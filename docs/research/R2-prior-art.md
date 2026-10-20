@@ -1,6 +1,6 @@
 # R2: prior art
 
-Oct 20, 2026 · research ticket R2 in `proposal-v3.md`
+Oct 20, 2026 · research ticket R2 in `docs/00-design.md`
 
 **Method.** Web searches (ROS Discourse, GitHub, project documentation, blogs) on Oct 20, 2026, plus reading the repositories that came up. This is a sweep, not an exhaustive survey: GitLab, non-English forums and private projects were not covered. Links are at the end.
 
@@ -33,7 +33,7 @@ No maintained project offers general publish and subscribe between an 8-bit AVR 
 
 ## Risks this sweep surfaced
 
-- **Naming.** "ros2serial" was proposed as the name of a rosserial rewrite in ros2/ros2#365 (2018), and a 2020 comment there started `ros2serial_python` and `ros2serial_msgs`. No released or maintained project under that name was found. The name stays usable, but the open decision on the project name in `proposal-v3.md` should consider searchability and this history.
+- **Naming.** "ros2serial" was proposed as the name of a rosserial rewrite in ros2/ros2#365 (2018), and a 2020 comment there started `ros2serial_python` and `ros2serial_msgs`. No released or maintained project under that name was found. The name stays usable, but the open decision on the project name in `docs/00-design.md` should consider searchability and this history.
 - **micro-ROS on bigger 8-bit parts.** A trimmed XRCE-DDS client might fit the Mega's 8 KB. Nobody has published such a configuration, but the docs and the Phase 0 post should be precise: ros2serial's case is strongest on the Uno and similar parts, and on simplicity everywhere.
 - **zenoh-pico maturing on 32-bit parts** could make tier L less distinctive. That is already a non-goal area (v3 does not compete with micro-ROS on 32-bit MCUs with an RTOS).
 

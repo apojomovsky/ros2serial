@@ -1,6 +1,6 @@
 # K1 spike: the v3 protocol on a real Uno
 
-Throwaway code for ticket K1 in `proposal-v3.md`: handwritten firmware that speaks the v3 framing (rCOBS, CRC-16/MCRF4XX) and a minimal session, plus a host script that measures the link. No ROS involved. Nothing here ships; the directory is deleted once K1's measurements are recorded.
+Throwaway code for ticket K1 in `docs/00-design.md`: handwritten firmware that speaks the v3 framing (rCOBS, CRC-16/MCRF4XX) and a minimal session, plus a host script that measures the link. No ROS involved. Nothing here ships; the directory is deleted once K1's measurements are recorded.
 
 ## What is already done (no hardware)
 
