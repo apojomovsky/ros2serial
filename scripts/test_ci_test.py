@@ -4,8 +4,10 @@ Runs the script on a copy of the tracked files, scoped to LINT=1 so the
 suite never re-enters this test.
 """
 
+import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -27,14 +29,17 @@ def copy_tree(dest: Path) -> Path:
     return dest
 
 
+SCOPES = ("LINT", "SCRIPTS", "CORE", "GEN", "BRIDGE", "E2E")
+
+
 def run_lint(root: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ["bash", "scripts/ci-test.sh"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        env={"PATH": "/usr/local/bin:/usr/bin:/bin", "LINT": "1", "HOME": str(root)},
-    )
+    # Keep the caller's tools (CI installs them outside the system PATH), use this
+    # interpreter's directory first, and drop inherited scopes so the nested run is
+    # LINT only and never re-enters this test.
+    env = {k: v for k, v in os.environ.items() if k not in SCOPES}
+    env["PATH"] = os.pathsep.join([str(Path(sys.executable).parent), env.get("PATH", "")])
+    env["LINT"] = "1"
+    return subprocess.run(["bash", "scripts/ci-test.sh"], cwd=root, capture_output=True, text=True, env=env)
 
 
 def test_lint_passes_on_the_tree(tmp_path):
