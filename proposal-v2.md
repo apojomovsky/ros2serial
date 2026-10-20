@@ -11,8 +11,8 @@ Oct 3, 2026 · @Alexis Pojomovsky · supersedes v1 (Oct 2, 2026)
 | Topic | v1 | v2 |
 | --- | --- | --- |
 | Target quality | Implicit hobbyist scope | Hobbyist UX, professional robustness: written protocol spec, fuzzing, conformance tests |
-| Hardware targets | ATmega328P, "AVR and PIC" | Three tiers (S, M, L); Uno and PIC18F4550 as tier M references; a PIC16 tier S |
-| PIC toolchain | XC8 or SDCC, unverified | epic-cc and epic-hal as first-class targets, XC8 as secondary |
+| Hardware targets | ATmega328P, "AVR and PIC" | Three tiers (S, M, L); Uno + Mega as tier M validation; PIC16 class (e.g. 16F877A) as deferred tier S bound |
+| PIC toolchain | XC8 or SDCC, unverified | Deferred to Phase 3; AVR (avr-gcc) is the reference until then |
 | Wire encoding | Native CDR (leaning) | Own packed little-endian layout; the bridge converts to CDR |
 | `float64` on 8 bits | Open | Wire follows the `.msg`; opt-in "narrow" profile per topic (default where `double` is 32 bits) |
 | Unbounded strings and sequences | Generator fails | Bounds come from the node config; the wire layout does not depend on them |
@@ -37,8 +37,8 @@ The intended user experience is a hobbyist's: write a short config, include a he
 **Goals**
 
 - A user experience equivalent to rosserial, with naming adapted to ROS 2 conventions.
-- MCU core in C99, with no malloc, no external dependencies and no hardware access, portable across architectures (AVR, PIC, ARM Cortex-M, RISC-V), endianness and compilers (avr-gcc, epic-cc, XC8, arm-none-eabi-gcc).
-- First-class support for 8-bit PIC through [epic-hal](https://github.com/apojomovsky/epic-hal) and [epic-cc](https://github.com/apojomovsky/epic-cc).
+- MCU core in C99, with no malloc, no external dependencies and no hardware access, portable across architectures (AVR, PIC, ARM Cortex-M, RISC-V), endianness and compilers (avr-gcc, XC8, arm-none-eabi-gcc and other C99 compilers).
+- Small-part constraint: the same core must eventually fit PIC16-class parts (e.g. 16F877A, 368 B RAM) as well as Uno/Mega-class boards (2 KB tight bound on the Uno); PIC work is deferred, but the constraint shapes the core now.
 - On the host side, a regular ROS 2 node (Jazzy onwards) that works with any RMW (Fast DDS, Cyclone, rmw_zenoh).
 - Transparency: the user writes or reuses `.msg` files and the MCU code is generated.
 - A written, versioned protocol specification with test vectors, so third parties can implement it.
@@ -55,8 +55,8 @@ The intended user experience is a hobbyist's: write a short config, include a he
 
 | Tier | Examples | RAM | Features |
 | --- | --- | --- | --- |
-| S | PIC16F193X (epic-hal), PIC16F877A (stretch) | 368 B to 1 KB | Publish and subscribe, compact handshake, narrow profile mandatory, optional log |
-| M | Arduino Uno (ATmega328P), PIC18F4550 (epic-hal) | 2 KB | Everything in P0 and P1 |
+| S | PIC16 class, e.g. 16F193X / 16F877A (deferred; bounding constraint) | 368 B to 1 KB | Publish and subscribe, compact handshake, narrow profile mandatory, optional log |
+| M | Arduino Uno (ATmega328P) + Mega (ATmega2560), validation platforms | 2 KB on Uno / 8 KB on Mega | Everything in P0 and P1 |
 | L | STM32, RP2040 | 32 KB or more | Everything; full-width `float64` by default |
 
 Features are selected at compile time (`R2S_WITH_TIME`, `R2S_WITH_LOG`, `R2S_WITH_PARAMS`, `R2S_WITH_RELIABLE`), so a tier S build carries only publish and subscribe.
@@ -135,7 +135,7 @@ From this the generator emits:
 - receive dispatch as a `switch (topic_id)` that calls a user-implemented handler for each subscription, for example `r2s_on_cmd_vel(const geometry_msgs__msg__Twist *)`;
 - buffer sizes computed exactly from the largest message in each direction.
 
-**Why generated tables and direct calls.** This keeps every call direct, with no function pointers. On PIC16 that is necessary: the hardware stack has 8 levels, and epic-cc lowers indirect calls into compare-and-call chains. It also keeps RAM use exact and puts strings in flash without passing string literals around at runtime. The same generated code is used on every target, so there is a single code path to test. The call depth from `r2s_spin_some` to a user handler is at most 3, and CI checks it.
+**Why generated tables and direct calls.** This keeps every call direct, with no function pointers. On small 8-bit parts that is necessary: e.g. PIC16 has an 8-level hardware stack, and some 8-bit compilers lower indirect calls into compare-and-call chains. It also keeps RAM use exact and puts strings in flash without passing string literals around at runtime. The same generated code is used on every target, so there is a single code path to test. The call depth from `r2s_spin_some` to a user handler is at most 3, and CI checks it.
 
 Topic names still live in the firmware, in flash, and the launch file can still remap them (see User API).
 
@@ -166,9 +166,8 @@ The CDR comparison stays in the encoding benchmark (Phase 2) as a check on this 
 
 Lengths are varints (LEB128): 1 byte for values under 128, which covers almost all bounded fields. As a result **the layout does not depend on the bounds**. The host never needs to know the bound chosen for a field. It only needs to know whether the topic uses the narrow profile.
 
-**`float64` and the narrow profile.** By default the wire carries what the `.msg` says. On compilers whose `double` is 32 bits (avr-gcc by default, epic-cc, some XC8 configurations), the generated code converts a C `float` to binary64 and back with byte-level bit manipulation. This is cheap, but it doubles the bytes. A topic can opt into the narrow profile (`narrow_float64: true`). All of its `float64` fields then travel as binary32 and the bridge widens them. On toolchains where `double` is 32 bits, the narrow profile is the default.
-
-**No 64-bit integers in the core.** The core and the generated codecs never use 64-bit C types, because 8-bit toolchains handle them badly (epic-cc does not fully support `i64` yet). The binary64 conversion works on bytes. On toolchains without a usable 64-bit integer, `int64` and `uint64` fields are generated as an 8-byte little-endian array with helper functions.
+**`float64` and the narrow profile.** By default the wire carries what the `.msg` says. On 8-bit toolchains whose `double` is 32 bits (avr-gcc by default, XC8 in some configurations, and similar small-part compilers), the generated code converts a C `float` to binary64 and back with byte-level bit manipulation. This is cheap, but it doubles the bytes. A topic can opt into the narrow profile (`narrow_float64: true`). All of its `float64` fields then travel as binary32 and the bridge widens them. On toolchains where `double` is 32 bits, the narrow profile is the default.
+**No 64-bit integers in the core.** The core and the generated codecs never use 64-bit C types, because 8-bit toolchains handle them badly (slow, large, or incompletely supported). The binary64 conversion works on bytes. On toolchains without a usable 64-bit integer, `int64` and `uint64` fields are generated as an 8-byte little-endian array with helper functions.
 
 **Bound violations** are never silently truncated. When publishing, the serializer returns an error. On reception, the decoder drops the frame and reports it to the host, which logs a warning naming the topic and field.
 
@@ -212,7 +211,7 @@ void r2s_rx_push(uint8_t byte);                      /* ISR-safe; only with R2S_
 void r2s_spin_some(void);                            /* decode, dispatch, send heartbeats */
 ```
 
-Many HALs already keep their own interrupt-driven ring (epic-serial, Arduino's `HardwareSerial`). On those, the port glue reads from it and calls `r2s_rx_feed`, and the core keeps no second ring, which would waste RAM on a tier S part.
+Many HALs already keep their own interrupt-driven ring (Arduino's `HardwareSerial`, PIC HAL serial drivers, etc.). On those, the port glue reads from it and calls `r2s_rx_feed`, and the core keeps no second ring, which would waste RAM on a tier S part.
 
 For ports without a ring, `R2S_WITH_RX_RING` enables a single-producer, single-consumer ring fed by `r2s_rx_push` from the UART interrupt. It is safe on any target because:
 
@@ -224,10 +223,9 @@ COBS decoding happens in place in the frame buffer, and the CRC is computed duri
 
 | Port | RX path |
 | --- | --- |
-| epic-hal (PIC16, PIC18) | `spin_some` drains `epic_serial_read` into `r2s_rx_feed` |
-| Arduino (any core) | `spin_some` drains `Serial` into `r2s_rx_feed`. Works with the stock 64-byte buffer if `loop()` calls spin often enough |
+| Arduino (any core, default path) | `spin_some` drains `Serial` into `r2s_rx_feed`. Works with the stock 64-byte buffer if `loop()` calls spin often enough |
 | AVR bare metal | `R2S_WITH_RX_RING`: `ISR(USART_RX_vect) { r2s_rx_push(UDR0); }` |
-| PIC with XC8, no HAL | Same as bare-metal AVR, in the UART RX interrupt |
+| PIC (HAL serial or bare metal) | `spin_some` drains the HAL serial buffer into `r2s_rx_feed`, or `R2S_WITH_RX_RING` from the UART RX interrupt |
 | STM32, RP2040 | DMA in circular mode plus an idle-line interrupt, fed in bursts |
 
 Transmission goes through a single port function, `r2s_port_write(buf, len)`.
@@ -245,7 +243,7 @@ Transmission goes through a single port function, `r2s_port_write(buf, len)`.
 3. The bridge sends the MCU a correction: "tick T0 corresponds to ROS time S0, with drift D ppm".
 4. On the MCU, `r2s_now()` computes `S0 + (tick - T0)` with drift correction, in 32-bit integer arithmetic. Tick wraparound is handled with unsigned subtraction and by resyncing well before the counter wraps.
 
-The tick comes from the port: `micros()` on Arduino, `epic_tick_get()` (1 ms) on epic-hal, a hardware timer elsewhere. The tick rate is announced in the handshake. The bridge also sets the serial port to low latency where the OS supports it. Target accuracy: about 1 ms, bounded by the tick resolution. Phase 2 measures the real figure.
+The tick comes from the port: `micros()` on Arduino, a 1 ms tick on PIC HALs, a hardware timer elsewhere. The tick rate is announced in the handshake. The bridge also sets the serial port to low latency where the OS supports it. Target accuracy: about 1 ms, bounded by the tick resolution. Phase 2 measures the real figure.
 
 ## User API
 
@@ -275,11 +273,9 @@ int main(void)
 }
 ```
 
-Logging is non-variadic, one function per value type, as in epic-serial's `put_*` API: `r2s_log_info("battery low")`, `r2s_log_info_u16("adc=", v)`. Stackless toolchains such as epic-cc cannot read varargs, and a format string costs flash on every target.
-
+Logging is non-variadic, one function per value type: `r2s_log_info("battery low")`, `r2s_log_info_u16("adc=", v)`. Some 8-bit toolchains cannot read varargs, and a format string costs flash on every target.
 ### C++ wrapper (P1)
-
-**Compatibility bar: strict Embedded C++.** The wrapper compiles under the 1998 Embedded C++ subset: no templates, no namespaces, no exceptions, no RTTI, no multiple or virtual inheritance. It also avoids virtual functions, the standard library and placement `new`. That makes it build with avr-g++ (which has no standard library either), with epic-cc's C++ front end, and with any EC++ or Extended EC++ compiler.
+**Compatibility bar: strict Embedded C++.** The wrapper compiles under the 1998 Embedded C++ subset: no templates, no namespaces, no exceptions, no RTTI, no multiple or virtual inheritance. It also avoids virtual functions, the standard library and placement `new`. That makes it build with avr-g++ (which has no standard library either) and with any EC++ or Extended EC++ compiler for small parts.
 
 The generator does what templates would otherwise do. It emits one concrete class per topic, sized from the config, with the port selected at compile time:
 
@@ -298,7 +294,7 @@ void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node
 
 The objects are globals, as in rosserial sketches, which relies on static constructors running before `setup()`. A conformance test checks construction order across source files on every supported compiler.
 
-An optional `r2s_namespaces.hpp` adds ROS 2-style names (`ros2serial::Node`, `std_msgs::msg::Float32`) as aliases, for compilers that support namespaces (avr-g++, epic-cc).
+An optional `r2s_namespaces.hpp` adds ROS 2-style names (`ros2serial::Node`, `std_msgs::msg::Float32`) as aliases, for compilers that support namespaces.
 
 ### Remapping from a launch file
 
@@ -314,10 +310,10 @@ Node(package='r2s_bridge', executable='bridge', namespace='robot1',
 
 `r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required) that reuses `rosidl_parser`. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources, the optional C++ wrapper, and the compact-mode node map. They are laid out to be usable as:
 
-- an Arduino library (zip or Library Manager), like rosserial's `ros_lib`;
+- an Arduino library (zip or Library Manager), like rosserial's `ros_lib` (default path);
 - a PlatformIO library;
-- an epic-hal module (`depends_on` serial and tick), so `install.sh 18F4550 --modules serial,tick,ros2serial` scaffolds a ROS 2 node;
-- a CMake or Makefile include for bare-metal and vendor toolchains.
+- a CMake or Makefile include for bare-metal and vendor toolchains;
+- a PIC HAL module (serial + tick dependency) for HAL-based PIC ports (see Portability notes).
 
 A thin rosidl plugin wraps it later for users who want generation inside `colcon build`. The bridge, the generator and a bundle of the standard messages are released as ROS packages through the buildfarm.
 
@@ -331,49 +327,45 @@ A thin rosidl plugin wraps it later for users who want generation inside `colcon
 - P1 parameters: the MCU declares name, type and default in the handshake. The bridge declares them as ROS parameters on its own node, so `ros2 param set` works, and pushes changes to the MCU over the reliable channel.
 - P1 services: the generic service APIs available in Jazzy still need checking. If they are missing, fall back to introspection-based typed services.
 
-## epic-hal and epic-cc
+## Portability notes (AVR now, PIC later)
 
-8-bit PIC support goes through epic-hal (HAL and module packaging) and epic-cc (open-source C compiler, with C++ in progress). XC8 remains supported as a secondary toolchain. Using the same author's toolchain means compiler gaps found by ros2serial can be fixed at the source, and ros2serial gives epic-cc a realistic, protocol-heavy test program.
+Validation is Arduino Uno + Mega (AVR) only. PIC support is deferred to Phase 3, but the PIC16 class (e.g. 16F877A: 368 B RAM, 8-level hardware stack, banked RAM) is the bounding constraint that shapes the core now. No PIC toolchain or HAL work is assumed before Phase 3.
 
-Constraints that shape the core. Most of them also make it leaner elsewhere.
+Constraints that shape the core. Most of them also make it leaner on AVR.
 
 | Constraint | Consequence for ros2serial |
 | --- | --- |
-| PIC16 hardware stack of 8 levels; a tick ISR uses 2 | Direct calls only, depth from `spin_some` to a handler of at most 3, checked in CI |
-| Indirect calls lower to compare-and-call chains | No function pointers in the core or the generated code |
-| No recursion (compile error) | Nested messages are flattened by the generator |
-| `double` is 32 bits | Narrow profile by default |
-| `i64` not fully supported yet | No 64-bit C types in the core or the codecs |
-| No varargs, no stdio | Per-type logging API |
-| Constant data lives in flash (RETLW tables, TBLRD) | Topic table and strings are generated as constant data |
-| Classic PIC16 RAM is banked | Tier S prefers PIC16F193X (linear addressing); buffers are small and sized exactly |
+| Small 8-bit hardware stack (8 levels on PIC16-class; a tick ISR uses 2) | Direct calls only, depth from `spin_some` to a handler of at most 3, checked in CI |
+| Indirect calls expensive on some 8-bit compilers | No function pointers in the core or the generated code |
+| No recursion on some small-part compilers | Nested messages are flattened by the generator |
+| `double` is 32 bits on default AVR and many PIC toolchains | Narrow profile by default on those toolchains |
+| 64-bit C types slow or incomplete on 8-bit targets | No 64-bit C types in the core or the codecs |
+| No varargs / no stdio on some small-part toolchains | Per-type logging API |
+| Constant data lives in flash | Topic table and strings are generated as constant data |
+| Banked RAM on classic 8-bit parts | Buffers are small and sized exactly; tier S prefers parts with linear addressing where available |
 
-**Testing.** The conformance vectors run on epic-cc's simulator and on epic-hal's simulator harness, next to simavr for AVR. Hardware in the loop on a PIC18F4550 board covers what the simulators do not.
+**Testing.** The conformance vectors run on host builds and on simavr for AVR (328P/2560). A PIC simulator backend lands with Phase 3; until then PIC is a design constraint, not a test target.
 
 ## Quality bar
 
 What "professional" means in concrete terms:
 
 - **Specification:** a protocol document versioned independently of the code, with byte-level test vectors for every frame type.
-- **Conformance suite:** the same vectors run against the C core (host build, simavr, epic-cc simulator) and against the bridge.
+- **Conformance suite:** the same vectors run against the C core (host build, simavr for 328P/2560) and against the bridge; PIC simulator joins in Phase 3.
 - **Fuzzing:** the COBS decoder, the CRC and every generated deserializer are fuzzed with libFuzzer on a host build. No input may crash, hang or write out of bounds.
 - **C hygiene:** `-std=c99 -pedantic -Wall -Wextra -Werror`, cppcheck and clang-tidy in CI, no undefined behavior (UBSan on host builds). The code follows a MISRA-inspired subset; certification is not a goal.
 - **Determinism:** no malloc, no recursion, no function pointers, bounded loops, a call depth checked in CI. Flash and RAM usage per configuration and per toolchain is reported in CI and tracked over time.
-- **C++ wrapper:** compiled in CI with avr-g++ and epic-cc C++, under the strict Embedded C++ rules.
+- **C++ wrapper:** compiled in CI with avr-g++ under the strict Embedded C++ rules.
 - **Versioning:** semver for the libraries and a protocol version checked in the handshake.
-- **Hardware in the loop:** for the certified boards, starting with the Uno and a PIC18F4550.
-
+- **Hardware in the loop:** Uno + Mega, starting with the Uno.
 ## 8-bit gotchas
-
-The tier M budget is 2 KB of RAM (ATmega328P, PIC18F4550); tier S goes down to a few hundred bytes.
-
-- **`double` is 32 bits** in default avr-gcc and in epic-cc. Handled by the narrow profile or the binary64 conversion helpers.
+The tier M budget is 2 KB of RAM (ATmega328P; Mega gives headroom at 8 KB); tier S is bounded by PIC16-class (368 B, e.g. 16F877A).
+- **`double` is 32 bits** on default avr-gcc and many PIC toolchains. Handled by the narrow profile or the binary64 conversion helpers.
 - **64-bit integers** are slow on 8-bit cores and incomplete on some toolchains. Kept out of the core; byte-array fallback for message fields.
 - **Imu is the stress case:** about 150 bytes under the narrow profile and about 300 at full width. A full-width Imu does not fit comfortably in a 2 KB RAM budget with RX and TX buffers. Use it to size the defaults and document the trade-off.
 - **Arduino's stock RX buffer is 64 bytes.** Either call spin often, or use the bare-metal ISR port.
 - **USB-serial latency:** the FTDI latency timer and USB frame scheduling affect time sync, not only throughput.
-- **PIC16 call stack and banked RAM:** see the epic-hal and epic-cc section.
-- **USB CDC on the PIC18F4550** costs a few KB of flash and some RAM for the USB stack. The hardware UART with an external USB adapter is much cheaper.
+- **Small-part call stack and banked RAM (PIC16-class bound):** see the Portability notes section.
 
 ## Plan
 
@@ -389,29 +381,26 @@ Each phase ends in a decision gate and a publishable artifact.
 - `r2s-gen` producing those same codecs plus the topic table and dispatch, compared byte for byte against the handwritten ones.
 - Bridge: handshake (full mode), generic pub/sub, introspection conversion.
 - CI: host build plus simavr running the conformance vectors.
-- *Demo:* teleop `cmd_vel` to a real Uno and a Float32 back, on Fast DDS and on rmw_zenoh.
+- *Demo:* teleop `cmd_vel` to a real Uno/Mega and a Float32 back, on Fast DDS and on rmw_zenoh.
 - *Gate:* end-to-end works. *Artifact:* demo video and repository made public.
-
 **Phase 2: measure and harden**
-- Framing and CRC benchmark on AVR and on PIC18 (epic-cc): COBS vs SLIP vs rosserial style; CRC variants. Flash, RAM, cycles per byte, recovery time.
+- Framing and CRC benchmark on AVR (Uno/Mega): COBS vs SLIP vs rosserial style; CRC variants. Flash, RAM, cycles per byte, recovery time.
 - Encoding benchmark: packed vs CDR vs MAVLink as a baseline, for Float32, Twist, Range, Imu, JointState.
 - P0 complete: logging, time sync with measured accuracy, reconnection and reset detection, Range, Imu, JointState with bounds.
 - Fuzzing, the protocol spec v1.0, and flash and RAM tracking.
 - *Gate:* P0 complete and tier M budgets met. *Artifact:* benchmark write-up and the spec.
-
-**Phase 3: PIC, portability and P1**
-- PIC18F4550 on epic-hal and epic-cc (tier M), with XC8 as a secondary build.
-- Tier S: compact handshake on a PIC16F193X part; the 877A as a stretch goal.
+**Phase 3: portability and P1**
+- PIC port (deferred): tier S compact handshake on PIC16-class (16F877A as bounding part), tier M PIC18-class check; toolchain TBD.
 - A 32-bit target (STM32 or RP2040) for tier L.
-- Parameters, services, the C++ wrapper (strict EC++), Arduino, PlatformIO and epic-hal packaging, rosidl plugin wrapper.
-- *Demo:* the same sketch built for an Uno and for a PIC18F4550, both publishing into the same ROS 2 graph.
-- *Gate:* release candidate. *Artifact:* a "port your rosserial sketch" guide and the cross-compiler demo.
+- Parameters, services, the C++ wrapper (strict EC++), Arduino, PlatformIO and PIC-HAL packaging, rosidl plugin wrapper.
+- *Demo:* the same sketch on Uno and Mega, plus a PIC board if Phase 3 landed, all publishing into the same ROS 2 graph.
+- *Gate:* release candidate. *Artifact:* a "port your rosserial sketch" guide and the cross-board demo.
 
 **Phase 4: release and community**
 - Buildfarm release of the bridge and generator, docs site, Discourse announcement.
 - Possible move into a community organization (ros-drivers or similar).
 
-**Role of the agents.** Each spike or workstream gets its own agent. A shared harness (simavr, epic-cc simulator, host builds, conformance vectors, flash and RAM reports) makes the agents produce comparable tables. A person reads those tables and makes the design decisions.
+**Role of the agents.** Each spike or workstream gets its own agent. A shared harness (simavr for 328P/2560, host builds, conformance vectors, flash and RAM reports) makes the agents produce comparable tables. A person reads those tables and makes the design decisions.
 
 **Other proposed targets (to adjust with Phase 1 data)**
 
@@ -441,11 +430,11 @@ Each open decision has a default. Tickets use the default until the decision is 
 
 | Risk | Mitigation |
 | --- | --- |
-| Scope grows from trying to be universal | Tiers with explicit feature sets; Uno first, PIC in Phase 3 |
+| Scope grows from trying to be universal | Tiers with explicit feature sets; Uno + Mega now, PIC deferred to Phase 3 as a constraint |
 | Packed layout and bridge conversion drift apart | Single written spec; the conformance vectors run on both sides in CI |
 | Introspection conversion is slow for large messages | Measure in Phase 2; cache per-type conversion plans |
 | Config file feels like friction compared with rosserial | Ship bound defaults for common messages; keep the config to a few lines; consider a runtime API on tier L |
-| epic-cc gaps block the PIC targets | Same maintainer; file gaps with minimal repros from ros2serial; XC8 as fallback |
+| 8-bit compiler gaps block a PIC port | File gaps upstream with minimal repros; XC8 as fallback |
 | Prior art exists that was not found | Phase 0 sweep before investing in code |
 | Low demand as 32-bit MCUs get cheaper | Validate early; the value is the experience and robustness, not only size, and the core also runs on 32-bit MCUs |
 
@@ -480,11 +469,11 @@ ros2serial/
 │   ├── posix/                host "virtual MCU" over a pty: used by integration tests and fuzzing
 │   ├── arduino/              Arduino library glue (Serial, micros)
 │   ├── avr/                  bare-metal AVR glue (USART ISR, timer tick)
-│   ├── epic-hal/             epic-serial + epic-tick glue, epic-hal module manifest entry
+│   ├── pic/                  Phase 3: PIC serial + tick glue and module manifest entry (deferred)
 │   └── stm32/                Phase 3
-├── examples/                 one directory per example, each built in CI
+├── examples/                 one directory per example, each built in CI (Uno + Mega in Phase 1)
 ├── tests/
-│   ├── e2e/                  shared end-to-end scenarios, run against posix, simavr and PIC simulators
+│   ├── e2e/                  shared end-to-end scenarios, run against posix and simavr (PIC sim joins in Phase 3)
 │   └── harness/              simavr UART-to-pty harness, fault-injecting pty proxy
 ├── tools/                    size_report.py, call_depth.py, budgets.yaml, vectors_check.py
 ├── docs/                     user documentation (later the docs site)
@@ -501,7 +490,7 @@ ros2serial/
 | C++ (bridge) | C++17 (Jazzy's baseline), `ament_lint_auto` (cpplint, uncrustify or clang-format, cppcheck), ROS 2 style |
 | C++ (MCU wrapper) | Strict Embedded C++, see Part I |
 | Python | 3.10 or newer, `ruff` (lint + format), `mypy --strict` on `r2s_gen`, `pytest`, `hypothesis` |
-| Commits | Conventional Commits (`feat(core): ...`, `fix(bridge): ...`, `test(gen): ...`); changelog with git-cliff, as in epic-hal and epic-cc |
+| Commits | Conventional Commits (`feat(core): ...`, `fix(bridge): ...`, `test(gen): ...`); changelog with git-cliff |
 | Branches and PRs | `main` is protected; one ticket per PR; squash merge; CI must be green; the PR body links the ticket and pastes the red test run (see TDD rules) |
 | Versions | semver per component (`core`, `gen`, `bridge`) plus the protocol version (`R2S_PROTOCOL_VERSION`, starts at 1) |
 | Licenses | MIT for everything by default (see open decisions) |
@@ -630,7 +619,7 @@ uint32_t r2s_port_tick(void);                               /* monotonic, wraps;
 uint32_t r2s_port_seed(void);                               /* entropy for session_id; differs across boots where possible */
 ```
 
-A port that has its own receive buffer also reads from it in the user's loop and calls `r2s_rx_feed`. The Arduino and epic-hal ports provide an `r2s_port_poll()` helper that does this.
+A port that has its own receive buffer also reads from it in the user's loop and calls `r2s_rx_feed`. The Arduino and PIC HAL ports provide an `r2s_port_poll()` helper that does this.
 
 ### Generated API
 
@@ -652,7 +641,7 @@ void r2s_on_<name>(const <Type> *msg);               /* subscribed topics: proto
 | `int8` … `int32`, `uint16` … `uint32` | `int8_t` … `uint32_t` |
 | `int64`, `uint64` | `int64_t`, `uint64_t`; with `R2S_NO_INT64`, `r2s_i64_t`/`r2s_u64_t` (8-byte arrays plus helpers) |
 | `float32` | `float` |
-| `float64` | `double` (32 bits on avr-gcc and epic-cc; documented precision loss) |
+| `float64` | `double` (32 bits on default avr-gcc and many PIC toolchains; documented precision loss) |
 | `string<=N` | `char name[N + 1]`, NUL-terminated |
 | `T[N]` | `T name[N]` |
 | `T[<=N]` | `struct { uint8_t size; T data[N]; }` (`uint16_t size` if N > 255) |
@@ -663,7 +652,7 @@ void r2s_on_<name>(const <Type> *msg);               /* subscribed topics: proto
 ### Command line
 
 ```
-r2s-gen generate --config r2s.yaml --out <dir> [--msg-path <dir>]... [--layout cmake|arduino|platformio|epic-hal] [--cpp]
+r2s-gen generate --config r2s.yaml --out <dir> [--msg-path <dir>]... [--layout cmake|arduino|platformio|pic] [--cpp]
 r2s-gen check    --config r2s.yaml [--msg-path <dir>]...       # validate only, exit code 0 or 1
 r2s-gen vectors  --type <pkg/msg/Type> --message <yaml>         # print payload hex from the reference codec
 r2s-gen version
@@ -699,7 +688,7 @@ Generator errors are precise and actionable: file, key or field path, what is wr
 - `r2s_generated.h` and `r2s_generated.c`: types, codecs, topic table, publish functions, dispatch, `R2S_MAX_FRAME`, feature macros, the protocol version.
 - `r2s_generated.hpp` and `r2s_namespaces.hpp` with `--cpp`.
 - `r2s_node_map.yaml` in compact mode.
-- A `layout`-specific wrapper: `library.properties` (Arduino), `library.json` (PlatformIO), a module entry (epic-hal), `CMakeLists.txt` (cmake).
+- A `layout`-specific wrapper: `library.properties` (Arduino), `library.json` (PlatformIO), a module entry (pic, Phase 3), `CMakeLists.txt` (cmake).
 - Every output file starts with a header naming the generator version and config hash. Output is deterministic: same inputs, byte-identical files.
 
 ### Type hash
@@ -811,11 +800,11 @@ Frame and session vectors (full frames with CRC, handshake transcripts as ordere
 | Bridge unit | Host session state machine with a fake transport, converter against rclcpp serialization, time estimator with a simulated drifting clock, rate limiting | gtest via `ament_cmake_gtest` | Every PR |
 | End-to-end, posix | Bridge plus the posix virtual MCU over a pty: handshake, pub, sub, log, time, remapping, reconnect | launch_testing | Every PR, RMW matrix |
 | Fault injection | A pty proxy between bridge and MCU that flips bits, drops, duplicates and inserts bytes, truncates frames and resets the MCU mid-session | launch_testing + `tests/harness/` | Every PR (short), nightly (long) |
-| End-to-end, AVR | The same scenarios against firmware running in simavr (ATmega328P), UART bridged to a pty | simavr harness | Every PR once ticket R5 lands |
-| End-to-end, PIC | The same scenarios on epic-cc's simulator or epic-hal's host simulation | Decided by research ticket R6 | Every PR once available |
-| Build matrix | Examples compile for Uno (arduino-cli), PlatformIO, bare AVR, epic-cc PIC18F4550, XC8 if available | arduino/compile-sketches, `pio ci`, make | Every PR |
-| Budgets | Flash and RAM per example and tier against `tools/budgets.yaml`; call depth ≤ 3 from `r2s_spin_some` | avr-size, `-fstack-usage`, `-fcallgraph-info`, epic-cc size map and call graph | Every PR |
-| Hardware in the loop | Real Uno and PIC18F4550 boards | Self-hosted runner, manual trigger | Phase 3 onwards |
+| End-to-end, AVR | The same scenarios against firmware running in simavr (ATmega328P for Uno, ATmega2560 for Mega), UART bridged to a pty | simavr harness | Every PR once ticket R5 lands |
+| End-to-end, PIC (deferred) | The same scenarios on a PIC simulator | Decided by research ticket R6 | Phase 3 only |
+| Build matrix | Examples compile for Uno + Mega (arduino-cli), PlatformIO, bare AVR | arduino/compile-sketches, `pio ci`, make | Every PR |
+| Budgets | Flash and RAM per example and tier against `tools/budgets.yaml`; call depth ≤ 3 from `r2s_spin_some` | avr-size, `-fstack-usage`, `-fcallgraph-info` | Every PR |
+| Hardware in the loop | Real Uno + Mega | Self-hosted runner, manual trigger | Phase 1 onwards; PIC boards join in Phase 3 |
 
 **Key end-to-end scenarios** (in `tests/e2e/`, each a launch_testing test parameterized by MCU backend):
 
@@ -836,13 +825,11 @@ Frame and session vectors (full frames with CRC, handshake transcripts as ordere
 | --- | --- | --- |
 | `ci.yml` | Push and PR | `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, actionlint); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `fuzz-smoke`; `gen` (Python 3.10 to 3.13); `bridge` (colcon build and test in `ros:jazzy` and the newer distros); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `budgets` (posts a size table as a PR comment and fails on budget breach) |
 | `nightly.yml` | Schedule | Long fuzzing, long fault injection, big-endian qemu, extended hypothesis runs, Rolling distro |
-| `release.yml` | Tag | Changelog (git-cliff), Python package to PyPI, Arduino library zip, PlatformIO package, epic-hal module bundle |
-
+| `release.yml` | Tag | Changelog (git-cliff), Python package to PyPI, Arduino library zip, PlatformIO package, PIC module bundle (Phase 3) |
 Rules:
-
-- Every job runs in a pinned container image or pinned action versions. Toolchain versions (avr-gcc, arduino-cli core, epic-cc release, ROS images) are pinned in one file, `ci/versions.env`.
+- Every job runs in a pinned container image or pinned action versions. Toolchain versions (avr-gcc, arduino-cli core, ROS images; PIC toolchains join in Phase 3) are pinned in one file, `ci/versions.env`.
 - The ROS jobs use the official `ros:<distro>` images or `ros-tooling/setup-ros` plus `ros-tooling/action-ros-ci`.
-- epic-cc is installed from its GitHub release bundle. XC8 builds reuse epic-hal's CI toolchain image if it carries XC8 (research ticket R9). Otherwise XC8 is a manual check.
+- PIC compilers (Phase 3): installed from their release bundles; XC8 via a toolchain image if available (research ticket R9), else manual check.
 - Required checks on `main`: everything in `ci.yml` except jobs whose prerequisites haven't landed yet; each such job is marked `continue-on-error` with a link to its ticket until it lands.
 
 ## Research tickets
@@ -855,11 +842,11 @@ Each one produces a short write-up in `docs/research/` and, where relevant, a pr
 | R2 | Prior art: existing rosserial-like projects for ROS 2 | Annotated list and a go/no-go recommendation | Proceed |
 | R3 | Can `rosidl_parser` and the RIHS01 algorithm be used without a ROS install (pip), or must they be vendored | Working proof inside `gen/` with a hash test | Vendor the needed modules with attribution |
 | R4 | Generic service and client APIs in Jazzy and later distros | API inventory with versions | Introspection-based typed services |
-| R5 | simavr: UART-to-pty bridging for ATmega328P, tick source, run in CI | `tests/harness/simavr/` running one echo firmware in CI | — (blocks the e2e-avr job only) |
-| R6 | PIC end-to-end: epic-cc's simulator UART support, or epic-hal's host simulation, as the PIC backend for `tests/e2e/` | Recommendation plus a working echo test | Build-only CI for PIC |
-| R7 | CRC choice: Hamming distance of CRC-16/CCITT-FALSE and alternatives at our frame sizes (Koopman tables), cost on AVR and PIC18 | Table and recommendation | CRC-16/CCITT-FALSE, bitwise |
+| R5 | simavr: UART-to-pty bridging for ATmega328P/2560, tick source, run in CI | `tests/harness/simavr/` running echo firmware (Uno + Mega) in CI | — (blocks the e2e-avr job only) |
+| R6 | PIC end-to-end (deferred, Phase 3): PIC simulator UART support or HAL host simulation as the PIC backend for `tests/e2e/` | Recommendation plus a working echo test | Build-only CI for PIC |
+| R7 | CRC choice: Hamming distance of CRC-16/CCITT-FALSE and alternatives at our frame sizes (Koopman tables), cost on AVR | Table and recommendation | CRC-16/CCITT-FALSE, bitwise |
 | R8 | Serial I/O in the bridge: `transport_drivers` vs asio vs termios; low-latency control on Linux and FTDI | Recommendation with a latency measurement | termios behind an interface |
-| R9 | XC8 in CI: license terms and reuse of epic-hal's toolchain image | Working job or a written reason why not | Manual XC8 checks |
+| R9 | XC8 in CI: license terms and toolchain image | Working job or a written reason why not | Manual XC8 checks |
 | R10 | Arduino `HardwareSerial` behavior: RX buffer size per core, overflow, how to enlarge it via build flags | Notes and port recommendations | Drain into `r2s_rx_feed` in every `r2s_port_poll()` |
 
 ## Epics and seed tickets
@@ -914,7 +901,7 @@ Ticket IDs are for cross-reference; the ticket agent may renumber. "Deps" lists 
 | G7 | C emission: codecs | G6, G4 | Byte-identical output to C9 for Float32 and Twist; property-based round trip against G4 |
 | G8 | C emission: topic table, publish functions, dispatch, limits | G7, C8 | Replaces C9's handwritten table in the posix test firmware |
 | G9 | `vectors` subcommand | G4 | Used to produce S4 |
-| G10 | Layouts: cmake and arduino | G8 | Example builds in the build matrix |
+| G10 | Layouts: cmake, arduino and platformio | G8 | Example builds in the build matrix |
 
 ### E4: bridge
 
@@ -937,8 +924,8 @@ Ticket IDs are for cross-reference; the ticket agent may renumber. "Deps" lists 
 | V1 | `tests/e2e/` framework, posix backend, scenarios 1 to 4 | C10, H9 | Green in `e2e-posix` for all RMWs |
 | V2 | Fault-injecting pty proxy and scenario 10 | V1 | Green |
 | V3 | simavr harness | R5 | Echo firmware test green in CI |
-| V4 | Uno firmware for the slice; e2e-avr runs scenarios 1 to 4 | V1, V3, G10 | Green |
-| V5 | Arduino example sketch and a manual real-Uno checklist | V4 | Maintainer runs it on hardware |
+| V4 | Uno + Mega firmware for the slice; e2e-avr runs scenarios 1 to 4 on both | V1, V3, G10 | Green |
+| V5 | Arduino example sketches and a manual real-Uno + real-Mega checklist | V4 | Maintainer runs both on hardware |
 
 ### E6: P0 completion and hardening (Phase 2)
 
@@ -952,27 +939,25 @@ Ticket IDs are for cross-reference; the ticket agent may renumber. "Deps" lists 
 | P6 | Budgets: `tools/size_report.py`, `budgets.yaml`, PR comment | V4 | Job fails on a deliberate breach in a test PR |
 | P7 | Call-depth check for AVR | V4 | Fails on a deliberate deep call in a test |
 | P8 | Big-endian qemu job | C1 | Nightly green |
-| P9 | Framing and CRC benchmark (AVR, PIC18) | V4, R7 | Write-up in `docs/benchmarks/` |
+| P9 | Framing and CRC benchmark (AVR Uno/Mega) | V4, R7 | Write-up in `docs/benchmarks/` |
 | P10 | Encoding benchmark (packed vs CDR vs MAVLink) | G7 | Write-up; decision on narrow per field |
 | P11 | Protocol spec v1.0 freeze | P1–P5 | Tagged; vectors frozen |
-
-### E7: PIC, portability and P1 (Phase 3)
-
+### E7: PIC, portability and P1 (Phase 3, deferred)
 | ID | Ticket | Deps | Acceptance |
 | --- | --- | --- | --- |
-| X1 | epic-hal port (PIC18F4550), epic-cc build in CI | V1 | Builds; budgets recorded |
+| X1 | PIC port (deferred): PIC18-class check + tier S on PIC16-class with 16F877A as bounding part | V1 | Builds; budgets recorded |
 | X2 | PIC end-to-end backend | R6, X1 | Scenarios 1 to 4 on the PIC backend |
 | X3 | Compact handshake (MCU, generator node map, bridge loader) | P11 | Scenarios 1 to 4 in compact mode |
-| X4 | Tier S on PIC16F193X | X1, X3 | Fits tier S budgets |
-| X5 | XC8 build | R9, X1 | Build job or documented manual check |
+| X4 | Tier S budget proof on 16F877A-class | X1, X3 | Fits tier S budgets |
+| X5 | PIC toolchain build (XC8 + second PIC C compiler) | R9, X1 | Build job or documented manual check |
 | X6 | STM32 or RP2040 port | V1 | Builds; e2e on hardware manually |
 | X7 | Reliable channel | S5 | Unit and fault-injection tests |
 | X8 | Parameters | X7 | `ros2 param set` reaches the MCU in e2e |
 | X9 | Services | X7, R4 | Server and client e2e |
-| X10 | C++ wrapper (strict EC++), avr-g++ and epic-cc C++ builds | G8 | Wrapper example builds on both; static construction order test |
-| X11 | PlatformIO and epic-hal layouts and module entry | G10, X1 | Install-and-build tests in CI |
+| X10 | C++ wrapper (strict EC++), avr-g++ now, PIC C++ in Phase 3 | G8 | Wrapper example builds; static construction order test |
+| X11 | PlatformIO and PIC layouts and module entry | G10, X1 | Install-and-build tests in CI |
 | X12 | rosidl plugin wrapper | G8 | Generation from `colcon build` in a test package |
-| X13 | Cross-compiler demo: same sketch on Uno and PIC18F4550 | X1, X10 | Demo recording |
+| X13 | Cross-board demo: same sketch on Uno, Mega, and PIC board | X1, X10 | Demo recording |
 
 ### E8: release (Phase 4)
 
