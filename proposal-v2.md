@@ -483,6 +483,7 @@ ros2serial/
 │   ├── e2e/                  shared end-to-end scenarios, run against posix and simavr (PIC sim joins in Phase 3)
 │   └── harness/              simavr UART-to-pty harness, fault-injecting pty proxy
 ├── tools/                    size_report.py, call_depth.py, budgets.yaml, vectors_check.py
+├── scratch/                  gitignored per-ticket experiments; nothing ships
 ├── docs/                     user documentation (later the docs site)
 └── .github/workflows/
 ```
@@ -535,8 +536,8 @@ The normative rulebook; `CONTRIBUTING.md` defers to it and never duplicates it. 
 ### Docker image
 
 - Stages: `base` / `dev` / `ci` (empty alias of `dev`: running locally IS running in CI) / `release`. The dev image carries avr-gcc, arduino-cli, ROS Jazzy, simavr, Python with pytest/ruff/mypy/hypothesis, gtest, clang-format, cppcheck. Nothing toolchain-related lives on the host.
-- The container runs as your uid (files stay host-owned). Caches (ccache, pip, Arduino cores) live under `~/.cache/ros2serial/`; the host checkout is mounted at a fixed path with one build dir per worktree, so parallel agents never replay each other's artifacts.
-- Content-addressed image tag from the Dockerfile hash, a dedicated buildx builder so `docker system prune` cannot wipe the cache, and a GHCR registry cache as fallback. Pinned versions live in one file (`ci/versions.env`).
+- The container runs as your uid locally and as the runner uid in CI (files stay host-owned either way; no chown step). Caches (ccache, pip, Arduino cores) live under `~/.cache/ros2serial/`; the host checkout is mounted at a fixed path with one build dir per worktree, so parallel agents never replay each other's artifacts.
+- Content-addressed image tag from the Dockerfile hash, so `make image` is idempotent. No registry cache or dedicated builder: the toolchain is apt-installable (minutes, not hours), so a plain `actions/cache` on the apt/pip layers suffices. Pinned versions live in one file (`ci/versions.env`).
 
 ### Takeoff ritual (`make pre-pr-check`)
 
@@ -544,10 +545,12 @@ The normative rulebook; `CONTRIBUTING.md` defers to it and never duplicates it. 
 2. Work is in a `.worktrees/` worktree, never on `main`.
 3. No plan files in the final diff: plans live through development, then are deleted; load-bearing decisions distill into an ADR in the same commit.
 4. Commit hygiene (subjects, no trailers, no em-dashes, no whitespace errors).
-5. `check-warnings` clean.
-6. Prose review: `scripts/prose-diff.sh` lists added comment blocks; violations of the block cap and decoration rules fail.
-7. PR body with real newlines (`--body-file`, never inline `\n`).
-8. User-visible changes update `README.md`/`docs/` in the same PR or note `README: n/a`.
+5. `check-warnings` clean (C/C++ `-Werror` builds, cppcheck, UBSan on host builds).
+6. Lint clean (`scripts/lint-python.sh`: ruff check + format; clang-format; ament linters).
+7. Prose review: `scripts/prose-diff.sh` lists added comment blocks; violations of the block cap and decoration rules fail.
+8. PR body with real newlines (`--body-file` or heredoc, never inline `\n`); never a shared fixed path like `/tmp/pr_body.md` (one file per PR).
+9. Hooks installed (`make setup-hooks`).
+10. User-visible changes update `README.md`/`docs/` in the same PR or note `README: n/a`.
 
 ### Git hooks (`make setup-hooks`)
 
@@ -559,17 +562,21 @@ The normative rulebook; `CONTRIBUTING.md` defers to it and never duplicates it. 
 
 Conventional single-line subjects (`feat(core): ...`, `fix(bridge): ...`, `docs(...)`, `ci(...)`, `test(...)`); never `Co-Authored-By:` or other trailers; breaking changes carry the `!` marker. One ticket per PR, squash merge. Version truth is per component (`core`, `gen`, `bridge`) plus `R2S_PROTOCOL_VERSION`.
 
+### Worktrees
+
+One worktree per ticket under `.worktrees/`, removed only after the PR merges (the branch must stay reachable for review). A build from the main clone is refused while worktrees exist (`guard-main-clone`, overridable for one-offs), so parallel agents never build a dirty tree.
+
 ### Prose rules (comments and docs)
 
 Why, not what; a comment must earn its lines (block cap 8, 2 to 3 preferred); no `@file`/`@brief` decoration or separator art; no iteration narrative (verification claims belong in the PR, not the tree); `TODO` carries a reason or does not exist; no em-dashes in prose. Third-party code keeps its own style.
 
 ### Docs lifecycle
 
-`docs/NN-*.md` is the numbered design series; decisions worth keeping distill into `docs/adr/ADR-00N-<topic>.md` with an index line. Implementation plans are ephemeral and deleted before merge (master history keeps them via the PR). No session logs on `main`; no volatile numbers (counts, trees, line numbers) in docs; diagrams only where prose would belabor.
+`docs/NN-*.md` is the numbered design series; decisions worth keeping distill into `docs/adr/ADR-00N-<topic>.md` with an index line. Implementation plans are ephemeral and deleted before merge (`main` history keeps them via the PR). No session logs on `main`; no volatile numbers (counts, trees, line numbers) in docs; diagrams only where prose would belabor.
 
 ### Scripts
 
-Helpers live in `scripts/` with a `test_*.py` beside each non-trivial one; `ruff` is pinned in the Dockerfile and `scripts/lint-python.sh` gates it. CI runs the same script the developer runs (`scripts/ci-test.sh`); flash/RAM budgets are judged head-vs-base in the same run (measure both, judge the delta, post the PR comment), not as absolute numbers in the tree.
+Helpers live in `scripts/` with a `test_*.py` beside each non-trivial one; `ruff` is pinned in the Dockerfile and `scripts/lint-python.sh` gates it. CI runs the same script the developer runs (`scripts/ci-test.sh`); flash/RAM budgets are judged head-vs-base in the same run, using the base commit's judge script (a PR cannot relax the thresholds it is judged by), not as absolute numbers in the tree. A non-code classifier may skip heavy jobs on docs-only PRs, but never the prose gate, and workflow files are never exempt: a misclassification may only cause an extra run, never a missed break. `scratch/` is gitignored and holds per-ticket experiments; nothing in it ships.
 
 ### Deliberately not adopted
 
