@@ -607,7 +607,7 @@ ros2serial/
 | C++ (bridge) | C++17 (Jazzy's baseline), `ament_lint_auto` (cpplint, uncrustify or clang-format, cppcheck), ROS 2 style |
 | Python | 3.10 or newer, `ruff` (lint + format), `mypy --strict` on `r2s_gen`, `pytest`, `hypothesis` |
 | Commits | Conventional Commits (`feat(core): ...`, `fix(bridge): ...`, `test(gen): ...`); changelog with git-cliff; details in `AGENTS.md` |
-| Branches and PRs | `main` is protected; one ticket per PR in a `.worktrees/` worktree, never on `main`; branches named `<type>/<issue>-<slug>`; a draft PR is the claim; squash merge; CI must be green; the PR body carries `Closes #N`, a `## Review` section and the red test run (see TDD rules) |
+| Branches and PRs | `main` is protected; one ticket per PR in a `.worktrees/` worktree, never on `main`; branches named `<type>/<issue>-<slug>`; a draft PR is the claim; squash merge; CI must be green; the PR body carries `Closes #N`, a `## Review` section and the red test run (see `docs/01-testing.md`) |
 | Versions | One semver for the whole repository (`VERSION`, bumped only by `cut-release.yml`) plus the protocol version (`R2S_PROTOCOL_VERSION`, starts at 1) |
 | Licenses | MIT for everything |
 | Docs | Every public function has a doc comment; every PR that changes behavior updates `spec/protocol.md` or `docs/` in the same PR |
@@ -927,108 +927,16 @@ The generator computes the REP-2011 RIHS01 hash for each type. Default approach:
 
 ## Test strategy
 
-### TDD rules
+The full strategy is `docs/01-testing.md`, which is normative. In short:
 
-1. Every ticket starts with tests. The first commit in a PR adds tests that fail, and the PR body includes the failing run (command and output excerpt).
-2. Behavior that crosses the wire is specified by a conformance vector in `spec/vectors/` before any code is written. Code in C, Python and C++ is tested against the same vectors.
-3. The first message vectors (Float32, Twist) are computed by hand and reviewed; the Python reference codec must reproduce them before it generates any further vector.
-4. Bugs are fixed by first adding a test (or a vector, or a fuzz corpus entry) that reproduces them.
-5. No test is deleted or weakened to make CI pass without the maintainer's approval in the PR.
-6. CI is the source of truth: a test that only runs locally does not count.
+- **Test-first, from the spec down.** Behavior that crosses the wire is fixed by a conformance vector before any code; the C core, the Python reference and the bridge all run the same vectors. Every normative statement in the spec carries an ID, and CI fails when an ID has no test.
+- **Designed for testability.** One static state struct per core module with a test-only reset, link-time seams (port functions, user handlers) with a scriptable fake port, time only through the port tick, pure functions for the algorithms, a thin rclcpp shell around plain C++ classes in the bridge, a functional pipeline in the generator.
+- **Levels:** unit, component, contract (vectors), integration (bridge plus a posix virtual MCU), system (simavr, then hardware), plus property-based, model-based, differential, fuzz, fault-injection, golden, soak and budget tests where they fit.
+- **Extent:** coverage floors per component (95% lines for the core), 100% of spec IDs and error paths, and mutation testing nightly as the real measure of test quality.
+- **When:** seconds while editing, under 30 s at commit, under 15 min per PR, hours nightly, plus the hardware checklist at release.
+- **Honesty:** flaky tests are bugs, tests are reviewed before the code, golden files and vectors change only on purpose, and the fakes have tests of their own.
 
-### Test oracles
-
-| Oracle | Checks |
-| --- | --- |
-| Conformance vectors (`spec/vectors/`) | C core, Python reference codec, bridge framing and conversion |
-| Python reference codec (`r2s_gen/reference/`) | A deliberately simple, readable implementation of the encoding rules, rCOBS and the CRC. It generates vectors and is the oracle for property-based tests |
-| `rclpy.serialization.serialize_message` / rclcpp serialization | The bridge's packed-to-CDR output, byte for byte |
-| Installed type support hashes | The generator's RIHS01 hashes |
-| Published check values | CRC-16/MCRF4XX of `"123456789"` is `0x6F91` |
-
-### Vector format
-
-```yaml
-# spec/vectors/messages/float32_1_5.yaml
-name: float32_1_5
-type: std_msgs/msg/Float32
-profile: {narrow_float64: false}
-message: {data: 1.5}
-payload: "00 00 c0 3f"
-```
-
-```yaml
-# spec/vectors/rcobs/basic.yaml (delimiter included in "encoded")
-cases:
-  - {decoded: "",            encoded: "01 00"}
-  - {decoded: "00",          encoded: "01 01 00"}
-  - {decoded: "00 00",       encoded: "01 01 01 00"}
-  - {decoded: "11 22 00 33", encoded: "11 22 03 33 02 00"}
-  - {decoded: "11 22 33 44", encoded: "11 22 33 44 05 00"}
-  - {decoded: "11 00 00 00", encoded: "11 02 01 01 01 00"}
-```
-
-```yaml
-# spec/vectors/frames/float32_topic16.yaml
-name: float32_topic16
-topic_id: 16
-seq: 0
-payload: "00 00 c0 3f"
-frame: "10 00 00 00 c0 3f 1e 49"        # before rCOBS; CRC 0x491e stored little-endian
-wire: "10 02 01 01 c0 3f 1e 49 05 00"
-```
-
-```yaml
-# spec/vectors/varint/basic.yaml
-cases:
-  - {value: 0,   encoded: "00"}
-  - {value: 127, encoded: "7f"}
-  - {value: 128, encoded: "80 01"}
-  - {value: 300, encoded: "ac 02"}
-```
-
-Session vectors (handshake transcripts as ordered lists of host and MCU frames) and time vectors (tick, correction and expected `r2s_now()` results, including wraparound and maximum drift) are produced by the reference implementation and reviewed by hand once, then frozen. `tools/vectors_check.py` validates every vector file against a schema in CI.
-
-### Test layers
-
-| Layer | What | Tooling | Runs |
-| --- | --- | --- | --- |
-| Core unit | CRC, rCOBS, varint, framer, ring, session state machine, time math, log encoding, codec interpreter, topic accessors | Unity (ThrowTheSwitch, MIT), CMake/CTest, gcc and clang, `-m32` build too | Every PR |
-| Core vectors | Every vector in `spec/vectors/` through the C code | Unity runner generated from YAML | Every PR |
-| Core sanitizers | Unit tests under ASan + UBSan | clang | Every PR |
-| Core coverage | Line and branch coverage | gcovr; fail below 95% lines for `core/src` | Every PR |
-| Zone check | Core free of function pointers, float operations and C++ includes | `tools/zone_check.py` on object files | Every PR |
-| Big-endian | Core unit tests on a big-endian target | qemu-user (for example s390x) via docker | Nightly |
-| Fuzzing | rCOBS decoder, framer, codec interpreter with every descriptor, session input | libFuzzer; corpora committed in `core/fuzz/corpus/` | 60 s per target on PRs, 30 min nightly |
-| Generator unit | Config validation, bounds resolution, naming and collisions, error messages | pytest | Every PR |
-| Generator golden | Generated files for example configs match committed snapshots | pytest; `--update-golden` flag for intentional changes | Every PR |
-| Generator property | Random message definitions and values: generate C, compile on host, round-trip through the interpreter, compare with the reference codec | hypothesis + host gcc | Every PR (bounded examples), more nightly |
-| Generator hashes | RIHS01 equals the installed type support's hash for bundled types, per distro | pytest inside the ROS containers | Every PR |
-| C++ layer | Static and runtime APIs: registration, dispatch, construction order, registration-after-spin error | Host builds + avr-g++ compile tests | Every PR |
-| Bridge unit | Host session state machine with a fake transport (boot wait, reset rules), converter against rclcpp serialization, time estimator with a simulated drifting clock, rate limiting and bandwidth cap | gtest via `ament_cmake_gtest` | Every PR |
-| End-to-end, posix | Bridge plus the posix virtual MCU over a pty: the key scenarios below, on both registration paths | launch_testing | Every PR, RMW matrix |
-| Fault injection | A pty proxy between bridge and MCU that flips bits, drops, duplicates and inserts bytes, truncates frames and resets the MCU mid-session | launch_testing + `tests/harness/` | Every PR (short), nightly (long) |
-| End-to-end, AVR | The same scenarios against firmware running in simavr (ATmega328P for Uno, ATmega2560 for Mega), UART bridged to a pty | simavr harness | Every PR once ticket R5 lands |
-| End-to-end, PIC | The same scenarios under MPLAB SIM | epic-hal mdb gate | Phase 5 |
-| Build matrix | Examples compile for Uno + Mega (arduino-cli, both registration paths), PlatformIO, bare AVR | arduino/compile-sketches, `pio ci`, make | Every PR |
-| PIC canary | Core and static C++ compile with epic-cc for PIC16F1938 and PIC18F4550 | epic-cc release bundle | Every PR from Phase 2, advisory until Phase 5 |
-| Budgets | Flash, RAM and worst-case stack per example and tier against `tools/budgets.yaml`. Stack: static (host `-fcallgraph-info` call graph combined with avr-gcc `-fstack-usage` frame sizes) and measured (stack painting in simavr during the e2e scenarios) | avr-size, `tools/stack_report.py` | Every PR |
-| Hardware in the loop | Real Uno + Mega | Self-hosted runner, `workflow_dispatch` by maintainers only, never on pull requests | Phase 1 onwards; PIC boards join in Phase 5 |
-
-**Key end-to-end scenarios** (in `tests/e2e/`, each a launch_testing test parameterized by MCU backend and registration path):
-
-1. Handshake completes; `ros2 topic list` shows the announced topics within 3 s of the MCU's HELLO.
-2. MCU publishes Float32 at 50 Hz for 10 s; the host receives at least 99% with correct values.
-3. Host publishes Twist; the MCU echoes it on a test topic; values match after the narrow round trip.
-4. Launch remapping and namespace apply to the MCU's topics.
-5. A type hash mismatch rejects only that topic, with an error naming the type.
-6. Unplug (close the pty) and replug: CONNECTED again within `boot_wait_ms` + 3 s without restarting the bridge.
-7. MCU reset: detected within 500 ms (HELLO in reply to a heartbeat), re-handshake follows; publishers are kept when the table is unchanged.
-8. Time sync: with a simulated MCU clock off by 5000 ppm, stamps stay within 1 ms of host time after the initial burst.
-9. Log messages at each level appear on `/rosout` with the right severity and logger name.
-10. Fault injection at 1% byte corruption: no crash, the counters match the injected faults, and delivery recovers on the next frame.
-11. A subscribed message that exceeds a bound is dropped, and the bridge logs the topic and the field path.
-12. Link saturation: the MCU publishes more than the link carries; publishes return `R2S_ERR_TX_BUSY`, no frame is corrupted, and the counters report it.
+Scenario numbers in the tickets below refer to the key end-to-end scenarios in `docs/01-testing.md`, section 10.
 
 ## CI on GitHub Actions
 
@@ -1063,6 +971,7 @@ Each one produces a short write-up in `docs/research/` and, where relevant, a pr
 | R10 | Arduino `HardwareSerial` behavior: RX buffer size per core, overflow, `availableForWrite()`, how to enlarge buffers via build flags | Notes and port recommendations | Read byte by byte in `r2s_port_read` |
 | R11 | CH32V00x: which part is the tier M proof (RAM and flash of the V002, V003, V006) and its toolchain | Part choice with datasheet links | CH32V003 class, 2 KB RAM |
 | R12 | Static C++ API on epic-cc for PIC14E and PIC18: verify the compile-time results in simulation, global constructors included | Simulated fixtures and an epic-cc ticket for any gap | Advisory compile-only canary |
+| R13 | Mutation testing tools for C, C++ and Python (Mull, mutmut, alternatives): accuracy, speed, CI fit | Recommendation with a trial run on the core and the generator | Mull and mutmut |
 
 ## Epics and seed tickets
 
@@ -1074,6 +983,10 @@ Ticket IDs are for cross-reference; the ticket agent may renumber. "Deps" lists 
 | --- | --- | --- | --- |
 | K0 | R1 and R2 write-ups and the go/no-go note | | Maintainer decision recorded in `docs/research/` |
 | K1 | Hardware spike on a real Uno: handwritten Float32 and Twist over rCOBS, minimal host script, flash and RAM measured (lives in `scratch/`, not merged) | | Measurements recorded; tier M targets confirmed or adjusted in this document |
+
+### E10: test infrastructure
+
+Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their dependencies on the epics below. T1 lands before any core ticket after C1, and T8 before any bridge ticket after H1.
 
 ### E0: repository bootstrap
 

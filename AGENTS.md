@@ -72,6 +72,7 @@ Work is plain GitHub issues. A draft pull request is the claim.
 
 - Inner loop in the container: `make shell`, then `make test CORE=1` (or `GEN=1`, `BRIDGE=1`, `E2E=posix`) and `make compile EXAMPLE=<name>`.
 - **Tests first.** The first commit of a PR adds tests, vectors or fuzz corpus entries that fail, and the PR body pastes that failing run. Bugs are fixed by first reproducing them in a test.
+- **`docs/01-testing.md` is normative:** how code must be written to be testable, what to test at which level, coverage, mutation and spec-coverage gates, and the rules for the tests themselves. Read it before writing any code.
 - Behavior that crosses the wire is specified by a conformance vector before any code is written. The first message vectors are computed by hand; the Python reference must reproduce them before it generates any further vector.
 - Bisect by artifact before reading code: is the vector right, does the reference reproduce it, does the C core, does the bridge? `r2s-gen vectors` prints a payload; the fault-injecting proxy logs every frame as hex.
 
