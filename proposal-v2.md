@@ -53,11 +53,13 @@ The intended user experience is a hobbyist's: write a short config, include a he
 
 ## Hardware tiers
 
+Tiers are defined by resources, not ISA bitness: a 32-bit core is not automatically big (CH32V002 has 2 KB RAM).
+
 | Tier | Examples | RAM | Features |
 | --- | --- | --- | --- |
 | S | PIC16 class, e.g. 16F193X / 16F877A (deferred; bounding constraint) | 368 B to 1 KB | Publish and subscribe, compact handshake, narrow profile mandatory, optional log |
-| M | Arduino Uno (ATmega328P) + Mega (ATmega2560), validation platforms | 2 KB on Uno / 8 KB on Mega | Everything in P0 and P1 |
-| L | STM32, RP2040 | 32 KB or more | Everything; full-width `float64` by default |
+| M | Arduino Uno (ATmega328P) + Mega (ATmega2560), validation platforms; CH32V002 (Phase 3) | 2 KB on Uno / CH32V002, 8 KB on Mega | Everything in P0 and P1 |
+| L | STM32 (one small + one mid, Phase 3), RP2040, ESP32 (build-only via Arduino layout) | 32 KB or more | Everything; full-width `float64` by default |
 
 Features are selected at compile time (`R2S_WITH_TIME`, `R2S_WITH_LOG`, `R2S_WITH_PARAMS`, `R2S_WITH_RELIABLE`), so a tier S build carries only publish and subscribe.
 
@@ -391,9 +393,9 @@ Each phase ends in a decision gate and a publishable artifact.
 - *Gate:* P0 complete and tier M budgets met. *Artifact:* benchmark write-up and the spec.
 **Phase 3: portability and P1**
 - PIC port (deferred): tier S compact handshake on PIC16-class (16F877A as bounding part), tier M PIC18-class check; toolchain TBD.
-- A 32-bit target (STM32 or RP2040) for tier L.
-- Parameters, services, the C++ wrapper (strict EC++), Arduino, PlatformIO and PIC-HAL packaging, rosidl plugin wrapper.
-- *Demo:* the same sketch on Uno and Mega, plus a PIC board if Phase 3 landed, all publishing into the same ROS 2 graph.
+- 32-bit ports: CH32V002 (tier M proof on a modern toolchain) + one small STM32 for tier M/L; RP2040 for tier L; ESP32 build-only via the existing Arduino layout (no WiFi transport in v1).
+- Parameters, services, the C++ wrapper (strict EC++), Arduino, PlatformIO and PIC packaging, rosidl plugin wrapper.
+- *Demo:* the same sketch on Uno and Mega, plus a 32-bit board (and a PIC board if landed), all publishing into the same ROS 2 graph.
 - *Gate:* release candidate. *Artifact:* a "port your rosserial sketch" guide and the cross-board demo.
 
 **Phase 4: release and community**
@@ -470,7 +472,8 @@ ros2serial/
 │   ├── arduino/              Arduino library glue (Serial, micros)
 │   ├── avr/                  bare-metal AVR glue (USART ISR, timer tick)
 │   ├── pic/                  Phase 3: PIC serial + tick glue and module manifest entry (deferred)
-│   └── stm32/                Phase 3
+│   ├── ch32v/                Phase 3: CH32V002 serial + tick glue (tier M 32-bit proof)
+│   ├── stm32/                Phase 3: one small STM32 + RP2040; ESP32 build-only via Arduino layout
 ├── examples/                 one directory per example, each built in CI (Uno + Mega in Phase 1)
 ├── tests/
 │   ├── e2e/                  shared end-to-end scenarios, run against posix and simavr (PIC sim joins in Phase 3)
@@ -942,7 +945,7 @@ Ticket IDs are for cross-reference; the ticket agent may renumber. "Deps" lists 
 | P9 | Framing and CRC benchmark (AVR Uno/Mega) | V4, R7 | Write-up in `docs/benchmarks/` |
 | P10 | Encoding benchmark (packed vs CDR vs MAVLink) | G7 | Write-up; decision on narrow per field |
 | P11 | Protocol spec v1.0 freeze | P1–P5 | Tagged; vectors frozen |
-### E7: PIC, portability and P1 (Phase 3, deferred)
+### E7: portability and P1 (Phase 3, deferred)
 | ID | Ticket | Deps | Acceptance |
 | --- | --- | --- | --- |
 | X1 | PIC port (deferred): PIC18-class check + tier S on PIC16-class with 16F877A as bounding part | V1 | Builds; budgets recorded |
@@ -950,14 +953,14 @@ Ticket IDs are for cross-reference; the ticket agent may renumber. "Deps" lists 
 | X3 | Compact handshake (MCU, generator node map, bridge loader) | P11 | Scenarios 1 to 4 in compact mode |
 | X4 | Tier S budget proof on 16F877A-class | X1, X3 | Fits tier S budgets |
 | X5 | PIC toolchain build (XC8 + second PIC C compiler) | R9, X1 | Build job or documented manual check |
-| X6 | STM32 or RP2040 port | V1 | Builds; e2e on hardware manually |
+| X6 | 32-bit ports: CH32V002 + one small STM32 (e2e on hardware manually); RP2040; ESP32 build-only via Arduino layout | V1 | Builds; budgets recorded |
 | X7 | Reliable channel | S5 | Unit and fault-injection tests |
 | X8 | Parameters | X7 | `ros2 param set` reaches the MCU in e2e |
 | X9 | Services | X7, R4 | Server and client e2e |
-| X10 | C++ wrapper (strict EC++), avr-g++ now, PIC C++ in Phase 3 | G8 | Wrapper example builds; static construction order test |
+| X10 | C++ wrapper (strict EC++), avr-g++ now, PIC/32-bit C++ in Phase 3 | G8 | Wrapper example builds; static construction order test |
 | X11 | PlatformIO and PIC layouts and module entry | G10, X1 | Install-and-build tests in CI |
 | X12 | rosidl plugin wrapper | G8 | Generation from `colcon build` in a test package |
-| X13 | Cross-board demo: same sketch on Uno, Mega, and PIC board | X1, X10 | Demo recording |
+| X13 | Cross-board demo: same sketch on Uno, Mega, 32-bit and PIC boards | X1, X6, X10 | Demo recording |
 
 ### E8: release (Phase 4)
 
