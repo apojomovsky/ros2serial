@@ -15,11 +15,11 @@ ros2serial brings rosserial's experience to ROS 2: publish and subscribe from sm
 
 ## Bootstrap status
 
-The repository is being bootstrapped (epic E0 in `docs/00-design.md`). Until each ticket below lands, the rules that depend on it describe the target state, and `scripts/check_layout.py` is the only check that runs:
+The repository is being bootstrapped (epic E0 in `docs/00-design.md`). Until each ticket below lands, the rules that depend on it describe the target state. What runs today: `make test`, which runs `scripts/ci-test.sh` (layout check, ruff, actionlint, script tests), the same suite as CI:
 
 | Rule area | Ticket |
 | --- | --- |
-| CI skeleton, `scripts/ci-test.sh`, `main` as the protected default branch | #4 |
+| `main` as the protected default branch (CI skeleton and `scripts/ci-test.sh` are in place; `make test` runs on the host until #7) | #4 |
 | Conventional Commits check, changelog | #5 |
 | Vector schema check | #6 |
 | `make` targets, Docker image | #7 |

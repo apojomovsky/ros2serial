@@ -1,0 +1,89 @@
+name: ci
+
+# Every job runs scripts/ci-test.sh with a scope, the same script `make test`
+# runs. Placeholder jobs mark where each test layer lands; each names the
+# ticket that fills it in.
+
+on:
+  push:
+    branches: [main, master] # master until the default branch is renamed (#4)
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Load pinned versions
+        run: grep -v '^#' ci/versions.env >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install pinned tools
+        run: pip install "ruff==${RUFF_VERSION}" "actionlint-py==${ACTIONLINT_PY_VERSION}"
+      - name: Lint and layout
+        run: LINT=1 bash scripts/ci-test.sh
+
+  scripts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Load pinned versions
+        run: grep -v '^#' ci/versions.env >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install pinned tools
+        run: pip install "pytest==${PYTEST_VERSION}" "ruff==${RUFF_VERSION}" "actionlint-py==${ACTIONLINT_PY_VERSION}"
+      - name: Script tests
+        run: SCRIPTS=1 bash scripts/ci-test.sh
+
+  # Placeholders. Each becomes a real job in the ticket it names, and stays
+  # out of the required checks until then.
+  core:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - run: echo "pending C1, see docs/00-design.md"
+  gen:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - run: echo "pending G1, see docs/00-design.md"
+  bridge:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - run: echo "pending H1, see docs/00-design.md"
+  e2e-posix:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - run: echo "pending V1, see docs/00-design.md"
+  e2e-avr:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - run: echo "pending V3 and V4, see docs/00-design.md"
+  fuzz-smoke:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - run: echo "pending C11, see docs/00-design.md"
+  build-matrix:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - run: echo "pending G10, see docs/00-design.md"
+  budgets:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - run: echo "pending P6, see docs/00-design.md"

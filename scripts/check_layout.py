@@ -10,17 +10,48 @@ import sys
 from pathlib import Path
 
 REQUIRED_DIRS = [
-    "spec/vectors/crc", "spec/vectors/rcobs", "spec/vectors/varint", "spec/vectors/frames",
-    "spec/vectors/messages", "spec/vectors/session", "spec/vectors/time",
-    "core/include/r2s", "core/src", "core/tests", "core/fuzz",
-    "cpp", "gen/r2s_gen", "gen/tests",
-    "bridge/r2s_bridge", "bridge/r2s_bridge_tests",
-    "ports/posix", "ports/arduino", "ports/avr", "ports/ch32v", "ports/stm32", "ports/epic-hal",
-    "examples", "tests/e2e", "tests/harness", "tools", "scripts", "ci",
-    "docs/adr", "docs/research", ".github/workflows", ".githooks",
+    "spec/vectors/crc",
+    "spec/vectors/rcobs",
+    "spec/vectors/varint",
+    "spec/vectors/frames",
+    "spec/vectors/messages",
+    "spec/vectors/session",
+    "spec/vectors/time",
+    "core/include/r2s",
+    "core/src",
+    "core/tests",
+    "core/fuzz",
+    "cpp",
+    "gen/r2s_gen",
+    "gen/tests",
+    "bridge/r2s_bridge",
+    "bridge/r2s_bridge_tests",
+    "ports/posix",
+    "ports/arduino",
+    "ports/avr",
+    "ports/ch32v",
+    "ports/stm32",
+    "ports/epic-hal",
+    "examples",
+    "tests/e2e",
+    "tests/harness",
+    "tools",
+    "scripts",
+    "ci",
+    "docs/adr",
+    "docs/research",
+    ".github/workflows",
+    ".githooks",
 ]
-REQUIRED_FILES = ["LICENSE", "README.md", "AGENTS.md", "CONTRIBUTING.md", ".gitignore",
-                  "docs/00-design.md", "docs/adr/README.md"]
+REQUIRED_FILES = [
+    "LICENSE",
+    "README.md",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    ".gitignore",
+    "docs/00-design.md",
+    "docs/adr/README.md",
+]
 GITIGNORED = ["scratch/", ".worktrees/"]
 
 

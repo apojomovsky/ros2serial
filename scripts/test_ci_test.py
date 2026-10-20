@@ -12,21 +12,29 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def copy_tree(dest: Path) -> Path:
-    files = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True).stdout
-    for name in filter(None, files.decode().split("\0")):
+    """Copy the working tree as git sees it: tracked plus untracked, minus ignored."""
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+    ).stdout
+    for name in filter(None, listed.decode().split("\0")):
         src = ROOT / name
         if src.is_file():
             (dest / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dest / name)
-    for extra in ["scripts/ci-test.sh", "ci/versions.env", "pyproject.toml"]:
-        if (ROOT / extra).is_file() and not (dest / extra).is_file():
-            shutil.copy2(ROOT / extra, dest / extra)
     return dest
 
 
 def run_lint(root: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(["bash", "scripts/ci-test.sh"], cwd=root, capture_output=True, text=True,
-                          env={"PATH": "/usr/local/bin:/usr/bin:/bin", "LINT": "1", "HOME": str(root)})
+    return subprocess.run(
+        ["bash", "scripts/ci-test.sh"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/local/bin:/usr/bin:/bin", "LINT": "1", "HOME": str(root)},
+    )
 
 
 def test_lint_passes_on_the_tree(tmp_path):
