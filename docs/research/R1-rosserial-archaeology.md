@@ -1,6 +1,6 @@
 # R1: rosserial archaeology
 
-Oct 20, 2026 · research ticket R1 in `proposal-v3.md`
+Oct 20, 2026 · research ticket R1 in `docs/00-design.md`
 
 **Sources.** `ros-drivers/rosserial`, branch `noetic-devel` at `c169ae2` (Jun 16, 2021, the last commit on that branch): `rosserial_client` (the MCU library), `rosserial_arduino`, `rosserial_python` (the host). Sizes were measured on an Arduino Uno build (ATmega328P) made with avr-gcc 7.3.0 and the Arduino AVR core 1.8.6 compiler flags. The build scripts and sketches are in `spike/k1-uno/`. Statements about behavior come from reading the code; none was observed on hardware.
 
@@ -10,7 +10,7 @@ Oct 20, 2026 · research ticket R1 in `proposal-v3.md`
 - Its RAM goes to two large frame buffers, pointer tables sized for 25 publishers and 25 subscribers, **vtables and type-name and MD5 strings that AVR keeps in RAM**, and a heap allocator linked in for array fields.
 - Its receive path writes frames into a fixed buffer **without a bounds check**, and its publish path serializes **before** checking the size, so oversized or corrupted frames corrupt memory.
 - Its time sync is a millisecond offset with a systematic bias and no drift model. Its reset detection relies on timeouts: up to **15 s** of outage after an MCU reset.
-- The parity table in `proposal-v3.md` holds. The rosserial-compatible API needs more surface than v3 lists, and "ports unmodified apart from includes" only holds for messages without arrays or strings (see the last section).
+- The parity table in `docs/00-design.md` holds. The rosserial-compatible API needs more surface than v3 lists, and "ports unmodified apart from includes" only holds for messages without arrays or strings (see the last section).
 
 ## Architecture
 
@@ -86,7 +86,7 @@ Where rosserial's RAM goes, beyond the two buffers and the pointer tables: one v
 
 ## Parity table check
 
-Every row of the parity table in `proposal-v3.md` exists in rosserial. Corrections:
+Every row of the parity table in `docs/00-design.md` exists in rosserial. Corrections:
 
 - **Parameters** are get-only and blocking in rosserial. v3's plan (parameters declared by the MCU and exposed as ROS 2 parameters of the bridge, set from the host) is a superset, not parity.
 - **TF** has a client-side helper (`tf::TransformBroadcaster`). Parity means providing at least that convenience, even if the work happens on the host.

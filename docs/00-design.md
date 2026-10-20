@@ -1,6 +1,6 @@
-# rosserial for ROS 2: kickoff document (v3)
+# ros2serial design
 
-Oct 20, 2026 · @Alexis Pojomovsky · supersedes v2 (Oct 3, 2026)
+Oct 20, 2026 · @Alexis Pojomovsky · from the kickoff proposal v3, which superseded v2 (Oct 3, 2026); both are in the git history
 
 > **How to use this document.** Part I is the design: what we build and why. Part II is the implementation specification: repository layout, exact protocol details, APIs, test strategy, CI, research tickets and the seed backlog. An agent creating tickets should start from Part II, section "Epics and seed tickets", and follow the links back into Part I for rationale. Where something is still unknown, Part II names a research ticket and a default to use until it is answered, so no ticket is blocked on a decision. Everything is built test-first, and every test runs on GitHub Actions.
 
@@ -33,7 +33,7 @@ Oct 20, 2026 · @Alexis Pojomovsky · supersedes v2 (Oct 3, 2026)
 | Distros | Jazzy "and newer" | Jazzy and Lyrical required, Rolling nightly; the generator targets a distro explicitly |
 | Uno specifics | Not covered | DTR auto-reset on port open, bootloader delay, ceramic resonator drift, baud error at 16 MHz |
 | Phase 0 | Research only | Research plus a throwaway hardware spike to measure real RAM and flash before tickets are written against the budgets |
-| Engineering practices | A section of this document | A separate document, `engineering-practices.md`, checked against epic-cc's actual tooling |
+| Engineering practices | A section of this document | `AGENTS.md` (the rules) and ADR-001 (where they come from), checked against epic-cc's actual tooling |
 | Versions | Per component | One version for the repository (bloom releases all packages of a repository with one version) |
 
 ## Vision and non-goals
@@ -606,7 +606,7 @@ ros2serial/
 | Zone boundary | `tools/zone_check.py` fails CI if anything under `core/` includes from `cpp/`, uses a function pointer type, or calls a float operation (checked on the object files) |
 | C++ (bridge) | C++17 (Jazzy's baseline), `ament_lint_auto` (cpplint, uncrustify or clang-format, cppcheck), ROS 2 style |
 | Python | 3.10 or newer, `ruff` (lint + format), `mypy --strict` on `r2s_gen`, `pytest`, `hypothesis` |
-| Commits | Conventional Commits (`feat(core): ...`, `fix(bridge): ...`, `test(gen): ...`); changelog with git-cliff; details in `engineering-practices.md` |
+| Commits | Conventional Commits (`feat(core): ...`, `fix(bridge): ...`, `test(gen): ...`); changelog with git-cliff; details in `AGENTS.md` |
 | Branches and PRs | `main` is protected; one ticket per PR in a `.worktrees/` worktree, never on `main`; branches named `<type>/<issue>-<slug>`; a draft PR is the claim; squash merge; CI must be green; the PR body carries `Closes #N`, a `## Review` section and the red test run (see TDD rules) |
 | Versions | One semver for the whole repository (`VERSION`, bumped only by `cut-release.yml`) plus the protocol version (`R2S_PROTOCOL_VERSION`, starts at 1) |
 | Licenses | MIT for everything |
@@ -614,7 +614,7 @@ ros2serial/
 
 ## Engineering practices
 
-The workflow, tooling and writing rules (Makefile, Docker image, hooks, worktrees, review gate, takeoff ritual, commit hygiene, CI workflows, releases, comment and docs rules) are in `engineering-practices.md`, which ticket B1 turns into `AGENTS.md`. Most of them come from epic-cc; that document says what was adopted, adapted or left out, and why.
+The workflow, tooling and writing rules (Makefile, Docker image, hooks, worktrees, review gate, takeoff ritual, commit hygiene, CI workflows, releases, comment and docs rules) are in `AGENTS.md`, the normative rulebook. Most of them come from epic-cc; `docs/adr/ADR-001-engineering-practices.md` says what was adopted, adapted or left out, and why.
 
 ## Protocol details
 
@@ -1079,7 +1079,7 @@ Ticket IDs are for cross-reference; the ticket agent may renumber. "Deps" lists 
 
 | ID | Ticket | Deps | Acceptance |
 | --- | --- | --- | --- |
-| B1 | Repository skeleton per the layout, LICENSE, README stub, `AGENTS.md` from `engineering-practices.md`; this document moves to `docs/00-design.md` | | Layout exists; AGENTS.md links the design document |
+| B1 | Repository skeleton per the layout, LICENSE, README stub, `AGENTS.md` and ADR-001 from the engineering practices draft; this document moves to `docs/00-design.md` | | Layout exists; AGENTS.md links the design document |
 | B2 | CI skeleton: `ci.yml` with lint jobs and empty test jobs, `scripts/ci-test.sh` as the single suite script, pinned `ci/versions.env` | B1 | Green run on `main`; `make test` runs the same script as CI |
 | B3 | Conventional commits check and git-cliff config | B1 | PR title check enforced in CI |
 | B4 | Vector schema and `tools/vectors_check.py` | B1 | Invalid vector files fail CI |
