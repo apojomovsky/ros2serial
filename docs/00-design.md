@@ -385,9 +385,13 @@ ROS 2-style aliases (`std_msgs::msg::Float32`) are always provided; rosserial-st
 The bridge creates its publishers and subscriptions under the names the MCU announces. ROS 2 applies remapping and namespace rules when a node creates a topic, so the standard launch syntax works with no extra code:
 
 ```python
-Node(package='r2s_bridge', executable='bridge', namespace='robot1',
-     parameters=[{'port': '/dev/ttyACM0', 'baud': 115200}],
-     remappings=[('battery', 'power/battery')])
+Node(
+    package="r2s_bridge",
+    executable="bridge",
+    namespace="robot1",
+    parameters=[{"port": "/dev/ttyACM0", "baud": 115200}],
+    remappings=[("battery", "power/battery")],
+)
 ```
 
 ## Code generator and packaging
