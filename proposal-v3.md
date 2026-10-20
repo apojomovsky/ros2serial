@@ -77,7 +77,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 | Tier | Core with 1 publisher + 1 subscriber (Float32, Twist) |
 | --- | --- |
 | S | < 200 B RAM including buffers, < 4K words flash |
-| M | < 400 B RAM including buffers, < 4 KB flash (P0 features), measured as the delta over an empty sketch that uses the same serial driver |
+| M | < 400 B RAM including buffers, < 4 KB flash (P0 features), measured as the delta over an empty sketch that uses the same serial driver. The K1 spike measured +137 B and +2.6 KB on a Uno build, against +706 B and +9.0 KB for the smallest rosserial configuration (R1) |
 
 ## Scope: parity with rosserial
 
@@ -522,7 +522,7 @@ Each open decision has a default. Tickets use the default until the decision is 
 
 | Decision | Default until decided | Decided by |
 | --- | --- | --- |
-| Project name and C prefix | Repository `ros2serial`, C prefix `r2s_`, ROS packages `r2s_*` | Maintainer, before Phase 4 |
+| Project name and C prefix | Repository `ros2serial`, C prefix `r2s_`, ROS packages `r2s_*`. The name was floated in 2018 for an unreleased rosserial rewrite (R2) | Maintainer, before Phase 4 |
 | Message type names in C headers (`__` is reserved in C++) | `std_msgs__msg__Float32` in C; C++ code uses namespace aliases | Maintainer, before the C++ API ticket |
 | CRC variant | CRC-16/MCRF4XX | Research ticket R7 |
 | Type hash truncation on the wire | 8 bytes | Spec ticket S2 |
@@ -1173,7 +1173,7 @@ Ticket IDs are for cross-reference; the ticket agent may renumber. "Deps" lists 
 | P8 | Big-endian qemu job | C1 | Nightly green |
 | P9 | Framing and CRC benchmark (AVR Uno/Mega): rCOBS, COBS, SLIP, rosserial style | V4, R7 | Write-up in `docs/benchmarks/` |
 | P10 | Encoding benchmark (packed vs CDR vs MAVLink) | G7 | Write-up; decision on narrow per field |
-| P11 | rosserial-compatible runtime registration: RAM topic table backend, `ros::NodeHandle`, `Publisher`, `Subscriber<T>`, compatibility headers | V5, C13, R1 | Every e2e scenario also passes on the runtime path; a ported rosserial example sketch builds unmodified apart from includes |
+| P11 | rosserial-compatible runtime registration: RAM topic table backend, `ros::NodeHandle` and `NodeHandle_<...>` (size parameters accepted and ignored), `Publisher`, `Subscriber<T>` and `Subscriber<T, ObjT>` (member functions), `setSpinTimeout`, `ros::Time` and `ros::Duration` arithmetic, `tf::TransformBroadcaster`, compatibility headers (see R1) | V5, C13 | Every e2e scenario also passes on the runtime path; rosserial example sketches with fixed-size messages build unmodified apart from includes; arrays, strings and `Header` need the one-line edits the migration guide documents; services fail to compile with a clear message until X6 |
 | P12 | Link saturation and TX_BUSY | C6, V1 | Scenario 12 |
 | P13 | Baud-rate matrix: 115200, 250000, 500000, 1000000 in simavr and on hardware | V4 | Results documented; default confirmed or changed |
 | P14 | PIC canary job with epic-cc (advisory) | C9, V5 | Core and static C++ compile for PIC16F1938 and PIC18F4550 |
