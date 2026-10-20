@@ -451,6 +451,10 @@ One repository, one colcon workspace root. Every directory has its own tests nex
 ```
 ros2serial/
 ├── AGENTS.md                 conventions for agents and contributors (summarizes this Part II)
+├── Makefile                  only entry point: bootstrap, image, shell, test, pre-pr-check, help
+├── Dockerfile                base/dev/ci(=dev)/release stages; versions pinned via ci/versions.env
+├── .githooks/                pre-commit, commit-msg, pre-push (installed by make setup-hooks)
+├── scripts/                  ci-test.sh, pre-pr-check.sh, prose-diff.sh, lint-python.sh, helpers + test_*.py
 ├── LICENSE                   MIT
 ├── spec/
 │   ├── protocol.md           the normative protocol specification (grows from Part I + this Part II)
@@ -494,10 +498,85 @@ ros2serial/
 | C++ (MCU wrapper) | Strict Embedded C++, see Part I |
 | Python | 3.10 or newer, `ruff` (lint + format), `mypy --strict` on `r2s_gen`, `pytest`, `hypothesis` |
 | Commits | Conventional Commits (`feat(core): ...`, `fix(bridge): ...`, `test(gen): ...`); changelog with git-cliff |
-| Branches and PRs | `main` is protected; one ticket per PR; squash merge; CI must be green; the PR body links the ticket and pastes the red test run (see TDD rules) |
+| Branches and PRs | `main` is protected; one ticket per PR in a `.worktrees/` worktree, never on `main`; squash merge; CI must be green; the PR body links the ticket and pastes the red test run (see TDD rules) |
 | Versions | semver per component (`core`, `gen`, `bridge`) plus the protocol version (`R2S_PROTOCOL_VERSION`, starts at 1) |
 | Licenses | MIT for everything by default (see open decisions) |
 | Docs | Every public function has a doc comment; every PR that changes behavior updates `spec/protocol.md` or `docs/` in the same PR |
+
+## Agent-friendly tooling (adopted from epic-cc)
+
+Principle, copied from epic-cc: one entry point (`make`), local == CI, one file for agents (`AGENTS.md`). Rust-specific parts are dropped, and the Docker pain is much smaller here (apt-installable toolchain, minutes not hours).
+
+### AGENTS.md
+
+The normative rulebook; `CONTRIBUTING.md` defers to it and never duplicates it. Contents: build and test commands, branch and worktree discipline, the takeoff ritual, commit and prose and docs rules, non-obvious gotchas, CI overview. Ticket B1 writes it from this section.
+
+### Makefile: the only entry point
+
+| Target | What |
+| --- | --- |
+| `bootstrap` | First-time setup: host deps check, git hooks, dev image |
+| `doctor` | Report what setup is missing, change nothing |
+| `image` | Build the dev image (the only image needed locally) |
+| `shell` | Interactive dev shell inside the image |
+| `exec CMD='...'` | One-off command inside the image |
+| `test` | Full suite: runs `scripts/ci-test.sh`, the exact script CI runs |
+| `test CORE=1` / `GEN=1` / `BRIDGE=1` / `E2E=posix` | Scope the suite while iterating |
+| `compile` | Build an example firmware and print sizes |
+| `info` | Toolchain versions from the image |
+| `fmt` / `lint` | clang-format, ruff, ament linters |
+| `check-warnings` | Fail on any compiler warning (hard gate; linters stay advisory) |
+| `size-report` | Regenerate flash/RAM report from the tree |
+| `docs-gen` | Regenerate CLI and vector reference docs from the tree |
+| `setup-hooks` | Install git hooks from `.githooks/` |
+| `pre-pr-check` | Takeoff ritual before opening a PR |
+| `help` | List all targets |
+
+### Docker image
+
+- Stages: `base` / `dev` / `ci` (empty alias of `dev`: running locally IS running in CI) / `release`. The dev image carries avr-gcc, arduino-cli, ROS Jazzy, simavr, Python with pytest/ruff/mypy/hypothesis, gtest, clang-format, cppcheck. Nothing toolchain-related lives on the host.
+- The container runs as your uid (files stay host-owned). Caches (ccache, pip, Arduino cores) live under `~/.cache/ros2serial/`; the host checkout is mounted at a fixed path with one build dir per worktree, so parallel agents never replay each other's artifacts.
+- Content-addressed image tag from the Dockerfile hash, a dedicated buildx builder so `docker system prune` cannot wipe the cache, and a GHCR registry cache as fallback. Pinned versions live in one file (`ci/versions.env`).
+
+### Takeoff ritual (`make pre-pr-check`)
+
+1. Working tree clean, branch not behind `main`.
+2. Work is in a `.worktrees/` worktree, never on `main`.
+3. No plan files in the final diff: plans live through development, then are deleted; load-bearing decisions distill into an ADR in the same commit.
+4. Commit hygiene (subjects, no trailers, no em-dashes, no whitespace errors).
+5. `check-warnings` clean.
+6. Prose review: `scripts/prose-diff.sh` lists added comment blocks; violations of the block cap and decoration rules fail.
+7. PR body with real newlines (`--body-file`, never inline `\n`).
+8. User-visible changes update `README.md`/`docs/` in the same PR or note `README: n/a`.
+
+### Git hooks (`make setup-hooks`)
+
+- `pre-commit`: format check on staged files (clang-format, ruff), warning check, trailing whitespace.
+- `commit-msg`: Conventional Commits, no trailers, no em-dashes.
+- `pre-push`: refuse force-pushes on shared branches, re-run prose verify.
+
+### Commit hygiene
+
+Conventional single-line subjects (`feat(core): ...`, `fix(bridge): ...`, `docs(...)`, `ci(...)`, `test(...)`); never `Co-Authored-By:` or other trailers; breaking changes carry the `!` marker. One ticket per PR, squash merge. Version truth is per component (`core`, `gen`, `bridge`) plus `R2S_PROTOCOL_VERSION`.
+
+### Prose rules (comments and docs)
+
+Why, not what; a comment must earn its lines (block cap 8, 2 to 3 preferred); no `@file`/`@brief` decoration or separator art; no iteration narrative (verification claims belong in the PR, not the tree); `TODO` carries a reason or does not exist; no em-dashes in prose. Third-party code keeps its own style.
+
+### Docs lifecycle
+
+`docs/NN-*.md` is the numbered design series; decisions worth keeping distill into `docs/adr/ADR-00N-<topic>.md` with an index line. Implementation plans are ephemeral and deleted before merge (master history keeps them via the PR). No session logs on `main`; no volatile numbers (counts, trees, line numbers) in docs; diagrams only where prose would belabor.
+
+### Scripts
+
+Helpers live in `scripts/` with a `test_*.py` beside each non-trivial one; `ruff` is pinned in the Dockerfile and `scripts/lint-python.sh` gates it. CI runs the same script the developer runs (`scripts/ci-test.sh`); flash/RAM budgets are judged head-vs-base in the same run (measure both, judge the delta, post the PR comment), not as absolute numbers in the tree.
+
+### Deliberately not adopted
+
+- The epic-tasks board: single repo, so plain GitHub issues with one ticket per agent and `area:*` labels; no shared-account claim tooling.
+- `master`: this repo uses `main`.
+- Clang-from-source and Rust specifics (clippy, rustfmt, cargo target poetry): apt + pip + ccache cover it.
+- License oracles and differential harnesses against proprietary toolchains: nothing proprietary in the loop.
 
 ## Protocol details
 
@@ -860,10 +939,12 @@ Ticket IDs are for cross-reference; the ticket agent may renumber. "Deps" lists 
 
 | ID | Ticket | Deps | Acceptance |
 | --- | --- | --- | --- |
-| B1 | Repository skeleton per the layout, LICENSE, README stub, AGENTS.md summarizing Part II | | Layout exists; AGENTS.md links this document |
-| B2 | CI skeleton: `ci.yml` with lint jobs and empty test jobs, pinned `ci/versions.env` | B1 | Green run on `main` |
+| B1 | Repository skeleton per the layout, LICENSE, README stub, AGENTS.md per the tooling section | | Layout exists; AGENTS.md links this document |
+| B2 | CI skeleton: `ci.yml` with lint jobs and empty test jobs, `scripts/ci-test.sh` as the single suite script, pinned `ci/versions.env` | B1 | Green run on `main`; `make test` runs the same script as CI |
 | B3 | Conventional commits check and git-cliff config | B1 | PR title check enforced in CI |
 | B4 | Vector schema and `tools/vectors_check.py` | B1 | Invalid vector files fail CI |
+| B5 | Makefile entry points + Docker dev/ci/release images + `make bootstrap`/`doctor` | B1 | Clean clone to `make test` per AGENTS.md; `dev` and `ci` identical |
+| B6 | Git hooks + `make pre-pr-check` (takeoff) + `scripts/prose-diff.sh` + `scripts/lint-python.sh` | B5 | Ritual fails a deliberately dirty PR in a test run |
 
 ### E1: specification and vectors
 
