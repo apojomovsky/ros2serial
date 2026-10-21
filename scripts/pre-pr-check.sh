@@ -43,10 +43,12 @@ done < <(python3 "$root/scripts/commit_check.py" --range "$base..HEAD" 2>&1)
 git diff --check "$base...HEAD" >/dev/null 2>&1 || fix "whitespace errors in the diff: git diff --check $base...HEAD"
 
 # 5. Compiler warnings.
-note "compiler warnings: the gate starts with C1 and H1 (no C or C++ code yet)"
+bash "$root/scripts/check-warnings.sh" >/dev/null 2>&1 \
+  || fix "compiler warnings or cppcheck findings: run make check-warnings"
 
 # 6. Lint.
 bash "$root/scripts/lint-python.sh" >/dev/null 2>&1 || fix "Python lint fails: bash scripts/lint-python.sh"
+bash "$root/scripts/c-format.sh" >/dev/null 2>&1 || fix "C formatting differs: make fmt"
 
 # 7. Zone check.
 if [ -f "$root/tools/zone_check.py" ]; then

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# pre-commit: whitespace and formatting on the staged files. The C and C++
-# warning check joins when C1 and H1 bring code to compile.
+# pre-commit: whitespace and formatting on the staged files, and a -Werror
+# build of the core when a staged file is under core/.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 status=0
@@ -13,6 +13,27 @@ if [ "${#py[@]}" -gt 0 ]; then
     make -s -C "$root" exec CMD="ruff format --check -- ${py[*]}" || status=1
   else
     echo "pre-commit: no ruff and no docker; formatting is left to CI"
+  fi
+fi
+mapfile -t c < <(git diff --cached --name-only --diff-filter=ACM -- '*.c' '*.h' '*.cpp' '*.hpp' '*.cc')
+if [ "${#c[@]}" -gt 0 ]; then
+  if command -v clang-format >/dev/null 2>&1; then
+    bash "$root/scripts/c-format.sh" "${c[@]}" || status=1
+  elif command -v docker >/dev/null 2>&1; then
+    make -s -C "$root" exec CMD="bash scripts/c-format.sh $(printf '%q ' "${c[@]}")" || status=1
+  else
+    echo "pre-commit: no clang-format and no docker; formatting is left to CI"
+  fi
+fi
+if git diff --cached --name-only --diff-filter=ACMR -- core/ | grep -q .; then
+  if command -v cmake >/dev/null 2>&1; then
+    bash "$root/scripts/core-test.sh" --build-only gcc >/dev/null 2>&1 \
+      || { echo "pre-commit: the core does not build clean with -Werror; run make check-warnings"; status=1; }
+  elif command -v docker >/dev/null 2>&1; then
+    make -s -C "$root" exec CMD="bash scripts/core-test.sh --build-only gcc" >/dev/null 2>&1 \
+      || { echo "pre-commit: the core does not build clean with -Werror; run make check-warnings"; status=1; }
+  else
+    echo "pre-commit: no cmake and no docker; the warning check is left to CI"
   fi
 fi
 exit $status

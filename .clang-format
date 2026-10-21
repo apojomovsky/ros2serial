@@ -1,0 +1,11 @@
+# C and C++ formatting, checked by the suite's LINT section and the pre-commit
+# hook. Vendored code under */vendor/ keeps its own style and is not checked.
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 110
+BreakBeforeBraces: Linux
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+IncludeBlocks: Preserve
+SortIncludes: CaseSensitive

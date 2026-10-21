@@ -10,6 +10,7 @@ ARG AVR_GCC_VERSION
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc-avr avr-libc binutils-avr simavr libsimavr-dev libelf-dev \
         build-essential clang clang-format clang-tidy cppcheck cmake ninja-build ccache \
+        libclang-rt-18-dev $([ "$(dpkg --print-architecture)" = amd64 ] && echo gcc-multilib) \
         python3-venv python3-pip git curl ca-certificates make \
     && rm -rf /var/lib/apt/lists/* \
     && test "$(avr-gcc -dumpversion)" = "${AVR_GCC_VERSION}" \
@@ -23,6 +24,7 @@ ARG GIT_CLIFF_VERSION
 ARG PYYAML_VERSION
 ARG JSONSCHEMA_VERSION
 ARG PYSERIAL_VERSION
+ARG GCOVR_VERSION
 ARG ARDUINO_CLI_VERSION
 ARG ARDUINO_AVR_CORE_VERSION
 # System site packages stay visible so the ROS Python packages (rclpy) work too.
@@ -30,7 +32,7 @@ RUN python3 -m venv --system-site-packages /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir \
         "ruff==${RUFF_VERSION}" "pytest==${PYTEST_VERSION}" "actionlint-py==${ACTIONLINT_PY_VERSION}" \
         "git-cliff==${GIT_CLIFF_VERSION}" "pyyaml==${PYYAML_VERSION}" "jsonschema==${JSONSCHEMA_VERSION}" \
-        "pyserial==${PYSERIAL_VERSION}"
+        "pyserial==${PYSERIAL_VERSION}" "gcovr==${GCOVR_VERSION}"
 ENV ARDUINO_DIRECTORIES_DATA=/opt/arduino \
     ARDUINO_DIRECTORIES_USER=/opt/arduino/user \
     ARDUINO_BUILD_CACHE_PATH=/tmp/arduino-build-cache

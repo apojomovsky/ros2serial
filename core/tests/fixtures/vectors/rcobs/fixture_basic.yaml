@@ -1,0 +1,5 @@
+# A fixture for the vector runner's self-test, not a conformance vector.
+covers: [COB-1, COB-4]
+cases:
+  - {decoded: "", encoded: "01 00"}
+  - {decoded: "11 22 00 33", encoded: "11 22 03 33 02 00"}

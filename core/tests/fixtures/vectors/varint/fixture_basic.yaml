@@ -1,0 +1,5 @@
+# A fixture for the vector runner's self-test, not a conformance vector.
+covers: [VAR-1]
+cases:
+  - {value: 0, encoded: "00"}
+  - {value: 65535, encoded: "ff ff 03"}

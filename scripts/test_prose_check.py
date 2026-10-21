@@ -53,3 +53,9 @@ def test_todo_needs_a_reason():
 
 def test_a_clean_comment_passes():
     assert prose_check.verify(diff("a.py", ["# CRC-16/MCRF4XX: reflected, so a little-endian append leaves 0."])) == []
+
+
+def test_vendored_code_keeps_its_own_style():
+    long_block = [f"/* line {i} */" for i in range(12)] + ["/* @brief upstream doc */"]
+    assert prose_check.verify(diff("core/tests/vendor/unity/unity.h", long_block)) == []
+    assert blocks(diff("core/tests/vendor/unity/README.md", [f"x {EM} y"])) == []
