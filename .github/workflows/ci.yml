@@ -1,8 +1,8 @@
 name: ci
 
-# Every job runs scripts/ci-test.sh with a scope, the same script `make test`
-# runs. Placeholder jobs mark where each test layer lands; each names the
-# ticket that fills it in.
+# Every job runs `make test` with a scope inside the dev image, exactly as a
+# contributor does locally. Placeholder jobs mark where each test layer lands;
+# each names the ticket that fills it in.
 
 on:
   push:
@@ -21,29 +21,15 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4.2.2
-      - name: Load pinned versions
-        run: grep -v '^#' ci/versions.env >> "$GITHUB_ENV"
-      - uses: actions/setup-python@v5.3.0
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install pinned tools
-        run: pip install "ruff==${RUFF_VERSION}" "actionlint-py==${ACTIONLINT_PY_VERSION}" "pyyaml==${PYYAML_VERSION}" "jsonschema==${JSONSCHEMA_VERSION}"
-      - name: Lint and layout
-        run: LINT=1 bash scripts/ci-test.sh
+      - uses: ./.github/actions/dev-image
+      - run: make test LINT=1
 
   scripts:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4.2.2
-      - name: Load pinned versions
-        run: grep -v '^#' ci/versions.env >> "$GITHUB_ENV"
-      - uses: actions/setup-python@v5.3.0
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install pinned tools
-        run: pip install "pytest==${PYTEST_VERSION}" "ruff==${RUFF_VERSION}" "actionlint-py==${ACTIONLINT_PY_VERSION}" "git-cliff==${GIT_CLIFF_VERSION}" "pyyaml==${PYYAML_VERSION}" "jsonschema==${JSONSCHEMA_VERSION}"
-      - name: Script tests
-        run: SCRIPTS=1 bash scripts/ci-test.sh
+      - uses: ./.github/actions/dev-image
+      - run: make test SCRIPTS=1
 
   # Placeholders. Each becomes a real job in the ticket it names, and stays
   # out of the required checks until then.

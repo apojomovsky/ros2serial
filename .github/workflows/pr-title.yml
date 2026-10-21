@@ -2,7 +2,9 @@ name: pr-title
 
 # Every commit in the PR lands on master (merge commits, never squash), so each
 # must follow the commit rules; the title follows them too for consistency.
-# Separate from ci.yml so editing a title re-checks only this.
+# Separate from ci.yml so editing a title re-checks only this. It runs on the
+# runner's Python, not the dev image: the check needs only the standard library
+# and git, and building the image for every title edit would be waste.
 
 on:
   pull_request:
