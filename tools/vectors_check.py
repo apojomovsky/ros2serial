@@ -74,7 +74,8 @@ def check_file(path: Path, name: str, validators: dict) -> list[str]:
 def check_frame(name: str, data: dict) -> list[str]:
     """Check a frame vector against the reference codec.
 
-    The frame and the wire bytes must be the ones the reference makes, so a
+    The frame and the wire bytes must be the ones the reference makes, and
+    the topic id must be in the range the spec gives its channel, so a
     vector cannot claim a rule it does not carry.
     """
     problems = []
@@ -100,7 +101,37 @@ def check_frame(name: str, data: dict) -> list[str]:
         problems.append(f"{name}/frame: shorter than 4 bytes")
     if not wire.endswith(b"\x00"):
         problems.append(f"{name}/wire: does not end with the delimiter")
+    problems += check_channel(name, data, topic_id)
     return problems
+
+
+# The system channels of spec/protocol.md section 7, and the range a user
+# topic takes.
+SYSTEM_CHANNELS = {
+    "hello_req": 0,
+    "hello": 0,
+    "ready": 0,
+    "topic": 0,
+    "ping": 1,
+    "pong": 1,
+    "host_heartbeat": 4,
+    "reserved_channel": None,  # any id from 7 to 15
+}
+
+
+def check_channel(name: str, data: dict, topic_id: int) -> list[str]:
+    """Check that the frame is on the channel its name says."""
+    vector_name = data.get("name")
+    if vector_name not in SYSTEM_CHANNELS:
+        return []
+    wanted = SYSTEM_CHANNELS[vector_name]
+    if wanted is None:
+        if not 7 <= topic_id <= 15:
+            return [f"{name}/topic_id: {topic_id} is not in the reserved range 7 to 15"]
+        return []
+    if topic_id != wanted:
+        return [f"{name}/topic_id: {topic_id} is not the channel {wanted} of this vector"]
+    return []
 
 
 def check_tree(vectors: Path) -> list[str]:

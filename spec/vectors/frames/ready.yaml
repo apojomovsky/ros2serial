@@ -1,5 +1,5 @@
 name: ready
-covers: [SYS-2]
+covers: [SYS-2, CTL-16]
 topic_id: 0
 seq: 1
 payload: "06"

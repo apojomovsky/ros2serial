@@ -1,5 +1,5 @@
 name: ping
-covers: [SYS-2]
+covers: [SYS-2, TIM-10]
 topic_id: 1
 seq: 0
 payload: "01 2a"

@@ -1,5 +1,5 @@
 name: topic
-covers: [CTL-15]
+covers: [CTL-15, CTL-16]
 topic_id: 0
 seq: 1
 payload: "04 00 10 03 00 01 02 03 04 05 06 07 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 05 66 6c 6f 61 74"

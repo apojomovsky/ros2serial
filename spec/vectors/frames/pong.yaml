@@ -1,5 +1,5 @@
 name: pong
-covers: [TIM-1, TIM-2]
+covers: [TIM-1, TIM-2, TIM-10]
 topic_id: 1
 seq: 0
 payload: "02 2a 10 27 00 00"

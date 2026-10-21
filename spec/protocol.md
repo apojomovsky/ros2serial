@@ -142,6 +142,7 @@ A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3
 - [CTL-13] A `TOPIC_STATUS` status is 0 for ok, 1 for unknown type, 2 for hash mismatch and 3 for name conflict. Every other value is reserved and MUST be 0.
 - [CTL-14] A receiver MUST refuse a `TOPIC_STATUS` whose status is not one of those four.
 - [CTL-15] The topics of a handshake are requested and sent one at a time, so the MCU never needs a buffer larger than one TOPIC frame.
+- [CTL-16] The payload of each control opcode is the one the table above gives, in that order and with nothing between: the opcode byte, then the fields it lists, and a string as its varint length and bytes (section 5).
 
 ### 7.2 Time channel (ID 1)
 
@@ -173,6 +174,7 @@ normalize again
 - [TIM-7] `R2S_TIME_MAX_ANCHOR_MS` defaults to 10000. A correction older than that makes the MCU's time unsynced, and the MCU MUST report it as unsynced until a new correction arrives.
 - [TIM-8] The intermediate nanosecond value before the drift is added MUST fit in a 32-bit unsigned integer, and the drift term MUST fit in a 32-bit signed integer.
 - [TIM-9] The MCU MUST normalize the nanosecond value into [0, 10^9) by carrying into the seconds, before and after the drift is added.
+- [TIM-10] The payload of each time opcode is the one the table above gives, in that order and with nothing between: the opcode byte, then the fields it lists.
 
 ### 7.3 Log channel (ID 2)
 

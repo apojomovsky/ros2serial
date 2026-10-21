@@ -1,5 +1,5 @@
 name: reserved_channel
-covers: [SYS-1, SYS-4]
+covers: [SYS-1]
 topic_id: 9
 seq: 0
 payload: ""
