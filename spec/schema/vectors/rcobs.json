@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "rCOBS encodings, delimiter included in encoded",
+  "title": "rCOBS encodings, delimiter included in encoded; a reject case names the rule a decoder applies",
   "type": "object",
   "properties": {
     "covers": {
@@ -14,22 +14,45 @@
     "cases": {
       "type": "array",
       "items": {
-        "type": "object",
-        "properties": {
-          "decoded": {
-            "type": "string",
-            "pattern": "^$|^[0-9a-f]{2}( [0-9a-f]{2})*$"
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "decoded": {
+                "type": "string",
+                "pattern": "^$|^[0-9a-f]{2}( [0-9a-f]{2})*$"
+              },
+              "encoded": {
+                "type": "string",
+                "pattern": "^$|^[0-9a-f]{2}( [0-9a-f]{2})*$"
+              }
+            },
+            "required": [
+              "decoded",
+              "encoded"
+            ],
+            "additionalProperties": false
           },
-          "encoded": {
-            "type": "string",
-            "pattern": "^$|^[0-9a-f]{2}( [0-9a-f]{2})*$"
+          {
+            "type": "object",
+            "properties": {
+              "encoded": {
+                "type": "string",
+                "pattern": "^$|^[0-9a-f]{2}( [0-9a-f]{2})*$"
+              },
+              "reject": {
+                "type": "string",
+                "pattern": "^[A-Z]{2,4}-[0-9]+$",
+                "description": "the spec ID of the rule that rejects the encoding"
+              }
+            },
+            "required": [
+              "encoded",
+              "reject"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "decoded",
-          "encoded"
-        ],
-        "additionalProperties": false
+        ]
       }
     }
   },

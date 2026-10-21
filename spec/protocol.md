@@ -64,7 +64,7 @@ Reverse Consistent Overhead Byte Stuffing removes every `0x00` from the frame, s
 ## 5. Varints
 
 - [VAR-1] Lengths of strings and sequences are unsigned LEB128 varints: 7 bits per byte, least significant group first, the high bit set on every byte but the last.
-- [VAR-2] A length is at most 65535. A decoder MUST reject a varint that encodes a larger value.
+- [VAR-2] A length is at most 65535, so a varint has at most 3 bytes. A decoder MUST reject a varint that encodes a larger value, or whose third byte has the high bit set.
 - [VAR-3] A decoder MUST reject a varint truncated by the end of the payload.
 - [VAR-4] An encoder MUST use the shortest encoding, and a decoder MUST reject any other (for example `80 00` for 0). A valid varint is therefore 1 to 3 bytes long.
 

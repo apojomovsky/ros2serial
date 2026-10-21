@@ -14,22 +14,45 @@
     "cases": {
       "type": "array",
       "items": {
-        "type": "object",
-        "properties": {
-          "value": {
-            "type": "integer",
-            "minimum": 0
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "encoded": {
+                "type": "string",
+                "pattern": "^$|^[0-9a-f]{2}( [0-9a-f]{2})*$"
+              }
+            },
+            "required": [
+              "value",
+              "encoded"
+            ],
+            "additionalProperties": false
           },
-          "encoded": {
-            "type": "string",
-            "pattern": "^$|^[0-9a-f]{2}( [0-9a-f]{2})*$"
+          {
+            "type": "object",
+            "properties": {
+              "encoded": {
+                "type": "string",
+                "pattern": "^$|^[0-9a-f]{2}( [0-9a-f]{2})*$"
+              },
+              "reject": {
+                "type": "string",
+                "pattern": "^[A-Z]{2,4}-[0-9]+$",
+                "description": "the spec ID of the rule that rejects the encoding"
+              }
+            },
+            "required": [
+              "encoded",
+              "reject"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "value",
-          "encoded"
-        ],
-        "additionalProperties": false
+        ]
       }
     }
   },

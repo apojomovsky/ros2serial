@@ -12,11 +12,13 @@ VECTORS = Path(__file__).resolve().parents[2] / "spec" / "vectors"
 SEED = 20261021
 
 
-def cases(kind: str):
+def cases(kind: str) -> list:
+    params = []
     for path in sorted((VECTORS / kind).glob("*.yaml")):
         doc = yaml.safe_load(path.read_text())
         for i, case in enumerate(doc["cases"]):
-            yield pytest.param(case, id=f"{path.stem}-{i}")
+            params.append(pytest.param(case, id=f"{path.stem}-{i}"))
+    return params
 
 
 def h(text: str) -> bytes:
@@ -89,7 +91,7 @@ def test_rcobs_reproduces_every_vector(case):
 # covers: COB-5
 def test_rcobs_rejects_a_zero_code():
     with pytest.raises(Rejected) as e:
-        rcobs.decode(b"\x11\x00\x02")
+        rcobs.decode(b"\x00\x01")
     assert e.value.rule == "COB-5"
 
 
