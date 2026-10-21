@@ -53,6 +53,7 @@ if wants LINT; then
   section c-format bash scripts/c-format.sh
   section workflow-lint lint_workflows
   section vectors python3 tools/vectors_check.py
+  section spec-coverage python3 tools/spec_coverage.py
   section zone python3 tools/zone_check.py
 fi
 if wants COMMITS; then

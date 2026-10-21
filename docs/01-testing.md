@@ -62,7 +62,7 @@ These rules shape how the code is written. They are part of the code review, not
 | Resource budgets: flash, RAM, stack, cycles per byte | |
 | Every bug ever fixed | |
 
-**Spec traceability.** Every normative statement in `spec/protocol.md` is a list item starting with its ID (for example `[FRM-4]`, `[SES-7]`, `[TIM-2]`). Vectors and tests name the IDs they cover, and `tools/spec_coverage.py` fails CI when an ID has no test or a test names an unknown ID. This turns "is the spec tested" into a checked fact.
+**Spec traceability.** Every normative statement in `spec/protocol.md` is a list item starting with its ID (for example `[FRM-4]`, `[SES-7]`, `[TIM-2]`). Vectors and tests name the IDs they cover, and `tools/spec_coverage.py` fails CI when an ID has no test or a test names an unknown ID. This turns "is the spec tested" into a checked fact. A test names IDs on a marker line of its own, `covers: FRM-4, FRM-5`, as a comment or in a docstring. A rule specified before its implementation lands is listed in `tools/spec_pending.txt` with the ticket that will cover it; the check fails once a listed rule is covered, so the list only shrinks and every entry points at the work that empties it.
 
 ## 4. Test levels
 
