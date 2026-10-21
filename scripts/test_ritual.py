@@ -158,3 +158,50 @@ def test_an_unreadable_pr_body_is_a_fix_not_a_silent_pass(tmp_path):
     result = ritual(wt, PR_BODY=str(body))
     assert result.returncode == 1
     assert "PR body" in result.stdout
+
+
+def test_commit_msg_hook_lets_git_merge_messages_through_during_a_merge(tmp_path):
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    msg = tmp_path / "MSG"
+    msg.write_text("Merge branch 'ci/8-hooks' into feat/1-thing\n")
+    assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode != 0
+    merge_head = Path(git(wt, "rev-parse", "--git-path", "MERGE_HEAD").stdout.strip())
+    if not merge_head.is_absolute():
+        merge_head = wt / merge_head
+    merge_head.write_text(git(wt, "rev-parse", "HEAD").stdout)
+    assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode == 0
+    msg.write_text("Merge branch 'x'\n\nSigned-off-by: Someone <s@example.com>\n")
+    assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode != 0
+
+
+def test_pre_push_runs_the_suite_without_the_hooks_git_variables(tmp_path):
+    _, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    head = git(wt, "rev-parse", "HEAD").stdout.strip()
+    line = f"refs/heads/feat/1-thing {head} refs/heads/feat/1-thing {'0' * 40}\n"
+    gitdir = git(wt, "rev-parse", "--absolute-git-dir").stdout.strip()
+    out = tmp_path / "suite-env.txt"
+    # Git exports GIT_DIR to a pre-push hook run from a worktree; the suite must not inherit it.
+    assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=f"env > {out}", GIT_DIR=gitdir).returncode == 0
+    assert "GIT_DIR=" not in out.read_text()
+
+
+def test_commit_msg_hook_still_checks_other_subjects_during_a_merge(tmp_path):
+    _, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    merge_head = Path(git(wt, "rev-parse", "--absolute-git-dir").stdout.strip()) / "MERGE_HEAD"
+    merge_head.write_text(git(wt, "rev-parse", "HEAD").stdout)
+    msg = tmp_path / "MSG"
+    msg.write_text("wip stuff\n")
+    assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode != 0
+    # merge.log=true appends a shortlog; git's own merge message may be longer than 3 lines.
+    msg.write_text("Merge branch 'x'\n\n* x:\n  feat(core): a\n  feat(core): b\n")
+    assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode == 0
+
+
+def test_the_suite_cleans_the_git_variables_before_any_section():
+    text = (ROOT / "scripts/ci-test.sh").read_text()
+    assert text.index('source "$root/scripts/clean-git-env.sh"') < text.index("\nif wants ")
+    hook = (ROOT / ".githooks/pre-push").read_text()
+    assert hook.index('source "$root/scripts/clean-git-env.sh"') < hook.index("R2S_PRE_PUSH_SUITE")

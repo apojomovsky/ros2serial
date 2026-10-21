@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 # commit-msg: Conventional Commits, at most 3 lines, no trailers, no em-dashes.
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-exec python3 "$root/scripts/commit_check.py" --file "$1"
+merge=()
+git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 && merge=(--merge)
+exec python3 "$root/scripts/commit_check.py" --file "$1" "${merge[@]}"
