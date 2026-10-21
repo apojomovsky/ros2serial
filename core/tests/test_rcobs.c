@@ -99,8 +99,11 @@ void test_rcobs_a_group_of_254_bytes_ends_itself(void)
     }
     uint16_t len = encode(data, sizeof data, encoded);
 
-    TEST_ASSERT_EQUAL_UINT16(255, len);
-    TEST_ASSERT_EQUAL_HEX8(0xFF, encoded[253]);
+    /* The 254 bytes, the code byte of the group and the empty group that
+     * follows it. */
+    TEST_ASSERT_EQUAL_UINT16(256, len);
+    TEST_ASSERT_EQUAL_HEX8(0xFF, encoded[254]);
+    TEST_ASSERT_EQUAL_HEX8(0x01, encoded[255]);
 }
 
 /* covers: COB-4 */
@@ -112,14 +115,17 @@ void test_rcobs_decoding_ends_where_the_encoding_ended(void)
     uint16_t len = encode(data, sizeof data, encoded);
 
     TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_OK, r2s_rcobs_decode(encoded, len, &decoded));
+    /* The decoded frame ends where the encoded one did, so its last byte is
+     * the last byte of the encoding. */
+    TEST_ASSERT_EQUAL_UINT8(0x33, decoded[sizeof data - 1u]);
     TEST_ASSERT_EQUAL_UINT8(0x33, encoded[len - 1u]);
-    TEST_ASSERT_EQUAL_UINT8(0x00, encoded[len - 2u]);
 }
 
 /* covers: COB-5 */
 void test_rcobs_a_zero_byte_in_the_encoding_is_refused(void)
 {
-    uint8_t encoded[] = {0x11, 0x00, 0x02};
+    /* The codes are sound, so only the 0x00 byte itself can refuse this. */
+    uint8_t encoded[] = {0x00, 0x02, 0x01};
     uint8_t *decoded = NULL;
 
     TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_ERR_CODE, r2s_rcobs_decode(encoded, sizeof encoded, &decoded));
@@ -168,28 +174,34 @@ void test_rcobs_decoding_accepts_only_the_canonical_encoding(void)
     /* Any encoding of the same bytes that is not the one the encoder made
      * would give the decoder a second reading, so it must be refused. */
     for (uint16_t i = 0; i < len; i++) {
-        uint8_t altered[80];
+        uint8_t original[80];
+        uint8_t buffer[80];
         uint8_t *decoded = NULL;
 
         for (uint16_t k = 0; k < len; k++) {
-            altered[k] = encoded[k];
+            original[k] = encoded[k];
         }
-        altered[i] = (uint8_t)(altered[i] + 1u);
-        int8_t status = r2s_rcobs_decode(altered, len, &decoded);
+        original[i] = (uint8_t)(original[i] + 1u);
+        for (uint16_t k = 0; k < len; k++) {
+            buffer[k] = original[k];
+        }
+
+        int8_t status = r2s_rcobs_decode(buffer, len, &decoded);
         if (status == R2S_RCOBS_OK) {
+            uint16_t decoded_len = (uint16_t)(len - (uint16_t)(decoded - buffer));
             uint8_t reencoded[80];
             r2s_rcobs_encoder_t enc;
             uint16_t reencoded_len = 0;
 
             r2s_rcobs_encoder_init(&enc);
-            for (uint16_t k = 0; k < len; k++) {
+            for (uint16_t k = 0; k < decoded_len; k++) {
                 reencoded_len = (uint16_t)(reencoded_len + r2s_rcobs_encode_byte(&enc, decoded[k],
                                                                                  reencoded + reencoded_len));
             }
             reencoded_len = (uint16_t)(reencoded_len + r2s_rcobs_encode_end(&enc, reencoded + reencoded_len));
             TEST_ASSERT_EQUAL_UINT16_MESSAGE(len, reencoded_len, "a second encoding of the same bytes");
             for (uint16_t k = 0; k < len; k++) {
-                TEST_ASSERT_EQUAL_HEX8_MESSAGE(encoded[k], reencoded[k],
+                TEST_ASSERT_EQUAL_HEX8_MESSAGE(original[k], reencoded[k],
                                                "a second encoding of the same bytes");
             }
         }

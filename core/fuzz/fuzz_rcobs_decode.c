@@ -12,8 +12,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
     /* The decoder works in place, so it needs a buffer it may write to. The
      * largest frame the protocol allows is 65277 bytes; anything longer is
-     * truncated, since the decoder would refuse it anyway. */
-    static const size_t limit = 65536;
+     * cut, since the decoder would refuse it anyway. */
+    static const size_t limit = 65535;
     uint8_t *buffer = malloc(limit);
     if (buffer == NULL) {
         return 0;
