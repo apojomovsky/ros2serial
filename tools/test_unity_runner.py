@@ -51,7 +51,7 @@ def test_rcobs_cases_become_arrays_with_their_lengths(tmp_path):
     )
     out = unity_runner.vector_runner("rcobs", [f])
     assert re.search(r"\{0x11, 0x00\}", out) and re.search(r"\{0x11, 0x01, 0x02, 0x00\}", out)
-    assert '"basic.yaml case 0"' in out and '"COB-1 COB-4"' in out
+    assert f'"{f} case 0"' in out and '"COB-1 COB-4"' in out
     assert '"11 00", ' in out and "RUN_TEST(test_rcobs_basic_0)" in out
     assert re.search(r"r2s_vec_check_rcobs\(&\w+\)", out)
 
@@ -59,7 +59,7 @@ def test_rcobs_cases_become_arrays_with_their_lengths(tmp_path):
 def test_crc_text_cases_carry_the_ascii_bytes(tmp_path):
     f = write(tmp_path, "check.yaml", 'covers: [CHK-2]\ncases:\n  - {text: "12", crc: 28561}\n')
     out = unity_runner.vector_runner("crc", [f])
-    assert "{0x31, 0x32}" in out and '"31 32"' in out and "28561u" in out
+    assert "{0x31, 0x32}" in out and 'NULL, "12", 28561u' in out
 
 
 def test_empty_byte_strings_have_length_zero(tmp_path):

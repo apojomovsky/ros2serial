@@ -14,7 +14,8 @@ BRANCH_FLOOR=90
 # One lock for the whole core build directory, held for the entire run.
 if [ -z "${R2S_CORE_LOCKED:-}" ]; then
   mkdir -p "$build"
-  exec env R2S_CORE_LOCKED=1 bash "$root/scripts/with-build-lock.sh" "$build/.lock" bash "$0" "$@"
+  exec env R2S_CORE_LOCKED=1 bash "$root/scripts/with-build-lock.sh" "$build/.lock" \
+    bash "$root/scripts/core-test.sh" "$@"
 fi
 
 build_only=0
@@ -24,11 +25,13 @@ configs=("$@")
 
 flags() {
   case $1 in
-    gcc) echo "-DCMAKE_C_COMPILER=gcc" ;;
-    clang) echo "-DCMAKE_C_COMPILER=clang" ;;
-    gcc-m32) echo "-DCMAKE_C_COMPILER=gcc -DCMAKE_C_FLAGS=-m32" ;;
-    sanitize) echo "-DCMAKE_C_COMPILER=clang -DR2S_SANITIZE=ON" ;;
-    coverage) echo "-DCMAKE_C_COMPILER=gcc -DR2S_COVERAGE=ON" ;;
+    # Optimized builds, as on the targets, so the warnings that need the
+    # optimizer's analysis fire too; the instrumented builds stay at -O0.
+    gcc) echo "-DCMAKE_C_COMPILER=gcc -DCMAKE_BUILD_TYPE=MinSizeRel" ;;
+    clang) echo "-DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release" ;;
+    gcc-m32) echo "-DCMAKE_C_COMPILER=gcc -DCMAKE_C_FLAGS=-m32 -DCMAKE_BUILD_TYPE=Debug" ;;
+    sanitize) echo "-DCMAKE_C_COMPILER=clang -DR2S_SANITIZE=ON -DCMAKE_BUILD_TYPE=Debug" ;;
+    coverage) echo "-DCMAKE_C_COMPILER=gcc -DR2S_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug" ;;
     *) return 1 ;;
   esac
 }
@@ -52,11 +55,12 @@ run_config() {
     return 0
   fi
   # shellcheck disable=SC2086 # args holds several -D options.
-  cmake -S core -B "$dir" -G Ninja -DCMAKE_BUILD_TYPE=Debug $args >"$dir.configure.log" 2>&1 \
+  # A coverage build starts empty: notes left by a deleted source make gcovr abort.
+  if [ "$name" = coverage ]; then rm -rf "$dir"; fi
+  cmake -S core -B "$dir" -G Ninja $args >"$dir.configure.log" 2>&1 \
     || { cat "$dir.configure.log"; return 1; }
   cmake --build "$dir" || return 1
   [ "$build_only" = 1 ] && return 0
-  if [ "$name" = coverage ]; then find "$dir" -name '*.gcda' -delete; fi
   ctest --test-dir "$dir" --output-on-failure || return 1
   if [ "$name" = coverage ]; then coverage_report "$dir" || return 1; fi
 }

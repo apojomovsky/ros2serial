@@ -51,6 +51,7 @@ if wants LINT; then
   section layout python3 scripts/check_layout.py
   section python-lint lint_python
   section c-format bash scripts/c-format.sh
+  section cppcheck bash scripts/cppcheck.sh
   section workflow-lint lint_workflows
   section vectors python3 tools/vectors_check.py
   section zone python3 tools/zone_check.py
