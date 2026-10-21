@@ -1,0 +1,7 @@
+name: host_heartbeat
+covers: [HB-1]
+topic_id: 4
+seq: 0
+payload: ""
+frame: "04 00 d8 97"
+wire: "04 02 d8 97 03 00"

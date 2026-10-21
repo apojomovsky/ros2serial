@@ -1,0 +1,7 @@
+name: ping
+covers: [SYS-2]
+topic_id: 1
+seq: 0
+payload: "01 2a"
+frame: "01 00 01 2a 1a 88"
+wire: "01 02 01 2a 1a 88 05 00"
