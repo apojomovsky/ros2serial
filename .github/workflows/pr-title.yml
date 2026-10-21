@@ -1,7 +1,8 @@
 name: pr-title
 
-# Squash merges use the PR title as the commit subject, so it must follow the
-# commit rules too. Separate from ci.yml so editing a title re-checks only this.
+# Every commit in the PR lands on master (merge commits, never squash), so each
+# must follow the commit rules; the title follows them too for consistency.
+# Separate from ci.yml so editing a title re-checks only this.
 
 on:
   pull_request:
