@@ -210,9 +210,9 @@ def test_the_suite_cleans_the_git_variables_before_any_section():
 def test_the_ritual_does_not_leak_its_scopes_into_the_suite(tmp_path):
     """A ritual that runs the suite must not let that suite run a ritual.
 
-    The suite's own tests call the ritual, so a scope that reaches the suite
+    The suite's own tests call the ritual, so a TEST that reaches the suite
     comes back as another ritual, and the pair forks without bound. The
-    ritual therefore starts the suite with the scopes cleared.
+    ritual therefore starts the suite without it.
     """
     main, wt = fixture(tmp_path)
     git(main, "config", "core.hooksPath", ".githooks")
@@ -232,5 +232,6 @@ def test_the_ritual_does_not_leak_its_scopes_into_the_suite(tmp_path):
     # the suite was given.
     assert marker.exists(), result.stdout + result.stderr
     # TEST is the trigger: the suite's own tests call the ritual, and a
-    # ritual that still sees TEST=1 runs the suite again.
-    assert marker.read_text().strip() == "TEST= SCRIPTS=", "the suite was started with TEST or a scope still set"
+    # ritual that still sees TEST=1 runs the suite again. The scopes stay,
+    # so the child does what this run was asked to do.
+    assert marker.read_text().strip() == "TEST= SCRIPTS=1", "the suite was started with TEST still set"

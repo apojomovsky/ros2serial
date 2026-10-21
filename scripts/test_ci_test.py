@@ -49,9 +49,43 @@ def test_lint_passes_on_the_tree(tmp_path):
 
 def test_the_suite_does_not_pass_test_down_to_its_own_tests(tmp_path):
     """The script tests call the ritual, and a ritual that sees TEST=1 runs
-    the suite again, so TEST must not reach them."""
-    text = (ROOT / "scripts/ci-test.sh").read_text()
-    assert "env -u TEST python3 -m pytest scripts tools" in text
+    the suite again, so TEST must not reach them.
+
+    "make test TEST=1" forwards TEST into the container, so the suite has to
+    drop it before it starts pytest, or the pair forks there as well.
+    """
+    seen = tmp_path / "seen.txt"
+    # A tree with the suite, the script it sources, and one test that records
+    # the environment it was started with. The test writes to a file, because
+    # pytest swallows what a test prints. Nothing else is in the tree, so the
+    # suite collects the probe and nothing else.
+    copy = tmp_path / "copy"
+    (copy / "scripts").mkdir(parents=True)
+    (copy / "tools").mkdir()
+    for name in ("ci-test.sh", "clean-git-env.sh"):
+        shutil.copy2(ROOT / "scripts" / name, copy / "scripts" / name)
+    (copy / "scripts" / "test_probe_env.py").write_text(
+        '"""Records the environment the script tests are started with."""\n'
+        "\n"
+        "import os\n"
+        "\n"
+        "\n"
+        "def test_the_environment():\n"
+        f"    with open({str(seen)!r}, 'w') as f:\n"
+        "        f.write(os.environ.get('TEST', ''))\n"
+    )
+    env = {**os.environ, "TEST": "1", "SCRIPTS": "1"}
+    env["PATH"] = os.pathsep.join([str(Path(sys.executable).parent), env.get("PATH", "")])
+    result = subprocess.run(
+        ["bash", "scripts/ci-test.sh"],
+        cwd=copy,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=600,
+    )
+    assert seen.exists(), result.stdout + result.stderr
+    assert seen.read_text() == "", "TEST reached the script tests"
 
 
 def test_lint_fails_on_a_python_lint_error(tmp_path):
