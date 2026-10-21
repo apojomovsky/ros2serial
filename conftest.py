@@ -7,6 +7,9 @@ throwaway repo would otherwise run its git commands on the real repository.
 import os
 import subprocess
 
-_vars = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True).stdout.split()
+try:
+    _vars = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True).stdout.split()
+except FileNotFoundError:
+    _vars = []  # no git, so nothing could have been exported for it
 for _var in _vars:
     os.environ.pop(_var, None)

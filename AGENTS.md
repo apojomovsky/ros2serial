@@ -95,7 +95,8 @@ Write PR bodies to a unique file under the cache, which the dev image can see (`
 
 ## Git hooks (`make setup-hooks`)
 
-- `commit-msg`: Conventional Commits, no trailers, no em-dashes.
+- `commit-msg`: Conventional Commits, no trailers, no em-dashes. While a merge is in progress, git's own `Merge ...` message is accepted, as the commit check skips merge commits.
+- Every hook and the suite run tests without the repository-local git variables git exports to hooks (`scripts/clean-git-env.sh`, `conftest.py`), so a test's throwaway repository never writes to the real one.
 - `pre-commit`: format check on staged files (clang-format, ruff), warning check on touched C and C++, trailing whitespace.
 - `pre-push`: refuse force pushes unless approved, run the prose verify, then `make ci-local`. A suite stamp records the tree and hook versions that already passed, so pushing the same tree twice does not run the suite twice.
 
