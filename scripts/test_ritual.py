@@ -158,3 +158,18 @@ def test_an_unreadable_pr_body_is_a_fix_not_a_silent_pass(tmp_path):
     result = ritual(wt, PR_BODY=str(body))
     assert result.returncode == 1
     assert "PR body" in result.stdout
+
+
+def test_commit_msg_hook_lets_git_merge_messages_through_during_a_merge(tmp_path):
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    msg = tmp_path / "MSG"
+    msg.write_text("Merge branch 'ci/8-hooks' into feat/1-thing\n")
+    assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode != 0
+    merge_head = Path(git(wt, "rev-parse", "--git-path", "MERGE_HEAD").stdout.strip())
+    if not merge_head.is_absolute():
+        merge_head = wt / merge_head
+    merge_head.write_text(git(wt, "rev-parse", "HEAD").stdout)
+    assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode == 0
+    msg.write_text("Merge branch 'x'\n\nSigned-off-by: Someone <s@example.com>\n")
+    assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode != 0
