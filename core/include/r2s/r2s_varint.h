@@ -1,6 +1,7 @@
 /* Length varints: unsigned LEB128, at most 3 bytes and 65535 (spec/protocol.md,
  * section 5). Not part of the firmware API: the codec uses it, and so does the
- * bridge, which links varint.c for its own encoding. */
+ * bridge, which links varint.c to read and write the lengths of a packed
+ * payload as it converts to and from CDR. */
 #ifndef R2S_VARINT_H
 #define R2S_VARINT_H
 

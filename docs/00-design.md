@@ -805,7 +805,8 @@ typedef const char *r2s_fstr_t;
 
 ```c
 /* r2s_varint.h: lengths as unsigned LEB128 (spec/protocol.md, section 5).
-   Not part of the firmware API: the codec uses it, and so does the bridge. */
+   Not part of the firmware API: the codec uses it, and so does the bridge,
+   which reads and writes the lengths of a packed payload. */
 #define R2S_VARINT_MAX 0xFFFFu
 #define R2S_VARINT_MAX_BYTES 3u
 
