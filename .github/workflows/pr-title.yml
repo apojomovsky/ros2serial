@@ -1,0 +1,29 @@
+name: pr-title
+
+# Squash merges use the PR title as the commit subject, so it must follow the
+# commit rules too. Separate from ci.yml so editing a title re-checks only this.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  commits:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Load pinned versions
+        run: grep -v '^#' ci/versions.env >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: PR title and commits
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          COMMIT_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+        run: COMMITS=1 bash scripts/ci-test.sh

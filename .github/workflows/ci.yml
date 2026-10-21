@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install pinned tools
-        run: pip install "pytest==${PYTEST_VERSION}" "ruff==${RUFF_VERSION}" "actionlint-py==${ACTIONLINT_PY_VERSION}"
+        run: pip install "pytest==${PYTEST_VERSION}" "ruff==${RUFF_VERSION}" "actionlint-py==${ACTIONLINT_PY_VERSION}" "git-cliff==${GIT_CLIFF_VERSION}"
       - name: Script tests
         run: SCRIPTS=1 bash scripts/ci-test.sh
 
