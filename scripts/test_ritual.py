@@ -147,3 +147,14 @@ def test_push_helper_verifies_the_remote_ref(tmp_path):
 def test_push_helper_forbids_no_verify(tmp_path):
     _, wt = fixture(tmp_path)
     assert run(["bash", str(ROOT / "scripts/push.sh"), "--no-verify"], wt).returncode == 2
+
+
+def test_an_unreadable_pr_body_is_a_fix_not_a_silent_pass(tmp_path):
+    main, wt = fixture(tmp_path)
+    git(main, "config", "core.hooksPath", ".githooks")
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    body = tmp_path / "body.md"
+    body.write_bytes(b"Closes #1\n\xff\xfe\n")
+    result = ritual(wt, PR_BODY=str(body))
+    assert result.returncode == 1
+    assert "PR body" in result.stdout

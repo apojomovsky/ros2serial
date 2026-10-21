@@ -28,10 +28,13 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
     return repo
 
 
-def next_version(repo: Path) -> str:
-    out = subprocess.run(
-        ["bash", str(ROOT / "scripts/release.sh"), "--dry-run"], cwd=repo, capture_output=True, text=True, check=True
-    )
+def release(repo: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["bash", str(ROOT / "scripts/release.sh"), *args], cwd=repo, capture_output=True, text=True)
+
+
+def next_version(repo: Path, *args: str) -> str:
+    out = release(repo, "--dry-run", *args)
+    assert out.returncode == 0, out.stdout + out.stderr
     m = re.search(r"next version: (\S+)", out.stdout)
     assert m, out.stdout
     return m.group(1)
@@ -62,3 +65,58 @@ def test_dry_run_changes_nothing(tmp_path):
     next_version(repo)
     assert (repo / "VERSION").read_text() == "0.3.1\n"
     assert not (repo / "CHANGELOG.md").exists()
+
+
+def untagged_repo(tmp_path: Path, subjects: list[str]) -> Path:
+    repo = repo_with(tmp_path, "v0.0.0", subjects)
+    git(repo, "tag", "-d", "v0.0.0")
+    return repo
+
+
+def test_first_release_is_0_1_0(tmp_path):
+    assert next_version(untagged_repo(tmp_path, ["feat(core): a"])) == "0.1.0"
+
+
+def test_fix_with_bang_is_breaking(tmp_path):
+    assert next_version(repo_with(tmp_path, "v1.2.0", ["fix(core)!: a"])) == "2.0.0"
+
+
+def test_manual_bump_overrides_the_commits(tmp_path):
+    repo = repo_with(tmp_path, "v0.3.1", ["feat(core): b"])
+    assert next_version(repo, "--bump", "patch") == "0.3.2"
+    assert next_version(repo, "--bump", "major") == "1.0.0"
+
+
+def test_nothing_to_release_fails_loudly(tmp_path):
+    result = release(repo_with(tmp_path, "v0.3.1", []), "--dry-run")
+    assert result.returncode == 1 and "nothing to release" in result.stdout
+
+
+def test_chore_only_is_nothing_to_release(tmp_path):
+    result = release(repo_with(tmp_path, "v0.3.1", ["chore(ci): tidy"]), "--dry-run")
+    assert result.returncode == 1 and "nothing to release" in result.stdout
+
+
+def test_bad_arguments_are_reported(tmp_path):
+    repo = repo_with(tmp_path, "v0.3.1", ["feat(core): b"])
+    for args in (["--bump", "bogus"], ["--bump"], ["--what"]):
+        result = release(repo, *args)
+        assert result.returncode == 2 and "usage" in result.stdout, (args, result.stdout + result.stderr)
+
+
+def test_a_real_run_writes_version_and_changelog_in_one_commit(tmp_path):
+    repo = repo_with(tmp_path, "v0.3.1", ["feat(core): b"])
+    (repo / "sub").mkdir()
+    result = subprocess.run(["bash", str(ROOT / "scripts/release.sh")], cwd=repo / "sub", capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (repo / "VERSION").read_text() == "0.4.0\n"
+    assert "B" in (repo / "CHANGELOG.md").read_text()
+    log = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=repo, capture_output=True, text=True).stdout.strip()
+    assert log == "chore(release): v0.4.0"
+    assert "next version: 0.4.0" in result.stdout
+
+
+def test_release_commits_stay_out_of_the_changelog(tmp_path):
+    repo = repo_with(tmp_path, "v0.3.1", ["chore(release): v0.3.1", "feat(core): b"])
+    out = release(repo, "--dry-run").stdout
+    assert "chore(release)" not in out and "V0.3.1" not in out

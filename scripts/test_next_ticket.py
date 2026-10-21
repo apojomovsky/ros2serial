@@ -73,3 +73,62 @@ def test_an_agents_own_prs_do_not_block_its_next_stacked_ticket():
     assert next_ticket.select(issues, prs).available == []
     assert [t["number"] for t in next_ticket.select(issues, prs, agent="claude@box").available] == [7]
     assert next_ticket.select(issues, prs, agent="other@box").available == []
+
+
+def test_dependency_lines_are_parsed_in_every_common_form():
+    open3 = issue(3, ["area:spec"])
+    for body in [
+        "depends on #3",
+        "- Depends on #3",
+        "Depends on: #3",
+        "**Depends on** #3",
+        "Depends on #1 and #3",
+        "Depends on #4, #3",
+    ]:
+        report = next_ticket.select([issue(1, state="closed"), issue(4, state="closed"), issue(2, ["area:core"], body=body), open3], [])
+        assert 2 in report.skipped and "#3" in report.skipped[2], (body, report.skipped)
+
+
+def test_issues_that_are_pull_requests_are_not_tickets():
+    item = issue(40, ["area:ci"])
+    item["pull_request"] = {"url": "x"}
+    assert next_ticket.select([item], []).available == []
+
+
+def test_a_dependency_on_a_merged_pr_counts_as_done():
+    merged = issue(19, state="closed")
+    merged["pull_request"] = {"url": "x"}
+    report = next_ticket.select([merged, issue(2, ["area:core"], body="Depends on #19")], [])
+    assert [t["number"] for t in report.available] == [2]
+
+
+def test_claims_are_case_insensitive_and_accept_issue_urls():
+    issues = [issue(3, ["area:spec"]), issue(5, ["area:gen"])]
+    prs = [pr(20, "closes #3"), pr(21, "Closes https://github.com/apojomovsky/ros2serial/issues/5")]
+    report = next_ticket.select(issues, prs)
+    assert report.available == [] and "PR #20" in report.skipped[3] and "PR #21" in report.skipped[5]
+
+
+def test_closing_the_same_issue_twice_in_one_body_is_not_a_race():
+    assert next_ticket.select([issue(3)], [pr(20, "Closes #3\n\nCloses #3")]).races == {}
+
+
+def test_agent_ids_must_match_exactly():
+    issues = [issue(6, ["area:ci"]), issue(7, ["area:ci"])]
+    prs = [pr(16, "Closes #6\n\nagent: claude@box2")]
+    assert next_ticket.select(issues, prs, agent="claude@box").available == []
+    prose = [pr(16, "Closes #6\n\nThe agent: claude@box line goes in the body.")]
+    assert next_ticket.select(issues, prose, agent="claude@box").available == []
+
+
+def test_main_prints_races_and_available_tickets(tmp_path, capsys):
+    import json
+
+    (tmp_path / "i.json").write_text(json.dumps([issue(3, ["area:spec"]), issue(9, ["area:bridge"])]))
+    (tmp_path / "p.json").write_text(json.dumps([pr(30, "Closes #3"), pr(31, "Closes #3")]))
+    import sys
+
+    sys.argv = ["next_ticket.py", "--from-json", str(tmp_path / "i.json"), str(tmp_path / "p.json")]
+    assert next_ticket.main() == 0
+    out = capsys.readouterr().out
+    assert "race on #3" in out and "#9 ticket 9" in out
