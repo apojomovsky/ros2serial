@@ -6,6 +6,7 @@ name: cut-release
 # R2S_RELEASE_TOKEN secret (a personal access token): a PR or tag pushed with
 # the default GITHUB_TOKEN never triggers other workflows, so the release PR's
 # required checks would never run and release.yml would never start.
+# Auto-merge needs "Allow auto-merge" enabled in the repository settings.
 
 on:
   workflow_dispatch:
@@ -26,6 +27,12 @@ on:
 permissions:
   contents: read
 
+concurrency: release
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   prepare:
     if: github.event_name == 'workflow_dispatch'
@@ -42,8 +49,11 @@ jobs:
           token: ${{ inputs.dry_run && github.token || secrets.R2S_RELEASE_TOKEN }}
       - name: Load pinned versions
         run: grep -v '^#' ci/versions.env >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Install git-cliff
-        run: pip install "git-cliff==${GIT_CLIFF_VERSION}"
+        run: python3 -m pip install "git-cliff==${GIT_CLIFF_VERSION}"
       - name: Dry run
         if: ${{ inputs.dry_run }}
         env:
@@ -57,9 +67,13 @@ jobs:
         run: |
           git config user.name "release"
           git config user.email "release@users.noreply.github.com"
-          version=$(bash scripts/release.sh --dry-run --bump "$BUMP" | sed -n 's/^next version: //p')
-          git switch -c "release/v${version}"
-          bash scripts/release.sh --bump "$BUMP"
+          set -o pipefail
+          git switch -c release-cut
+          bash scripts/release.sh --bump "$BUMP" | tee release.log
+          version=$(sed -n 's/^next version: //p' release.log)
+          rm release.log
+          test -n "$version" || { echo "release.sh printed no version"; exit 1; }
+          git branch -m "release/v${version}"
           git push -u origin "release/v${version}"
           gh pr create --base master --title "chore(release): v${version}" \
             --body "Release v${version}: VERSION and CHANGELOG.md from scripts/release.sh."
@@ -78,8 +92,12 @@ jobs:
           TOKEN: ${{ secrets.R2S_RELEASE_TOKEN }}
         run: |
           version=$(cat VERSION)
+          subject=$(git log -1 --format=%s -- VERSION)
           if [ "$version" = 0.0.0 ]; then
             echo "VERSION is 0.0.0: nothing has been released yet"
+          elif [ "$subject" != "chore(release): v${version}" ]; then
+            echo "VERSION last changed by \"$subject\", not by a release commit: cut releases with this workflow"
+            exit 1
           elif git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
             echo "v${version} already tagged"
           elif [ -z "$TOKEN" ]; then

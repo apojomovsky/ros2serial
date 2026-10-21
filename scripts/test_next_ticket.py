@@ -85,7 +85,9 @@ def test_dependency_lines_are_parsed_in_every_common_form():
         "Depends on #1 and #3",
         "Depends on #4, #3",
     ]:
-        report = next_ticket.select([issue(1, state="closed"), issue(4, state="closed"), issue(2, ["area:core"], body=body), open3], [])
+        report = next_ticket.select(
+            [issue(1, state="closed"), issue(4, state="closed"), issue(2, ["area:core"], body=body), open3], []
+        )
         assert 2 in report.skipped and "#3" in report.skipped[2], (body, report.skipped)
 
 

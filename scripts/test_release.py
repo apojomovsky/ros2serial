@@ -107,7 +107,9 @@ def test_bad_arguments_are_reported(tmp_path):
 def test_a_real_run_writes_version_and_changelog_in_one_commit(tmp_path):
     repo = repo_with(tmp_path, "v0.3.1", ["feat(core): b"])
     (repo / "sub").mkdir()
-    result = subprocess.run(["bash", str(ROOT / "scripts/release.sh")], cwd=repo / "sub", capture_output=True, text=True)
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/release.sh")], cwd=repo / "sub", capture_output=True, text=True
+    )
     assert result.returncode == 0, result.stdout + result.stderr
     assert (repo / "VERSION").read_text() == "0.4.0\n"
     assert "B" in (repo / "CHANGELOG.md").read_text()

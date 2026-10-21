@@ -25,6 +25,7 @@ protect_breaking_commits = true
 sort_commits = "oldest"
 # The comment prefixes only order the sections; they don't render.
 commit_parsers = [
+  { message = "^chore\\(release\\)", skip = true },
   { field = "breaking", pattern = "true", group = "<!-- 0 -->Breaking" },
   { message = "^feat", group = "<!-- 1 -->Features" },
   { message = "^fix", group = "<!-- 2 -->Fixes" },

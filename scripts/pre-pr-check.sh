@@ -73,7 +73,7 @@ if [ -n "${PR_BODY:-}" ]; then
   else
     while read -r line; do
       [ -n "$line" ] && fix "$line"
-    done < <(python3 "$root/scripts/pr_body_check.py" --full --file "$PR_BODY")
+    done < <(python3 "$root/scripts/pr_body_check.py" --full --file "$PR_BODY" 2>&1 || echo "PR body check failed to run")
   fi
 else
   note "PR body: pass PR_BODY=<file> to check it"
