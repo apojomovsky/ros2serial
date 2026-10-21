@@ -1,0 +1,11 @@
+# Computed by hand from VAR-1: 7 bits per byte, least significant first.
+covers: [VAR-1, VAR-2, VAR-4]
+cases:
+  - {value: 0,     encoded: "00"}
+  - {value: 1,     encoded: "01"}
+  - {value: 127,   encoded: "7f"}
+  - {value: 128,   encoded: "80 01"}
+  - {value: 300,   encoded: "ac 02"}
+  - {value: 16383, encoded: "ff 7f"}
+  - {value: 16384, encoded: "80 80 01"}
+  - {value: 65535, encoded: "ff ff 03"}

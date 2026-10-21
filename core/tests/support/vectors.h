@@ -27,6 +27,7 @@ typedef struct {
     const uint8_t *encoded; /* the delimiter included */
     uint16_t encoded_len;
     const char *encoded_hex;
+    const char *reject; /* the rule a decoder rejects it by, or NULL; decoded is empty then */
 } r2s_vec_rcobs_t;
 
 typedef struct {
@@ -36,6 +37,7 @@ typedef struct {
     const uint8_t *encoded;
     uint16_t encoded_len;
     const char *encoded_hex;
+    const char *reject; /* the rule a decoder rejects it by, or NULL; value is 0 then */
 } r2s_vec_varint_t;
 
 /* One check per kind, linked in by the test executable: the runner

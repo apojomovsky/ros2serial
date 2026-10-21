@@ -56,17 +56,21 @@ Reverse Consistent Overhead Byte Stuffing removes every `0x00` from the frame, s
 - [COB-2] The encoding of any input contains no `0x00` byte.
 - [COB-3] The encoding is deterministic. In particular, 254 non-zero bytes at the end of the input produce a trailing empty group: the encoding ends in `... FF 01`.
 - [COB-4] Decoding runs from the end of the encoded bytes (without the delimiter). Read the last byte as a code `c`; the `c - 1` bytes before it are that group's data. Repeat with the bytes before those, until none are left.
-- [COB-5] A decoder MUST reject an encoding that contains a code of `0x00`, or a code `c` with fewer than `c - 1` bytes before it.
+- [COB-5] A decoder MUST reject an encoding that contains a `0x00` byte, or a code `c` with fewer than `c - 1` bytes before it.
 - [COB-6] A decoder MUST reject an encoding whose last byte is `0xFF`. ([COB-1] never produces one, and accepting it would give a second encoding of the same input.)
 - [COB-7] In the decoded output, each group's data is followed by a `0x00` when the next group towards the end of the encoding exists and the group's own code is not `0xFF`. The group nearest the end is never followed by a `0x00`.
+When an encoding breaks several rules, a decoder names the first one it meets: [COB-6] before any code is read, then [COB-5] group by group from the end. Conformance vectors only use encodings that break a single rule.
+
 - [COB-8] An encoded frame of `n` decoded bytes is at most `n + n / 254 + 1` bytes long (integer division), before the delimiter. The bound is reached when the input has no `0x00`.
 
 ## 5. Varints
 
 - [VAR-1] Lengths of strings and sequences are unsigned LEB128 varints: 7 bits per byte, least significant group first, the high bit set on every byte but the last.
-- [VAR-2] A length is at most 65535. A decoder MUST reject a varint that encodes a larger value.
+- [VAR-2] A length is at most 65535, so a varint has at most 3 bytes. A decoder MUST reject a varint that encodes a larger value, or whose third byte has the high bit set.
 - [VAR-3] A decoder MUST reject a varint truncated by the end of the payload.
 - [VAR-4] An encoder MUST use the shortest encoding, and a decoder MUST reject any other (for example `80 00` for 0). A valid varint is therefore 1 to 3 bytes long.
+
+A decoder applies these rules in the order it reads the bytes: a varint is rejected by [VAR-2] as soon as its third byte has the high bit set, by [VAR-3] when the payload ends first, and by [VAR-4] once its last byte is read. Conformance vectors only use encodings that break a single rule.
 
 ## 6. Message encoding
 

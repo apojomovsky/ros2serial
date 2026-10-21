@@ -1,0 +1,7 @@
+# The published check value, and frames before and after the CRC is appended.
+covers: [CHK-1, CHK-2, CHK-3, CHK-4]
+cases:
+  - {text: "123456789", crc: 0x6F91}
+  - {data: "", crc: 0xFFFF}
+  - {data: "10 00 00 00 c0 3f", crc: 0x491E}
+  - {data: "10 00 00 00 c0 3f 1e 49", crc: 0x0000}

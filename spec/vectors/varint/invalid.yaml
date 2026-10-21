@@ -1,0 +1,11 @@
+# Encodings a decoder must reject, each with the rule that rejects it.
+covers: [VAR-2, VAR-3, VAR-4]
+cases:
+  - {encoded: "80 80 04",    reject: VAR-2}
+  - {encoded: "ff ff 7f",    reject: VAR-2}
+  - {encoded: "ff ff ff 01", reject: VAR-2}
+  - {encoded: "",            reject: VAR-3}
+  - {encoded: "80",          reject: VAR-3}
+  - {encoded: "ff ff",       reject: VAR-3}
+  - {encoded: "80 00",       reject: VAR-4}
+  - {encoded: "ff 80 00",    reject: VAR-4}

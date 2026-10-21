@@ -1,0 +1,175 @@
+"""The Python reference for CRC, rCOBS and varint: published values, properties, rejections, vectors."""
+
+import random
+from pathlib import Path
+
+import pytest
+import yaml
+from r2s_gen.reference import crc, rcobs, varint
+from r2s_gen.reference.errors import Rejected
+
+VECTORS = Path(__file__).resolve().parents[2] / "spec" / "vectors"
+SEED = 20261021
+
+
+def cases(kind: str, reject: bool = False) -> list:
+    params = []
+    for path in sorted((VECTORS / kind).glob("*.yaml")):
+        doc = yaml.safe_load(path.read_text())
+        for i, case in enumerate(doc["cases"]):
+            if ("reject" in case) == reject:
+                params.append(pytest.param(case, id=f"{path.stem}-{i}"))
+    return params
+
+
+def h(text: str) -> bytes:
+    return bytes.fromhex(text)
+
+
+# covers: CHK-2
+def test_crc_of_the_check_string_is_the_published_value():
+    assert crc.crc16(b"123456789") == 0x6F91
+
+
+# covers: CHK-3, CHK-4
+def test_crc_appended_little_endian_leaves_a_zero_residue():
+    rng = random.Random(SEED)
+    for _ in range(2000):
+        data = rng.randbytes(rng.randrange(0, 64))
+        assert crc.crc16(data + crc.crc16(data).to_bytes(2, "little")) == 0
+
+
+# covers: CHK-1
+@pytest.mark.parametrize("case", cases("crc"))
+def test_crc_reproduces_every_vector(case):
+    data = case["text"].encode("ascii") if "text" in case else h(case["data"])
+    assert crc.crc16(data) == case["crc"]
+
+
+# covers: COB-1, COB-4, COB-7
+def test_rcobs_round_trips_random_input():
+    rng = random.Random(SEED)
+    for _ in range(2000):
+        size = rng.choice([0, 1, 2, 253, 254, 255, 508, 509, rng.randrange(0, 1200)])
+        # Without long zero-free runs no 0xFF group would ever be decoded.
+        zero = rng.choice([0.0, 1 / 256, 1 / 2])
+        data = bytes(0 if rng.random() < zero else rng.randrange(1, 256) for _ in range(size))
+        assert rcobs.decode(rcobs.encode(data)) == data
+
+
+# covers: COB-4, COB-7
+def test_rcobs_round_trips_0xff_groups_in_every_position():
+    run = b"\x01" * 254
+    for data in (run, run * 2, run * 2 + b"\x01", run + b"\x00" + run, b"\x00" + run + b"\x00", run + b"\x00\x00"):
+        assert rcobs.decode(rcobs.encode(data)) == data
+
+
+# covers: COB-3, COB-6
+def test_rcobs_decoding_accepts_only_the_canonical_encoding():
+    rng = random.Random(SEED)
+    for _ in range(20000):
+        encoded = bytes(rng.randrange(1, 256) for _ in range(rng.randrange(1, 300)))
+        try:
+            decoded = rcobs.decode(encoded)
+        except Rejected:
+            continue
+        assert rcobs.encode(decoded) == encoded
+
+
+# covers: VAR-4
+def test_varint_decoding_accepts_only_the_canonical_encoding():
+    for n in range(1, 4):
+        for value in range(0, 256**n, 1 if n < 3 else 97):
+            data = value.to_bytes(n, "little")
+            try:
+                decoded, used = varint.decode(data)
+            except Rejected:
+                continue
+            assert varint.encode(decoded) == data[:used]
+
+
+# covers: COB-2, COB-8
+def test_rcobs_output_has_no_zero_and_stays_within_the_bound():
+    rng = random.Random(SEED)
+    for _ in range(2000):
+        data = rng.randbytes(rng.randrange(0, 1200))
+        out = rcobs.encode(data)
+        assert 0 not in out
+        assert len(out) <= len(data) + len(data) // 254 + 1
+
+
+# covers: COB-8
+def test_rcobs_bound_is_reached_without_zeros():
+    for n in (0, 1, 253, 254, 255, 508, 1000):
+        assert len(rcobs.encode(b"\x01" * n)) == n + n // 254 + 1
+
+
+# covers: COB-3
+def test_rcobs_254_nonzero_bytes_at_the_end_give_a_trailing_empty_group():
+    assert rcobs.encode(b"\x11" * 254)[-2:] == b"\xff\x01"
+
+
+@pytest.mark.parametrize("case", cases("rcobs"))
+def test_rcobs_reproduces_every_valid_vector(case):
+    wire = h(case["encoded"])
+    assert rcobs.encode(h(case["decoded"])) + b"\x00" == wire, "rcobs vectors include the delimiter"
+    assert rcobs.decode(wire[:-1]) == h(case["decoded"])
+
+
+@pytest.mark.parametrize("case", cases("rcobs", reject=True))
+def test_rcobs_rejects_every_invalid_vector_by_its_rule(case):
+    with pytest.raises(Rejected) as e:
+        rcobs.decode(h(case["encoded"])[:-1])
+    assert e.value.rule == case["reject"]
+
+
+# covers: COB-5
+def test_rcobs_rejects_a_zero_code():
+    with pytest.raises(Rejected) as e:
+        rcobs.decode(b"\x00\x01")
+    assert e.value.rule == "COB-5"
+
+
+# covers: COB-5
+def test_rcobs_rejects_a_zero_data_byte():
+    with pytest.raises(Rejected) as e:
+        rcobs.decode(b"\x00\x02")
+    assert e.value.rule == "COB-5"
+
+
+# covers: VAR-1, VAR-4
+def test_varint_round_trips_every_length():
+    for n in range(0, 65536):
+        out = varint.encode(n)
+        assert varint.decode(out) == (n, len(out))
+        assert len(out) == (1 if n < 128 else 2 if n < 16384 else 3)
+
+
+# covers: VAR-2
+def test_varint_encoder_refuses_lengths_over_65535():
+    with pytest.raises(ValueError):
+        varint.encode(65536)
+
+
+# covers: VAR-1
+def test_varint_decode_reports_the_bytes_it_used():
+    assert varint.decode(h("ac 02 ff")) == (300, 2)
+
+
+@pytest.mark.parametrize("case", cases("varint"))
+def test_varint_reproduces_every_valid_vector(case):
+    wire = h(case["encoded"])
+    assert varint.encode(case["value"]) == wire
+    assert varint.decode(wire) == (case["value"], len(wire))
+
+
+@pytest.mark.parametrize("case", cases("varint", reject=True))
+def test_varint_rejects_every_invalid_vector_by_its_rule(case):
+    with pytest.raises(Rejected) as e:
+        varint.decode(h(case["encoded"]))
+    assert e.value.rule == case["reject"]
+
+
+def test_every_kind_has_vectors():
+    for kind in ("crc", "rcobs", "varint"):
+        assert list((VECTORS / kind).glob("*.yaml")), kind

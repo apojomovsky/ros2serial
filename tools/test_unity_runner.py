@@ -104,6 +104,19 @@ def test_the_cli_writes_the_runner(tmp_path):
     assert "RUN_TEST(test_varint_basic_0)" in out.read_text()
 
 
+def test_rejected_cases_carry_the_rule_and_no_decoded_value(tmp_path):
+    f = write(tmp_path, "invalid.yaml", 'covers: [COB-5]\ncases:\n  - {encoded: "05 00", reject: COB-5}\n')
+    out = unity_runner.vector_runner("rcobs", [f])
+    assert re.search(r'NULL, 0u, "", v_invalid_0_encoded, 2u, "05 00", "COB-5"', out), out
+    f = write(tmp_path, "bad.yaml", 'covers: [VAR-3]\ncases:\n  - {encoded: "80", reject: VAR-3}\n')
+    assert re.search(r'0ul, v_bad_0_encoded, 1u, "80", "VAR-3"', unity_runner.vector_runner("varint", [f]))
+
+
+def test_valid_cases_have_a_null_rule(tmp_path):
+    f = write(tmp_path, "basic.yaml", 'covers: [VAR-1]\ncases:\n  - {value: 1, encoded: "01"}\n')
+    assert re.search(r'"01", NULL\}', unity_runner.vector_runner("varint", [f]))
+
+
 def test_a_prototype_does_not_run_a_test_twice():
     assert unity_runner.test_names("void test_a(void);\nvoid test_a(void)\n{\n}\n") == ["test_a"]
 

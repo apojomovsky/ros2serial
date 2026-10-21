@@ -66,7 +66,7 @@ if wants SCRIPTS; then
   section scripts-tests python3 -m pytest scripts tools
 fi
 if wants CORE; then section core bash scripts/core-test.sh; fi
-if wants GEN; then section gen pending "G1"; fi
+if wants GEN; then section gen python3 -m pytest gen; fi
 if wants BRIDGE; then section bridge pending "H1"; fi
 if wants E2E; then section e2e pending "V1, V3"; fi
 
