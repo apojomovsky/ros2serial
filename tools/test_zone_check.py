@@ -37,7 +37,9 @@ def tree(tmp_path: Path, sources: dict[str, str]) -> Path:
     (tmp_path / "core/include/r2s").mkdir(parents=True)
     (tmp_path / "core/include/r2s/ok.h").write_text("#define R2S_OK 0\n")
     (tmp_path / "cpp").mkdir()
-    (tmp_path / "cpp/ros2serial.hpp").write_text("namespace r2s {\ntemplate <class T> struct A {};\n}\n#define R2S_CPP 1\n")
+    (tmp_path / "cpp/ros2serial.hpp").write_text(
+        "namespace r2s {\ntemplate <class T> struct A {};\n}\n#define R2S_CPP 1\n"
+    )
     (tmp_path / "core/src").mkdir()
     for name, text in sources.items():
         (tmp_path / "core/src" / name).write_text(text)
