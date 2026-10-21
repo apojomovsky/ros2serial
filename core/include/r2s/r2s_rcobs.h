@@ -43,14 +43,12 @@ uint8_t r2s_rcobs_encode_end(r2s_rcobs_encoder_t *enc, uint8_t *out);
 
 /* Decodes an encoded frame in place: buf holds len bytes of the encoding,
  * without its delimiter, and the decoded frame is written over it, right
- * aligned, so the decoded frame ends where the encoded one ended. The address
- * of its first byte is written to decoded, and the length of the decoded
- * frame to decoded_len. The function returns R2S_RCOBS_OK, or the error of
- * the rule the encoding breaks: R2S_RCOBS_ERR_TRAILING for COB-6, which is
- * checked before any code is read, and R2S_RCOBS_ERR_CODE for COB-5. The
- * buffer and the length are left undefined when the encoding is refused. The
- * length comes back from the decoder because a caller cannot work it out: a
- * pointer difference is 16 bits on an AVR, and a frame may be longer. */
+ * aligned, so it ends where the encoded one ended. It writes the address of
+ * the decoded frame's first byte to decoded and its length to decoded_len.
+ * It returns R2S_RCOBS_OK, or the rule the encoding breaks: R2S_RCOBS_ERR_TRAILING
+ * for COB-6, checked before any code is read, and R2S_RCOBS_ERR_CODE for COB-5.
+ * The length comes back because a caller cannot work it out: a pointer
+ * difference is 16 bits on an AVR, and a frame may be longer. */
 int8_t r2s_rcobs_decode(uint8_t *buf, uint16_t len, uint8_t **decoded, uint16_t *decoded_len);
 
 #ifdef __cplusplus
