@@ -6,7 +6,7 @@
 add_library(unity STATIC vendor/unity/unity.c)
 target_include_directories(unity SYSTEM PUBLIC vendor/unity)
 
-add_library(r2s_test_support STATIC support/bytes.c)
+add_library(r2s_test_support STATIC support/bytes.c support/fake_port.c support/fake_port_unity.c)
 target_include_directories(r2s_test_support PUBLIC support)
 target_compile_options(r2s_test_support PRIVATE ${R2S_WARNINGS})
 target_link_libraries(r2s_test_support PUBLIC unity r2s_core)
@@ -30,7 +30,16 @@ function(r2s_unit_test source)
   add_executable(${name} "${source}" "${runner}")
   target_compile_options(${name} PRIVATE ${R2S_TEST_WARNINGS})
   target_link_libraries(${name} PRIVATE r2s_test_support)
-  add_test(NAME ${name} COMMAND ${name})
+  # One ctest entry per test function, read at configure time; editing the
+  # source re-runs the configure step.
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${source}")
+  execute_process(
+    COMMAND "${Python3_EXECUTABLE}" "${R2S_RUNNER_TOOL}" names "${CMAKE_CURRENT_SOURCE_DIR}/${source}"
+    OUTPUT_VARIABLE test_functions OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+  string(REPLACE "\n" ";" test_functions "${test_functions}")
+  foreach(fn ${test_functions})
+    add_test(NAME ${name}.${fn} COMMAND ${name} ${fn})
+  endforeach()
 endfunction()
 
 # r2s_vector_test(<name> <kind> <check.c> <yaml>...): runs every case of the
@@ -67,11 +76,13 @@ endforeach()
 # Proof that a failing assertion fails: without these, a check that silently
 # returned early would make every test pass.
 r2s_unit_test(must_fail/bytes_mismatch.c)
-set_tests_properties(bytes_mismatch PROPERTIES
+set_tests_properties(bytes_mismatch.test_must_fail_assert_bytes_reports_a_mismatch PROPERTIES
   PASS_REGULAR_EXPRESSION "bytes_mismatch\\.c:[0-9]+:test_must_fail_assert_bytes_reports_a_mismatch:FAIL: demo: expected \\[01 02\\] \\(2 bytes\\), got \\[01 03 04\\] \\(3 bytes\\)")
+r2s_unit_test(must_fail/overrun_unnoticed.c)
+set_tests_properties(overrun_unnoticed.test_must_fail_an_unnoticed_overrun_fails_the_test PROPERTIES PASS_REGULAR_EXPRESSION "core wrote past tx_free")
 r2s_unit_test(must_fail/selftest_mismatch.c)
 target_sources(selftest_mismatch PRIVATE support/vector_selftest.c)
-set_tests_properties(selftest_mismatch PROPERTIES
+set_tests_properties(selftest_mismatch.test_must_fail_selftest_rejects_mistranscribed_bytes PROPERTIES
   PASS_REGULAR_EXPRESSION "must_fail case 0 \\[COB-1\\] decoded: expected \\[11 22\\]")
 
 # The self-test runs the fixtures and every published vector of each kind
