@@ -1,5 +1,6 @@
 /* rCOBS: the encoding round-trips, it never holds a 0x00, the decoder accepts
  * only the canonical encoding, and the decoder decodes in place. */
+#include "bytes.h"
 #include "r2s/r2s_rcobs.h"
 #include "unity.h"
 
@@ -26,10 +27,11 @@ void test_rcobs_a_frame_round_trips(void)
     const uint8_t data[] = {0x11, 0x22, 0x00, 0x33, 0x00, 0x00};
     uint8_t encoded[32];
     uint8_t *decoded = NULL;
+    uint16_t decoded_len = 0;
     uint16_t len = encode(data, sizeof data, encoded);
 
-    TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_OK, r2s_rcobs_decode(encoded, len, &decoded));
-    TEST_ASSERT_EQUAL_UINT16(sizeof data, (uint16_t)(len - (uint16_t)(decoded - encoded)));
+    TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_OK, r2s_rcobs_decode(encoded, len, &decoded, &decoded_len));
+    TEST_ASSERT_EQUAL_UINT16(sizeof data, decoded_len);
     TEST_ASSERT_EQUAL_HEX8_ARRAY(data, decoded, sizeof data);
 }
 
@@ -112,9 +114,10 @@ void test_rcobs_decoding_ends_where_the_encoding_ended(void)
     const uint8_t data[] = {0x11, 0x22, 0x00, 0x33};
     uint8_t encoded[32];
     uint8_t *decoded = NULL;
+    uint16_t decoded_len = 0;
     uint16_t len = encode(data, sizeof data, encoded);
 
-    TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_OK, r2s_rcobs_decode(encoded, len, &decoded));
+    TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_OK, r2s_rcobs_decode(encoded, len, &decoded, &decoded_len));
     /* The decoded frame ends where the encoded one did, so its last byte is
      * the last byte of the encoding. */
     TEST_ASSERT_EQUAL_UINT8(0x33, decoded[sizeof data - 1u]);
@@ -127,8 +130,10 @@ void test_rcobs_a_zero_byte_in_the_encoding_is_refused(void)
     /* The codes are sound, so only the 0x00 byte itself can refuse this. */
     uint8_t encoded[] = {0x00, 0x02, 0x01};
     uint8_t *decoded = NULL;
+    uint16_t decoded_len = 0;
 
-    TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_ERR_CODE, r2s_rcobs_decode(encoded, sizeof encoded, &decoded));
+    TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_ERR_CODE,
+                           r2s_rcobs_decode(encoded, sizeof encoded, &decoded, &decoded_len));
 }
 
 /* covers: COB-5 */
@@ -136,8 +141,10 @@ void test_rcobs_a_code_without_its_bytes_is_refused(void)
 {
     uint8_t encoded[] = {0x11, 0x03};
     uint8_t *decoded = NULL;
+    uint16_t decoded_len = 0;
 
-    TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_ERR_CODE, r2s_rcobs_decode(encoded, sizeof encoded, &decoded));
+    TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_ERR_CODE,
+                           r2s_rcobs_decode(encoded, sizeof encoded, &decoded, &decoded_len));
 }
 
 /* covers: COB-6 */
@@ -145,8 +152,10 @@ void test_rcobs_a_trailing_0xff_code_is_refused(void)
 {
     uint8_t encoded[] = {0x11, 0xFF};
     uint8_t *decoded = NULL;
+    uint16_t decoded_len = 0;
 
-    TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_ERR_TRAILING, r2s_rcobs_decode(encoded, sizeof encoded, &decoded));
+    TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_ERR_TRAILING,
+                           r2s_rcobs_decode(encoded, sizeof encoded, &decoded, &decoded_len));
 }
 
 /* covers: COB-6 */
@@ -156,8 +165,31 @@ void test_rcobs_the_trailing_rule_is_checked_before_any_code(void)
      * first, so that is the rule the decoder names. */
     uint8_t encoded[] = {0x00, 0xFF};
     uint8_t *decoded = NULL;
+    uint16_t decoded_len = 0;
 
-    TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_ERR_TRAILING, r2s_rcobs_decode(encoded, sizeof encoded, &decoded));
+    TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_ERR_TRAILING,
+                           r2s_rcobs_decode(encoded, sizeof encoded, &decoded, &decoded_len));
+}
+
+/* covers: COB-8 */
+void test_rcobs_a_frame_longer_than_a_pointer_difference_decodes(void)
+{
+    /* FRM-9: the protocol allows a frame of 65277 bytes. A pointer
+     * difference is 16 bits on an AVR, so the length comes from the
+     * decoder. */
+    static uint8_t data[40000];
+    static uint8_t encoded[40000 + 40000 / 254 + 2];
+    uint8_t *decoded = NULL;
+    uint16_t decoded_len = 0;
+
+    for (unsigned i = 0; i < sizeof data; i++) {
+        data[i] = (uint8_t)((i % 251u) + 1u);
+    }
+    uint16_t len = encode(data, sizeof data, encoded);
+
+    TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_OK, r2s_rcobs_decode(encoded, len, &decoded, &decoded_len));
+    TEST_ASSERT_EQUAL_UINT16(sizeof data, decoded_len);
+    R2S_ASSERT_BYTES(data, sizeof data, decoded, decoded_len, "a long frame");
 }
 
 /* covers: COB-3, COB-6 */
@@ -204,6 +236,7 @@ void test_rcobs_decoding_accepts_only_the_canonical_encoding(void)
             uint8_t original[300];
             uint8_t buffer[300];
             uint8_t *decoded = NULL;
+            uint16_t decoded_len = 0;
 
             for (uint16_t k = 0; k < len; k++) {
                 original[k] = encoded[k];
@@ -213,9 +246,8 @@ void test_rcobs_decoding_accepts_only_the_canonical_encoding(void)
                 buffer[k] = original[k];
             }
 
-            int8_t status = r2s_rcobs_decode(buffer, len, &decoded);
+            int8_t status = r2s_rcobs_decode(buffer, len, &decoded, &decoded_len);
             if (status == R2S_RCOBS_OK) {
-                uint16_t decoded_len = (uint16_t)(len - (uint16_t)(decoded - buffer));
                 uint8_t reencoded[300];
                 r2s_rcobs_encoder_t enc;
                 uint16_t reencoded_len = 0;

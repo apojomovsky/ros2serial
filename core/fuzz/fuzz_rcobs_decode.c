@@ -24,10 +24,15 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     memcpy(buffer, data, size);
 
     uint8_t *decoded = NULL;
-    int8_t status = r2s_rcobs_decode(buffer, (uint16_t)size, &decoded);
+    uint16_t decoded_len = 0;
+    int8_t status = r2s_rcobs_decode(buffer, (uint16_t)size, &decoded, &decoded_len);
     if (status == R2S_RCOBS_OK) {
-        /* The decoded frame must lie inside the buffer. */
+        /* The decoded frame must lie inside the buffer, and its length must
+         * fit in it. */
         if (decoded < buffer || decoded > buffer + size) {
+            abort();
+        }
+        if (decoded_len > size) {
             abort();
         }
     }

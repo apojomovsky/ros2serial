@@ -39,6 +39,7 @@ void r2s_vec_check_rcobs(const r2s_vec_rcobs_t *v)
     static uint8_t buffer[0xFFFF];
     char label[256];
     uint8_t *decoded = NULL;
+    uint16_t decoded_len = 0;
     int8_t status;
 
     snprintf(label, sizeof label, "%s [%s]", v->where, v->covers);
@@ -48,14 +49,14 @@ void r2s_vec_check_rcobs(const r2s_vec_rcobs_t *v)
     memcpy(buffer, v->encoded, len);
 
     if (v->reject != NULL) {
-        status = r2s_rcobs_decode(buffer, len, &decoded);
+        status = r2s_rcobs_decode(buffer, len, &decoded, &decoded_len);
         TEST_ASSERT_EQUAL_STRING_MESSAGE(v->reject, rule_of(status), label);
         return;
     }
 
-    status = r2s_rcobs_decode(buffer, len, &decoded);
+    status = r2s_rcobs_decode(buffer, len, &decoded, &decoded_len);
     TEST_ASSERT_EQUAL_INT8_MESSAGE(R2S_RCOBS_OK, status, label);
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(v->decoded_len, (uint16_t)(len - (uint16_t)(decoded - buffer)), label);
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(v->decoded_len, decoded_len, label);
     R2S_ASSERT_BYTES(v->decoded, v->decoded_len, decoded, v->decoded_len, label);
 
     /* The other direction: the encoding of the decoded frame, with the

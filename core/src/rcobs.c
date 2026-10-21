@@ -33,7 +33,7 @@ uint8_t r2s_rcobs_encode_end(r2s_rcobs_encoder_t *enc, uint8_t *out)
     return 1u;
 }
 
-int8_t r2s_rcobs_decode(uint8_t *buf, uint16_t len, uint8_t **decoded)
+int8_t r2s_rcobs_decode(uint8_t *buf, uint16_t len, uint8_t **decoded, uint16_t *decoded_len)
 {
     uint16_t read = len;
     uint16_t write = len;
@@ -41,6 +41,7 @@ int8_t r2s_rcobs_decode(uint8_t *buf, uint16_t len, uint8_t **decoded)
 
     if (len == 0u) {
         *decoded = buf;
+        *decoded_len = 0u;
         return R2S_RCOBS_OK;
     }
     /* COB-6 comes before any code is read: an encoding that ends in 0xFF has
@@ -75,5 +76,6 @@ int8_t r2s_rcobs_decode(uint8_t *buf, uint16_t len, uint8_t **decoded)
     }
 
     *decoded = buf + write;
+    *decoded_len = (uint16_t)(len - write);
     return R2S_RCOBS_OK;
 }

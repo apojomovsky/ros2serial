@@ -835,7 +835,7 @@ typedef struct { uint8_t run; } r2s_rcobs_encoder_t;
 void r2s_rcobs_encoder_init(r2s_rcobs_encoder_t *enc);
 uint8_t r2s_rcobs_encode_byte(r2s_rcobs_encoder_t *enc, uint8_t byte, uint8_t *out);
 uint8_t r2s_rcobs_encode_end(r2s_rcobs_encoder_t *enc, uint8_t *out);
-int8_t r2s_rcobs_decode(uint8_t *buf, uint16_t len, uint8_t **decoded);
+int8_t r2s_rcobs_decode(uint8_t *buf, uint16_t len, uint8_t **decoded, uint16_t *decoded_len);
 ```
 
 ### Port contract
