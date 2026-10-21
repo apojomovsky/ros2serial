@@ -214,6 +214,8 @@ The CDR comparison stays in the encoding benchmark (Phase 2) as a check on this 
 | `T[]`, `T[<=N]` | Varint length + elements |
 | Nested message | Fields inline, in declaration order |
 
+`wstring` and `wchar` have no encoding: the generator rejects a message that uses them, naming the field.
+
 Lengths are varints (LEB128): 1 byte for values under 128, which covers almost all bounded fields. As a result **the layout does not depend on the bounds**. The host never needs to know the bound chosen for a field. It only needs to know whether the topic is narrow.
 
 **`float64` and narrow topics.** On a toolchain whose `double` is 32 bits (avr-gcc by default, epic-cc, XC8 in common configurations), sending binary64 carries no extra precision, so every topic is narrow on such a build: all `float64` fields travel as binary32 and the bridge widens them. The build detects this from `<float.h>` (`DBL_MANT_DIG == FLT_MANT_DIG`) and forces the narrow flag in the topic table; no binary64 conversion code exists on these targets. On toolchains with a 64-bit `double` (tier L), the wire carries binary64 by default and a topic can opt into narrow (`narrow_float64: true`) to save bandwidth.
@@ -222,7 +224,9 @@ Lengths are varints (LEB128): 1 byte for values under 128, which covers almost a
 
 **No 64-bit integers in the core.** The core and the codec never use 64-bit C types, because 8-bit toolchains handle them badly (slow, large, or incompletely supported). On toolchains without a usable 64-bit integer, `int64` and `uint64` fields are generated as an 8-byte little-endian array with helper functions.
 
-**Bound violations** are never silently truncated. When publishing, the serializer returns an error. On reception, the decoder drops the frame and reports the topic and the field to the host, which logs a warning naming both.
+**Bound violations** are never silently truncated. When publishing, the serializer returns an error. On reception, the decoder drops the frame and reports the topic and the field to the host, which logs a warning naming both. The host has no bounds, so only the MCU checks them; both sides drop a payload that is truncated or has bytes left over.
+
+**Strings carry no `0x00`.** The MCU holds strings NUL-terminated, so a string containing a `0x00` byte would be cut short without notice. Neither side sends one, and both drop a payload that has one; the bridge logs the topic and field instead of publishing a shortened string.
 
 ## Protocol draft (v1)
 
@@ -236,7 +240,7 @@ frame = rCOBS( topic_id[1] | seq[1] | payload[N] | crc16[2] ) + 0x00
 | seq | 1 byte | Per-direction, per-topic counter to detect lost frames |
 | payload | N bytes | Packed message |
 | crc16 | 2 bytes, little-endian | CRC-16/MCRF4XX (polynomial 0x1021 reflected, init 0xFFFF, no final XOR) over topic_id, seq and payload, computed bitwise (no 512-byte table). Appended little-endian, the CRC over the whole frame is 0, so the receiver checks one value |
-| rCOBS and delimiter | 2 bytes up to 254 bytes of frame | One code byte (plus one per extra 254 bytes) and the trailing 0x00 |
+| rCOBS and delimiter | 2 bytes up to 253 bytes of frame | One code byte (plus one per extra 254 bytes) and the trailing 0x00 |
 
 **Why reverse COBS.** COBS replaces every 0x00 so that 0x00 can mark the end of a frame, but each code byte comes *before* its block, so an encoder must look up to 254 bytes ahead: in practice, a full TX buffer. rCOBS puts each code byte *after* its block. The encoder needs only a counter, so the MCU serializes, computes the CRC and encodes in one pass, straight to the UART. The receiver buffers the frame anyway and decodes it backwards, in place. Overhead and resync behavior are the same as COBS. The exact encoding is in Part II.
 
@@ -622,15 +626,16 @@ The workflow, tooling and writing rules (Makefile, Docker image, hooks, worktree
 
 ## Protocol details
 
-All multi-byte integers are little-endian. "string" means varint length followed by bytes, without a terminator. Sizes are in bytes.
+`spec/protocol.md` is the normative form of this section, with an ID on every rule; where the two differ, the spec wins and this section is fixed. All multi-byte integers are little-endian. "string" means varint length followed by bytes, without a terminator. Sizes are in bytes. Varints are at most 3 bytes and 65535, in their shortest form only.
 
 ### Frame and limits
 
 - `frame = rCOBS(topic_id u8 | seq u8 | payload | crc16 u16) 0x00`, as in Part I.
 - `crc16` is CRC-16/MCRF4XX (width 16, polynomial 0x1021, reflected input and output, init 0xFFFF, no final XOR; check value of `"123456789"` is `0x6F91`) over `topic_id`, `seq` and `payload`, stored little-endian. The receiver computes the same CRC over the whole decoded frame, CRC included, and accepts it when the result is 0.
-- `seq` is one counter per `topic_id` per direction. It starts at 0 after each handshake and wraps at 255.
-- The maximum unencoded frame (`topic_id` to `crc16`) is set at build time (`R2S_MAX_FRAME`, generated) and announced in `HELLO`. The protocol allows up to 65535. The host never sends a frame larger than the MCU announced.
+- `seq` is one counter per `topic_id` per direction. It starts at 0 after each handshake and wraps at 255. A gap on a user topic counts lost frames but does not drop the frame.
+- The maximum unencoded frame (`topic_id` to `crc16`) is set at build time (`R2S_MAX_FRAME`, generated) and announced in `HELLO`. The protocol allows up to 65277, so the encoded frame and its delimiter fit in 65535 bytes and a 16-bit index. The host never sends a frame larger than the MCU announced; the host's own limit is 65277 and is not announced. A receiver buffers up to the encoded bound of its limit (`n + n / 254 + 1`).
 - A frame shorter than 4 bytes after decoding, with a bad CRC, with an invalid rCOBS code, or longer than `R2S_MAX_FRAME`, is dropped and counted.
+- A receiver starts as if it had just seen a `0x00`, and two consecutive `0x00` bytes (an empty frame) are ignored without counting, so a sender may send a `0x00` before a frame to flush a partial one off the line.
 
 ### rCOBS
 
@@ -645,7 +650,7 @@ for each byte b of D:
 emit n
 ```
 
-Decoding of an encoded string `E` (without its delimiter) runs from the end. Read the last byte as a code `c` (0 or larger than the bytes left is an error); the `c - 1` bytes before it are data; the group before it, if any, is followed by a 0x00 in the output unless its own code is 0xFF. Writing the output from the end of the buffer backwards decodes in place, with the result right-aligned.
+Decoding of an encoded string `E` (without its delimiter) runs from the end. Read the last byte as a code `c` (0, or more than `c - 1` bytes before it, is an error; a last code of 0xFF is an error too); the `c - 1` bytes before it are data; the group before it, if any, is followed by a 0x00 in the output unless its own code is 0xFF. Writing the output from the end of the buffer backwards decodes in place, with the result right-aligned.
 
 The encoding is deterministic: 254 non-zero bytes at the end of a frame produce a trailing empty group (`... FF 01`). Decoders accept exactly this encoding.
 
@@ -1002,7 +1007,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | B4 | Vector schema and `tools/vectors_check.py` | B1 | Invalid vector files fail CI |
 | B5 | Makefile entry points + Docker dev/ci/release images + `make bootstrap`/`doctor` | B1 | Clean clone to `make test` per AGENTS.md; `dev` and `ci` identical |
 | B6 | Git hooks + `make pre-pr-check` (takeoff) + `scripts/prose-diff.sh` + `scripts/lint-python.sh` + `scripts/push.sh` | B5 | Ritual fails a deliberately dirty PR in a test run |
-| B8 | `scripts/next-ticket.py` (claim rule), `pr-body.yml`, `cut-release.yml` | B2 | Picks only unblocked, unclaimed, non-conflicting tickets in a test fixture; release dry run green |
+| B8 | `scripts/next_ticket.py` (claim rule), `pr-body.yml`, `cut-release.yml` | B2 | Picks only unblocked, unclaimed, non-conflicting tickets in a test fixture; release dry run green |
 | B7 | `tools/zone_check.py` | B2 | Fails on a deliberate function pointer and a deliberate float operation in `core/` |
 
 ### E1: specification and vectors

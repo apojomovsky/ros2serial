@@ -13,25 +13,13 @@ ros2serial brings rosserial's experience to ROS 2: publish and subscribe from sm
 3. **Text artifacts at every boundary.** A frame is a hex string, a message is a vector file, a generated file is a golden snapshot. A failure bisects to a boundary before anyone reads code.
 4. **Correct over silent.** Unsupported input fails with a precise message. Never "fix" an error by producing wrong bytes.
 
-## Bootstrap status
-
-The repository is being bootstrapped (epic E0 in `docs/00-design.md`). Until each ticket below lands, the rules that depend on it describe the target state. What runs today: `make test` (on the host until #7), which runs `scripts/ci-test.sh` (layout check, ruff, actionlint, the vector schema check, the commit and PR-title check, script and tool tests), the same suite as CI:
-
-| Rule area | Ticket |
-| --- | --- |
-| `make` targets, Docker image | #7 |
-| Git hooks, takeoff ritual, prose and lint scripts, push helper | #8 |
-| Zone check | #9 |
-| Claim script, `pr-body.yml`, `cut-release.yml` | #10 |
-
-Delete this section when the last of them merges.
-
 ## Build and toolchain
 
 - Everything runs in the Docker dev image: avr-gcc and avr-libc, arduino-cli with a pinned AVR core, a host gcc of version 10 or newer, ROS Jazzy, simavr, Python tooling. Nothing toolchain-related is installed on the host.
 - Stages: `base`, `dev`, `ci` (an empty alias of `dev`), `release`. The container runs as the caller's uid locally and the runner's uid in CI, so files stay host-owned.
 - Every pinned version lives in `ci/versions.env`. **A pin is a migration, not housekeeping:** the pins set code size and behavior, which the budgets measure, so bumping one is its own PR with the size report showing the effect.
-- Caches live under `~/.cache/ros2serial/`. No registry cache or dedicated builder: the image builds from apt and pip in minutes.
+- Caches live under `~/.cache/ros2serial/`. No registry cache or dedicated builder: the image builds from apt and pip in minutes, and CI keeps its layers in the GitHub Actions cache (`.github/actions/dev-image`).
+- Inside the image `R2S_IN_IMAGE=1` is set, so `make` targets run their command directly instead of through `docker run`. The pinned avr-gcc version is checked when the image builds, because the apt package itself cannot be pinned.
 
 | Target | What |
 | --- | --- |
@@ -55,9 +43,10 @@ Delete this section when the last of them merges.
 Work is plain GitHub issues. A draft pull request is the claim.
 
 - Every ticket is an issue with `area:*` labels (`area:core`, `area:gen`, `area:bridge`, `area:cpp`, `area:spec`, `area:ci`, `area:ports`) and its hard dependencies listed as `Depends on #N`.
-- **Choose a ticket with `scripts/next-ticket.py`, never by reading the issue list.** It lists open issues whose dependencies are closed, that no open PR closes, and whose areas no open PR is already working on. Two tickets sharing an area are never worked at the same time.
+- **Choose a ticket with `scripts/next_ticket.py --agent <your agent ID>`, never by reading the issue list.** It lists open issues whose dependencies are closed, that no open PR closes, and whose areas no other agent's open PR is working on; `--why` explains every skipped ticket. Two agents never work tickets sharing an area at the same time, but an agent may stack its next ticket on its own open PRs (see below). Issues labelled `needs-hardware` or `dispatch-only` are the maintainer's.
 - **Claim before writing code:** open a draft PR from your worktree branch with `Closes #N`, the issue's `area:*` labels, and your agent ID (`<runtime>@<host>`) in the body. If someone else's draft PR for the same issue is older, close yours and pick again.
 - Branch names: `<type>/<issue>-<slug>`, for example `feat/42-rcobs-encoder`.
+- **Stacked PRs:** a ticket that builds on your previous one branches from that PR's branch and targets it as the PR base. The maintainer merges the stack oldest first, with merge commits, and GitHub retargets each PR to `master` as its base branch is deleted.
 
 ## Worktrees
 
@@ -95,7 +84,7 @@ Work is plain GitHub issues. A draft pull request is the claim.
 12. README and docs freshness: user-visible changes update `README.md` or `docs/` in the same PR, or the PR body says `README: n/a` (advisory).
 13. `make pre-pr-check TEST=1` also runs the full suite.
 
-Write PR bodies to a unique file (`mktemp "/tmp/pr-<issue>-XXXXXX.md"`) or pass them through a heredoc. Never use an inline `\n` string, and never a shared fixed path such as `/tmp/pr_body.md`, which another agent can overwrite.
+Write PR bodies to a unique file under the cache, which the dev image can see (`mktemp "$HOME/.cache/ros2serial/pr-<issue>-XXXXXX.md"`), and pass it as `make pre-pr-check PR_BODY=<file>`. Never use an inline `\n` string, and never a shared fixed path such as `/tmp/pr_body.md`, which another agent can overwrite.
 
 ## Commit hygiene
 
@@ -172,4 +161,4 @@ Write PR bodies to a unique file (`mktemp "/tmp/pr-<issue>-XXXXXX.md"`) or pass 
 - The non-code classifier is a single script with an allowlist of non-code paths; anything else counts as code. Workflow files are never exempt.
 - Flash, RAM and stack budgets are measured on the PR head and the PR base in the same run and judged by the base commit's script, so a PR cannot relax its own judge.
 - PR comments for fork PRs are posted by a `workflow_run` job, since a fork PR's token cannot write.
-- **Releases:** one version for the whole repository, in `VERSION`, plus `R2S_PROTOCOL_VERSION`. `cut-release.yml` is the only thing that bumps `VERSION`, and it must open its release PR with a personal access token stored as a secret: a PR opened with the default `GITHUB_TOKEN` never triggers other workflows, so its required checks never run.
+- **Releases:** one version for the whole repository, in `VERSION`, plus `R2S_PROTOCOL_VERSION`. `cut-release.yml` is the only thing that bumps `VERSION`, and it must open its release PR with a personal access token stored as a secret: a PR opened with the default `GITHUB_TOKEN` never triggers other workflows, so its required checks never run. The repository also needs "Allow auto-merge" enabled, and the tag job only tags a `VERSION` change made by a `chore(release): v<version>` commit.

@@ -25,6 +25,7 @@ protect_breaking_commits = true
 sort_commits = "oldest"
 # The comment prefixes only order the sections; they don't render.
 commit_parsers = [
+  { message = "^chore\\(release\\)", skip = true },
   { field = "breaking", pattern = "true", group = "<!-- 0 -->Breaking" },
   { message = "^feat", group = "<!-- 1 -->Features" },
   { message = "^fix", group = "<!-- 2 -->Fixes" },
@@ -37,3 +38,10 @@ commit_parsers = [
   { message = "^revert", group = "<!-- 9 -->Reverts" },
   { message = "^chore", group = "<!-- 10 -->Chores" },
 ]
+
+[bump]
+# Before 1.0 a breaking change bumps the minor version (AGENTS.md, Releases);
+# from 1.0 on, the major. A feature always bumps the minor.
+breaking_always_bump_major = false
+features_always_bump_minor = true
+initial_tag = "v0.1.0"
