@@ -42,7 +42,6 @@ SYS-4   C8
 CTL-3   C8
 CTL-4   C8
 CTL-5   C8
-CTL-6   C8
 CTL-9   C8
 CTL-10  C8
 CTL-11  C8

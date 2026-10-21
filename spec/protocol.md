@@ -132,7 +132,7 @@ A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3
 - [CTL-3] A receiver MUST refuse a frame whose `features` byte has a reserved bit set.
 - [CTL-4] The `flags` byte has bit 0 for the direction (0 when the MCU publishes the topic, 1 when it subscribes), bit 1 for narrow `float64`, bit 2 for keep-latest and bit 3 for the reliable channel. Every other bit is reserved and MUST be 0.
 - [CTL-5] The flags are the truth for the wire. A receiver MUST use the announced flags rather than its own build to decide whether a topic is narrow.
-- [CTL-6] A build whose C `double` is 32 bits MUST set the narrow flag on every topic it announces.
+- [CTL-6] Retired. It said what [ENC-12] says, and a rule is never renumbered.
 - [CTL-7] `rx_capacity` is the size of the MCU's receive frame buffer in bytes.
 - [CTL-8] `tick_hz` MUST be `1000 × k` with `k` a divisor of 10^6, so that a tick rate converts to nanoseconds with integer math alone.
 - [CTL-9] A receiver MUST refuse a `tick_hz` that is not of that form.
