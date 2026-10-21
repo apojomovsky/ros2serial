@@ -1198,7 +1198,7 @@ Tickets that must land first.
 
 A ticket is done when:
 
-- the tests were written first and the PR shows them failing before the change;
+- the tests were written first and fail before the change;
 - all CI jobs that apply are green;
 - coverage, budgets and the zone check are not regressed;
 - `spec/protocol.md` and the vectors are updated if anything on the wire changed;
