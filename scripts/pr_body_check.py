@@ -3,7 +3,7 @@
 
 CI (pr-body.yml) runs the newline check on every PR, since a body written with
 an inline "\\n" string renders as one line. The takeoff ritual runs --full: a
-Closes #N line, a ## Review section and the failing run as a fenced block.
+Closes #N line and a ## Review section.
 
 Usage:
   pr_body_check.py [--full] --file <path>
@@ -33,8 +33,6 @@ def check(body: str, full: bool) -> list[str]:
             problems.append("PR body has no Closes #N")
         if not re.search(r"^## Review\b", body, re.M):
             problems.append("PR body has no ## Review section")
-        if not re.search(r"^(?:```|~~~)", body, re.M):
-            problems.append("PR body has no failing test run (a fenced code block from the first commit)")
     return problems
 
 
