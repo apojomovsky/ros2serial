@@ -10,6 +10,10 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source "$root/scripts/clean-git-env.sh"
 cd "$root" || exit 2
 
+# TEST goes here and not further down: the script tests call the ritual, and a
+# ritual that sees TEST=1 runs the suite again, so the pair would fork.
+unset TEST
+
 scoped=0
 for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E; do [ -n "${!v:-}" ] && scoped=1; done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }
