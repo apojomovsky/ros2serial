@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# The single suite script: CI runs exactly this, and so does `make test`.
+# Scope with one or more of LINT=1 SCRIPTS=1 CORE=1 GEN=1 BRIDGE=1 E2E=<backend>;
+# no scope runs everything. Exits non-zero if any section fails.
+set -uo pipefail
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$root" || exit 2
+
+scoped=0
+for v in LINT SCRIPTS CORE GEN BRIDGE E2E; do [ -n "${!v:-}" ] && scoped=1; done
+wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }
+
+failed=()
+section() {
+  local name=$1; shift
+  echo "== $name"
+  if "$@"; then echo "== $name: ok"; else echo "== $name: FAILED"; failed+=("$name"); fi
+}
+need() {
+  command -v "$1" >/dev/null 2>&1 && return 0
+  echo "$1 not found: install the versions pinned in ci/versions.env"
+  return 1
+}
+pending() { echo "pending: $1 (see docs/00-design.md, Epics and seed tickets)"; }
+
+# python3 -m keeps the pip-installed, pinned ruff ahead of any other on PATH.
+lint_python() {
+  python3 -m ruff --version >/dev/null 2>&1 || { echo "ruff not found: install the versions pinned in ci/versions.env"; return 1; }
+  python3 -m ruff check . && python3 -m ruff format --check .
+}
+lint_workflows() { need actionlint && actionlint .github/workflows/*.yml; }
+
+if wants LINT; then
+  section layout python3 scripts/check_layout.py
+  section python-lint lint_python
+  section workflow-lint lint_workflows
+fi
+if wants SCRIPTS; then
+  section scripts-tests python3 -m pytest scripts
+fi
+if wants CORE; then section core pending "C1"; fi
+if wants GEN; then section gen pending "G1"; fi
+if wants BRIDGE; then section bridge pending "H1"; fi
+if wants E2E; then section e2e pending "V1, V3"; fi
+
+if [ "${#failed[@]}" -gt 0 ]; then
+  echo "failed sections: ${failed[*]}"
+  exit 1
+fi
+echo "all sections passed"

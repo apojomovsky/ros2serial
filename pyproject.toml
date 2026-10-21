@@ -1,0 +1,14 @@
+# Repository-wide tool configuration. The generator gets its own package
+# metadata under gen/ (G1).
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+# spike/ is throwaway (K1, #2) and is deleted once its measurements are recorded.
+extend-exclude = ["spike"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
