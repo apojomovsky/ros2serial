@@ -145,7 +145,7 @@ cases:
 ```yaml
 # spec/vectors/frames/float32_topic16.yaml
 name: float32_topic16
-covers: [FRM-1, FRM-2, CRC-3]
+covers: [FRM-1, FRM-2, CHK-3]
 topic_id: 16
 seq: 0
 payload: "00 00 c0 3f"
