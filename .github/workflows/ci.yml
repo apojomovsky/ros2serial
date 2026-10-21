@@ -20,9 +20,14 @@ jobs:
   lint:
     runs-on: ubuntu-24.04
     steps:
+      # Full history: the spec coverage check compares the pending list with the PR's base.
       - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
       - uses: ./.github/actions/dev-image
       - run: make test LINT=1
+        env:
+          COMMIT_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
 
   scripts:
     runs-on: ubuntu-24.04
