@@ -611,7 +611,7 @@ ros2serial/
 | C++ (bridge) | C++17 (Jazzy's baseline), `ament_lint_auto` (cpplint, uncrustify or clang-format, cppcheck), ROS 2 style |
 | Python | 3.10 or newer, `ruff` (lint + format), `mypy --strict` on `r2s_gen`, `pytest`, `hypothesis` |
 | Commits | Conventional Commits (`feat(core): ...`, `fix(bridge): ...`, `test(gen): ...`); changelog with git-cliff; details in `AGENTS.md` |
-| Branches and PRs | `main` is protected; one ticket per PR in a `.worktrees/` worktree, never on `main`; branches named `<type>/<issue>-<slug>`; a draft PR is the claim; squash merge; CI must be green; the PR body carries `Closes #N`, a `## Review` section and the red test run (see `docs/01-testing.md`) |
+| Branches and PRs | `master` is the default branch; one ticket per PR in a `.worktrees/` worktree, never on `master`; branches named `<type>/<issue>-<slug>`; a draft PR is the claim; squash merge; CI must be green; the PR body carries `Closes #N`, a `## Review` section and the red test run (see `docs/01-testing.md`) |
 | Versions | One semver for the whole repository (`VERSION`, bumped only by `cut-release.yml`) plus the protocol version (`R2S_PROTOCOL_VERSION`, starts at 1) |
 | Licenses | MIT for everything |
 | Docs | Every public function has a doc comment; every PR that changes behavior updates `spec/protocol.md` or `docs/` in the same PR |
@@ -955,7 +955,7 @@ Rules:
 - The ROS jobs use the official `ros:<distro>` images or `ros-tooling/setup-ros` plus `ros-tooling/action-ros-ci`.
 - PR comments from fork PRs are posted by a separate `workflow_run` job, since a fork PR's token cannot write comments.
 - The self-hosted hardware runner only runs `workflow_dispatch` jobs started by maintainers. It never runs code from pull requests.
-- Required checks on `main`: everything in `ci.yml` except advisory jobs and jobs whose prerequisites haven't landed yet; each such job is marked `continue-on-error` with a link to its ticket until it lands.
+- Required checks on `master`: everything in `ci.yml` except advisory jobs and jobs whose prerequisites haven't landed yet; each such job is marked `continue-on-error` with a link to its ticket until it lands.
 
 ## Research tickets
 
@@ -997,7 +997,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | ID | Ticket | Deps | Acceptance |
 | --- | --- | --- | --- |
 | B1 | Repository skeleton per the layout, LICENSE, README stub, `AGENTS.md` and ADR-001 from the engineering practices draft; this document moves to `docs/00-design.md` | | Layout exists; AGENTS.md links the design document |
-| B2 | CI skeleton: `ci.yml` with lint jobs and empty test jobs, `scripts/ci-test.sh` as the single suite script, pinned `ci/versions.env` | B1 | Green run on `main`; `make test` runs the same script as CI |
+| B2 | CI skeleton: `ci.yml` with lint jobs and empty test jobs, `scripts/ci-test.sh` as the single suite script, pinned `ci/versions.env` | B1 | Green run on `master`; `make test` runs the same script as CI |
 | B3 | Conventional commits check and git-cliff config | B1 | PR title check enforced in CI |
 | B4 | Vector schema and `tools/vectors_check.py` | B1 | Invalid vector files fail CI |
 | B5 | Makefile entry points + Docker dev/ci/release images + `make bootstrap`/`doctor` | B1 | Clean clone to `make test` per AGENTS.md; `dev` and `ci` identical |
@@ -1131,7 +1131,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | Y4 | Tier S budget proof on PIC16F1938 | Y1, Y3 | Fits tier S budgets |
 | Y5 | Tier M on PIC18F2455/4550: C API and static C++ | Y1, R12 | Scenarios 1 to 4 |
 | Y6 | epic-hal layout and module entry | G10, Y1 | Install-and-build test in CI |
-| Y7 | PIC canary becomes a required job | Y1 | Required on `main` |
+| Y7 | PIC canary becomes a required job | Y1 | Required on `master` |
 | Y8 | XC8 build (optional) | R9, Y1 | Build job or documented reason why not |
 | Y9 | PIC16F877A stretch: Float32-only within one-bank buffers | Y4 | Builds and passes scenario 2, or a written reason why not |
 | Y10 | Cross-board demo: the same static-API sketch on a Uno, a PIC18 and a PIC16 | Y4, Y5 | Demo recording |
