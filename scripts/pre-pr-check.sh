@@ -103,7 +103,7 @@ if [ "${TEST:-}" = 1 ]; then
   # the script to run, so a test can see what the suite was given.
   suite=${R2S_SUITE:-$root/scripts/ci-test.sh}
   env -u TEST -u LINT -u SCRIPTS -u COMMITS -u CORE -u GEN -u BRIDGE -u E2E \
-    -u BASE -u PR_BODY -u COMMIT_RANGE -u PR_TITLE \
+    -u BASE -u PR_BODY \
     bash "$suite" >/dev/null 2>&1 || fix "the suite fails: bash scripts/ci-test.sh"
 fi
 
