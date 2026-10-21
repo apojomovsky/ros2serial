@@ -27,3 +27,12 @@ def test_full_mode_requires_closes_review_and_the_failing_run():
     assert any("Closes #N" in p for p in problems)
     assert any("## Review" in p for p in problems)
     assert any("failing test run" in p for p in problems)
+
+
+def test_tilde_fences_and_indented_code_are_code():
+    body = GOOD + "\n~~~\necho a\\nb\n~~~\n\n    printf('x\\n')\n"
+    assert pr_body_check.check(body, full=True) == []
+
+
+def test_closes_is_case_insensitive():
+    assert pr_body_check.check(GOOD.replace("Closes", "closes"), full=True) == []

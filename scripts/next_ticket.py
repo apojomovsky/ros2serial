@@ -2,7 +2,7 @@
 """Pick the next ticket: open, unblocked, unclaimed, and in an area no open PR is working on.
 
 A draft or open PR claims every issue its body closes (Closes, Fixes or
-Resolves #N). Its areas are its own area:* labels plus those of the issues
+Resolves #N, or the issue URL). Its areas are its own area:* labels plus those of the issues
 it closes. With --agent, the PRs whose body says `agent: <id>` don't block
 that agent's areas, so it can stack its next ticket on its own open PRs.
 Issues labelled needs-hardware or dispatch-only belong to the maintainer.
@@ -20,9 +20,14 @@ import subprocess
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
+from pathlib import Path
 
-DEPENDS = re.compile(r"^Depends on #(\d+)", re.MULTILINE)
-CLOSES = re.compile(r"\b(?:closes|fixes|resolves) #(\d+)", re.IGNORECASE)
+DEPENDS_LINE = re.compile(r"^.*\bdepends on\b.*$", re.IGNORECASE | re.MULTILINE)
+ISSUE_REF = re.compile(r"(?<![\w/])#(\d+)\b")
+CLOSES = re.compile(
+    r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:https://github\.com/[^/\s]+/[^/\s]+/issues/|#)(\d+)\b",
+    re.IGNORECASE,
+)
 MAINTAINER = {
     "needs-hardware": "needs hardware: the maintainer runs it",
     "dispatch-only": "maintainer only (dispatch-only)",
@@ -40,19 +45,29 @@ def _labels(item: dict) -> set[str]:
     return {lbl["name"] for lbl in item.get("labels", [])}
 
 
+def _depends(body: str) -> list[int]:
+    return [int(n) for line in DEPENDS_LINE.findall(body) for n in ISSUE_REF.findall(line)]
+
+
+def _is_agent(pr: dict, agent: str) -> bool:
+    return re.search(rf"^agent:\s*{re.escape(agent)}\s*$", pr.get("body") or "", re.M | re.I) is not None
+
+
 def select(issues: list[dict], prs: list[dict], agent: str | None = None) -> Report:
+    # Merged or closed PRs show up in the issue list too, and a dependency on one counts.
+    state = {i["number"]: i["state"] for i in issues}
     issues = [i for i in issues if "pull_request" not in i]
     by_number = {i["number"]: i for i in issues}
     claims: dict[int, list[dict]] = defaultdict(list)
     busy: dict[str, int] = {}
     for pr in sorted(prs, key=lambda p: p.get("created_at", "")):
-        closed = [int(n) for n in CLOSES.findall(pr.get("body") or "")]
+        closed = list(dict.fromkeys(int(n) for n in CLOSES.findall(pr.get("body") or "")))
         for n in closed:
             claims[n].append(pr)
         areas = {a for a in _labels(pr) if a.startswith("area:")}
         for n in closed:
             areas |= {a for a in _labels(by_number.get(n, {})) if a.startswith("area:")}
-        if agent and f"agent: {agent}" in (pr.get("body") or ""):
+        if agent and _is_agent(pr, agent):
             continue
         for a in areas:
             busy.setdefault(a, pr["number"])
@@ -69,13 +84,9 @@ def select(issues: list[dict], prs: list[dict], agent: str | None = None) -> Rep
         if reason is None and claims.get(n):
             reason = f"claimed by PR #{claims[n][0]['number']}"
         if reason is None:
-            waiting = [
-                d
-                for d in map(int, DEPENDS.findall(issue.get("body") or ""))
-                if by_number.get(d, {}).get("state") != "closed"
-            ]
+            waiting = [d for d in dict.fromkeys(_depends(issue.get("body") or "")) if state.get(d) != "closed"]
             if waiting:
-                reason = "waits on " + ", ".join(f"#{d} (open or unknown)" for d in waiting)
+                reason = "waits on " + ", ".join(f"#{d} ({'open' if d in state else 'not found'})" for d in waiting)
         if reason is None:
             clash = sorted(a for a in labels if a in busy)
             if clash:
@@ -103,7 +114,7 @@ def main() -> int:
     ap.add_argument("--why", action="store_true", help="also list skipped tickets and why")
     args = ap.parse_args()
     if args.from_json:
-        issues, prs = (json.load(open(p, encoding="utf-8")) for p in args.from_json)
+        issues, prs = (json.loads(Path(p).read_text(encoding="utf-8")) for p in args.from_json)
     else:
         issues = _gh(f"repos/{args.repo}/issues?state=all&per_page=100")
         prs = _gh(f"repos/{args.repo}/pulls?state=open&per_page=100")

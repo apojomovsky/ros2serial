@@ -14,10 +14,13 @@ import argparse
 import os
 import re
 import sys
+from pathlib import Path
 
 
 def _without_code(body: str) -> str:
-    return re.sub(r"`[^`\n]*`", "", re.sub(r"```.*?```", "", body, flags=re.S))
+    body = re.sub(r"^(```|~~~).*?^\1[^\n]*$", "", body, flags=re.S | re.M)
+    body = re.sub(r"^(?:    |\t).*$", "", body, flags=re.M)
+    return re.sub(r"`[^`\n]*`", "", body)
 
 
 def check(body: str, full: bool) -> list[str]:
@@ -26,11 +29,11 @@ def check(body: str, full: bool) -> list[str]:
     if "\\n" in prose or "\\r" in prose:
         problems.append("PR body contains a literal \\n or \\r: write it to a file or a heredoc with real newlines")
     if full:
-        if not re.search(r"\b(?:Closes|Fixes|Resolves) #\d+", body):
+        if not re.search(r"\b(?:closes|fixes|resolves) #\d+", body, re.I):
             problems.append("PR body has no Closes #N")
         if not re.search(r"^## Review\b", body, re.M):
             problems.append("PR body has no ## Review section")
-        if not re.search(r"^```", body, re.M):
+        if not re.search(r"^(?:```|~~~)", body, re.M):
             problems.append("PR body has no failing test run (a fenced code block from the first commit)")
     return problems
 
@@ -43,8 +46,11 @@ def main() -> int:
     src.add_argument("--env")
     args = ap.parse_args()
     if args.file:
-        with open(args.file, encoding="utf-8") as f:
-            body = f.read()
+        try:
+            body = Path(args.file).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            print(f"PR body file {args.file} cannot be read as UTF-8 text: {e}")
+            return 1
     else:
         body = os.environ.get(args.env, "")
     problems = check(body, args.full)
