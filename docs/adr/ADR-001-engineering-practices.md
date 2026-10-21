@@ -40,7 +40,7 @@ The practices worked in epic-cc for the same setting: one maintainer, many agent
 
 ## Rejected alternatives
 
-- **Joining the epic-tasks board.** ros2serial is a separate project; a draft-PR claim rule and `scripts/next-ticket.py` give the same protection against two agents taking one ticket or one area.
+- **Joining the epic-tasks board.** ros2serial is a separate project; a draft-PR claim rule and `scripts/next_ticket.py` give the same protection against two agents taking one ticket or one area.
 - **Copying epic-cc's tooling wholesale.** Its registry cache, dedicated builder and compiler oracles protect problems ros2serial does not have, and would cost maintenance for nothing.
 
 ## Revisit if

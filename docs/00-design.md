@@ -1002,7 +1002,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | B4 | Vector schema and `tools/vectors_check.py` | B1 | Invalid vector files fail CI |
 | B5 | Makefile entry points + Docker dev/ci/release images + `make bootstrap`/`doctor` | B1 | Clean clone to `make test` per AGENTS.md; `dev` and `ci` identical |
 | B6 | Git hooks + `make pre-pr-check` (takeoff) + `scripts/prose-diff.sh` + `scripts/lint-python.sh` + `scripts/push.sh` | B5 | Ritual fails a deliberately dirty PR in a test run |
-| B8 | `scripts/next-ticket.py` (claim rule), `pr-body.yml`, `cut-release.yml` | B2 | Picks only unblocked, unclaimed, non-conflicting tickets in a test fixture; release dry run green |
+| B8 | `scripts/next_ticket.py` (claim rule), `pr-body.yml`, `cut-release.yml` | B2 | Picks only unblocked, unclaimed, non-conflicting tickets in a test fixture; release dry run green |
 | B7 | `tools/zone_check.py` | B2 | Fails on a deliberate function pointer and a deliberate float operation in `core/` |
 
 ### E1: specification and vectors

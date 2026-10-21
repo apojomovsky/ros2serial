@@ -13,16 +13,6 @@ ros2serial brings rosserial's experience to ROS 2: publish and subscribe from sm
 3. **Text artifacts at every boundary.** A frame is a hex string, a message is a vector file, a generated file is a golden snapshot. A failure bisects to a boundary before anyone reads code.
 4. **Correct over silent.** Unsupported input fails with a precise message. Never "fix" an error by producing wrong bytes.
 
-## Bootstrap status
-
-The repository is being bootstrapped (epic E0 in `docs/00-design.md`). Until each ticket below lands, the rules that depend on it describe the target state. What runs today: `make test`, which runs `scripts/ci-test.sh` in the dev image (layout check, ruff, actionlint, the vector schema check, the zone check, the commit and PR-title check, the prose gate, script and tool tests), plus `make pre-pr-check`, the hooks and `scripts/push.sh`, the same suite as CI:
-
-| Rule area | Ticket |
-| --- | --- |
-| Claim script, `pr-body.yml`, `cut-release.yml` | #10 |
-
-Delete this section when the last of them merges.
-
 ## Build and toolchain
 
 - Everything runs in the Docker dev image: avr-gcc and avr-libc, arduino-cli with a pinned AVR core, a host gcc of version 10 or newer, ROS Jazzy, simavr, Python tooling. Nothing toolchain-related is installed on the host.
@@ -53,9 +43,10 @@ Delete this section when the last of them merges.
 Work is plain GitHub issues. A draft pull request is the claim.
 
 - Every ticket is an issue with `area:*` labels (`area:core`, `area:gen`, `area:bridge`, `area:cpp`, `area:spec`, `area:ci`, `area:ports`) and its hard dependencies listed as `Depends on #N`.
-- **Choose a ticket with `scripts/next-ticket.py`, never by reading the issue list.** It lists open issues whose dependencies are closed, that no open PR closes, and whose areas no open PR is already working on. Two tickets sharing an area are never worked at the same time.
+- **Choose a ticket with `scripts/next_ticket.py --agent <your agent ID>`, never by reading the issue list.** It lists open issues whose dependencies are closed, that no open PR closes, and whose areas no other agent's open PR is working on; `--why` explains every skipped ticket. Two agents never work tickets sharing an area at the same time, but an agent may stack its next ticket on its own open PRs (see below). Issues labelled `needs-hardware` or `dispatch-only` are the maintainer's.
 - **Claim before writing code:** open a draft PR from your worktree branch with `Closes #N`, the issue's `area:*` labels, and your agent ID (`<runtime>@<host>`) in the body. If someone else's draft PR for the same issue is older, close yours and pick again.
 - Branch names: `<type>/<issue>-<slug>`, for example `feat/42-rcobs-encoder`.
+- **Stacked PRs:** a ticket that builds on your previous one branches from that PR's branch and targets it as the PR base. The maintainer merges the stack oldest first, with merge commits, and GitHub retargets each PR to `master` as its base branch is deleted.
 
 ## Worktrees
 
@@ -170,4 +161,4 @@ Write PR bodies to a unique file under the cache, which the dev image can see (`
 - The non-code classifier is a single script with an allowlist of non-code paths; anything else counts as code. Workflow files are never exempt.
 - Flash, RAM and stack budgets are measured on the PR head and the PR base in the same run and judged by the base commit's script, so a PR cannot relax its own judge.
 - PR comments for fork PRs are posted by a `workflow_run` job, since a fork PR's token cannot write.
-- **Releases:** one version for the whole repository, in `VERSION`, plus `R2S_PROTOCOL_VERSION`. `cut-release.yml` is the only thing that bumps `VERSION`, and it must open its release PR with a personal access token stored as a secret: a PR opened with the default `GITHUB_TOKEN` never triggers other workflows, so its required checks never run.
+- **Releases:** one version for the whole repository, in `VERSION`, plus `R2S_PROTOCOL_VERSION`. `cut-release.yml` is the only thing that bumps `VERSION`, and it must open its release PR with a personal access token stored as a secret: a PR opened with the default `GITHUB_TOKEN` never triggers other workflows, so its required checks never run. The repository also needs "Allow auto-merge" enabled, and the tag job only tags a `VERSION` change made by a `chore(release): v<version>` commit.

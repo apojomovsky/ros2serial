@@ -71,12 +71,9 @@ if [ -n "${PR_BODY:-}" ]; then
   if [ ! -f "$PR_BODY" ]; then
     fix "PR_BODY file $PR_BODY not found"
   else
-    body=$(cat "$PR_BODY")
-    stripped=$(python3 -c 'import re,sys; t=sys.stdin.read(); print(re.sub(r"`[^`]*`", "", re.sub(r"```.*?```", "", t, flags=re.S)))' <<<"$body")
-    grep -qF '\n' <<<"$stripped" && fix "PR body contains a literal \\n: write it to a file or a heredoc with real newlines"
-    grep -qE 'Closes #[0-9]+' <<<"$body" || fix "PR body has no Closes #N"
-    grep -q '^## Review' <<<"$body" || fix "PR body has no ## Review section"
-    grep -q '^```' <<<"$body" || fix "PR body has no failing test run (a fenced code block from the first commit)"
+    while read -r line; do
+      [ -n "$line" ] && fix "$line"
+    done < <(python3 "$root/scripts/pr_body_check.py" --full --file "$PR_BODY" 2>&1 || echo "PR body check failed to run")
   fi
 else
   note "PR body: pass PR_BODY=<file> to check it"
