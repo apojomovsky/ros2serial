@@ -8,6 +8,7 @@ makes. Exits 1 with one line per problem, naming the file and the key path.
 """
 
 import json
+import struct
 import sys
 from pathlib import Path
 
@@ -102,6 +103,7 @@ def check_frame(name: str, data: dict) -> list[str]:
     if not wire.endswith(b"\x00"):
         problems.append(f"{name}/wire: does not end with the delimiter")
     problems += check_channel(name, data, topic_id)
+    problems += check_payload(data.get("name", ""), payload)
     return problems
 
 
@@ -132,6 +134,128 @@ def check_channel(name: str, data: dict, topic_id: int) -> list[str]:
     if topic_id != wanted:
         return [f"{name}/topic_id: {topic_id} is not the channel {wanted} of this vector"]
     return []
+
+
+class _Reader:
+    """Reads the fields of a payload, and says where it went wrong."""
+
+    def __init__(self, data: bytes):
+        self.data = data
+        self.pos = 0
+
+    def take(self, n: int) -> bytes:
+        if self.pos + n > len(self.data):
+            raise ValueError(f"the payload ends after {self.pos} bytes, wanted {n} more")
+        out = self.data[self.pos : self.pos + n]
+        self.pos += n
+        return out
+
+    def u8(self) -> int:
+        return self.take(1)[0]
+
+    def u16(self) -> int:
+        return struct.unpack("<H", self.take(2))[0]
+
+    def u32(self) -> int:
+        return struct.unpack("<I", self.take(4))[0]
+
+    def varint(self) -> int:
+        value = 0
+        for i in range(3):
+            byte = self.u8()
+            value |= (byte & 0x7F) << (7 * i)
+            if not byte & 0x80:
+                return value
+        raise ValueError("the varint is longer than 3 bytes")
+
+    def string(self) -> bytes:
+        return self.take(self.varint())
+
+
+# The payload layouts the spec gives, by the name of the vector that
+# carries them. A vector whose layout is not here is left alone.
+PAYLOAD_LAYOUTS = {
+    "hello_req",
+    "hello",
+    "ready",
+    "topic",
+    "host_heartbeat",
+    "reserved_channel",
+    "ping",
+    "pong",
+}
+
+
+def check_payload(name: str, payload: bytes) -> list[str]:
+    """Parse the payload the way the spec's tables describe it.
+
+    A length that does not match the name it precedes is caught here, which
+    the frame and wire bytes alone cannot show. A vector whose layout this
+    does not know is left alone.
+    """
+    problems: list[str] = []
+    if name not in PAYLOAD_LAYOUTS:
+        return problems
+    r = _Reader(payload)
+    try:
+        if name == "hello_req":
+            if r.u8() != 0x01:
+                problems.append(f"{name}/payload: the opcode is not HELLO_REQ")
+            if r.u8() != 0x01:
+                problems.append(f"{name}/payload: the protocol version is not 1")
+        elif name == "ready":
+            if r.u8() != 0x06:
+                problems.append(f"{name}/payload: the opcode is not READY")
+        elif name == "hello":
+            if r.u8() != 0x02:
+                problems.append(f"{name}/payload: the opcode is not HELLO")
+            if r.u8() != 0x01:
+                problems.append(f"{name}/payload: the protocol version is not 1")
+            if r.u8() not in (0, 1):
+                problems.append(f"{name}/payload: the handshake mode is neither full nor compact")
+            r.u32()  # boot id
+            if r.u16() > 65277:
+                problems.append(f"{name}/payload: max_frame is above the limit")
+            r.u16()  # rx capacity
+            tick_hz = r.u32()
+            if tick_hz < 1000 or tick_hz % 1000 or 1000000 % (tick_hz // 1000):
+                problems.append(f"{name}/payload: tick_hz is not 1000 times k")
+            if r.u8() & ~0x3F:
+                problems.append(f"{name}/payload: the features byte has a reserved bit set")
+            r.u8()  # topic count
+            if not r.string():
+                problems.append(f"{name}/payload: the node name is empty")
+        elif name == "topic":
+            if r.u8() != 0x04:
+                problems.append(f"{name}/payload: the opcode is not TOPIC")
+            r.u8()  # index
+            if r.u8() < 16:
+                problems.append(f"{name}/payload: the topic id is in the reserved range")
+            if r.u8() & ~0x0F:
+                problems.append(f"{name}/payload: the flags byte has a reserved bit set")
+            r.take(8)  # type hash
+            if not r.string():
+                problems.append(f"{name}/payload: the type name is empty")
+            if not r.string():
+                problems.append(f"{name}/payload: the topic name is empty")
+        elif name == "host_heartbeat":
+            pass  # the host's heartbeat has no payload
+        elif name == "reserved_channel":
+            pass  # a frame the receiver ignores
+        elif name == "ping":
+            if r.u8() != 0x01:
+                problems.append(f"{name}/payload: the opcode is not PING")
+            r.u8()  # ping id
+        elif name == "pong":
+            if r.u8() != 0x02:
+                problems.append(f"{name}/payload: the opcode is not PONG")
+            r.u8()  # ping id
+            r.u32()  # tick
+        if r.pos != len(payload):
+            problems.append(f"{name}/payload: {len(payload) - r.pos} bytes were not read")
+    except ValueError as e:
+        problems.append(f"{name}/payload: {e}")
+    return problems
 
 
 def check_tree(vectors: Path) -> list[str]:

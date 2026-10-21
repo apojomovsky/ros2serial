@@ -163,3 +163,20 @@ wire: "10 02 01 01 c0 3f 1e 48 05 00"
     problems = vectors_check.check_tree(make_tree(tmp_path, files))
     assert any("not the frame the reference makes" in p for p in problems), problems
     assert any("not the bytes the reference makes" in p for p in problems), problems
+
+
+def test_a_frame_vector_must_carry_a_payload_the_layout_fits(tmp_path):
+    """A length that does not match the name it precedes is caught."""
+    files = {
+        "frames/bad_length.yaml": """
+name: topic
+covers: [FRM-1]
+topic_id: 0
+seq: 0
+payload: "04 00 10 00 00 01 02 03 04 05 06 07 16"
+frame: "00 00 04 00 10 00 00 01 02 03 04 05 06 07 16 00 00"
+wire: "01 00 04 02 10 02 01 01 02 03 04 05 06 07 16 00 00 00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("payload" in p for p in problems), problems
