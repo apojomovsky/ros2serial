@@ -243,3 +243,13 @@ def test_only_rules_new_to_the_spec_may_enter_the_pending_list(tmp_path):
     assert spec_coverage.check(root, base="HEAD").problems == [
         "tools/spec_pending.txt:1: AAA-2 was already a rule at HEAD; cover it instead of listing it as pending"
     ]
+
+
+def test_the_pr_that_introduces_the_pending_list_may_fill_it(tmp_path):
+    root = tree(tmp_path, {"spec/vectors/rcobs/a.yaml": "covers: [AAA-1]\ncases: []\n"})
+    _git(root, "init", "-q")
+    _git(root, "add", ".")
+    _git(root, "commit", "-q", "-m", "base without a pending list")
+    (root / "tools").mkdir()
+    (root / "tools/spec_pending.txt").write_text("AAA-2  C5\n")
+    assert spec_coverage.check(root, base="HEAD").problems == []
