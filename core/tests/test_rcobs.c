@@ -163,46 +163,76 @@ void test_rcobs_the_trailing_rule_is_checked_before_any_code(void)
 /* covers: COB-3, COB-6 */
 void test_rcobs_decoding_accepts_only_the_canonical_encoding(void)
 {
-    uint8_t data[64];
-    uint8_t encoded[80];
+    uint8_t data[300];
+    uint8_t encoded[300];
+    uint8_t group_of_254[254];
 
-    for (unsigned i = 0; i < sizeof data; i++) {
-        data[i] = (uint8_t)(i + 1u);
+    /* The shapes that make the decoder work hardest: no zero byte, a zero
+     * byte at each end, and a group of 254 bytes. */
+    const uint8_t zero_at_start[] = {0x00, 0x01, 0x02, 0x03};
+    const uint8_t zero_at_end[] = {0x01, 0x02, 0x03, 0x00};
+
+    for (unsigned i = 0; i < sizeof group_of_254; i++) {
+        group_of_254[i] = 0x11;
     }
-    uint16_t len = encode(data, sizeof data, encoded);
 
-    /* Any encoding of the same bytes that is not the one the encoder made
-     * would give the decoder a second reading, so it must be refused. */
-    for (uint16_t i = 0; i < len; i++) {
-        uint8_t original[80];
-        uint8_t buffer[80];
-        uint8_t *decoded = NULL;
+    for (unsigned shape = 0; shape < 4u; shape++) {
+        uint16_t data_len;
+        const uint8_t *source = data;
 
-        for (uint16_t k = 0; k < len; k++) {
-            original[k] = encoded[k];
-        }
-        original[i] = (uint8_t)(original[i] + 1u);
-        for (uint16_t k = 0; k < len; k++) {
-            buffer[k] = original[k];
-        }
-
-        int8_t status = r2s_rcobs_decode(buffer, len, &decoded);
-        if (status == R2S_RCOBS_OK) {
-            uint16_t decoded_len = (uint16_t)(len - (uint16_t)(decoded - buffer));
-            uint8_t reencoded[80];
-            r2s_rcobs_encoder_t enc;
-            uint16_t reencoded_len = 0;
-
-            r2s_rcobs_encoder_init(&enc);
-            for (uint16_t k = 0; k < decoded_len; k++) {
-                reencoded_len = (uint16_t)(reencoded_len + r2s_rcobs_encode_byte(&enc, decoded[k],
-                                                                                 reencoded + reencoded_len));
+        if (shape == 0u) {
+            for (unsigned i = 0; i < 64u; i++) {
+                data[i] = (uint8_t)(i + 1u);
             }
-            reencoded_len = (uint16_t)(reencoded_len + r2s_rcobs_encode_end(&enc, reencoded + reencoded_len));
-            TEST_ASSERT_EQUAL_UINT16_MESSAGE(len, reencoded_len, "a second encoding of the same bytes");
+            data_len = 64u;
+        } else if (shape == 1u) {
+            source = zero_at_start;
+            data_len = sizeof zero_at_start;
+        } else if (shape == 2u) {
+            source = zero_at_end;
+            data_len = sizeof zero_at_end;
+        } else {
+            source = group_of_254;
+            data_len = sizeof group_of_254;
+        }
+        uint16_t len = encode(source, data_len, encoded);
+
+        /* Any encoding of the same bytes that is not the one the encoder
+         * made would give the decoder a second reading, so it must be
+         * refused. */
+        for (uint16_t i = 0; i < len; i++) {
+            uint8_t original[300];
+            uint8_t buffer[300];
+            uint8_t *decoded = NULL;
+
             for (uint16_t k = 0; k < len; k++) {
-                TEST_ASSERT_EQUAL_HEX8_MESSAGE(original[k], reencoded[k],
-                                               "a second encoding of the same bytes");
+                original[k] = encoded[k];
+            }
+            original[i] = (uint8_t)(original[i] + 1u);
+            for (uint16_t k = 0; k < len; k++) {
+                buffer[k] = original[k];
+            }
+
+            int8_t status = r2s_rcobs_decode(buffer, len, &decoded);
+            if (status == R2S_RCOBS_OK) {
+                uint16_t decoded_len = (uint16_t)(len - (uint16_t)(decoded - buffer));
+                uint8_t reencoded[300];
+                r2s_rcobs_encoder_t enc;
+                uint16_t reencoded_len = 0;
+
+                r2s_rcobs_encoder_init(&enc);
+                for (uint16_t k = 0; k < decoded_len; k++) {
+                    reencoded_len =
+                        (uint16_t)(reencoded_len +
+                                   r2s_rcobs_encode_byte(&enc, decoded[k], reencoded + reencoded_len));
+                }
+                reencoded_len =
+                    (uint16_t)(reencoded_len + r2s_rcobs_encode_end(&enc, reencoded + reencoded_len));
+                TEST_ASSERT_EQUAL_UINT16_MESSAGE(len, reencoded_len, "a second encoding of the same bytes");
+                for (uint16_t k = 0; k < len; k++) {
+                    TEST_ASSERT_EQUAL_HEX8_MESSAGE(original[k], reencoded[k],
+                                                   "a second encoding of the same bytes");
+                }
             }
         }
     }
