@@ -29,5 +29,8 @@ if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$key" ]; then
   echo "pre-push: suite already passed on this tree"
   exit 0
 fi
+# The stamp path is resolved above; the suite itself must not see the hook's git variables.
+# shellcheck source=scripts/clean-git-env.sh
+source "$root/scripts/clean-git-env.sh"
 bash -c "${R2S_PRE_PUSH_SUITE:-make -s -C "$root" ci-local}" || exit 1
 echo "$key" > "$stamp"

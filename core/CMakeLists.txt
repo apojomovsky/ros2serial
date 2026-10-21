@@ -12,6 +12,9 @@ option(R2S_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer"
 option(R2S_COVERAGE "Build with line and branch coverage instrumentation" OFF)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+# This project is the host test build: the core itself compiles with the test
+# hooks (docs/01-testing.md, section 2.1). Firmware builds never use it.
+add_compile_definitions(R2S_TESTING)
 set(R2S_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 set(R2S_WARNINGS
     -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow

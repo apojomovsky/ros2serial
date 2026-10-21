@@ -57,7 +57,14 @@ def check_file(path: Path, name: str, validators: dict) -> list[str]:
         deeper = [s for s in e.context or [] if len(s.absolute_path) > len(e.absolute_path)]
         errors += deeper if e.validator in ("oneOf", "anyOf") and deeper else [e]
     errors.sort(key=lambda e: [str(p) for p in e.absolute_path])
-    return [f"{name}: {_location(e)}: {_message(e)}" for e in errors]
+    lines = [f"{name}: {_location(e)}: {_message(e)}" for e in errors]
+    covers = set((data or {}).get("covers") or []) if isinstance(data, dict) else set()
+    for i, case in enumerate((data or {}).get("cases") or [] if isinstance(data, dict) else []):
+        rule = case.get("reject") if isinstance(case, dict) else None
+        if isinstance(rule, str) and rule not in covers:
+            lines.append(f"{name}: cases/{i}/reject: {rule} is not in the file's covers")
+    # Alternatives of a oneOf that fail on the same field report the same message.
+    return list(dict.fromkeys(lines))
 
 
 def check_tree(vectors: Path) -> list[str]:
