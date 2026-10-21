@@ -31,13 +31,15 @@ jobs:
       - uses: ./.github/actions/dev-image
       - run: make test SCRIPTS=1
 
-  # Placeholders. Each becomes a real job in the ticket it names, and stays
-  # out of the required checks until then.
   core:
     runs-on: ubuntu-24.04
-    continue-on-error: true
     steps:
-      - run: echo "pending C1, see docs/00-design.md"
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test CORE=1
+
+  # Placeholders. Each becomes a real job in the ticket it names, and stays
+  # out of the required checks until then.
   gen:
     runs-on: ubuntu-24.04
     continue-on-error: true

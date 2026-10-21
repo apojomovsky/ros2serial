@@ -67,14 +67,14 @@ vectors: guard-main-clone cache-dir ## Validate every vector file (regeneration 
 docs-gen: ## Regenerate reference docs (CLI, vectors, bridge parameters)
 	@$(call pending,docs-gen,G1 and H1 in docs/00-design.md)
 
-fmt: guard-main-clone cache-dir ## Format the tree (ruff; clang-format with C1)
-	@$(call in_image,ruff format .)
+fmt: guard-main-clone cache-dir ## Format the tree (ruff, clang-format)
+	@$(call in_image,ruff format . && bash scripts/c-format.sh --fix)
 
 lint: guard-main-clone cache-dir ## Linters: the LINT section of the suite
 	@$(call in_image,env LINT=1 bash scripts/ci-test.sh)
 
-check-warnings: ## Fail on any compiler warning (hard gate)
-	@echo "check-warnings: no C or C++ code yet; the gate starts with C1 and H1"
+check-warnings: guard-main-clone cache-dir ## Fail on any compiler warning (hard gate): core builds with -Werror, cppcheck
+	@$(call in_image,bash scripts/check-warnings.sh)
 
 setup-hooks: ## Install git hooks from .githooks/
 	@git config core.hooksPath .githooks && echo "git hooks installed (core.hooksPath = .githooks)"

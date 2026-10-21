@@ -35,6 +35,9 @@ class Block:
 
 
 def _style(path: str) -> str | None:
+    # Third-party code under a vendor/ directory keeps its own style (AGENTS.md).
+    if path.startswith("vendor/") or "/vendor/" in path:
+        return None
     name = path.rsplit("/", 1)[-1]
     if path.startswith(".githooks/") or name in HASH_NAMES or name.endswith(HASH_SUFFIXES):
         return "hash"

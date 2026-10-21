@@ -30,7 +30,13 @@ void test_a_runs_second(void)
 def test_the_tests_runner_runs_every_test_once():
     out = unity_runner.tests_runner("test_x.c", ["test_one", "test_two"])
     assert out.count("RUN_TEST(test_one)") == 1 and out.count("RUN_TEST(test_two)") == 1
-    assert "void test_one(void);" in out and "UNITY_BEGIN()" in out and "return UNITY_END();" in out
+    assert "void test_one(void);" in out and "return UNITY_END();" in out
+
+
+def test_failures_are_reported_against_the_test_source_not_the_runner(tmp_path):
+    assert 'UnityBegin("/src/test_x.c");' in unity_runner.tests_runner("/src/test_x.c", ["test_one"])
+    f = write(tmp_path, "basic.yaml", 'covers: [VAR-1]\ncases:\n  - {value: 1, encoded: "01"}\n')
+    assert 'UnityBegin("/src/check.c");' in unity_runner.vector_runner("varint", [f], "/src/check.c")
 
 
 def test_a_source_without_tests_is_an_error(tmp_path, capsys):
@@ -84,13 +90,15 @@ def test_malformed_vectors_fail_with_the_file_and_case(tmp_path):
 
 def test_unknown_kinds_are_rejected(tmp_path, capsys):
     f = write(tmp_path, "x.yaml", "covers: [FRM-1]\ncases: []\n")
-    assert unity_runner.main(["vectors", "frames", str(tmp_path / "out.c"), str(f)]) == 2
+    assert unity_runner.main(["vectors", "frames", "check.c", str(tmp_path / "out.c"), str(f)]) == 2
     assert "kind" in capsys.readouterr().out
 
 
 def test_the_cli_writes_the_runner(tmp_path):
     f = write(tmp_path, "basic.yaml", 'covers: [VAR-1]\ncases:\n  - {value: 1, encoded: "01"}\n')
     out = tmp_path / "runner.c"
-    result = subprocess.run([sys.executable, str(TOOL), "vectors", "varint", str(out), str(f)], capture_output=True)
+    result = subprocess.run(
+        [sys.executable, str(TOOL), "vectors", "varint", "check.c", str(out), str(f)], capture_output=True
+    )
     assert result.returncode == 0, result.stdout
     assert "RUN_TEST(test_varint_basic_0)" in out.read_text()
