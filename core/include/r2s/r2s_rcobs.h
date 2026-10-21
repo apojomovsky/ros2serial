@@ -47,6 +47,7 @@ uint8_t r2s_rcobs_encode_end(r2s_rcobs_encoder_t *enc, uint8_t *out);
  * the decoded frame's first byte to decoded and its length to decoded_len.
  * It returns R2S_RCOBS_OK, or the rule the encoding breaks: R2S_RCOBS_ERR_TRAILING
  * for COB-6, checked before any code is read, and R2S_RCOBS_ERR_CODE for COB-5.
+ * An empty buffer decodes to an empty frame; the framer never passes one.
  * The length comes back because a caller cannot work it out: a pointer
  * difference is 16 bits on an AVR, and a frame may be longer. */
 int8_t r2s_rcobs_decode(uint8_t *buf, uint16_t len, uint8_t **decoded, uint16_t *decoded_len);

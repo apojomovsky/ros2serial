@@ -1,25 +1,21 @@
 /* rCOBS: the encoding round-trips, it never holds a 0x00, the decoder accepts
  * only the canonical encoding, and the decoder decodes in place. */
+#include <stdio.h>
+
 #include "bytes.h"
 #include "r2s/r2s_rcobs.h"
+#include "rcobs.h"
 #include "unity.h"
+
+/* A fixed seed on every PR, printed so a failure reproduces from it alone; the
+ * nightly build passes a fresh one with -DR2S_TEST_SEED. */
+#ifndef R2S_TEST_SEED
+#define R2S_TEST_SEED 20261021u
+#endif
+#define SEED R2S_TEST_SEED
 
 /* The most bytes an encoding of n bytes takes (COB-8). */
 #define R2S_RCOBS_BOUND(n) ((n) + (n) / 254u + 1u)
-
-/* Encodes data into out and returns its length, which is at most
- * R2S_RCOBS_MAX_FRAME + its bound. */
-static uint16_t encode(const uint8_t *data, uint16_t len, uint8_t *out)
-{
-    r2s_rcobs_encoder_t enc;
-    uint16_t written = 0;
-
-    r2s_rcobs_encoder_init(&enc);
-    for (uint16_t i = 0; i < len; i++) {
-        written = (uint16_t)(written + r2s_rcobs_encode_byte(&enc, data[i], out + written));
-    }
-    return (uint16_t)(written + r2s_rcobs_encode_end(&enc, out + written));
-}
 
 /* covers: COB-1, COB-2, COB-4, COB-7 */
 void test_rcobs_a_frame_round_trips(void)
@@ -28,7 +24,7 @@ void test_rcobs_a_frame_round_trips(void)
     uint8_t encoded[32];
     uint8_t *decoded = NULL;
     uint16_t decoded_len = 0;
-    uint16_t len = encode(data, sizeof data, encoded);
+    uint16_t len = r2s_test_rcobs_encode(data, sizeof data, encoded);
 
     TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_OK, r2s_rcobs_decode(encoded, len, &decoded, &decoded_len));
     TEST_ASSERT_EQUAL_UINT16(sizeof data, decoded_len);
@@ -39,7 +35,7 @@ void test_rcobs_a_frame_round_trips(void)
 void test_rcobs_an_empty_frame_encodes_as_one_byte(void)
 {
     uint8_t encoded[4];
-    uint16_t len = encode(NULL, 0, encoded);
+    uint16_t len = r2s_test_rcobs_encode(NULL, 0, encoded);
 
     TEST_ASSERT_EQUAL_UINT16(1, len);
     TEST_ASSERT_EQUAL_HEX8(0x01, encoded[0]);
@@ -54,7 +50,7 @@ void test_rcobs_the_encoding_never_holds_a_zero_byte(void)
     for (unsigned i = 0; i < sizeof data; i++) {
         data[i] = (uint8_t)(i % 7u);
     }
-    uint16_t len = encode(data, sizeof data, encoded);
+    uint16_t len = r2s_test_rcobs_encode(data, sizeof data, encoded);
 
     for (uint16_t i = 0; i < len; i++) {
         TEST_ASSERT_NOT_EQUAL_MESSAGE(0, encoded[i], "the encoding holds a zero byte");
@@ -70,7 +66,7 @@ void test_rcobs_the_encoding_stays_within_the_bound(void)
     for (unsigned i = 0; i < sizeof data; i++) {
         data[i] = 0x11;
     }
-    uint16_t len = encode(data, sizeof data, encoded);
+    uint16_t len = r2s_test_rcobs_encode(data, sizeof data, encoded);
 
     TEST_ASSERT_EQUAL_UINT16(R2S_RCOBS_BOUND(sizeof data), len);
 }
@@ -84,7 +80,7 @@ void test_rcobs_254_nonzero_bytes_at_the_end_give_a_trailing_empty_group(void)
     for (unsigned i = 0; i < sizeof data; i++) {
         data[i] = 0x11;
     }
-    uint16_t len = encode(data, sizeof data, encoded);
+    uint16_t len = r2s_test_rcobs_encode(data, sizeof data, encoded);
 
     TEST_ASSERT_EQUAL_HEX8(0xFF, encoded[len - 2u]);
     TEST_ASSERT_EQUAL_HEX8(0x01, encoded[len - 1u]);
@@ -99,7 +95,7 @@ void test_rcobs_a_group_of_254_bytes_ends_itself(void)
     for (unsigned i = 0; i < sizeof data; i++) {
         data[i] = 0x11;
     }
-    uint16_t len = encode(data, sizeof data, encoded);
+    uint16_t len = r2s_test_rcobs_encode(data, sizeof data, encoded);
 
     /* The 254 bytes, the code byte of the group and the empty group that
      * follows it. */
@@ -109,13 +105,25 @@ void test_rcobs_a_group_of_254_bytes_ends_itself(void)
 }
 
 /* covers: COB-4 */
+void test_rcobs_an_empty_buffer_decodes_to_an_empty_frame(void)
+{
+    uint8_t buffer[1] = {0x00};
+    uint8_t *decoded = NULL;
+    uint16_t decoded_len = 1;
+
+    TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_OK, r2s_rcobs_decode(buffer, 0, &decoded, &decoded_len));
+    TEST_ASSERT_EQUAL_UINT16(0, decoded_len);
+    TEST_ASSERT_EQUAL_PTR(buffer, decoded);
+}
+
+/* covers: COB-4 */
 void test_rcobs_decoding_ends_where_the_encoding_ended(void)
 {
     const uint8_t data[] = {0x11, 0x22, 0x00, 0x33};
     uint8_t encoded[32];
     uint8_t *decoded = NULL;
     uint16_t decoded_len = 0;
-    uint16_t len = encode(data, sizeof data, encoded);
+    uint16_t len = r2s_test_rcobs_encode(data, sizeof data, encoded);
 
     TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_OK, r2s_rcobs_decode(encoded, len, &decoded, &decoded_len));
     /* The decoded frame ends where the encoded one did, so its last byte is
@@ -185,7 +193,7 @@ void test_rcobs_a_frame_longer_than_a_pointer_difference_decodes(void)
     for (unsigned i = 0; i < sizeof data; i++) {
         data[i] = (uint8_t)((i % 251u) + 1u);
     }
-    uint16_t len = encode(data, sizeof data, encoded);
+    uint16_t len = r2s_test_rcobs_encode(data, sizeof data, encoded);
 
     TEST_ASSERT_EQUAL_INT8(R2S_RCOBS_OK, r2s_rcobs_decode(encoded, len, &decoded, &decoded_len));
     TEST_ASSERT_EQUAL_UINT16(sizeof data, decoded_len);
@@ -195,77 +203,39 @@ void test_rcobs_a_frame_longer_than_a_pointer_difference_decodes(void)
 /* covers: COB-3, COB-6 */
 void test_rcobs_decoding_accepts_only_the_canonical_encoding(void)
 {
-    uint8_t data[300];
-    uint8_t encoded[300];
-    uint8_t group_of_254[254];
+    uint8_t reencoded[300];
+    uint32_t rng_state = SEED;
+    char seed[48];
 
-    /* The shapes that make the decoder work hardest: no zero byte, a zero
-     * byte at each end, and a group of 254 bytes. */
-    const uint8_t zero_at_start[] = {0x00, 0x01, 0x02, 0x03};
-    const uint8_t zero_at_end[] = {0x01, 0x02, 0x03, 0x00};
+    snprintf(seed, sizeof seed, "seed %u", SEED);
+    TEST_MESSAGE(seed);
 
-    for (unsigned i = 0; i < sizeof group_of_254; i++) {
-        group_of_254[i] = 0x11;
-    }
+    /* The oracle of the reference: an encoding the decoder accepts must be
+     * the one the encoder makes of the bytes it decoded, so no frame has a
+     * second reading. */
+    for (unsigned trial = 0; trial < 2000u; trial++) {
+        uint8_t original[300];
+        uint8_t buffer[300];
+        uint8_t *decoded = NULL;
+        uint16_t decoded_len = 0;
+        uint16_t len = (uint16_t)(1u + (rng_state >> 24) % 8u);
 
-    for (unsigned shape = 0; shape < 4u; shape++) {
-        uint16_t data_len;
-        const uint8_t *source = data;
-
-        if (shape == 0u) {
-            for (unsigned i = 0; i < 64u; i++) {
-                data[i] = (uint8_t)(i + 1u);
-            }
-            data_len = 64u;
-        } else if (shape == 1u) {
-            source = zero_at_start;
-            data_len = sizeof zero_at_start;
-        } else if (shape == 2u) {
-            source = zero_at_end;
-            data_len = sizeof zero_at_end;
-        } else {
-            source = group_of_254;
-            data_len = sizeof group_of_254;
+        for (uint16_t k = 0; k < len; k++) {
+            rng_state = rng_state * 1664525u + 1013904223u;
+            original[k] = (uint8_t)(rng_state >> 24);
         }
-        uint16_t len = encode(source, data_len, encoded);
+        for (uint16_t k = 0; k < len; k++) {
+            buffer[k] = original[k];
+        }
 
-        /* Any encoding of the same bytes that is not the one the encoder
-         * made would give the decoder a second reading, so it must be
-         * refused. */
-        for (uint16_t i = 0; i < len; i++) {
-            uint8_t original[300];
-            uint8_t buffer[300];
-            uint8_t *decoded = NULL;
-            uint16_t decoded_len = 0;
-
-            for (uint16_t k = 0; k < len; k++) {
-                original[k] = encoded[k];
-            }
-            original[i] = (uint8_t)(original[i] + 1u);
-            for (uint16_t k = 0; k < len; k++) {
-                buffer[k] = original[k];
-            }
-
-            int8_t status = r2s_rcobs_decode(buffer, len, &decoded, &decoded_len);
-            if (status == R2S_RCOBS_OK) {
-                uint8_t reencoded[300];
-                r2s_rcobs_encoder_t enc;
-                uint16_t reencoded_len = 0;
-
-                r2s_rcobs_encoder_init(&enc);
-                for (uint16_t k = 0; k < decoded_len; k++) {
-                    reencoded_len =
-                        (uint16_t)(reencoded_len +
-                                   r2s_rcobs_encode_byte(&enc, decoded[k], reencoded + reencoded_len));
-                }
-                reencoded_len =
-                    (uint16_t)(reencoded_len + r2s_rcobs_encode_end(&enc, reencoded + reencoded_len));
-                TEST_ASSERT_EQUAL_UINT16_MESSAGE(len, reencoded_len, "a second encoding of the same bytes");
-                for (uint16_t k = 0; k < len; k++) {
-                    TEST_ASSERT_EQUAL_HEX8_MESSAGE(original[k], reencoded[k],
-                                                   "a second encoding of the same bytes");
-                }
-            }
+        int8_t status = r2s_rcobs_decode(buffer, len, &decoded, &decoded_len);
+        if (status != R2S_RCOBS_OK) {
+            continue;
+        }
+        uint16_t reencoded_len = r2s_test_rcobs_encode(decoded, decoded_len, reencoded);
+        TEST_ASSERT_EQUAL_UINT16_MESSAGE(len, reencoded_len, seed);
+        for (uint16_t k = 0; k < len; k++) {
+            TEST_ASSERT_EQUAL_HEX8_MESSAGE(original[k], reencoded[k], seed);
         }
     }
 }
