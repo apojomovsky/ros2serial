@@ -575,7 +575,7 @@ ros2serial/
 │   └── vectors/              conformance vectors (YAML), the single source of truth for every codec test
 │       ├── crc/  rcobs/  varint/  frames/  messages/  session/  time/
 ├── core/                     C99 MCU core (no ROS, no hardware)
-│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h; r2s_crc.h and r2s_varint.h, shared with the bridge
+│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h; r2s_crc.h, r2s_rcobs.h and r2s_varint.h, shared with the bridge
 │   ├── src/                  crc.c, rcobs.c, varint.c, framer.c, session.c, time.c, log.c, ring.c, codec.c, topics.c
 │   ├── tests/                Unity unit tests, vector runner, CMakeLists.txt
 │   └── fuzz/                 libFuzzer targets and seed corpora
@@ -604,6 +604,8 @@ ros2serial/
 ```
 
 **Code reuse between MCU and host.** The bridge links `core/src/crc.c`, `rcobs.c`, `varint.c` and `framer.c` compiled for the host. Framing, CRC and lengths therefore have a single implementation. The host session logic is separate C++.
+
+**The rCOBS encoder is a stream.** `r2s_rcobs_encode_byte()` takes one byte and writes the bytes it produces, at most two, so the MCU serializes, computes the CRC and encodes in one pass with no TX buffer. `r2s_rcobs_encode_end()` writes the last code byte; the delimiter is the framer's. The decoder takes the encoded frame in a buffer and writes the decoded frame over it, right aligned, so it needs no second copy.
 
 ## Engineering conventions
 
@@ -816,6 +818,24 @@ typedef const char *r2s_fstr_t;
 
 uint8_t r2s_varint_encode(uint16_t value, uint8_t *out);
 int8_t r2s_varint_decode(const uint8_t *data, uint16_t len, uint16_t *value, uint8_t *used);
+```
+
+```c
+/* r2s_rcobs.h: the framing that removes every 0x00 from a frame
+   (spec/protocol.md, section 4). Not part of the firmware API: the core's
+   framing uses it, and so does the bridge. */
+#define R2S_RCOBS_OK 0
+#define R2S_RCOBS_ERR_CODE (-1)     /* COB-5 */
+#define R2S_RCOBS_ERR_TRAILING (-2) /* COB-6 */
+
+#define R2S_RCOBS_MAX_EMIT 2u
+
+typedef struct { uint8_t run; } r2s_rcobs_encoder_t;
+
+void r2s_rcobs_encoder_init(r2s_rcobs_encoder_t *enc);
+uint8_t r2s_rcobs_encode_byte(r2s_rcobs_encoder_t *enc, uint8_t byte, uint8_t *out);
+uint8_t r2s_rcobs_encode_end(r2s_rcobs_encoder_t *enc, uint8_t *out);
+int8_t r2s_rcobs_decode(uint8_t *buf, uint16_t len, uint8_t **decoded);
 ```
 
 ### Port contract
