@@ -9,6 +9,7 @@ decided at link time, so the same generated file serves the runner self-test
 and the real conformance tests.
 
 Usage:
+  unity_runner.py names SOURCE.c                     print the test names, one per line
   unity_runner.py tests SOURCE.c OUT.c
   unity_runner.py vectors KIND CHECK.c OUT.c FILE.yaml...
 
@@ -48,11 +49,32 @@ def _c_string(text: str) -> str:
     return json.dumps(text)
 
 
+# With a test name as its argument, a runner runs only that test, so CMake can
+# register every test function as its own ctest entry: each then runs alone, in
+# a fresh process, in the order ctest --schedule-random picks.
+RUN_ONE = """
+static int r2s_matched;
+
+static void r2s_run_test(UnityTestFunction fn, const char *name, int argc, char **argv)
+{
+    if (argc < 2 || strcmp(argv[1], name) == 0) {
+        r2s_matched = 1;
+        UnityDefaultTestRun(fn, name, __LINE__);
+    }
+}
+"""
+
+
 def _main(names: list[str], prelude: str, reported_file: str) -> str:
     # UnityBegin names the file failures are reported in; UNITY_BEGIN would name this runner.
-    runs = "".join(f"    RUN_TEST({n});\n" for n in names)
+    runs = "".join(f'    r2s_run_test({n}, "{n}", argc, argv);\n' for n in names)
     begin = f"UnityBegin({json.dumps(reported_file)});"
-    return f"{prelude}\nint main(void)\n{{\n    {begin}\n{runs}    return UNITY_END();\n}}\n"
+    unknown = '        fprintf(stderr, "no test named %s\\n", argv[1]);\n        return 1;\n'
+    return (
+        f"{prelude}\n#include <stdio.h>\n#include <string.h>\n{RUN_ONE}\n"
+        f"int main(int argc, char **argv)\n{{\n    {begin}\n{runs}"
+        f"    if (argc >= 2 && !r2s_matched) {{\n{unknown}    }}\n    return UNITY_END();\n}}\n"
+    )
 
 
 def tests_runner(source: str, names: list[str]) -> str:
@@ -158,6 +180,9 @@ def vector_runner(kind: str, files: list[Path], check: str = "vectors") -> str:
 
 def main(argv: list[str]) -> int:
     try:
+        if len(argv) == 2 and argv[0] == "names":
+            print("\n".join(test_names(Path(argv[1]).read_text(encoding="utf-8"))))
+            return 0
         if len(argv) == 3 and argv[0] == "tests":
             source = Path(argv[1])
             try:

@@ -38,10 +38,6 @@ flags() {
 
 coverage_report() {
   local dir=$1
-  if [ -z "$(find core/src -name '*.c' -print -quit)" ]; then
-    echo "coverage: no sources in core/src yet, nothing to measure"
-    return 0
-  fi
   gcovr --root "$root" --filter 'core/src/' --object-directory "$dir" \
     --txt-metric branch --print-summary --exclude-unreachable-branches \
     --fail-under-line "$LINE_FLOOR" --fail-under-branch "$BRANCH_FLOOR" "$dir"

@@ -31,15 +31,9 @@ if(R2S_COVERAGE)
 endif()
 
 file(GLOB_RECURSE R2S_CORE_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
-if(R2S_CORE_SOURCES)
-  add_library(r2s_core STATIC ${R2S_CORE_SOURCES})
-  target_include_directories(r2s_core PUBLIC include)
-  target_compile_options(r2s_core PRIVATE ${R2S_WARNINGS})
-else()
-  # Header-only until the first module lands (C2).
-  add_library(r2s_core INTERFACE)
-  target_include_directories(r2s_core INTERFACE include)
-endif()
+add_library(r2s_core STATIC ${R2S_CORE_SOURCES})
+target_include_directories(r2s_core PUBLIC include)
+target_compile_options(r2s_core PRIVATE ${R2S_WARNINGS})
 
 enable_testing()
 add_subdirectory(tests)

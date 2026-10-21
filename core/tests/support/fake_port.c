@@ -6,7 +6,6 @@
 
 #include "bytes.h"
 #include "r2s/r2s_port.h"
-#include "unity.h"
 
 #define TX_UNLIMITED 0xFFFFu
 
@@ -30,8 +29,16 @@ void fake_port_reset(void)
 
 void fake_port_queue_rx(const uint8_t *data, uint16_t len)
 {
-    TEST_ASSERT_TRUE_MESSAGE(len <= FAKE_PORT_CAPACITY - port.rx_len, "fake port: RX queue full");
-    memcpy(port.rx + port.rx_len, data, len);
+    if (port.rx_pos == port.rx_len) {
+        port.rx_pos = port.rx_len = 0;
+    }
+    if (len > FAKE_PORT_CAPACITY - port.rx_len) {
+        fake_port_fail("fake port: RX queue full");
+        return;
+    }
+    if (len > 0u) {
+        memcpy(port.rx + port.rx_len, data, len);
+    }
     port.rx_len = (uint16_t)(port.rx_len + len);
 }
 
@@ -40,7 +47,10 @@ void fake_port_queue_rx_hex(const char *hex)
     static uint8_t bytes[FAKE_PORT_CAPACITY];
     int32_t n = r2s_hex_parse(hex, bytes, (uint16_t)sizeof bytes);
 
-    TEST_ASSERT_TRUE_MESSAGE(n >= 0, hex);
+    if (n < 0) {
+        fake_port_fail("fake port: bad hex for fake_port_queue_rx_hex");
+        return;
+    }
     fake_port_queue_rx(bytes, (uint16_t)n);
 }
 
@@ -53,6 +63,11 @@ const uint8_t *fake_port_tx(uint16_t *len)
 {
     *len = port.tx_len;
     return port.tx;
+}
+
+void fake_port_tx_clear(void)
+{
+    port.tx_len = 0;
 }
 
 uint16_t fake_port_tx_len(void)
@@ -104,9 +119,12 @@ void fake_port_set_tx_free(uint16_t free_bytes)
     port.tx_free = free_bytes;
 }
 
-uint16_t fake_port_tx_overruns(void)
+uint16_t fake_port_take_overruns(void)
 {
-    return port.tx_overruns;
+    uint16_t n = port.tx_overruns;
+
+    port.tx_overruns = 0;
+    return n;
 }
 
 void fake_port_set_boot_id(uint32_t boot_id)
@@ -121,15 +139,16 @@ uint16_t r2s_port_read(uint8_t *buf, uint16_t max)
     if (n > max) {
         n = max;
     }
-    memcpy(buf, port.rx + port.rx_pos, n);
+    if (n > 0u) {
+        memcpy(buf, port.rx + port.rx_pos, n);
+    }
     port.rx_pos = (uint16_t)(port.rx_pos + n);
     return n;
 }
 
 void r2s_port_write(const uint8_t *buf, uint16_t len)
 {
-    /* The core must never write more than tx_free said; the overrun count lets
-     * a test assert that, and the bytes are kept so the failure is visible. */
+    /* Bytes past tx_free are still captured, so a failing test shows them. */
     if (port.tx_free != TX_UNLIMITED) {
         if (len > port.tx_free) {
             port.tx_overruns++;
@@ -138,8 +157,13 @@ void r2s_port_write(const uint8_t *buf, uint16_t len)
             port.tx_free = (uint16_t)(port.tx_free - len);
         }
     }
-    TEST_ASSERT_TRUE_MESSAGE(len <= FAKE_PORT_CAPACITY - port.tx_len, "fake port: TX capture full");
-    memcpy(port.tx + port.tx_len, buf, len);
+    if (len > FAKE_PORT_CAPACITY - port.tx_len) {
+        fake_port_fail("fake port: TX capture full; fake_port_tx_clear() between phases");
+        return;
+    }
+    if (len > 0u) {
+        memcpy(port.tx + port.tx_len, buf, len);
+    }
     port.tx_len = (uint16_t)(port.tx_len + len);
 }
 

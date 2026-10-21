@@ -9,11 +9,13 @@
 /* Copies up to max received bytes into buf without blocking and returns how
  * many it copied, 0 if none are waiting. While assembling a frame the core
  * asks for one byte at a time, so a port never has to buffer past a
- * delimiter for it. */
+ * delimiter for it. With R2S_WITH_RX_RING the core provides this function
+ * itself, and the port must not define it. */
 uint16_t r2s_port_read(uint8_t *buf, uint16_t max);
 
-/* Sends len bytes. The core only writes as many bytes as r2s_port_tx_free()
- * last reported, so the port must accept them without blocking. */
+/* Sends len bytes. After asking r2s_port_tx_free(), the core writes at most
+ * that many bytes in total, in one or more calls, before it asks again; the
+ * port accepts them without blocking unless it reported 0xFFFF. */
 void r2s_port_write(const uint8_t *buf, uint16_t len);
 
 /* Returns how many bytes r2s_port_write() accepts right now without blocking,

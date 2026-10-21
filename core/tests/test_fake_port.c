@@ -35,7 +35,7 @@ void test_fake_port_reading_one_byte_at_a_time_stops_at_each_delimiter(void)
     TEST_ASSERT_EQUAL_UINT16(3, fake_port_rx_pending());
 }
 
-void test_fake_port_tx_is_captured_and_split_into_frames(void)
+void test_fake_port_tx_is_captured_and_split_into_encoded_frames(void)
 {
     uint16_t len;
     const uint8_t *frame;
@@ -87,7 +87,7 @@ void test_fake_port_a_write_beyond_tx_free_is_recorded(void)
 
     r2s_port_write((const uint8_t *)"\x01\x02", 2);
 
-    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_overruns());
+    TEST_ASSERT_EQUAL_UINT16(1, fake_port_take_overruns());
 }
 
 void test_fake_port_boot_id_is_the_chosen_one(void)
@@ -114,37 +114,63 @@ void test_fake_port_reset_restores_every_control(void)
     TEST_ASSERT_EQUAL_HEX32(0, r2s_port_tick());
     TEST_ASSERT_EQUAL_UINT16(0xFFFF, r2s_port_tx_free());
     TEST_ASSERT_EQUAL_HEX32(0, r2s_port_boot_id());
-    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_overruns());
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_take_overruns());
 }
 
-void test_fake_port_every_test_starts_from_a_reset_port_first(void)
+void test_fake_port_unlimited_tx_free_never_shrinks(void)
 {
-    /* Paired with the next test: whichever runs first dirties the port. */
+    uint8_t data[300] = {0};
+
+    r2s_port_write(data, sizeof data);
+
+    TEST_ASSERT_EQUAL_UINT16(0xFFFF, r2s_port_tx_free());
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_take_overruns());
+}
+
+void test_fake_port_an_overrun_leaves_no_space(void)
+{
+    fake_port_set_tx_free(1);
+
+    r2s_port_write((const uint8_t *)"\x01\x02", 2);
+
+    TEST_ASSERT_EQUAL_UINT16(0, r2s_port_tx_free());
+    TEST_ASSERT_EQUAL_UINT16(1, fake_port_take_overruns());
+}
+
+void test_fake_port_consumed_rx_frees_its_space(void)
+{
+    uint8_t chunk[1000] = {0x11};
+    uint8_t sink[1000];
+
+    for (unsigned i = 0; i < 10u; i++) {
+        fake_port_queue_rx(chunk, sizeof chunk);
+        TEST_ASSERT_EQUAL_UINT16(sizeof sink, r2s_port_read(sink, sizeof sink));
+    }
+
     TEST_ASSERT_EQUAL_UINT16(0, fake_port_rx_pending());
-    fake_port_queue_rx_hex("01 02");
 }
 
-void test_fake_port_every_test_starts_from_a_reset_port_second(void)
+void test_fake_port_tx_clear_starts_a_new_capture(void)
 {
-    TEST_ASSERT_EQUAL_UINT16(0, fake_port_rx_pending());
-    fake_port_queue_rx_hex("03");
-}
+    r2s_port_write((const uint8_t *)"\x11\x00", 2);
 
-void test_core_test_reset_is_available_in_test_builds(void)
-{
-    r2s_test_reset();
+    fake_port_tx_clear();
+
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_len());
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
 }
 
 void test_fake_port_scripts_a_full_exchange_byte_by_byte(void)
 {
-    uint8_t frame[16];
+    const uint8_t expected[] = {0x10, 0x02, 0x01, 0x01, 0xc0, 0x3f, 0x1e, 0x49, 0x05};
+    uint8_t frame[sizeof expected + 1u];
     uint16_t n = 0;
     uint16_t len;
     const uint8_t *sent;
     uint8_t b;
 
     fake_port_queue_rx_hex("10 02 01 01 c0 3f 1e 49 05 00");
-    while (r2s_port_read(&b, 1) == 1 && b != 0x00) {
+    while (n < sizeof frame && r2s_port_read(&b, 1) == 1 && b != 0x00) {
         frame[n++] = b;
     }
     r2s_port_write(frame, n);
@@ -152,5 +178,5 @@ void test_fake_port_scripts_a_full_exchange_byte_by_byte(void)
 
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
     sent = fake_port_tx_frame(0, &len);
-    R2S_ASSERT_BYTES(frame, n, sent, len, "echoed frame");
+    R2S_ASSERT_BYTES(expected, sizeof expected, sent, len, "echoed frame");
 }
