@@ -62,7 +62,7 @@ These rules shape how the code is written. They are part of the code review, not
 | Resource budgets: flash, RAM, stack, cycles per byte | |
 | Every bug ever fixed | |
 
-**Spec traceability.** Every normative statement in `spec/protocol.md` carries an ID (for example `[FRM-4]`, `[SES-7]`, `[TIM-2]`). Vectors and tests name the IDs they cover, and `tools/spec_coverage.py` fails CI when an ID has no test or a test names an unknown ID. This turns "is the spec tested" into a checked fact.
+**Spec traceability.** Every normative statement in `spec/protocol.md` is a list item starting with its ID (for example `[FRM-4]`, `[SES-7]`, `[TIM-2]`). Vectors and tests name the IDs they cover, and `tools/spec_coverage.py` fails CI when an ID has no test or a test names an unknown ID. This turns "is the spec tested" into a checked fact.
 
 ## 4. Test levels
 
@@ -132,7 +132,7 @@ payload: "00 00 c0 3f"
 
 ```yaml
 # spec/vectors/rcobs/basic.yaml (delimiter included in "encoded")
-covers: [FRM-2, FRM-3]
+covers: [COB-1, COB-4]
 cases:
   - {decoded: "",            encoded: "01 00"}
   - {decoded: "00",          encoded: "01 01 00"}
@@ -145,7 +145,7 @@ cases:
 ```yaml
 # spec/vectors/frames/float32_topic16.yaml
 name: float32_topic16
-covers: [FRM-1, FRM-5]
+covers: [FRM-1, FRM-2, CHK-3]
 topic_id: 16
 seq: 0
 payload: "00 00 c0 3f"
@@ -155,7 +155,7 @@ wire: "10 02 01 01 c0 3f 1e 49 05 00"
 
 ```yaml
 # spec/vectors/varint/basic.yaml
-covers: [ENC-6]
+covers: [VAR-1]
 cases:
   - {value: 0,   encoded: "00"}
   - {value: 127, encoded: "7f"}
