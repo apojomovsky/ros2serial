@@ -1,0 +1,9 @@
+# Computed by hand from COB-1 (docs/01-testing.md, section 5.5).
+covers: [COB-1, COB-2, COB-4, COB-7]
+cases:
+  - {decoded: "",            encoded: "01 00"}
+  - {decoded: "00",          encoded: "01 01 00"}
+  - {decoded: "00 00",       encoded: "01 01 01 00"}
+  - {decoded: "11 22 00 33", encoded: "11 22 03 33 02 00"}
+  - {decoded: "11 22 33 44", encoded: "11 22 33 44 05 00"}
+  - {decoded: "11 00 00 00", encoded: "11 02 01 01 01 00"}

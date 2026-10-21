@@ -113,3 +113,23 @@ def test_invalid_files_name_the_file_and_the_key(tmp_path, name, text, expected)
 def test_repository_vectors_pass():
     root = Path(vectors_check.__file__).resolve().parent.parent / "spec" / "vectors"
     assert vectors_check.check_tree(root) == []
+
+
+def test_rejected_encodings_name_the_rule_that_rejects_them(tmp_path):
+    files = {
+        "rcobs/invalid.yaml": "covers: [COB-5]\ncases:\n  - {encoded: '05 00', reject: COB-5}\n",
+        "varint/invalid.yaml": "covers: [VAR-3]\ncases:\n  - {encoded: '80', reject: VAR-3}\n",
+    }
+    assert vectors_check.check_tree(make_tree(tmp_path, files)) == []
+
+
+@pytest.mark.parametrize(
+    ("name", "text"),
+    [
+        ("rcobs/both.yaml", "covers: [COB-5]\ncases:\n  - {decoded: '', encoded: '05 00', reject: COB-5}\n"),
+        ("rcobs/bad_rule.yaml", "covers: [COB-5]\ncases:\n  - {encoded: '05 00', reject: cob5}\n"),
+        ("varint/both.yaml", "covers: [VAR-3]\ncases:\n  - {value: 1, encoded: '80', reject: VAR-3}\n"),
+    ],
+)
+def test_a_rejected_case_carries_no_decoded_value_and_a_real_rule(tmp_path, name, text):
+    assert vectors_check.check_tree(make_tree(tmp_path, {name: text})) != []
