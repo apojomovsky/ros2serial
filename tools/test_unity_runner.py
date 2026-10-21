@@ -29,7 +29,7 @@ void test_a_runs_second(void)
 
 def test_the_tests_runner_runs_every_test_once():
     out = unity_runner.tests_runner("test_x.c", ["test_one", "test_two"])
-    assert out.count("RUN_TEST(test_one)") == 1 and out.count("RUN_TEST(test_two)") == 1
+    assert out.count("r2s_run_test(test_one, ") == 1 and out.count("r2s_run_test(test_two, ") == 1
     assert "void test_one(void);" in out and "return UNITY_END();" in out
 
 
@@ -52,7 +52,7 @@ def test_rcobs_cases_become_arrays_with_their_lengths(tmp_path):
     out = unity_runner.vector_runner("rcobs", [f])
     assert re.search(r"\{0x11, 0x00\}", out) and re.search(r"\{0x11, 0x01, 0x02, 0x00\}", out)
     assert f'"{f} case 0"' in out and '"COB-1 COB-4"' in out
-    assert '"11 00", ' in out and "RUN_TEST(test_rcobs_basic_0)" in out
+    assert '"11 00", ' in out and "r2s_run_test(test_rcobs_basic_0, " in out
     assert re.search(r"r2s_vec_check_rcobs\(&\w+\)", out)
 
 
@@ -101,7 +101,7 @@ def test_the_cli_writes_the_runner(tmp_path):
         [sys.executable, str(TOOL), "vectors", "varint", "check.c", str(out), str(f)], capture_output=True
     )
     assert result.returncode == 0, result.stdout
-    assert "RUN_TEST(test_varint_basic_0)" in out.read_text()
+    assert "r2s_run_test(test_varint_basic_0, " in out.read_text()
 
 
 def test_rejected_cases_carry_the_rule_and_no_decoded_value(tmp_path):

@@ -1,5 +1,6 @@
-/* test_reset: the host test builds' reset of every module's state. Each module
- * keeps its state in one static struct and adds a line here when it lands. */
+/* test_reset: the host test builds' reset of every module's state. A stateful
+ * module keeps its state in one static struct, defines r2s_<module>_test_reset()
+ * under R2S_TESTING next to it, and adds the call here when it lands. */
 #include "r2s/r2s.h"
 
 #ifdef R2S_TESTING

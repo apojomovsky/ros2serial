@@ -9,6 +9,8 @@
 - **Vector checks chosen at link time.** A generated vector runner calls `r2s_vec_check_<kind>()` for each case and does not know which implementation it gets. The runner self-test links checks that compare each record's bytes with the vector's own text; each module's conformance test links its own check for the same files. The same mechanism serves both, with no function pointers in test code that might be copied into the core.
 - **Fixtures are a separate tree.** `core/tests/fixtures/vectors/` holds files that exercise the runner, named `fixture_*`, and never counts as conformance or spec coverage.
 - **Must-fail tests.** Tests under `core/tests/must_fail/` pass only when they fail with the expected message, which proves the assertion helpers and checks can fail at all.
+- **One ctest entry per test function.** A generated runner runs one named test when given its name, and CMake registers each test function separately, so `ctest --schedule-random` runs every test alone, in a fresh process, in a random order. Vector runners stay one entry per kind: their checks hold no state.
+- **Reset by convention.** A stateful core module keeps its state in one static struct and defines `r2s_<module>_test_reset()` under `R2S_TESTING`; `r2s_test_reset()` calls each, and Unity's `setUp` calls it with `fake_port_reset()` before every test.
 - **Configurations as builds.** One CMake project, configured once per CI configuration by `scripts/core-test.sh`: gcc and clang optimized, gcc `-m32`, clang with ASan and UBSan, and gcc with coverage held to the floors of `docs/01-testing.md`.
 
 ## Rationale

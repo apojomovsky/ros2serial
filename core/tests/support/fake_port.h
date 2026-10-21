@@ -5,7 +5,10 @@
 
 #include <stdint.h>
 
+/* Bytes queued and not yet read, and bytes captured, at any one time. */
+#ifndef FAKE_PORT_CAPACITY
 #define FAKE_PORT_CAPACITY 4096u
+#endif
 
 /* Empties RX and TX, sets the tick and boot ID to 0 and tx_free to 0xFFFF
  * (blocking allowed). Called before every test. */
@@ -16,9 +19,11 @@ void fake_port_queue_rx(const uint8_t *data, uint16_t len);
 void fake_port_queue_rx_hex(const char *hex);
 uint16_t fake_port_rx_pending(void);
 
-/* Everything written so far, and the same split at each 0x00 delimiter. A frame
- * is returned without its delimiter; an unterminated tail is not a frame. */
+/* Everything written so far, and the same split at each 0x00 delimiter into
+ * encoded frames (still rCOBS-encoded, without the delimiter); an unterminated
+ * tail is not a frame. Clearing starts a new capture. */
 const uint8_t *fake_port_tx(uint16_t *len);
+void fake_port_tx_clear(void);
 uint16_t fake_port_tx_len(void);
 uint16_t fake_port_tx_frame_count(void);
 const uint8_t *fake_port_tx_frame(uint16_t index, uint16_t *len);
@@ -28,12 +33,15 @@ void fake_port_set_tick(uint32_t tick);
 void fake_port_advance(uint32_t ticks);
 
 /* r2s_port_tx_free() returns this, reduced by each write; 0xFFFF never shrinks.
- * A write longer than the reported space is counted as an overrun. */
+ * A write longer than the reported space is an overrun: it leaves no space, and
+ * tearDown fails the test unless the test took the count itself. */
 void fake_port_set_tx_free(uint16_t free_bytes);
-uint16_t fake_port_tx_overruns(void);
 uint16_t fake_port_take_overruns(void);
-void fake_port_tx_clear(void);
 
 void fake_port_set_boot_id(uint32_t boot_id);
+
+/* Reports a misuse of the fake (a full queue, bad hex). The Unity build fails
+ * the current test; a build without Unity (libr2s_host, T3) provides its own. */
+void fake_port_fail(const char *message);
 
 #endif
