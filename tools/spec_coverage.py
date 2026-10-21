@@ -151,9 +151,10 @@ def check(root: Path, base: str | None = None) -> Report:
     tickets = set(DESIGN_TICKET.findall(design.read_text(encoding="utf-8"))) if design.is_file() else None
     base_rules = set(DEFINITION.findall(_git_show(root, base, "spec/protocol.md"))) if base else set()
     base_rules = {r for r, _ in base_rules}
-    base_pending = (
-        {ln.split()[0] for ln in _git_show(root, base, PENDING).splitlines() if ln.split()} if base else set()
-    )
+    base_pending_text = _git_show(root, base, PENDING) if base else ""
+    base_pending = {f[0] for f in (ln.split("#", 1)[0].split() for ln in base_pending_text.splitlines()) if f}
+    if not base_pending_text:
+        base = None  # the PR that introduces the list fills it; from then on it only shrinks
     listed = set()  # a rejected pending line already explains its rule; no second line for it
     pending_file = root / PENDING
     if pending_file.is_file():
