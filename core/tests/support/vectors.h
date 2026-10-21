@@ -1,7 +1,7 @@
 /* Records of conformance vector cases, filled by the runners that
  * tools/unity_runner.py generates. Each byte field comes as the bytes, their
- * length and the original hex text, and every record names its file, case
- * and spec IDs for failure messages. */
+ * length and the vector's own hex text, and every record names its file,
+ * case and spec IDs for failure messages. */
 #ifndef R2S_TEST_VECTORS_H
 #define R2S_TEST_VECTORS_H
 
@@ -13,7 +13,8 @@ typedef struct {
     const char *covers;
     const uint8_t *data;
     uint16_t data_len;
-    const char *data_hex;
+    const char *data_hex; /* NULL when the vector gives the data as text */
+    const char *text;     /* NULL when the vector gives the data as hex */
     uint16_t crc;
 } r2s_vec_crc_t;
 

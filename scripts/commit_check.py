@@ -2,7 +2,8 @@
 """Check commit messages and PR titles against the commit hygiene rules in AGENTS.md.
 
 Usage:
-  commit_check.py --file <path>        one message (the commit-msg hook, #8)
+  commit_check.py --file <path> [--merge]  one message (the commit-msg hook); --merge
+                                       accepts git's "Merge ..." subject, as during a merge
   commit_check.py --range <base..head> every non-merge commit in a range
   commit_check.py --title <text>       a PR title
 
@@ -48,11 +49,15 @@ def check_subject(subject: str) -> list[str]:
     return problems
 
 
-def check_message(message: str) -> list[str]:
+def check_message(message: str, merge: bool = False) -> list[str]:
     lines = _lines(message)
     if not lines:
         return ["empty message"]
-    problems = check_subject(lines[0])
+    # Merge commits are skipped by --range, so git's own subject is fine; the rest still applies.
+    if merge and lines[0].startswith("Merge "):
+        problems = [p for p in check_subject(lines[0]) if not p.startswith(SUBJECT_HELP)]
+    else:
+        problems = check_subject(lines[0])
     body = "\n".join(lines[1:])
     if "\u2014" in body:
         problems.append("em-dash in the body; use a comma, a colon or a period")
@@ -90,11 +95,12 @@ def main() -> int:
     group.add_argument("--file")
     group.add_argument("--range")
     group.add_argument("--title")
+    ap.add_argument("--merge", action="store_true")
     args = ap.parse_args()
 
     if args.file:
         with open(args.file, encoding="utf-8") as f:
-            problems = check_message(f.read())
+            problems = check_message(f.read(), args.merge)
     elif args.title is not None:
         problems = [f"PR title: {p}" for p in check_title(args.title)]
     else:

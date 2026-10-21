@@ -1,0 +1,2 @@
+# Vendored code is kept byte-identical to upstream, whitespace included.
+core/tests/vendor/** -whitespace

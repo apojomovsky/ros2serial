@@ -23,7 +23,8 @@ from pathlib import Path
 
 import yaml
 
-TEST_FN = re.compile(r"^void\s+(test_\w+)\s*\(\s*void\s*\)", re.MULTILINE)
+# A definition, not a prototype: the body's brace follows the signature.
+TEST_FN = re.compile(r"^void\s+(test_\w+)\s*\(\s*void\s*\)\s*\{", re.MULTILINE)
 COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.DOTALL)
 HEX = re.compile(r"^$|^[0-9a-f]{2}( [0-9a-f]{2})*$")
 KINDS = ("crc", "rcobs", "varint")
@@ -36,7 +37,15 @@ class VectorError(Exception):
 
 
 def test_names(source: str) -> list[str]:
-    return TEST_FN.findall(COMMENT.sub("", source))
+    names = TEST_FN.findall(COMMENT.sub("", source))
+    for n in names:
+        if names.count(n) > 1:
+            raise VectorError(f"{n} is defined twice")
+    return names
+
+
+def _c_string(text: str) -> str:
+    return json.dumps(text)
 
 
 def _main(names: list[str], prelude: str, reported_file: str) -> str:
@@ -57,7 +66,7 @@ def _ident(text: str) -> str:
 
 
 def _bytes(where: str, field: str, hex_text: object) -> bytes:
-    if not isinstance(hex_text, str) or not HEX.match(hex_text):
+    if not isinstance(hex_text, str) or not HEX.fullmatch(hex_text):
         raise VectorError(f"{where}: {field} is not a hex byte string: {hex_text!r}")
     return bytes.fromhex(hex_text)
 
@@ -70,12 +79,20 @@ def _array(name: str, data: bytes) -> tuple[str, str]:
     return f"static const uint8_t {name}[] = {{{body}}};\n", name
 
 
-def _blob(prefix: str, field: str, data: bytes) -> tuple[str, str]:
-    """Definition, plus the `bytes, length, "hex"` initializer for a field."""
-    if len(data) > 0xFFFF:
-        raise VectorError(f"{prefix}: {field} is longer than 65535 bytes")
+def _blob(prefix: str, field: str, data: bytes, text: str | None) -> tuple[str, str]:
+    """Definition, plus the `bytes, length, "text"` initializer for a field.
+
+    The text is the vector's own string, not one rebuilt from the bytes, so the
+    self-test compares two independent transcriptions."""
+    if len(data) > 0xFFFE:
+        raise VectorError(f"{prefix}: {field} is longer than 65534 bytes")
     definition, expr = _array(f"{prefix}_{field}", data)
-    return definition, f'{expr}, {len(data)}u, "{data.hex(" ")}"'
+    return definition, f"{expr}, {len(data)}u, {'NULL' if text is None else _c_string(text)}"
+
+
+def _hex_field(where: str, prefix: str, field: str, case: dict) -> tuple[str, str]:
+    data = _bytes(where, field, case.get(field))
+    return _blob(prefix, field, data, case[field])
 
 
 def _case(kind: str, where: str, prefix: str, case: dict) -> tuple[str, str]:
@@ -83,26 +100,28 @@ def _case(kind: str, where: str, prefix: str, case: dict) -> tuple[str, str]:
     if not isinstance(case, dict):
         raise VectorError(f"{where}: a case must be a mapping")
     if kind == "crc":
-        if "text" in case:
-            if not isinstance(case["text"], str) or not case["text"].isascii():
-                raise VectorError(f"{where}: text must be an ASCII string")
-            data = case["text"].encode("ascii")
-        else:
-            data = _bytes(where, "data", case.get("data"))
         crc = case.get("crc")
         if not isinstance(crc, int) or not 0 <= crc <= 0xFFFF:
             raise VectorError(f"{where}: crc must be an integer from 0 to 65535")
-        definition, blob = _blob(prefix, "data", data)
-        return definition, f"{blob}, {crc}u"
+        if "text" in case:
+            text = case["text"]
+            if not isinstance(text, str) or not text.isascii():
+                raise VectorError(f"{where}: text must be an ASCII string")
+            definition, blob = _blob(prefix, "data", text.encode("ascii"), None)
+            return definition, f"{blob}, {_c_string(text)}, {crc}u"
+        definition, blob = _hex_field(where, prefix, "data", case)
+        return definition, f"{blob}, NULL, {crc}u"
     # A reject case has no decoded side; its record carries the rule's ID instead of NULL.
     reject = case.get("reject")
-    if reject is not None and not (isinstance(reject, str) and SPEC_ID.match(reject)):
+    if reject is not None and not (isinstance(reject, str) and SPEC_ID.fullmatch(reject)):
         raise VectorError(f"{where}: reject must be a spec ID such as COB-5")
-    rule = "NULL" if reject is None else f'"{reject}"'
-    e_def, e = _blob(prefix, "encoded", _bytes(where, "encoded", case.get("encoded")))
+    rule = "NULL" if reject is None else _c_string(reject)
+    e_def, e = _hex_field(where, prefix, "encoded", case)
     if kind == "rcobs":
-        decoded = b"" if reject is not None else _bytes(where, "decoded", case.get("decoded"))
-        d_def, d = _blob(prefix, "decoded", decoded)
+        if reject is not None:
+            d_def, d = _blob(prefix, "decoded", b"", "")
+        else:
+            d_def, d = _hex_field(where, prefix, "decoded", case)
         return d_def + e_def, f"{d}, {e}, {rule}"
     value = 0 if reject is not None else case.get("value")
     if not isinstance(value, int) or not 0 <= value <= 0xFFFFFFFF:
@@ -117,17 +136,18 @@ def vector_runner(kind: str, files: list[Path], check: str = "vectors") -> str:
     for path in files:
         doc = yaml.safe_load(path.read_text(encoding="utf-8"))
         if not isinstance(doc, dict) or not isinstance(doc.get("cases"), list):
-            raise VectorError(f"{path.name}: expected a mapping with a cases list")
+            raise VectorError(f"{path}: expected a mapping with a cases list")
         covers = " ".join(doc.get("covers") or [])
         for i, case in enumerate(doc["cases"]):
-            where = f"{path.name} case {i}"
+            where = f"{path} case {i}"
             prefix = f"v_{_ident(path.stem)}_{i}"
             name = f"test_{kind}_{_ident(path.stem)}_{i}"
             if name in names:
                 raise VectorError(f"{where}: another file already produces {name}")
             definition, fields = _case(kind, where, prefix, case)
             defs.append(
-                f'{definition}static const r2s_vec_{kind}_t {prefix} = {{"{where}", "{covers}", {fields}}};\n'
+                f"{definition}static const r2s_vec_{kind}_t {prefix} = "
+                f"{{{_c_string(where)}, {_c_string(covers)}, {fields}}};\n"
                 f"static void {name}(void)\n{{\n    r2s_vec_check_{kind}(&{prefix});\n}}\n"
             )
             names.append(name)
@@ -140,7 +160,11 @@ def main(argv: list[str]) -> int:
     try:
         if len(argv) == 3 and argv[0] == "tests":
             source = Path(argv[1])
-            names = test_names(source.read_text(encoding="utf-8"))
+            try:
+                names = test_names(source.read_text(encoding="utf-8"))
+            except VectorError as e:
+                print(f"{source}: {e}")
+                return 1
             if not names:
                 print(f"{source}: no test functions (void test_*(void))")
                 return 1

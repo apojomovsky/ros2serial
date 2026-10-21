@@ -68,7 +68,7 @@ docs-gen: ## Regenerate reference docs (CLI, vectors, bridge parameters)
 	@$(call pending,docs-gen,G1 and H1 in docs/00-design.md)
 
 fmt: guard-main-clone cache-dir ## Format the tree (ruff, clang-format)
-	@$(call in_image,ruff format . && bash scripts/c-format.sh --fix)
+	@$(call in_image,bash -c 'ruff format . && bash scripts/c-format.sh --fix')
 
 lint: guard-main-clone cache-dir ## Linters: the LINT section of the suite
 	@$(call in_image,env LINT=1 bash scripts/ci-test.sh)
