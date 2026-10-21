@@ -73,6 +73,11 @@ foreach(source ${unit_tests})
   r2s_unit_test(${source})
 endforeach()
 
+add_executable(cxx_headers cxx_headers.cpp)
+target_link_libraries(cxx_headers PRIVATE r2s_core)
+target_compile_options(cxx_headers PRIVATE -Wall -Wextra -Werror)
+add_test(NAME cxx_headers COMMAND cxx_headers)
+
 # Proof that a failing assertion fails: without these, a check that silently
 # returned early would make every test pass.
 r2s_unit_test(must_fail/bytes_mismatch.c)
@@ -95,6 +100,10 @@ foreach(kind ${R2S_VECTOR_KINDS})
   r2s_vector_test(vectors_selftest_fixtures_${kind} ${kind} support/vector_selftest.c ${fixtures})
   r2s_vector_test(vectors_selftest_${kind} ${kind} support/vector_selftest.c ${published})
 endforeach()
+
+# Conformance: the published vectors through each module that implements a kind.
+file(GLOB crc_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/crc/*.yaml")
+r2s_vector_test(vectors_crc crc vectors/crc_check.c ${crc_vectors})
 
 # Vector kinds the C runner does not read yet, each with the ticket that adds
 # it. A kind with files that is in neither list would be silently skipped, so

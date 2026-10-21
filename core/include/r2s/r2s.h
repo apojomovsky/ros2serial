@@ -6,10 +6,18 @@
  * that an older peer cannot handle bumps it. */
 #define R2S_PROTOCOL_VERSION 1
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifdef R2S_TESTING
 /* Host test builds only: returns every core module to its state after
  * power-up, so each test starts from the same place. */
 void r2s_test_reset(void);
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

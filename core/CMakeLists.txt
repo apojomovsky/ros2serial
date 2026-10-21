@@ -2,7 +2,8 @@
 # build per CI configuration through the options below and CMAKE_C_FLAGS
 # (-m32 for the 32-bit build).
 cmake_minimum_required(VERSION 3.22)
-project(r2s_core LANGUAGES C)
+# C++ only to check that the headers can be used from C++ (the bridge, cpp/).
+project(r2s_core LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
