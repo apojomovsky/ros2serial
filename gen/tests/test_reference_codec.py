@@ -12,12 +12,13 @@ VECTORS = Path(__file__).resolve().parents[2] / "spec" / "vectors"
 SEED = 20261021
 
 
-def cases(kind: str) -> list:
+def cases(kind: str, reject: bool = False) -> list:
     params = []
     for path in sorted((VECTORS / kind).glob("*.yaml")):
         doc = yaml.safe_load(path.read_text())
         for i, case in enumerate(doc["cases"]):
-            params.append(pytest.param(case, id=f"{path.stem}-{i}"))
+            if ("reject" in case) == reject:
+                params.append(pytest.param(case, id=f"{path.stem}-{i}"))
     return params
 
 
@@ -50,8 +51,41 @@ def test_rcobs_round_trips_random_input():
     rng = random.Random(SEED)
     for _ in range(2000):
         size = rng.choice([0, 1, 2, 253, 254, 255, 508, 509, rng.randrange(0, 1200)])
-        data = bytes(rng.choice([0, rng.randrange(1, 256)]) for _ in range(size))
+        # Without long zero-free runs no 0xFF group would ever be decoded.
+        zero = rng.choice([0.0, 1 / 256, 1 / 2])
+        data = bytes(0 if rng.random() < zero else rng.randrange(1, 256) for _ in range(size))
         assert rcobs.decode(rcobs.encode(data)) == data
+
+
+# covers: COB-4, COB-7
+def test_rcobs_round_trips_0xff_groups_in_every_position():
+    run = b"\x01" * 254
+    for data in (run, run * 2, run * 2 + b"\x01", run + b"\x00" + run, b"\x00" + run + b"\x00", run + b"\x00\x00"):
+        assert rcobs.decode(rcobs.encode(data)) == data
+
+
+# covers: COB-3, COB-6
+def test_rcobs_decoding_accepts_only_the_canonical_encoding():
+    rng = random.Random(SEED)
+    for _ in range(20000):
+        encoded = bytes(rng.randrange(1, 256) for _ in range(rng.randrange(1, 300)))
+        try:
+            decoded = rcobs.decode(encoded)
+        except Rejected:
+            continue
+        assert rcobs.encode(decoded) == encoded
+
+
+# covers: VAR-4
+def test_varint_decoding_accepts_only_the_canonical_encoding():
+    for n in range(1, 4):
+        for value in range(0, 256**n, 1 if n < 3 else 97):
+            data = value.to_bytes(n, "little")
+            try:
+                decoded, used = varint.decode(data)
+            except Rejected:
+                continue
+            assert varint.encode(decoded) == data[:used]
 
 
 # covers: COB-2, COB-8
@@ -76,22 +110,30 @@ def test_rcobs_254_nonzero_bytes_at_the_end_give_a_trailing_empty_group():
 
 
 @pytest.mark.parametrize("case", cases("rcobs"))
-def test_rcobs_reproduces_every_vector(case):
+def test_rcobs_reproduces_every_valid_vector(case):
     wire = h(case["encoded"])
-    assert wire[-1:] == b"\x00", "rcobs vectors include the delimiter"
-    if "reject" in case:
-        with pytest.raises(Rejected) as e:
-            rcobs.decode(wire[:-1])
-        assert e.value.rule == case["reject"]
-    else:
-        assert rcobs.encode(h(case["decoded"])) + b"\x00" == wire
-        assert rcobs.decode(wire[:-1]) == h(case["decoded"])
+    assert rcobs.encode(h(case["decoded"])) + b"\x00" == wire, "rcobs vectors include the delimiter"
+    assert rcobs.decode(wire[:-1]) == h(case["decoded"])
+
+
+@pytest.mark.parametrize("case", cases("rcobs", reject=True))
+def test_rcobs_rejects_every_invalid_vector_by_its_rule(case):
+    with pytest.raises(Rejected) as e:
+        rcobs.decode(h(case["encoded"])[:-1])
+    assert e.value.rule == case["reject"]
 
 
 # covers: COB-5
 def test_rcobs_rejects_a_zero_code():
     with pytest.raises(Rejected) as e:
         rcobs.decode(b"\x00\x01")
+    assert e.value.rule == "COB-5"
+
+
+# covers: COB-5
+def test_rcobs_rejects_a_zero_data_byte():
+    with pytest.raises(Rejected) as e:
+        rcobs.decode(b"\x00\x02")
     assert e.value.rule == "COB-5"
 
 
@@ -115,15 +157,17 @@ def test_varint_decode_reports_the_bytes_it_used():
 
 
 @pytest.mark.parametrize("case", cases("varint"))
-def test_varint_reproduces_every_vector(case):
+def test_varint_reproduces_every_valid_vector(case):
     wire = h(case["encoded"])
-    if "reject" in case:
-        with pytest.raises(Rejected) as e:
-            varint.decode(wire)
-        assert e.value.rule == case["reject"]
-    else:
-        assert varint.encode(case["value"]) == wire
-        assert varint.decode(wire) == (case["value"], len(wire))
+    assert varint.encode(case["value"]) == wire
+    assert varint.decode(wire) == (case["value"], len(wire))
+
+
+@pytest.mark.parametrize("case", cases("varint", reject=True))
+def test_varint_rejects_every_invalid_vector_by_its_rule(case):
+    with pytest.raises(Rejected) as e:
+        varint.decode(h(case["encoded"]))
+    assert e.value.rule == case["reject"]
 
 
 def test_every_kind_has_vectors():

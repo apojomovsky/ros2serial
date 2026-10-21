@@ -133,3 +133,16 @@ def test_rejected_encodings_name_the_rule_that_rejects_them(tmp_path):
 )
 def test_a_rejected_case_carries_no_decoded_value_and_a_real_rule(tmp_path, name, text):
     assert vectors_check.check_tree(make_tree(tmp_path, {name: text})) != []
+
+
+def test_a_bad_field_in_a_reject_case_is_reported_once(tmp_path):
+    files = {"rcobs/bad.yaml": "covers: [COB-5]\ncases:\n  - {encoded: 'zz 00', reject: COB-5}\n"}
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert len(problems) == 1 and "cases/0/encoded" in problems[0], problems
+
+
+def test_a_reject_rule_must_be_listed_in_covers(tmp_path):
+    files = {"rcobs/invalid.yaml": "covers: [COB-5]\ncases:\n  - {encoded: '05 00', reject: COB-6}\n"}
+    assert vectors_check.check_tree(make_tree(tmp_path, files)) == [
+        "rcobs/invalid.yaml: cases/0/reject: COB-6 is not in the file's covers"
+    ]
