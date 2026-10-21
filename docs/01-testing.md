@@ -132,7 +132,7 @@ payload: "00 00 c0 3f"
 
 ```yaml
 # spec/vectors/rcobs/basic.yaml (delimiter included in "encoded")
-covers: [COB-1, COB-4]
+covers: [COB-1, COB-2, COB-4, COB-7]
 cases:
   - {decoded: "",            encoded: "01 00"}
   - {decoded: "00",          encoded: "01 01 00"}
@@ -141,6 +141,16 @@ cases:
   - {decoded: "11 22 33 44", encoded: "11 22 33 44 05 00"}
   - {decoded: "11 00 00 00", encoded: "11 02 01 01 01 00"}
 ```
+
+```yaml
+# spec/vectors/rcobs/invalid.yaml: encodings a decoder must reject
+covers: [COB-5, COB-6]
+cases:
+  - {encoded: "05 00",    reject: COB-5}
+  - {encoded: "11 03 00", reject: COB-5}
+```
+
+A reject case gives only the encoding and the ID of the rule that rejects it, which must be one of the file's `covers`. Each reject vector breaks exactly one rule, so every correct decoder names the same one.
 
 ```yaml
 # spec/vectors/frames/float32_topic16.yaml

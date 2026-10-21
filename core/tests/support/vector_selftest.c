@@ -29,13 +29,21 @@ void r2s_vec_check_crc(const r2s_vec_crc_t *v)
     }
 }
 
+/* A reject rule is either absent or a real ID; an empty string means a lost transcription. */
+static void check_rule(const char *where, const char *rule)
+{
+    TEST_ASSERT_TRUE_MESSAGE(rule == NULL || strlen(rule) >= 5u, where);
+}
+
 void r2s_vec_check_rcobs(const r2s_vec_rcobs_t *v)
 {
+    check_rule(v->where, v->reject);
     check_blob(v->where, v->covers, "decoded", v->decoded, v->decoded_len, v->decoded_hex);
     check_blob(v->where, v->covers, "encoded", v->encoded, v->encoded_len, v->encoded_hex);
 }
 
 void r2s_vec_check_varint(const r2s_vec_varint_t *v)
 {
+    check_rule(v->where, v->reject);
     check_blob(v->where, v->covers, "encoded", v->encoded, v->encoded_len, v->encoded_hex);
 }

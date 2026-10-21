@@ -12,3 +12,5 @@ select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
+# The generator is importable from its tests without installing it (G1 packages it).
+pythonpath = ["gen"]

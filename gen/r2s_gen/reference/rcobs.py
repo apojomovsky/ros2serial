@@ -21,9 +21,14 @@ def encode(data: bytes) -> bytes:
 
 
 def decode(encoded: bytes) -> bytes:
-    """Decodes from the end, group by group, as COB-4 to COB-7 describe."""
+    """Decodes from the end, group by group, as COB-4 to COB-7 describe.
+
+    The input is one frame without its delimiter, as the framer delivers it; the
+    framer ignores an empty frame (FRM-14) before it ever gets here."""
     if encoded[-1:] == b"\xff":
         raise Rejected("COB-6", "the last code is 0xFF")
+    if 0 in encoded:
+        raise Rejected("COB-5", f"a 0x00 byte at offset {encoded.index(0)}")
     groups = []  # (code, data), from the end of the encoding towards its start
     end = len(encoded)
     while end > 0:
