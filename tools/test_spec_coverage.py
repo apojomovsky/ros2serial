@@ -105,7 +105,9 @@ def test_a_pending_id_that_is_covered_must_leave_the_list(tmp_path):
         "spec/vectors/rcobs/a.yaml": "covers: [AAA-1, AAA-2]\ncases: []\n",
         "tools/spec_pending.txt": "AAA-2  C5\n",
     }
-    assert problems(tree(tmp_path, files)) == ["tools/spec_pending.txt:1: AAA-2 is covered now; remove it"]
+    assert problems(tree(tmp_path, files)) == [
+        "tools/spec_pending.txt:1: AAA-2 is covered now (spec/vectors/rcobs/a.yaml); remove it"
+    ]
 
 
 def test_pending_lines_need_a_known_id_and_a_ticket(tmp_path):

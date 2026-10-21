@@ -47,6 +47,15 @@ check_prose() {
     echo "no $base to compare with; skipping the prose gate"
   fi
 }
+spec_coverage() {
+  local base=${COMMIT_RANGE:-origin/master..HEAD}
+  base=${base%%..*}
+  if git rev-parse --verify -q "$base" >/dev/null; then
+    python3 tools/spec_coverage.py --base "$(git merge-base "$base" HEAD)"
+  else
+    python3 tools/spec_coverage.py
+  fi
+}
 lint_workflows() { need actionlint && actionlint .github/workflows/*.yml; }
 
 if wants LINT; then
@@ -56,7 +65,7 @@ if wants LINT; then
   section cppcheck bash scripts/cppcheck.sh
   section workflow-lint lint_workflows
   section vectors python3 tools/vectors_check.py
-  section spec-coverage python3 tools/spec_coverage.py
+  section spec-coverage spec_coverage
   section zone python3 tools/zone_check.py
 fi
 if wants COMMITS; then

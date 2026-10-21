@@ -1,6 +1,7 @@
 # Spec rules without coverage yet, each with the ticket that covers it
 # (docs/00-design.md, Epics and seed tickets). tools/spec_coverage.py fails
-# once a listed rule is covered, so this list only shrinks.
+# once a listed rule is covered, and on a PR only rules the PR adds to the spec
+# may join the list.
 GEN-1   S4
 FRM-1   S4
 FRM-2   S4
@@ -11,12 +12,12 @@ FRM-6   C5
 FRM-7   C5
 FRM-8   C5
 FRM-9   C8
-FRM-10  C5
+FRM-10  H3
 FRM-11  C6
 FRM-12  C5
 FRM-13  C5
 FRM-14  C5
-FRM-15  C5
+FRM-15  C8
 ENC-1   S4
 ENC-2   S4
 ENC-3   S4
