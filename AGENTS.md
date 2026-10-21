@@ -15,11 +15,10 @@ ros2serial brings rosserial's experience to ROS 2: publish and subscribe from sm
 
 ## Bootstrap status
 
-The repository is being bootstrapped (epic E0 in `docs/00-design.md`). Until each ticket below lands, the rules that depend on it describe the target state. What runs today: `make test` (on the host until #7), which runs `scripts/ci-test.sh` (layout check, ruff, actionlint, script tests), the same suite as CI:
+The repository is being bootstrapped (epic E0 in `docs/00-design.md`). Until each ticket below lands, the rules that depend on it describe the target state. What runs today: `make test` (on the host until #7), which runs `scripts/ci-test.sh` (layout check, ruff, actionlint, the commit and PR-title check, script tests), the same suite as CI:
 
 | Rule area | Ticket |
 | --- | --- |
-| Conventional Commits check, changelog | #5 |
 | Vector schema check | #6 |
 | `make` targets, Docker image | #7 |
 | Git hooks, takeoff ritual, prose and lint scripts, push helper | #8 |
@@ -101,7 +100,7 @@ Write PR bodies to a unique file (`mktemp "/tmp/pr-<issue>-XXXXXX.md"`) or pass 
 
 ## Commit hygiene
 
-- Conventional Commits, single subject line, at most 3 lines in total: `feat(core): ...`, `fix(bridge): ...`, `docs(...)`, `test(...)`, `ci(...)`, `build(...)`, `chore(...)`. The scope is the area (`core`, `gen`, `bridge`, `cpp`, `spec`, `ports`, `docker`, `ci`).
+- Conventional Commits, single subject line, at most 3 lines in total: `feat(core): ...`, `fix(bridge): ...`, `docs(...)`, `test(...)`, `ci(...)`, `build(...)`, `chore(...)`, `refactor(...)`, `perf(...)`, `revert(...)`. The scope is the area (`core`, `gen`, `bridge`, `cpp`, `spec`, `ports`, `docker`, `ci`). `scripts/commit_check.py` enforces these rules on every commit in a PR and on the PR title, which squash merges use as the subject.
 - **Never `Co-Authored-By:` or any other trailer, and no em-dashes.** The commit-msg hook rejects both. Git history is the record; the commit message is the maintainer's.
 - **Breaking changes carry `!`.** Breaking means a change to the wire protocol, the C API, the C++ APIs, the `r2s.yaml` schema, the X-macro syntax, the bridge parameters or the generator's CLI. Wire changes also bump `R2S_PROTOCOL_VERSION`.
 - One ticket per PR, squash merge. Commit when a piece of work is finished; don't batch unrelated changes. Update the docs a change touches before calling it done.

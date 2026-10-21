@@ -22,7 +22,7 @@ def test_good_messages_pass(message):
         ("feature(core): add the encoder", "subject must be"),
         ("feat(Core): add the encoder", "subject must be"),
         ("feat(core):add the encoder", "subject must be"),
-        ("feat(core): add the encoder — streaming", "em-dash"),
+        ("feat(core): add the encoder \u2014 streaming", "em-dash"),
         ("feat(core): a\n\nline two\nline three\nline four", "at most 3 lines"),
         ("feat(core): a\n\nCo-Authored-By: Someone <s@example.com>", "trailer"),
         ("feat(core): a\n\nSigned-off-by: Someone <s@example.com>", "trailer"),

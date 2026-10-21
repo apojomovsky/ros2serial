@@ -29,7 +29,7 @@ def copy_tree(dest: Path) -> Path:
     return dest
 
 
-SCOPES = ("LINT", "SCRIPTS", "CORE", "GEN", "BRIDGE", "E2E")
+SCOPES = ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN", "BRIDGE", "E2E")
 
 
 def run_lint(root: Path) -> subprocess.CompletedProcess:

@@ -46,8 +46,8 @@ def test_sections_by_type_and_breaking_first(tmp_path):
     assert "### Documentation" in text
     assert text.index("### Breaking") < text.index("### Features")
     breaking = text[text.index("### Breaking") : text.index("### Features")]
-    assert "widen topic IDs" in breaking
-    assert "add the rCOBS encoder" not in breaking
+    assert "Widen topic IDs" in breaking
+    assert "Add the rCOBS encoder" not in breaking
 
 
 def test_unconventional_commits_are_left_out(tmp_path):

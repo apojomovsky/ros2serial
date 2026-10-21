@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # The single suite script: CI runs exactly this, and so does `make test`.
-# Scope with one or more of LINT=1 SCRIPTS=1 CORE=1 GEN=1 BRIDGE=1 E2E=<backend>;
-# no scope runs everything. Exits non-zero if any section fails.
+# Scope with one or more of LINT=1 SCRIPTS=1 COMMITS=1 CORE=1 GEN=1 BRIDGE=1
+# E2E=<backend>; no scope runs everything. COMMITS checks COMMIT_RANGE
+# (default origin/master..HEAD) and PR_TITLE when set. Exits non-zero if any section fails.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root" || exit 2
 
 scoped=0
-for v in LINT SCRIPTS CORE GEN BRIDGE E2E; do [ -n "${!v:-}" ] && scoped=1; done
+for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E; do [ -n "${!v:-}" ] && scoped=1; done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }
 
 failed=()
@@ -28,12 +29,25 @@ lint_python() {
   python3 -m ruff --version >/dev/null 2>&1 || { echo "ruff not found: install the versions pinned in ci/versions.env"; return 1; }
   python3 -m ruff check . && python3 -m ruff format --check .
 }
+check_commits() {
+  local range=${COMMIT_RANGE:-origin/master..HEAD} ok=0
+  if [ -n "${PR_TITLE:-}" ]; then python3 scripts/commit_check.py --title "$PR_TITLE" || ok=1; fi
+  if git rev-parse --verify -q "${range%%..*}" >/dev/null; then
+    python3 scripts/commit_check.py --range "$range" || ok=1
+  else
+    echo "no ${range%%..*} to compare with; skipping the commit range"
+  fi
+  return $ok
+}
 lint_workflows() { need actionlint && actionlint .github/workflows/*.yml; }
 
 if wants LINT; then
   section layout python3 scripts/check_layout.py
   section python-lint lint_python
   section workflow-lint lint_workflows
+fi
+if wants COMMITS; then
+  section commits check_commits
 fi
 if wants SCRIPTS; then
   section scripts-tests python3 -m pytest scripts
