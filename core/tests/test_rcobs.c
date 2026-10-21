@@ -205,6 +205,7 @@ void test_rcobs_decoding_accepts_only_the_canonical_encoding(void)
 {
     uint8_t reencoded[300];
     uint32_t rng_state = SEED;
+    unsigned accepted = 0;
     char seed[48];
 
     snprintf(seed, sizeof seed, "seed %u", SEED);
@@ -212,17 +213,34 @@ void test_rcobs_decoding_accepts_only_the_canonical_encoding(void)
 
     /* The oracle of the reference: an encoding the decoder accepts must be
      * the one the encoder makes of the bytes it decoded, so no frame has a
-     * second reading. */
+     * second reading. The encodings are built group by group, so most of
+     * them are ones the decoder can accept; a few raw byte strings are
+     * thrown in for the other side. */
     for (unsigned trial = 0; trial < 2000u; trial++) {
         uint8_t original[300];
         uint8_t buffer[300];
         uint8_t *decoded = NULL;
         uint16_t decoded_len = 0;
-        uint16_t len = (uint16_t)(1u + (rng_state >> 24) % 8u);
+        uint16_t len = 0;
 
-        for (uint16_t k = 0; k < len; k++) {
-            rng_state = rng_state * 1664525u + 1013904223u;
-            original[k] = (uint8_t)(rng_state >> 24);
+        if (trial % 8u == 0u) {
+            /* A raw byte string, which the decoder mostly refuses. */
+            len = (uint16_t)(1u + (rng_state >> 24) % 8u);
+            for (uint16_t k = 0; k < len; k++) {
+                rng_state = rng_state * 1664525u + 1013904223u;
+                original[k] = (uint8_t)(rng_state >> 24);
+            }
+        } else {
+            /* Groups of data bytes, each closed by its code byte. */
+            uint16_t groups = (uint16_t)(1u + (rng_state >> 24) % 4u);
+            for (uint16_t g = 0; g < groups && len < sizeof original - 5u; g++) {
+                uint16_t data_len = (uint16_t)((rng_state >> 16) % 4u);
+                for (uint16_t d = 0; d < data_len; d++) {
+                    rng_state = rng_state * 1664525u + 1013904223u;
+                    original[len++] = (uint8_t)(rng_state >> 24);
+                }
+                original[len++] = (uint8_t)(data_len + 1u);
+            }
         }
         for (uint16_t k = 0; k < len; k++) {
             buffer[k] = original[k];
@@ -232,10 +250,14 @@ void test_rcobs_decoding_accepts_only_the_canonical_encoding(void)
         if (status != R2S_RCOBS_OK) {
             continue;
         }
+        accepted++;
         uint16_t reencoded_len = r2s_test_rcobs_encode(decoded, decoded_len, reencoded);
         TEST_ASSERT_EQUAL_UINT16_MESSAGE(len, reencoded_len, seed);
         for (uint16_t k = 0; k < len; k++) {
             TEST_ASSERT_EQUAL_HEX8_MESSAGE(original[k], reencoded[k], seed);
         }
     }
+    /* The encodings the decoder accepts are the point of the test, so a
+     * change that leaves it refusing everything must fail loudly. */
+    TEST_ASSERT_GREATER_THAN_MESSAGE(500u, accepted, seed);
 }

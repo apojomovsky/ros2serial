@@ -32,7 +32,12 @@ void r2s_vec_check_rcobs(const r2s_vec_rcobs_t *v)
 
     snprintf(label, sizeof label, "%s [%s]", v->where, v->covers);
     /* The vectors hold the delimiter with the encoding; the codec does not
-     * know it, so the check takes it off. */
+     * know it, so the check takes it off. A vector with no delimiter at all
+     * is refused here rather than underflowing into a huge length. */
+    if (v->encoded_len == 0u) {
+        TEST_FAIL_MESSAGE("the vector holds no delimiter");
+        return;
+    }
     uint16_t len = (uint16_t)(v->encoded_len - 1u);
     memcpy(buffer, v->encoded, len);
 
