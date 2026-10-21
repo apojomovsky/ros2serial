@@ -57,7 +57,7 @@ Work is plain GitHub issues. A draft pull request is the claim.
 ## Development cycle
 
 - Inner loop in the container: `make shell`, then `make test CORE=1` (or `GEN=1`, `BRIDGE=1`, `E2E=posix`) and `make compile EXAMPLE=<name>`.
-- **Tests first.** The first commit of a PR adds tests, vectors or fuzz corpus entries that fail, and the PR body pastes that failing run. Bugs are fixed by first reproducing them in a test.
+- **Tests first.** The first commit of a PR adds tests, vectors or fuzz corpus entries that fail. Bugs are fixed by first reproducing them in a test.
 - **`docs/01-testing.md` is normative:** how code must be written to be testable, what to test at which level, coverage, mutation and spec-coverage gates, and the rules for the tests themselves. Read it before writing any code.
 - Behavior that crosses the wire is specified by a conformance vector before any code is written. The first message vectors are computed by hand; the Python reference must reproduce them before it generates any further vector.
 - Bisect by artifact before reading code: is the vector right, does the reference reproduce it, does the C core, does the bridge? `r2s-gen vectors` prints a payload; the fault-injecting proxy logs every frame as hex.
@@ -79,7 +79,7 @@ Work is plain GitHub issues. A draft pull request is the claim.
 7. Zone check: `tools/zone_check.py` (no function pointers, float operations or C++ includes in `core/`).
 8. Spec sync: if `spec/protocol.md` changed, vectors changed in the same PR, and the other way round.
 9. Prose: `scripts/prose-diff.sh` lists every added comment block; the mechanical rules (8-line cap, no decoration, no narrative, no em-dashes) fail the ritual. Content judgment stays with the author.
-10. PR body: real newlines, `Closes #N`, a `## Review` section, the failing test run from the first commit.
+10. PR body: real newlines, `Closes #N`, a `## Review` section.
 11. Hooks installed.
 12. README and docs freshness: user-visible changes update `README.md` or `docs/` in the same PR, or the PR body says `README: n/a` (advisory).
 13. `make pre-pr-check TEST=1` also runs the full suite.

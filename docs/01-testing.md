@@ -223,7 +223,7 @@ When the PR suite exceeds its budget, the slowest tests are made faster or moved
 ## 8. Keeping the tests honest
 
 - **Flaky tests are bugs.** A test that fails without a code change gets an issue and is fixed at the root cause. Tests are never retried automatically, skipped or quarantined to get green (the ground rule in `AGENTS.md`).
-- **Tests are reviewed first.** The reviewer agent and the maintainer read the tests before the code: do they cover the ticket's acceptance criteria, the boundaries and the error paths, and would they fail if the code were wrong? The failing run in the PR body proves the last point.
+- **Tests are reviewed first.** The reviewer agent and the maintainer read the tests before the code: do they cover the ticket's acceptance criteria, the boundaries and the error paths, and would they fail if the code was wrong?
 - **Golden files and vectors change only on purpose.** A diff in either is called out in the PR body with the reason.
 - **Fakes are tested.** The fake port, fake transport, manual clock and posix virtual MCU have their own tests against the real components' contracts.
 - **Coverage and mutation results are published** per PR (coverage) and per night (mutation), so regressions are visible.

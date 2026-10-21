@@ -45,7 +45,7 @@ def ritual(cwd: Path, **env) -> subprocess.CompletedProcess:
     return run(["bash", str(ROOT / "scripts/pre-pr-check.sh")], cwd, {"BASE": "origin/master", **env})
 
 
-GOOD_BODY = "Closes #1\n\n## Failing run first\n\n```\n1 failed\n```\n\n## Review\n\nReviewer agent: no findings.\n"
+GOOD_BODY = "Closes #1\n\nThe thing, and why.\n\n## Review\n\nReviewer agent: no findings.\n"
 
 
 def test_a_clean_pr_passes(tmp_path):
