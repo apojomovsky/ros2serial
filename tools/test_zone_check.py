@@ -51,7 +51,9 @@ def test_no_sources_passes(tmp_path):
     ("source", "expected"),
     [
         (
-            "static int inc(int x) { return x + 1; }\nint (*volatile fp)(int) = inc;\nint call(int x) { return fp(x); }\n",
+            "static int inc(int x) { return x + 1; }\n"
+            "int (*volatile fp)(int) = inc;\n"
+            "int call(int x) { return fp(x); }\n",
             "function pointer",
         ),
         (
