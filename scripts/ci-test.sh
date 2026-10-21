@@ -2,7 +2,8 @@
 # The single suite script: CI runs exactly this, and so does `make test`.
 # Scope with one or more of LINT=1 SCRIPTS=1 COMMITS=1 CORE=1 GEN=1 BRIDGE=1
 # E2E=<backend>; no scope runs everything. COMMITS checks COMMIT_RANGE
-# (default origin/master..HEAD) and PR_TITLE when set. Exits non-zero if any section fails.
+# (default origin/master..HEAD) and PR_TITLE when set, then runs the prose gate
+# on the same range. Exits non-zero if any section fails.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root" || exit 2
@@ -24,11 +25,7 @@ need() {
 }
 pending() { echo "pending: $1 (see docs/00-design.md, Epics and seed tickets)"; }
 
-# python3 -m keeps the pip-installed, pinned ruff ahead of any other on PATH.
-lint_python() {
-  python3 -m ruff --version >/dev/null 2>&1 || { echo "ruff not found: install the versions pinned in ci/versions.env"; return 1; }
-  python3 -m ruff check . && python3 -m ruff format --check .
-}
+lint_python() { bash scripts/lint-python.sh; }
 check_commits() {
   local range=${COMMIT_RANGE:-origin/master..HEAD} ok=0
   if [ -n "${PR_TITLE:-}" ]; then python3 scripts/commit_check.py --title "$PR_TITLE" || ok=1; fi
@@ -38,6 +35,15 @@ check_commits() {
     echo "no ${range%%..*} to compare with; skipping the commit range"
   fi
   return $ok
+}
+check_prose() {
+  local base=${COMMIT_RANGE:-origin/master..HEAD}
+  base=${base%%..*}
+  if git rev-parse --verify -q "$base" >/dev/null; then
+    python3 scripts/prose_check.py --verify --base "$base"
+  else
+    echo "no $base to compare with; skipping the prose gate"
+  fi
 }
 lint_workflows() { need actionlint && actionlint .github/workflows/*.yml; }
 
@@ -49,6 +55,7 @@ if wants LINT; then
 fi
 if wants COMMITS; then
   section commits check_commits
+  section prose check_prose
 fi
 if wants SCRIPTS; then
   section scripts-tests python3 -m pytest scripts tools

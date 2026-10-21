@@ -15,11 +15,10 @@ ros2serial brings rosserial's experience to ROS 2: publish and subscribe from sm
 
 ## Bootstrap status
 
-The repository is being bootstrapped (epic E0 in `docs/00-design.md`). Until each ticket below lands, the rules that depend on it describe the target state. What runs today: `make test`, which runs `scripts/ci-test.sh` in the dev image (layout check, ruff, actionlint, the vector schema check, the commit and PR-title check, script and tool tests), the same suite as CI:
+The repository is being bootstrapped (epic E0 in `docs/00-design.md`). Until each ticket below lands, the rules that depend on it describe the target state. What runs today: `make test`, which runs `scripts/ci-test.sh` in the dev image (layout check, ruff, actionlint, the vector schema check, the commit and PR-title check, the prose gate, script and tool tests), plus `make pre-pr-check`, the hooks and `scripts/push.sh`, the same suite as CI:
 
 | Rule area | Ticket |
 | --- | --- |
-| Git hooks, takeoff ritual, prose and lint scripts, push helper | #8 |
 | Zone check | #9 |
 | Claim script, `pr-body.yml`, `cut-release.yml` | #10 |
 
@@ -95,7 +94,7 @@ Work is plain GitHub issues. A draft pull request is the claim.
 12. README and docs freshness: user-visible changes update `README.md` or `docs/` in the same PR, or the PR body says `README: n/a` (advisory).
 13. `make pre-pr-check TEST=1` also runs the full suite.
 
-Write PR bodies to a unique file (`mktemp "/tmp/pr-<issue>-XXXXXX.md"`) or pass them through a heredoc. Never use an inline `\n` string, and never a shared fixed path such as `/tmp/pr_body.md`, which another agent can overwrite.
+Write PR bodies to a unique file under the cache, which the dev image can see (`mktemp "$HOME/.cache/ros2serial/pr-<issue>-XXXXXX.md"`), and pass it as `make pre-pr-check PR_BODY=<file>`. Never use an inline `\n` string, and never a shared fixed path such as `/tmp/pr_body.md`, which another agent can overwrite.
 
 ## Commit hygiene
 

@@ -13,7 +13,7 @@ REPO_ROOT := $(abspath $(shell git rev-parse --git-common-dir 2>/dev/null)/..)
 CACHE := $(HOME)/.cache/ros2serial
 BUILD_DIR := $(CACHE)/build$(subst /,-,$(CURDIR))
 TTY := $(shell [ -t 0 ] && echo -it)
-PASS_VARS := LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E PR_TITLE COMMIT_RANGE
+PASS_VARS := LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E PR_TITLE COMMIT_RANGE BASE PR_BODY TEST
 
 DOCKER_BASE = docker run --rm $(TTY) --user $$(id -u):$$(id -g) \
 	-v $(REPO_ROOT):$(REPO_ROOT) -w $(CURDIR) -v $(CACHE):$(CACHE) -e R2S_BUILD_DIR=$(BUILD_DIR)
@@ -29,7 +29,7 @@ help: ## List all targets
 
 bootstrap: ## First-time setup: host deps check, git hooks, dev image
 	@bash scripts/doctor.sh || { echo "fix the MISSING items above, then re-run make bootstrap"; exit 1; }
-	@echo "git hooks: installed by make setup-hooks once #8 lands"
+	@$(MAKE) --no-print-directory setup-hooks
 	@$(MAKE) --no-print-directory image
 
 doctor: ## Report what setup is missing, change nothing
@@ -77,10 +77,10 @@ check-warnings: ## Fail on any compiler warning (hard gate)
 	@echo "check-warnings: no C or C++ code yet; the gate starts with C1 and H1"
 
 setup-hooks: ## Install git hooks from .githooks/
-	@$(call pending,setup-hooks,#8)
+	@git config core.hooksPath .githooks && echo "git hooks installed (core.hooksPath = .githooks)"
 
-pre-pr-check: ## Takeoff ritual before opening a PR
-	@$(call pending,pre-pr-check,#8)
+pre-pr-check: guard-main-clone cache-dir ## Takeoff ritual before opening a PR (BASE=<ref> PR_BODY=<file> TEST=1)
+	@$(call in_image,bash scripts/pre-pr-check.sh)
 
 guard-main-clone:
 	@bash scripts/check-main-clone-build.sh
