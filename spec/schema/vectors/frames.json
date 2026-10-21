@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Complete frames: before rCOBS and on the wire",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "covers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z]{2,4}-[0-9]+$"
+      }
+    },
+    "topic_id": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "payload": {
+      "type": "string",
+      "pattern": "^$|^[0-9a-f]{2}( [0-9a-f]{2})*$"
+    },
+    "frame": {
+      "type": "string",
+      "pattern": "^$|^[0-9a-f]{2}( [0-9a-f]{2})*$"
+    },
+    "wire": {
+      "type": "string",
+      "pattern": "^$|^[0-9a-f]{2}( [0-9a-f]{2})*$"
+    }
+  },
+  "required": [
+    "name",
+    "covers",
+    "topic_id",
+    "seq",
+    "payload",
+    "frame",
+    "wire"
+  ],
+  "additionalProperties": false
+}

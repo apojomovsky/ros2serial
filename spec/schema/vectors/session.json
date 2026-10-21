@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Session transcripts: ordered frames between host and MCU",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "covers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z]{2,4}-[0-9]+$"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "enum": [
+              "host",
+              "mcu"
+            ]
+          },
+          "frame": {
+            "type": "string",
+            "pattern": "^$|^[0-9a-f]{2}( [0-9a-f]{2})*$"
+          },
+          "at_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "frame"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "name",
+    "covers",
+    "steps"
+  ],
+  "additionalProperties": false
+}

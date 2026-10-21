@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Message payloads",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "covers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z]{2,4}-[0-9]+$"
+      }
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*/msg/[A-Z][A-Za-z0-9]*$"
+    },
+    "profile": {
+      "type": "object",
+      "properties": {
+        "narrow_float64": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "narrow_float64"
+      ],
+      "additionalProperties": false
+    },
+    "message": {
+      "type": "object"
+    },
+    "payload": {
+      "type": "string",
+      "pattern": "^$|^[0-9a-f]{2}( [0-9a-f]{2})*$"
+    }
+  },
+  "required": [
+    "name",
+    "covers",
+    "type",
+    "profile",
+    "message",
+    "payload"
+  ],
+  "additionalProperties": false
+}

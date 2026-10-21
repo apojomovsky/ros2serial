@@ -4,7 +4,7 @@
 Usage:
   commit_check.py --file <path>        one message (the commit-msg hook, #8)
   commit_check.py --range <base..head> every non-merge commit in a range
-  commit_check.py --title <text>       a PR title (squash merges use it as the subject)
+  commit_check.py --title <text>       a PR title
 
 Exits 1 with one line per problem.
 """

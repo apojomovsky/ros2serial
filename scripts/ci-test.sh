@@ -45,12 +45,13 @@ if wants LINT; then
   section layout python3 scripts/check_layout.py
   section python-lint lint_python
   section workflow-lint lint_workflows
+  section vectors python3 tools/vectors_check.py
 fi
 if wants COMMITS; then
   section commits check_commits
 fi
 if wants SCRIPTS; then
-  section scripts-tests python3 -m pytest scripts
+  section scripts-tests python3 -m pytest scripts tools
 fi
 if wants CORE; then section core pending "C1"; fi
 if wants GEN; then section gen pending "G1"; fi
