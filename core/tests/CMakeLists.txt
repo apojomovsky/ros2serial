@@ -85,6 +85,10 @@ foreach(kind ${R2S_VECTOR_KINDS})
   r2s_vector_test(vectors_selftest_${kind} ${kind} support/vector_selftest.c ${published})
 endforeach()
 
+# Conformance: the published vectors through each module that implements a kind.
+file(GLOB crc_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/crc/*.yaml")
+r2s_vector_test(vectors_crc crc vectors/crc_check.c ${crc_vectors})
+
 # Vector kinds the C runner does not read yet, each with the ticket that adds
 # it. A kind with files that is in neither list would be silently skipped, so
 # it stops the configure step instead.
