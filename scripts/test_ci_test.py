@@ -47,6 +47,13 @@ def test_lint_passes_on_the_tree(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_the_suite_does_not_pass_test_down_to_its_own_tests(tmp_path):
+    """The script tests call the ritual, and a ritual that sees TEST=1 runs
+    the suite again, so TEST must not reach them."""
+    text = (ROOT / "scripts/ci-test.sh").read_text()
+    assert "env -u TEST python3 -m pytest scripts tools" in text
+
+
 def test_lint_fails_on_a_python_lint_error(tmp_path):
     root = copy_tree(tmp_path)
     (root / "scripts" / "broken.py").write_text("import os\n")

@@ -73,7 +73,9 @@ if wants COMMITS; then
   section prose check_prose
 fi
 if wants SCRIPTS; then
-  section scripts-tests python3 -m pytest scripts tools
+  # TEST does not go down with the suite: the script tests call the ritual,
+  # and a ritual that still sees TEST=1 runs the suite again.
+  section scripts-tests env -u TEST python3 -m pytest scripts tools
 fi
 if wants CORE; then section core bash scripts/core-test.sh; fi
 if wants GEN; then section gen python3 -m pytest gen; fi
