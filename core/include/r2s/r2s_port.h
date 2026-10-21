@@ -6,6 +6,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Copies up to max received bytes into buf without blocking and returns how
  * many it copied, 0 if none are waiting. While assembling a frame the core
  * asks for one byte at a time, so a port never has to buffer past a
@@ -28,5 +32,9 @@ uint32_t r2s_port_tick(void);
 /* Returns a value that differs on every boot (an EEPROM counter, or random),
  * so the host can tell a reset from a reconnect. */
 uint32_t r2s_port_boot_id(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

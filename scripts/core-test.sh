@@ -29,7 +29,7 @@ flags() {
     # optimizer's analysis fire too; the instrumented builds stay at -O0.
     gcc) echo "-DCMAKE_C_COMPILER=gcc -DCMAKE_BUILD_TYPE=MinSizeRel" ;;
     clang) echo "-DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release" ;;
-    gcc-m32) echo "-DCMAKE_C_COMPILER=gcc -DCMAKE_C_FLAGS=-m32 -DCMAKE_BUILD_TYPE=Debug" ;;
+    gcc-m32) echo "-DCMAKE_C_COMPILER=gcc -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_BUILD_TYPE=Debug" ;;
     sanitize) echo "-DCMAKE_C_COMPILER=clang -DR2S_SANITIZE=ON -DCMAKE_BUILD_TYPE=Debug" ;;
     coverage) echo "-DCMAKE_C_COMPILER=gcc -DR2S_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug" ;;
     *) return 1 ;;

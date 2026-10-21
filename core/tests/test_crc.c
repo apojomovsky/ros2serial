@@ -5,8 +5,12 @@
 #include "r2s/r2s_crc.h"
 #include "unity.h"
 
-/* A fixed seed on every PR, printed so a failure reproduces from it alone. */
-#define SEED 20261021u
+/* A fixed seed on every PR, printed so a failure reproduces from it alone; the
+ * nightly build passes a fresh one with -DR2S_TEST_SEED. */
+#ifndef R2S_TEST_SEED
+#define R2S_TEST_SEED 20261021u
+#endif
+#define SEED R2S_TEST_SEED
 
 static uint32_t rng_state;
 
@@ -59,5 +63,37 @@ void test_crc_one_byte_at_a_time_equals_the_buffer_form(void)
     }
 
     TEST_ASSERT_EQUAL_HEX16(r2s_crc16_update_buf(R2S_CRC16_INIT, data, sizeof data), crc);
-    TEST_ASSERT_EQUAL_HEX16(0x491E, crc);
+}
+
+void test_crc_split_anywhere_equals_one_pass(void)
+{
+    uint8_t data[300];
+
+    rng_state = SEED;
+    for (unsigned i = 0; i < sizeof data; i++) {
+        data[i] = next_byte();
+    }
+    uint16_t whole = r2s_crc16_update_buf(R2S_CRC16_INIT, data, sizeof data);
+    for (uint16_t k = 0; k <= sizeof data; k++) {
+        uint16_t head = r2s_crc16_update_buf(R2S_CRC16_INIT, data, k);
+        TEST_ASSERT_EQUAL_HEX16(whole, r2s_crc16_update_buf(head, data + k, (uint16_t)(sizeof data - k)));
+    }
+}
+
+/* covers: CHK-4 */
+void test_crc_residue_holds_at_the_largest_frame(void)
+{
+    /* FRM-9: 65277 bytes from topic_id to crc16. */
+    static uint8_t frame[65277];
+    uint16_t len = (uint16_t)(sizeof frame - 2u);
+
+    rng_state = SEED;
+    for (uint16_t i = 0; i < len; i++) {
+        frame[i] = next_byte();
+    }
+    uint16_t crc = r2s_crc16_update_buf(R2S_CRC16_INIT, frame, len);
+    frame[len] = (uint8_t)(crc & 0xFFu);
+    frame[len + 1u] = (uint8_t)(crc >> 8);
+
+    TEST_ASSERT_EQUAL_HEX16(0, r2s_crc16_update_buf(R2S_CRC16_INIT, frame, (uint16_t)sizeof frame));
 }

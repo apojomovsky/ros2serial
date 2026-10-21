@@ -73,6 +73,11 @@ foreach(source ${unit_tests})
   r2s_unit_test(${source})
 endforeach()
 
+add_executable(cxx_headers cxx_headers.cpp)
+target_link_libraries(cxx_headers PRIVATE r2s_core)
+target_compile_options(cxx_headers PRIVATE -Wall -Wextra -Werror)
+add_test(NAME cxx_headers COMMAND cxx_headers)
+
 # Proof that a failing assertion fails: without these, a check that silently
 # returned early would make every test pass.
 r2s_unit_test(must_fail/bytes_mismatch.c)

@@ -10,7 +10,7 @@ ARG AVR_GCC_VERSION
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc-avr avr-libc binutils-avr simavr libsimavr-dev libelf-dev \
         build-essential clang clang-format clang-tidy cppcheck cmake ninja-build ccache \
-        libclang-rt-18-dev $([ "$(dpkg --print-architecture)" = amd64 ] && echo gcc-multilib) \
+        libclang-rt-18-dev $([ "$(dpkg --print-architecture)" = amd64 ] && echo gcc-multilib g++-multilib) \
         python3-venv python3-pip git curl ca-certificates make \
     && rm -rf /var/lib/apt/lists/* \
     && test "$(avr-gcc -dumpversion)" = "${AVR_GCC_VERSION}" \
