@@ -145,3 +145,16 @@ def test_crc_text_cases_keep_the_text_for_the_self_test(tmp_path):
     f = write(tmp_path, "t.yaml", 'covers: [CHK-2]\ncases:\n  - {text: "12", crc: 1}\n  - {data: "31", crc: 2}\n')
     out = unity_runner.vector_runner("crc", [f])
     assert '2u, NULL, "12", 1u' in out and '1u, "31", NULL, 2u' in out
+
+
+def test_a_runner_can_run_one_named_test_and_fails_on_an_unknown_name():
+    out = unity_runner.tests_runner("test_x.c", ["test_one", "test_two"])
+    assert "int main(int argc, char **argv)" in out
+    assert 'r2s_run_test(test_one, "test_one", argc, argv)' in out
+    assert "no test named" in out
+
+
+def test_the_names_command_lists_the_tests_for_cmake(tmp_path, capsys):
+    src = write(tmp_path, "test_n.c", "void test_a(void)\n{\n}\nvoid test_b(void)\n{\n}\n")
+    assert unity_runner.main(["names", str(src)]) == 0
+    assert capsys.readouterr().out.split() == ["test_a", "test_b"]

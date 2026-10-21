@@ -69,6 +69,8 @@ endforeach()
 r2s_unit_test(must_fail/bytes_mismatch.c)
 set_tests_properties(bytes_mismatch PROPERTIES
   PASS_REGULAR_EXPRESSION "bytes_mismatch\\.c:[0-9]+:test_must_fail_assert_bytes_reports_a_mismatch:FAIL: demo: expected \\[01 02\\] \\(2 bytes\\), got \\[01 03 04\\] \\(3 bytes\\)")
+r2s_unit_test(must_fail/overrun_unnoticed.c)
+set_tests_properties(overrun_unnoticed PROPERTIES PASS_REGULAR_EXPRESSION "core wrote past tx_free")
 r2s_unit_test(must_fail/selftest_mismatch.c)
 target_sources(selftest_mismatch PRIVATE support/vector_selftest.c)
 set_tests_properties(selftest_mismatch PROPERTIES

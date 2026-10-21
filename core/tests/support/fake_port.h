@@ -31,6 +31,8 @@ void fake_port_advance(uint32_t ticks);
  * A write longer than the reported space is counted as an overrun. */
 void fake_port_set_tx_free(uint16_t free_bytes);
 uint16_t fake_port_tx_overruns(void);
+uint16_t fake_port_take_overruns(void);
+void fake_port_tx_clear(void);
 
 void fake_port_set_boot_id(uint32_t boot_id);
 

@@ -157,3 +157,12 @@ uint32_t r2s_port_boot_id(void)
 {
     return port.boot_id;
 }
+
+uint16_t fake_port_take_overruns(void)
+{
+    return 0;
+}
+
+void fake_port_tx_clear(void)
+{
+}
