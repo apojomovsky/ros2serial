@@ -1,2 +1,4 @@
 # Vendored code is kept byte-identical to upstream, whitespace included.
 core/tests/vendor/** -whitespace
+# The fuzz corpus holds raw bytes, so it is not text and has no whitespace.
+core/fuzz/corpus/** binary

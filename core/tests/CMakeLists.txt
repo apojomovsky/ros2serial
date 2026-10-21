@@ -6,7 +6,8 @@
 add_library(unity STATIC vendor/unity/unity.c)
 target_include_directories(unity SYSTEM PUBLIC vendor/unity)
 
-add_library(r2s_test_support STATIC support/bytes.c support/fake_port.c support/fake_port_unity.c)
+add_library(r2s_test_support STATIC support/bytes.c support/fake_port.c support/fake_port_unity.c
+                                       support/rcobs.c)
 target_include_directories(r2s_test_support PUBLIC support)
 target_compile_options(r2s_test_support PRIVATE ${R2S_WARNINGS})
 target_link_libraries(r2s_test_support PUBLIC unity r2s_core)
@@ -107,6 +108,9 @@ r2s_vector_test(vectors_crc crc vectors/crc_check.c ${crc_vectors})
 
 file(GLOB varint_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/varint/*.yaml")
 r2s_vector_test(vectors_varint varint vectors/varint_check.c ${varint_vectors})
+
+file(GLOB rcobs_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/rcobs/*.yaml")
+r2s_vector_test(vectors_rcobs rcobs vectors/rcobs_check.c ${rcobs_vectors})
 
 # Vector kinds the C runner does not read yet, each with the ticket that adds
 # it. A kind with files that is in neither list would be silently skipped, so
