@@ -52,6 +52,7 @@ if wants LINT; then
   section python-lint lint_python
   section workflow-lint lint_workflows
   section vectors python3 tools/vectors_check.py
+  section zone python3 tools/zone_check.py
 fi
 if wants COMMITS; then
   section commits check_commits

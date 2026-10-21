@@ -15,11 +15,10 @@ ros2serial brings rosserial's experience to ROS 2: publish and subscribe from sm
 
 ## Bootstrap status
 
-The repository is being bootstrapped (epic E0 in `docs/00-design.md`). Until each ticket below lands, the rules that depend on it describe the target state. What runs today: `make test`, which runs `scripts/ci-test.sh` in the dev image (layout check, ruff, actionlint, the vector schema check, the commit and PR-title check, the prose gate, script and tool tests), plus `make pre-pr-check`, the hooks and `scripts/push.sh`, the same suite as CI:
+The repository is being bootstrapped (epic E0 in `docs/00-design.md`). Until each ticket below lands, the rules that depend on it describe the target state. What runs today: `make test`, which runs `scripts/ci-test.sh` in the dev image (layout check, ruff, actionlint, the vector schema check, the zone check, the commit and PR-title check, the prose gate, script and tool tests), plus `make pre-pr-check`, the hooks and `scripts/push.sh`, the same suite as CI:
 
 | Rule area | Ticket |
 | --- | --- |
-| Zone check | #9 |
 | Claim script, `pr-body.yml`, `cut-release.yml` | #10 |
 
 Delete this section when the last of them merges.
