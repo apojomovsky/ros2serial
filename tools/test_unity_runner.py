@@ -102,3 +102,33 @@ def test_the_cli_writes_the_runner(tmp_path):
     )
     assert result.returncode == 0, result.stdout
     assert "RUN_TEST(test_varint_basic_0)" in out.read_text()
+
+
+def test_a_prototype_does_not_run_a_test_twice():
+    assert unity_runner.test_names("void test_a(void);\nvoid test_a(void)\n{\n}\n") == ["test_a"]
+
+
+def test_a_test_defined_twice_is_an_error(tmp_path, capsys):
+    src = write(tmp_path, "test_twice.c", "void test_a(void)\n{\n}\nvoid test_a(void) {\n}\n")
+    assert unity_runner.main(["tests", str(src), str(tmp_path / "out.c")]) == 1
+    assert "test_a is defined twice" in capsys.readouterr().out
+
+
+def test_hex_with_a_trailing_newline_is_malformed(tmp_path):
+    f = write(tmp_path, "nl.yaml", 'covers: [COB-1]\ncases:\n  - {decoded: "01\\n", encoded: "01 00"}\n')
+    with pytest.raises(unity_runner.VectorError, match="nl.yaml case 0: decoded"):
+        unity_runner.vector_runner("rcobs", [f])
+
+
+def test_records_name_the_file_as_given_and_escape_it(tmp_path):
+    d = tmp_path / 'we"ird'
+    d.mkdir()
+    f = write(d, "basic.yaml", 'covers: [VAR-1]\ncases:\n  - {value: 1, encoded: "01"}\n')
+    out = unity_runner.vector_runner("varint", [f])
+    assert '"' + str(f).replace('"', '\\"') + ' case 0"' in out
+
+
+def test_crc_text_cases_keep_the_text_for_the_self_test(tmp_path):
+    f = write(tmp_path, "t.yaml", 'covers: [CHK-2]\ncases:\n  - {text: "12", crc: 1}\n  - {data: "31", crc: 2}\n')
+    out = unity_runner.vector_runner("crc", [f])
+    assert '2u, NULL, "12", 1u' in out and '1u, "31", NULL, 2u' in out
