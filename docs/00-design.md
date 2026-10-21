@@ -575,8 +575,8 @@ ros2serial/
 │   └── vectors/              conformance vectors (YAML), the single source of truth for every codec test
 │       ├── crc/  rcobs/  varint/  frames/  messages/  session/  time/
 ├── core/                     C99 MCU core (no ROS, no hardware)
-│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h; r2s_crc.h, shared with the bridge
-│   ├── src/                  crc.c, rcobs.c, framer.c, session.c, time.c, log.c, ring.c, codec.c, topics.c
+│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h; r2s_crc.h and r2s_varint.h, shared with the bridge
+│   ├── src/                  crc.c, rcobs.c, varint.c, framer.c, session.c, time.c, log.c, ring.c, codec.c, topics.c
 │   ├── tests/                Unity unit tests, vector runner, CMakeLists.txt
 │   └── fuzz/                 libFuzzer targets and seed corpora
 ├── cpp/                      C++ layer: static API (ros2serial.hpp) and rosserial-compatible API (ros.h)
@@ -603,7 +603,7 @@ ros2serial/
 └── .github/workflows/
 ```
 
-**Code reuse between MCU and host.** The bridge links `core/src/crc.c`, `rcobs.c` and `framer.c` compiled for the host. Framing and CRC therefore have a single implementation. The host session logic is separate C++.
+**Code reuse between MCU and host.** The bridge links `core/src/crc.c`, `rcobs.c`, `varint.c` and `framer.c` compiled for the host. Framing, CRC and lengths therefore have a single implementation. The host session logic is separate C++.
 
 ## Engineering conventions
 
@@ -801,6 +801,22 @@ void r2s_log_info_ram(const char *text);                /* text built at runtime
 #define R2S_FLASH_READ_BYTE(p)     /* pgm_read_byte(p) on AVR, *(p) elsewhere */
 #define R2S_FSTR(lit)              /* PSTR(lit) on AVR, (lit) elsewhere */
 typedef const char *r2s_fstr_t;
+```
+
+```c
+/* r2s_varint.h: lengths as unsigned LEB128 (spec/protocol.md, section 5).
+   Not part of the firmware API: the codec uses it, and so does the bridge,
+   which reads and writes the lengths of a packed payload. */
+#define R2S_VARINT_MAX 0xFFFFu
+#define R2S_VARINT_MAX_BYTES 3u
+
+#define R2S_VARINT_OK 0
+#define R2S_VARINT_ERR_OVERFLOW (-1)     /* VAR-2 */
+#define R2S_VARINT_ERR_TRUNCATED (-2)    /* VAR-3 */
+#define R2S_VARINT_ERR_NOT_SHORTEST (-3) /* VAR-4 */
+
+uint8_t r2s_varint_encode(uint16_t value, uint8_t *out);
+int8_t r2s_varint_decode(const uint8_t *data, uint16_t len, uint16_t *value, uint8_t *used);
 ```
 
 ### Port contract
