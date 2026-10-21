@@ -15,11 +15,10 @@ ros2serial brings rosserial's experience to ROS 2: publish and subscribe from sm
 
 ## Bootstrap status
 
-The repository is being bootstrapped (epic E0 in `docs/00-design.md`). Until each ticket below lands, the rules that depend on it describe the target state. What runs today: `make test`, which runs `scripts/ci-test.sh` (layout check, ruff, actionlint, script tests), the same suite as CI:
+The repository is being bootstrapped (epic E0 in `docs/00-design.md`). Until each ticket below lands, the rules that depend on it describe the target state. What runs today: `make test` (on the host until #7), which runs `scripts/ci-test.sh` (layout check, ruff, actionlint, script tests), the same suite as CI:
 
 | Rule area | Ticket |
 | --- | --- |
-| `main` as the protected default branch (CI skeleton and `scripts/ci-test.sh` are in place; `make test` runs on the host until #7) | #4 |
 | Conventional Commits check, changelog | #5 |
 | Vector schema check | #6 |
 | `make` targets, Docker image | #7 |
@@ -64,7 +63,7 @@ Work is plain GitHub issues. A draft pull request is the claim.
 
 ## Worktrees
 
-- One worktree per ticket under `.worktrees/`, never work on `main`. Remove it only after the PR merges: the branch must stay reachable for review.
+- One worktree per ticket under `.worktrees/`, never work on `master`. Remove it only after the PR merges: the branch must stay reachable for review.
 - `guard-main-clone` refuses builds from the main clone while worktrees exist (overridable for one-offs), because two agents building in one directory corrupt each other's builds.
 - Build directories are keyed by worktree path, and builds sharing one directory are serialized with a lock (`scripts/with-build-lock.sh`).
 
@@ -84,8 +83,8 @@ Work is plain GitHub issues. A draft pull request is the claim.
 
 **Takeoff ritual (`make pre-pr-check`).** It exits 1 with the exact fix list while anything blocking is outstanding:
 
-1. Working tree clean, branch not behind `origin/main`.
-2. Work is in a `.worktrees/` worktree, not on `main`.
+1. Working tree clean, branch not behind `origin/master`.
+2. Work is in a `.worktrees/` worktree, not on `master`.
 3. No plan files in the final diff; load-bearing decisions distilled into an ADR in the same commit.
 4. Commit hygiene: Conventional Commit subjects, at most 3 lines, no trailers, no em-dashes, no whitespace errors.
 5. Warnings: C and C++ builds clean under `-Werror` (`make check-warnings`), cppcheck clean, UBSan clean on host builds.
@@ -147,7 +146,7 @@ Write PR bodies to a unique file (`mktemp "/tmp/pr-<issue>-XXXXXX.md"`) or pass 
 1. `docs/NN-*.md` is the numbered design series, living documents. `docs/00-design.md` is the design.
 2. Decisions worth keeping become `docs/adr/ADR-00N-<topic>.md` (status, decision, rationale, rejected alternatives) with an index line in `docs/adr/README.md`. A bug fix rarely earns one; a feature or an architectural change does.
 3. Implementation plans live in `docs/plans/` during development and are deleted in the final commit before merging. The PR history keeps them.
-4. No logs or findings narratives on `main`. Live gotchas go here or in the ADRs. Research write-ups (`docs/research/`) are inputs to decisions and stay.
+4. No logs or findings narratives on `master`. Live gotchas go here or in the ADRs. Research write-ups (`docs/research/`) are inputs to decisions and stay.
 5. Write for a reader who wasn't there, sized to the point being made.
 6. No volatile facts in docs: no counts, pasted trees or line numbers.
 7. Diagrams only where they clarify what prose would belabor.

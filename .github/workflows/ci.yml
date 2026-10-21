@@ -6,7 +6,7 @@ name: ci
 
 on:
   push:
-    branches: [main, master] # master until the default branch is renamed (#4)
+    branches: [master]
   pull_request:
 
 permissions:

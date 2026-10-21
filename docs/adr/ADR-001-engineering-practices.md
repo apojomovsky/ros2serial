@@ -19,7 +19,7 @@ ros2serial reuses the engineering practices of epic-cc, the maintainer's PIC com
 | Commit hygiene (Conventional Commits, short, no trailers, no em-dashes, `!` for breaking) | Adopted | Changelog and version bumps come from commit subjects |
 | One worktree per ticket, `guard-main-clone`, per-worktree build dirs, build lock | Adopted | Parallel agents on one machine corrupt each other's builds otherwise |
 | Comment and docs rules, prose gate | Adopted, Rust doc rules translated to C, C++ and Python | Same standard of writing |
-| Docs lifecycle (design series, ADRs, ephemeral plans, no logs) | Adopted | Keeps `main` readable for someone who wasn't there |
+| Docs lifecycle (design series, ADRs, ephemeral plans, no logs) | Adopted | Keeps `master` readable for someone who wasn't there |
 | Never post to third-party repositories; external contributions are the human's | Adopted, made stricter | ros2serial touches more third parties than epic-cc: rosdistro, Discourse, upstream ROS packages, the Arduino Library Manager |
 | Push helper that verifies the remote ref | Adapted | A small `scripts/push.sh` instead of `epic-tasks push` |
 | Non-code CI classifier (safe direction only) | Adopted | Docs-only PRs skip heavy jobs; a misclassification can only cause an extra run |
