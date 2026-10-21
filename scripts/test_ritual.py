@@ -233,6 +233,4 @@ def test_the_ritual_does_not_leak_its_scopes_into_the_suite(tmp_path):
     assert marker.exists(), result.stdout + result.stderr
     # TEST is the trigger: the suite's own tests call the ritual, and a
     # ritual that still sees TEST=1 runs the suite again.
-    assert marker.read_text().strip() == "TEST= SCRIPTS=", (
-        "the suite was started with the scope that makes it run a ritual again"
-    )
+    assert marker.read_text().strip() == "TEST= SCRIPTS=", "the suite was started with TEST or a scope still set"

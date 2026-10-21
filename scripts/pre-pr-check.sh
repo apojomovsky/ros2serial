@@ -98,10 +98,12 @@ if [ "${TEST:-}" = 1 ]; then
   # The scopes go with the suite and must not come back: the suite's own
   # tests call this ritual, and a scope that reaches them makes the pair
   # fork. TEST goes with them, since it is what makes a nested ritual run
-  # the suite again. R2S_SUITE names the script to run, so a test can see
-  # what the suite was given.
+  # the suite again. This ritual's own inputs go too, so a nested ritual
+  # reads its own base and body rather than the outer ones. R2S_SUITE names
+  # the script to run, so a test can see what the suite was given.
   suite=${R2S_SUITE:-$root/scripts/ci-test.sh}
   env -u TEST -u LINT -u SCRIPTS -u COMMITS -u CORE -u GEN -u BRIDGE -u E2E \
+    -u BASE -u PR_BODY -u COMMIT_RANGE -u PR_TITLE \
     bash "$suite" >/dev/null 2>&1 || fix "the suite fails: bash scripts/ci-test.sh"
 fi
 
