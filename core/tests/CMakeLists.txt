@@ -6,7 +6,7 @@
 add_library(unity STATIC vendor/unity/unity.c)
 target_include_directories(unity SYSTEM PUBLIC vendor/unity)
 
-add_library(r2s_test_support STATIC support/bytes.c)
+add_library(r2s_test_support STATIC support/bytes.c support/fake_port.c)
 target_include_directories(r2s_test_support PUBLIC support)
 target_compile_options(r2s_test_support PRIVATE ${R2S_WARNINGS})
 target_link_libraries(r2s_test_support PUBLIC unity r2s_core)
