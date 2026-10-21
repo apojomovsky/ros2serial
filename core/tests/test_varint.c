@@ -1,8 +1,5 @@
 /* Varint lengths: every length round-trips, the encoding is the shortest one,
  * and an encoding that breaks a rule is refused by that rule. */
-#include <stdio.h>
-
-#include "bytes.h"
 #include "r2s/r2s_varint.h"
 #include "unity.h"
 
