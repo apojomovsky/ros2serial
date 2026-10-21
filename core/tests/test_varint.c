@@ -53,6 +53,55 @@ void test_varint_decoding_accepts_only_the_canonical_encoding(void)
                            r2s_varint_decode(encoded, sizeof encoded, &decoded, &used));
 }
 
+/* covers: VAR-4 */
+void test_varint_a_three_byte_encoding_that_fits_in_two_is_refused(void)
+{
+    const uint8_t encoded[] = {0xFF, 0x80, 0x00};
+    uint16_t decoded = 0;
+    uint8_t used = 0;
+
+    TEST_ASSERT_EQUAL_INT8(R2S_VARINT_ERR_NOT_SHORTEST,
+                           r2s_varint_decode(encoded, sizeof encoded, &decoded, &used));
+}
+
+/* covers: VAR-2 */
+void test_varint_a_third_byte_with_its_high_bit_set_is_overflow_whatever_the_value(void)
+{
+    /* The third byte's high bit is set, so VAR-2 applies even though the
+     * value the bytes carry is 0. */
+    const uint8_t encoded[] = {0x80, 0x80, 0x80};
+    uint16_t decoded = 0;
+    uint8_t used = 0;
+
+    TEST_ASSERT_EQUAL_INT8(R2S_VARINT_ERR_OVERFLOW,
+                           r2s_varint_decode(encoded, sizeof encoded, &decoded, &used));
+}
+
+/* covers: VAR-2, VAR-3, VAR-4 */
+void test_varint_an_error_leaves_the_value_and_the_count_alone(void)
+{
+    const uint8_t overflow[] = {0xFF, 0xFF, 0x7F};
+    const uint8_t truncated[] = {0x80};
+    const uint8_t not_shortest[] = {0x80, 0x00};
+    uint16_t decoded = 0xAAAA;
+    uint8_t used = 0xAA;
+
+    TEST_ASSERT_EQUAL_INT8(R2S_VARINT_ERR_OVERFLOW,
+                           r2s_varint_decode(overflow, sizeof overflow, &decoded, &used));
+    TEST_ASSERT_EQUAL_UINT16(0xAAAA, decoded);
+    TEST_ASSERT_EQUAL_UINT8(0xAA, used);
+
+    TEST_ASSERT_EQUAL_INT8(R2S_VARINT_ERR_TRUNCATED,
+                           r2s_varint_decode(truncated, sizeof truncated, &decoded, &used));
+    TEST_ASSERT_EQUAL_UINT16(0xAAAA, decoded);
+    TEST_ASSERT_EQUAL_UINT8(0xAA, used);
+
+    TEST_ASSERT_EQUAL_INT8(R2S_VARINT_ERR_NOT_SHORTEST,
+                           r2s_varint_decode(not_shortest, sizeof not_shortest, &decoded, &used));
+    TEST_ASSERT_EQUAL_UINT16(0xAAAA, decoded);
+    TEST_ASSERT_EQUAL_UINT8(0xAA, used);
+}
+
 /* covers: VAR-2 */
 void test_varint_a_third_byte_with_its_high_bit_set_is_overflow(void)
 {
