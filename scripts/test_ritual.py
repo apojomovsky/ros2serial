@@ -226,8 +226,9 @@ def test_the_ritual_does_not_leak_its_scopes_into_the_suite(tmp_path):
     recorder.write_text(f'echo "TEST=${{TEST:-}} SCRIPTS=${{SCRIPTS:-}}" > {marker}\n')
 
     result = ritual(wt, TEST="1", SCRIPTS="1", PR_BODY=str(body), R2S_SUITE=str(recorder))
-    # The exit code is not the point: the copy of the tree has no compiler
-    # toolchain, so the ritual reports other problems. What matters is what
+    # The exit code is not the point: the fixture is a bare repository with
+    # no compiler toolchain, so the ritual reports other problems. Every
+    # test here asserts on stdout for the same reason. What matters is what
     # the suite was given.
     assert marker.exists(), result.stdout + result.stderr
     # TEST is the trigger: the suite's own tests call the ritual, and a
