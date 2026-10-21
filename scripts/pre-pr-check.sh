@@ -4,6 +4,8 @@
 #   BASE     ref the PR targets (default origin/master; a stacked PR uses its parent's branch)
 #   PR_BODY  file holding the PR body, to check it too
 #   TEST=1   also run the full suite
+#   R2S_SUITE  script to run instead of the suite, so a test can see what the
+#              suite was given
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 base=${BASE:-origin/master}
