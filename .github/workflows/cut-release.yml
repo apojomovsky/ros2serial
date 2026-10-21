@@ -1,0 +1,91 @@
+name: cut-release
+
+# Manual release cut. `prepare` computes the next version from the commits,
+# updates VERSION and CHANGELOG.md, and opens a release PR set to auto-merge;
+# `tag` tags the merge when VERSION changes on master. Both push with the
+# R2S_RELEASE_TOKEN secret (a personal access token): a PR or tag pushed with
+# the default GITHUB_TOKEN never triggers other workflows, so the release PR's
+# required checks would never run and release.yml would never start.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+      dry_run:
+        description: Only print the next version and the changelog
+        type: boolean
+        default: true
+  push:
+    branches: [master]
+    paths: [VERSION]
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require the release token
+        if: ${{ !inputs.dry_run }}
+        env:
+          TOKEN: ${{ secrets.R2S_RELEASE_TOKEN }}
+        run: test -n "$TOKEN" || { echo "set the R2S_RELEASE_TOKEN secret first"; exit 1; }
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+          token: ${{ inputs.dry_run && github.token || secrets.R2S_RELEASE_TOKEN }}
+      - name: Load pinned versions
+        run: grep -v '^#' ci/versions.env >> "$GITHUB_ENV"
+      - name: Install git-cliff
+        run: pip install "git-cliff==${GIT_CLIFF_VERSION}"
+      - name: Dry run
+        if: ${{ inputs.dry_run }}
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: bash scripts/release.sh --dry-run --bump "$BUMP"
+      - name: Release commit and PR
+        if: ${{ !inputs.dry_run }}
+        env:
+          BUMP: ${{ inputs.bump }}
+          GH_TOKEN: ${{ secrets.R2S_RELEASE_TOKEN }}
+        run: |
+          git config user.name "release"
+          git config user.email "release@users.noreply.github.com"
+          version=$(bash scripts/release.sh --dry-run --bump "$BUMP" | sed -n 's/^next version: //p')
+          git switch -c "release/v${version}"
+          bash scripts/release.sh --bump "$BUMP"
+          git push -u origin "release/v${version}"
+          gh pr create --base master --title "chore(release): v${version}" \
+            --body "Release v${version}: VERSION and CHANGELOG.md from scripts/release.sh."
+          gh pr merge --auto --merge
+
+  tag:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.R2S_RELEASE_TOKEN || github.token }}
+      - name: Tag the release
+        env:
+          TOKEN: ${{ secrets.R2S_RELEASE_TOKEN }}
+        run: |
+          version=$(cat VERSION)
+          if [ "$version" = 0.0.0 ]; then
+            echo "VERSION is 0.0.0: nothing has been released yet"
+          elif git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
+            echo "v${version} already tagged"
+          elif [ -z "$TOKEN" ]; then
+            echo "set the R2S_RELEASE_TOKEN secret: a tag pushed with the default token would not start release.yml"
+            exit 1
+          else
+            git tag "v${version}"
+            git push origin "v${version}"
+          fi

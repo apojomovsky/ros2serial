@@ -65,3 +65,11 @@ def test_a_dependency_missing_from_the_list_counts_as_open():
     report = next_ticket.select([issue(2, ["area:core"], body="Depends on #99")], [])
     assert report.available == []
     assert "#99" in report.skipped[2]
+
+
+def test_an_agents_own_prs_do_not_block_its_next_stacked_ticket():
+    issues = [issue(6, ["area:ci"]), issue(7, ["area:ci"])]
+    prs = [pr(16, "Closes #6\n\nagent: claude@box")]
+    assert next_ticket.select(issues, prs).available == []
+    assert [t["number"] for t in next_ticket.select(issues, prs, agent="claude@box").available] == [7]
+    assert next_ticket.select(issues, prs, agent="other@box").available == []

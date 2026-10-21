@@ -1,0 +1,21 @@
+name: pr-body
+
+# A body written with an inline "\n" string renders as one line on GitHub.
+# The body reaches the check through the environment, never the shell command.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  newlines:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: PR body uses real newlines
+        env:
+          PR_BODY_TEXT: ${{ github.event.pull_request.body }}
+        run: python3 scripts/pr_body_check.py --env PR_BODY_TEXT
