@@ -6,6 +6,8 @@
 # on the same range. Exits non-zero if any section fails.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# shellcheck source=scripts/clean-git-env.sh
+source "$root/scripts/clean-git-env.sh"
 cd "$root" || exit 2
 
 scoped=0
