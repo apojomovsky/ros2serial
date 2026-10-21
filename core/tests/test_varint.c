@@ -75,6 +75,19 @@ void test_varint_a_value_over_65535_is_overflow(void)
                            r2s_varint_decode(encoded, sizeof encoded, &decoded, &used));
 }
 
+/* covers: VAR-2 */
+void test_varint_a_third_byte_with_its_high_bit_set_is_overflow_at_its_own_length(void)
+{
+    /* The varint ends with the third byte, so the payload does not cut it
+     * short: the rule that refuses it is VAR-2, not VAR-3. */
+    const uint8_t encoded[] = {0xFF, 0xFF, 0xFF};
+    uint16_t decoded = 0;
+    uint8_t used = 0;
+
+    TEST_ASSERT_EQUAL_INT8(R2S_VARINT_ERR_OVERFLOW,
+                           r2s_varint_decode(encoded, sizeof encoded, &decoded, &used));
+}
+
 /* covers: VAR-3 */
 void test_varint_a_payload_that_ends_inside_the_varint_is_truncated(void)
 {
