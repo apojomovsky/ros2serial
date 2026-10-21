@@ -21,29 +21,15 @@ def leaky_env(tmp_path: Path) -> dict[str, str]:
     return env
 
 
+def test_this_process_has_no_local_git_variables():
+    assert [v for v in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE") if v in os.environ] == []
+
+
 def test_pytest_runs_without_the_callers_git_environment(tmp_path):
-    probe = tmp_path / "test_probe.py"
-    probe.write_text(
-        "import os\n\n\ndef test_probe():\n"
-        "    assert not [v for v in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE') if v in os.environ]\n"
-    )
+    node = f"{Path(__file__).name}::test_this_process_has_no_local_git_variables"
     result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-q",
-            "-p",
-            "no:cacheprovider",
-            "--rootdir",
-            str(ROOT),
-            "-c",
-            str(ROOT / "pyproject.toml"),
-            "--confcutdir",
-            str(ROOT),
-            str(probe),
-        ],
-        cwd=ROOT,
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", node],
+        cwd=Path(__file__).parent,
         env=leaky_env(tmp_path),
         capture_output=True,
         text=True,
