@@ -146,3 +146,20 @@ def test_a_reject_rule_must_be_listed_in_covers(tmp_path):
     assert vectors_check.check_tree(make_tree(tmp_path, files)) == [
         "rcobs/invalid.yaml: cases/0/reject: COB-6 is not in the file's covers"
     ]
+
+
+def test_a_frame_vector_must_carry_the_bytes_the_reference_makes(tmp_path):
+    files = {
+        "frames/wrong.yaml": """
+name: wrong
+covers: [FRM-1]
+topic_id: 16
+seq: 0
+payload: "00 00 c0 3f"
+frame: "10 00 00 00 c0 3f 1e 48"
+wire: "10 02 01 01 c0 3f 1e 48 05 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("not the frame the reference makes" in p for p in problems), problems
+    assert any("not the bytes the reference makes" in p for p in problems), problems

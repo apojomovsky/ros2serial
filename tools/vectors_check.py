@@ -2,8 +2,9 @@
 """Validate every conformance vector against the JSON Schema of its kind.
 
 The kind is the directory under spec/vectors/; its schema is
-spec/schema/vectors/<kind>.json. Exits 1 with one line per problem, naming the
-file and the key path.
+spec/schema/vectors/<kind>.json. A frame vector is also checked against the
+reference codec, so that the bytes it carries are the bytes the reference
+makes. Exits 1 with one line per problem, naming the file and the key path.
 """
 
 import json
@@ -15,6 +16,9 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS = ROOT / "spec" / "schema" / "vectors"
+sys.path.insert(0, str(ROOT / "gen"))
+
+from r2s_gen.reference import crc, rcobs  # noqa: E402
 
 
 def _schemas() -> dict[str, jsonschema.protocols.Validator]:
@@ -67,11 +71,51 @@ def check_file(path: Path, name: str, validators: dict) -> list[str]:
     return list(dict.fromkeys(lines))
 
 
+def check_frame(name: str, data: dict) -> list[str]:
+    """Check a frame vector against the reference codec.
+
+    The frame and the wire bytes must be the ones the reference makes, so a
+    vector cannot claim a rule it does not carry.
+    """
+    problems = []
+    try:
+        payload = bytes.fromhex(data["payload"])
+        frame = bytes.fromhex(data["frame"])
+        wire = bytes.fromhex(data["wire"])
+        topic_id = data["topic_id"]
+        seq = data["seq"]
+        body = bytes((topic_id, seq)) + payload
+    except (KeyError, TypeError, ValueError) as e:
+        # The schema reports the field that is out of range; this only has to
+        # not crash on it.
+        return [] if isinstance(e, ValueError) else [f"{name}: the frame fields are not usable: {e}"]
+
+    expected_frame = body + crc.crc16(body).to_bytes(2, "little")
+    expected_wire = rcobs.encode(expected_frame) + b"\x00"
+    if frame != expected_frame:
+        problems.append(f"{name}/frame: not the frame the reference makes")
+    if wire != expected_wire:
+        problems.append(f"{name}/wire: not the bytes the reference makes")
+    if len(frame) < 4:
+        problems.append(f"{name}/frame: shorter than 4 bytes")
+    if not wire.endswith(b"\x00"):
+        problems.append(f"{name}/wire: does not end with the delimiter")
+    return problems
+
+
 def check_tree(vectors: Path) -> list[str]:
     validators = _schemas()
     problems = []
     for path in sorted(p for p in vectors.rglob("*") if p.is_file() and p.name != ".gitkeep"):
-        problems += check_file(path, path.relative_to(vectors).as_posix(), validators)
+        name = path.relative_to(vectors).as_posix()
+        problems += check_file(path, name, validators)
+        if name.startswith("frames/") and path.suffix == ".yaml":
+            try:
+                data = yaml.safe_load(path.read_text())
+            except yaml.YAMLError:
+                continue
+            if isinstance(data, dict):
+                problems += check_frame(name, data)
     return problems
 
 
