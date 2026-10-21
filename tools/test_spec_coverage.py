@@ -232,14 +232,24 @@ def _git(repo: Path, *args: str) -> None:
 
 
 def test_only_rules_new_to_the_spec_may_enter_the_pending_list(tmp_path):
-    root = tree(tmp_path, {"spec/vectors/rcobs/a.yaml": "covers: [AAA-1, AAA-2]\ncases: []\n"})
+    files = {"spec/vectors/rcobs/a.yaml": "covers: [AAA-1, AAA-2]\ncases: []\n", "tools/spec_pending.txt": "# none\n"}
+    root = tree(tmp_path, files)
     _git(root, "init", "-q")
     _git(root, "add", ".")
     _git(root, "commit", "-q", "-m", "base")
     (root / "spec/protocol.md").write_text(SPEC + "- [CCC-1] A new rule.\n")
     (root / "spec/vectors/rcobs/a.yaml").write_text("covers: [AAA-1]\ncases: []\n")
-    (root / "tools").mkdir()
     (root / "tools/spec_pending.txt").write_text("AAA-2  C5\nCCC-1  C5\n")
     assert spec_coverage.check(root, base="HEAD").problems == [
         "tools/spec_pending.txt:1: AAA-2 was already a rule at HEAD; cover it instead of listing it as pending"
     ]
+
+
+def test_the_pr_that_introduces_the_pending_list_may_fill_it(tmp_path):
+    root = tree(tmp_path, {"spec/vectors/rcobs/a.yaml": "covers: [AAA-1]\ncases: []\n"})
+    _git(root, "init", "-q")
+    _git(root, "add", ".")
+    _git(root, "commit", "-q", "-m", "base without a pending list")
+    (root / "tools").mkdir()
+    (root / "tools/spec_pending.txt").write_text("AAA-2  C5\n")
+    assert spec_coverage.check(root, base="HEAD").problems == []
