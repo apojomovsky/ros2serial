@@ -108,6 +108,9 @@ r2s_vector_test(vectors_crc crc vectors/crc_check.c ${crc_vectors})
 file(GLOB varint_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/varint/*.yaml")
 r2s_vector_test(vectors_varint varint vectors/varint_check.c ${varint_vectors})
 
+file(GLOB rcobs_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/rcobs/*.yaml")
+r2s_vector_test(vectors_rcobs rcobs vectors/rcobs_check.c ${rcobs_vectors})
+
 # Vector kinds the C runner does not read yet, each with the ticket that adds
 # it. A kind with files that is in neither list would be silently skipped, so
 # it stops the configure step instead.
