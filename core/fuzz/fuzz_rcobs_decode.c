@@ -14,10 +14,11 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     /* The decoder works in place, so it needs a buffer it may write to, and
      * a copy of the input to compare against afterwards. The largest frame
      * the protocol allows is 65277 bytes; anything longer is cut, since the
-     * decoder would refuse it anyway. */
+     * decoder would refuse it anyway. The re-encoding of a full buffer needs
+     * the bound of COB-8 on top of it. */
     static uint8_t buffer[65535];
     static uint8_t original[65535];
-    static uint8_t reencoded[65535];
+    static uint8_t reencoded[65535 + 65535 / 254 + 2];
     uint8_t *decoded = NULL;
     uint16_t decoded_len = 0;
 
