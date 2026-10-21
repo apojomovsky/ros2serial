@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# pre-commit: whitespace and formatting on the staged files. The C and C++
+# warning check joins when C1 and H1 bring code to compile.
+set -uo pipefail
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+status=0
+git diff --cached --check || { echo "pre-commit: whitespace errors in the staged changes"; status=1; }
+mapfile -t py < <(git diff --cached --name-only --diff-filter=ACM -- '*.py')
+if [ "${#py[@]}" -gt 0 ]; then
+  if python3 -m ruff --version >/dev/null 2>&1; then
+    python3 -m ruff format --check -- "${py[@]}" || status=1
+  elif command -v docker >/dev/null 2>&1; then
+    make -s -C "$root" exec CMD="ruff format --check -- ${py[*]}" || status=1
+  else
+    echo "pre-commit: no ruff and no docker; formatting is left to CI"
+  fi
+fi
+exit $status
