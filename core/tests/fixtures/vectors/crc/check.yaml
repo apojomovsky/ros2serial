@@ -1,0 +1,5 @@
+# A fixture for the vector runner's self-test, not a conformance vector.
+covers: [CHK-2]
+cases:
+  - {text: "123456789", crc: 28561}
+  - {data: "", crc: 65535}
