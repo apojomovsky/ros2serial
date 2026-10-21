@@ -104,8 +104,10 @@ def agents_targets() -> set[str]:
     text = (ROOT / "AGENTS.md").read_text()
     table = text[text.index("| Target | What |") : text.index("## Picking up work")]
     names = set()
-    for cell in re.findall(r"^\| ([^|]+) \|", table, re.MULTILINE):
-        names.update(re.findall(r"`([a-z][a-z-]*)", cell))
+    for line in (ln for ln in table.splitlines()[2:] if ln.startswith("|")):
+        # Cells split on unescaped pipes: a target cell may contain `uno\|mega`.
+        first = re.split(r"(?<!\\)\|", line)[1]
+        names.update(re.findall(r"`([a-z][a-z-]*)", first))
     return names - {"Target"}
 
 

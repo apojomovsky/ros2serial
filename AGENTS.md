@@ -15,11 +15,10 @@ ros2serial brings rosserial's experience to ROS 2: publish and subscribe from sm
 
 ## Bootstrap status
 
-The repository is being bootstrapped (epic E0 in `docs/00-design.md`). Until each ticket below lands, the rules that depend on it describe the target state. What runs today: `make test` (on the host until #7), which runs `scripts/ci-test.sh` (layout check, ruff, actionlint, the vector schema check, the commit and PR-title check, script and tool tests), the same suite as CI:
+The repository is being bootstrapped (epic E0 in `docs/00-design.md`). Until each ticket below lands, the rules that depend on it describe the target state. What runs today: `make test`, which runs `scripts/ci-test.sh` in the dev image (layout check, ruff, actionlint, the vector schema check, the commit and PR-title check, script and tool tests), the same suite as CI:
 
 | Rule area | Ticket |
 | --- | --- |
-| `make` targets, Docker image | #7 |
 | Git hooks, takeoff ritual, prose and lint scripts, push helper | #8 |
 | Zone check | #9 |
 | Claim script, `pr-body.yml`, `cut-release.yml` | #10 |
@@ -31,7 +30,8 @@ Delete this section when the last of them merges.
 - Everything runs in the Docker dev image: avr-gcc and avr-libc, arduino-cli with a pinned AVR core, a host gcc of version 10 or newer, ROS Jazzy, simavr, Python tooling. Nothing toolchain-related is installed on the host.
 - Stages: `base`, `dev`, `ci` (an empty alias of `dev`), `release`. The container runs as the caller's uid locally and the runner's uid in CI, so files stay host-owned.
 - Every pinned version lives in `ci/versions.env`. **A pin is a migration, not housekeeping:** the pins set code size and behavior, which the budgets measure, so bumping one is its own PR with the size report showing the effect.
-- Caches live under `~/.cache/ros2serial/`. No registry cache or dedicated builder: the image builds from apt and pip in minutes.
+- Caches live under `~/.cache/ros2serial/`. No registry cache or dedicated builder: the image builds from apt and pip in minutes, and CI keeps its layers in the GitHub Actions cache (`.github/actions/dev-image`).
+- Inside the image `R2S_IN_IMAGE=1` is set, so `make` targets run their command directly instead of through `docker run`. The pinned avr-gcc version is checked when the image builds, because the apt package itself cannot be pinned.
 
 | Target | What |
 | --- | --- |
