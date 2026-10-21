@@ -38,6 +38,7 @@ void test_fake_port_reading_one_byte_at_a_time_stops_at_each_delimiter(void)
 void test_fake_port_tx_is_captured_and_split_into_frames(void)
 {
     uint16_t len;
+    const uint8_t *frame;
 
     r2s_port_write((const uint8_t *)"\x11\x01", 2);
     r2s_port_write((const uint8_t *)"\x00\x22", 2);
@@ -45,8 +46,10 @@ void test_fake_port_tx_is_captured_and_split_into_frames(void)
 
     TEST_ASSERT_EQUAL_UINT16(7, fake_port_tx_len());
     TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
-    R2S_ASSERT_BYTES((const uint8_t *)"\x11\x01", 2, fake_port_tx_frame(0, &len), len, "frame 0");
-    R2S_ASSERT_BYTES((const uint8_t *)"\x22\x01", 2, fake_port_tx_frame(1, &len), len, "frame 1");
+    frame = fake_port_tx_frame(0, &len);
+    R2S_ASSERT_BYTES((const uint8_t *)"\x11\x01", 2, frame, len, "frame 0");
+    frame = fake_port_tx_frame(1, &len);
+    R2S_ASSERT_BYTES((const uint8_t *)"\x22\x01", 2, frame, len, "frame 1");
     TEST_ASSERT_NULL(fake_port_tx_frame(2, &len));
 }
 
@@ -137,6 +140,7 @@ void test_fake_port_scripts_a_full_exchange_byte_by_byte(void)
     uint8_t frame[16];
     uint16_t n = 0;
     uint16_t len;
+    const uint8_t *sent;
     uint8_t b;
 
     fake_port_queue_rx_hex("10 02 01 01 c0 3f 1e 49 05 00");
@@ -147,5 +151,6 @@ void test_fake_port_scripts_a_full_exchange_byte_by_byte(void)
     r2s_port_write((const uint8_t *)"\x00", 1);
 
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
-    R2S_ASSERT_BYTES(frame, n, fake_port_tx_frame(0, &len), len, "echoed frame");
+    sent = fake_port_tx_frame(0, &len);
+    R2S_ASSERT_BYTES(frame, n, sent, len, "echoed frame");
 }

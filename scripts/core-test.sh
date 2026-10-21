@@ -61,7 +61,7 @@ run_config() {
     || { cat "$dir.configure.log"; return 1; }
   cmake --build "$dir" || return 1
   [ "$build_only" = 1 ] && return 0
-  ctest --test-dir "$dir" --output-on-failure || return 1
+  ctest --test-dir "$dir" --output-on-failure --schedule-random || return 1
   if [ "$name" = coverage ]; then coverage_report "$dir" || return 1; fi
 }
 
