@@ -20,9 +20,10 @@ if ! git rev-parse --verify -q "$base" >/dev/null; then
   fix "base $base not found: fetch it, or set BASE"
 elif ! git merge-base --is-ancestor "$base" HEAD; then
   # A rebase, not a merge: a merge commit is not part of a PR's work, since
-  # the PR is squashed. A rebase rewrites the pushed branch, but it keeps the
-  # changes, so the pre-push hook allows that push.
-  fix "branch is behind $base: rebase it onto $base and push"
+  # the PR is squashed. A rebase rewrites the pushed branch, so the push that
+  # follows is a force push, which the pre-push hook refuses without the
+  # maintainer's go-ahead.
+  fix "branch is behind $base: rebase it onto $base, then push with R2S_FORCE_PUSH_APPROVED=1"
 fi
 
 # 2. In a worktree, on a ticket branch.

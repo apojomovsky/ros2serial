@@ -320,11 +320,12 @@ def test_settings_that_are_not_visible_to_the_token_are_not_a_failure(tmp_path):
     assert "not visible" in out.stderr
 
 
-def test_the_pre_push_hook_allows_a_rebase_but_refuses_a_dropped_change(tmp_path):
-    """A rebase keeps the changes, so it is not the force push the rule fears.
+def test_the_pre_push_hook_refuses_a_force_push(tmp_path):
+    """Every force push needs the maintainer's go-ahead, a rebase included.
 
-    Every merge advances master, so without this every open branch would
-    need a force push of its own after the first merge of the day.
+    The gate exists so that work another agent may have pulled is never
+    dropped, and the maintainer keeps it. Catching up with master is a
+    rebase, which is a force push, so it asks.
     """
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -341,8 +342,14 @@ def test_the_pre_push_hook_allows_a_rebase_but_refuses_a_dropped_change(tmp_path
     remote = tmp_path / "remote.git"
     git(tmp_path, "init", "-q", "--bare", str(remote))
     git(repo, "push", "-q", str(remote), "feat/1-thing")
+    # The hook is installed after the first push, so the push under test is
+    # the one the hook sees.
+    (repo / ".githooks").mkdir()
+    shutil.copy2(ROOT / ".githooks/pre-push", repo / ".githooks/pre-push")
+    (repo / ".githooks/pre-push").chmod(0o755)
+    git(repo, "config", "core.hooksPath", ".githooks")
 
-    # Master moves on, and the branch is rebased onto it.
+    # Master moves on and the branch is rebased onto it: a force push.
     git(repo, "switch", "-q", "master")
     (repo / "c.txt").write_text("three\n")
     git(repo, "add", ".")
@@ -351,30 +358,23 @@ def test_the_pre_push_hook_allows_a_rebase_but_refuses_a_dropped_change(tmp_path
     git(repo, "rebase", "-q", "master")
 
     env = {**os.environ, "R2S_PRE_PUSH_SUITE": "true", "R2S_FORCE_PUSH_APPROVED": ""}
-    # The hook is the repository's, so the change to it is what is tested.
-    (repo / ".githooks").mkdir()
-    shutil.copy2(ROOT / ".githooks/pre-push", repo / ".githooks/pre-push")
-    (repo / ".githooks/pre-push").chmod(0o755)
-    git(repo, "config", "core.hooksPath", ".githooks")
-
-    rebased = subprocess.run(
+    refused = subprocess.run(
         ["git", "push", "--force", str(remote), "feat/1-thing"],
         cwd=repo,
         capture_output=True,
         text=True,
         env=env,
     )
-    said = rebased.stdout + rebased.stderr
-    assert "refusing a force push" not in said, said
-
-    # A push that drops a change is refused.
-    git(repo, "reset", "-q", "--hard", "HEAD~1")
-    dropped = subprocess.run(
-        ["git", "push", "--force", str(remote), "feat/1-thing"],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-    said = dropped.stdout + dropped.stderr
+    said = refused.stdout + refused.stderr
     assert "refusing a force push" in said, said
+
+    # With the maintainer's go-ahead it goes through.
+    env = {**os.environ, "R2S_PRE_PUSH_SUITE": "true", "R2S_FORCE_PUSH_APPROVED": "1"}
+    allowed = subprocess.run(
+        ["git", "push", "--force", str(remote), "feat/1-thing"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert "refusing a force push" not in allowed.stdout + allowed.stderr
