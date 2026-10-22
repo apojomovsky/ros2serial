@@ -16,7 +16,7 @@ TTY := $(shell [ -t 0 ] && echo -it)
 PASS_VARS := LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E PR_TITLE COMMIT_RANGE BASE PR_BODY TEST
 
 DOCKER_BASE = docker run --rm $(TTY) --user $$(id -u):$$(id -g) \
-	-v $(REPO_ROOT):$(REPO_ROOT) -w $(CURDIR) -v $(CACHE):$(CACHE) -e R2S_BUILD_DIR=$(BUILD_DIR)
+	-v $(REPO_ROOT):$(REPO_ROOT) -w $(CURDIR) -v $(CACHE):$(CACHE) -e R2S_BUILD_DIR=$(BUILD_DIR) -e R2S_CACHE_DIR=$(CACHE)
 DOCKER_RUN = $(DOCKER_BASE) $(foreach v,$(PASS_VARS),-e $(v)) $(IMAGE)
 in_image = $(if $(R2S_IN_IMAGE),$(1),$(DOCKER_RUN) $(1))
 pending = echo "make $(1): not available until $(2)"; exit 1

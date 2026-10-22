@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -85,19 +86,55 @@ def test_guard_allows_the_main_clone_without_worktrees(tmp_path):
     assert run(["bash", str(ROOT / "scripts/check-main-clone-build.sh")], cwd=repo).returncode == 0
 
 
-def test_build_lock_serializes_commands(tmp_path):
+def test_build_lock_refuses_a_second_run_and_queues_when_asked(tmp_path):
+    """A run that finds the lock held stops, rather than waiting behind it.
+
+    A queue of waiting runs delays every one of them and the last one still
+    finds the tree changed under it, so the default is to refuse.
+    """
     lock, log = tmp_path / "build.lock", tmp_path / "log"
     body = f"echo start >> {log}; sleep 0.3; echo end >> {log}"
+    script = str(ROOT / "scripts/with-build-lock.sh")
 
-    def one():
-        run(["bash", str(ROOT / "scripts/with-build-lock.sh"), str(lock), "bash", "-c", body], check=True)
+    def one(env=None):
+        return run(["bash", script, str(lock), "bash", "-c", body], env=env)
 
     threads = [threading.Thread(target=one) for _ in range(2)]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
+    # One ran, the other was refused, so the log holds one run's two marks.
+    assert log.read_text().split() == ["start", "end"]
+
+    # Asked to wait, the second run queues and both complete.
+    log.write_text("")
+    env = {**os.environ, "R2S_LOCK_WAIT": "1"}
+    threads = [threading.Thread(target=lambda: one(env)) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
     assert log.read_text().split() == ["start", "end", "start", "end"]
+
+
+def test_build_lock_says_which_lock_is_busy(tmp_path):
+    lock = tmp_path / "build.lock"
+    script = str(ROOT / "scripts/with-build-lock.sh")
+    holder = subprocess.Popen(
+        ["bash", script, str(lock), "bash", "-c", "sleep 5"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        time.sleep(0.5)
+        out = run(["bash", script, str(lock), "bash", "-c", "true"])
+        assert out.returncode != 0
+        assert "busy" in out.stderr
+        assert str(lock) in out.stderr
+    finally:
+        holder.kill()
+        holder.wait()
 
 
 def agents_targets() -> set[str]:
@@ -123,3 +160,42 @@ def test_make_test_reaches_the_suite_script_in_and_out_of_the_image():
     assert "docker" not in inside
     outside = run(["make", "-n", "test", "R2S_IN_IMAGE="], check=True).stdout
     assert re.search(r"docker run .* bash scripts/ci-test\.sh", outside), outside
+
+
+def test_the_suite_refuses_a_second_run_on_the_same_repository(tmp_path):
+    """Two suite runs at once would test a tree the first one changed."""
+    script = ROOT / "scripts/ci-test.sh"
+    lock = tmp_path / "suite.lock"
+    env = {**os.environ, "R2S_SUITE_LOCK": str(lock), "LINT": "1"}
+    holder = subprocess.Popen(
+        ["bash", str(ROOT / "scripts/with-build-lock.sh"), str(lock), "sleep", "5"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        time.sleep(0.5)
+        out = run(["bash", str(script)], env=env)
+        assert out.returncode == 75, out.stdout + out.stderr
+        assert "already running" in out.stderr
+    finally:
+        holder.kill()
+        holder.wait()
+
+
+def test_the_suite_queues_when_asked(tmp_path):
+    """Asked to wait, the second run waits and then runs."""
+    script = ROOT / "scripts/ci-test.sh"
+    lock = tmp_path / "suite.lock"
+    env = {**os.environ, "R2S_SUITE_LOCK": str(lock), "LINT": "1", "R2S_LOCK_WAIT": "1"}
+    holder = subprocess.Popen(
+        ["bash", str(ROOT / "scripts/with-build-lock.sh"), str(lock), "sleep", "2"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        time.sleep(0.3)
+        out = run(["bash", str(script)], env=env)
+        assert out.returncode == 0, out.stdout + out.stderr
+    finally:
+        holder.kill()
+        holder.wait()

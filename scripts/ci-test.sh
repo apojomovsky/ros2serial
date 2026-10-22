@@ -10,6 +10,39 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source "$root/scripts/clean-git-env.sh"
 cd "$root" || exit 2
 
+# One suite at a time per repository. A second run would wait on the same
+# lock and then test a tree the first run had already changed, so it says so
+# and stops instead. The lock lives in the cache, under the repository's
+# path, so it is scoped to this repository the way the build directory is.
+cache=${R2S_CACHE_DIR:-}
+if [ -z "$cache" ] && [ -n "${R2S_BUILD_DIR:-}" ]; then
+  cache=$(dirname "$R2S_BUILD_DIR")
+fi
+cache=${cache:-$HOME/.cache/ros2serial}
+suite_lock=${R2S_SUITE_LOCK:-$cache/$(echo "$root" | tr / -)/suite.lock}
+mkdir -p "$(dirname "$suite_lock")" 2>/dev/null || {
+  echo "the suite lock directory cannot be created ($suite_lock)" >&2
+  echo "set R2S_CACHE_DIR to a writable directory" >&2
+  exit 1
+}
+# The lock is taken here and held for the whole run, so a second suite run
+# is refused. The script does not re-exec itself to take it: the suite runs
+# this script, so a self re-exec would nest without end.
+exec 9>"$suite_lock" || {
+  echo "the suite lock cannot be opened ($suite_lock)" >&2
+  exit 1
+}
+if [ "${R2S_LOCK_WAIT:-0}" = 1 ]; then
+  flock 9 || {
+    echo "the suite lock cannot be taken ($suite_lock)" >&2
+    exit 1
+  }
+elif ! flock -n 9; then
+  echo "the suite is already running for this repository ($suite_lock)" >&2
+  echo "wait for it, or set R2S_LOCK_WAIT=1 to queue" >&2
+  exit 75
+fi
+
 scoped=0
 for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E; do [ -n "${!v:-}" ] && scoped=1; done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }

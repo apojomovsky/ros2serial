@@ -52,7 +52,7 @@ Work is plain GitHub issues. A draft pull request is the claim.
 
 - One worktree per ticket under `.worktrees/`, never work on `master`. Remove it only after the PR merges: the branch must stay reachable for review.
 - `guard-main-clone` refuses builds from the main clone while worktrees exist (overridable for one-offs), because two agents building in one directory corrupt each other's builds.
-- Build directories are keyed by worktree path, and builds sharing one directory are serialized with a lock (`scripts/with-build-lock.sh`).
+- Build directories are keyed by worktree path, and builds sharing one directory are serialized with a lock (`scripts/with-build-lock.sh`). The lock is not queued: a run that finds it held says so and stops, so a second suite run never waits behind the first and then tests a tree the first one changed. Set `R2S_LOCK_WAIT=1` to queue instead.
 
 ## Development cycle
 
