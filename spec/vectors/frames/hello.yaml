@@ -1,5 +1,5 @@
 name: hello
-covers: [CTL-1, CTL-2, CTL-7, CTL-8, CTL-16]
+covers: [CTL-1, CTL-16]
 topic_id: 0
 seq: 0
 payload: "02 01 00 11 22 33 44 00 04 80 00 e8 03 00 00 11 01 04 6e 6f 64 65"

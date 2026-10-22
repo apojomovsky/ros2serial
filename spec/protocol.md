@@ -115,6 +115,7 @@ A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3
 - [SYS-2] A frame on a system channel uses the same framing as a user topic (section 2), so it has a `seq` counter and a CRC.
 - [SYS-3] The parameters and reliable-channel ack channels are specified in a later version of this document. Until then, a receiver MUST ignore a frame on them.
 - [SYS-4] A receiver MUST ignore a frame on a reserved channel (ID 7 to 15) and MUST NOT count it as an error.
+- [SYS-5] A receiver that refuses a frame drops it and takes no other action on it. The MCU also counts it as a dropped frame (section 7.4), which is the only side that keeps that counter.
 
 ### 7.1 Control channel (ID 0)
 
@@ -129,18 +130,18 @@ A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3
 
 - [CTL-1] The handshake mode is 0 for full and 1 for compact.
 - [CTL-2] The `features` byte has bit 0 for time, bit 1 for log, bit 2 for parameters, bit 3 for the reliable channel, bit 4 for "`double` is 32 bits" and bit 5 for runtime topic registration. Bits 4 and 5 are informational. Every other bit is reserved and MUST be 0 in both directions.
-- [CTL-3] A receiver MUST refuse a frame whose `features` byte has a reserved bit set.
+- [CTL-3] A receiver MUST refuse ([SYS-5]) a frame whose `features` byte has a reserved bit set.
 - [CTL-4] The `flags` byte has bit 0 for the direction (0 when the MCU publishes the topic, 1 when it subscribes), bit 1 for narrow `float64`, bit 2 for keep-latest and bit 3 for the reliable channel. Every other bit is reserved and MUST be 0.
 - [CTL-5] The flags are the truth for the wire. A receiver MUST use the announced flags rather than its own build to decide whether a topic is narrow.
 - [CTL-6] Retired. It said what [ENC-12] says, and a rule is never renumbered.
 - [CTL-7] `rx_capacity` is the size of the MCU's receive frame buffer in bytes.
 - [CTL-8] `tick_hz` MUST be `1000 × k` with `k` a divisor of 10^6, so that a tick rate converts to nanoseconds with integer math alone.
-- [CTL-9] A receiver MUST refuse a `tick_hz` that is not of that form.
+- [CTL-9] A receiver MUST refuse ([SYS-5]) a `tick_hz` that is not of that form.
 - [CTL-10] `max_frame` is the largest decoded frame the MCU accepts, and MUST NOT be larger than the limit of section 2 ([FRM-9]).
 - [CTL-11] A name hash in compact mode is FNV-1a 32-bit over the UTF-8 bytes of the name.
-- [CTL-12] The `type_hash` field is the first 8 bytes of the type's RIHS01 hash, which is a 32-byte SHA-256. A receiver MUST compare only the 8 bytes on the wire, and a mismatch of any of them rejects the topic.
+- [CTL-12] The `type_hash` field is the first 8 bytes of the type's RIHS01 hash. A receiver MUST compare only the 8 bytes on the wire, and a mismatch of any of them rejects the topic.
 - [CTL-13] A `TOPIC_STATUS` status is 0 for ok, 1 for unknown type, 2 for hash mismatch and 3 for name conflict. Every other value is reserved and MUST be 0.
-- [CTL-14] A receiver MUST refuse a `TOPIC_STATUS` whose status is not one of those four.
+- [CTL-14] A receiver MUST refuse ([SYS-5]) a `TOPIC_STATUS` whose status is not one of those four.
 - [CTL-15] The topics of a handshake are requested and sent one at a time, so the MCU never needs a buffer larger than one TOPIC frame.
 - [CTL-16] The payload of each control opcode is the one the table above gives, in that order and with nothing between: the opcode byte, then the fields it lists, and a string as its varint length and bytes (section 5).
 
@@ -156,7 +157,7 @@ A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3
 - [TIM-2] A PONG MUST carry the `ping_id` of the PING it answers.
 - [TIM-3] `tick0` is the tick at which the correction's time was measured, so that the MCU can compute the elapsed ticks.
 - [TIM-4] `drift_ppm` is the number of nanoseconds of ROS time to add per nominal millisecond of MCU time, and MUST be within ±20000.
-- [TIM-5] A receiver MUST refuse a CORRECTION whose `drift_ppm` is outside ±20000.
+- [TIM-5] A receiver MUST refuse ([SYS-5]) a CORRECTION whose `drift_ppm` is outside ±20000.
 
 The MCU computes its time from the correction in 32-bit integers alone. With `k = tick_hz / 1000` ticks per millisecond and `p = 10^6 / k` nanoseconds per tick, and `e = tick - tick0` computed as an unsigned 32-bit difference, so that it wraps correctly:
 
@@ -175,6 +176,7 @@ normalize again
 - [TIM-8] The intermediate nanosecond value before the drift is added MUST fit in a 32-bit unsigned integer, and the drift term MUST fit in a 32-bit signed integer.
 - [TIM-9] The MCU MUST normalize the nanosecond value into [0, 10^9) by carrying into the seconds, before and after the drift is added.
 - [TIM-10] The payload of each time opcode is the one the table above gives, in that order and with nothing between: the opcode byte, then the fields it lists.
+- [TIM-11] The `nanosec` of a CORRECTION MUST be less than 1000000000, and a receiver MUST refuse ([SYS-5]) a CORRECTION whose `nanosec` is not.
 
 ### 7.3 Log channel (ID 2)
 
@@ -183,7 +185,7 @@ The MCU sends on this channel; the host does not.
 - [LOG-1] The payload is `level u8, text string, value_kind u8`, then the value when `value_kind` is not 0.
 - [LOG-2] A level is 10 for debug, 20 for info, 30 for warn, 40 for error and 50 for fatal, the ROS severities.
 - [LOG-3] A value kind is 0 for none, 1 for `u16`, 2 for `i16`, 3 for `u32`, 4 for `i32` and 5 for `f32`. Every other value is reserved and MUST be 0.
-- [LOG-4] A receiver MUST refuse a log frame whose value kind is not one of those six.
+- [LOG-4] A receiver MUST refuse ([SYS-5]) a log frame whose value kind is not one of those six.
 
 ### 7.4 Heartbeat channel (ID 4)
 
@@ -204,6 +206,7 @@ The MCU sends on this channel; the host does not.
 - [ERR-3] A publish while not connected is reported once per connection, and a busy transmitter at most once per second.
 - [ERR-4] The `field` is the index of the offending field in depth-first declaration order over the type's field definitions, where the elements of an array are not counted separately, or 0xFF when the rule does not name a field.
 - [ERR-5] The host computes the same field order with introspection, so that it can log the path of the offending field.
+- [ERR-6] The `count` is the number of occurrences of the error since the last error report of the same code, and it wraps at 65535.
 
 ## 8. Session
 
