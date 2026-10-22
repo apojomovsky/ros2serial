@@ -3,6 +3,7 @@
 
 Usage:
   commit_check.py --file <path>          one message (the commit-msg hook)
+  commit_check.py --file <path> --merge  the same, accepting git's own merge message
   commit_check.py --range <base..head>   every non-merge commit in a range
   commit_check.py --title <text>         a PR title
   commit_check.py --title <text> --covers-range <base..head>
@@ -50,15 +51,21 @@ def check_subject(subject: str) -> list[str]:
     return problems
 
 
-def check_message(message: str) -> list[str]:
+def check_message(message: str, merge: bool = False) -> list[str]:
     lines = _lines(message)
     if not lines:
         return ["empty message"]
-    problems = check_subject(lines[0])
+    # Merge commits are skipped by --range, so git's own subject and its merge.log
+    # shortlog are fine; trailers and em-dashes are still refused.
+    git_merge = merge and lines[0].startswith("Merge ")
+    if git_merge:
+        problems = [p for p in check_subject(lines[0]) if not p.startswith(SUBJECT_HELP)]
+    else:
+        problems = check_subject(lines[0])
     body = "\n".join(lines[1:])
     if "\u2014" in body:
         problems.append("em-dash in the body; use a comma, a colon or a period")
-    if len(lines) > MAX_LINES:
+    if len(lines) > MAX_LINES and not git_merge:
         problems.append(f"message has {len(lines)} lines; at most {MAX_LINES} lines allowed")
     if re.search(r"^BREAKING[ -]CHANGE:", body, re.MULTILINE):
         problems.append("mark breaking changes with ! in the subject, not a BREAKING CHANGE footer")
@@ -151,6 +158,7 @@ def main() -> int:
     group.add_argument("--file")
     group.add_argument("--range")
     group.add_argument("--title")
+    ap.add_argument("--merge", action="store_true")
     # The range the title must cover goes with the title, so it is its own
     # argument rather than part of the mutually exclusive group.
     ap.add_argument("--covers-range", help="the range of commits the title must cover")
@@ -158,7 +166,7 @@ def main() -> int:
 
     if args.file:
         with open(args.file, encoding="utf-8") as f:
-            problems = check_message(f.read())
+            problems = check_message(f.read(), args.merge)
     elif args.title is not None:
         problems = [f"PR title: {p}" for p in check_title(args.title)]
         if args.covers_range:

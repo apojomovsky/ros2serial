@@ -47,7 +47,7 @@ Work is plain GitHub issues. A draft pull request is the claim.
 - **Claim before writing code:** open a draft PR from your worktree branch with `Closes #N`, the issue's `area:*` labels, and your agent ID (`<runtime>@<host>`) in the body. If someone else's draft PR for the same issue is older, close yours and pick again.
 - Branch names: `<type>/<issue>-<slug>`, for example `feat/42-rcobs-encoder`.
 - **One ticket at a time, from `master`.** A PR is not stacked on another PR's branch: a squash drops the parent branch's commits, so a stacked PR's diff would carry its parent's work again. A ticket branches from `master` and targets `master`. See `docs/adr/ADR-003-squash-merges.md`.
-- **Rebase when `master` moves on.** Every merged PR advances `master`, so an open branch falls behind it. Rebase the branch onto `master` and push. A rebase rewrites the pushed branch, so that push is a force push, and the pre-push hook refuses it without the maintainer's go-ahead: `R2S_FORCE_PUSH_APPROVED=1 git push --force-with-lease`. Expect to ask, once per merge that lands while the branch is open.
+- **Merge `master` in when it moves on.** Every merged PR advances `master`, so an open branch falls behind it. Merge `master` into the branch (`git merge origin/master`) and push; that is an ordinary push. The PR keeps its whole history, merge commits included, and the squash lands only the PR title. Do not rebase a pushed branch: that is a force push, which the pre-push hook refuses, and it is for the rare case where the maintainer approves one.
 
 ## Worktrees
 
@@ -97,7 +97,7 @@ Write PR bodies to a unique file under the cache, which the dev image can see (`
 
 ## Git hooks (`make setup-hooks`)
 
-- `commit-msg`: Conventional Commits, no trailers, no em-dashes. Every commit is checked, including one made while a merge is in progress, because a PR is squashed and no merge commit of its own lands on `master`.
+- `commit-msg`: Conventional Commits, no trailers, no em-dashes. Every commit is checked, except that git's own `Merge ...` message is accepted while a merge is in progress, which is how a branch catches up with `master`.
 - Every hook and the suite run tests without the repository-local git variables git exports to hooks (`scripts/clean-git-env.sh`, `conftest.py`), so a test's throwaway repository never writes to the real one.
 - `pre-commit`: format check on staged files (clang-format, ruff), warning check on touched C and C++, trailing whitespace.
 - `pre-push`: refuse force pushes unless approved, run the prose verify, then `make ci-local`. A suite stamp records the tree and hook versions that already passed, so pushing the same tree twice does not run the suite twice.
