@@ -306,3 +306,19 @@ wire: "01 00 03 02 00 02 00 00 00 00 00 00 00 00 00 30 75 00 00 00 00 00 00"
     }
     problems = vectors_check.check_tree(make_tree(tmp_path, files))
     assert any("the drift is outside 20000 ppm" in p for p in problems), problems
+
+
+def test_a_correction_whose_nanosec_is_too_large_is_reported(tmp_path):
+    files = {
+        "frames/correction.yaml": """
+name: correction
+covers: [FRM-1]
+topic_id: 1
+seq: 0
+payload: "03 00 00 00 00 00 00 00 00 00 94 35 77 00 00"
+frame: "01 00 03 00 00 00 00 00 00 00 00 00 00 00 94 35 77 00 00 00 00"
+wire: "01 00 03 02 00 02 00 00 00 00 00 00 00 00 00 94 35 77 00 00 00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("nanosec is not below 10^9" in p for p in problems), problems
