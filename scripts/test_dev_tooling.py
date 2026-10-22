@@ -160,7 +160,7 @@ def test_the_suite_refuses_a_second_run_on_the_same_tree(tmp_path):
     (tree / "scripts").mkdir()
     shutil.copy2(ROOT / "scripts/ci-test.sh", tree / "scripts/ci-test.sh")
     lock = tmp_path / "suite.lock"
-    env = {**os.environ, "R2S_SUITE_LOCK": str(lock), "LINT": "1"}
+    env = {**os.environ, "R2S_SUITE_LOCK": str(lock), "R2S_SUITE_LOCK_TREE": str(tree), "LINT": "1"}
     holder = subprocess.Popen(
         ["bash", str(ROOT / "scripts/with-build-lock.sh"), str(lock), "sleep", "5"],
         stdout=subprocess.DEVNULL,
@@ -183,7 +183,13 @@ def test_the_suite_queues_when_asked(tmp_path):
     (tree / "scripts").mkdir()
     shutil.copy2(ROOT / "scripts/ci-test.sh", tree / "scripts/ci-test.sh")
     lock = tmp_path / "suite.lock"
-    env = {**os.environ, "R2S_SUITE_LOCK": str(lock), "LINT": "1", "R2S_SUITE_LOCK_WAIT": "1"}
+    env = {
+        **os.environ,
+        "R2S_SUITE_LOCK": str(lock),
+        "R2S_SUITE_LOCK_TREE": str(tree),
+        "LINT": "1",
+        "R2S_SUITE_LOCK_WAIT": "1",
+    }
     holder = subprocess.Popen(
         ["bash", str(ROOT / "scripts/with-build-lock.sh"), str(lock), "sleep", "2"],
         stdout=subprocess.DEVNULL,

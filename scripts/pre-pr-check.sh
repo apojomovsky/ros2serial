@@ -93,10 +93,16 @@ fi
 
 # 13. The full suite.
 if [ "${TEST:-}" = 1 ]; then
-  bash "$root/scripts/ci-test.sh" >/dev/null 2>&1 || {
-    bash "$root/scripts/ci-test.sh" 2>&1 | tail -20
+  # The output is kept, so a failure can be shown without running the suite
+  # again: a second run would be refused by the lock the first one holds.
+  suite_log=$(mktemp "${TMPDIR:-/tmp}/r2s-suite.XXXXXX")
+  if ! bash "$root/scripts/ci-test.sh" >"$suite_log" 2>&1; then
+    tail -20 "$suite_log"
+    rm -f "$suite_log"
     fix "the suite fails: bash scripts/ci-test.sh"
-  }
+  else
+    rm -f "$suite_log"
+  fi
 fi
 
 for n in "${notes[@]}"; do echo "note: $n"; done
