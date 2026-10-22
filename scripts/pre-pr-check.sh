@@ -92,12 +92,16 @@ if grep -qE '^(core/include/|cpp/|gen/r2s_gen/cli.py|bridge/r2s_bridge/config/)'
 fi
 
 # 13. The full suite.
-if [ "${TEST:-}" = 1 ]; then
+if [ "${TEST:-}" = 1 ] && [ "${R2S_SUITE_TREE:-}" = "$root" ]; then
+  note "the suite for this tree is already running: not running it again"
+elif [ "${TEST:-}" = 1 ]; then
   # The output is kept, so a failure can be shown without running the suite
   # again: a second run would be refused by the lock the first one holds.
   suite_log=$(mktemp "${TMPDIR:-/tmp}/r2s-suite.XXXXXX")
   if ! bash "$root/scripts/ci-test.sh" >"$suite_log" 2>&1; then
-    tail -20 "$suite_log"
+    # The failed section is the point, so it is shown, not the last lines.
+    sed -n '/== scripts-tests/,/== scripts-tests:/p' "$suite_log" | tail -30
+    tail -5 "$suite_log"
     rm -f "$suite_log"
     fix "the suite fails: bash scripts/ci-test.sh"
   else

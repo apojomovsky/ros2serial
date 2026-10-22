@@ -49,6 +49,9 @@ elif ! flock -n 9; then
   echo "wait for it, or set R2S_SUITE_LOCK_WAIT=1 to queue" >&2
   exit 75
 fi
+# The tree the run is of, so a run inside this one knows that the suite for
+# this tree has already been made.
+export R2S_SUITE_TREE="$root"
 
 scoped=0
 for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E; do [ -n "${!v:-}" ] && scoped=1; done
