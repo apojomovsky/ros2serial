@@ -1,3 +1,7 @@
+import subprocess
+import sys
+from pathlib import Path
+
 import commit_check
 import pytest
 
@@ -42,3 +46,25 @@ def test_git_comment_lines_and_trailing_blanks_do_not_count():
 def test_title_must_be_a_single_line():
     assert any("single line" in p for p in commit_check.check_title("fix(core): a\nb"))
     assert commit_check.check_title("fix(core): a") == []
+
+
+def test_a_title_problem_is_printed_once_however_many_commits_cause_it(tmp_path):
+    def git(*args):
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    git("init", "-q", "-b", "master")
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+    git("commit", "-q", "--allow-empty", "-m", "chore: start")
+    for n in range(3):
+        git("commit", "-q", "--allow-empty", "-m", f"fix(core): thing {n}")
+    script = Path(commit_check.__file__)
+    out = subprocess.run(
+        [sys.executable, str(script), "--title", "docs(core): things", "--covers-range", "HEAD~3..HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    lines = out.stdout.splitlines()
+    assert out.returncode == 1
+    assert len(lines) == len(set(lines)) == 1, lines

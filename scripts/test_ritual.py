@@ -410,3 +410,54 @@ def test_the_pre_push_hook_refuses_a_force_push(tmp_path):
         env=env,
     )
     assert "refusing a force push" not in allowed.stdout + allowed.stderr
+
+
+def _fake_gh(tmp_path: Path, settings: str) -> dict:
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    gh = fake / "gh"
+    gh.write_text(
+        "#!/usr/bin/env bash\n"
+        f'if [ "$1" = "api" ]; then printf "%s\\n" "{settings}"; exit 0; fi\n'
+        'echo "apojomovsky/ros2serial"\n'
+    )
+    gh.chmod(0o755)
+    return {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}"}
+
+
+def test_the_merge_settings_that_match_the_rule_pass(tmp_path):
+    env = _fake_gh(tmp_path, "true|false|false|PR_TITLE|BLANK")
+    out = run(["bash", str(ROOT / "scripts/merge-settings.sh")], ROOT, env)
+    assert out.returncode == 0, out.stderr
+
+
+def test_an_empty_setting_does_not_shift_the_ones_after_it(tmp_path):
+    env = _fake_gh(tmp_path, "true|false|false||BLANK")
+    out = run(["bash", str(ROOT / "scripts/merge-settings.sh")], ROOT, env)
+    assert out.returncode == 1
+    assert "the squash title is , not PR_TITLE" in out.stderr
+    assert "squash message" not in out.stderr
+
+
+def test_the_ritual_says_once_that_the_settings_were_not_checked(tmp_path):
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    fake = tmp_path / "gbin"
+    fake.mkdir()
+    gh = fake / "gh"
+    gh.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = "api" ]; then echo "gh: set the GH_TOKEN environment variable." >&2; exit 4; fi\n'
+        'echo "apojomovsky/ros2serial"\n'
+    )
+    gh.chmod(0o755)
+    env = {"PATH": f"{fake}{os.pathsep}{os.environ['PATH']}", "GH_TOKEN": ""}
+    out = ritual(wt, **env)
+    lines = [ln for ln in (out.stdout + out.stderr).splitlines() if "merge-settings" in ln or "merge settings" in ln]
+    assert len(lines) == 1, lines
+
+
+def test_the_release_workflow_calls_the_subject_script():
+    """The tag job's check is a script so that its test cannot drift from it."""
+    text = (ROOT / ".github/workflows/cut-release.yml").read_text()
+    assert "scripts/release-subject.sh" in text
