@@ -43,7 +43,7 @@ ros2serial brings rosserial's experience to ROS 2: publish and subscribe from sm
 Work is plain GitHub issues. A draft pull request is the claim.
 
 - Every ticket is an issue with `area:*` labels (`area:core`, `area:gen`, `area:bridge`, `area:cpp`, `area:spec`, `area:ci`, `area:ports`) and its hard dependencies listed as `Depends on #N`.
-- **Choose a ticket with `scripts/next_ticket.py --agent <your agent ID>`, never by reading the issue list.** It lists open issues whose dependencies are closed, that no open PR closes, and whose areas no other agent's open PR is working on; `--why` explains every skipped ticket. Two agents never work tickets sharing an area at the same time. Issues labelled `needs-hardware` or `dispatch-only` are the maintainer's.
+- **Choose a ticket with `scripts/next_ticket.py`, never by reading the issue list.** It lists open issues whose dependencies are closed, that no open PR closes, and whose areas no open PR is working on; `--why` explains every skipped ticket. Two agents never work tickets sharing an area at the same time. Issues labelled `needs-hardware` or `dispatch-only` are the maintainer's.
 - **Claim before writing code:** open a draft PR from your worktree branch with `Closes #N`, the issue's `area:*` labels, and your agent ID (`<runtime>@<host>`) in the body. If someone else's draft PR for the same issue is older, close yours and pick again.
 - Branch names: `<type>/<issue>-<slug>`, for example `feat/42-rcobs-encoder`.
 - **One ticket at a time, from `master`.** A PR is not stacked on another PR's branch: a squash drops the parent branch's commits, so a stacked PR's diff would carry its parent's work again. A ticket branches from `master` and targets `master`. See `docs/adr/ADR-003-squash-merges.md`.

@@ -300,7 +300,7 @@ def test_the_merge_settings_check_catches_a_wrong_setting(tmp_path):
     gh = fake / "gh"
     gh.write_text(
         "#!/usr/bin/env bash\n"
-        'if [ "$1" = "api" ]; then printf "true\\ttrue\\ttrue\\tCOMMIT_MESSAGES\\tCOMMIT_MESSAGES\\n"; exit 0; fi\n'
+        'if [ "$1" = "api" ]; then printf "true|true|true|COMMIT_MESSAGES|COMMIT_MESSAGES\\n"; exit 0; fi\n'
         'echo "apojomovsky/ros2serial"\n'
     )
     gh.chmod(0o755)
@@ -341,9 +341,7 @@ def test_settings_that_are_not_visible_to_the_token_are_not_a_failure(tmp_path):
     fake.mkdir()
     gh = fake / "gh"
     gh.write_text(
-        "#!/usr/bin/env bash\n"
-        'if [ "$1" = "api" ]; then printf "\\t\\t\\t\\t\\n"; exit 0; fi\n'
-        'echo "apojomovsky/ros2serial"\n'
+        '#!/usr/bin/env bash\nif [ "$1" = "api" ]; then printf "||||\\n"; exit 0; fi\necho "apojomovsky/ros2serial"\n'
     )
     gh.chmod(0o755)
     env = {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}"}

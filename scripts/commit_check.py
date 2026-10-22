@@ -80,7 +80,6 @@ def check_title(title: str) -> list[str]:
     return check_subject(title.strip())
 
 
-# The type and the breaking marker a subject declares.
 def _declared(subject: str) -> tuple[str, bool]:
     """The type and the breaking marker a subject declares.
 
@@ -171,7 +170,8 @@ def main() -> int:
         problems = [f"PR title: {p}" for p in check_title(args.title)]
         if args.covers_range:
             subjects = [msg.splitlines()[0] for _, msg in _range_messages(args.covers_range)]
-            problems += [f"PR title: {p}" for p in check_title_covers(args.title.strip(), subjects)]
+            covers = check_title_covers(args.title.strip(), subjects)
+            problems += [f"PR title: {p}" for p in dict.fromkeys(covers)]
     else:
         problems = [f"{sha}: {p}" for sha, msg in _range_messages(args.range) for p in check_message(msg)]
     for p in problems:

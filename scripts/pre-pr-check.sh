@@ -89,11 +89,11 @@ fi
 # A rule in a document says what should happen; the settings say what may
 # happen, so a merge commit is only possible if the settings allow it. The
 # check needs gh, and a host without it says so rather than passing.
-bash "$root/scripts/merge-settings.sh"
+settings_said=$(bash "$root/scripts/merge-settings.sh" 2>&1)
 case $? in
   0) ;;
-  75) note "the repository's merge settings are not checked: gh is not available" ;;
-  *) fix "the repository's merge settings do not match ADR-003" ;;
+  75) note "the repository's merge settings are not checked (${settings_said#merge-settings: })" ;;
+  *) fix "the repository's merge settings do not match ADR-003: $settings_said" ;;
 esac
 
 # 12. Hooks installed.
