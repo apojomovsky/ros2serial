@@ -216,9 +216,9 @@ The MCU and the host each run a state machine. A handshake brings them from a fr
 
 ```
 BOOT --init, send HELLO--> ANNOUNCING --READY--> CONNECTED
-                              ^   |                  |
-                              |   +-- every 1 s with no host traffic: send HELLO
-                              +-------- link timeout, or HELLO_REQ received --+
+^                          |                     |
+|                          +- every 1 s with no host traffic: send HELLO
++-- link timeout, or HELLO_REQ received
 ```
 
 - [SES-1] The MCU starts in BOOT, sends HELLO, and moves to ANNOUNCING.
@@ -237,8 +237,8 @@ BOOT --init, send HELLO--> ANNOUNCING --READY--> CONNECTED
 
 ```
 DISCONNECTED --port open--> BOOT_WAIT --HELLO or boot_wait_ms--> HANDSHAKING --all topics resolved, READY sent--> CONNECTED
-     ^                                                               ^                                               |
-     +-- port error -------------------------------------------------+---- link timeout or reset detected ---------------+
+^                                                                ^                                                |
++-- port error                                                   +--- link timeout or reset detected              +
 ```
 
 - [SES-12] In DISCONNECTED the host tries to open the port every 1000 ms.
