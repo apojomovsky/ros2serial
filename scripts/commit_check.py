@@ -151,7 +151,9 @@ def main() -> int:
     group.add_argument("--file")
     group.add_argument("--range")
     group.add_argument("--title")
-    group.add_argument("--covers-range", help="the range of commits the title must cover")
+    # The range the title must cover goes with the title, so it is its own
+    # argument rather than part of the mutually exclusive group.
+    ap.add_argument("--covers-range", help="the range of commits the title must cover")
     args = ap.parse_args()
 
     if args.file:
