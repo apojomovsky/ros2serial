@@ -19,7 +19,9 @@ note() { notes+=("$1"); }
 if ! git rev-parse --verify -q "$base" >/dev/null; then
   fix "base $base not found: fetch it, or set BASE"
 elif ! git merge-base --is-ancestor "$base" HEAD; then
-  fix "branch is behind $base: merge $base into it"
+  # A rebase, not a merge: a merge commit is not part of a PR's work, since
+  # the PR is squashed.
+  fix "branch is behind $base: rebase it onto $base"
 fi
 
 # 2. In a worktree, on a ticket branch.

@@ -122,3 +122,25 @@ def test_release_commits_stay_out_of_the_changelog(tmp_path):
     repo = repo_with(tmp_path, "v0.3.1", ["chore(release): v0.3.1", "feat(core): b"])
     out = release(repo, "--dry-run").stdout
     assert "chore(release)" not in out and "V0.3.1" not in out
+
+
+def test_the_release_subject_is_recognised_after_a_squash(tmp_path):
+    """A squash puts the PR number after the subject, so it is matched by prefix.
+
+    The tag job reads the subject of the commit that last changed VERSION and
+    refuses to tag unless it is the release commit. A squash rewrites the
+    subject, so the test has to accept the number GitHub appends.
+    """
+    repo = repo_with(tmp_path, "v0.3.1", ["feat(core): b"])
+    (repo / "VERSION").write_text("0.4.0\n")
+    git(repo, "add", "VERSION")
+    git(repo, "commit", "-q", "-m", "chore(release): v0.4.0 (#99)")
+    version = (repo / "VERSION").read_text().strip()
+    subject = subprocess.run(
+        ["git", "log", "-1", "--format=%s", "--", "VERSION"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert subject == "chore(release): v0.4.0 (#99)"
+    assert re.search(rf"^chore\(release\): v{re.escape(version)}($| )", subject), subject

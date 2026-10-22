@@ -160,7 +160,8 @@ def test_an_unreadable_pr_body_is_a_fix_not_a_silent_pass(tmp_path):
     assert "PR body" in result.stdout
 
 
-def test_commit_msg_hook_lets_git_merge_messages_through_during_a_merge(tmp_path):
+def test_commit_msg_hook_refuses_a_git_merge_message(tmp_path):
+    """Every PR is squashed, so no merge commit of its own lands on master."""
     main, wt = fixture(tmp_path)
     commit(wt, {"a.txt": "a\n"}, "feat(core): a")
     msg = tmp_path / "MSG"
@@ -170,7 +171,7 @@ def test_commit_msg_hook_lets_git_merge_messages_through_during_a_merge(tmp_path
     if not merge_head.is_absolute():
         merge_head = wt / merge_head
     merge_head.write_text(git(wt, "rev-parse", "HEAD").stdout)
-    assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode == 0
+    assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode != 0
     msg.write_text("Merge branch 'x'\n\nSigned-off-by: Someone <s@example.com>\n")
     assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode != 0
 
@@ -187,7 +188,8 @@ def test_pre_push_runs_the_suite_without_the_hooks_git_variables(tmp_path):
     assert "GIT_DIR=" not in out.read_text()
 
 
-def test_commit_msg_hook_still_checks_other_subjects_during_a_merge(tmp_path):
+def test_commit_msg_hook_checks_every_subject_during_a_merge(tmp_path):
+    """A merge in progress does not relax the check: nothing merges into master."""
     _, wt = fixture(tmp_path)
     commit(wt, {"a.txt": "a\n"}, "feat(core): a")
     merge_head = Path(git(wt, "rev-parse", "--absolute-git-dir").stdout.strip()) / "MERGE_HEAD"
@@ -195,9 +197,9 @@ def test_commit_msg_hook_still_checks_other_subjects_during_a_merge(tmp_path):
     msg = tmp_path / "MSG"
     msg.write_text("wip stuff\n")
     assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode != 0
-    # merge.log=true appends a shortlog; git's own merge message may be longer than 3 lines.
+    # merge.log=true appends a shortlog, which is longer than 3 lines.
     msg.write_text("Merge branch 'x'\n\n* x:\n  feat(core): a\n  feat(core): b\n")
-    assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode == 0
+    assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode != 0
 
 
 def test_the_suite_cleans_the_git_variables_before_any_section():

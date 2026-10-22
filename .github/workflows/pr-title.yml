@@ -1,7 +1,7 @@
 name: pr-title
 
-# Every commit in the PR lands on master (merge commits, never squash), so each
-# must follow the commit rules; the title follows them too for consistency.
+# The PR is squashed into one commit on master, so each of its commits must
+# follow the commit rules; the title follows them too for consistency.
 # The same run applies the prose gate to everything the PR adds.
 # Separate from ci.yml so editing a title re-checks only this. It runs on the
 # runner's Python, not the dev image: the check needs only the standard library

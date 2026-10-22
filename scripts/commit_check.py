@@ -3,8 +3,7 @@
 
 Usage:
   commit_check.py --file <path>          one message (the commit-msg hook)
-  commit_check.py --file <path> --merge  the same, accepting git's own merge message
-  commit_check.py --range <base..head>   every non-merge commit in a range
+  commit_check.py --range <base..head>   every commit in a range
   commit_check.py --title <text>         a PR title
 
 Exits 1 with one line per problem.
@@ -49,21 +48,15 @@ def check_subject(subject: str) -> list[str]:
     return problems
 
 
-def check_message(message: str, merge: bool = False) -> list[str]:
+def check_message(message: str) -> list[str]:
     lines = _lines(message)
     if not lines:
         return ["empty message"]
-    # Merge commits are skipped by --range, so git's own subject and its merge.log
-    # shortlog are fine; trailers and em-dashes are still refused.
-    git_merge = merge and lines[0].startswith("Merge ")
-    if git_merge:
-        problems = [p for p in check_subject(lines[0]) if not p.startswith(SUBJECT_HELP)]
-    else:
-        problems = check_subject(lines[0])
+    problems = check_subject(lines[0])
     body = "\n".join(lines[1:])
     if "\u2014" in body:
         problems.append("em-dash in the body; use a comma, a colon or a period")
-    if len(lines) > MAX_LINES and not git_merge:
+    if len(lines) > MAX_LINES:
         problems.append(f"message has {len(lines)} lines; at most {MAX_LINES} lines allowed")
     if re.search(r"^BREAKING[ -]CHANGE:", body, re.MULTILINE):
         problems.append("mark breaking changes with ! in the subject, not a BREAKING CHANGE footer")
@@ -79,6 +72,10 @@ def check_title(title: str) -> list[str]:
 
 
 def _range_messages(rev_range: str) -> list[tuple[str, str]]:
+    # A merge commit is not part of a PR's work: the PR is squashed, so its
+    # merge commit is never what lands. A merge commit on a branch that was
+    # pushed before the rule changed stays there, so the range check leaves
+    # them alone rather than failing a PR over history it cannot change.
     shas = subprocess.run(
         ["git", "rev-list", "--no-merges", rev_range], capture_output=True, text=True, check=True
     ).stdout.split()
@@ -97,12 +94,11 @@ def main() -> int:
     group.add_argument("--file")
     group.add_argument("--range")
     group.add_argument("--title")
-    ap.add_argument("--merge", action="store_true")
     args = ap.parse_args()
 
     if args.file:
         with open(args.file, encoding="utf-8") as f:
-            problems = check_message(f.read(), args.merge)
+            problems = check_message(f.read())
     elif args.title is not None:
         problems = [f"PR title: {p}" for p in check_title(args.title)]
     else:

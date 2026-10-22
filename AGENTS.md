@@ -46,7 +46,7 @@ Work is plain GitHub issues. A draft pull request is the claim.
 - **Choose a ticket with `scripts/next_ticket.py --agent <your agent ID>`, never by reading the issue list.** It lists open issues whose dependencies are closed, that no open PR closes, and whose areas no other agent's open PR is working on; `--why` explains every skipped ticket. Two agents never work tickets sharing an area at the same time, but an agent may stack its next ticket on its own open PRs (see below). Issues labelled `needs-hardware` or `dispatch-only` are the maintainer's.
 - **Claim before writing code:** open a draft PR from your worktree branch with `Closes #N`, the issue's `area:*` labels, and your agent ID (`<runtime>@<host>`) in the body. If someone else's draft PR for the same issue is older, close yours and pick again.
 - Branch names: `<type>/<issue>-<slug>`, for example `feat/42-rcobs-encoder`.
-- **Stacked PRs:** a ticket that builds on your previous one branches from that PR's branch and targets it as the PR base. The maintainer merges the stack oldest first, with merge commits, and GitHub retargets each PR to `master` as its base branch is deleted.
+- **Stacked PRs:** a ticket that builds on your previous one branches from that PR's branch and targets it as the PR base. The maintainer merges the stack oldest first, each as a squash, and GitHub retargets each PR to `master` as its base branch is deleted. A squash drops the branch's commits, so the next ticket in the stack cannot keep them: after a PR is merged, the ticket that follows starts from `master` again, not from the merged branch.
 
 ## Worktrees
 
@@ -91,11 +91,11 @@ Write PR bodies to a unique file under the cache, which the dev image can see (`
 - Conventional Commits, single subject line, at most 3 lines in total: `feat(core): ...`, `fix(bridge): ...`, `docs(...)`, `test(...)`, `ci(...)`, `build(...)`, `chore(...)`, `refactor(...)`, `perf(...)`, `revert(...)`. The scope is the area (`core`, `gen`, `bridge`, `cpp`, `spec`, `ports`, `docker`, `ci`). `scripts/commit_check.py` enforces these rules on every commit in a PR, since every commit lands on `master`, and on the PR title.
 - **Never `Co-Authored-By:` or any other trailer, and no em-dashes.** The commit-msg hook rejects both. Git history is the record; the commit message is the maintainer's.
 - **Breaking changes carry `!`.** Breaking means a change to the wire protocol, the C API, the C++ APIs, the `r2s.yaml` schema, the X-macro syntax, the bridge parameters or the generator's CLI. Wire changes also bump `R2S_PROTOCOL_VERSION`.
-- One ticket per PR, merged with a merge commit, never squashed: stacked PRs (each branching from the previous one) rely on their commits staying identical. Commit when a piece of work is finished; don't batch unrelated changes. Update the docs a change touches before calling it done.
+- One ticket per PR, merged as a squash: the PR's commits become one commit on `master`, and that commit is the record. Commit when a piece of work is finished; don't batch unrelated changes. Update the docs a change touches before calling it done.
 
 ## Git hooks (`make setup-hooks`)
 
-- `commit-msg`: Conventional Commits, no trailers, no em-dashes. While a merge is in progress, git's own `Merge ...` message is accepted, as the commit check skips merge commits.
+- `commit-msg`: Conventional Commits, no trailers, no em-dashes. Every commit is checked, including one made while a merge is in progress, because a PR is squashed and no merge commit of its own lands on `master`.
 - Every hook and the suite run tests without the repository-local git variables git exports to hooks (`scripts/clean-git-env.sh`, `conftest.py`), so a test's throwaway repository never writes to the real one.
 - `pre-commit`: format check on staged files (clang-format, ruff), warning check on touched C and C++, trailing whitespace.
 - `pre-push`: refuse force pushes unless approved, run the prose verify, then `make ci-local`. A suite stamp records the tree and hook versions that already passed, so pushing the same tree twice does not run the suite twice.
