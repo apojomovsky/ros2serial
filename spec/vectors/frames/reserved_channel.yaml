@@ -1,0 +1,7 @@
+name: reserved_channel
+covers: [SYS-1]
+topic_id: 9
+seq: 0
+payload: ""
+frame: "09 00 a0 27"
+wire: "09 02 a0 27 03 00"

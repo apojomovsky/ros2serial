@@ -1,0 +1,7 @@
+name: hello_req
+covers: [SYS-2, CTL-16]
+topic_id: 0
+seq: 0
+payload: "01 01"
+frame: "00 00 01 01 70 0b"
+wire: "01 01 01 01 70 0b 05 00"

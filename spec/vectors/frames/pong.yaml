@@ -1,0 +1,7 @@
+name: pong
+covers: [TIM-2, TIM-10]
+topic_id: 1
+seq: 0
+payload: "02 2a 10 27 00 00"
+frame: "01 00 02 2a 10 27 00 00 c3 95"
+wire: "01 02 02 2a 10 27 05 01 c3 95 03 00"

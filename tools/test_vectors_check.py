@@ -146,3 +146,179 @@ def test_a_reject_rule_must_be_listed_in_covers(tmp_path):
     assert vectors_check.check_tree(make_tree(tmp_path, files)) == [
         "rcobs/invalid.yaml: cases/0/reject: COB-6 is not in the file's covers"
     ]
+
+
+def test_a_frame_vector_must_carry_the_bytes_the_reference_makes(tmp_path):
+    files = {
+        "frames/wrong.yaml": """
+name: wrong
+covers: [FRM-1]
+topic_id: 16
+seq: 0
+payload: "00 00 c0 3f"
+frame: "10 00 00 00 c0 3f 1e 48"
+wire: "10 02 01 01 c0 3f 1e 48 05 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("not the frame the reference makes" in p for p in problems), problems
+    assert any("not the bytes the reference makes" in p for p in problems), problems
+
+
+def test_a_frame_vector_must_carry_a_payload_the_layout_fits(tmp_path):
+    """A length that does not match the name it precedes is caught."""
+    files = {
+        "frames/bad_length.yaml": """
+name: topic
+covers: [FRM-1]
+topic_id: 0
+seq: 0
+payload: "04 00 10 00 00 01 02 03 04 05 06 07 16"
+frame: "00 00 04 00 10 00 00 01 02 03 04 05 06 07 16 00 00"
+wire: "01 00 04 02 10 02 01 01 02 03 04 05 06 07 16 00 00 00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("payload" in p for p in problems), problems
+
+
+def test_a_layout_is_chosen_by_the_opcode_not_by_the_vector_name(tmp_path):
+    """A vector whose name says nothing still gets its layout checked."""
+    files = {
+        "frames/unnamed.yaml": """
+name: something_else
+covers: [FRM-1]
+topic_id: 0
+seq: 0
+payload: "04 00 10 00 00 01 02 03 04 05 06 07 16"
+frame: "00 00 04 00 10 00 00 01 02 03 04 05 06 07 16 00 00"
+wire: "01 00 04 02 10 02 01 01 02 03 04 05 06 07 16 00 00 00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("payload" in p for p in problems), problems
+
+
+def test_an_opcode_the_spec_does_not_give_is_reported(tmp_path):
+    files = {
+        "frames/bad_opcode.yaml": """
+name: hello
+covers: [FRM-1]
+topic_id: 0
+seq: 0
+payload: "07 01"
+frame: "00 00 07 01 00 00"
+wire: "01 00 07 01 00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("the opcode is not one the spec gives" in p for p in problems), problems
+
+
+def test_a_frame_on_the_wrong_channel_is_reported(tmp_path):
+    """A PING on the control channel is not a PING."""
+    files = {
+        "frames/wrong_channel.yaml": """
+name: ping
+covers: [FRM-1]
+topic_id: 0
+seq: 0
+payload: "01 2a"
+frame: "00 00 01 2a 00 00"
+wire: "01 00 01 2a 00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("is not the channel 1 of a ping frame" in p for p in problems), problems
+
+
+def test_a_payload_that_is_not_hex_is_reported(tmp_path):
+    """A payload the schema accepts but the bytes do not is not silent."""
+    files = {
+        "frames/bad_hex.yaml": """
+name: topic
+covers: [FRM-1]
+topic_id: 0
+seq: 0
+payload: "04 00 1g"
+frame: "00 00 04 00 10 00 00 01 02 03 04 05 06 07 16 00 00"
+wire: "01 00 04 02 10 02 01 01 02 03 04 05 06 07 16 00 00 00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("not hexadecimal bytes" in p for p in problems), problems
+
+
+def test_a_log_frame_with_a_reserved_value_kind_is_reported(tmp_path):
+    """A frame on a channel with no vector yet is still checked."""
+    files = {
+        "frames/log.yaml": """
+name: log
+covers: [FRM-1]
+topic_id: 2
+seq: 0
+payload: "1e 02 68 69 09"
+frame: "02 00 1e 02 68 69 09 00 00"
+wire: "02 00 1e 02 68 69 09 00 00 00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("the value kind is not one the spec gives" in p for p in problems), problems
+
+
+def test_a_compact_handshake_carries_a_hash_where_the_full_one_carries_a_name(tmp_path):
+    """A compact HELLO and TOPIC parse, and a full one does too."""
+    files = {
+        "frames/compact_hello.yaml": """
+name: hello
+covers: [FRM-1]
+topic_id: 0
+seq: 0
+payload: "02 01 01 11 22 33 44 00 04 80 00 e8 03 00 00 11 01 6e 6f 64 65"
+frame: "00 00 02 01 01 11 22 33 44 00 04 80 00 e8 03 00 00 11 01 6e 6f 64 65 bc ef"
+wire: "01 01 02 01 01 11 22 33 44 08 04 80 03 e8 03 03 01 11 01 6e 6f 64 65 bc ef 09 00"
+""",
+        "frames/compact_topic.yaml": """
+name: topic_compact
+covers: [FRM-1]
+topic_id: 0
+seq: 1
+payload: "04 00 10 03 00 01 02 03 04 05 06 07 04 61 62 63 64 12 34 56 78"
+frame: "00 01 04 00 10 03 00 01 02 03 04 05 06 07 04 61 62 63 64 12 34 56 78 2a c7"
+wire: "01 01 04 03 10 03 03 01 02 03 04 05 06 07 04 61 62 63 64 12 34 56 78 2a c7 13 00"
+""",
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert not any("payload" in p for p in problems), problems
+
+
+def test_a_correction_whose_drift_is_outside_the_limit_is_reported(tmp_path):
+    files = {
+        "frames/correction.yaml": """
+name: correction
+covers: [FRM-1]
+topic_id: 1
+seq: 0
+payload: "03 00 00 00 00 00 00 00 00 00 00 00 00 30 75"
+frame: "01 00 03 00 00 00 00 00 00 00 00 00 00 00 30 75 00 00"
+wire: "01 00 03 02 00 02 00 00 00 00 00 00 00 00 00 30 75 00 00 00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("the drift is outside 20000 ppm" in p for p in problems), problems
+
+
+def test_a_correction_whose_nanosec_is_too_large_is_reported(tmp_path):
+    files = {
+        "frames/correction.yaml": """
+name: correction
+covers: [FRM-1]
+topic_id: 1
+seq: 0
+payload: "03 00 00 00 00 00 00 00 00 00 94 35 77 00 00"
+frame: "01 00 03 00 00 00 00 00 00 00 00 00 00 00 94 35 77 00 00 00 00"
+wire: "01 00 03 02 00 02 00 00 00 00 00 00 00 00 00 94 35 77 00 00 00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("nanosec is not below 10^9" in p for p in problems), problems

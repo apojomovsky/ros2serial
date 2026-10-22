@@ -1,12 +1,12 @@
 # ros2serial protocol specification
 
-Version 0.1 (draft) · protocol version 1
+Version 0.2 (draft) · protocol version 1
 
 This document is normative. Every normative statement is a list item starting with an ID in brackets, such as `[FRM-1]`. Conformance vectors (`spec/vectors/`) and tests name the IDs they cover, so every rule here is checked by at least one test (`docs/01-testing.md`, section 3). IDs are never reused: a removed rule keeps its list item, with its text replaced by "Retired.", so the numbering has no gaps.
 
 The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119. Prose outside the ID items, tables included, is informative.
 
-This version covers the frame, the frame check, rCOBS, varints and the message encoding. System channels, the handshake, the session state machines, the error counters and time synchronization follow in the next version (ticket S2). Where a rule below says a frame or payload is "counted" or "reported", which counter or report it is belongs to that version.
+This version covers the frame, the frame check, rCOBS, varints, the message encoding, the system channels, the handshake, the session state machines, the error counters and time synchronization. The parameters and reliable-channel channels, and the descriptor format, follow in a later version.
 
 ## 1. Conventions
 
@@ -28,13 +28,13 @@ frame = rCOBS( topic_id u8 | seq u8 | payload | crc16 u16 ) 0x00
 - [FRM-3] `topic_id` values 0 to 15 are reserved for system channels; user topics use 16 to 255.
 - [FRM-4] `seq` is a counter kept per `topic_id` and per direction. It is 0 in the first frame on that topic in that direction after each handshake.
 - [FRM-5] Each further frame on that topic in that direction carries the previous `seq` plus 1, modulo 256.
-- [FRM-6] A receiver MUST drop, and count, a frame whose rCOBS decoding fails ([COB-5], [COB-6]).
-- [FRM-7] A receiver MUST drop, and count, a decoded frame shorter than 4 bytes. The encoded frame `01` (0 decoded bytes) is such a frame.
-- [FRM-8] A receiver MUST drop, and count, a frame whose CRC check fails ([CHK-4]).
+- [FRM-6] A receiver MUST drop a frame whose rCOBS decoding fails ([COB-5], [COB-6]), and count it as a dropped frame (section 7.4).
+- [FRM-7] A receiver MUST drop a decoded frame shorter than 4 bytes, and count it as a dropped frame. The encoded frame `01` (0 decoded bytes) is such a frame.
+- [FRM-8] A receiver MUST drop a frame whose CRC check fails ([CHK-4]), and count it as a CRC error and as a dropped frame.
 - [FRM-9] The MCU's maximum decoded frame size, `max_frame` (from `topic_id` to `crc16` inclusive), is set at build time and announced in the handshake. It is at most 65277, so that the encoded frame and its delimiter fit in 65535 bytes ([COB-8]).
 - [FRM-10] The host's `max_frame` is 65277 and is not announced.
 - [FRM-11] A sender MUST NOT send a decoded frame larger than the receiver's `max_frame`.
-- [FRM-12] A receiver MUST accept every frame whose decoded size is at most its `max_frame`, so it buffers up to the [COB-8] bound of encoded bytes. Once the encoded bytes of a frame exceed that bound, it MUST drop and count the frame, discarding bytes until the next `0x00`.
+- [FRM-12] A receiver MUST accept every frame whose decoded size is at most its `max_frame`, so it buffers up to the [COB-8] bound of encoded bytes. Once the encoded bytes of a frame exceed that bound, it MUST drop the frame and count it as a receive overflow and as a dropped frame, discarding bytes until the next `0x00`.
 - [FRM-13] After any error, a receiver resynchronizes at the next `0x00`: the bytes after it start a new frame. A receiver starts as if it had just received a `0x00`.
 - [FRM-14] Two consecutive `0x00` bytes delimit an empty encoded frame (no bytes at all), which is ignored without being counted. A sender MAY send a `0x00` before a frame, for example to flush a partial frame left on the line.
 - [FRM-15] On a user topic, a receiver counts `(seq - expected) mod 256` lost frames, where `expected` is the previous `seq` plus 1, or 0 for the first frame after a handshake. A gap is not an error and does not drop the frame.
@@ -106,3 +106,155 @@ A payload is the packed encoding of one message, field after field, with no padd
 - [ENC-17] A receiver MUST drop, and count, a payload that ends before its last field.
 - [ENC-18] A receiver MUST drop, and count, a payload with bytes left after its last field.
 - [ENC-19] The table above is exhaustive. `wstring` and `wchar` have no wire encoding, and the generator rejects a message that uses them.
+
+## 7. System channels
+
+A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3]). The payload of a system channel on ID 0 or ID 1 begins with an opcode byte; the other system channels have no opcode.
+
+- [SYS-1] The system channels are: ID 0 control, ID 1 time, ID 2 log, ID 3 parameters, ID 4 heartbeat, ID 5 error report, ID 6 reliable-channel ack. IDs 7 to 15 are reserved and MUST NOT be used.
+- [SYS-2] A frame on a system channel uses the same framing as a user topic (section 2), so it has a `seq` counter and a CRC.
+- [SYS-3] The parameters and reliable-channel ack channels are specified in a later version of this document. Until then, a receiver MUST ignore a frame on them.
+- [SYS-4] A receiver MUST ignore a frame on a reserved channel (ID 7 to 15) and MUST NOT count it as an error.
+- [SYS-5] A receiver that refuses a frame drops it and takes no other action on it. The MCU also counts it as a dropped frame (section 7.4), which is the only side that keeps that counter.
+
+### 7.1 Control channel (ID 0)
+
+| Opcode | Name | Direction | Payload after the opcode |
+| --- | --- | --- | --- |
+| 0x01 | HELLO_REQ | host to MCU | `protocol_version u8` |
+| 0x02 | HELLO | MCU to host | `protocol_version u8, handshake_mode u8, boot_id u32, max_frame u16, rx_capacity u16, tick_hz u32, features u8, topic_count u8`, then `node_name string` (full) or `node_name_hash u32` (compact) |
+| 0x03 | TOPIC_REQ | host to MCU | `index u8` |
+| 0x04 | TOPIC | MCU to host | `index u8, topic_id u8, flags u8, type_hash[8]`, then `type_name string, topic_name string` (full) or `topic_name_hash u32` (compact) |
+| 0x05 | TOPIC_STATUS | host to MCU | `topic_id u8, status u8` |
+| 0x06 | READY | host to MCU | none |
+
+- [CTL-1] The handshake mode is 0 for full and 1 for compact.
+- [CTL-2] The `features` byte has bit 0 for time, bit 1 for log, bit 2 for parameters, bit 3 for the reliable channel, bit 4 for "`double` is 32 bits" and bit 5 for runtime topic registration. Bits 4 and 5 are informational. Every other bit is reserved and MUST be 0 in both directions.
+- [CTL-3] A receiver MUST refuse ([SYS-5]) a frame whose `features` byte has a reserved bit set.
+- [CTL-4] The `flags` byte has bit 0 for the direction (0 when the MCU publishes the topic, 1 when it subscribes), bit 1 for narrow `float64`, bit 2 for keep-latest and bit 3 for the reliable channel. Every other bit is reserved and MUST be 0.
+- [CTL-5] The flags are the truth for the wire. A receiver MUST use the announced flags rather than its own build to decide whether a topic is narrow.
+- [CTL-6] Retired. It said what [ENC-12] says, and a rule is never renumbered.
+- [CTL-7] `rx_capacity` is the size of the MCU's receive frame buffer in bytes.
+- [CTL-8] `tick_hz` MUST be `1000 × k` with `k` a divisor of 10^6, so that a tick rate converts to nanoseconds with integer math alone.
+- [CTL-9] A receiver MUST refuse ([SYS-5]) a `tick_hz` that is not of that form.
+- [CTL-10] `max_frame` is the largest decoded frame the MCU accepts, and MUST NOT be larger than the limit of section 2 ([FRM-9]).
+- [CTL-11] A name hash in compact mode is FNV-1a 32-bit over the UTF-8 bytes of the name.
+- [CTL-12] The `type_hash` field is the first 8 bytes of the type's RIHS01 hash. A receiver MUST compare only the 8 bytes on the wire, and a mismatch of any of them rejects the topic.
+- [CTL-13] A `TOPIC_STATUS` status is 0 for ok, 1 for unknown type, 2 for hash mismatch and 3 for name conflict. Every other value is reserved and MUST be 0.
+- [CTL-14] A receiver MUST refuse ([SYS-5]) a `TOPIC_STATUS` whose status is not one of those four.
+- [CTL-15] The topics of a handshake are requested and sent one at a time, so the MCU never needs a buffer larger than one TOPIC frame.
+- [CTL-16] The payload of each control opcode is the one the table above gives, in that order and with nothing between: the opcode byte, then the fields it lists, and a string as its varint length and bytes (section 5).
+
+### 7.2 Time channel (ID 1)
+
+| Opcode | Name | Direction | Payload after the opcode |
+| --- | --- | --- | --- |
+| 0x01 | PING | host to MCU | `ping_id u8` |
+| 0x02 | PONG | MCU to host | `ping_id u8, tick u32` |
+| 0x03 | CORRECTION | host to MCU | `tick0 u32, sec i32, nanosec u32, drift_ppm i16` |
+
+- [TIM-1] The `tick` of a PONG is the tick at which the PING's delimiter arrived.
+- [TIM-2] A PONG MUST carry the `ping_id` of the PING it answers.
+- [TIM-3] `tick0` is the tick at which the correction's time was measured, so that the MCU can compute the elapsed ticks.
+- [TIM-4] `drift_ppm` is the number of nanoseconds of ROS time to add per nominal millisecond of MCU time, and MUST be within ±20000.
+- [TIM-5] A receiver MUST refuse ([SYS-5]) a CORRECTION whose `drift_ppm` is outside ±20000.
+
+The MCU computes its time from the correction in 32-bit integers alone. With `k = tick_hz / 1000` ticks per millisecond and `p = 10^6 / k` nanoseconds per tick, and `e = tick - tick0` computed as an unsigned 32-bit difference, so that it wraps correctly:
+
+```
+ms  = e / k;  r = e % k
+if ms > R2S_TIME_MAX_ANCHOR_MS: time is unsynced
+sec = sec0 + ms / 1000
+ns  = nanosec0 + (ms % 1000) * 1000000 + r * p
+normalize ns into [0, 10^9) by carrying into sec
+ns  = ns + ms * drift_ppm
+normalize again
+```
+
+- [TIM-6] The MCU MUST compute its time with the integer arithmetic above and MUST NOT use floating point.
+- [TIM-7] `R2S_TIME_MAX_ANCHOR_MS` defaults to 10000. A correction older than that makes the MCU's time unsynced, and the MCU MUST report it as unsynced until a new correction arrives.
+- [TIM-8] The intermediate nanosecond value before the drift is added MUST fit in a 32-bit unsigned integer, and the drift term MUST fit in a 32-bit signed integer.
+- [TIM-9] The MCU MUST normalize the nanosecond value into [0, 10^9) by carrying into the seconds, before and after the drift is added.
+- [TIM-10] The payload of each time opcode is the one the table above gives, in that order and with nothing between: the opcode byte, then the fields it lists.
+- [TIM-11] The `nanosec` of a CORRECTION MUST be less than 1000000000, and a receiver MUST refuse ([SYS-5]) a CORRECTION whose `nanosec` is not.
+
+### 7.3 Log channel (ID 2)
+
+The MCU sends on this channel; the host does not.
+
+- [LOG-1] The payload is `level u8, text string, value_kind u8`, then the value when `value_kind` is not 0.
+- [LOG-2] A level is 10 for debug, 20 for info, 30 for warn, 40 for error and 50 for fatal, the ROS severities.
+- [LOG-3] A value kind is 0 for none, 1 for `u16`, 2 for `i16`, 3 for `u32`, 4 for `i32` and 5 for `f32`. Every other value is reserved and MUST be 0.
+- [LOG-4] A receiver MUST refuse ([SYS-5]) a log frame whose value kind is not one of those six.
+
+### 7.4 Heartbeat channel (ID 4)
+
+- [HB-1] A heartbeat from the host has an empty payload.
+- [HB-2] A heartbeat from the MCU carries `rx_frames u16, crc_errors u16, rx_overflows u16, dropped_frames u16`.
+- [HB-3] The four counters are wrapping 16-bit counters, and each counts the frames of its own kind since the MCU booted. A frame that two rules count, such as one that fails the CRC check, counts in both of them.
+- [HB-4] `rx_frames` counts the frames the MCU received and accepted.
+- [HB-5] `crc_errors` counts the frames the MCU dropped because their CRC check failed ([FRM-8]).
+- [HB-6] `rx_overflows` counts the frames the MCU dropped because their encoded bytes exceeded its buffer ([FRM-12]).
+- [HB-7] `dropped_frames` counts every frame the MCU dropped, whichever rule dropped it ([FRM-6], [FRM-7], [FRM-8], [FRM-12]). It is therefore the total of the drops, and is not the sum of the other three.
+
+### 7.5 Error report channel (ID 5)
+
+The MCU sends on this channel; the host does not.
+
+- [ERR-1] The payload is `code u8, topic_id u8, count u16, field u8`.
+- [ERR-2] A code is 1 for a bound violation on decode, 2 for an unknown topic ID, 3 for a receive overflow, 4 for a frame too large, 5 for a publish while not connected and 6 for a busy transmitter.
+- [ERR-3] A publish while not connected is reported once per connection, and a busy transmitter at most once per second.
+- [ERR-4] The `field` is the index of the offending field in depth-first declaration order over the type's field definitions, where the elements of an array are not counted separately, or 0xFF when the rule does not name a field.
+- [ERR-5] The host computes the same field order with introspection, so that it can log the path of the offending field.
+- [ERR-6] The `count` is the number of times the error occurred since the last error report of that code, and it wraps at 65535. A code that [ERR-3] rate-limits is counted the same way and reported no more often than that.
+
+## 8. Session
+
+The MCU and the host each run a state machine. A handshake brings them from a fresh start to a link that carries user traffic.
+
+### 8.1 The MCU session
+
+```
+BOOT --init, send HELLO--> ANNOUNCING --READY--> CONNECTED
+^                          |                     |
+|                          +- every 1 s with no host traffic: send HELLO
++-- link timeout, or HELLO_REQ received
+```
+
+- [SES-1] The MCU starts in BOOT, sends HELLO, and moves to ANNOUNCING.
+- [SES-2] In ANNOUNCING the MCU answers a HELLO_REQ with HELLO and a TOPIC_REQ with TOPIC, and stores the TOPIC_STATUS of each topic.
+- [SES-3] In ANNOUNCING, a host frame that is neither HELLO_REQ nor TOPIC_REQ is answered with HELLO, at most once per 100 ms, and is otherwise ignored. A user topic frame is ignored in the same way.
+- [SES-4] In ANNOUNCING, a publish fails with the not-connected error and sends nothing.
+- [SES-5] The MCU sends HELLO every second while it is in ANNOUNCING and the host has sent nothing.
+- [SES-6] The MCU moves from ANNOUNCING to CONNECTED when the host sends READY.
+- [SES-7] The MCU returns to ANNOUNCING on a link timeout or on a HELLO_REQ.
+- [SES-8] A link timeout is no valid frame from the host for 2000 ms. The interval is a build-time setting.
+- [SES-9] In CONNECTED the MCU sends a heartbeat every 500 ms, and a publish works for the topics whose status is ok.
+- [SES-10] The `boot_id` comes from the port, once per boot, so that a host can tell a reset from a reconnect.
+- [SES-11] The `seq` counter of every topic restarts at 0 after each handshake (section 2, [FRM-4]).
+
+### 8.2 The host session
+
+```
+DISCONNECTED --port open--> BOOT_WAIT --HELLO or boot_wait_ms--> HANDSHAKING --all topics resolved, READY sent--> CONNECTED
+^                                                                ^                                                |
++-- port error                                                   +--- link timeout or reset detected              +
+```
+
+- [SES-12] In DISCONNECTED the host tries to open the port every 1000 ms.
+- [SES-13] After it opens the port, the host waits up to 2500 ms for an unsolicited HELLO before it sends anything, so that a board reset by DTR is not talking to its bootloader.
+- [SES-14] In HANDSHAKING the host sends HELLO_REQ every 500 ms until a HELLO arrives.
+- [SES-15] The host refuses a HELLO whose protocol version it does not support, and logs an error naming both versions.
+- [SES-16] For each topic index, the host sends TOPIC_REQ with a 200 ms timeout and at most 3 retries, resolves the type support, checks the hash, sends TOPIC_STATUS, and creates or reuses the publisher or subscription.
+- [SES-17] The host sends READY when every topic is resolved.
+- [SES-18] In CONNECTED the host sends a heartbeat every 500 ms and forwards user traffic.
+- [SES-19] The host detects a reset when a HELLO arrives while it is connected, or when a HELLO carries a different `boot_id`.
+- [SES-20] On a re-handshake the host keeps its publishers and subscriptions when the new topic table is identical to the previous one, and destroys and recreates them otherwise.
+- [SES-21] The host returns to DISCONNECTED on a port error, and to HANDSHAKING on a link timeout or a reset.
+
+### 8.3 Time synchronization on the host
+
+- [SES-22] Right after READY, the host sends 8 PINGs 50 ms apart.
+- [SES-23] After that, the host sends one PING every 1000 ms for the first 10 s, and then every `time_sync.period_ms`, which defaults to 5000.
+- [SES-24] The estimator keeps the 16 most recent samples, uses the ones with the lowest round trip for the offset, and fits a line for the drift.
+- [SES-25] The host sends a CORRECTION after the initial burst, whenever the estimate moves by more than 100 µs, and at least every 5 s.

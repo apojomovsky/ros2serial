@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -86,11 +87,13 @@ def test_guard_allows_the_main_clone_without_worktrees(tmp_path):
 
 
 def test_build_lock_serializes_commands(tmp_path):
+    """Two runs of one build directory take turns."""
     lock, log = tmp_path / "build.lock", tmp_path / "log"
     body = f"echo start >> {log}; sleep 0.3; echo end >> {log}"
+    script = str(ROOT / "scripts/with-build-lock.sh")
 
-    def one():
-        run(["bash", str(ROOT / "scripts/with-build-lock.sh"), str(lock), "bash", "-c", body], check=True)
+    def one(env=None):
+        return run(["bash", script, str(lock), "bash", "-c", body], env=env)
 
     threads = [threading.Thread(target=one) for _ in range(2)]
     for t in threads:
@@ -98,6 +101,27 @@ def test_build_lock_serializes_commands(tmp_path):
     for t in threads:
         t.join()
     assert log.read_text().split() == ["start", "end", "start", "end"]
+
+
+def test_build_lock_refuses_when_asked_not_to_wait(tmp_path):
+    """Asked not to wait, a run that finds the lock held stops."""
+    lock, log = tmp_path / "build.lock", tmp_path / "log"
+    script = str(ROOT / "scripts/with-build-lock.sh")
+    holder = subprocess.Popen(
+        ["bash", script, str(lock), "bash", "-c", f"echo start >> {log}; sleep 5"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        time.sleep(0.5)
+        env = {**os.environ, "R2S_LOCK_NOWAIT": "1"}
+        out = run(["bash", script, str(lock), "bash", "-c", "true"], env=env)
+        assert out.returncode == 75
+        assert "busy" in out.stderr
+        assert str(lock) in out.stderr
+    finally:
+        holder.kill()
+        holder.wait()
 
 
 def agents_targets() -> set[str]:
@@ -123,3 +147,73 @@ def test_make_test_reaches_the_suite_script_in_and_out_of_the_image():
     assert "docker" not in inside
     outside = run(["make", "-n", "test", "R2S_IN_IMAGE="], check=True).stdout
     assert re.search(r"docker run .* bash scripts/ci-test\.sh", outside), outside
+
+
+def test_the_suite_refuses_a_second_run_on_the_same_tree(tmp_path):
+    """Two suite runs at once would test a tree the first one changed.
+
+    The run happens in a copy of the tree, so the suite it starts does not
+    run this test again.
+    """
+    tree = tmp_path / "tree"
+    tree.mkdir()
+    (tree / "scripts").mkdir()
+    shutil.copy2(ROOT / "scripts/ci-test.sh", tree / "scripts/ci-test.sh")
+    lock = tmp_path / "suite.lock"
+    env = {**os.environ, "R2S_SUITE_LOCK": str(lock), "R2S_SUITE_LOCK_TREE": str(tree), "LINT": "1"}
+    holder = subprocess.Popen(
+        ["bash", str(ROOT / "scripts/with-build-lock.sh"), str(lock), "sleep", "5"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        time.sleep(0.5)
+        out = run(["bash", "scripts/ci-test.sh"], cwd=tree, env=env)
+        assert out.returncode == 75, out.stdout + out.stderr
+        assert "already running" in out.stderr
+    finally:
+        holder.kill()
+        holder.wait()
+
+
+def test_the_suite_queues_when_asked(tmp_path):
+    """Asked to wait, the second run waits and then runs."""
+    tree = tmp_path / "tree"
+    tree.mkdir()
+    (tree / "scripts").mkdir()
+    shutil.copy2(ROOT / "scripts/ci-test.sh", tree / "scripts/ci-test.sh")
+    lock = tmp_path / "suite.lock"
+    env = {
+        **os.environ,
+        "R2S_SUITE_LOCK": str(lock),
+        "R2S_SUITE_LOCK_TREE": str(tree),
+        "LINT": "1",
+        "R2S_SUITE_LOCK_WAIT": "1",
+    }
+    holder = subprocess.Popen(
+        ["bash", str(ROOT / "scripts/with-build-lock.sh"), str(lock), "sleep", "2"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        time.sleep(0.3)
+        out = run(["bash", "scripts/ci-test.sh"], cwd=tree, env=env)
+        assert "already running" not in out.stderr, out.stdout + out.stderr
+    finally:
+        holder.kill()
+        holder.wait()
+
+
+def test_the_suite_runs_without_flock(tmp_path):
+    """A host without flock runs the suite unlocked, as the build lock does."""
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    for name in ("bash", "cat", "dirname", "grep", "mkdir", "mktemp", "rm", "sed", "tail", "tr"):
+        found = shutil.which(name)
+        if found:
+            (stub / name).symlink_to(found)
+    env = {**os.environ, "PATH": str(stub), "LINT": "1"}
+    out = run(["bash", str(ROOT / "scripts/ci-test.sh")], env=env)
+    # The suite ran: it got as far as the lint, which has no ruff here.
+    assert "flock is not on this host" in out.stderr
+    assert "the suite lock cannot be" not in out.stderr

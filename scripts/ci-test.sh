@@ -14,6 +14,48 @@ cd "$root" || exit 2
 # ritual that sees TEST=1 runs the suite again, so the pair would fork.
 unset TEST
 
+# One suite at a time per tree. A second run would wait on the same lock and
+# then test a tree the first run had already changed, so it says so and stops
+# instead. The lock lives in the cache, under the tree's path, so a run of a
+# copy of the tree takes its own lock and does not collide with the run that
+# copied it.
+cache=${R2S_CACHE_DIR:-}
+if [ -z "$cache" ] && [ -n "${R2S_BUILD_DIR:-}" ]; then
+  cache=$(dirname "$R2S_BUILD_DIR")
+fi
+cache=${cache:-$HOME/.cache/ros2serial}
+suite_lock=$cache/$(echo "$root" | tr / -)/suite.lock
+if [ -n "${R2S_SUITE_LOCK:-}" ] && [ "${R2S_SUITE_LOCK_TREE:-}" = "$root" ]; then
+  suite_lock=$R2S_SUITE_LOCK
+fi
+mkdir -p "$(dirname "$suite_lock")" 2>/dev/null || {
+  echo "the suite lock directory cannot be created ($suite_lock)" >&2
+  echo "set R2S_CACHE_DIR to a writable directory" >&2
+  exit 1
+}
+# The lock is taken here and held for the whole run, so a second suite run
+# for the tree is refused. The script does not re-exec itself to take it: the
+# suite runs this script, so a self re-exec would nest without end. A host
+# without flock runs unlocked, as the build lock does.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$suite_lock" || {
+    echo "the suite lock cannot be opened ($suite_lock)" >&2
+    exit 1
+  }
+  if [ "${R2S_SUITE_LOCK_WAIT:-0}" = 1 ]; then
+    flock 9 || {
+      echo "the suite lock cannot be taken ($suite_lock)" >&2
+      exit 1
+    }
+  elif ! flock -n 9; then
+    echo "the suite is already running for this repository ($suite_lock)" >&2
+    echo "wait for it, or set R2S_SUITE_LOCK_WAIT=1 to queue" >&2
+    exit 75
+  fi
+else
+  echo "the suite lock is not taken: flock is not on this host" >&2
+fi
+
 scoped=0
 for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E; do [ -n "${!v:-}" ] && scoped=1; done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }

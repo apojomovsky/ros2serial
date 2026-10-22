@@ -533,7 +533,7 @@ Each open decision has a default. Tickets use the default until the decision is 
 | Project name and C prefix | Repository `ros2serial`, C prefix `r2s_`, ROS packages `r2s_*`. The name was floated in 2018 for an unreleased rosserial rewrite (R2) | Maintainer, before Phase 4 |
 | Message type names in C headers (`__` is reserved in C++) | `std_msgs__msg__Float32` in C; C++ code uses namespace aliases | Maintainer, before the C++ API ticket |
 | CRC variant | CRC-16/MCRF4XX | Research ticket R7 |
-| Type hash truncation on the wire | 8 bytes | Spec ticket S2 |
+| Type hash truncation on the wire | 8 bytes | Confirmed by spec ticket S2 |
 | Narrow per field or per topic (64-bit-`double` targets only) | Per topic | Maintainer, after the Phase 2 encoding benchmark |
 | Serial library for the bridge | Plain POSIX `termios` behind a small interface | Research ticket R8 |
 | Generic service support per distro | Use generic APIs where present, introspection-based typed services elsewhere | Research ticket R4 |
@@ -675,7 +675,7 @@ The first payload byte of IDs 0 and 1 is an opcode.
 - `flags` bits: 0 direction (0 = the MCU publishes, 1 = the MCU subscribes), 1 narrow_float64, 2 keep_latest, 3 reliable. The other bits are reserved. The flags are the truth for the wire; bit 1 is always set on a build whose `double` is 32 bits.
 - `rx_capacity` is the size of the MCU's RX frame buffer.
 - `tick_hz` must be `1000 × k` with `k` a divisor of 10^6 (1 kHz, 10 kHz, 100 kHz and 1 MHz are typical), so the MCU converts ticks to nanoseconds with integer math.
-- Name hashes in compact mode are FNV-1a 32-bit over the UTF-8 name. Default; spec ticket S2 confirms it.
+- Name hashes in compact mode are FNV-1a 32-bit over the UTF-8 name. Confirmed by spec ticket S2.
 - Each topic is requested and sent one at a time, so a tier S MCU never needs a buffer larger than one TOPIC frame.
 
 **ID 1, time**
@@ -705,9 +705,9 @@ normalize again
 
 **ID 3, parameters**: P1, specified by ticket S5.
 
-**ID 4, heartbeat**: host → MCU has an empty payload. MCU → host carries `rx_frames u16, crc_errors u16, rx_overflows u16, dropped_frames u16`, all wrapping counters.
+**ID 4, heartbeat**: host → MCU has an empty payload. MCU → host carries `rx_frames u16, crc_errors u16, rx_overflows u16, dropped_frames u16`, all wrapping counters. `rx_frames` counts the frames the MCU accepted, `crc_errors` the ones it dropped for a bad CRC, `rx_overflows` the ones that did not fit its buffer, and `dropped_frames` every frame it dropped, whichever rule dropped it.
 
-**ID 5, error report** (MCU → host): `code u8, topic_id u8, count u16, field u8`. Codes: 1 bound violation on decode, 2 unknown topic ID, 3 RX overflow, 4 frame too large, 5 publish while not connected (counted, reported once per connection), 6 TX busy (counted, reported once per second at most). `field` is the index of the offending field in depth-first declaration order over the type's field definitions (array elements are not counted separately), or 0xFF when not applicable. The bridge computes the same order with introspection and logs the field path.
+**ID 5, error report** (MCU → host): `code u8, topic_id u8, count u16, field u8`. Codes: 1 bound violation on decode, 2 unknown topic ID, 3 RX overflow, 4 frame too large, 5 publish while not connected (reported once per connection), 6 TX busy (reported once per second at most). `count` is the number of times the error occurred since the last error report of that code, and it wraps at 65535; a code that is rate-limited is counted the same way and reported no more often than that. `field` is the index of the offending field in depth-first declaration order over the type's field definitions (array elements are not counted separately), or 0xFF when not applicable. The bridge computes the same order with introspection and logs the field path.
 
 **ID 6, reliable-channel ack**: P1, specified by ticket S5.
 
