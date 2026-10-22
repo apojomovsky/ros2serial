@@ -36,14 +36,14 @@ exec 9>"$suite_lock" || {
   echo "the suite lock cannot be opened ($suite_lock)" >&2
   exit 1
 }
-if [ "${R2S_LOCK_WAIT:-0}" = 1 ]; then
+if [ "${R2S_SUITE_LOCK_WAIT:-0}" = 1 ]; then
   flock 9 || {
     echo "the suite lock cannot be taken ($suite_lock)" >&2
     exit 1
   }
 elif ! flock -n 9; then
   echo "the suite is already running for this repository ($suite_lock)" >&2
-  echo "wait for it, or set R2S_LOCK_WAIT=1 to queue" >&2
+  echo "wait for it, or set R2S_SUITE_LOCK_WAIT=1 to queue" >&2
   exit 75
 fi
 

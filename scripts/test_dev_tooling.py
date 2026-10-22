@@ -86,12 +86,8 @@ def test_guard_allows_the_main_clone_without_worktrees(tmp_path):
     assert run(["bash", str(ROOT / "scripts/check-main-clone-build.sh")], cwd=repo).returncode == 0
 
 
-def test_build_lock_refuses_a_second_run_and_queues_when_asked(tmp_path):
-    """A run that finds the lock held stops, rather than waiting behind it.
-
-    A queue of waiting runs delays every one of them and the last one still
-    finds the tree changed under it, so the default is to refuse.
-    """
+def test_build_lock_serializes_commands(tmp_path):
+    """Two runs of one build directory take turns."""
     lock, log = tmp_path / "build.lock", tmp_path / "log"
     body = f"echo start >> {log}; sleep 0.3; echo end >> {log}"
     script = str(ROOT / "scripts/with-build-lock.sh")
@@ -104,32 +100,23 @@ def test_build_lock_refuses_a_second_run_and_queues_when_asked(tmp_path):
         t.start()
     for t in threads:
         t.join()
-    # One ran, the other was refused, so the log holds one run's two marks.
-    assert log.read_text().split() == ["start", "end"]
-
-    # Asked to wait, the second run queues and both complete.
-    log.write_text("")
-    env = {**os.environ, "R2S_LOCK_WAIT": "1"}
-    threads = [threading.Thread(target=lambda: one(env)) for _ in range(2)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
     assert log.read_text().split() == ["start", "end", "start", "end"]
 
 
-def test_build_lock_says_which_lock_is_busy(tmp_path):
-    lock = tmp_path / "build.lock"
+def test_build_lock_refuses_when_asked_not_to_wait(tmp_path):
+    """Asked not to wait, a run that finds the lock held stops."""
+    lock, log = tmp_path / "build.lock", tmp_path / "log"
     script = str(ROOT / "scripts/with-build-lock.sh")
     holder = subprocess.Popen(
-        ["bash", script, str(lock), "bash", "-c", "sleep 5"],
+        ["bash", script, str(lock), "bash", "-c", f"echo start >> {log}; sleep 5"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     try:
         time.sleep(0.5)
-        out = run(["bash", script, str(lock), "bash", "-c", "true"])
-        assert out.returncode != 0
+        env = {**os.environ, "R2S_LOCK_NOWAIT": "1"}
+        out = run(["bash", script, str(lock), "bash", "-c", "true"], env=env)
+        assert out.returncode == 75
         assert "busy" in out.stderr
         assert str(lock) in out.stderr
     finally:
@@ -191,8 +178,12 @@ def test_the_suite_refuses_a_second_run_on_the_same_tree(tmp_path):
 
 def test_the_suite_queues_when_asked(tmp_path):
     """Asked to wait, the second run waits and then runs."""
+    tree = tmp_path / "tree"
+    tree.mkdir()
+    (tree / "scripts").mkdir()
+    shutil.copy2(ROOT / "scripts/ci-test.sh", tree / "scripts/ci-test.sh")
     lock = tmp_path / "suite.lock"
-    env = {**os.environ, "R2S_SUITE_LOCK": str(lock), "R2S_LOCK_WAIT": "1"}
+    env = {**os.environ, "R2S_SUITE_LOCK": str(lock), "LINT": "1", "R2S_SUITE_LOCK_WAIT": "1"}
     holder = subprocess.Popen(
         ["bash", str(ROOT / "scripts/with-build-lock.sh"), str(lock), "sleep", "2"],
         stdout=subprocess.DEVNULL,
@@ -200,9 +191,8 @@ def test_the_suite_queues_when_asked(tmp_path):
     )
     try:
         time.sleep(0.3)
-        # The lock is held, so the suite waits for it rather than refusing.
-        out = run(["bash", str(ROOT / "scripts/with-build-lock.sh"), str(lock), "true"], env=env)
-        assert out.returncode == 0, out.stdout + out.stderr
+        out = run(["bash", "scripts/ci-test.sh"], cwd=tree, env=env)
+        assert "already running" not in out.stderr, out.stdout + out.stderr
     finally:
         holder.kill()
         holder.wait()

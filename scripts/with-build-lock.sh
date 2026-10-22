@@ -3,9 +3,11 @@
 # one at a time. Hosts without flock run unlocked rather than failing.
 # Usage: with-build-lock.sh <lockfile> <command> [args...]
 #
-# The lock is not queued: a run that finds the lock held says so and stops,
-# because a queue of waiting runs delays every one of them and the last one
-# still finds the tree changed under it. Set R2S_LOCK_WAIT=1 to wait instead.
+# The lock is taken by waiting, because a build directory is a resource the
+# runs of one tree share: the second run of the same tree waits for the
+# first and then uses what it left. A lock that is refused instead is for a
+# run that must not happen at all, which the suite does on its own lock.
+# Set R2S_LOCK_NOWAIT=1 to refuse rather than wait.
 set -uo pipefail
 lock=$1
 shift
@@ -23,17 +25,17 @@ exec 9>"$lock" || {
   exit 1
 }
 
-if [ "${R2S_LOCK_WAIT:-0}" = 1 ]; then
+if [ "${R2S_LOCK_NOWAIT:-0}" = 1 ]; then
+  if ! flock -n 9; then
+    echo "with-build-lock: the build directory is busy ($lock); another run holds it" >&2
+    echo "with-build-lock: wait for it, or unset R2S_LOCK_NOWAIT" >&2
+    exit 75
+  fi
+else
   flock 9 || {
     echo "with-build-lock: cannot take the lock ($lock)" >&2
     exit 1
   }
-else
-  if ! flock -n 9; then
-    echo "with-build-lock: the build directory is busy ($lock); another run holds it" >&2
-    echo "with-build-lock: wait for it, or set R2S_LOCK_WAIT=1 to queue" >&2
-    exit 75
-  fi
 fi
 
 "$@"
