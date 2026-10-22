@@ -96,11 +96,9 @@ jobs:
         run: |
           version=$(cat VERSION)
           subject=$(git log -1 --format=%s -- VERSION)
-          # A squash puts the PR number after the subject, so the subject is
-          # matched by its prefix, not in full.
           if [ "$version" = 0.0.0 ]; then
             echo "VERSION is 0.0.0: nothing has been released yet"
-          elif ! printf '%s\n' "$subject" | grep -qE "^chore\(release\): v${version}($| )"; then
+          elif ! bash scripts/release-subject.sh "$version" "$subject"; then
             echo "VERSION last changed by \"$subject\", not by a release commit: cut releases with this workflow"
             exit 1
           elif git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
