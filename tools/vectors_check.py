@@ -193,11 +193,12 @@ def check_channel(name: str, vector_name: str, topic_id: int, payload: bytes) ->
         return []
     if topic_id not in SYSTEM_CHANNELS:
         return []
-    if vector_name not in SPEC_NAMES:
+    frame_name = vector_name.removesuffix("_compact")
+    if frame_name not in SPEC_NAMES:
         return [f"{name}/name: {vector_name} is not a frame the spec gives"]
-    wanted = SPEC_NAMES[vector_name]
+    wanted = SPEC_NAMES[frame_name]
     if topic_id != wanted:
-        return [f"{name}/topic_id: {topic_id} is not the channel {wanted} of a {vector_name} frame"]
+        return [f"{name}/topic_id: {topic_id} is not the channel {wanted} of a {frame_name} frame"]
     return []
 
 
@@ -282,7 +283,8 @@ def check_payload(name: str, payload: bytes, topic_id: int) -> list[str]:
                 problems.append(f"{name}/payload: the opcode is not HELLO")
             if r.u8() != 0x01:
                 problems.append(f"{name}/payload: the protocol version is not 1")
-            if r.u8() not in (0, 1):
+            mode = r.u8()
+            if mode not in (0, 1):
                 problems.append(f"{name}/payload: the handshake mode is neither full nor compact")
             r.u32()  # boot id
             if r.u16() > 65277:
@@ -294,8 +296,11 @@ def check_payload(name: str, payload: bytes, topic_id: int) -> list[str]:
             if r.u8() & ~0x3F:
                 problems.append(f"{name}/payload: the features byte has a reserved bit set")
             r.u8()  # topic count
-            if not r.string():
-                problems.append(f"{name}/payload: the node name is empty")
+            if mode == 0:
+                if not r.string():
+                    problems.append(f"{name}/payload: the node name is empty")
+            else:
+                r.u32()  # node name hash
         elif layout == "topic":
             if r.u8() != 0x04:
                 problems.append(f"{name}/payload: the opcode is not TOPIC")
@@ -307,7 +312,12 @@ def check_payload(name: str, payload: bytes, topic_id: int) -> list[str]:
             r.take(8)  # type hash
             if not r.string():
                 problems.append(f"{name}/payload: the type name is empty")
-            if not r.string():
+            # The topic name is a string in a full handshake and a hash in
+            # a compact one. A TOPIC carries no mode byte, so the vector's
+            # name says which it is.
+            if name.endswith("_compact"):
+                r.u32()  # topic name hash
+            elif not r.string():
                 problems.append(f"{name}/payload: the topic name is empty")
         elif layout == "heartbeat":
             pass  # the host's heartbeat has no payload
@@ -340,7 +350,8 @@ def check_payload(name: str, payload: bytes, topic_id: int) -> list[str]:
             r.i32()  # sec
             if r.u32() >= 1000000000:
                 problems.append(f"{name}/payload: nanosec is not below 10^9")
-            r.i16()  # drift ppm
+            if abs(r.i16()) > 20000:
+                problems.append(f"{name}/payload: the drift is outside 20000 ppm")
         elif layout == "log":
             if r.u8() not in (10, 20, 30, 40, 50):
                 problems.append(f"{name}/payload: the level is not a ROS severity")

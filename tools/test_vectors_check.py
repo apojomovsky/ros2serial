@@ -264,3 +264,45 @@ wire: "02 00 1e 02 68 69 09 00 00 00 00 00 00"
     }
     problems = vectors_check.check_tree(make_tree(tmp_path, files))
     assert any("the value kind is not one the spec gives" in p for p in problems), problems
+
+
+def test_a_compact_handshake_carries_a_hash_where_the_full_one_carries_a_name(tmp_path):
+    """A compact HELLO and TOPIC parse, and a full one does too."""
+    files = {
+        "frames/compact_hello.yaml": """
+name: hello
+covers: [FRM-1]
+topic_id: 0
+seq: 0
+payload: "02 01 01 11 22 33 44 00 04 80 00 e8 03 00 00 11 01 6e 6f 64 65"
+frame: "00 00 02 01 01 11 22 33 44 00 04 80 00 e8 03 00 00 11 01 6e 6f 64 65 00 00"
+wire: "01 00 02 01 03 11 22 33 44 05 04 80 03 e8 03 03 01 11 01 6e 6f 64 65 00 00 00 00 00 00"
+""",
+        "frames/compact_topic.yaml": """
+name: topic_compact
+covers: [FRM-1]
+topic_id: 0
+seq: 1
+payload: "04 00 10 03 00 01 02 03 04 05 06 07 04 61 62 63 04 6e 6f 64 65"
+frame: "00 01 04 00 10 03 00 01 02 03 04 05 06 07 04 61 62 63 04 6e 6f 64 65 00 00"
+wire: "01 00 04 03 10 03 03 01 02 03 04 05 06 07 04 61 62 63 04 6e 6f 64 65 00 00 00 00 00 00"
+""",
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert not any("payload" in p for p in problems), problems
+
+
+def test_a_correction_whose_drift_is_outside_the_limit_is_reported(tmp_path):
+    files = {
+        "frames/correction.yaml": """
+name: correction
+covers: [FRM-1]
+topic_id: 1
+seq: 0
+payload: "03 00 00 00 00 00 00 00 00 00 00 00 00 30 75"
+frame: "01 00 03 00 00 00 00 00 00 00 00 00 00 00 30 75 00 00"
+wire: "01 00 03 02 00 02 00 00 00 00 00 00 00 00 00 30 75 00 00 00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("the drift is outside 20000 ppm" in p for p in problems), problems
