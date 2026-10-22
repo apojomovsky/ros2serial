@@ -17,12 +17,19 @@ if [ -z "$repo" ]; then
 fi
 settings=$(gh api "repos/$repo" --jq '[
   .allow_squash_merge, .allow_merge_commit, .allow_rebase_merge,
-  .squash_merge_commit_title, .squash_merge_commit_message] | @tsv' 2>/dev/null)
+  .squash_merge_commit_title, .squash_merge_commit_message] | @tsv')
 if [ -z "$settings" ]; then
   echo "merge-settings: cannot read the settings of $repo" >&2
   exit 1
 fi
 read -r squash merge rebase title message <<<"$settings"
+# The API hides the merge settings from a token that is not an admin, and
+# reports them as empty. That is not a wrong setting, it is an unreadable
+# one, so it says so rather than claiming the repository allows a merge.
+if [ -z "$squash$merge$rebase$title$message" ]; then
+  echo "merge-settings: the settings of $repo are not visible to this token" >&2
+  exit 75
+fi
 problems=""
 [ "$squash" = true ] || problems="$problems a squash merge is not allowed"
 [ "$merge" = false ] || problems="$problems a merge commit is allowed"

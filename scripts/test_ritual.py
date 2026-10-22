@@ -278,6 +278,27 @@ def test_the_merge_settings_check_catches_a_wrong_setting(tmp_path):
     assert "ADR-003" in out.stderr
 
 
+def test_settings_that_are_not_visible_to_the_token_are_not_a_failure(tmp_path):
+    """The API hides the merge settings from a token that is not an admin.
+
+    A fork's pull request has no token that can read them, and a token that
+    cannot is not a wrong setting.
+    """
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    gh = fake / "gh"
+    gh.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = "api" ]; then printf "\\t\\t\\t\\t\\n"; exit 0; fi\n'
+        'echo "apojomovsky/ros2serial"\n'
+    )
+    gh.chmod(0o755)
+    env = {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}"}
+    out = run(["bash", str(ROOT / "scripts/merge-settings.sh")], ROOT, env)
+    assert out.returncode == 75
+    assert "not visible" in out.stderr
+
+
 def test_the_pre_push_hook_allows_a_rebase_but_refuses_a_dropped_change(tmp_path):
     """A rebase keeps the changes, so it is not the force push the rule fears.
 

@@ -36,7 +36,18 @@ jobs:
         run: COMMITS=1 bash scripts/ci-test.sh
       - name: The repository's merge settings
         # The rule is what the settings allow, so they are checked where a
-        # token is available. The dev image has no gh.
+        # token can read them. The default GITHUB_TOKEN cannot: the API
+        # hides the merge settings from a token that is not an admin, and
+        # reports them as empty. The release token is a personal access
+        # token with the scope. A fork's pull request has neither, so the
+        # check says so and passes.
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash scripts/merge-settings.sh "${{ github.repository }}"
+          GH_TOKEN: ${{ secrets.R2S_RELEASE_TOKEN }}
+        run: |
+          bash scripts/merge-settings.sh "${{ github.repository }}"
+          status=$?
+          if [ "$status" = 75 ]; then
+            echo "the merge settings are not visible to this token; the check is skipped"
+          elif [ "$status" != 0 ]; then
+            exit "$status"
+          fi
