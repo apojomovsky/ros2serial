@@ -1,16 +1,43 @@
 #!/usr/bin/env bash
-# pre-push: refuse force pushes, run the prose gate, then the exact CI suite.
-# A force push is any push whose remote ref is not an ancestor of what is pushed:
-# it drops commits other agents may have pulled, so it needs the maintainer's
-# go-ahead and R2S_FORCE_PUSH_APPROVED=1.
+# pre-push: refuse a force push that drops work, run the prose gate, then the
+# exact CI suite.
+# A force push is any push whose remote ref is not an ancestor of what is
+# pushed, and it needs the maintainer's go-ahead and R2S_FORCE_PUSH_APPROVED=1.
+# A rebase of the branch's own commits is allowed: it rewrites the history
+# but keeps the changes, and every merge advances master, so without it every
+# open branch would need a force push of its own. A rebase is recognised by
+# the patch ids, which identify a change whatever its commit sits on.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 zero=0000000000000000000000000000000000000000
+
+# The patch ids of the commits in a range, one per line.
+patch_ids() {
+  git rev-list "$1" 2>/dev/null | while read -r sha; do
+    git show --pretty=format: "$sha" 2>/dev/null | git patch-id --stable 2>/dev/null | cut -d' ' -f1
+  done | sort -u
+}
+
+# Is every change the old ref carries still in the new one? The two sides
+# are measured from their common ancestor, which is where they part.
+same_changes() {
+  local old=$1 new=$2 base dropped added
+  base=$(git merge-base "$old" "$new" 2>/dev/null) || return 1
+  dropped=$(patch_ids "$old" "^$base")
+  [ -z "$dropped" ] && return 0
+  added=$(patch_ids "$new" "^$base")
+  while read -r id; do
+    [ -z "$id" ] && continue
+    grep -qx "$id" <<<"$added" || return 1
+  done <<<"$dropped"
+  return 0
+}
+
 while read -r local_ref local_oid remote_ref remote_oid; do
   [ -z "${local_ref:-}" ] && continue
   [ "$remote_oid" = "$zero" ] || [ "$local_oid" = "$zero" ] && continue
   if ! git merge-base --is-ancestor "$remote_oid" "$local_oid" 2>/dev/null; then
-    if [ "${R2S_FORCE_PUSH_APPROVED:-}" != 1 ]; then
+    if [ "${R2S_FORCE_PUSH_APPROVED:-}" != 1 ] && ! same_changes "$remote_oid" "$local_oid"; then
       echo "pre-push: refusing a force push to $remote_ref (needs the maintainer's go-ahead and R2S_FORCE_PUSH_APPROVED=1)"
       exit 1
     fi

@@ -47,6 +47,7 @@ Work is plain GitHub issues. A draft pull request is the claim.
 - **Claim before writing code:** open a draft PR from your worktree branch with `Closes #N`, the issue's `area:*` labels, and your agent ID (`<runtime>@<host>`) in the body. If someone else's draft PR for the same issue is older, close yours and pick again.
 - Branch names: `<type>/<issue>-<slug>`, for example `feat/42-rcobs-encoder`.
 - **One ticket at a time, from `master`.** A PR is not stacked on another PR's branch: a squash drops the parent branch's commits, so a stacked PR's diff would carry its parent's work again. A ticket branches from `master` and targets `master`. See `docs/adr/ADR-003-squash-merges.md`.
+- **Rebase when `master` moves on.** Every merged PR advances `master`, so an open branch falls behind it. Rebase the branch onto `master` and push: the pre-push hook allows that, because a rebase keeps the changes, and it refuses a force push that drops any of them. A rebase needs no approval; a force push that drops work needs the maintainer's go-ahead and `R2S_FORCE_PUSH_APPROVED=1`.
 
 ## Worktrees
 

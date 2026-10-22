@@ -1,6 +1,7 @@
 """The takeoff ritual, the git hooks and the push helper, on throwaway repositories."""
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -275,3 +276,63 @@ def test_the_merge_settings_check_catches_a_wrong_setting(tmp_path):
     out = run(["bash", str(ROOT / "scripts/merge-settings.sh")], ROOT, env)
     assert out.returncode == 1
     assert "ADR-003" in out.stderr
+
+
+def test_the_pre_push_hook_allows_a_rebase_but_refuses_a_dropped_change(tmp_path):
+    """A rebase keeps the changes, so it is not the force push the rule fears.
+
+    Every merge advances master, so without this every open branch would
+    need a force push of its own after the first merge of the day.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "master")
+    git(repo, "config", "user.email", "t@example.com")
+    git(repo, "config", "user.name", "t")
+    (repo / "a.txt").write_text("one\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-q", "-m", "feat(core): a")
+    git(repo, "switch", "-q", "-c", "feat/1-thing")
+    (repo / "b.txt").write_text("two\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-q", "-m", "feat(core): b")
+    remote = tmp_path / "remote.git"
+    git(tmp_path, "init", "-q", "--bare", str(remote))
+    git(repo, "push", "-q", str(remote), "feat/1-thing")
+
+    # Master moves on, and the branch is rebased onto it.
+    git(repo, "switch", "-q", "master")
+    (repo / "c.txt").write_text("three\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-q", "-m", "chore: master moves")
+    git(repo, "switch", "-q", "feat/1-thing")
+    git(repo, "rebase", "-q", "master")
+
+    env = {**os.environ, "R2S_PRE_PUSH_SUITE": "true", "R2S_FORCE_PUSH_APPROVED": ""}
+    # The hook is the repository's, so the change to it is what is tested.
+    (repo / ".githooks").mkdir()
+    shutil.copy2(ROOT / ".githooks/pre-push", repo / ".githooks/pre-push")
+    (repo / ".githooks/pre-push").chmod(0o755)
+    git(repo, "config", "core.hooksPath", ".githooks")
+
+    rebased = subprocess.run(
+        ["git", "push", "--force", str(remote), "feat/1-thing"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    said = rebased.stdout + rebased.stderr
+    assert "refusing a force push" not in said, said
+
+    # A push that drops a change is refused.
+    git(repo, "reset", "-q", "--hard", "HEAD~1")
+    dropped = subprocess.run(
+        ["git", "push", "--force", str(remote), "feat/1-thing"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    said = dropped.stdout + dropped.stderr
+    assert "refusing a force push" in said, said

@@ -20,10 +20,9 @@ if ! git rev-parse --verify -q "$base" >/dev/null; then
   fix "base $base not found: fetch it, or set BASE"
 elif ! git merge-base --is-ancestor "$base" HEAD; then
   # A rebase, not a merge: a merge commit is not part of a PR's work, since
-  # the PR is squashed. A rebase rewrites the pushed branch, so the push that
-  # follows is a force push, which the pre-push hook refuses without the
-  # maintainer's go-ahead.
-  fix "branch is behind $base: rebase it onto $base, then push with R2S_FORCE_PUSH_APPROVED=1"
+  # the PR is squashed. A rebase rewrites the pushed branch, but it keeps the
+  # changes, so the pre-push hook allows that push.
+  fix "branch is behind $base: rebase it onto $base and push"
 fi
 
 # 2. In a worktree, on a ticket branch.
@@ -89,10 +88,14 @@ fi
 
 # 11. The repository's merge settings.
 # A rule in a document says what should happen; the settings say what may
-# happen, so a merge commit is only possible if the settings allow it.
-if [ -n "${R2S_CHECK_MERGE_SETTINGS:-}" ]; then
-  bash "$root/scripts/merge-settings.sh" || fix "the repository's merge settings do not match ADR-003"
-fi
+# happen, so a merge commit is only possible if the settings allow it. The
+# check needs gh, and a host without it says so rather than passing.
+bash "$root/scripts/merge-settings.sh"
+case $? in
+  0) ;;
+  75) note "the repository's merge settings are not checked: gh is not available" ;;
+  *) fix "the repository's merge settings do not match ADR-003" ;;
+esac
 
 # 12. Hooks installed.
 [ "$(git config core.hooksPath)" = .githooks ] || fix "git hooks are not installed: make setup-hooks"
