@@ -44,8 +44,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.R2S_RELEASE_TOKEN }}
         run: |
-          bash scripts/merge-settings.sh "${{ github.repository }}"
-          status=$?
+          status=0
+          bash scripts/merge-settings.sh "${{ github.repository }}" || status=$?
           if [ "$status" = 75 ]; then
             echo "the merge settings are not visible to this token; the check is skipped"
           elif [ "$status" != 0 ]; then
