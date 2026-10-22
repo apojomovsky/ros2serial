@@ -105,8 +105,9 @@ def check_frame(name: str, data: dict) -> list[str]:
         problems.append(f"{name}/frame: shorter than 4 bytes")
     if not wire.endswith(b"\x00"):
         problems.append(f"{name}/wire: does not end with the delimiter")
-    problems += check_channel(name, data.get("name", ""), topic_id, payload)
-    problems += check_payload(data.get("name", ""), payload, topic_id)
+    frame_name = data.get("name", "")
+    problems += check_channel(name, frame_name, topic_id, payload)
+    problems += check_payload(name, frame_name, payload, topic_id)
     return problems
 
 
@@ -132,7 +133,6 @@ SYSTEM_CHANNELS = {
     4: {"heartbeat": "heartbeat"},
     5: {"error_report": "error_report"},
 }
-RESERVED_CHANNELS = range(7, 16)
 
 
 def layout_of(topic_id: int, payload: bytes) -> str:
@@ -147,15 +147,15 @@ def layout_of(topic_id: int, payload: bytes) -> str:
     opcodes = SYSTEM_CHANNELS[topic_id]
     if not opcodes:
         return "user"
-    if len(opcodes) == 1:
-        # The channel's payload has no opcode byte, so it is empty or not.
-        layout = next(iter(opcodes))
-        return layout if payload else "empty"
     if topic_id == 4:
         # The heartbeat channel carries two frames with no opcode, and the
         # payload tells them apart: the host's is empty, the MCU's carries
         # four counters.
         return "mcu_heartbeat" if payload else "heartbeat"
+    if len(opcodes) == 1:
+        # The channel's payload has no opcode byte, so it is empty or not.
+        layout = next(iter(opcodes))
+        return layout if payload else "empty"
     if not payload:
         return "empty"
     opcode = payload[0]
@@ -232,19 +232,28 @@ class _Reader:
         return struct.unpack("<i", self.take(4))[0]
 
     def varint(self) -> int:
+        """A varint as the spec gives it: at most 3 bytes, and the shortest.
+
+        The third byte carries no continuation bit, and a value that fits in
+        fewer bytes is not written in more.
+        """
         value = 0
         for i in range(3):
             byte = self.u8()
             value |= (byte & 0x7F) << (7 * i)
             if not byte & 0x80:
+                if i > 0 and value < (1 << (7 * i)):
+                    raise ValueError("the varint is not in its shortest form")
                 return value
+            if i == 2:
+                raise ValueError("the varint is longer than 3 bytes")
         raise ValueError("the varint is longer than 3 bytes")
 
     def string(self) -> bytes:
         return self.take(self.varint())
 
 
-def check_payload(name: str, payload: bytes, topic_id: int) -> list[str]:
+def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> list[str]:
     """Parse the payload the way the spec's tables describe it.
 
     A length that does not match the name it precedes is caught here, which
@@ -255,10 +264,6 @@ def check_payload(name: str, payload: bytes, topic_id: int) -> list[str]:
     problems: list[str] = []
     layout = layout_of(topic_id, payload)
     if layout == "user":
-        return problems
-    if layout == "reserved":
-        if payload:
-            problems.append(f"{name}/payload: a reserved channel carries no payload")
         return problems
     if layout == "unknown":
         problems.append(f"{name}/payload: the opcode is not one the spec gives for this channel")
@@ -315,7 +320,7 @@ def check_payload(name: str, payload: bytes, topic_id: int) -> list[str]:
             # The topic name is a string in a full handshake and a hash in
             # a compact one. A TOPIC carries no mode byte, so the vector's
             # name says which it is.
-            if name.endswith("_compact"):
+            if frame_name.endswith("_compact"):
                 r.u32()  # topic name hash
             elif not r.string():
                 problems.append(f"{name}/payload: the topic name is empty")
