@@ -4,7 +4,8 @@
 A draft or open PR claims every issue its body closes (Closes, Fixes or
 Resolves #N, or the issue URL). Its areas are its own area:* labels plus those of the issues
 it closes. With --agent, the PRs whose body says `agent: <id>` don't block
-that agent's areas, so it can stack its next ticket on its own open PRs.
+that agent's areas, so it can work a ticket in an area it already has a PR
+in.
 Issues labelled needs-hardware or dispatch-only belong to the maintainer.
 Two PRs claiming one issue is a race: the older PR keeps it.
 
