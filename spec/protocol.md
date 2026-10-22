@@ -206,7 +206,7 @@ The MCU sends on this channel; the host does not.
 - [ERR-3] A publish while not connected is reported once per connection, and a busy transmitter at most once per second.
 - [ERR-4] The `field` is the index of the offending field in depth-first declaration order over the type's field definitions, where the elements of an array are not counted separately, or 0xFF when the rule does not name a field.
 - [ERR-5] The host computes the same field order with introspection, so that it can log the path of the offending field.
-- [ERR-6] The `count` is the number of occurrences of the error since the last error report of the same code, and it wraps at 65535.
+- [ERR-6] The `count` is the number of times the error occurred since the last error report of that code, and it wraps at 65535. A code that [ERR-3] rate-limits is counted the same way and reported no more often than that.
 
 ## 8. Session
 
