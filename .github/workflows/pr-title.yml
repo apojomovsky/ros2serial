@@ -35,12 +35,12 @@ jobs:
           COMMIT_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
         run: COMMITS=1 bash scripts/ci-test.sh
       - name: The repository's merge settings
-        # The rule is what the settings allow, so they are checked where a
-        # token can read them. The default GITHUB_TOKEN cannot: the API
-        # hides the merge settings from a token that is not an admin, and
-        # reports them as empty. The release token is a personal access
-        # token with the scope. A fork's pull request has neither, so the
-        # check says so and passes.
+        # The rule is what the settings allow, so they are checked. The
+        # default GITHUB_TOKEN cannot read them: the API hides the merge
+        # settings from a token that is not an admin, and reports them as
+        # empty. The release token is a personal access token with the
+        # scope, and the repository has it once a release has been cut. A
+        # fork's pull request has neither, so the check says so and passes.
         env:
           GH_TOKEN: ${{ secrets.R2S_RELEASE_TOKEN }}
         run: |

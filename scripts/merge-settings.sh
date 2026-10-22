@@ -17,9 +17,16 @@ if [ -z "$repo" ]; then
 fi
 settings=$(gh api "repos/$repo" --jq '[
   .allow_squash_merge, .allow_merge_commit, .allow_rebase_merge,
-  .squash_merge_commit_title, .squash_merge_commit_message] | @tsv')
+  .squash_merge_commit_title, .squash_merge_commit_message] | @tsv' 2>/dev/null)
+status=$?
+if [ "$status" != 0 ]; then
+  # gh refuses to run without a token, and the repository has no secret yet
+  # on some workflows. That is an unreadable setting, not a wrong one.
+  echo "merge-settings: the settings of $repo cannot be read" >&2
+  exit 75
+fi
 if [ -z "$settings" ]; then
-  echo "merge-settings: cannot read the settings of $repo" >&2
+  echo "merge-settings: the settings of $repo are empty" >&2
   exit 1
 fi
 read -r squash merge rebase title message <<<"$settings"

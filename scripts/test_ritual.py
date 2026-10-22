@@ -278,6 +278,27 @@ def test_the_merge_settings_check_catches_a_wrong_setting(tmp_path):
     assert "ADR-003" in out.stderr
 
 
+def test_settings_that_cannot_be_read_are_not_a_failure(tmp_path):
+    """gh refuses to run without a token, which is not a wrong setting.
+
+    The repository has no secret yet, so a workflow without one cannot read
+    the settings and says so.
+    """
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    gh = fake / "gh"
+    gh.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = "api" ]; then echo "gh: set the GH_TOKEN environment variable." >&2; exit 4; fi\n'
+        'echo "apojomovsky/ros2serial"\n'
+    )
+    gh.chmod(0o755)
+    env = {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}", "GH_TOKEN": ""}
+    out = run(["bash", str(ROOT / "scripts/merge-settings.sh")], ROOT, env)
+    assert out.returncode == 75
+    assert "cannot be read" in out.stderr
+
+
 def test_settings_that_are_not_visible_to_the_token_are_not_a_failure(tmp_path):
     """The API hides the merge settings from a token that is not an admin.
 
