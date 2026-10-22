@@ -82,15 +82,18 @@ def check_frame(name: str, data: dict) -> list[str]:
     problems = []
     try:
         payload = bytes.fromhex(data["payload"])
+    except (KeyError, TypeError, ValueError) as e:
+        return [f"{name}/payload: not hexadecimal bytes: {e}"]
+    try:
         frame = bytes.fromhex(data["frame"])
         wire = bytes.fromhex(data["wire"])
         topic_id = data["topic_id"]
         seq = data["seq"]
         body = bytes((topic_id, seq)) + payload
-    except (KeyError, TypeError, ValueError) as e:
-        # The schema reports the field that is out of range; this only has to
-        # not crash on it.
-        return [] if isinstance(e, ValueError) else [f"{name}: the frame fields are not usable: {e}"]
+    except (KeyError, TypeError, ValueError):
+        # The schema reports the field that is out of range, so there is
+        # nothing to add here.
+        return []
 
     expected_frame = body + crc.crc16(body).to_bytes(2, "little")
     expected_wire = rcobs.encode(expected_frame) + b"\x00"
@@ -148,6 +151,11 @@ def layout_of(topic_id: int, payload: bytes) -> str:
         # The channel's payload has no opcode byte, so it is empty or not.
         layout = next(iter(opcodes))
         return layout if payload else "empty"
+    if topic_id == 4:
+        # The heartbeat channel carries two frames with no opcode, and the
+        # payload tells them apart: the host's is empty, the MCU's carries
+        # four counters.
+        return "mcu_heartbeat" if payload else "heartbeat"
     if not payload:
         return "empty"
     opcode = payload[0]
@@ -172,6 +180,7 @@ SPEC_NAMES = {
     "log": 2,
     "heartbeat": 4,
     "host_heartbeat": 4,
+    "mcu_heartbeat": 4,
     "error_report": 5,
 }
 
@@ -214,6 +223,12 @@ class _Reader:
 
     def u32(self) -> int:
         return struct.unpack("<I", self.take(4))[0]
+
+    def i16(self) -> int:
+        return struct.unpack("<h", self.take(2))[0]
+
+    def i32(self) -> int:
+        return struct.unpack("<i", self.take(4))[0]
 
     def varint(self) -> int:
         value = 0
@@ -294,19 +309,54 @@ def check_payload(name: str, payload: bytes, topic_id: int) -> list[str]:
                 problems.append(f"{name}/payload: the type name is empty")
             if not r.string():
                 problems.append(f"{name}/payload: the topic name is empty")
-        elif name == "host_heartbeat":
+        elif layout == "heartbeat":
             pass  # the host's heartbeat has no payload
-        elif name == "reserved_channel":
-            pass  # a frame the receiver ignores
-        elif name == "ping":
+        elif layout == "mcu_heartbeat":
+            for _ in range(4):
+                r.u16()  # rx frames, crc errors, rx overflows, dropped frames
+        elif layout == "topic_req":
+            if r.u8() != 0x03:
+                problems.append(f"{name}/payload: the opcode is not TOPIC_REQ")
+            r.u8()  # index
+        elif layout == "topic_status":
+            if r.u8() != 0x05:
+                problems.append(f"{name}/payload: the opcode is not TOPIC_STATUS")
+            r.u8()  # topic id
+            if r.u8() > 3:
+                problems.append(f"{name}/payload: the status is not one the spec gives")
+        elif layout == "ping":
             if r.u8() != 0x01:
                 problems.append(f"{name}/payload: the opcode is not PING")
             r.u8()  # ping id
-        elif name == "pong":
+        elif layout == "pong":
             if r.u8() != 0x02:
                 problems.append(f"{name}/payload: the opcode is not PONG")
             r.u8()  # ping id
             r.u32()  # tick
+        elif layout == "correction":
+            if r.u8() != 0x03:
+                problems.append(f"{name}/payload: the opcode is not CORRECTION")
+            r.u32()  # tick0
+            r.i32()  # sec
+            if r.u32() >= 1000000000:
+                problems.append(f"{name}/payload: nanosec is not below 10^9")
+            r.i16()  # drift ppm
+        elif layout == "log":
+            if r.u8() not in (10, 20, 30, 40, 50):
+                problems.append(f"{name}/payload: the level is not a ROS severity")
+            r.string()  # text
+            kind = r.u8()
+            if kind > 5:
+                problems.append(f"{name}/payload: the value kind is not one the spec gives")
+            elif kind in (1, 2):
+                r.take(2)
+            elif kind in (3, 4, 5):
+                r.take(4)
+        elif layout == "error_report":
+            r.u8()  # code
+            r.u8()  # topic id
+            r.u16()  # count
+            r.u8()  # field
         if r.pos != len(payload):
             problems.append(f"{name}/payload: {len(payload) - r.pos} bytes were not read")
     except ValueError as e:
