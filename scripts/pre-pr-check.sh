@@ -93,7 +93,10 @@ fi
 
 # 13. The full suite.
 if [ "${TEST:-}" = 1 ]; then
-  bash "$root/scripts/ci-test.sh" >/dev/null 2>&1 || fix "the suite fails: bash scripts/ci-test.sh"
+  bash "$root/scripts/ci-test.sh" >/dev/null 2>&1 || {
+    bash "$root/scripts/ci-test.sh" 2>&1 | tail -20
+    fix "the suite fails: bash scripts/ci-test.sh"
+  }
 fi
 
 for n in "${notes[@]}"; do echo "note: $n"; done
