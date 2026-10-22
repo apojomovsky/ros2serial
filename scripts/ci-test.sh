@@ -10,19 +10,20 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source "$root/scripts/clean-git-env.sh"
 cd "$root" || exit 2
 
-# One suite at a time per repository. A second run would wait on the same
-# lock and then test a tree the first run had already changed, so it says so
-# and stops instead. The lock lives in the cache, under the repository's
-# path, so it is scoped to this repository the way the build directory is.
+# TEST goes here and not further down: the script tests call the ritual, and a
+# ritual that sees TEST=1 runs the suite again, so the pair would fork.
+unset TEST
+
+# One suite at a time per tree. A second run would wait on the same lock and
+# then test a tree the first run had already changed, so it says so and stops
+# instead. The lock lives in the cache, under the tree's path, so a run of a
+# copy of the tree takes its own lock and does not collide with the run that
+# copied it.
 cache=${R2S_CACHE_DIR:-}
 if [ -z "$cache" ] && [ -n "${R2S_BUILD_DIR:-}" ]; then
   cache=$(dirname "$R2S_BUILD_DIR")
 fi
 cache=${cache:-$HOME/.cache/ros2serial}
-# The lock path names the tree the run tests, so a run of a copy of the tree
-# takes its own lock and never collides with the run of the tree it was
-# copied from. A caller that runs the suite on a tree of its own choosing
-# names that tree in R2S_SUITE_LOCK_TREE and the lock in R2S_SUITE_LOCK.
 suite_lock=$cache/$(echo "$root" | tr / -)/suite.lock
 if [ -n "${R2S_SUITE_LOCK:-}" ] && [ "${R2S_SUITE_LOCK_TREE:-}" = "$root" ]; then
   suite_lock=$R2S_SUITE_LOCK
@@ -33,8 +34,8 @@ mkdir -p "$(dirname "$suite_lock")" 2>/dev/null || {
   exit 1
 }
 # The lock is taken here and held for the whole run, so a second suite run
-# is refused. The script does not re-exec itself to take it: the suite runs
-# this script, so a self re-exec would nest without end.
+# for the tree is refused. The script does not re-exec itself to take it: the
+# suite runs this script, so a self re-exec would nest without end.
 exec 9>"$suite_lock" || {
   echo "the suite lock cannot be opened ($suite_lock)" >&2
   exit 1
@@ -49,9 +50,6 @@ elif ! flock -n 9; then
   echo "wait for it, or set R2S_SUITE_LOCK_WAIT=1 to queue" >&2
   exit 75
 fi
-# The tree the run is of, so a run inside this one knows that the suite for
-# this tree has already been made.
-export R2S_SUITE_TREE="$root"
 
 scoped=0
 for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E; do [ -n "${!v:-}" ] && scoped=1; done

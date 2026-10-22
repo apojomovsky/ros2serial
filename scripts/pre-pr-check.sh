@@ -4,6 +4,8 @@
 #   BASE     ref the PR targets (default origin/master; a stacked PR uses its parent's branch)
 #   PR_BODY  file holding the PR body, to check it too
 #   TEST=1   also run the full suite
+#   R2S_SUITE  script to run instead of the suite, so a test can see what the
+#              suite was given
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 base=${BASE:-origin/master}
@@ -92,13 +94,18 @@ if grep -qE '^(core/include/|cpp/|gen/r2s_gen/cli.py|bridge/r2s_bridge/config/)'
 fi
 
 # 13. The full suite.
-if [ "${TEST:-}" = 1 ] && [ "${R2S_SUITE_TREE:-}" = "$root" ]; then
-  note "the suite for this tree is already running: not running it again"
-elif [ "${TEST:-}" = 1 ]; then
+if [ "${TEST:-}" = 1 ]; then
+  # The suite's own tests call this ritual, and a ritual that sees TEST=1
+  # runs the suite again, so TEST does not go down with it. The scopes do:
+  # the child must do what this run was asked to do, no more. This ritual's
+  # own inputs go too, so a nested ritual reads its own base and body
+  # rather than the outer ones. R2S_SUITE names the script to run, so a
+  # test can see what the suite was given.
+  suite=${R2S_SUITE:-$root/scripts/ci-test.sh}
   # The output is kept, so a failure can be shown without running the suite
   # again: a second run would be refused by the lock the first one holds.
   suite_log=$(mktemp "${TMPDIR:-/tmp}/r2s-suite.XXXXXX")
-  if ! bash "$root/scripts/ci-test.sh" >"$suite_log" 2>&1; then
+  if ! env -u TEST -u BASE -u PR_BODY bash "$suite" >"$suite_log" 2>&1; then
     # The failed section is the point, so it is shown, not the last lines.
     sed -n '/== scripts-tests/,/== scripts-tests:/p' "$suite_log" | tail -30
     tail -5 "$suite_log"

@@ -205,3 +205,33 @@ def test_the_suite_cleans_the_git_variables_before_any_section():
     assert text.index('source "$root/scripts/clean-git-env.sh"') < text.index("\nif wants ")
     hook = (ROOT / ".githooks/pre-push").read_text()
     assert hook.index('source "$root/scripts/clean-git-env.sh"') < hook.index("R2S_PRE_PUSH_SUITE")
+
+
+def test_the_ritual_does_not_leak_its_scopes_into_the_suite(tmp_path):
+    """A ritual that runs the suite must not let that suite run a ritual.
+
+    The suite's own tests call the ritual, so a TEST that reaches the suite
+    comes back as another ritual, and the pair forks without bound. The
+    ritual therefore starts the suite without it.
+    """
+    main, wt = fixture(tmp_path)
+    git(main, "config", "core.hooksPath", ".githooks")
+    commit(wt, {"core/a.py": "# Bounded so the PIC stack never overflows.\nX = 1\n"}, "feat(core): add a thing")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+
+    # The suite records the scopes it was started with, so a leak shows.
+    marker = tmp_path / "scopes.txt"
+    recorder = tmp_path / "record-scopes.sh"
+    recorder.write_text(f'echo "TEST=${{TEST:-}} SCRIPTS=${{SCRIPTS:-}}" > {marker}\n')
+
+    result = ritual(wt, TEST="1", SCRIPTS="1", PR_BODY=str(body), R2S_SUITE=str(recorder))
+    # The exit code is not the point: the fixture is a bare repository with
+    # no compiler toolchain, so the ritual reports other problems. Every
+    # test here asserts on stdout for the same reason. What matters is what
+    # the suite was given.
+    assert marker.exists(), result.stdout + result.stderr
+    # TEST is the trigger: the suite's own tests call the ritual, and a
+    # ritual that still sees TEST=1 runs the suite again. The scopes stay,
+    # so the child does what this run was asked to do.
+    assert marker.read_text().strip() == "TEST= SCRIPTS=1", "the suite was started with TEST still set"
