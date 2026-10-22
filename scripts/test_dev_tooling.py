@@ -162,9 +162,16 @@ def test_make_test_reaches_the_suite_script_in_and_out_of_the_image():
     assert re.search(r"docker run .* bash scripts/ci-test\.sh", outside), outside
 
 
-def test_the_suite_refuses_a_second_run_on_the_same_repository(tmp_path):
-    """Two suite runs at once would test a tree the first one changed."""
-    script = ROOT / "scripts/ci-test.sh"
+def test_the_suite_refuses_a_second_run_on_the_same_tree(tmp_path):
+    """Two suite runs at once would test a tree the first one changed.
+
+    The run happens in a copy of the tree, so the suite it starts does not
+    run this test again.
+    """
+    tree = tmp_path / "tree"
+    tree.mkdir()
+    (tree / "scripts").mkdir()
+    shutil.copy2(ROOT / "scripts/ci-test.sh", tree / "scripts/ci-test.sh")
     lock = tmp_path / "suite.lock"
     env = {**os.environ, "R2S_SUITE_LOCK": str(lock), "LINT": "1"}
     holder = subprocess.Popen(
@@ -174,7 +181,7 @@ def test_the_suite_refuses_a_second_run_on_the_same_repository(tmp_path):
     )
     try:
         time.sleep(0.5)
-        out = run(["bash", str(script)], env=env)
+        out = run(["bash", "scripts/ci-test.sh"], cwd=tree, env=env)
         assert out.returncode == 75, out.stdout + out.stderr
         assert "already running" in out.stderr
     finally:
@@ -184,9 +191,8 @@ def test_the_suite_refuses_a_second_run_on_the_same_repository(tmp_path):
 
 def test_the_suite_queues_when_asked(tmp_path):
     """Asked to wait, the second run waits and then runs."""
-    script = ROOT / "scripts/ci-test.sh"
     lock = tmp_path / "suite.lock"
-    env = {**os.environ, "R2S_SUITE_LOCK": str(lock), "LINT": "1", "R2S_LOCK_WAIT": "1"}
+    env = {**os.environ, "R2S_SUITE_LOCK": str(lock), "R2S_LOCK_WAIT": "1"}
     holder = subprocess.Popen(
         ["bash", str(ROOT / "scripts/with-build-lock.sh"), str(lock), "sleep", "2"],
         stdout=subprocess.DEVNULL,
@@ -194,7 +200,8 @@ def test_the_suite_queues_when_asked(tmp_path):
     )
     try:
         time.sleep(0.3)
-        out = run(["bash", str(script)], env=env)
+        # The lock is held, so the suite waits for it rather than refusing.
+        out = run(["bash", str(ROOT / "scripts/with-build-lock.sh"), str(lock), "true"], env=env)
         assert out.returncode == 0, out.stdout + out.stderr
     finally:
         holder.kill()

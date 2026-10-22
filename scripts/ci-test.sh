@@ -19,6 +19,10 @@ if [ -z "$cache" ] && [ -n "${R2S_BUILD_DIR:-}" ]; then
   cache=$(dirname "$R2S_BUILD_DIR")
 fi
 cache=${cache:-$HOME/.cache/ros2serial}
+# The lock path names the tree the run tests, so a run of a copy of the tree
+# takes its own lock and never waits for the run of the tree it was copied
+# from. R2S_SUITE_LOCK names it outright, for a caller that runs the suite on
+# a tree of its own choosing.
 suite_lock=${R2S_SUITE_LOCK:-$cache/$(echo "$root" | tr / -)/suite.lock}
 mkdir -p "$(dirname "$suite_lock")" 2>/dev/null || {
   echo "the suite lock directory cannot be created ($suite_lock)" >&2
