@@ -102,37 +102,93 @@ def check_frame(name: str, data: dict) -> list[str]:
         problems.append(f"{name}/frame: shorter than 4 bytes")
     if not wire.endswith(b"\x00"):
         problems.append(f"{name}/wire: does not end with the delimiter")
-    problems += check_channel(name, data, topic_id)
-    problems += check_payload(data.get("name", ""), payload)
+    problems += check_channel(name, data.get("name", ""), topic_id, payload)
+    problems += check_payload(data.get("name", ""), payload, topic_id)
     return problems
 
 
-# The system channels of spec/protocol.md section 7, and the range a user
-# topic takes.
+# The system channels of spec/protocol.md section 7. A channel's opcodes
+# name the layout its payload has, so a vector is checked by the channel and
+# the opcode it carries, not by the name it happens to have.
+CONTROL_OPCODES = {
+    0x01: "hello_req",
+    0x02: "hello",
+    0x03: "topic_req",
+    0x04: "topic",
+    0x05: "topic_status",
+    0x06: "ready",
+}
+TIME_OPCODES = {0x01: "ping", 0x02: "pong", 0x03: "correction"}
+# The channels whose payload has no opcode byte, so an empty payload on
+# them is what the spec says.
+NO_OPCODE_CHANNELS = {4, 5}
 SYSTEM_CHANNELS = {
+    0: CONTROL_OPCODES,
+    1: TIME_OPCODES,
+    2: {"log": "log"},
+    4: {"heartbeat": "heartbeat"},
+    5: {"error_report": "error_report"},
+}
+RESERVED_CHANNELS = range(7, 16)
+
+
+def layout_of(topic_id: int, payload: bytes) -> str:
+    """The layout a payload has, from its channel and its opcode.
+
+    A frame on a system channel begins with an opcode byte, which names the
+    layout. A frame on a user topic carries a message, which this does not
+    know, so it is left alone.
+    """
+    if topic_id not in SYSTEM_CHANNELS:
+        return "user"
+    opcodes = SYSTEM_CHANNELS[topic_id]
+    if not opcodes:
+        return "user"
+    if len(opcodes) == 1:
+        # The channel's payload has no opcode byte, so it is empty or not.
+        layout = next(iter(opcodes))
+        return layout if payload else "empty"
+    if not payload:
+        return "empty"
+    opcode = payload[0]
+    if opcode not in opcodes:
+        return "unknown"
+    return opcodes[opcode]
+
+
+# The channel each opcode the spec gives belongs to, by the name of the
+# frame. A vector on a system channel names the frame it carries, so the
+# name is what says which channel the frame was meant for.
+SPEC_NAMES = {
     "hello_req": 0,
     "hello": 0,
-    "ready": 0,
+    "topic_req": 0,
     "topic": 0,
+    "topic_status": 0,
+    "ready": 0,
     "ping": 1,
     "pong": 1,
+    "correction": 1,
+    "log": 2,
+    "heartbeat": 4,
     "host_heartbeat": 4,
-    "reserved_channel": None,  # any id from 7 to 15
+    "error_report": 5,
 }
 
 
-def check_channel(name: str, data: dict, topic_id: int) -> list[str]:
-    """Check that the frame is on the channel its name says."""
-    vector_name = data.get("name")
-    if vector_name not in SYSTEM_CHANNELS:
+def check_channel(name: str, vector_name: str, topic_id: int, payload: bytes) -> list[str]:
+    """Check that the frame sits on the channel its name says."""
+    if 7 <= topic_id <= 15:
+        if payload:
+            return [f"{name}/payload: a reserved channel carries no payload"]
         return []
-    wanted = SYSTEM_CHANNELS[vector_name]
-    if wanted is None:
-        if not 7 <= topic_id <= 15:
-            return [f"{name}/topic_id: {topic_id} is not in the reserved range 7 to 15"]
+    if topic_id not in SYSTEM_CHANNELS:
         return []
+    if vector_name not in SPEC_NAMES:
+        return [f"{name}/name: {vector_name} is not a frame the spec gives"]
+    wanted = SPEC_NAMES[vector_name]
     if topic_id != wanted:
-        return [f"{name}/topic_id: {topic_id} is not the channel {wanted} of this vector"]
+        return [f"{name}/topic_id: {topic_id} is not the channel {wanted} of a {vector_name} frame"]
     return []
 
 
@@ -172,41 +228,41 @@ class _Reader:
         return self.take(self.varint())
 
 
-# The payload layouts the spec gives, by the name of the vector that
-# carries them. A vector whose layout is not here is left alone.
-PAYLOAD_LAYOUTS = {
-    "hello_req",
-    "hello",
-    "ready",
-    "topic",
-    "host_heartbeat",
-    "reserved_channel",
-    "ping",
-    "pong",
-}
-
-
-def check_payload(name: str, payload: bytes) -> list[str]:
+def check_payload(name: str, payload: bytes, topic_id: int) -> list[str]:
     """Parse the payload the way the spec's tables describe it.
 
     A length that does not match the name it precedes is caught here, which
-    the frame and wire bytes alone cannot show. A vector whose layout this
-    does not know is left alone.
+    the frame and wire bytes alone cannot show. The layout comes from the
+    channel and the opcode, so a vector that is added later is checked
+    without this tool changing.
     """
     problems: list[str] = []
-    if name not in PAYLOAD_LAYOUTS:
+    layout = layout_of(topic_id, payload)
+    if layout == "user":
+        return problems
+    if layout == "reserved":
+        if payload:
+            problems.append(f"{name}/payload: a reserved channel carries no payload")
+        return problems
+    if layout == "unknown":
+        problems.append(f"{name}/payload: the opcode is not one the spec gives for this channel")
+        return problems
+    if layout == "empty":
+        if topic_id in NO_OPCODE_CHANNELS:
+            return problems
+        problems.append(f"{name}/payload: a frame on this channel carries an opcode")
         return problems
     r = _Reader(payload)
     try:
-        if name == "hello_req":
+        if layout == "hello_req":
             if r.u8() != 0x01:
                 problems.append(f"{name}/payload: the opcode is not HELLO_REQ")
             if r.u8() != 0x01:
                 problems.append(f"{name}/payload: the protocol version is not 1")
-        elif name == "ready":
+        elif layout == "ready":
             if r.u8() != 0x06:
                 problems.append(f"{name}/payload: the opcode is not READY")
-        elif name == "hello":
+        elif layout == "hello":
             if r.u8() != 0x02:
                 problems.append(f"{name}/payload: the opcode is not HELLO")
             if r.u8() != 0x01:
@@ -225,7 +281,7 @@ def check_payload(name: str, payload: bytes) -> list[str]:
             r.u8()  # topic count
             if not r.string():
                 problems.append(f"{name}/payload: the node name is empty")
-        elif name == "topic":
+        elif layout == "topic":
             if r.u8() != 0x04:
                 problems.append(f"{name}/payload: the opcode is not TOPIC")
             r.u8()  # index

@@ -180,3 +180,53 @@ wire: "01 00 04 02 10 02 01 01 02 03 04 05 06 07 16 00 00 00 00 00 00"
     }
     problems = vectors_check.check_tree(make_tree(tmp_path, files))
     assert any("payload" in p for p in problems), problems
+
+
+def test_a_layout_is_chosen_by_the_opcode_not_by_the_vector_name(tmp_path):
+    """A vector whose name says nothing still gets its layout checked."""
+    files = {
+        "frames/unnamed.yaml": """
+name: something_else
+covers: [FRM-1]
+topic_id: 0
+seq: 0
+payload: "04 00 10 00 00 01 02 03 04 05 06 07 16"
+frame: "00 00 04 00 10 00 00 01 02 03 04 05 06 07 16 00 00"
+wire: "01 00 04 02 10 02 01 01 02 03 04 05 06 07 16 00 00 00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("payload" in p for p in problems), problems
+
+
+def test_an_opcode_the_spec_does_not_give_is_reported(tmp_path):
+    files = {
+        "frames/bad_opcode.yaml": """
+name: hello
+covers: [FRM-1]
+topic_id: 0
+seq: 0
+payload: "07 01"
+frame: "00 00 07 01 00 00"
+wire: "01 00 07 01 00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("the opcode is not one the spec gives" in p for p in problems), problems
+
+
+def test_a_frame_on_the_wrong_channel_is_reported(tmp_path):
+    """A PING on the control channel is not a PING."""
+    files = {
+        "frames/wrong_channel.yaml": """
+name: ping
+covers: [FRM-1]
+topic_id: 0
+seq: 0
+payload: "01 2a"
+frame: "00 00 01 2a 00 00"
+wire: "01 00 01 2a 00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("is not the channel 1 of a ping frame" in p for p in problems), problems
