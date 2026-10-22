@@ -202,3 +202,18 @@ def test_the_suite_queues_when_asked(tmp_path):
     finally:
         holder.kill()
         holder.wait()
+
+
+def test_the_suite_runs_without_flock(tmp_path):
+    """A host without flock runs the suite unlocked, as the build lock does."""
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    for name in ("bash", "cat", "dirname", "grep", "mkdir", "mktemp", "rm", "sed", "tail", "tr"):
+        found = shutil.which(name)
+        if found:
+            (stub / name).symlink_to(found)
+    env = {**os.environ, "PATH": str(stub), "LINT": "1"}
+    out = run(["bash", str(ROOT / "scripts/ci-test.sh")], env=env)
+    # The suite ran: it got as far as the lint, which has no ruff here.
+    assert "flock is not on this host" in out.stderr
+    assert "the suite lock cannot be" not in out.stderr

@@ -106,9 +106,17 @@ if [ "${TEST:-}" = 1 ]; then
   # again: a second run would be refused by the lock the first one holds.
   suite_log=$(mktemp "${TMPDIR:-/tmp}/r2s-suite.XXXXXX")
   if ! env -u TEST -u BASE -u PR_BODY bash "$suite" >"$suite_log" 2>&1; then
-    # The failed section is the point, so it is shown, not the last lines.
-    sed -n '/== scripts-tests/,/== scripts-tests:/p' "$suite_log" | tail -30
-    tail -5 "$suite_log"
+    # The failed sections are the point, so they are shown. The suite names
+    # them on its last line; a section that is not named falls back to the
+    # last lines of the log.
+    shown=0
+    for s in $(sed -n 's/^failed sections: //p' "$suite_log"); do
+      for name in $s; do
+        sed -n "/^== $name$/,/^== $name:/p" "$suite_log"
+        shown=1
+      done
+    done
+    [ "$shown" = 1 ] || tail -5 "$suite_log"
     rm -f "$suite_log"
     fix "the suite fails: bash scripts/ci-test.sh"
   else

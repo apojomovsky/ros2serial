@@ -35,20 +35,25 @@ mkdir -p "$(dirname "$suite_lock")" 2>/dev/null || {
 }
 # The lock is taken here and held for the whole run, so a second suite run
 # for the tree is refused. The script does not re-exec itself to take it: the
-# suite runs this script, so a self re-exec would nest without end.
-exec 9>"$suite_lock" || {
-  echo "the suite lock cannot be opened ($suite_lock)" >&2
-  exit 1
-}
-if [ "${R2S_SUITE_LOCK_WAIT:-0}" = 1 ]; then
-  flock 9 || {
-    echo "the suite lock cannot be taken ($suite_lock)" >&2
+# suite runs this script, so a self re-exec would nest without end. A host
+# without flock runs unlocked, as the build lock does.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$suite_lock" || {
+    echo "the suite lock cannot be opened ($suite_lock)" >&2
     exit 1
   }
-elif ! flock -n 9; then
-  echo "the suite is already running for this repository ($suite_lock)" >&2
-  echo "wait for it, or set R2S_SUITE_LOCK_WAIT=1 to queue" >&2
-  exit 75
+  if [ "${R2S_SUITE_LOCK_WAIT:-0}" = 1 ]; then
+    flock 9 || {
+      echo "the suite lock cannot be taken ($suite_lock)" >&2
+      exit 1
+    }
+  elif ! flock -n 9; then
+    echo "the suite is already running for this repository ($suite_lock)" >&2
+    echo "wait for it, or set R2S_SUITE_LOCK_WAIT=1 to queue" >&2
+    exit 75
+  fi
+else
+  echo "the suite lock is not taken: flock is not on this host" >&2
 fi
 
 scoped=0
