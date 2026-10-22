@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The takeoff ritual (AGENTS.md): run before opening a PR, from the PR's worktree.
 # Prints one FIX line per blocking problem and exits 1 while any remain.
-#   BASE     ref the PR targets (default origin/master; a stacked PR uses its parent's branch)
+#   BASE     ref the PR targets (default origin/master; a PR is never stacked)
 #   PR_BODY  file holding the PR body, to check it too
 #   TEST=1   also run the full suite
 #   R2S_SUITE  script to run instead of the suite, so a test can see what the
@@ -20,8 +20,10 @@ if ! git rev-parse --verify -q "$base" >/dev/null; then
   fix "base $base not found: fetch it, or set BASE"
 elif ! git merge-base --is-ancestor "$base" HEAD; then
   # A rebase, not a merge: a merge commit is not part of a PR's work, since
-  # the PR is squashed.
-  fix "branch is behind $base: rebase it onto $base"
+  # the PR is squashed. A rebase rewrites the pushed branch, so the push that
+  # follows is a force push, which the pre-push hook refuses without the
+  # maintainer's go-ahead.
+  fix "branch is behind $base: rebase it onto $base, then push with R2S_FORCE_PUSH_APPROVED=1"
 fi
 
 # 2. In a worktree, on a ticket branch.
@@ -85,17 +87,24 @@ else
   note "PR body: pass PR_BODY=<file> to check it"
 fi
 
-# 11. Hooks installed.
+# 11. The repository's merge settings.
+# A rule in a document says what should happen; the settings say what may
+# happen, so a merge commit is only possible if the settings allow it.
+if [ -n "${R2S_CHECK_MERGE_SETTINGS:-}" ]; then
+  bash "$root/scripts/merge-settings.sh" || fix "the repository's merge settings do not match ADR-003"
+fi
+
+# 12. Hooks installed.
 [ "$(git config core.hooksPath)" = .githooks ] || fix "git hooks are not installed: make setup-hooks"
 
-# 12. README and docs freshness (advisory).
+# 13. README and docs freshness (advisory).
 if grep -qE '^(core/include/|cpp/|gen/r2s_gen/cli.py|bridge/r2s_bridge/config/)' <<<"$changed" \
   && ! grep -qE '^(README.md|docs/)' <<<"$changed" \
   && ! { [ -n "${PR_BODY:-}" ] && grep -q 'README: n/a' "$PR_BODY" 2>/dev/null; }; then
   note "user-visible files changed without README.md or docs/: update them or write README: n/a in the PR body"
 fi
 
-# 13. The full suite.
+# 14. The full suite.
 if [ "${TEST:-}" = 1 ]; then
   # The suite's own tests call this ritual, and a ritual that sees TEST=1
   # runs the suite again, so TEST does not go down with it. The scopes do:

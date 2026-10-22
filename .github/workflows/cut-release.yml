@@ -8,8 +8,8 @@ name: cut-release
 # required checks would never run and release.yml would never start.
 # Auto-merge needs "Allow auto-merge" enabled in the repository settings.
 # The release PR is squashed like every other PR, so the commit on master
-# carries the PR number after the subject, and the tag job matches on the
-# subject's prefix.
+# carries the PR number after the subject, and the tag job matches the
+# subject and the subject with the number.
 
 on:
   workflow_dispatch:

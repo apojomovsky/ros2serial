@@ -3,8 +3,10 @@
 
 Usage:
   commit_check.py --file <path>          one message (the commit-msg hook)
-  commit_check.py --range <base..head>   every commit in a range
+  commit_check.py --range <base..head>   every non-merge commit in a range
   commit_check.py --title <text>         a PR title
+  commit_check.py --title <text> --covers-range <base..head>
+                                           the title must cover what the commits declare
 
 Exits 1 with one line per problem.
 """
@@ -71,6 +73,61 @@ def check_title(title: str) -> list[str]:
     return check_subject(title.strip())
 
 
+# The type and the breaking marker a subject declares.
+def _declared(subject: str) -> tuple[str, bool]:
+    """The type and the breaking marker a subject declares.
+
+    The `!` of a breaking change comes after the scope, so it is read from
+    the part before the colon.
+    """
+    m = SUBJECT.match(subject)
+    if not m:
+        return "", False
+    head = m.group(0).split(":", 1)[0]
+    return head.split("(", 1)[0].split("!", 1)[0], "!" in head
+
+
+# How much a type says. A title that says less than a commit hides the
+# commit's type from the changelog and the version bump.
+_STRENGTH = {
+    "chore": 0,
+    "docs": 1,
+    "test": 1,
+    "build": 1,
+    "ci": 1,
+    "refactor": 2,
+    "revert": 2,
+    "perf": 3,
+    "fix": 4,
+    "feat": 5,
+}
+
+
+def check_title_covers(title: str, subjects: list[str]) -> list[str]:
+    """The title is the subject that lands, so it must carry the strongest type.
+
+    A PR holding a `feat` commit but titled `docs(...)` reaches neither the
+    changelog nor the version bump, and a `!` on a commit is lost with the
+    commit, so the title must carry it.
+    """
+    problems = []
+    title_kind, title_breaking = _declared(title)
+    if not title_kind:
+        return problems
+    for subject in subjects:
+        kind, breaking = _declared(subject)
+        if not kind:
+            continue
+        if _STRENGTH.get(kind, 0) > _STRENGTH.get(title_kind, 0):
+            problems.append(
+                f"the title is {title_kind!r} but a commit is {kind!r}: the title is the "
+                f"subject that lands, so it must carry the strongest type"
+            )
+        if breaking and not title_breaking:
+            problems.append("a commit is a breaking change and the title is not: the title must carry the '!'")
+    return problems
+
+
 def _range_messages(rev_range: str) -> list[tuple[str, str]]:
     # A merge commit is not part of a PR's work: the PR is squashed, so its
     # merge commit is never what lands. A merge commit on a branch that was
@@ -94,6 +151,7 @@ def main() -> int:
     group.add_argument("--file")
     group.add_argument("--range")
     group.add_argument("--title")
+    group.add_argument("--covers-range", help="the range of commits the title must cover")
     args = ap.parse_args()
 
     if args.file:
@@ -101,6 +159,9 @@ def main() -> int:
             problems = check_message(f.read())
     elif args.title is not None:
         problems = [f"PR title: {p}" for p in check_title(args.title)]
+        if args.covers_range:
+            subjects = [msg.splitlines()[0] for _, msg in _range_messages(args.covers_range)]
+            problems += [f"PR title: {p}" for p in check_title_covers(args.title.strip(), subjects)]
     else:
         problems = [f"{sha}: {p}" for sha, msg in _range_messages(args.range) for p in check_message(msg)]
     for p in problems:

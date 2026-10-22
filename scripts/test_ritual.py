@@ -2,7 +2,12 @@
 
 import os
 import subprocess
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import commit_check  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 EM = "\u2014"
@@ -237,3 +242,36 @@ def test_the_ritual_does_not_leak_its_scopes_into_the_suite(tmp_path):
     # ritual that still sees TEST=1 runs the suite again. The scopes stay,
     # so the child does what this run was asked to do.
     assert marker.read_text().strip() == "TEST= SCRIPTS=1", "the suite was started with TEST still set"
+
+
+def test_the_title_must_carry_the_strongest_type_of_its_commits():
+    """The title is the subject that lands, so it must carry the type.
+
+    A PR holding a feat commit but titled docs(...) reaches neither the
+    changelog nor the version bump, and a `!` on a commit is lost with the
+    commit.
+    """
+    assert commit_check.check_title_covers("docs(core): add the encoder", ["feat(core): add the encoder"]) != []
+    assert commit_check.check_title_covers("feat(core): add the encoder", ["feat(core): add the encoder"]) == []
+    assert commit_check.check_title_covers("fix(core): a thing", ["fix(core): a thing"]) == []
+    assert commit_check.check_title_covers("docs(spec): tidy", ["docs(spec): tidy"]) == []
+    # A breaking change on a commit is lost unless the title carries it.
+    assert commit_check.check_title_covers("feat(core): widen ids", ["feat(spec)!: widen ids"]) != []
+    assert commit_check.check_title_covers("feat(core)!: widen ids", ["feat(spec)!: widen ids"]) == []
+
+
+def test_the_merge_settings_check_catches_a_wrong_setting(tmp_path):
+    """The settings are what make the rule hold, so they are checked."""
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    gh = fake / "gh"
+    gh.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = "api" ]; then printf "true\\ttrue\\ttrue\\tCOMMIT_MESSAGES\\tCOMMIT_MESSAGES\\n"; exit 0; fi\n'
+        'echo "apojomovsky/ros2serial"\n'
+    )
+    gh.chmod(0o755)
+    env = {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}"}
+    out = run(["bash", str(ROOT / "scripts/merge-settings.sh")], ROOT, env)
+    assert out.returncode == 1
+    assert "ADR-003" in out.stderr
