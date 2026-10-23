@@ -4,6 +4,8 @@ Version 0.3 (draft) · protocol version 1
 
 This document is normative. Every normative statement is a list item starting with an ID in brackets, such as `[FRM-1]`. Conformance vectors (`spec/vectors/`) and tests name the IDs they cover, so every rule here is checked by at least one test (`docs/01-testing.md`, section 3). IDs are never reused: a removed rule keeps its list item, with its text replaced by "Retired.", so the numbering has no gaps.
 
+A section whose heading ends in `(local)` specifies bytes that never appear on the wire, so tests, not conformance vectors, cover its rules.
+
 The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119. Prose outside the ID items, tables included, is informative.
 
 This version covers the frame, the frame check, rCOBS, varints, the message encoding, the codec descriptors, the system channels, the handshake, the session state machines, the error counters and time synchronization. The parameters and reliable-channel channels follow in a later version.
@@ -259,7 +261,7 @@ DISCONNECTED --port open--> BOOT_WAIT --HELLO or boot_wait_ms--> HANDSHAKING --a
 - [SES-24] The estimator keeps the 16 most recent samples, uses the ones with the lowest round trip for the offset, and fits a line for the drift.
 - [SES-25] The host sends a CORRECTION after the initial burst, whenever the estimate moves by more than 100 µs, and at least every 5 s.
 
-## 9. Codec descriptors
+## 9. Codec descriptors (local)
 
 One interpreter in the MCU encodes and decodes every message type from constant tables in flash: a type record for each message type, and a field entry for each field. The tables are built with the firmware and never cross the link, so this section fixes a build artifact rather than a frame. It is normative because the generator and a handwritten table must agree on it byte for byte, and because a table that breaks these rules makes the interpreter read outside a struct.
 
