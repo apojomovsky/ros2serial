@@ -2,7 +2,7 @@
 
 rosserial for ROS 2: publish and subscribe to ROS 2 topics from small microcontrollers, down to an 8-bit Arduino Uno, over a serial link.
 
-**Status:** design and bootstrap. Nothing is usable yet. The design is in [`docs/00-design.md`](docs/00-design.md), the Phase 0 research in [`docs/research/`](docs/research/), and the work in the [issues](https://github.com/apojomovsky/ros2serial/issues).
+**Status:** design and bootstrap. Nothing is usable yet. The design is in [`docs/00-design.md`](docs/00-design.md), and the work in the [issues](https://github.com/apojomovsky/ros2serial/issues).
 
 ## What it will look like
 

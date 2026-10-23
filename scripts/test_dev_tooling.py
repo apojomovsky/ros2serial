@@ -126,7 +126,7 @@ def test_build_lock_refuses_when_asked_not_to_wait(tmp_path):
 
 def agents_targets() -> set[str]:
     text = (ROOT / "AGENTS.md").read_text()
-    table = text[text.index("| Target | What |") : text.index("## Picking up work")]
+    table = text[text.index("| Target | What |") : text.index("## Working on an issue")]
     names = set()
     for line in (ln for ln in table.splitlines()[2:] if ln.startswith("|")):
         # Cells split on unescaped pipes: a target cell may contain `uno\|mega`.

@@ -6,36 +6,6 @@ Oct 20, 2026 · @Alexis Pojomovsky · from the kickoff proposal v3, which supers
 
 # Part I: Design
 
-## What changed since v2
-
-| Topic | v2 | v3 |
-| --- | --- | --- |
-| Project ownership | Open (license, home) | Personal project: MIT everywhere, personal repository, community organization only if it grows into one |
-| Framing | COBS | Reverse COBS (rCOBS): the MCU streams frames to the UART with no TX buffer |
-| CRC | CRC-16/CCITT-FALSE, appended little-endian (breaks the zero-residue check) | CRC-16/MCRF4XX: same polynomial, reflected, so a little-endian append leaves a zero residue |
-| Codecs | Generated code per type, nested types flattened | One table-driven codec interpreter plus generated field descriptors in flash |
-| `float64` on 32-bit-`double` toolchains | Per-topic opt-in narrow profile, binary64 conversion code otherwise | Narrow is forced by the build; no binary64 conversion code exists on those targets |
-| Call depth | "≤ 3, checked in CI" | No fixed number. No recursion and bounded nesting everywhere; RAM stack bytes budgeted on AVR; epic-cc checks the PIC hardware stack itself |
-| Code zones | One set of restrictions for everything | Two zones: a portable C99 core (PIC-safe rules) and a comfortable layer (C++ wrapper, runtime registration) that only gcc-class and epic-cc targets compile |
-| C++ wrapper | Strict Embedded C++ (no templates, no namespaces), Phase 3 | The epic-cc C++ subset (classes, templates, namespaces; no exceptions, RTTI, heap, virtuals), Phase 1 |
-| Declaring topics | `r2s.yaml` plus generator only | Three ways: `r2s.yaml` (generator), an X-macro list in the sketch (no Python), runtime rosserial-style registration (gcc targets) |
-| Arduino UX | Generated library copied into the sketch | Library Manager install with bundled common message types; topics declared in the sketch |
-| rosserial porting | "Port your rosserial sketch" guide in Phase 3 | rosserial-compatible `ros::NodeHandle` API in Phase 2, with the guide |
-| Strings | "In flash" (not true on AVR without `PROGMEM`) | `R2S_FLASH` access macros; flash-string and RAM-string entry points kept separate (AVR and epic-cc both need this) |
-| Receive path | Port pushes bytes with `r2s_rx_feed` | Core pulls bytes with `r2s_port_read` inside `spin_some`; dispatch never happens inside the port |
-| Transmit path | `r2s_port_write` "may block", yet `R2S_ERR_TX_BUSY` exists | `r2s_port_tx_free()`: a publish that does not fit returns `R2S_ERR_TX_BUSY` before writing anything |
-| Session ID | Random from `r2s_port_seed()` (no entropy on a Uno) | Boot ID from the port (EEPROM boot counter on AVR and PIC); unsolicited HELLO means reset |
-| Time correction | `drift_ppb`, overflows 32-bit math | `drift_ppm` applied per elapsed millisecond, all 32-bit, with a bounded anchor window |
-| Bound-violation report | Names the topic only | Names the topic and the field |
-| Tier S reference | PIC16F877A | PIC16F1938 class (enhanced mid-range, linear addressing); 877A becomes a Float32-only stretch goal |
-| PIC toolchain | XC8 or a second compiler, Phase 3 | epic-cc first, XC8 optional; all PIC work in the last phase |
-| PIC in the plan | Phase 3, before release | Phase 5, after the 1.0 release; PIC-enabling rules apply from day one |
-| Distros | Jazzy "and newer" | Jazzy and Lyrical required, Rolling nightly; the generator targets a distro explicitly |
-| Uno specifics | Not covered | DTR auto-reset on port open, bootloader delay, ceramic resonator drift, baud error at 16 MHz |
-| Phase 0 | Research only | Research plus a throwaway hardware spike to measure real RAM and flash before tickets are written against the budgets |
-| Engineering practices | A section of this document | `AGENTS.md` (the rules) and ADR-001 (where they come from), checked against epic-cc's actual tooling |
-| Versions | Per component | One version for the repository (bloom releases all packages of a repository with one version) |
-
 ## Vision and non-goals
 
 The goal is to offer in ROS 2 what rosserial offered in ROS 1: publishing and subscribing to topics from a small microcontroller, down to 8-bit AVR and PIC, in a few steps and without having to learn DDS or micro-ROS.
@@ -77,7 +47,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 | Tier | Core with 1 publisher + 1 subscriber (Float32, Twist) |
 | --- | --- |
 | S | < 200 B RAM including buffers, < 4K words flash |
-| M | < 400 B RAM including buffers, < 4 KB flash (P0 features), measured as the delta over an empty sketch that uses the same serial driver. The K1 spike measured +137 B and +2.6 KB on a Uno build, against +706 B and +9.0 KB for the smallest rosserial configuration (R1) |
+| M | < 400 B RAM including buffers, < 4 KB flash (P0 features), measured as the delta over an empty sketch that uses the same serial driver. A throwaway K1 build measured +137 B and +2.6 KB on a Uno build, against +706 B and +9.0 KB for the smallest rosserial configuration |
 
 ## Scope: parity with rosserial
 
@@ -95,7 +65,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 | TF and diagnostics | P2 | Probably better handled on the host |
 | Actions | Out of scope | |
 
-The list is still based on prior knowledge of rosserial; the Phase 0 archaeology validates it against the source code.
+The list is still based on prior knowledge of rosserial; the Phase 0 archaeology validated it against the source code.
 
 ## Architecture
 
@@ -513,8 +483,6 @@ Each phase ends in a decision gate and a publishable artifact.
 - *Demo:* the same static-API sketch on a Uno and a PIC18, then a PIC16, publishing into the same ROS 2 graph.
 - *Artifact:* a cross-board post (ros2serial on epic-hal).
 
-**Role of the agents.** Each spike or workstream gets its own agent. A shared harness (simavr for 328P/2560, host builds, conformance vectors, flash, RAM and stack reports) makes the agents produce comparable tables. A person reads those tables and makes the design decisions.
-
 **Other proposed targets (to adjust with Phase 1 data)**
 
 | Metric | Target |
@@ -565,6 +533,7 @@ One repository, one colcon workspace root. Every directory has its own tests nex
 ```
 ros2serial/
 ├── AGENTS.md                 conventions for agents and contributors (summarizes this Part II)
+├── CLAUDE.md                 symlink to AGENTS.md, for the tools that read that name
 ├── Makefile                  only entry point: bootstrap, image, shell, test, pre-pr-check, help
 ├── Dockerfile                base/dev/ci(=dev)/release stages; versions pinned via ci/versions.env
 ├── .githooks/                pre-commit, commit-msg, pre-push (installed by make setup-hooks)
@@ -617,14 +586,14 @@ ros2serial/
 | C++ (bridge) | C++17 (Jazzy's baseline), `ament_lint_auto` (cpplint, uncrustify or clang-format, cppcheck), ROS 2 style |
 | Python | 3.10 or newer, `ruff` (lint + format), `mypy --strict` on `r2s_gen`, `pytest`, `hypothesis` |
 | Commits | Conventional Commits (`feat(core): ...`, `fix(bridge): ...`, `test(gen): ...`); changelog with git-cliff; details in `AGENTS.md` |
-| Branches and PRs | `master` is the default branch; one ticket per PR in a `.worktrees/` worktree, never on `master`; branches named `<type>/<issue>-<slug>`; a draft PR is the claim; each PR is squashed into one commit on `master`, and the PR title is that commit's subject; no PR is stacked on another (`docs/adr/ADR-003-squash-merges.md`); CI must be green; the PR body carries `Closes #N` and a `## Review` section (see `docs/01-testing.md`) |
+| Branches and PRs | `master` is the default branch; one ticket per PR in a `.worktrees/` worktree, never on `master`; branches named `<type>/<issue>-<slug>`; each PR is squashed into one commit on `master`, and the PR title is that commit's subject; no PR is stacked on another; CI must be green; the PR body carries `Closes #N` and a `## Review` section (see `docs/01-testing.md`) |
 | Versions | One semver for the whole repository (`VERSION`, bumped only by `cut-release.yml`) plus the protocol version (`R2S_PROTOCOL_VERSION`, starts at 1) |
 | Licenses | MIT for everything |
 | Docs | Every public function has a doc comment; every PR that changes behavior updates `spec/protocol.md` or `docs/` in the same PR |
 
 ## Engineering practices
 
-The workflow, tooling and writing rules (Makefile, Docker image, hooks, worktrees, review gate, takeoff ritual, commit hygiene, CI workflows, releases, comment and docs rules) are in `AGENTS.md`, the normative rulebook. Most of them come from epic-cc; `docs/adr/ADR-001-engineering-practices.md` says what was adopted, adapted or left out, and why.
+The workflow, tooling and writing rules (Makefile, Docker image, hooks, worktrees, review gate, takeoff ritual, commit hygiene, CI workflows, releases, comment and docs rules) are in `AGENTS.md`, the normative rulebook. Most of them come from epic-cc.
 
 ## Protocol details
 
@@ -1000,7 +969,7 @@ Rules:
 
 ## Research tickets
 
-Each one produces a short write-up in `docs/research/` and, where relevant, a proposal to change this document. Until it is done, tickets use the default.
+Each one ends as an issue comment whose first line starts with `Findings` and, where relevant, a proposal to change this document. Until it is done, tickets use the default.
 
 | ID | Question | Deliverable | Default meanwhile |
 | --- | --- | --- | --- |
@@ -1026,7 +995,7 @@ Ticket IDs are for cross-reference; the ticket agent may renumber. "Deps" lists 
 
 | ID | Ticket | Deps | Acceptance |
 | --- | --- | --- | --- |
-| K0 | R1 and R2 write-ups and the go/no-go note | | Maintainer decision recorded in `docs/research/` |
+| K0 | R1 and R2 findings and the go/no-go note | | Maintainer decision recorded in the issue comment |
 | K1 | Hardware spike on a real Uno: handwritten Float32 and Twist over rCOBS, minimal host script, flash and RAM measured (lives in `scratch/`, not merged) | | Measurements recorded; tier M targets confirmed or adjusted in this document |
 
 ### E10: test infrastructure
@@ -1037,13 +1006,13 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 
 | ID | Ticket | Deps | Acceptance |
 | --- | --- | --- | --- |
-| B1 | Repository skeleton per the layout, LICENSE, README stub, `AGENTS.md` and ADR-001 from the engineering practices draft; this document moves to `docs/00-design.md` | | Layout exists; AGENTS.md links the design document |
+| B1 | Repository skeleton per the layout, LICENSE, README stub and `AGENTS.md` from the engineering practices draft; this document moves to `docs/00-design.md` | | Layout exists; AGENTS.md links the design document |
 | B2 | CI skeleton: `ci.yml` with lint jobs and empty test jobs, `scripts/ci-test.sh` as the single suite script, pinned `ci/versions.env` | B1 | Green run on `master`; `make test` runs the same script as CI |
 | B3 | Conventional commits check and git-cliff config | B1 | PR title check enforced in CI |
 | B4 | Vector schema and `tools/vectors_check.py` | B1 | Invalid vector files fail CI |
 | B5 | Makefile entry points + Docker dev/ci/release images + `make bootstrap`/`doctor` | B1 | Clean clone to `make test` per AGENTS.md; `dev` and `ci` identical |
 | B6 | Git hooks + `make pre-pr-check` (takeoff) + `scripts/prose-diff.sh` + `scripts/lint-python.sh` + `scripts/push.sh` | B5 | Ritual fails a deliberately dirty PR in a test run |
-| B8 | `scripts/next_ticket.py` (claim rule), `pr-body.yml`, `cut-release.yml` | B2 | Picks only unblocked, unclaimed, non-conflicting tickets in a test fixture; release dry run green |
+| B8 | `pr-body.yml`, `cut-release.yml` | B2 | The release dry run is green |
 | B7 | `tools/zone_check.py` | B2 | Fails on a deliberate function pointer and a deliberate float operation in `core/` |
 
 ### E1: specification and vectors
@@ -1131,7 +1100,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | P8 | Big-endian qemu job | C1 | Nightly green |
 | P9 | Framing and CRC benchmark (AVR Uno/Mega): rCOBS, COBS, SLIP, rosserial style | V4, R7 | Write-up in `docs/benchmarks/` |
 | P10 | Encoding benchmark (packed vs CDR vs MAVLink) | G7 | Write-up; decision on narrow per field |
-| P11 | rosserial-compatible runtime registration: RAM topic table backend, `ros::NodeHandle` and `NodeHandle_<...>` (size parameters accepted and ignored), `Publisher`, `Subscriber<T>` and `Subscriber<T, ObjT>` (member functions), `setSpinTimeout`, `ros::Time` and `ros::Duration` arithmetic, `tf::TransformBroadcaster`, compatibility headers (see R1) | V5, C13 | Every e2e scenario also passes on the runtime path; rosserial example sketches with fixed-size messages build unmodified apart from includes; arrays, strings and `Header` need the one-line edits the migration guide documents; services fail to compile with a clear message until X6 |
+| P11 | rosserial-compatible runtime registration: RAM topic table backend, `ros::NodeHandle` and `NodeHandle_<...>` (size parameters accepted and ignored), `Publisher`, `Subscriber<T>` and `Subscriber<T, ObjT>` (member functions), `initNode()`, `advertise()`, `subscribe()`, `spinOnce()`, `connected()`, `now()`, `setSpinTimeout()`, `getHardware()`, `ros::Time` and `ros::Duration` arithmetic, `tf::TransformBroadcaster`, compatibility headers | V5, C13 | Every e2e scenario also passes on the runtime path; rosserial example sketches with fixed-size messages build unmodified apart from includes; arrays, strings and `Header` need the one-line edits the migration guide documents; services fail to compile with a clear message until X6 |
 | P12 | Link saturation and TX_BUSY | C6, V1 | Scenario 12 |
 | P13 | Baud-rate matrix: 115200, 250000, 500000, 1000000 in simavr and on hardware | V4 | Results documented; default confirmed or changed |
 | P14 | PIC canary job with epic-cc (advisory) | C9, V5 | Core and static C++ compile for PIC16F1938 and PIC18F4550 |
