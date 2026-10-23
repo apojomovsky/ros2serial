@@ -16,6 +16,10 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 # This project is the host test build: the core itself compiles with the test
 # hooks (docs/01-testing.md, section 2.1). Firmware builds never use it.
 add_compile_definitions(R2S_TESTING)
+# A frame limit above 254 makes the decoded-too-large drop reachable, because
+# below it the buffer bound refuses such a frame first (FRM-12). Firmware takes
+# the value from the generated configuration.
+add_compile_definitions(R2S_MAX_FRAME=512)
 set(R2S_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 set(R2S_WARNINGS
     -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow

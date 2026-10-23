@@ -544,7 +544,7 @@ ros2serial/
 │   └── vectors/              conformance vectors (YAML), the single source of truth for every codec test
 │       ├── crc/  rcobs/  varint/  frames/  messages/  session/  time/
 ├── core/                     C99 MCU core (no ROS, no hardware)
-│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h; r2s_crc.h, r2s_rcobs.h and r2s_varint.h, shared with the bridge
+│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h; r2s_crc.h, r2s_rcobs.h, r2s_varint.h and r2s_framer.h, shared with the bridge
 │   ├── src/                  crc.c, rcobs.c, varint.c, framer.c, session.c, time.c, log.c, ring.c, codec.c, topics.c
 │   ├── tests/                Unity unit tests, vector runner, CMakeLists.txt
 │   └── fuzz/                 libFuzzer targets and seed corpora
@@ -605,7 +605,7 @@ The workflow, tooling and writing rules (Makefile, Docker image, hooks, worktree
 - `crc16` is CRC-16/MCRF4XX (width 16, polynomial 0x1021, reflected input and output, init 0xFFFF, no final XOR; check value of `"123456789"` is `0x6F91`) over `topic_id`, `seq` and `payload`, stored little-endian. The receiver computes the same CRC over the whole decoded frame, CRC included, and accepts it when the result is 0.
 - `seq` is one counter per `topic_id` per direction. It starts at 0 after each handshake and wraps at 255. A gap on a user topic counts lost frames but does not drop the frame.
 - The maximum unencoded frame (`topic_id` to `crc16`) is set at build time (`R2S_MAX_FRAME`, generated) and announced in `HELLO`. The protocol allows up to 65277, so the encoded frame and its delimiter fit in 65535 bytes and a 16-bit index. The host never sends a frame larger than the MCU announced; the host's own limit is 65277 and is not announced. A receiver buffers up to the encoded bound of its limit (`n + n / 254 + 1`).
-- A frame shorter than 4 bytes after decoding, with a bad CRC, with an invalid rCOBS code, or longer than `R2S_MAX_FRAME`, is dropped and counted.
+- A frame shorter than 4 bytes after decoding, with a bad CRC, with an invalid rCOBS code, or longer than `R2S_MAX_FRAME`, is dropped and counted. A decoded frame over the limit that still fits the encoded buffer counts in `dropped_frames` alone, because `rx_overflows` counts the buffer bound ([HB-6]). Below a limit of 254 the case cannot arise: the encoding of a longer frame is always over the bound.
 - A receiver starts as if it had just seen a `0x00`, and two consecutive `0x00` bytes (an empty frame) are ignored without counting, so a sender may send a `0x00` before a frame to flush a partial one off the line.
 
 ### rCOBS
