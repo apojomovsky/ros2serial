@@ -7,6 +7,7 @@ repository root (this file's parent directory).
 
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -58,6 +59,36 @@ RULEBOOK_ALIAS = "CLAUDE.md"
 RULEBOOK = "AGENTS.md"
 
 
+def tracked_files(root: Path) -> set[str]:
+    """Repository-relative paths of the tracked files, from the checkout's index.
+
+    Outside a checkout there is no index, and the files present are the whole
+    content, so all of them count and the rule stays meaningful in a tarball and
+    in a test's throwaway tree.
+    """
+    try:
+        listing = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return {p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file() and ".git" not in p.parts}
+    return {p for p in listing.split("\0") if p}
+
+
+def gitkeep_problems(root: Path) -> list[str]:
+    """A .gitkeep earns its place only while its directory tracks nothing else."""
+    files = tracked_files(root)
+    problems = []
+    for path in sorted(p for p in files if p.rsplit("/", 1)[-1] == ".gitkeep"):
+        directory = path.rsplit("/", 1)[0] if "/" in path else ""
+        if any(other != path and (not directory or other.startswith(directory + "/")) for other in files):
+            problems.append(f".gitkeep in a non-empty directory: {path}")
+    return problems
+
+
 def check(root: Path) -> list[str]:
     problems = []
     for d in REQUIRED_DIRS:
@@ -89,6 +120,7 @@ def check(root: Path) -> list[str]:
         for pattern in GITIGNORED:
             if pattern not in lines:
                 problems.append(f".gitignore does not ignore {pattern}")
+    problems.extend(gitkeep_problems(root))
     for p in sorted(root.glob("*.md")):
         if re.fullmatch(r"proposal-v\d+\.md|engineering-practices\.md", p.name):
             problems.append(f"superseded document still at the root: {p.name}")
