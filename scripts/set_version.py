@@ -33,9 +33,21 @@ def set_version(root: Path, version: str) -> None:
     """Write the version into VERSION, the generator package and the ROS manifest."""
     package = _updated_text(root / PACKAGE_VERSION, PACKAGE_VERSION_LINE, f'__version__ = "{version}"')
     manifest = _updated_text(root / ROS_MANIFEST, ROS_MANIFEST_TAG, f"<version>{version}</version>")
-    (root / PACKAGE_VERSION).write_text(package, encoding="utf-8")
-    (root / ROS_MANIFEST).write_text(manifest, encoding="utf-8")
-    (root / VERSION_FILE).write_text(version + "\n", encoding="utf-8")
+    updates = {
+        root / VERSION_FILE: version + "\n",
+        root / PACKAGE_VERSION: package,
+        root / ROS_MANIFEST: manifest,
+    }
+    originals = {path: path.read_text(encoding="utf-8") for path in updates}
+    written: list[Path] = []
+    try:
+        for path, text in updates.items():
+            path.write_text(text, encoding="utf-8")
+            written.append(path)
+    except OSError:
+        for path in written:
+            path.write_text(originals[path], encoding="utf-8")
+        raise
 
 
 def main(argv: list[str] | None = None) -> int:
