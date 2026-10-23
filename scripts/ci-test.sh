@@ -129,7 +129,18 @@ fi
 if wants CORE; then section core bash scripts/core-test.sh; fi
 if wants GEN; then section gen python3 -m pytest gen; fi
 if wants BRIDGE; then section bridge bash scripts/bridge-test.sh; fi
-if wants E2E; then section e2e pending "V1, V3"; fi
+if wants E2E; then
+  case "${E2E:-}" in
+    "") section e2e-avr bash tests/harness/simavr/run.sh
+        section e2e-posix pending "V1" ;;
+    avr) section e2e-avr bash tests/harness/simavr/run.sh ;;
+    posix) section e2e-posix pending "V1" ;;
+    *)
+      echo "unknown E2E backend '${E2E}': known are posix and avr" >&2
+      failed+=("e2e")
+      ;;
+  esac
+fi
 
 if [ "${#failed[@]}" -gt 0 ]; then
   echo "failed sections: ${failed[*]}"
