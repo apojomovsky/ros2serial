@@ -3,6 +3,7 @@
 # Prints one FIX line per blocking problem and exits 1 while any remain.
 #   BASE     ref the PR targets (default origin/master; a PR is never stacked)
 #   PR_BODY  file holding the PR body, to check it too
+#   PR_TITLE the title the PR will carry, to check it against the commits
 #   TEST=1   also run the full suite
 #   R2S_SUITE  script to run instead of the suite, so a test can see what the
 #              suite was given
@@ -45,6 +46,21 @@ while read -r line; do
   [ -n "$line" ] && fix "commit $line"
 done < <(python3 "$root/scripts/commit_check.py" --range "$base..HEAD" 2>&1)
 git diff --check "$base...HEAD" >/dev/null 2>&1 || fix "whitespace errors in the diff: git diff --check $base...HEAD"
+# The title is the subject that lands, so it must carry what the commits
+# declare. The check is the one CI runs, so the problem shows here.
+if [ -n "${PR_TITLE:-}" ]; then
+  if git rev-parse --verify -q "$base" >/dev/null; then
+    while read -r line; do
+      [ -n "$line" ] && fix "PR title: ${line#PR title: }"
+    done < <(python3 "$root/scripts/commit_check.py" --title "$PR_TITLE" --covers-range "$base..HEAD" 2>&1)
+  else
+    while read -r line; do
+      [ -n "$line" ] && fix "PR title: ${line#PR title: }"
+    done < <(python3 "$root/scripts/commit_check.py" --title "$PR_TITLE" 2>&1)
+  fi
+else
+  note "PR title: not checked, pass PR_TITLE=\"<the title the PR will carry>\""
+fi
 
 # 5. Compiler warnings.
 bash "$root/scripts/check-warnings.sh" >/dev/null 2>&1 \
