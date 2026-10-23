@@ -13,6 +13,9 @@ def make_skeleton(root: Path) -> None:
     (root / "AGENTS.md").write_text("See docs/00-design.md\n")
     (root / "CONTRIBUTING.md").write_text("AGENTS.md is the rulebook\n")
     (root / ".gitignore").write_text("scratch/\n.worktrees/\n")
+    # The alias is a link, so the rulebook it points at cannot drift.
+    (root / "CLAUDE.md").unlink(missing_ok=True)
+    (root / "CLAUDE.md").symlink_to("AGENTS.md")
 
 
 def test_complete_skeleton_passes(tmp_path):
@@ -50,6 +53,35 @@ def test_gitignore_entries_are_required(tmp_path):
     make_skeleton(tmp_path)
     (tmp_path / ".gitignore").write_text("scratch/\n")
     assert check_layout.check(tmp_path) == [".gitignore does not ignore .worktrees/"]
+
+
+def test_the_planning_records_are_not_required(tmp_path):
+    """The planning records live elsewhere, so a tree without them is complete."""
+    make_skeleton(tmp_path)
+    assert not (tmp_path / "docs/adr").exists()
+    assert not (tmp_path / "docs/research").exists()
+    assert check_layout.check(tmp_path) == []
+
+
+def test_the_rulebook_alias_must_exist(tmp_path):
+    make_skeleton(tmp_path)
+    (tmp_path / "CLAUDE.md").unlink()
+    assert check_layout.check(tmp_path) == ["missing file: CLAUDE.md"]
+
+
+def test_the_rulebook_alias_must_be_a_link(tmp_path):
+    """A copy of the rulebook would drift from it, so only a link passes."""
+    make_skeleton(tmp_path)
+    (tmp_path / "CLAUDE.md").unlink()
+    (tmp_path / "CLAUDE.md").write_text("See docs/00-design.md\n")
+    assert check_layout.check(tmp_path) == ["CLAUDE.md is not a symlink to AGENTS.md"]
+
+
+def test_the_rulebook_alias_must_point_at_the_rulebook(tmp_path):
+    make_skeleton(tmp_path)
+    (tmp_path / "CLAUDE.md").unlink()
+    (tmp_path / "CLAUDE.md").symlink_to("README.md")
+    assert check_layout.check(tmp_path) == ["CLAUDE.md is not a symlink to AGENTS.md"]
 
 
 def test_repository_matches_the_layout():
