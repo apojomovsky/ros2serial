@@ -9,9 +9,11 @@ command -v colcon >/dev/null 2>&1 || { echo "colcon not found: run it in a ROS c
 : "${ROS_DISTRO:?ROS_DISTRO is not set: run it in a ROS container}"
 if [ -z "${AMENT_PREFIX_PATH:-}" ] && [ -f "/opt/ros/$ROS_DISTRO/setup.bash" ]; then
   # shellcheck source=/dev/null
+  set +u
   source "/opt/ros/$ROS_DISTRO/setup.bash"
+  set -u
 fi
-workspace=${R2S_BUILD_DIR:-$root/build}/bridge
+workspace=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/bridge
 mkdir -p "$workspace" || exit 1
 echo "== bridge: $ROS_DISTRO"
 
