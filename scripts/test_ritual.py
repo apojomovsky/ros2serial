@@ -178,6 +178,21 @@ def test_spec_without_vectors_is_flagged(tmp_path):
     assert "spec/protocol.md changed without spec/vectors" in result.stdout
 
 
+def test_a_placeholder_is_not_a_vector_change(tmp_path):
+    """A .gitkeep carries no vector, so removing one keeps the spec in sync."""
+    main, wt = fixture(tmp_path)
+    commit(main, {"spec/vectors/crc/.gitkeep": ""}, "chore(spec): keep the vector directory")
+    git(main, "push", "-q", "origin", "master")
+    git(wt, "merge", "-q", "--no-edit", "origin/master")
+    git(wt, "rm", "-q", "spec/vectors/crc/.gitkeep")
+    git(wt, "commit", "-q", "-m", "chore(spec): drop the vector placeholder")
+    git(main, "config", "core.hooksPath", ".githooks")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+    result = ritual(wt, PR_BODY=str(body))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_commit_msg_hook_rejects_a_trailer(tmp_path):
     msg = tmp_path / "MSG"
     msg.write_text("fix(core): a\n\nSigned-off-by: Someone <s@example.com>\n")
