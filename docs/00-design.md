@@ -586,7 +586,7 @@ ros2serial/
 | C++ (bridge) | C++17 (Jazzy's baseline), `ament_lint_auto` (cpplint, uncrustify or clang-format, cppcheck), ROS 2 style |
 | Python | 3.10 or newer, `ruff` (lint + format), `mypy --strict` on `r2s_gen`, `pytest`, `hypothesis` |
 | Commits | Conventional Commits (`feat(core): ...`, `fix(bridge): ...`, `test(gen): ...`); changelog with git-cliff; details in `AGENTS.md` |
-| Branches and PRs | `master` is the default branch; one ticket per PR in a `.worktrees/` worktree, never on `master`; branches named `<type>/<issue>-<slug>`; a comment on the issue is the claim; each PR is squashed into one commit on `master`, and the PR title is that commit's subject; no PR is stacked on another; CI must be green; the PR body carries `Closes #N` and a `## Review` section (see `docs/01-testing.md`) |
+| Branches and PRs | `master` is the default branch; one ticket per PR in a `.worktrees/` worktree, never on `master`; branches named `<type>/<issue>-<slug>`; each PR is squashed into one commit on `master`, and the PR title is that commit's subject; no PR is stacked on another; CI must be green; the PR body carries `Closes #N` and a `## Review` section (see `docs/01-testing.md`) |
 | Versions | One semver for the whole repository (`VERSION`, bumped only by `cut-release.yml`) plus the protocol version (`R2S_PROTOCOL_VERSION`, starts at 1) |
 | Licenses | MIT for everything |
 | Docs | Every public function has a doc comment; every PR that changes behavior updates `spec/protocol.md` or `docs/` in the same PR |
@@ -1012,7 +1012,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | B4 | Vector schema and `tools/vectors_check.py` | B1 | Invalid vector files fail CI |
 | B5 | Makefile entry points + Docker dev/ci/release images + `make bootstrap`/`doctor` | B1 | Clean clone to `make test` per AGENTS.md; `dev` and `ci` identical |
 | B6 | Git hooks + `make pre-pr-check` (takeoff) + `scripts/prose-diff.sh` + `scripts/lint-python.sh` + `scripts/push.sh` | B5 | Ritual fails a deliberately dirty PR in a test run |
-| B8 | The claim rule (a comment on the issue claims the ticket), `pr-body.yml`, `cut-release.yml` | B2 | A comment claims its ticket; the release dry run is green |
+| B8 | `pr-body.yml`, `cut-release.yml` | B2 | The release dry run is green |
 | B7 | `tools/zone_check.py` | B2 | Fails on a deliberate function pointer and a deliberate float operation in `core/` |
 
 ### E1: specification and vectors

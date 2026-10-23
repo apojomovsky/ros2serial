@@ -38,12 +38,12 @@ ros2serial brings rosserial's experience to ROS 2: publish and subscribe from sm
 | `setup-hooks` / `pre-pr-check` | Install hooks / run the takeoff ritual |
 | `help` | List all targets |
 
-## Picking up work
+## Working on an issue
 
-Work is plain GitHub issues. A comment on the issue is the claim.
+Work is plain GitHub issues.
 
 - Every ticket is an issue with `area:*` labels (`area:core`, `area:gen`, `area:bridge`, `area:cpp`, `area:spec`, `area:ci`, `area:ports`) and its hard dependencies listed as `Depends on #N`.
-- **Comment on the issue before starting, so two people do not take the same ticket.** Two people do not work tickets sharing an area at the same time. Issues labelled `needs-hardware` are the maintainer's.
+- An issue labelled `needs-hardware` needs real boards to finish.
 - **Open the pull request when it is ready for review,** from your worktree branch, with `Closes #N` and the issue's `area:*` labels.
 - Branch names: `<type>/<issue>-<slug>`, for example `feat/42-rcobs-encoder`.
 - **One ticket at a time, from `master`.** A PR is not stacked on another PR's branch: a squash drops the parent branch's commits, so a stacked PR's diff would carry its parent's work again. A ticket branches from `master` and targets `master`.
@@ -122,7 +122,7 @@ Pass the title the PR will carry as `make pre-pr-check PR_TITLE="<title>"`, so t
 1. **Why, not what.** Comments carry the non-obvious reason, the datasheet fact, the invariant. A comment that restates the line below it is deleted.
 2. **A comment must earn its lines.** 2 to 3 lines for a compact reason, up to 8 when the reason needs it, never more (the prose gate fails it).
 3. **No decoration.** No separator art, no `@file` or `@brief` boilerplate. A 1 to 3 line file header is fine when it adds context.
-4. **No narrative.** No "fixed X by doing Y". Verification claims belong in the PR. Durable hardware or toolchain facts, with a date, stay.
+4. **No narrative.** No "fixed X by doing Y". Verification belongs in the PR. Durable hardware or toolchain facts, with a date, stay.
 5. `TODO` and `FIXME` carry a concrete reason or do not exist.
 6. **No em-dashes in prose,** in comments, docs or commit messages. Replacing one is a judgment call: rewrite the sentence so it reads well, don't swap characters mechanically. ASCII-art diagrams are the only exception.
 

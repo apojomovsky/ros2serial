@@ -9,5 +9,5 @@ In short:
 - Everything runs in the Docker dev image through `make` (`make bootstrap`, then `make test`).
 - Tests come first: the first commit of a pull request adds the failing test.
 - Conventional Commits, no trailers, no em-dashes.
-- Before starting on an issue, comment on it, so two people do not take the same ticket.
+- Questions and proposals go on the issue. The maintainer reviews every pull request.
 - The pull request is opened when it is ready for review, with `Closes #N` and the issue's `area:*` labels.
