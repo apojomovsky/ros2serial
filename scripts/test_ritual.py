@@ -48,7 +48,17 @@ def fixture(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def ritual(cwd: Path, **env) -> subprocess.CompletedProcess:
-    return run(["bash", str(ROOT / "scripts/pre-pr-check.sh")], cwd, {"BASE": "origin/master", **env})
+    # The ritual takes its title and its body from the environment, so a
+    # value in the caller's shell would be checked against the fixture
+    # commits of the test. Only what the test passes is the ritual's input.
+    inherited = {k: v for k, v in os.environ.items() if k not in ("PR_TITLE", "PR_BODY")}
+    return subprocess.run(
+        ["bash", str(ROOT / "scripts/pre-pr-check.sh")],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        env={**inherited, "BASE": "origin/master", **env},
+    )
 
 
 GOOD_BODY = "Closes #1\n\nThe thing, and why.\n\n## Review\n\nReviewer agent: no findings.\n"
@@ -62,6 +72,58 @@ def test_a_clean_pr_passes(tmp_path):
     body.write_text(GOOD_BODY)
     result = ritual(wt, PR_BODY=str(body))
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_the_ritual_checks_the_title_against_the_commits(tmp_path):
+    """The title is the subject that lands, so the ritual must check it.
+
+    The check is the one CI runs, so an agent finds the problem before the
+    PR is opened instead of after.
+    """
+    main, wt = fixture(tmp_path)
+    git(main, "config", "core.hooksPath", ".githooks")
+    commit(wt, {"core/a.py": "# Bounded so the PIC stack never overflows.\nX = 1\n"}, "fix(core): repair the thing")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+
+    weak = ritual(wt, PR_BODY=str(body), PR_TITLE="docs(ci): describe the thing")
+    assert weak.returncode == 1, weak.stdout + weak.stderr
+    assert "the title is 'docs' but a commit is 'fix'" in weak.stdout
+
+    strong = ritual(wt, PR_BODY=str(body), PR_TITLE="fix(ci): repair the thing")
+    assert strong.returncode == 0, strong.stdout + strong.stderr
+
+
+def test_the_ritual_says_the_title_was_not_checked(tmp_path):
+    main, wt = fixture(tmp_path)
+    git(main, "config", "core.hooksPath", ".githooks")
+    commit(wt, {"core/a.py": "# Bounded so the PIC stack never overflows.\nX = 1\n"}, "fix(core): repair the thing")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+
+    out = ritual(wt, PR_BODY=str(body))
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "PR title" in out.stdout
+    assert "not checked" in out.stdout
+
+
+def test_the_ritual_ignores_a_title_in_the_callers_shell(tmp_path, monkeypatch):
+    """A title in the caller's shell is not the ritual's input.
+
+    The suite runs with the caller's environment, and `make test PR_TITLE=...`
+    is how the same check CI runs is tried locally, so an ambient title would
+    be checked against the fixture commits of these tests.
+    """
+    monkeypatch.setenv("PR_TITLE", "docs(ci): a title for another branch")
+    main, wt = fixture(tmp_path)
+    git(main, "config", "core.hooksPath", ".githooks")
+    commit(wt, {"core/a.py": "# Bounded so the PIC stack never overflows.\nX = 1\n"}, "fix(core): repair the thing")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+
+    out = ritual(wt, PR_BODY=str(body))
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "not checked" in out.stdout
 
 
 def test_a_dirty_pr_gets_one_fix_line_per_problem(tmp_path):
@@ -275,6 +337,28 @@ def test_the_ritual_does_not_leak_its_scopes_into_the_suite(tmp_path):
     # ritual that still sees TEST=1 runs the suite again. The scopes stay,
     # so the child does what this run was asked to do.
     assert marker.read_text().strip() == "TEST= SCRIPTS=1", "the suite was started with TEST still set"
+
+
+def test_the_ritual_does_not_leak_its_title_into_the_suite(tmp_path):
+    """The suite's own tests call the ritual, and they carry no title.
+
+    A title that reached the suite would be checked against the fixture
+    commits of those tests, and the ritual would fail for a title that is
+    perfectly good.
+    """
+    main, wt = fixture(tmp_path)
+    git(main, "config", "core.hooksPath", ".githooks")
+    commit(wt, {"core/a.py": "# Bounded so the PIC stack never overflows.\nX = 1\n"}, "feat(core): add a thing")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+
+    marker = tmp_path / "title.txt"
+    recorder = tmp_path / "record-title.sh"
+    recorder.write_text(f'echo "PR_TITLE=${{PR_TITLE:-}}" > {marker}\n')
+
+    ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="feat(core): add a thing", R2S_SUITE=str(recorder))
+    assert marker.exists()
+    assert marker.read_text().strip() == "PR_TITLE=", "the suite was started with the outer PR_TITLE"
 
 
 def test_the_title_must_carry_the_strongest_type_of_its_commits():

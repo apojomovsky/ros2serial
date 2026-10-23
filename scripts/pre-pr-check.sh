@@ -3,6 +3,7 @@
 # Prints one FIX line per blocking problem and exits 1 while any remain.
 #   BASE     ref the PR targets (default origin/master; a PR is never stacked)
 #   PR_BODY  file holding the PR body, to check it too
+#   PR_TITLE the title the PR will carry, to check it against the commits
 #   TEST=1   also run the full suite
 #   R2S_SUITE  script to run instead of the suite, so a test can see what the
 #              suite was given
@@ -45,6 +46,21 @@ while read -r line; do
   [ -n "$line" ] && fix "commit $line"
 done < <(python3 "$root/scripts/commit_check.py" --range "$base..HEAD" 2>&1)
 git diff --check "$base...HEAD" >/dev/null 2>&1 || fix "whitespace errors in the diff: git diff --check $base...HEAD"
+# The title is the subject that lands, so it must carry what the commits
+# declare. The check is the one CI runs, so the problem shows here.
+if [ -n "${PR_TITLE:-}" ]; then
+  if git rev-parse --verify -q "$base" >/dev/null; then
+    while read -r line; do
+      [ -n "$line" ] && fix "PR title: ${line#PR title: }"
+    done < <(python3 "$root/scripts/commit_check.py" --title "$PR_TITLE" --covers-range "$base..HEAD" 2>&1)
+  else
+    while read -r line; do
+      [ -n "$line" ] && fix "PR title: ${line#PR title: }"
+    done < <(python3 "$root/scripts/commit_check.py" --title "$PR_TITLE" 2>&1)
+  fi
+else
+  note "PR title: not checked, pass PR_TITLE=\"<the title the PR will carry>\""
+fi
 
 # 5. Compiler warnings.
 bash "$root/scripts/check-warnings.sh" >/dev/null 2>&1 \
@@ -112,13 +128,15 @@ if [ "${TEST:-}" = 1 ]; then
   # runs the suite again, so TEST does not go down with it. The scopes do:
   # the child must do what this run was asked to do, no more. This ritual's
   # own inputs go too, so a nested ritual reads its own base and body
-  # rather than the outer ones. R2S_SUITE names the script to run, so a
-  # test can see what the suite was given.
+  # rather than the outer ones. The title goes with them: the suite's own
+  # tests call the ritual, and a title meant for this branch would be
+  # checked against their fixture commits. R2S_SUITE names the script to
+  # run, so a test can see what the suite was given.
   suite=${R2S_SUITE:-$root/scripts/ci-test.sh}
   # The output is kept, so a failure can be shown without running the suite
   # again: a second run would be refused by the lock the first one holds.
   suite_log=$(mktemp "${TMPDIR:-/tmp}/r2s-suite.XXXXXX")
-  if ! env -u TEST -u BASE -u PR_BODY bash "$suite" >"$suite_log" 2>&1; then
+  if ! env -u TEST -u BASE -u PR_BODY -u PR_TITLE bash "$suite" >"$suite_log" 2>&1; then
     # The failed sections are the point, so they are shown. The suite names
     # them on its last line; a section that is not named falls back to the
     # last lines of the log.

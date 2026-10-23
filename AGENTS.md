@@ -74,7 +74,7 @@ Work is plain GitHub issues. A draft pull request is the claim.
 1. Working tree clean, branch not behind `origin/master`.
 2. Work is in a `.worktrees/` worktree, not on `master`.
 3. No plan files in the final diff; load-bearing decisions distilled into an ADR in the same commit.
-4. Commit hygiene: Conventional Commit subjects, at most 3 lines, no trailers, no em-dashes, no whitespace errors.
+4. Commit hygiene: Conventional Commit subjects, at most 3 lines, no trailers, no em-dashes, no whitespace errors. The title the PR will carry is checked against the commits, so it carries their strongest type and any `!`.
 5. Warnings: C and C++ builds clean under `-Werror` (`make check-warnings`), cppcheck clean, UBSan clean on host builds.
 6. Lint: ruff, clang-format, ament linters.
 7. Zone check: `tools/zone_check.py` (no function pointers, float operations or C++ includes in `core/`).
@@ -86,6 +86,8 @@ Work is plain GitHub issues. A draft pull request is the claim.
 13. `make pre-pr-check TEST=1` also runs the full suite.
 
 Write PR bodies to a unique file under the cache, which the dev image can see (`mktemp "$HOME/.cache/ros2serial/pr-<issue>-XXXXXX.md"`), and pass it as `make pre-pr-check PR_BODY=<file>`. Never use an inline `\n` string, and never a shared fixed path such as `/tmp/pr_body.md`, which another agent can overwrite.
+
+Pass the title the PR will carry as `make pre-pr-check PR_TITLE="<title>"`, so the ritual checks it against the commits before the PR exists. Without it the ritual says the title was not checked.
 
 ## Commit hygiene
 

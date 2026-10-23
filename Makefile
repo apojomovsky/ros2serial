@@ -79,7 +79,7 @@ check-warnings: guard-main-clone cache-dir ## Fail on any compiler warning (hard
 setup-hooks: ## Install git hooks from .githooks/
 	@git config core.hooksPath .githooks && echo "git hooks installed (core.hooksPath = .githooks)"
 
-pre-pr-check: guard-main-clone cache-dir ## Takeoff ritual before opening a PR (BASE=<ref> PR_BODY=<file> TEST=1)
+pre-pr-check: guard-main-clone cache-dir ## Takeoff ritual before opening a PR (BASE=<ref> PR_BODY=<file> PR_TITLE="<title>" TEST=1)
 	@$(call in_image,bash scripts/pre-pr-check.sh)
 
 guard-main-clone:
