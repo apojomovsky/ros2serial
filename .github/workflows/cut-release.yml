@@ -1,8 +1,9 @@
 name: cut-release
 
 # Manual release cut. `prepare` computes the next version from the commits,
-# updates VERSION and CHANGELOG.md, and opens a release PR set to auto-merge;
-# `tag` tags the merge when VERSION changes on master. Both push with the
+# updates VERSION, the generator's version files and CHANGELOG.md, and opens a
+# release PR set to auto-merge; `tag` tags the merge when VERSION changes on
+# master. Both push with the
 # R2S_RELEASE_TOKEN secret (a personal access token): a PR or tag pushed with
 # the default GITHUB_TOKEN never triggers other workflows, so the release PR's
 # required checks would never run and release.yml would never start.
@@ -79,7 +80,7 @@ jobs:
           git branch -m "release/v${version}"
           git push -u origin "release/v${version}"
           gh pr create --base master --title "chore(release): v${version}" \
-            --body "Release v${version}: VERSION and CHANGELOG.md from scripts/release.sh."
+            --body "Release v${version}: VERSION, the generator's version files and CHANGELOG.md from scripts/release.sh."
           gh pr merge --auto --squash
 
   tag:

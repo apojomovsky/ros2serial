@@ -3,9 +3,12 @@
  * under R2S_TESTING next to it, and adds the call here when it lands. */
 #include "r2s/r2s.h"
 
+#include "r2s/r2s_framer.h"
+
 #ifdef R2S_TESTING
 void r2s_test_reset(void)
 {
+    r2s_framer_test_reset();
 }
 #else
 /* ISO C needs at least one declaration in a translation unit. */

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Does the repository's merge settings match the rule in ADR-003?
-# Squash alone, the PR title as the landed subject, and no message.
+# Does the repository's merge settings match the rule that a PR lands as one
+# commit, the PR title as the landed subject, and no message?
 # Usage: merge-settings.sh [owner/name]
 #   exit 0  the settings match
 #   exit 1  they do not, or cannot be read
@@ -46,7 +46,7 @@ problems=""
 [ "$title" = PR_TITLE ] || problems="$problems the squash title is $title, not PR_TITLE"
 [ "$message" = BLANK ] || problems="$problems the squash message is $message, not BLANK"
 if [ -n "$problems" ]; then
-  echo "the merge settings of $repo do not match ADR-003:$problems" >&2
+  echo "the merge settings of $repo do not match the squash rule:$problems" >&2
   exit 1
 fi
 exit 0

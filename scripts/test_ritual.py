@@ -153,6 +153,20 @@ def test_a_dirty_pr_gets_one_fix_line_per_problem(tmp_path):
         assert expected in out, f"{expected!r} missing from:\n{out}"
 
 
+def test_a_plan_file_anywhere_is_flagged(tmp_path):
+    """Plans do not belong in the tree, whatever directory they are written in."""
+    _, wt = fixture(tmp_path)
+    commit(
+        wt,
+        {"docs/plans/a.md": "plan\n", "docs/plan.md": "plan\n", "src/plan/z.md": "plan\n"},
+        "docs(ci): start a plan",
+    )
+    result = ritual(wt)
+    assert result.returncode == 1, result.stdout + result.stderr
+    for path in ["docs/plans/a.md", "docs/plan.md", "src/plan/z.md"]:
+        assert f"plan file in the diff: {path}" in result.stdout
+
+
 def test_spec_without_vectors_is_flagged(tmp_path):
     main, wt = fixture(tmp_path)
     git(main, "config", "core.hooksPath", ".githooks")
@@ -391,7 +405,7 @@ def test_the_merge_settings_check_catches_a_wrong_setting(tmp_path):
     env = {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}"}
     out = run(["bash", str(ROOT / "scripts/merge-settings.sh")], ROOT, env)
     assert out.returncode == 1
-    assert "ADR-003" in out.stderr
+    assert "do not match the squash rule" in out.stderr
 
 
 def test_settings_that_cannot_be_read_are_not_a_failure(tmp_path):

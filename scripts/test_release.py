@@ -17,7 +17,13 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
     git(repo, "init", "-q", "-b", "master")
     git(repo, "config", "user.email", "t@example.com")
     git(repo, "config", "user.name", "t")
-    (repo / "VERSION").write_text(tag.removeprefix("v") + "\n")
+    version = tag.removeprefix("v")
+    (repo / "VERSION").write_text(version + "\n")
+    (repo / "gen" / "r2s_gen").mkdir(parents=True)
+    (repo / "gen" / "r2s_gen" / "version.py").write_text(f'__version__ = "{version}"\nPROTOCOL_VERSION = 1\n')
+    (repo / "gen" / "package.xml").write_text(
+        f'<package format="3">\n  <name>r2s_gen</name>\n  <version>{version}</version>\n</package>\n'
+    )
     git(repo, "add", ".")
     git(repo, "commit", "-q", "-m", "chore: start")
     git(repo, "tag", tag)
@@ -41,7 +47,7 @@ def next_version(repo: Path, *args: str) -> str:
 
 
 def test_version_file_is_semver():
-    assert re.fullmatch(r"\d+\.\d+\.\d+\n", (ROOT / "VERSION").read_text())
+    assert re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\n", (ROOT / "VERSION").read_text())
 
 
 def test_fix_bumps_patch(tmp_path):
@@ -126,6 +132,14 @@ def test_a_real_run_writes_version_and_changelog_in_one_commit(tmp_path):
     log = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=repo, capture_output=True, text=True).stdout.strip()
     assert log == "chore(release): v0.4.0"
     assert "next version: 0.4.0" in result.stdout
+
+
+def test_a_real_run_writes_the_version_into_the_generator_package(tmp_path):
+    repo = repo_with(tmp_path, "v0.3.1", ["feat(core): b"])
+    result = subprocess.run(["bash", str(ROOT / "scripts/release.sh")], cwd=repo, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '__version__ = "0.4.0"' in (repo / "gen" / "r2s_gen" / "version.py").read_text()
+    assert "<version>0.4.0</version>" in (repo / "gen" / "package.xml").read_text()
 
 
 def test_release_commits_stay_out_of_the_changelog(tmp_path):

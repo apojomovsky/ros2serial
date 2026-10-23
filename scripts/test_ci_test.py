@@ -23,7 +23,12 @@ def copy_tree(dest: Path) -> Path:
     ).stdout
     for name in filter(None, listed.decode().split("\0")):
         src = ROOT / name
-        if src.is_file():
+        if src.is_symlink():
+            # A link copied as a file is a different tree, and the layout gate
+            # checks the rulebook alias for being a link.
+            (dest / name).parent.mkdir(parents=True, exist_ok=True)
+            (dest / name).symlink_to(os.readlink(src))
+        elif src.is_file():
             (dest / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dest / name)
     return dest

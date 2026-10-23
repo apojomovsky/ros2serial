@@ -5,6 +5,7 @@ Exits 1 with one line per problem. Run from anywhere: paths resolve from the
 repository root (this file's parent directory).
 """
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -38,8 +39,6 @@ REQUIRED_DIRS = [
     "tools",
     "scripts",
     "ci",
-    "docs/adr",
-    "docs/research",
     ".github/workflows",
     ".githooks",
 ]
@@ -47,12 +46,16 @@ REQUIRED_FILES = [
     "LICENSE",
     "README.md",
     "AGENTS.md",
+    "CLAUDE.md",
     "CONTRIBUTING.md",
     ".gitignore",
     "docs/00-design.md",
-    "docs/adr/README.md",
+    "docs/01-testing.md",
 ]
 GITIGNORED = ["scratch/", ".worktrees/"]
+# The alias is a link, so a copy cannot drift from the rulebook it stands for.
+RULEBOOK_ALIAS = "CLAUDE.md"
+RULEBOOK = "AGENTS.md"
 
 
 def check(root: Path) -> list[str]:
@@ -63,6 +66,14 @@ def check(root: Path) -> list[str]:
     for f in REQUIRED_FILES:
         if not (root / f).is_file():
             problems.append(f"missing file: {f}")
+    alias = root / RULEBOOK_ALIAS
+    if alias.is_symlink():
+        # realpath and not resolve: a link that points at itself is a loop
+        # that resolve raises on, and the gate must report it, not crash.
+        if os.path.realpath(alias) != os.path.realpath(root / RULEBOOK):
+            problems.append(f"{RULEBOOK_ALIAS} is not a symlink to {RULEBOOK}")
+    elif alias.exists():
+        problems.append(f"{RULEBOOK_ALIAS} is not a symlink to {RULEBOOK}")
     agents = root / "AGENTS.md"
     if agents.is_file() and "docs/00-design.md" not in agents.read_text():
         problems.append("AGENTS.md does not link docs/00-design.md")
