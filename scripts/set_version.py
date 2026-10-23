@@ -9,6 +9,7 @@ Usage: set_version.py <version> [root]
 """
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
@@ -17,7 +18,7 @@ VERSION_FILE = "VERSION"
 PACKAGE_VERSION = Path("gen") / "r2s_gen" / "version.py"
 ROS_MANIFEST = Path("gen") / "package.xml"
 
-SEMVER = re.compile(r"\d+\.\d+\.\d+\Z")
+SEMVER = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\Z")
 PACKAGE_VERSION_LINE = re.compile(r'^__version__ = ".*"$', re.MULTILINE)
 ROS_MANIFEST_TAG = re.compile(r"<version>[^<]*</version>")
 
@@ -29,25 +30,38 @@ def _updated_text(path: Path, pattern: re.Pattern[str], replacement: str) -> str
     return updated
 
 
+def _write_all(updates: dict[Path, str]) -> None:
+    """Replace every carrier from a staged copy, and put back the ones already replaced if a later one fails."""
+    originals = {path: path.read_text(encoding="utf-8") for path in updates}
+    staged = {path: path.with_name(path.name + ".tmp") for path in updates}
+    try:
+        for path, staged_path in staged.items():
+            staged_path.write_text(updates[path], encoding="utf-8")
+        replaced: list[Path] = []
+        try:
+            for path, staged_path in staged.items():
+                os.replace(staged_path, path)
+                replaced.append(path)
+        except OSError:
+            for path in replaced:
+                path.write_text(originals[path], encoding="utf-8")
+            raise
+    finally:
+        for staged_path in staged.values():
+            staged_path.unlink(missing_ok=True)
+
+
 def set_version(root: Path, version: str) -> None:
     """Write the version into VERSION, the generator package and the ROS manifest."""
     package = _updated_text(root / PACKAGE_VERSION, PACKAGE_VERSION_LINE, f'__version__ = "{version}"')
     manifest = _updated_text(root / ROS_MANIFEST, ROS_MANIFEST_TAG, f"<version>{version}</version>")
-    updates = {
-        root / VERSION_FILE: version + "\n",
-        root / PACKAGE_VERSION: package,
-        root / ROS_MANIFEST: manifest,
-    }
-    originals = {path: path.read_text(encoding="utf-8") for path in updates}
-    written: list[Path] = []
-    try:
-        for path, text in updates.items():
-            path.write_text(text, encoding="utf-8")
-            written.append(path)
-    except OSError:
-        for path in written:
-            path.write_text(originals[path], encoding="utf-8")
-        raise
+    _write_all(
+        {
+            root / VERSION_FILE: version + "\n",
+            root / PACKAGE_VERSION: package,
+            root / ROS_MANIFEST: manifest,
+        }
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

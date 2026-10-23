@@ -43,7 +43,7 @@ def test_the_protocol_version_is_left_alone(tmp_path):
 
 def test_a_version_that_is_not_semver_is_refused(tmp_path):
     root = tree(tmp_path)
-    for version in ("1.2", "v1.2.3", "1.2.3-rc1"):
+    for version in ("1.2", "v1.2.3", "1.2.3-rc1", "01.2.3"):
         result = set_version(root, version)
         assert result.returncode == 2 and "not a version" in result.stderr, version
     assert (root / "VERSION").read_text() == "0.1.0\n"
@@ -69,10 +69,14 @@ def test_two_places_to_write_are_reported(tmp_path):
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores file write permissions")
-def test_a_write_failure_puts_back_what_was_already_written(tmp_path):
+def test_a_write_failure_leaves_every_carrier_alone(tmp_path):
     root = tree(tmp_path)
-    (root / "gen" / "r2s_gen" / "version.py").chmod(0o444)
-    result = set_version(root, "0.2.0")
+    package = root / "gen" / "r2s_gen"
+    package.chmod(0o555)
+    try:
+        result = set_version(root, "0.2.0")
+    finally:
+        package.chmod(0o755)
     assert result.returncode != 0
     assert (root / "VERSION").read_text() == "0.1.0\n"
     assert '__version__ = "0.1.0"' in (root / "gen" / "r2s_gen" / "version.py").read_text()
