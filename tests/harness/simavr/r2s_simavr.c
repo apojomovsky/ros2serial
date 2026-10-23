@@ -1,5 +1,5 @@
 /* simavr harness: an emulated AVR's UART0 bridged to a pty, for system tests.
-   It links libsimavr, which only test-only code may do (ADR-004). */
+   It links libsimavr, which only test-only code may do (AGENTS.md, Licensing boundaries). */
 
 #define _XOPEN_SOURCE 700
 #define _DEFAULT_SOURCE

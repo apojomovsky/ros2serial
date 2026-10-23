@@ -260,7 +260,7 @@ When the PR suite exceeds its budget, the slowest tests are made faster or moved
 | Bridge unit and component | Session with a fake transport and manual clock, converter against rclcpp serialization, estimator with a simulated drifting clock, rate limiting and bandwidth cap | gtest via `ament_cmake_gtest` | Every PR |
 | Integration, posix | Bridge plus the posix virtual MCU over a pty: the key scenarios, on both registration paths | launch_testing | Every PR, RMW matrix |
 | Fault injection | A pty proxy that flips bits, drops, duplicates and inserts bytes, truncates frames and resets the MCU mid-session | launch_testing + `tests/harness/` | Every PR (short), nightly (long) |
-| System, AVR | The same scenarios against firmware in simavr (ATmega328P, ATmega2560), UART on a pty | simavr harness | Every PR once R5 lands |
+| System, AVR | The same scenarios against firmware in simavr (ATmega328P, ATmega2560), UART on a pty | simavr harness, `tests/harness/simavr/` | Every PR |
 | System, PIC | The same scenarios under MPLAB SIM | epic-hal mdb gate | Phase 5 |
 | Soak | Two hours of traffic on posix and simavr | launch_testing | Nightly |
 | Build matrix and docs | Examples for Uno and Mega (both registration paths), PlatformIO, bare AVR; every code snippet in `README.md` and `docs/` extracted and compiled | arduino/compile-sketches, `pio ci`, make | Every PR |
