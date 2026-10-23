@@ -77,9 +77,10 @@ else
   note "zone check: arrives with #9"
 fi
 
-# 8. Spec and vectors change together.
+# 8. Spec and vectors change together. A .gitkeep carries no content, so its
+# deletion under spec/vectors is not a vector change.
 spec=$(grep -c '^spec/protocol.md$' <<<"$changed")
-vectors=$(grep -c '^spec/vectors/' <<<"$changed")
+vectors=$(grep -E '^spec/vectors/' <<<"$changed" | grep -vc '/\.gitkeep$')
 [ "$spec" -gt 0 ] && [ "$vectors" -eq 0 ] && fix "spec/protocol.md changed without spec/vectors changes"
 [ "$vectors" -gt 0 ] && [ "$spec" -eq 0 ] && fix "spec/vectors changed without spec/protocol.md changes"
 
