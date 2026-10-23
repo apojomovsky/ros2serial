@@ -32,5 +32,5 @@ colcon --log-base "$workspace/log" test \
   --install-base "$workspace/install" \
   --event-handlers console_direct+ \
   --return-code-on-test-failure || status=1
-colcon test-result --test-result-base "$workspace/build" --all --verbose || status=1
+colcon --log-base "$workspace/log" test-result --test-result-base "$workspace/build" --all --verbose || status=1
 exit $status
