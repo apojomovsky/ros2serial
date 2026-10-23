@@ -136,7 +136,7 @@ void test_framer_drops_a_frame_whose_crc_fails(void)
 void test_framer_drops_an_encoded_frame_over_the_buffer(void)
 {
     const uint8_t payload[] = {0x01};
-    static uint8_t stream[R2S_FRAMER_RX_CAPACITY + 2u];
+    static uint8_t stream[R2S_FRAMER_RX_CAPACITY + 3u];
     r2s_frame_t frame;
     uint16_t len;
 
@@ -242,7 +242,7 @@ void test_framer_a_ready_frame_is_not_overwritten(void)
 void test_framer_dropped_frames_counts_every_drop(void)
 {
     const uint8_t payload[] = {0x01};
-    static uint8_t stream[R2S_FRAMER_RX_CAPACITY + 2u];
+    static uint8_t stream[R2S_FRAMER_RX_CAPACITY + 3u];
     r2s_frame_t frame;
     uint16_t len;
 
