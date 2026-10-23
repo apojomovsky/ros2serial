@@ -128,13 +128,15 @@ if [ "${TEST:-}" = 1 ]; then
   # runs the suite again, so TEST does not go down with it. The scopes do:
   # the child must do what this run was asked to do, no more. This ritual's
   # own inputs go too, so a nested ritual reads its own base and body
-  # rather than the outer ones. R2S_SUITE names the script to run, so a
-  # test can see what the suite was given.
+  # rather than the outer ones. The title goes with them: the suite's own
+  # tests call the ritual, and a title meant for this branch would be
+  # checked against their fixture commits. R2S_SUITE names the script to
+  # run, so a test can see what the suite was given.
   suite=${R2S_SUITE:-$root/scripts/ci-test.sh}
   # The output is kept, so a failure can be shown without running the suite
   # again: a second run would be refused by the lock the first one holds.
   suite_log=$(mktemp "${TMPDIR:-/tmp}/r2s-suite.XXXXXX")
-  if ! env -u TEST -u BASE -u PR_BODY bash "$suite" >"$suite_log" 2>&1; then
+  if ! env -u TEST -u BASE -u PR_BODY -u PR_TITLE bash "$suite" >"$suite_log" 2>&1; then
     # The failed sections are the point, so they are shown. The suite names
     # them on its last line; a section that is not named falls back to the
     # last lines of the log.

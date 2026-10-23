@@ -310,6 +310,28 @@ def test_the_ritual_does_not_leak_its_scopes_into_the_suite(tmp_path):
     assert marker.read_text().strip() == "TEST= SCRIPTS=1", "the suite was started with TEST still set"
 
 
+def test_the_ritual_does_not_leak_its_title_into_the_suite(tmp_path):
+    """The suite's own tests call the ritual, and they carry no title.
+
+    A title that reached the suite would be checked against the fixture
+    commits of those tests, and the ritual would fail for a title that is
+    perfectly good.
+    """
+    main, wt = fixture(tmp_path)
+    git(main, "config", "core.hooksPath", ".githooks")
+    commit(wt, {"core/a.py": "# Bounded so the PIC stack never overflows.\nX = 1\n"}, "feat(core): add a thing")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+
+    marker = tmp_path / "title.txt"
+    recorder = tmp_path / "record-title.sh"
+    recorder.write_text(f'echo "PR_TITLE=${{PR_TITLE:-}}" > {marker}\n')
+
+    ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="feat(core): add a thing", R2S_SUITE=str(recorder))
+    assert marker.exists()
+    assert marker.read_text().strip() == "PR_TITLE=", "the suite was started with the outer PR_TITLE"
+
+
 def test_the_title_must_carry_the_strongest_type_of_its_commits():
     """The title is the subject that lands, so it must carry the type.
 
