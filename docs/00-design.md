@@ -585,7 +585,7 @@ ros2serial/
 | C++ (bridge) | C++17 (Jazzy's baseline), `ament_lint_auto` (cpplint, uncrustify or clang-format, cppcheck), ROS 2 style |
 | Python | 3.10 or newer, `ruff` (lint + format), `mypy --strict` on `r2s_gen`, `pytest`, `hypothesis` |
 | Commits | Conventional Commits (`feat(core): ...`, `fix(bridge): ...`, `test(gen): ...`); changelog with git-cliff; details in `AGENTS.md` |
-| Branches and PRs | `master` is the default branch; one ticket per PR in a `.worktrees/` worktree, never on `master`; branches named `<type>/<issue>-<slug>`; a draft PR is the claim; each PR is squashed into one commit on `master`, and the PR title is that commit's subject; no PR is stacked on another; CI must be green; the PR body carries `Closes #N` and a `## Review` section (see `docs/01-testing.md`) |
+| Branches and PRs | `master` is the default branch; one ticket per PR in a `.worktrees/` worktree, never on `master`; branches named `<type>/<issue>-<slug>`; a comment on the issue is the claim; each PR is squashed into one commit on `master`, and the PR title is that commit's subject; no PR is stacked on another; CI must be green; the PR body carries `Closes #N` and a `## Review` section (see `docs/01-testing.md`) |
 | Versions | One semver for the whole repository (`VERSION`, bumped only by `cut-release.yml`) plus the protocol version (`R2S_PROTOCOL_VERSION`, starts at 1) |
 | Licenses | MIT for everything |
 | Docs | Every public function has a doc comment; every PR that changes behavior updates `spec/protocol.md` or `docs/` in the same PR |
