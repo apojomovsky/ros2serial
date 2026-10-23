@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from r2s_gen.version import PROTOCOL_VERSION, __version__
 
 ROOT = Path(__file__).resolve().parents[2]

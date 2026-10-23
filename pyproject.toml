@@ -1,5 +1,5 @@
-# Repository-wide tool configuration. The generator gets its own package
-# metadata under gen/ (G1).
+# Repository-wide tool configuration. The generator's package metadata and
+# build backend live under gen/.
 
 [tool.ruff]
 target-version = "py310"
@@ -12,5 +12,5 @@ select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
-# The generator is importable from its tests without installing it (G1 packages it).
+# The generator is importable from its tests without installing it.
 pythonpath = ["gen"]

@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>r2s_gen</name>
+  <version>0.0.0</version>
+  <description>The ros2serial code generator: .msg files and r2s.yaml in, firmware sources out.</description>
+  <maintainer email="apojomovsky@gmail.com">Alexis Pojomovsky</maintainer>
+  <license>MIT</license>
+  <url type="repository">https://github.com/apojomovsky/ros2serial</url>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <test_depend>python3-pytest</test_depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

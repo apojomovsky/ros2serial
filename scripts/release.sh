@@ -45,8 +45,8 @@ if [ "$dry" = 1 ]; then
   "${cliff[@]}" --unreleased --tag "v$next"
   exit 0
 fi
-echo "$next" > VERSION
+python3 "$root/scripts/set_version.py" "$next" "$PWD"
 "${cliff[@]}" --tag "v$next" -o CHANGELOG.md
-git add VERSION CHANGELOG.md
+git add VERSION CHANGELOG.md gen/r2s_gen/version.py gen/package.xml
 git commit -q -m "chore(release): v$next"
 echo "committed chore(release): v$next"
