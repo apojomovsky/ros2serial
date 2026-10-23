@@ -55,12 +55,12 @@ def test_gitignore_entries_are_required(tmp_path):
     assert check_layout.check(tmp_path) == [".gitignore does not ignore .worktrees/"]
 
 
-def test_the_planning_records_are_not_required(tmp_path):
-    """The planning records live elsewhere, so a tree without them is complete."""
+def test_the_gate_asks_for_no_planning_records(tmp_path):
+    """The planning records live elsewhere, so the gate asks for no other document."""
     make_skeleton(tmp_path)
-    assert not (tmp_path / "docs/adr").exists()
-    assert not (tmp_path / "docs/research").exists()
     assert check_layout.check(tmp_path) == []
+    assert [d for d in check_layout.REQUIRED_DIRS if d.startswith("docs/")] == []
+    assert [f for f in check_layout.REQUIRED_FILES if f.startswith("docs/")] == ["docs/00-design.md"]
 
 
 def test_the_rulebook_alias_must_exist(tmp_path):

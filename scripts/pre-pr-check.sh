@@ -38,7 +38,7 @@ changed=$(git diff --name-only "$base...HEAD" 2>/dev/null)
 
 # 3. No plan files.
 while read -r f; do
-  [ -n "$f" ] && fix "plan file in the diff: $f (distill decisions into an ADR and remove it)"
+  [ -n "$f" ] && fix "plan file in the diff: $f (distill the decisions into the commit and remove it)"
 done < <(grep '^docs/plans/' <<<"$changed")
 
 # 4. Commit hygiene and whitespace.
@@ -109,7 +109,7 @@ settings_said=$(bash "$root/scripts/merge-settings.sh" 2>&1)
 case $? in
   0) ;;
   75) note "the repository's merge settings are not checked (${settings_said#merge-settings: })" ;;
-  *) fix "the repository's merge settings do not match ADR-003: $settings_said" ;;
+  *) fix "the repository's merge settings do not match the squash rule: $settings_said" ;;
 esac
 
 # 12. Hooks installed.

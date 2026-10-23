@@ -11,8 +11,8 @@ command -v clang-format >/dev/null 2>&1 || { echo "clang-format not found: run i
 if [ "$#" -gt 0 ]; then
   files=("$@")
 else
-  mapfile -t files < <(git ls-files -- '*.c' '*.h' '*.cpp' '*.hpp' '*.cc' ':!:*/vendor/*' ':!:spike/*')
+  mapfile -t files < <(git ls-files -- '*.c' '*.h' '*.cpp' '*.hpp' '*.cc' ':!:*/vendor/*')
 fi
-mapfile -t files < <(printf '%s\n' "${files[@]}" | grep -Ev '(^|/)vendor/|^spike/' | grep -E '\.(c|h|cpp|hpp|cc)$')
+mapfile -t files < <(printf '%s\n' "${files[@]}" | grep -Ev '(^|/)vendor/' | grep -E '\.(c|h|cpp|hpp|cc)$')
 [ "${#files[@]}" -gt 0 ] || exit 0
 clang-format "${mode[@]}" -- "${files[@]}"

@@ -38,8 +38,6 @@ REQUIRED_DIRS = [
     "tools",
     "scripts",
     "ci",
-    "docs/adr",
-    "docs/research",
     ".github/workflows",
     ".githooks",
 ]
@@ -47,12 +45,15 @@ REQUIRED_FILES = [
     "LICENSE",
     "README.md",
     "AGENTS.md",
+    "CLAUDE.md",
     "CONTRIBUTING.md",
     ".gitignore",
     "docs/00-design.md",
-    "docs/adr/README.md",
 ]
 GITIGNORED = ["scratch/", ".worktrees/"]
+# The alias is a link, so a copy cannot drift from the rulebook it stands for.
+RULEBOOK_ALIAS = "CLAUDE.md"
+RULEBOOK = "AGENTS.md"
 
 
 def check(root: Path) -> list[str]:
@@ -63,6 +64,12 @@ def check(root: Path) -> list[str]:
     for f in REQUIRED_FILES:
         if not (root / f).is_file():
             problems.append(f"missing file: {f}")
+    alias = root / RULEBOOK_ALIAS
+    if alias.is_symlink():
+        if alias.resolve() != (root / RULEBOOK).resolve():
+            problems.append(f"{RULEBOOK_ALIAS} is not a symlink to {RULEBOOK}")
+    elif alias.exists():
+        problems.append(f"{RULEBOOK_ALIAS} is not a symlink to {RULEBOOK}")
     agents = root / "AGENTS.md"
     if agents.is_file() and "docs/00-design.md" not in agents.read_text():
         problems.append("AGENTS.md does not link docs/00-design.md")

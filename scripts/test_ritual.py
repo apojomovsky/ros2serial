@@ -391,7 +391,7 @@ def test_the_merge_settings_check_catches_a_wrong_setting(tmp_path):
     env = {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}"}
     out = run(["bash", str(ROOT / "scripts/merge-settings.sh")], ROOT, env)
     assert out.returncode == 1
-    assert "ADR-003" in out.stderr
+    assert "do not match the squash rule" in out.stderr
 
 
 def test_settings_that_cannot_be_read_are_not_a_failure(tmp_path):

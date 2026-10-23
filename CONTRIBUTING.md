@@ -9,4 +9,4 @@ In short:
 - Everything runs in the Docker dev image through `make` (`make bootstrap`, then `make test`).
 - Tests come first: the first commit of a pull request adds the failing test.
 - Conventional Commits, no trailers, no em-dashes.
-- Before starting on an issue, say so on it, so two people don't work on the same thing.
+- Before starting on an issue, comment on it, so two people do not take the same ticket.

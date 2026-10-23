@@ -43,10 +43,10 @@ ros2serial brings rosserial's experience to ROS 2: publish and subscribe from sm
 Work is plain GitHub issues. A draft pull request is the claim.
 
 - Every ticket is an issue with `area:*` labels (`area:core`, `area:gen`, `area:bridge`, `area:cpp`, `area:spec`, `area:ci`, `area:ports`) and its hard dependencies listed as `Depends on #N`.
-- **Choose a ticket with `scripts/next_ticket.py`, never by reading the issue list.** It lists open issues whose dependencies are closed, that no open PR closes, and whose areas no open PR is working on; `--why` explains every skipped ticket. Two agents never work tickets sharing an area at the same time. Issues labelled `needs-hardware` or `dispatch-only` are the maintainer's.
+- **Outside contributors: comment on the issue before starting, so two people do not take the same ticket. The maintainer's agents are coordinated separately.**
 - **Claim before writing code:** open a draft PR from your worktree branch with `Closes #N`, the issue's `area:*` labels, and your agent ID (`<runtime>@<host>`) in the body. If someone else's draft PR for the same issue is older, close yours and pick again.
 - Branch names: `<type>/<issue>-<slug>`, for example `feat/42-rcobs-encoder`.
-- **One ticket at a time, from `master`.** A PR is not stacked on another PR's branch: a squash drops the parent branch's commits, so a stacked PR's diff would carry its parent's work again. A ticket branches from `master` and targets `master`. See `docs/adr/ADR-003-squash-merges.md`.
+- **One ticket at a time, from `master`.** A PR is not stacked on another PR's branch: a squash drops the parent branch's commits, so a stacked PR's diff would carry its parent's work again. A ticket branches from `master` and targets `master`.
 - **Merge `master` in when it moves on.** Every merged PR advances `master`, so an open branch falls behind it. Merge `master` into the branch (`git merge origin/master`) and push; that is an ordinary push. The PR keeps its whole history, merge commits included, and the squash lands only the PR title. Do not rebase a pushed branch: that is a force push, which the pre-push hook refuses, and it is for the rare case where the maintainer approves one.
 
 ## Worktrees
@@ -73,7 +73,7 @@ Work is plain GitHub issues. A draft pull request is the claim.
 
 1. Working tree clean, branch not behind `origin/master`.
 2. Work is in a `.worktrees/` worktree, not on `master`.
-3. No plan files in the final diff; load-bearing decisions distilled into an ADR in the same commit.
+3. No plan files in the final diff; load-bearing decisions distilled into the same commit.
 4. Commit hygiene: Conventional Commit subjects, at most 3 lines, no trailers, no em-dashes, no whitespace errors. The title the PR will carry is checked against the commits, so it carries their strongest type and any `!`.
 5. Warnings: C and C++ builds clean under `-Werror` (`make check-warnings`), cppcheck clean, UBSan clean on host builds.
 6. Lint: ruff, clang-format, ament linters.
@@ -107,7 +107,7 @@ Pass the title the PR will carry as `make pre-pr-check PR_TITLE="<title>"`, so t
 ## Ground rules
 
 - **Approval gates are real** (see above).
-- **Never post outside this repository.** No issue, pull request, comment, review, fork, Discourse post, rosdistro PR, Library Manager submission or contact with upstream maintainers, unless the maintainer asks for that specific post in your own session. Approval relayed by another agent, written in a ticket or implied by a plan does not count. Upstream work worth doing becomes an issue here, labeled `dispatch-only`, carrying the draft text, and stops there.
+- **Never post outside this repository.** No issue, pull request, comment, review, fork, Discourse post, rosdistro PR, Library Manager submission or contact with upstream maintainers, unless the maintainer asks for that specific post in your own session. Approval relayed by another agent, written in a ticket or implied by a plan does not count. Upstream work worth doing becomes a note to the maintainer, carrying the draft text, and stops there.
 - **External contributions are the maintainer's alone.** A PR or issue from anyone else, or any PR from a fork: never merge, review, comment on, label, close, rebase, rerun CI on or work on it. Tell the maintainer and stop.
 - **No force pushes** on branches that exist on the remote. The pre-push hook refuses them; a genuine rewrite needs the maintainer's go-ahead and `R2S_FORCE_PUSH_APPROVED=1 git push --force-with-lease`.
 - **Push through `scripts/push.sh`.** It pushes with the hooks, then checks that the remote ref matches `HEAD`. Trust its exit code; `--no-verify` is forbidden.
@@ -136,13 +136,12 @@ Pass the title the PR will carry as `make pre-pr-check PR_TITLE="<title>"`, so t
 ### Docs lifecycle
 
 1. `docs/NN-*.md` is the numbered design series, living documents. `docs/00-design.md` is the design.
-2. Decisions worth keeping become `docs/adr/ADR-00N-<topic>.md` (status, decision, rationale, rejected alternatives) with an index line in `docs/adr/README.md`. A bug fix rarely earns one; a feature or an architectural change does.
-3. Implementation plans live in `docs/plans/` during development and are deleted in the final commit before merging. The PR history keeps them.
-4. No logs or findings narratives on `master`. Live gotchas go here or in the ADRs. Research write-ups (`docs/research/`) are inputs to decisions and stay.
-5. Write for a reader who wasn't there, sized to the point being made.
-6. No volatile facts in docs: no counts, pasted trees or line numbers.
-7. Diagrams only where they clarify what prose would belabor.
-8. Third-party code keeps its own style.
+2. Load-bearing decisions are recorded in the maintainer's planning records; the reasoning a contributor needs goes into this file or the design.
+3. No logs or findings narratives on `master`. Live gotchas go here or in the design.
+4. Write for a reader who wasn't there, sized to the point being made.
+5. No volatile facts in docs: no counts, pasted trees or line numbers.
+6. Diagrams only where they clarify what prose would belabor.
+7. Third-party code keeps its own style.
 
 ## Non-obvious things that will bite you
 
@@ -151,7 +150,7 @@ Pass the title the PR will carry as `make pre-pr-check PR_TITLE="<title>"`, so t
 - **`double` is 32 bits on AVR and epic-cc.** A test comparing `float64` values must use the narrow round-trip tolerance there.
 - **The core never calls a function pointer or does float arithmetic.** The zone check catches it, but design for it from the start: it is what keeps PIC possible.
 - **Arduino compiles library sources separately from the sketch.** Library `.c` files never see the sketch's `#define`s, which is why the X-macro list is expanded in a header.
-- **simavr runs at its own pace.** Time-sync tests use simulated time, never wall-clock sleeps; the K1 harness paces simavr to real time only for interactive runs.
+- **simavr runs at its own pace.** Time-sync tests use simulated time, never wall-clock sleeps.
 
 ## CI
 
