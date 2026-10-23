@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Cut a release: next version from the commits (git-cliff and the [bump] rules
-# in cliff.toml), VERSION and CHANGELOG.md updated, one commit. cut-release.yml
-# runs this in the dev image, then opens the release PR; the tag follows its
-# merge. Only feat, fix, perf, refactor, revert or breaking commits make a
-# release: docs, tests, CI and chores alone are nothing to release.
+# in cliff.toml), VERSION, the generator's version files and CHANGELOG.md
+# updated, one commit. cut-release.yml runs this in the dev image, then opens
+# the release PR; the tag follows its merge. Only feat, fix, perf, refactor,
+# revert or breaking commits make a release: docs, tests, CI and chores alone
+# are nothing to release.
 # Usage: release.sh [--dry-run] [--bump auto|patch|minor|major]
 set -euo pipefail
 usage() { echo "usage: release.sh [--dry-run] [--bump auto|patch|minor|major]"; exit 2; }
@@ -45,8 +46,8 @@ if [ "$dry" = 1 ]; then
   "${cliff[@]}" --unreleased --tag "v$next"
   exit 0
 fi
-echo "$next" > VERSION
+python3 "$root/scripts/set_version.py" "$next" "$PWD"
 "${cliff[@]}" --tag "v$next" -o CHANGELOG.md
-git add VERSION CHANGELOG.md
+git add VERSION CHANGELOG.md gen/r2s_gen/version.py gen/package.xml
 git commit -q -m "chore(release): v$next"
 echo "committed chore(release): v$next"
