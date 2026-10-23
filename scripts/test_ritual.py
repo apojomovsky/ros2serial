@@ -64,6 +64,39 @@ def test_a_clean_pr_passes(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_the_ritual_checks_the_title_against_the_commits(tmp_path):
+    """The title is the subject that lands, so the ritual must check it.
+
+    The check is the one CI runs, so an agent finds the problem before the
+    PR is opened instead of after.
+    """
+    main, wt = fixture(tmp_path)
+    git(main, "config", "core.hooksPath", ".githooks")
+    commit(wt, {"core/a.py": "# Bounded so the PIC stack never overflows.\nX = 1\n"}, "fix(core): repair the thing")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+
+    weak = ritual(wt, PR_BODY=str(body), PR_TITLE="docs(ci): describe the thing")
+    assert weak.returncode == 1, weak.stdout + weak.stderr
+    assert "the title is 'docs' but a commit is 'fix'" in weak.stdout
+
+    strong = ritual(wt, PR_BODY=str(body), PR_TITLE="fix(ci): repair the thing")
+    assert strong.returncode == 0, strong.stdout + strong.stderr
+
+
+def test_the_ritual_says_the_title_was_not_checked(tmp_path):
+    main, wt = fixture(tmp_path)
+    git(main, "config", "core.hooksPath", ".githooks")
+    commit(wt, {"core/a.py": "# Bounded so the PIC stack never overflows.\nX = 1\n"}, "fix(core): repair the thing")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+
+    out = ritual(wt, PR_BODY=str(body))
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "PR title" in out.stdout
+    assert "not checked" in out.stdout
+
+
 def test_a_dirty_pr_gets_one_fix_line_per_problem(tmp_path):
     main, _ = fixture(tmp_path)
     long_block = "".join(f"# reason line {i}\n" for i in range(9))
