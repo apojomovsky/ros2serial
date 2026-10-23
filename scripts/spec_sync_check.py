@@ -65,7 +65,7 @@ def check(root: Path, base: str) -> list[str]:
         # A rule that is added, removed, reworded or moved between sections is
         # a change; only the wire ones need a vector to show them.
         wire = [rule for rule, entry in new.items() if not entry[0] and old.get(rule) != entry]
-        wire += [rule for rule, entry in old.items() if not entry[0] and rule not in new]
+        wire += [rule for rule, entry in old.items() if not entry[0] and (rule not in new or new[rule][0])]
         if wire:
             problems.append(f"{SPEC} changed without spec/vectors changes: {', '.join(wire)} crosses the wire")
     if vectors_changed and not spec_changed:

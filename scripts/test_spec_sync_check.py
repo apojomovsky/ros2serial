@@ -94,6 +94,20 @@ def test_a_subsection_inherits_the_local_marker(tmp_path):
     assert problems(root) == []
 
 
+def test_a_wire_rule_moved_into_a_local_section_fails(tmp_path):
+    """Relabelling a wire rule as local takes it off the wire without a vector."""
+    base = LOCAL.replace(
+        "- [FRM-1] A frame is bytes.\n", "- [FRM-1] A frame is bytes.\n- [FRM-2] A frame has a topic.\n"
+    )
+    root = repo_with(tmp_path, base)
+    moved = base.replace("- [FRM-2] A frame has a topic.\n", "").replace(
+        "- [DSC-1] A type record is 5 bytes.\n",
+        "- [DSC-1] A type record is 5 bytes.\n- [FRM-2] A frame has a topic.\n",
+    )
+    write(root, "spec/protocol.md", moved)
+    assert problems(root) == ["spec/protocol.md changed without spec/vectors changes: FRM-2 crosses the wire"]
+
+
 def test_a_section_after_the_local_one_is_wire_again(tmp_path):
     root = repo_with(tmp_path, LOCAL)
     write(root, "spec/protocol.md", LOCAL + "\n## 10. Session\n\n- [SES-1] A session starts.\n")
