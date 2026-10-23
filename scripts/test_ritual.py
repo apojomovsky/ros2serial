@@ -178,6 +178,17 @@ def test_spec_without_vectors_is_flagged(tmp_path):
     assert "spec/protocol.md changed without spec/vectors" in result.stdout
 
 
+def test_a_vector_change_without_the_spec_is_flagged(tmp_path):
+    main, wt = fixture(tmp_path)
+    git(main, "config", "core.hooksPath", ".githooks")
+    commit(wt, {"spec/vectors/crc/values.yaml": "cases: []\n"}, "test(spec): add a vector")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+    result = ritual(wt, PR_BODY=str(body))
+    assert result.returncode == 1
+    assert "spec/vectors changed without spec/protocol.md changes" in result.stdout
+
+
 def test_a_placeholder_is_not_a_vector_change(tmp_path):
     """A .gitkeep carries no vector, so removing one keeps the spec in sync."""
     main, wt = fixture(tmp_path)

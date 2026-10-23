@@ -136,6 +136,14 @@ def test_a_gitkeep_in_an_empty_directory_passes(tmp_path):
     assert check_layout.check(tmp_path) == []
 
 
+def test_without_a_checkout_every_present_file_counts(tmp_path):
+    """No index means the files there are the whole content, so they count."""
+    make_skeleton(tmp_path)
+    (tmp_path / "tools/.gitkeep").write_text("")
+    (tmp_path / "tools/size_report.py").write_text("")
+    assert check_layout.check(tmp_path) == [".gitkeep in a non-empty directory: tools/.gitkeep"]
+
+
 def test_an_untracked_neighbour_does_not_count(tmp_path):
     """A scratch file must not turn a needed placeholder into a failure."""
     make_skeleton(tmp_path)
