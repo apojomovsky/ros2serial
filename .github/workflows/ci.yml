@@ -50,13 +50,26 @@ jobs:
       - uses: ./.github/actions/dev-image
       - run: make test GEN=1
 
-  # Placeholders. Each becomes a real job in the ticket it names, and stays
-  # out of the required checks until then.
+  # The bridge is built and tested on every supported distro, in that distro's
+  # own image. The dev image is the jazzy one, so the local run and the jazzy
+  # job share a toolchain.
   bridge:
     runs-on: ubuntu-24.04
-    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [jazzy, lyrical]
+    container:
+      image: ros:${{ matrix.distro }}-ros-base
     steps:
-      - run: echo "pending H1, see docs/00-design.md"
+      - uses: actions/checkout@v4.2.2
+      - run: make test BRIDGE=1
+        env:
+          R2S_IN_IMAGE: 1
+          R2S_BUILD_DIR: /tmp/r2s-build
+
+  # Placeholders. Each becomes a real job in the ticket it names, and stays
+  # out of the required checks until then.
   e2e-posix:
     runs-on: ubuntu-24.04
     continue-on-error: true

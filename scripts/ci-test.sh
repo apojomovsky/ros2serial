@@ -128,7 +128,7 @@ if wants SCRIPTS; then
 fi
 if wants CORE; then section core bash scripts/core-test.sh; fi
 if wants GEN; then section gen python3 -m pytest gen; fi
-if wants BRIDGE; then section bridge pending "H1"; fi
+if wants BRIDGE; then section bridge bash scripts/bridge-test.sh; fi
 if wants E2E; then section e2e pending "V1, V3"; fi
 
 if [ "${#failed[@]}" -gt 0 ]; then
