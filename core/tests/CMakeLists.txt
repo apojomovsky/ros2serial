@@ -7,7 +7,7 @@ add_library(unity STATIC vendor/unity/unity.c)
 target_include_directories(unity SYSTEM PUBLIC vendor/unity)
 
 add_library(r2s_test_support STATIC support/bytes.c support/fake_port.c support/fake_port_unity.c
-                                       support/rcobs.c)
+                                       support/frames.c support/rcobs.c)
 target_include_directories(r2s_test_support PUBLIC support)
 target_compile_options(r2s_test_support PRIVATE ${R2S_WARNINGS})
 target_link_libraries(r2s_test_support PUBLIC unity r2s_core)
@@ -75,7 +75,7 @@ foreach(source ${unit_tests})
 endforeach()
 
 add_executable(cxx_headers cxx_headers.cpp)
-target_link_libraries(cxx_headers PRIVATE r2s_core)
+target_link_libraries(cxx_headers PRIVATE r2s_test_support)
 target_compile_options(cxx_headers PRIVATE -Wall -Wextra -Werror)
 add_test(NAME cxx_headers COMMAND cxx_headers)
 
