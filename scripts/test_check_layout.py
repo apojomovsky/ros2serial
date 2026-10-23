@@ -55,8 +55,8 @@ def test_gitignore_entries_are_required(tmp_path):
     assert check_layout.check(tmp_path) == [".gitignore does not ignore .worktrees/"]
 
 
-def test_the_gate_asks_for_no_planning_records(tmp_path):
-    """The planning records live elsewhere, so the gate asks for no other document."""
+def test_the_gate_asks_for_the_design_and_the_rulebook_only(tmp_path):
+    """The gate asks for what a contributor needs, and nothing else."""
     make_skeleton(tmp_path)
     assert check_layout.check(tmp_path) == []
     assert [d for d in check_layout.REQUIRED_DIRS if d.startswith("docs/")] == []

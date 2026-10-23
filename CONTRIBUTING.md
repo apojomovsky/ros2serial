@@ -10,3 +10,4 @@ In short:
 - Tests come first: the first commit of a pull request adds the failing test.
 - Conventional Commits, no trailers, no em-dashes.
 - Before starting on an issue, comment on it, so two people do not take the same ticket.
+- The pull request is opened when it is ready for review, with `Closes #N` and the issue's `area:*` labels.

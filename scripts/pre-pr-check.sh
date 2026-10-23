@@ -38,7 +38,7 @@ changed=$(git diff --name-only "$base...HEAD" 2>/dev/null)
 
 # 3. No plan files.
 while read -r f; do
-  [ -n "$f" ] && fix "plan file in the diff: $f (distill the decisions into the commit and remove it)"
+  [ -n "$f" ] && fix "plan file in the diff: $f (explain the decisions where they apply and remove it)"
 done < <(grep '^docs/plans/' <<<"$changed")
 
 # 4. Commit hygiene and whitespace.
