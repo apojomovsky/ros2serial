@@ -36,10 +36,10 @@ fi
 
 changed=$(git diff --name-only "$base...HEAD" 2>/dev/null)
 
-# 3. No plan files.
+# 3. No plan files, wherever they are written.
 while read -r f; do
   [ -n "$f" ] && fix "plan file in the diff: $f (explain the decisions where they apply and remove it)"
-done < <(grep '^docs/plans/' <<<"$changed")
+done < <(grep -iE '(^|/)(plan|plans)/' <<<"$changed")
 
 # 4. Commit hygiene and whitespace.
 while read -r line; do

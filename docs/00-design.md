@@ -47,7 +47,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 | Tier | Core with 1 publisher + 1 subscriber (Float32, Twist) |
 | --- | --- |
 | S | < 200 B RAM including buffers, < 4K words flash |
-| M | < 400 B RAM including buffers, < 4 KB flash (P0 features), measured as the delta over an empty sketch that uses the same serial driver. The K1 spike measured +137 B and +2.6 KB on a Uno build, against +706 B and +9.0 KB for the smallest rosserial configuration (R1) |
+| M | < 400 B RAM including buffers, < 4 KB flash (P0 features), measured as the delta over an empty sketch that uses the same serial driver. A throwaway K1 build measured +137 B and +2.6 KB on a Uno build, against +706 B and +9.0 KB for the smallest rosserial configuration |
 
 ## Scope: parity with rosserial
 
@@ -65,7 +65,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 | TF and diagnostics | P2 | Probably better handled on the host |
 | Actions | Out of scope | |
 
-The list is still based on prior knowledge of rosserial; the Phase 0 archaeology validates it against the source code.
+The list is still based on prior knowledge of rosserial; the Phase 0 archaeology validated it against the source code.
 
 ## Architecture
 
@@ -533,6 +533,7 @@ One repository, one colcon workspace root. Every directory has its own tests nex
 ```
 ros2serial/
 ├── AGENTS.md                 conventions for agents and contributors (summarizes this Part II)
+├── CLAUDE.md                 symlink to AGENTS.md, for the tools that read that name
 ├── Makefile                  only entry point: bootstrap, image, shell, test, pre-pr-check, help
 ├── Dockerfile                base/dev/ci(=dev)/release stages; versions pinned via ci/versions.env
 ├── .githooks/                pre-commit, commit-msg, pre-push (installed by make setup-hooks)
@@ -1099,7 +1100,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | P8 | Big-endian qemu job | C1 | Nightly green |
 | P9 | Framing and CRC benchmark (AVR Uno/Mega): rCOBS, COBS, SLIP, rosserial style | V4, R7 | Write-up in `docs/benchmarks/` |
 | P10 | Encoding benchmark (packed vs CDR vs MAVLink) | G7 | Write-up; decision on narrow per field |
-| P11 | rosserial-compatible runtime registration: RAM topic table backend, `ros::NodeHandle` and `NodeHandle_<...>` (size parameters accepted and ignored), `Publisher`, `Subscriber<T>` and `Subscriber<T, ObjT>` (member functions), `setSpinTimeout`, `ros::Time` and `ros::Duration` arithmetic, `tf::TransformBroadcaster`, compatibility headers (see R1) | V5, C13 | Every e2e scenario also passes on the runtime path; rosserial example sketches with fixed-size messages build unmodified apart from includes; arrays, strings and `Header` need the one-line edits the migration guide documents; services fail to compile with a clear message until X6 |
+| P11 | rosserial-compatible runtime registration: RAM topic table backend, `ros::NodeHandle` and `NodeHandle_<...>` (size parameters accepted and ignored), `Publisher`, `Subscriber<T>` and `Subscriber<T, ObjT>` (member functions), `initNode()`, `advertise()`, `subscribe()`, `spinOnce()`, `connected()`, `now()`, `setSpinTimeout()`, `getHardware()`, `ros::Time` and `ros::Duration` arithmetic, `tf::TransformBroadcaster`, compatibility headers | V5, C13 | Every e2e scenario also passes on the runtime path; rosserial example sketches with fixed-size messages build unmodified apart from includes; arrays, strings and `Header` need the one-line edits the migration guide documents; services fail to compile with a clear message until X6 |
 | P12 | Link saturation and TX_BUSY | C6, V1 | Scenario 12 |
 | P13 | Baud-rate matrix: 115200, 250000, 500000, 1000000 in simavr and on hardware | V4 | Results documented; default confirmed or changed |
 | P14 | PIC canary job with epic-cc (advisory) | C9, V5 | Core and static C++ compile for PIC16F1938 and PIC18F4550 |

@@ -43,7 +43,7 @@ ros2serial brings rosserial's experience to ROS 2: publish and subscribe from sm
 Work is plain GitHub issues. A comment on the issue is the claim.
 
 - Every ticket is an issue with `area:*` labels (`area:core`, `area:gen`, `area:bridge`, `area:cpp`, `area:spec`, `area:ci`, `area:ports`) and its hard dependencies listed as `Depends on #N`.
-- **Comment on the issue before starting, so two people do not take the same ticket.**
+- **Comment on the issue before starting, so two people do not take the same ticket.** Two people do not work tickets sharing an area at the same time. Issues labelled `needs-hardware` are the maintainer's.
 - **Open the pull request when it is ready for review,** from your worktree branch, with `Closes #N` and the issue's `area:*` labels.
 - Branch names: `<type>/<issue>-<slug>`, for example `feat/42-rcobs-encoder`.
 - **One ticket at a time, from `master`.** A PR is not stacked on another PR's branch: a squash drops the parent branch's commits, so a stacked PR's diff would carry its parent's work again. A ticket branches from `master` and targets `master`.
@@ -73,7 +73,7 @@ Work is plain GitHub issues. A comment on the issue is the claim.
 
 1. Working tree clean, branch not behind `origin/master`.
 2. Work is in a `.worktrees/` worktree, not on `master`.
-3. No plan files in the final diff; load-bearing decisions explained where they apply, in the same commit.
+3. No plan files in the final diff, wherever they are written; load-bearing decisions explained where they apply, in the same commit.
 4. Commit hygiene: Conventional Commit subjects, at most 3 lines, no trailers, no em-dashes, no whitespace errors. The title the PR will carry is checked against the commits, so it carries their strongest type and any `!`.
 5. Warnings: C and C++ builds clean under `-Werror` (`make check-warnings`), cppcheck clean, UBSan clean on host builds.
 6. Lint: ruff, clang-format, ament linters.
