@@ -18,7 +18,7 @@ VERSION_FILE = "VERSION"
 PACKAGE_VERSION = Path("gen") / "r2s_gen" / "version.py"
 ROS_MANIFEST = Path("gen") / "package.xml"
 
-SEMVER = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\Z")
+SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")
 PACKAGE_VERSION_LINE = re.compile(r'^__version__ = ".*"$', re.MULTILINE)
 ROS_MANIFEST_TAG = re.compile(r"<version>[^<]*</version>")
 

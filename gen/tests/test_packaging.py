@@ -76,13 +76,13 @@ def test_colcon_builds_the_ament_python_package(tmp_path):
     )
     assert built.returncode == 0, built.stdout + built.stderr
     installed = workspace / "install" / "r2s_gen"
-    assert (installed / "bin" / "r2s-gen").is_file()
+    assert (installed / "lib" / "r2s_gen" / "r2s-gen").is_file()
     assert (installed / "share" / "ament_index" / "resource_index" / "packages" / "r2s_gen").is_file()
     assert (installed / "share" / "r2s_gen" / "package.xml").is_file()
     # The entry script needs the workspace's site-packages, as the ament pythonpath hook sets it.
     site_packages = next((installed / "lib").glob("python*/site-packages"))
     printed = run(
-        [str(installed / "bin" / "r2s-gen"), "version"],
+        [str(installed / "lib" / "r2s_gen" / "r2s-gen"), "version"],
         env=clean_env(PYTHONPATH=str(site_packages)),
     )
     assert printed.returncode == 0, printed.stderr

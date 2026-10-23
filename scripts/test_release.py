@@ -47,7 +47,7 @@ def next_version(repo: Path, *args: str) -> str:
 
 
 def test_version_file_is_semver():
-    assert re.fullmatch(r"\d+\.\d+\.\d+\n", (ROOT / "VERSION").read_text())
+    assert re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\n", (ROOT / "VERSION").read_text())
 
 
 def test_fix_bumps_patch(tmp_path):
