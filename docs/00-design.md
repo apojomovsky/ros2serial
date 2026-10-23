@@ -575,7 +575,7 @@ ros2serial/
 │   └── vectors/              conformance vectors (YAML), the single source of truth for every codec test
 │       ├── crc/  rcobs/  varint/  frames/  messages/  session/  time/
 ├── core/                     C99 MCU core (no ROS, no hardware)
-│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h; r2s_crc.h, r2s_rcobs.h and r2s_varint.h, shared with the bridge
+│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h; r2s_crc.h, r2s_rcobs.h, r2s_varint.h and r2s_framer.h, shared with the bridge
 │   ├── src/                  crc.c, rcobs.c, varint.c, framer.c, session.c, time.c, log.c, ring.c, codec.c, topics.c
 │   ├── tests/                Unity unit tests, vector runner, CMakeLists.txt
 │   └── fuzz/                 libFuzzer targets and seed corpora

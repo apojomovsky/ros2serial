@@ -153,6 +153,20 @@ void test_framer_drops_an_encoded_frame_over_the_buffer(void)
     TEST_ASSERT_EQUAL_UINT16(1, counters()->rx_frames);
 }
 
+/* covers: FRM-12, HB-6 */
+void test_framer_drops_a_frame_one_byte_over_the_buffer(void)
+{
+    static uint8_t stream[R2S_FRAMER_RX_CAPACITY + 2u];
+    r2s_frame_t frame;
+
+    memset(stream, 0xaa, sizeof stream);
+    stream[sizeof stream - 1u] = 0x00u;
+    fake_port_queue_rx(stream, sizeof stream);
+    TEST_ASSERT_EQUAL_UINT8(0, r2s_framer_poll(&frame));
+    TEST_ASSERT_EQUAL_UINT16(1, counters()->rx_overflows);
+    TEST_ASSERT_EQUAL_UINT16(1, counters()->dropped_frames);
+}
+
 /* covers: FRM-12, HB-4 */
 void test_framer_accepts_a_frame_exactly_at_the_buffer_bound(void)
 {
