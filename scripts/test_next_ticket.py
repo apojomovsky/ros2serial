@@ -1,3 +1,5 @@
+import inspect
+
 import next_ticket
 
 
@@ -67,12 +69,13 @@ def test_a_dependency_missing_from_the_list_counts_as_open():
     assert "#99" in report.skipped[2]
 
 
-def test_an_agents_own_prs_do_not_block_its_next_stacked_ticket():
+def test_an_agents_own_open_pr_blocks_its_areas_like_anyones():
+    """Tickets are not stacked, so an agent's own PR holds its area too."""
     issues = [issue(6, ["area:ci"]), issue(7, ["area:ci"])]
     prs = [pr(16, "Closes #6\n\nagent: claude@box")]
     assert next_ticket.select(issues, prs).available == []
-    assert [t["number"] for t in next_ticket.select(issues, prs, agent="claude@box").available] == [7]
-    assert next_ticket.select(issues, prs, agent="other@box").available == []
+    # Nothing exempts an agent any more, so nothing takes its ID.
+    assert list(inspect.signature(next_ticket.select).parameters) == ["issues", "prs"]
 
 
 def test_dependency_lines_are_parsed_in_every_common_form():
@@ -113,14 +116,6 @@ def test_claims_are_case_insensitive_and_accept_issue_urls():
 
 def test_closing_the_same_issue_twice_in_one_body_is_not_a_race():
     assert next_ticket.select([issue(3)], [pr(20, "Closes #3\n\nCloses #3")]).races == {}
-
-
-def test_agent_ids_must_match_exactly():
-    issues = [issue(6, ["area:ci"]), issue(7, ["area:ci"])]
-    prs = [pr(16, "Closes #6\n\nagent: claude@box2")]
-    assert next_ticket.select(issues, prs, agent="claude@box").available == []
-    prose = [pr(16, "Closes #6\n\nThe agent: claude@box line goes in the body.")]
-    assert next_ticket.select(issues, prose, agent="claude@box").available == []
 
 
 def test_main_prints_races_and_available_tickets(tmp_path, capsys):

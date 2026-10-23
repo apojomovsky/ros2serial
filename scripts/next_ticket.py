@@ -3,14 +3,14 @@
 
 A draft or open PR claims every issue its body closes (Closes, Fixes or
 Resolves #N, or the issue URL). Its areas are its own area:* labels plus those of the issues
-it closes. With --agent, the PRs whose body says `agent: <id>` don't block
-that agent's areas, so it can stack its next ticket on its own open PRs.
+it closes. Tickets are not stacked, so an agent's own open PR blocks its
+areas like anyone's.
 Issues labelled needs-hardware or dispatch-only belong to the maintainer.
 Two PRs claiming one issue is a race: the older PR keeps it.
 
 Usage:
-  next_ticket.py [--repo owner/name] [--agent ID] [--why]     read issues and PRs with `gh api`
-  next_ticket.py --from-json ISSUES PRS [--agent ID] [--why]  read them from files (REST JSON)
+  next_ticket.py [--repo owner/name] [--why]     read issues and PRs with `gh api`
+  next_ticket.py --from-json ISSUES PRS [--why]  read them from files (REST JSON)
 """
 
 import argparse
@@ -49,11 +49,7 @@ def _depends(body: str) -> list[int]:
     return [int(n) for line in DEPENDS_LINE.findall(body) for n in ISSUE_REF.findall(line)]
 
 
-def _is_agent(pr: dict, agent: str) -> bool:
-    return re.search(rf"^agent:\s*{re.escape(agent)}\s*$", pr.get("body") or "", re.M | re.I) is not None
-
-
-def select(issues: list[dict], prs: list[dict], agent: str | None = None) -> Report:
+def select(issues: list[dict], prs: list[dict]) -> Report:
     # Merged or closed PRs show up in the issue list too, and a dependency on one counts.
     state = {i["number"]: i["state"] for i in issues}
     issues = [i for i in issues if "pull_request" not in i]
@@ -67,8 +63,6 @@ def select(issues: list[dict], prs: list[dict], agent: str | None = None) -> Rep
         areas = {a for a in _labels(pr) if a.startswith("area:")}
         for n in closed:
             areas |= {a for a in _labels(by_number.get(n, {})) if a.startswith("area:")}
-        if agent and _is_agent(pr, agent):
-            continue
         for a in areas:
             busy.setdefault(a, pr["number"])
 
@@ -110,7 +104,6 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--repo", default="apojomovsky/ros2serial")
     ap.add_argument("--from-json", nargs=2, metavar=("ISSUES", "PRS"))
-    ap.add_argument("--agent", help="your agent ID (<runtime>@<host>): your own open PRs do not block your areas")
     ap.add_argument("--why", action="store_true", help="also list skipped tickets and why")
     args = ap.parse_args()
     if args.from_json:
@@ -118,7 +111,7 @@ def main() -> int:
     else:
         issues = _gh(f"repos/{args.repo}/issues?state=all&per_page=100")
         prs = _gh(f"repos/{args.repo}/pulls?state=open&per_page=100")
-    report = select(issues, prs, args.agent)
+    report = select(issues, prs)
     for n, owners in report.races.items():
         print(f"race on #{n}: PRs {', '.join(f'#{p}' for p in owners)}; the older one keeps it, the others close")
     for issue in report.available:

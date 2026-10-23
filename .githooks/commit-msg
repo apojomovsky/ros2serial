@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # commit-msg: Conventional Commits, at most 3 lines, no trailers, no em-dashes.
+# A merge in progress (a branch catching up with master) may keep git's own
+# "Merge ..." message; every other commit is checked in full.
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 merge=()
 git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 && merge=(--merge)

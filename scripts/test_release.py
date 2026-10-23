@@ -97,6 +97,16 @@ def test_chore_only_is_nothing_to_release(tmp_path):
     assert result.returncode == 1 and "nothing to release" in result.stdout
 
 
+def subject_ok(version: str, subject: str) -> bool:
+    """What the tag job's check says about a subject."""
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/release-subject.sh"), version, subject],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
 def test_bad_arguments_are_reported(tmp_path):
     repo = repo_with(tmp_path, "v0.3.1", ["feat(core): b"])
     for args in (["--bump", "bogus"], ["--bump"], ["--what"]):
@@ -122,3 +132,33 @@ def test_release_commits_stay_out_of_the_changelog(tmp_path):
     repo = repo_with(tmp_path, "v0.3.1", ["chore(release): v0.3.1", "feat(core): b"])
     out = release(repo, "--dry-run").stdout
     assert "chore(release)" not in out and "V0.3.1" not in out
+
+
+def test_the_release_subject_is_recognised_after_a_squash(tmp_path):
+    """A squash puts the PR number after the subject, so it is matched by prefix.
+
+    The tag job reads the subject of the commit that last changed VERSION and
+    refuses to tag unless it is the release commit. The check is a script, so
+    the job and this test cannot drift apart.
+    """
+    repo = repo_with(tmp_path, "v0.3.1", ["feat(core): b"])
+    (repo / "VERSION").write_text("0.4.0\n")
+    git(repo, "add", "VERSION")
+    git(repo, "commit", "-q", "-m", "chore(release): v0.4.0 (#99)")
+    version = (repo / "VERSION").read_text().strip()
+    subject = subprocess.run(
+        ["git", "log", "-1", "--format=%s", "--", "VERSION"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert subject == "chore(release): v0.4.0 (#99)"
+    assert subject_ok(version, subject), subject
+
+
+def test_a_subject_that_is_not_a_release_commit_is_refused(tmp_path):
+    """The check is a prefix match, so a later commit is not a release."""
+    assert subject_ok("0.4.0", "chore(release): v0.4.0 (#99)")
+    assert not subject_ok("0.4.0", "chore(release): v0.3.1 (#99)")
+    assert not subject_ok("0.4.0", "ci: add the ticket selector")
+    assert not subject_ok("0.4.0", "chore(release): v0.4.0x")

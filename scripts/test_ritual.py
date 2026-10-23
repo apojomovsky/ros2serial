@@ -1,8 +1,14 @@
 """The takeoff ritual, the git hooks and the push helper, on throwaway repositories."""
 
 import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import commit_check  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 EM = "\u2014"
@@ -161,6 +167,7 @@ def test_an_unreadable_pr_body_is_a_fix_not_a_silent_pass(tmp_path):
 
 
 def test_commit_msg_hook_lets_git_merge_messages_through_during_a_merge(tmp_path):
+    """A branch catches up by merging master in, and git writes that message."""
     main, wt = fixture(tmp_path)
     commit(wt, {"a.txt": "a\n"}, "feat(core): a")
     msg = tmp_path / "MSG"
@@ -200,6 +207,39 @@ def test_commit_msg_hook_still_checks_other_subjects_during_a_merge(tmp_path):
     assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode == 0
 
 
+def test_a_non_conventional_subject_outside_a_merge_still_fails(tmp_path):
+    _, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    msg = tmp_path / "MSG"
+    msg.write_text("wip stuff\n")
+    assert run(["bash", str(ROOT / ".githooks/commit-msg"), str(msg)], wt).returncode != 0
+
+
+def test_a_branch_behind_its_base_is_told_to_merge_it_in(tmp_path):
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    commit(main, {"b.txt": "b\n"}, "chore: master moves on")
+    git(main, "push", "-q", "origin", "master")
+    git(wt, "fetch", "-q", "origin")
+    out = ritual(wt).stdout
+    assert "behind origin/master" in out
+    assert "merge origin/master" in out
+    assert "rebase" not in out
+    assert "R2S_FORCE_PUSH_APPROVED" not in out
+
+
+def test_the_range_check_skips_a_merged_in_master(tmp_path):
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    commit(main, {"b.txt": "b\n"}, "chore: master moves on")
+    git(main, "push", "-q", "origin", "master")
+    git(wt, "fetch", "-q", "origin")
+    git(wt, "merge", "-q", "--no-edit", "origin/master")
+    assert git(wt, "log", "--merges", "--format=%s").stdout.startswith("Merge ")
+    result = run(["python3", str(ROOT / "scripts/commit_check.py"), "--range", "origin/master..HEAD"], wt)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_the_suite_cleans_the_git_variables_before_any_section():
     text = (ROOT / "scripts/ci-test.sh").read_text()
     assert text.index('source "$root/scripts/clean-git-env.sh"') < text.index("\nif wants ")
@@ -235,3 +275,187 @@ def test_the_ritual_does_not_leak_its_scopes_into_the_suite(tmp_path):
     # ritual that still sees TEST=1 runs the suite again. The scopes stay,
     # so the child does what this run was asked to do.
     assert marker.read_text().strip() == "TEST= SCRIPTS=1", "the suite was started with TEST still set"
+
+
+def test_the_title_must_carry_the_strongest_type_of_its_commits():
+    """The title is the subject that lands, so it must carry the type.
+
+    A PR holding a feat commit but titled docs(...) reaches neither the
+    changelog nor the version bump, and a `!` on a commit is lost with the
+    commit.
+    """
+    assert commit_check.check_title_covers("docs(core): add the encoder", ["feat(core): add the encoder"]) != []
+    assert commit_check.check_title_covers("feat(core): add the encoder", ["feat(core): add the encoder"]) == []
+    assert commit_check.check_title_covers("fix(core): a thing", ["fix(core): a thing"]) == []
+    assert commit_check.check_title_covers("docs(spec): tidy", ["docs(spec): tidy"]) == []
+    # A breaking change on a commit is lost unless the title carries it.
+    assert commit_check.check_title_covers("feat(core): widen ids", ["feat(spec)!: widen ids"]) != []
+    assert commit_check.check_title_covers("feat(core)!: widen ids", ["feat(spec)!: widen ids"]) == []
+
+
+def test_the_merge_settings_check_catches_a_wrong_setting(tmp_path):
+    """The settings are what make the rule hold, so they are checked."""
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    gh = fake / "gh"
+    gh.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = "api" ]; then printf "true|true|true|COMMIT_MESSAGES|COMMIT_MESSAGES\\n"; exit 0; fi\n'
+        'echo "apojomovsky/ros2serial"\n'
+    )
+    gh.chmod(0o755)
+    env = {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}"}
+    out = run(["bash", str(ROOT / "scripts/merge-settings.sh")], ROOT, env)
+    assert out.returncode == 1
+    assert "ADR-003" in out.stderr
+
+
+def test_settings_that_cannot_be_read_are_not_a_failure(tmp_path):
+    """gh refuses to run without a token, which is not a wrong setting.
+
+    The repository has no secret yet, so a workflow without one cannot read
+    the settings and says so.
+    """
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    gh = fake / "gh"
+    gh.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = "api" ]; then echo "gh: set the GH_TOKEN environment variable." >&2; exit 4; fi\n'
+        'echo "apojomovsky/ros2serial"\n'
+    )
+    gh.chmod(0o755)
+    env = {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}", "GH_TOKEN": ""}
+    out = run(["bash", str(ROOT / "scripts/merge-settings.sh")], ROOT, env)
+    assert out.returncode == 75
+    assert "cannot be read" in out.stderr
+
+
+def test_settings_that_are_not_visible_to_the_token_are_not_a_failure(tmp_path):
+    """The API hides the merge settings from a token that is not an admin.
+
+    A fork's pull request has no token that can read them, and a token that
+    cannot is not a wrong setting.
+    """
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    gh = fake / "gh"
+    gh.write_text(
+        '#!/usr/bin/env bash\nif [ "$1" = "api" ]; then printf "||||\\n"; exit 0; fi\necho "apojomovsky/ros2serial"\n'
+    )
+    gh.chmod(0o755)
+    env = {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}"}
+    out = run(["bash", str(ROOT / "scripts/merge-settings.sh")], ROOT, env)
+    assert out.returncode == 75
+    assert "not visible" in out.stderr
+
+
+def test_the_pre_push_hook_refuses_a_force_push(tmp_path):
+    """Every force push needs the maintainer's go-ahead, a rebase included.
+
+    The gate exists so that work another agent may have pulled is never
+    dropped, and the maintainer keeps it. Catching up with master is a
+    rebase, which is a force push, so it asks.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "master")
+    git(repo, "config", "user.email", "t@example.com")
+    git(repo, "config", "user.name", "t")
+    (repo / "a.txt").write_text("one\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-q", "-m", "feat(core): a")
+    git(repo, "switch", "-q", "-c", "feat/1-thing")
+    (repo / "b.txt").write_text("two\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-q", "-m", "feat(core): b")
+    remote = tmp_path / "remote.git"
+    git(tmp_path, "init", "-q", "--bare", str(remote))
+    git(repo, "push", "-q", str(remote), "feat/1-thing")
+    # The hook is installed after the first push, so the push under test is
+    # the one the hook sees.
+    (repo / ".githooks").mkdir()
+    shutil.copy2(ROOT / ".githooks/pre-push", repo / ".githooks/pre-push")
+    (repo / ".githooks/pre-push").chmod(0o755)
+    git(repo, "config", "core.hooksPath", ".githooks")
+
+    # Master moves on and the branch is rebased onto it: a force push.
+    git(repo, "switch", "-q", "master")
+    (repo / "c.txt").write_text("three\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-q", "-m", "chore: master moves")
+    git(repo, "switch", "-q", "feat/1-thing")
+    git(repo, "rebase", "-q", "master")
+
+    env = {**os.environ, "R2S_PRE_PUSH_SUITE": "true", "R2S_FORCE_PUSH_APPROVED": ""}
+    refused = subprocess.run(
+        ["git", "push", "--force", str(remote), "feat/1-thing"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    said = refused.stdout + refused.stderr
+    assert "refusing a force push" in said, said
+
+    # With the maintainer's go-ahead it goes through.
+    env = {**os.environ, "R2S_PRE_PUSH_SUITE": "true", "R2S_FORCE_PUSH_APPROVED": "1"}
+    allowed = subprocess.run(
+        ["git", "push", "--force", str(remote), "feat/1-thing"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert "refusing a force push" not in allowed.stdout + allowed.stderr
+
+
+def _fake_gh(tmp_path: Path, settings: str) -> dict:
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    gh = fake / "gh"
+    gh.write_text(
+        "#!/usr/bin/env bash\n"
+        f'if [ "$1" = "api" ]; then printf "%s\\n" "{settings}"; exit 0; fi\n'
+        'echo "apojomovsky/ros2serial"\n'
+    )
+    gh.chmod(0o755)
+    return {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}"}
+
+
+def test_the_merge_settings_that_match_the_rule_pass(tmp_path):
+    env = _fake_gh(tmp_path, "true|false|false|PR_TITLE|BLANK")
+    out = run(["bash", str(ROOT / "scripts/merge-settings.sh")], ROOT, env)
+    assert out.returncode == 0, out.stderr
+
+
+def test_an_empty_setting_does_not_shift_the_ones_after_it(tmp_path):
+    env = _fake_gh(tmp_path, "true|false|false||BLANK")
+    out = run(["bash", str(ROOT / "scripts/merge-settings.sh")], ROOT, env)
+    assert out.returncode == 1
+    assert "the squash title is , not PR_TITLE" in out.stderr
+    assert "squash message" not in out.stderr
+
+
+def test_the_ritual_says_once_that_the_settings_were_not_checked(tmp_path):
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    fake = tmp_path / "gbin"
+    fake.mkdir()
+    gh = fake / "gh"
+    gh.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = "api" ]; then echo "gh: set the GH_TOKEN environment variable." >&2; exit 4; fi\n'
+        'echo "apojomovsky/ros2serial"\n'
+    )
+    gh.chmod(0o755)
+    env = {"PATH": f"{fake}{os.pathsep}{os.environ['PATH']}", "GH_TOKEN": ""}
+    out = ritual(wt, **env)
+    lines = [ln for ln in (out.stdout + out.stderr).splitlines() if "merge-settings" in ln or "merge settings" in ln]
+    assert len(lines) == 1, lines
+
+
+def test_the_release_workflow_calls_the_subject_script():
+    """The tag job's check is a script so that its test cannot drift from it."""
+    text = (ROOT / ".github/workflows/cut-release.yml").read_text()
+    assert "scripts/release-subject.sh" in text

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # pre-push: refuse force pushes, run the prose gate, then the exact CI suite.
-# A force push is any push whose remote ref is not an ancestor of what is pushed:
-# it drops commits other agents may have pulled, so it needs the maintainer's
-# go-ahead and R2S_FORCE_PUSH_APPROVED=1.
+# A force push is any push whose remote ref is not an ancestor of what is
+# pushed: it drops commits other agents may have pulled, so it needs the
+# maintainer's go-ahead and R2S_FORCE_PUSH_APPROVED=1.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 zero=0000000000000000000000000000000000000000

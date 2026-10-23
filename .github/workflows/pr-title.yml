@@ -1,8 +1,11 @@
 name: pr-title
 
-# Every commit in the PR lands on master (merge commits, never squash), so each
-# must follow the commit rules; the title follows them too for consistency.
-# The same run applies the prose gate to everything the PR adds.
+# The PR is squashed into one commit on master, so each of its commits must
+# follow the commit rules; the title follows them too for consistency, and
+# the title must carry what the commits declare.
+# The same run applies the prose gate to everything the PR adds, and checks
+# the repository's merge settings, which are what make the squash the only
+# merge.
 # Separate from ci.yml so editing a title re-checks only this. It runs on the
 # runner's Python, not the dev image: the check needs only the standard library
 # and git, and building the image for every title edit would be waste.
@@ -31,3 +34,20 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           COMMIT_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
         run: COMMITS=1 bash scripts/ci-test.sh
+      - name: The repository's merge settings
+        # The rule is what the settings allow, so they are checked. The
+        # default GITHUB_TOKEN cannot read them: the API hides the merge
+        # settings from a token that is not an admin, and reports them as
+        # empty. The release token is a personal access token with the
+        # scope, and the repository has it once a release has been cut. A
+        # fork's pull request has neither, so the check says so and passes.
+        env:
+          GH_TOKEN: ${{ secrets.R2S_RELEASE_TOKEN }}
+        run: |
+          status=0
+          bash scripts/merge-settings.sh "${{ github.repository }}" || status=$?
+          if [ "$status" = 75 ]; then
+            echo "the merge settings are not visible to this token; the check is skipped"
+          elif [ "$status" != 0 ]; then
+            exit "$status"
+          fi

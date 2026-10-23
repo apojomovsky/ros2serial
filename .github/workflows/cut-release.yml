@@ -7,6 +7,9 @@ name: cut-release
 # the default GITHUB_TOKEN never triggers other workflows, so the release PR's
 # required checks would never run and release.yml would never start.
 # Auto-merge needs "Allow auto-merge" enabled in the repository settings.
+# The release PR is squashed like every other PR, so the commit on master
+# carries the PR number after the subject, and the tag job matches the
+# subject and the subject with the number.
 
 on:
   workflow_dispatch:
@@ -77,7 +80,7 @@ jobs:
           git push -u origin "release/v${version}"
           gh pr create --base master --title "chore(release): v${version}" \
             --body "Release v${version}: VERSION and CHANGELOG.md from scripts/release.sh."
-          gh pr merge --auto --merge
+          gh pr merge --auto --squash
 
   tag:
     if: github.event_name == 'push'
@@ -95,7 +98,7 @@ jobs:
           subject=$(git log -1 --format=%s -- VERSION)
           if [ "$version" = 0.0.0 ]; then
             echo "VERSION is 0.0.0: nothing has been released yet"
-          elif [ "$subject" != "chore(release): v${version}" ]; then
+          elif ! bash scripts/release-subject.sh "$version" "$subject"; then
             echo "VERSION last changed by \"$subject\", not by a release commit: cut releases with this workflow"
             exit 1
           elif git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then

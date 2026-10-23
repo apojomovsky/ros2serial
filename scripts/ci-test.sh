@@ -76,11 +76,16 @@ pending() { echo "pending: $1 (see docs/00-design.md, Epics and seed tickets)"; 
 lint_python() { bash scripts/lint-python.sh; }
 check_commits() {
   local range=${COMMIT_RANGE:-origin/master..HEAD} ok=0
-  if [ -n "${PR_TITLE:-}" ]; then python3 scripts/commit_check.py --title "$PR_TITLE" || ok=1; fi
   if git rev-parse --verify -q "${range%%..*}" >/dev/null; then
     python3 scripts/commit_check.py --range "$range" || ok=1
+    # The title is the subject that lands, so it must carry what the
+    # commits declare.
+    if [ -n "${PR_TITLE:-}" ]; then
+      python3 scripts/commit_check.py --title "$PR_TITLE" --covers-range "$range" || ok=1
+    fi
   else
     echo "no ${range%%..*} to compare with; skipping the commit range"
+    if [ -n "${PR_TITLE:-}" ]; then python3 scripts/commit_check.py --title "$PR_TITLE" || ok=1; fi
   fi
   return $ok
 }
