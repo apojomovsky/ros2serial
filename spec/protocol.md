@@ -1,12 +1,12 @@
 # ros2serial protocol specification
 
-Version 0.2 (draft) · protocol version 1
+Version 0.3 (draft) · protocol version 1
 
 This document is normative. Every normative statement is a list item starting with an ID in brackets, such as `[FRM-1]`. Conformance vectors (`spec/vectors/`) and tests name the IDs they cover, so every rule here is checked by at least one test (`docs/01-testing.md`, section 3). IDs are never reused: a removed rule keeps its list item, with its text replaced by "Retired.", so the numbering has no gaps.
 
 The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119. Prose outside the ID items, tables included, is informative.
 
-This version covers the frame, the frame check, rCOBS, varints, the message encoding, the system channels, the handshake, the session state machines, the error counters and time synchronization. The parameters and reliable-channel channels, and the descriptor format, follow in a later version.
+This version covers the frame, the frame check, rCOBS, varints, the message encoding, the codec descriptors, the system channels, the handshake, the session state machines, the error counters and time synchronization. The parameters and reliable-channel channels follow in a later version.
 
 ## 1. Conventions
 
@@ -258,3 +258,114 @@ DISCONNECTED --port open--> BOOT_WAIT --HELLO or boot_wait_ms--> HANDSHAKING --a
 - [SES-23] After that, the host sends one PING every 1000 ms for the first 10 s, and then every `time_sync.period_ms`, which defaults to 5000.
 - [SES-24] The estimator keeps the 16 most recent samples, uses the ones with the lowest round trip for the offset, and fits a line for the drift.
 - [SES-25] The host sends a CORRECTION after the initial burst, whenever the estimate moves by more than 100 µs, and at least every 5 s.
+
+## 9. Codec descriptors
+
+One interpreter in the MCU encodes and decodes every message type from constant tables in flash: a type record for each message type, and a field entry for each field. The tables are built with the firmware and never cross the link, so this section fixes a build artifact rather than a frame. It is normative because the generator and a handwritten table must agree on it byte for byte, and because a table that breaks these rules makes the interpreter read outside a struct.
+
+The interpreter reads a table one byte at a time through `R2S_FLASH_READ_BYTE()`, so the layout below holds on every target, whatever its byte order and alignment rules.
+
+### 9.1 The two tables
+
+A type record says where a type's fields are, and a field entry says how one field is stored. Both are addressed by index: a type record by its position in the type table, a field entry by its position in the field table.
+
+| Type record, 5 bytes | Width | Meaning |
+| --- | --- | --- |
+| `size` | 2 | `sizeof` of the type's C struct |
+| `first_field` | 2 | index of the type's first field entry |
+| `field_count` | 1 | number of the type's field entries |
+
+| Field entry, 8 bytes | Width | Meaning |
+| --- | --- | --- |
+| `kind` | 1 | the field's type, section 9.2 |
+| `mode` | 1 | scalar, fixed array or bounded array, section 9.2 |
+| `offset` | 2 | byte offset of the field's storage in the type's struct |
+| `count` | 2 | array length or bound, 0 for a scalar |
+| `aux` | 2 | string bound or type index, 0 otherwise |
+
+- [DSC-1] A descriptor table is two constant byte arrays: the type records and the field entries. Nothing else describes a message type to the interpreter.
+- [DSC-2] A type record is 5 bytes, in this order: `size` as a 2-byte integer, `first_field` as a 2-byte integer, `field_count` as a 1-byte integer.
+- [DSC-3] A field entry is 8 bytes, in this order: `kind` (1 byte), `mode` (1 byte), `offset` as a 2-byte integer, `count` as a 2-byte integer, `aux` as a 2-byte integer.
+- [DSC-4] Every multi-byte integer of a table is little-endian, whatever the target's byte order, because the interpreter assembles each one from bytes ([GEN-1]).
+- [DSC-5] `size` and `offset` are those of the C struct the same build emits, so a table describes its own build's structs and never another build's.
+- [DSC-6] `first_field` and `field_count` address the entries of one type: its fields are the entries from `first_field` to `first_field + field_count - 1`.
+- [DSC-7] `field_count` is 0 for a message with no fields, which then has no entries of its own.
+- [DSC-8] The entries of one type are contiguous and follow the declaration order of its fields, which is the order [ENC-1] encodes them in.
+- [DSC-9] The two tables have no gaps: the first type record has `first_field` 0, and every further record starts at the previous record's `first_field` plus its `field_count`.
+- [DSC-10] A message type appears at most once in a table, however many topics and fields use it, and a topic names its type by the index of its record.
+- [DSC-11] The type records are numbered by a depth-first walk of the configured topics in configuration order: at each field in declaration order, a nested type is numbered before the type that contains it, and a type that already has an index keeps it.
+- [DSC-12] A nested message field's `aux` is the index of its type's record and is less than the index of the record that names it, so a table has no cycle and the interpreter needs no list of visited types.
+
+### 9.2 Kinds, modes and storage
+
+| `kind` | `.msg` type | C type | Size in the struct |
+| --- | --- | --- | --- |
+| 0 | `bool` | `uint8_t` | 1 |
+| 1 | `byte`, `char`, `uint8` | `uint8_t` | 1 |
+| 2 | `int8` | `int8_t` | 1 |
+| 3 | `uint16` | `uint16_t` | 2 |
+| 4 | `int16` | `int16_t` | 2 |
+| 5 | `uint32` | `uint32_t` | 4 |
+| 6 | `int32` | `int32_t` | 4 |
+| 7 | `uint64` | `uint64_t`, or `r2s_u64_t` with `R2S_NO_INT64` | 8 |
+| 8 | `int64` | `int64_t`, or `r2s_i64_t` with `R2S_NO_INT64` | 8 |
+| 9 | `float32` | `float` | 4 |
+| 10 | `float64` | `double` | `sizeof(double)` |
+| 11 | `string<=N` | `char name[N + 1]` | `aux + 1` |
+| 12 | Nested message | its struct | the nested record's `size` |
+
+- [DSC-13] `kind` is one of the values in the table above, and every other value is reserved.
+- [DSC-14] `mode` is 0 for a scalar, 1 for a fixed array and 2 for a bounded array. Bit 7 (0x80) is set only with mode 2, where it says that the array's count member is 2 bytes wide instead of 1. Bits 1 to 6 are reserved and MUST be 0.
+- [DSC-15] `count` is 0 for a scalar, the number of elements of a fixed array, and the bound N of a bounded array `T[<=N]`.
+- [DSC-16] `aux` is the bound N of a string, the type index of a nested message, and 0 for every other kind.
+- [DSC-17] `offset` is the start of the field's storage: the value of a scalar, the first element of an array, the first character of a string, and the struct of a nested message.
+- [DSC-18] The size of one element is the size the table above gives, `aux + 1` for a string, and the nested record's `size` for a nested message.
+- [DSC-19] A scalar's storage is one element at `offset`. A fixed array's storage is `count` elements from `offset`. A bounded array's storage is `count` elements from `offset`, then its count member. A string's storage is `aux + 1` bytes from `offset`.
+- [DSC-20] A bounded array's count member is 1 byte, or 2 bytes when bit 7 of `mode` is set, and follows the last element, so that no compiler padding separates it from the elements. The struct a build emits for such a field holds the elements first and the count member after them.
+- [DSC-21] A field's storage lies within its type: `offset` plus the storage of [DSC-19] is at most the record's `size`, and every sum of [DSC-19] and [DSC-20] is computed in at least 32 bits so that it cannot wrap.
+- [DSC-22] An unbounded sequence `T[]` and an unbounded `string` have no descriptor form: the configuration gives each of them a bound, and the field is then a bounded array or a bounded string, whose wire form is [ENC-9]'s and [ENC-7]'s. `wstring` and `wchar` have no kind at all ([ENC-19]).
+- [DSC-23] A `bool` field is one byte holding 0 or 1, which is what [ENC-5] sends and what [ENC-6] accepts.
+- [DSC-24] Kinds 7 and 8 occupy 8 bytes with and without `R2S_NO_INT64`, so the interpreter copies their bytes and never computes with them.
+
+### 9.3 The narrow flag
+
+The narrow flag belongs to a topic, not to a type ([CTL-4] bit 1, [ENC-10]), so one table serves its type on a narrow and on a wide topic.
+
+- [DSC-25] A table carries no narrow flag. The interpreter is told whether the topic it encodes or decodes for is narrow, and applies [ENC-11] when it is.
+- [DSC-26] A `float64` field occupies `sizeof(double)` bytes in the struct, and 4 bytes on the wire on a narrow topic and 8 on any other ([ENC-4], [ENC-11]).
+- [DSC-27] On a build whose `double` is 32 bits (feature bit 4, [CTL-2]) the storage of a `float64` field is the 4 bytes of binary32, and [ENC-12] has such a build set narrow on every topic, so narrowing there is a copy of 4 bytes.
+
+### 9.4 Encoding and decoding
+
+The interpreter walks a type's entries from `first_field` in order. The field order of a payload is therefore the order of the field entries, which is the declaration order of [ENC-1].
+
+- [DSC-28] A type is encoded by visiting its entries in order and decoded in the same order, entering the record of a nested message where a `NEST` field is met.
+- [DSC-29] A scalar is encoded and decoded as the rule of section 6 for its kind gives, at its `offset` and with its element size.
+- [DSC-30] A fixed array is `count` elements with no length on the wire ([ENC-8]).
+- [DSC-31] A bounded array is a varint of its count member ([ENC-9]) followed by its elements: an encode sends the count the struct holds, and a decode reads the count, drops a payload whose count exceeds the bound ([ENC-16]), stores it in the count member and reads that many elements.
+- [DSC-32] A string is the bytes before its terminating `0x00`, with no terminator on the wire ([ENC-7]). A string with no terminator among its `aux + 1` bytes fails the publish with a bounds error ([ENC-15]). A decode drops a payload whose length exceeds `aux` ([ENC-16]), and writes the bytes and a terminator.
+- [DSC-33] A nested message is its own type's fields inline ([ENC-1]), in the `size` bytes of its record.
+- [DSC-34] A value is read from and written to the struct in the target's byte order and appears on the wire little-endian ([GEN-1]), so the interpreter swaps the bytes of every multi-byte kind on a big-endian target.
+- [DSC-35] A publish whose value does not fit a field's bound fails with `R2S_ERR_BOUNDS` and sends nothing: the interpreter never truncates a string or an array ([ENC-15]).
+- [DSC-36] A decode that breaks a rule of section 6 or of this section drops the payload, and the rule that broke is the reason ([ENC-6], [ENC-16], [ENC-17], [ENC-18]).
+- [DSC-37] The field an error names is [ERR-4]'s index: the number of field entries the interpreter visited before the offending one, counting the entries of the nested messages it entered and counting an array once, however many elements it has.
+
+### 9.5 Nesting
+
+- [DSC-38] The depth of a type is 1 when it has no `NEST` field, and otherwise 1 more than the greatest depth among the types its `NEST` fields name. An array of a nested message adds no level, because its elements are a loop.
+- [DSC-39] `R2S_MAX_NEST` is the greatest depth among the types a build uses, and at least 1.
+- [DSC-40] The interpreter keeps one frame per message level on an explicit stack of `R2S_MAX_NEST` frames and never recurses, so the RAM it spends on nesting does not depend on the payload.
+
+### 9.6 Validation
+
+A loader is the code that checks a table: the generator before it emits one, and the tests of a handwritten table. The interpreter does not check its own table at run time, because a table is compile-time data and cannot change while the firmware runs.
+
+- [DSC-41] A table is valid when every rule of this section holds, and a loader MUST reject a table that breaks any of them, naming the rule it broke.
+- [DSC-42] A loader MUST reject a `kind` that is not one of [DSC-13]'s.
+- [DSC-43] A loader MUST reject a `mode` with a reserved bit set, or with bit 7 set on a mode other than 2.
+- [DSC-44] A loader MUST reject a scalar whose `count` is not 0, an array whose `count` is 0, and a bounded array whose bit 7 disagrees with whether `count` is above 255.
+- [DSC-45] A loader MUST reject a non-zero `aux` on a kind other than a string and a nested message.
+- [DSC-46] A loader MUST reject a nested message field whose `aux` is not the index of a record of the table, or is not less than the index of the record that names it.
+- [DSC-47] A loader MUST reject a record whose `size` is 0, an entry outside the field table, and a record whose `first_field` does not follow the previous record as [DSC-9] requires.
+- [DSC-48] A loader MUST reject a field whose storage does not lie within its type, computing the check as [DSC-21] requires.
+- [DSC-49] A loader MUST reject a table whose depth exceeds `R2S_MAX_NEST` ([DSC-38], [DSC-39]).
