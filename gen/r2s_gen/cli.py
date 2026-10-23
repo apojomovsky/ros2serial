@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
         args = build_parser().parse_args(argv)
     except SystemExit as error:
         return int(error.code or 0)
-    return args.run(args)
+    return int(args.run(args))
 
 
 if __name__ == "__main__":

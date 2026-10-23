@@ -22,19 +22,20 @@ PACKAGE_VERSION_LINE = re.compile(r'^__version__ = ".*"$', re.MULTILINE)
 ROS_MANIFEST_TAG = re.compile(r"<version>[^<]*</version>")
 
 
-def _rewrite(path: Path, pattern: re.Pattern, replacement: str) -> None:
-    text = path.read_text(encoding="utf-8")
-    updated, count = pattern.subn(replacement, text)
+def _updated_text(path: Path, pattern: re.Pattern[str], replacement: str) -> str:
+    updated, count = pattern.subn(replacement, path.read_text(encoding="utf-8"))
     if count != 1:
         raise SystemExit(f"set_version: {path} has no single place to write the version")
-    path.write_text(updated, encoding="utf-8")
+    return updated
 
 
 def set_version(root: Path, version: str) -> None:
     """Write the version into VERSION, the generator package and the ROS manifest."""
+    package = _updated_text(root / PACKAGE_VERSION, PACKAGE_VERSION_LINE, f'__version__ = "{version}"')
+    manifest = _updated_text(root / ROS_MANIFEST, ROS_MANIFEST_TAG, f"<version>{version}</version>")
+    (root / PACKAGE_VERSION).write_text(package, encoding="utf-8")
+    (root / ROS_MANIFEST).write_text(manifest, encoding="utf-8")
     (root / VERSION_FILE).write_text(version + "\n", encoding="utf-8")
-    _rewrite(root / PACKAGE_VERSION, PACKAGE_VERSION_LINE, f'__version__ = "{version}"')
-    _rewrite(root / ROS_MANIFEST, ROS_MANIFEST_TAG, f"<version>{version}</version>")
 
 
 def main(argv: list[str] | None = None) -> int:

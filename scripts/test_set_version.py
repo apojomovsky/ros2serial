@@ -46,8 +46,10 @@ def test_a_version_that_is_not_semver_is_refused(tmp_path):
     assert (root / "VERSION").read_text() == "0.1.0\n"
 
 
-def test_a_file_without_exactly_one_place_to_write_is_reported(tmp_path):
+def test_a_file_without_exactly_one_place_to_write_is_reported_and_changes_nothing(tmp_path):
     root = tree(tmp_path)
     (root / "gen" / "package.xml").write_text('<package format="3">\n  <name>r2s_gen</name>\n</package>\n')
     result = set_version(root, "0.2.0")
     assert result.returncode != 0 and "no single place" in result.stderr
+    assert (root / "VERSION").read_text() == "0.1.0\n"
+    assert '__version__ = "0.1.0"' in (root / "gen" / "r2s_gen" / "version.py").read_text()
