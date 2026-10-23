@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import check_layout
@@ -16,6 +17,11 @@ def make_skeleton(root: Path) -> None:
     # The alias is a link, so the rulebook it points at cannot drift.
     (root / "CLAUDE.md").unlink(missing_ok=True)
     (root / "CLAUDE.md").symlink_to("AGENTS.md")
+
+
+def track_all(root: Path) -> None:
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
 
 
 def test_complete_skeleton_passes(tmp_path):
@@ -103,6 +109,40 @@ def test_a_link_that_points_at_itself_is_reported_not_raised(tmp_path):
         "missing file: CLAUDE.md",
         "CLAUDE.md is not a symlink to AGENTS.md",
     ]
+
+
+def test_a_gitkeep_next_to_a_file_is_named(tmp_path):
+    make_skeleton(tmp_path)
+    (tmp_path / "tools/.gitkeep").write_text("")
+    (tmp_path / "tools/size_report.py").write_text("")
+    track_all(tmp_path)
+    assert check_layout.check(tmp_path) == [".gitkeep in a non-empty directory: tools/.gitkeep"]
+
+
+def test_a_gitkeep_next_to_a_subdirectory_with_a_file_is_named(tmp_path):
+    """A placeholder is only needed while nothing below it is tracked."""
+    make_skeleton(tmp_path)
+    (tmp_path / "spec/vectors/crc/.gitkeep").write_text("")
+    (tmp_path / "spec/vectors/crc/cases").mkdir()
+    (tmp_path / "spec/vectors/crc/cases/check.yaml").write_text("")
+    track_all(tmp_path)
+    assert check_layout.check(tmp_path) == [".gitkeep in a non-empty directory: spec/vectors/crc/.gitkeep"]
+
+
+def test_a_gitkeep_in_an_empty_directory_passes(tmp_path):
+    make_skeleton(tmp_path)
+    (tmp_path / "core/fuzz/.gitkeep").write_text("")
+    track_all(tmp_path)
+    assert check_layout.check(tmp_path) == []
+
+
+def test_an_untracked_neighbour_does_not_count(tmp_path):
+    """A scratch file must not turn a needed placeholder into a failure."""
+    make_skeleton(tmp_path)
+    (tmp_path / "core/fuzz/.gitkeep").write_text("")
+    track_all(tmp_path)
+    (tmp_path / "core/fuzz/local.c").write_text("")
+    assert check_layout.check(tmp_path) == []
 
 
 def test_repository_matches_the_layout():
