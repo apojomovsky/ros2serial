@@ -49,7 +49,7 @@ def test_the_protocol_version_is_left_alone(tmp_path):
 
 def test_a_version_that_is_not_semver_is_refused(tmp_path):
     root = tree(tmp_path)
-    for version in ("1.2", "v1.2.3", "1.2.3-rc1", "01.2.3", "1.2.\u0664"):
+    for version in ("1.2", "v1.2.3", "1.2.3-rc1", "01.2.3", "1\u0662.2.3", "1.2.3\u0664"):
         result = set_version(root, version)
         assert result.returncode == 2 and "not a version" in result.stderr, version
     assert (root / "VERSION").read_text() == "0.1.0\n"
