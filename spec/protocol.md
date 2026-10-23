@@ -286,7 +286,7 @@ A type record says where a type's fields are, and a field entry says how one fie
 - [DSC-1] A descriptor table is two constant byte arrays: the type records and the field entries. Nothing else describes a message type to the interpreter.
 - [DSC-2] A type record is 5 bytes, in this order: `size` as a 2-byte integer, `first_field` as a 2-byte integer, `field_count` as a 1-byte integer.
 - [DSC-3] A field entry is 8 bytes, in this order: `kind` (1 byte), `mode` (1 byte), `offset` as a 2-byte integer, `count` as a 2-byte integer, `aux` as a 2-byte integer.
-- [DSC-4] Every multi-byte integer of a table is little-endian, whatever the target's byte order, because the interpreter assembles each one from bytes ([GEN-1]).
+- [DSC-4] Every multi-byte integer of a table is little-endian, whatever the target's byte order, because the interpreter assembles each one from bytes; the table keeps the wire's byte order, so one generator order serves every target.
 - [DSC-5] `size` and `offset` are those of the C struct the same build emits, so a table describes its own build's structs and never another build's.
 - [DSC-6] `first_field` and `field_count` address the entries of one type: its fields are the entries from `first_field` to `first_field + field_count - 1`.
 - [DSC-7] `field_count` is 0 for a message with no fields, which then has no entries of its own.
