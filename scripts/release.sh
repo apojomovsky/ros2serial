@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Cut a release: next version from the commits (git-cliff and the [bump] rules
-# in cliff.toml), VERSION and CHANGELOG.md updated, one commit. cut-release.yml
-# runs this in the dev image, then opens the release PR; the tag follows its
-# merge. Only feat, fix, perf, refactor, revert or breaking commits make a
-# release: docs, tests, CI and chores alone are nothing to release.
+# in cliff.toml), VERSION, the generator's version files and CHANGELOG.md
+# updated, one commit. cut-release.yml runs this in the dev image, then opens
+# the release PR; the tag follows its merge. Only feat, fix, perf, refactor,
+# revert or breaking commits make a release: docs, tests, CI and chores alone
+# are nothing to release.
 # Usage: release.sh [--dry-run] [--bump auto|patch|minor|major]
 set -euo pipefail
 usage() { echo "usage: release.sh [--dry-run] [--bump auto|patch|minor|major]"; exit 2; }
