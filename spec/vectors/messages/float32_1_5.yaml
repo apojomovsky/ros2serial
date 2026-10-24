@@ -1,0 +1,6 @@
+name: float32_1_5
+covers: [ENC-3]
+type: std_msgs/msg/Float32
+profile: {narrow_float64: false}
+message: {data: 1.5}
+payload: "00 00 c0 3f"

@@ -1,0 +1,6 @@
+name: float32_max_finite
+covers: [ENC-3]
+type: std_msgs/msg/Float32
+profile: {narrow_float64: false}
+message: {data: 3.4028234663852886e+38}
+payload: "ff ff 7f 7f"

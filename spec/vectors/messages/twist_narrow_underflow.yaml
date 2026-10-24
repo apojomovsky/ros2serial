@@ -1,0 +1,10 @@
+name: twist_narrow_underflow
+covers: [ENC-1, ENC-11]
+type: geometry_msgs/msg/Twist
+profile: {narrow_float64: true}
+# 1.5 * 2^-149 is a tie in binary32 subnormals and rounds to the even 2^-148;
+# 2^-150 is a tie at zero, and the smaller values round to zero with the sign kept.
+message:
+  linear: {x: 1.401298464324817e-45, y: 2.1019476964872256e-45, z: 7.006492321624085e-46}
+  angular: {x: -6.842277657836021e-49, y: 5.0e-324, z: -5.0e-324}
+payload: "01 00 00 00 02 00 00 00 00 00 00 00 00 00 00 80 00 00 00 00 00 00 00 80"

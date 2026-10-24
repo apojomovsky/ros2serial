@@ -1,0 +1,8 @@
+name: twist_full_edges
+covers: [ENC-1, ENC-4]
+type: geometry_msgs/msg/Twist
+profile: {narrow_float64: false}
+message:
+  linear: {x: 1.7976931348623157e+308, y: 5.0e-324, z: .inf}
+  angular: {x: -.inf, y: {bits: "7ff8000000000001"}, z: {bits: "fff8000000000002"}}
+payload: "ff ff ff ff ff ff ef 7f 01 00 00 00 00 00 00 00 00 00 00 00 00 00 f0 7f 00 00 00 00 00 00 f0 ff 01 00 00 00 00 00 f8 7f 02 00 00 00 00 00 f8 ff"
