@@ -85,9 +85,13 @@ class Harness:
                 raise AssertionError("no pty line from the harness:\n" + "".join(self._output))
             line = self._read_line(remaining)
             if not line:
-                code = self._proc.wait()
+                if self._proc.poll() is None:
+                    raise AssertionError(
+                        f"no pty line from the harness in {START_TIMEOUT:.0f} s:\n" + "".join(self._output)
+                    )
                 raise AssertionError(
-                    f"the harness exited with {code} before the pty was ready:\n" + "".join(self._output)
+                    f"the harness exited with {self._proc.returncode} before the pty was ready:\n"
+                    + "".join(self._output)
                 )
             self._output.append(line)
             if line.startswith("r2s_simavr: pty="):
