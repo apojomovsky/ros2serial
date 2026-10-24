@@ -1,0 +1,10 @@
+name: twist_narrow_min_normal
+covers: [ENC-1, ENC-11]
+type: geometry_msgs/msg/Twist
+profile: {narrow_float64: true}
+# Values at and just below the smallest normal round to it from below on a
+# tie, and the largest subnormal stays one.
+message:
+  linear: {x: 1.1754943507538647e-38, y: 1.1754942807573643e-38, z: 1.1754942106924411e-38}
+  angular: {x: 1.1754944208872107e-38, y: 1.1754943508222875e-38, z: 5.877471754111438e-39}
+payload: "00 00 80 00 00 00 80 00 ff ff 7f 00 00 00 80 00 00 00 80 00 00 00 40 00"

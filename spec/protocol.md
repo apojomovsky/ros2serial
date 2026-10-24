@@ -99,7 +99,7 @@ A payload is the packed encoding of one message, field after field, with no padd
 - [ENC-8] Fixed arrays `T[N]` are N consecutive elements with no length prefix.
 - [ENC-9] Unbounded and bounded sequences `T[]` and `T[<=N]` are a varint element count, which may be 0, followed by the elements.
 - [ENC-10] A topic is narrow when its topic announcement has the narrow flag set.
-- [ENC-11] On a narrow topic every `float64` field travels as IEEE 754 binary32, little-endian. A side holding the value as binary64 converts it with IEEE 754 roundTiesToEven before sending: a finite value too large for binary32 becomes an infinity of the same sign, a finite value too small becomes a subnormal or a zero of the same sign, and a NaN stays a NaN. The receiving host widens the value exactly.
+- [ENC-11] On a narrow topic every `float64` field travels as IEEE 754 binary32, little-endian. A side holding the value as binary64 converts it with IEEE 754 roundTiesToEven before sending: a finite value too large for binary32 becomes an infinity of the same sign, a finite value below the smallest normal becomes the smallest normal, a subnormal or a zero of the same sign, and a NaN stays a NaN. The receiving host widens the value exactly.
 - [ENC-12] An MCU build whose C `double` is 32 bits MUST set the narrow flag on every topic.
 - [ENC-13] The wire layout does not depend on the bounds chosen for strings and sequences: only the actual lengths are encoded. A message encodes to the same bytes whatever bounds the two sides were built with, as long as it fits them.
 - [ENC-14] A string MUST NOT contain a `0x00` byte, because the MCU holds strings NUL-terminated. A sender MUST NOT send one, and a receiver MUST drop a payload with one.
