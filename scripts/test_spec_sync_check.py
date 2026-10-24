@@ -140,3 +140,18 @@ def test_a_branch_that_changes_neither_passes(tmp_path):
     root = repo_with(tmp_path, LOCAL)
     write(root, "core.c", "int x;\n")
     assert problems(root) == []
+
+
+def test_removing_a_vector_placeholder_needs_no_spec_change(tmp_path):
+    """A .gitkeep carries no vector, so dropping one is not a vector change."""
+    root = repo_with(tmp_path, LOCAL, {"spec/vectors/crc/.gitkeep": ""})
+    git(root, "rm", "-q", "spec/vectors/crc/.gitkeep")
+    git(root, "commit", "-q", "-m", "change")
+    assert problems(root) == []
+
+
+def test_a_wire_rule_with_only_a_placeholder_change_fails(tmp_path):
+    root = repo_with(tmp_path, LOCAL, {"spec/vectors/crc/.gitkeep": ""})
+    git(root, "rm", "-q", "spec/vectors/crc/.gitkeep")
+    write(root, "spec/protocol.md", with_wire_rule(LOCAL))
+    assert problems(root) == ["spec/protocol.md changed without spec/vectors changes: FRM-2 crosses the wire"]
