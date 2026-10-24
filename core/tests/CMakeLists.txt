@@ -6,6 +6,23 @@
 add_library(unity STATIC vendor/unity/unity.c)
 target_include_directories(unity SYSTEM PUBLIC vendor/unity)
 
+# The ring is compiled only with R2S_WITH_RX_RING, so its tests build rx.c
+# again with the switch on instead of changing the configuration every other
+# test shares. One build per ring size: the header's default, and the smallest
+# the header allows, which the default-size tests cannot reach.
+function(r2s_ring_library target)
+  add_library(${target} STATIC "${CMAKE_CURRENT_SOURCE_DIR}/../src/rx.c")
+  target_include_directories(${target} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../include")
+  target_compile_definitions(${target} PUBLIC R2S_WITH_RX_RING)
+  target_compile_options(${target} PRIVATE ${R2S_WARNINGS})
+  if(ARGC GREATER 1)
+    target_compile_definitions(${target} PUBLIC R2S_RX_RING_SIZE=${ARGV1})
+  endif()
+endfunction()
+
+r2s_ring_library(r2s_rx_ring)
+r2s_ring_library(r2s_rx_ring_min 2)
+
 add_library(r2s_test_support STATIC support/bytes.c support/fake_port.c support/fake_port_unity.c
                                        support/frames.c support/rcobs.c)
 target_include_directories(r2s_test_support PUBLIC support)
@@ -30,7 +47,13 @@ function(r2s_unit_test source)
     VERBATIM)
   add_executable(${name} "${source}" "${runner}")
   target_compile_options(${name} PRIVATE ${R2S_TEST_WARNINGS})
-  target_link_libraries(${name} PRIVATE r2s_test_support)
+  # A test whose build is its own names what it links instead of the shared
+  # fake port, which cannot provide a symbol the core defines.
+  if(ARGC GREATER 1)
+    target_link_libraries(${name} PRIVATE ${ARGN})
+  else()
+    target_link_libraries(${name} PRIVATE r2s_test_support)
+  endif()
   # One ctest entry per test function, read at configure time; editing the
   # source re-runs the configure step.
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${source}")
@@ -70,6 +93,9 @@ function(r2s_vector_test name kind check)
 endfunction()
 
 file(GLOB unit_tests CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" test_*.c)
+# The ring tests have their own builds (r2s_rx_ring, r2s_rx_ring_min), so they
+# are registered below with those libraries instead of the shared support.
+list(REMOVE_ITEM unit_tests test_rx_ring.c test_rx_ring_min.c)
 foreach(source ${unit_tests})
   r2s_unit_test(${source})
 endforeach()
@@ -78,6 +104,9 @@ add_executable(cxx_headers cxx_headers.cpp)
 target_link_libraries(cxx_headers PRIVATE r2s_test_support)
 target_compile_options(cxx_headers PRIVATE -Wall -Wextra -Werror)
 add_test(NAME cxx_headers COMMAND cxx_headers)
+
+r2s_unit_test(test_rx_ring.c unity r2s_rx_ring)
+r2s_unit_test(test_rx_ring_min.c unity r2s_rx_ring_min)
 
 # Proof that a failing assertion fails: without these, a check that silently
 # returned early would make every test pass.
