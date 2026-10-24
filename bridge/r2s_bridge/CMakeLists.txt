@@ -38,6 +38,16 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(class_loader REQUIRED)
 
+  # The fakes are shared by every bridge test, so they build once instead of
+  # being copied into each test file.
+  add_library(r2s_bridge_test_support STATIC
+    test/support/fake_transport.cpp
+    test/support/manual_clock.cpp)
+  target_include_directories(r2s_bridge_test_support PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/test/support>)
+  target_link_libraries(r2s_bridge_test_support PUBLIC r2s_bridge_component)
+  target_compile_options(r2s_bridge_test_support PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
   ament_add_gtest(test_parameters test/test_parameters.cpp)
   target_link_libraries(test_parameters r2s_bridge_component)
 
@@ -48,6 +58,15 @@ if(BUILD_TESTING)
     class_loader::class_loader
     rclcpp_components::component
     rclcpp::rclcpp)
+
+  ament_add_gtest(test_fake_transport test/test_fake_transport.cpp)
+  target_link_libraries(test_fake_transport r2s_bridge_test_support)
+
+  ament_add_gtest(test_manual_clock test/test_manual_clock.cpp)
+  target_link_libraries(test_manual_clock r2s_bridge_test_support)
+
+  ament_add_gtest(test_session_without_executor test/test_session_without_executor.cpp)
+  target_link_libraries(test_session_without_executor r2s_bridge_test_support)
 endif()
 
 ament_export_targets(export_r2s_bridge HAS_LIBRARY_TARGET)
