@@ -50,6 +50,13 @@ jobs:
       - uses: ./.github/actions/dev-image
       - run: make test GEN=1
 
+  e2e-avr:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test E2E=avr
+
   # The bridge is built and tested on every supported distro, in that distro's
   # own image. The dev image is the jazzy one, so the local run and the jazzy
   # job share a toolchain.
@@ -75,11 +82,6 @@ jobs:
     continue-on-error: true
     steps:
       - run: echo "pending V1, see docs/00-design.md"
-  e2e-avr:
-    runs-on: ubuntu-24.04
-    continue-on-error: true
-    steps:
-      - run: echo "pending V3 and V4, see docs/00-design.md"
   fuzz-smoke:
     runs-on: ubuntu-24.04
     continue-on-error: true

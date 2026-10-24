@@ -119,7 +119,7 @@ Pass the title the PR will carry as `make pre-pr-check PR_TITLE="<title>"`, so t
 - **No force pushes** on branches that exist on the remote. The pre-push hook refuses them; a genuine rewrite needs the maintainer's go-ahead and `R2S_FORCE_PUSH_APPROVED=1 git push --force-with-lease`.
 - **Push through `scripts/push.sh`.** It pushes with the hooks, then checks that the remote ref matches `HEAD`. Trust its exit code; `--no-verify` is forbidden.
 - **Tests are never weakened to get green.** No deleting, skipping or loosening a test, vector or budget without the maintainer's approval in the PR.
-- **Licensing boundaries.** The core, generator and bridge are MIT. Bundled message definitions keep their Apache 2.0 attribution. GPL tools (simavr) run as external processes only, never linked into anything we ship. MPLAB SIM (Phase 5) is a proprietary external tool: invoked, never redistributed.
+- **Licensing boundaries.** The core, generator and bridge are MIT. Bundled message definitions keep their Apache 2.0 attribution. GPL tools (simavr) run as external processes only, never linked into anything we ship. Test-only code under `tests/` is the one exception, because no release artifact contains it: `tests/harness/simavr/` links `libsimavr`, since the stock CLI cannot put the emulated UART on a pty. MPLAB SIM (Phase 5) is a proprietary external tool: invoked, never redistributed.
 - **No copyrighted documents in the tree.** Link datasheets and application notes; never commit them or paste their content.
 
 ## Expression conventions
@@ -157,7 +157,7 @@ Pass the title the PR will carry as `make pre-pr-check PR_TITLE="<title>"`, so t
 - **`double` is 32 bits on AVR and epic-cc.** A test comparing `float64` values must use the narrow round-trip tolerance there.
 - **The core never calls a function pointer or does float arithmetic.** The zone check catches it, but design for it from the start: it is what keeps PIC possible.
 - **Arduino compiles library sources separately from the sketch.** Library `.c` files never see the sketch's `#define`s, which is why the X-macro list is expanded in a header.
-- **simavr runs at its own pace.** Time-sync tests use simulated time, never wall-clock sleeps.
+- **simavr runs at its own pace.** Time-sync tests use simulated time, never wall-clock sleeps. Its UART sleeps 1 ms on every RXC/TXC poll while `AVR_UART_FLAG_POLL_SLEEP` is set, which is the default; a harness that wants simulated time to run free clears the flag with `AVR_IOCTL_UART_SET_FLAGS`.
 
 ## CI
 
