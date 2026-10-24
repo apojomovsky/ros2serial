@@ -4,6 +4,8 @@
 
 #include <stdint.h>
 
+#include "r2s/r2s_rx.h"
+
 /* The wire protocol version (spec/protocol.md, GEN-2). A change on the wire
  * that an older peer cannot handle bumps it. */
 #define R2S_PROTOCOL_VERSION 1
