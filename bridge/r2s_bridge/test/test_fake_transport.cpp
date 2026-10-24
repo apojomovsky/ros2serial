@@ -66,12 +66,29 @@ TEST(FakeTransport, ReportsScriptedStatusesInOrder)
     EXPECT_EQ(transport.read(buffer, sizeof buffer), (IoResult{1, IoStatus::kOk}));
 }
 
-TEST(FakeTransport, ReportsAScriptedClose)
+TEST(FakeTransport, LatchesAScriptedPeerClose)
 {
     FakeTransport transport;
+    transport.script_read({0x01});
     transport.script_read(IoStatus::kClosed);
+    transport.script_read({0x02});
+    const std::uint8_t byte = 0x03;
     std::uint8_t buffer[1]{};
+
+    EXPECT_EQ(transport.read(buffer, sizeof buffer), (IoResult{1, IoStatus::kOk}));
     EXPECT_EQ(transport.read(buffer, sizeof buffer), (IoResult{0, IoStatus::kClosed}));
+    EXPECT_TRUE(transport.closed());
+    EXPECT_EQ(transport.read(buffer, sizeof buffer), (IoResult{0, IoStatus::kClosed}));
+    EXPECT_EQ(transport.write(&byte, 1), (IoResult{0, IoStatus::kClosed}));
+    EXPECT_TRUE(transport.writes().empty());
+}
+
+TEST(FakeTransport, RejectsAZeroCapacityRead)
+{
+    FakeTransport transport;
+    transport.script_read({0x01});
+    std::uint8_t buffer[1]{};
+    EXPECT_THROW(transport.read(buffer, 0), std::invalid_argument);
 }
 
 TEST(FakeTransport, RejectsAnEmptyChunk)
@@ -141,6 +158,7 @@ TEST(FakeTransport, RejectsReadsAndWritesAfterClose)
     EXPECT_TRUE(transport.closed());
     EXPECT_EQ(transport.read(buffer, sizeof buffer), (IoResult{0, IoStatus::kClosed}));
     EXPECT_EQ(transport.write(&byte, 1), (IoResult{0, IoStatus::kClosed}));
+    EXPECT_EQ(transport.write(&byte, 0), (IoResult{0, IoStatus::kClosed}));
     EXPECT_TRUE(transport.writes().empty());
 }
 

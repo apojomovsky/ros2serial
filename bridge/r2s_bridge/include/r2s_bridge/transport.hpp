@@ -39,9 +39,10 @@ class Transport
   public:
     virtual ~Transport() = default;
 
-    // Reads at most capacity bytes into buffer and never blocks. Returns kOk
-    // with the bytes read when the link had data, kWouldBlock when it had none,
-    // kClosed after the peer hung up, and kError when the read failed.
+    // Reads at most capacity bytes into buffer and never blocks; capacity is at
+    // least one. Returns kOk with the bytes read when the link had data,
+    // kWouldBlock when it had none, kClosed after the peer hung up, and kError
+    // when the read failed.
     virtual IoResult read(std::uint8_t *buffer, std::size_t capacity) = 0;
 
     // Writes size bytes and returns how many the link accepted, which may be

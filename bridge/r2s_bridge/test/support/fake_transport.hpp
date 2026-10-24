@@ -25,7 +25,8 @@ class FakeTransport final : public Transport
     void script_read(std::vector<std::uint8_t> bytes);
 
     // Queues a read outcome that carries no bytes. A read cannot report kOk
-    // without data, so that status throws std::invalid_argument.
+    // without data, so that status throws std::invalid_argument. kClosed is
+    // terminal, as a hung-up link is.
     void script_read(IoStatus status);
 
     // Caps how many bytes each write accepts, modelling a port whose kernel

@@ -45,6 +45,9 @@ IoResult FakeTransport::read(std::uint8_t *buffer, std::size_t capacity)
     if (closed_) {
         return {0, IoStatus::kClosed};
     }
+    if (capacity == 0) {
+        throw std::invalid_argument("FakeTransport::read needs a capacity of at least one");
+    }
     if (script_.empty()) {
         return {0, IoStatus::kWouldBlock};
     }
@@ -52,6 +55,10 @@ IoResult FakeTransport::read(std::uint8_t *buffer, std::size_t capacity)
     if (head.status != IoStatus::kOk) {
         const IoStatus status = head.status;
         script_.pop_front();
+        if (status == IoStatus::kClosed) {
+            closed_ = true;
+            script_.clear();
+        }
         return {0, status};
     }
     const std::size_t count = std::min(capacity, head.bytes.size() - head.offset);
@@ -68,11 +75,11 @@ IoResult FakeTransport::read(std::uint8_t *buffer, std::size_t capacity)
 
 IoResult FakeTransport::write(const std::uint8_t *data, std::size_t size)
 {
-    if (size == 0) {
-        throw std::invalid_argument("FakeTransport::write needs at least one byte");
-    }
     if (closed_) {
         return {0, IoStatus::kClosed};
+    }
+    if (size == 0) {
+        throw std::invalid_argument("FakeTransport::write needs at least one byte");
     }
     const std::size_t count = std::min(size, write_limit_);
     if (count == 0) {
