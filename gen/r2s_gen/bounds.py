@@ -109,7 +109,12 @@ def resolve(
             if string_bound is None:
                 string_bound = default_string_bound
             if string_bound is None:
-                raise MessageError(where, "unbounded string", f"set bounds['{where}'] or bounds.default_string_bound")
+                fix = (
+                    f"set bounds['{where}'] to [count, string_bound] or bounds.default_string_bound"
+                    if field.is_array
+                    else f"set bounds['{where}'] or bounds.default_string_bound"
+                )
+                raise MessageError(where, "unbounded string", fix)
         if field.type_name not in PRIMITIVES:
             visit(field.type_name, stack)
         return ResolvedField(field.name, field.type_name, field.is_array, array_bound, string_bound)

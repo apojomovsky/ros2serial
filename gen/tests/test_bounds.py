@@ -77,6 +77,19 @@ def test_the_default_string_bound_does_not_resolve_a_sequence_count():
     )
 
 
+def test_an_unbounded_element_string_in_a_sequence_is_an_error_naming_the_field():
+    configured = {key: value for key, value in JOINT_STATE_BOUNDS.items() if key != "sensor_msgs/msg/JointState.name"}
+    configured["sensor_msgs/msg/JointState.name"] = 4
+
+    with pytest.raises(msgs.MessageError) as caught:
+        bounds.resolve(repository(), ["sensor_msgs/msg/JointState"], bounds=configured)
+
+    assert str(caught.value) == (
+        "sensor_msgs/msg/JointState.name: unbounded string; "
+        "set bounds['sensor_msgs/msg/JointState.name'] to [count, string_bound] or bounds.default_string_bound"
+    )
+
+
 def test_an_unbounded_string_is_an_error_naming_the_field():
     with pytest.raises(msgs.MessageError) as caught:
         bounds.resolve(repository(), ["std_msgs/msg/Header"])
