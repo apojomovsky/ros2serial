@@ -717,7 +717,7 @@ DISCONNECTED ──port open──► BOOT_WAIT ──HELLO or boot_wait_ms─�
 
 The generator emits, for each message type used, a type record and a list of field entries, as constant data in flash. One interpreter in `core/src/codec.c` encodes and decodes any type from them. It is iterative, keeps an explicit nesting stack of `R2S_MAX_NEST` frames (generated: the deepest nesting among the types used), and reads descriptors through `R2S_FLASH_READ_BYTE()`.
 
-**Type record:** `size u16` (`sizeof` of the C struct, for array strides), `first_field u16`, `field_count u8`.
+**Type record (5 bytes):** `size u16` (`sizeof` of the C struct, for array strides), `first_field u16`, `field_count u8`.
 
 **Field entry (8 bytes):**
 
@@ -729,7 +729,7 @@ The generator emits, for each message type used, a type record and a list of fie
 | `count u16` | Array length (fixed) or bound (bounded) |
 | `aux u16` | String bound for STR, type index for NEST |
 
-The exact byte layout, the order of entries and the validation rules (bool must be 0 or 1, lengths within bounds, strings NUL-terminated on decode) are specified by ticket S6. The descriptors never appear on the wire, so they can change without a protocol version bump.
+The byte layout, the order of the entries, the storage of each kind and the validation a table must pass are `spec/protocol.md` section 9, which is normative. The descriptors never appear on the wire, so they can change without a protocol version bump.
 
 ## C API reference
 
@@ -846,7 +846,7 @@ void r2s_on_<name>(const <Type> *msg);               /* subscribed topics: proto
 | `float64` | `double` (32 bits on default avr-gcc, epic-cc and common PIC toolchains, where the topic is narrow) |
 | `string<=N` | `char name[N + 1]`, NUL-terminated |
 | `T[N]` | `T name[N]` |
-| `T[<=N]` | `struct { uint8_t size; T data[N]; }` (`uint16_t size` if N > 255) |
+| `T[<=N]` | `struct { T data[N]; uint8_t size; }` (`uint16_t size` if N > 255); the elements come first, and the count member follows at a distance rounded up to a multiple of its width |
 | Nested message | Nested struct |
 
 ## Code generator specification

@@ -170,12 +170,25 @@ def test_a_plan_file_anywhere_is_flagged(tmp_path):
 def test_spec_without_vectors_is_flagged(tmp_path):
     main, wt = fixture(tmp_path)
     git(main, "config", "core.hooksPath", ".githooks")
-    commit(wt, {"spec/protocol.md": "# spec\n"}, "docs(spec): start the spec")
+    commit(wt, {"spec/protocol.md": "# spec\n\n- [FRM-1] A frame is bytes.\n"}, "docs(spec): start the spec")
     body = tmp_path / "body.md"
     body.write_text(GOOD_BODY)
     result = ritual(wt, PR_BODY=str(body))
     assert result.returncode == 1
     assert "spec/protocol.md changed without spec/vectors" in result.stdout
+
+
+def test_a_local_spec_change_needs_no_vector(tmp_path):
+    """A section marked local never appears on the wire, so tests cover it."""
+    main, wt = fixture(tmp_path)
+    git(main, "config", "core.hooksPath", ".githooks")
+    spec = "# spec\n\n## 9. Descriptors (local)\n\n- [DSC-1] A type record is 5 bytes.\n"
+    commit(wt, {"spec/protocol.md": spec}, "docs(spec): describe the tables")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+    result = ritual(wt, PR_BODY=str(body))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "without spec/vectors" not in result.stdout
 
 
 def test_commit_msg_hook_rejects_a_trailer(tmp_path):
