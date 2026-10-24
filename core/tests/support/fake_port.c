@@ -15,6 +15,8 @@ static struct {
     uint16_t rx_pos;
     uint8_t tx[FAKE_PORT_CAPACITY];
     uint16_t tx_len;
+    uint16_t tx_write_calls;
+    uint16_t tx_write_max;
     uint16_t tx_free;
     uint16_t tx_overruns;
     uint32_t tick;
@@ -68,6 +70,18 @@ const uint8_t *fake_port_tx(uint16_t *len)
 void fake_port_tx_clear(void)
 {
     port.tx_len = 0;
+    port.tx_write_calls = 0;
+    port.tx_write_max = 0;
+}
+
+uint16_t fake_port_tx_write_calls(void)
+{
+    return port.tx_write_calls;
+}
+
+uint16_t fake_port_tx_write_max(void)
+{
+    return port.tx_write_max;
 }
 
 uint16_t fake_port_tx_len(void)
@@ -148,6 +162,10 @@ uint16_t r2s_port_read(uint8_t *buf, uint16_t max)
 
 void r2s_port_write(const uint8_t *buf, uint16_t len)
 {
+    port.tx_write_calls++;
+    if (len > port.tx_write_max) {
+        port.tx_write_max = len;
+    }
     /* Bytes past tx_free are still captured, so a failing test shows them. */
     if (port.tx_free != TX_UNLIMITED) {
         if (len > port.tx_free) {

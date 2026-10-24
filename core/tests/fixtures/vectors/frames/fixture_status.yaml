@@ -1,0 +1,8 @@
+# A fixture for the vector runner's self-test, not a conformance vector.
+name: fixture_status
+covers: [FRM-1]
+topic_id: 16
+seq: 2
+payload: "00 11 00"
+frame: "10 02 00 11 00 f7 31"
+wire: "10 02 03 11 02 f7 31 03 00"

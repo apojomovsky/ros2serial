@@ -40,9 +40,26 @@ typedef struct {
     const char *reject; /* the rule a decoder rejects it by, or NULL; value is 0 then */
 } r2s_vec_varint_t;
 
+typedef struct {
+    const char *where;
+    const char *covers;
+    uint8_t topic_id;
+    uint8_t seq;
+    const uint8_t *payload;
+    uint16_t payload_len;
+    const char *payload_hex;
+    const uint8_t *frame; /* the decoded frame before rCOBS (FRM-2) */
+    uint16_t frame_len;
+    const char *frame_hex;
+    const uint8_t *wire; /* the encoded frame and its delimiter (FRM-1) */
+    uint16_t wire_len;
+    const char *wire_hex;
+} r2s_vec_frames_t;
+
 /* One check per kind, linked in by the test executable: the runner
  * self-test, or the conformance test of the module that implements the kind. */
 void r2s_vec_check_crc(const r2s_vec_crc_t *v);
+void r2s_vec_check_frames(const r2s_vec_frames_t *v);
 void r2s_vec_check_rcobs(const r2s_vec_rcobs_t *v);
 void r2s_vec_check_varint(const r2s_vec_varint_t *v);
 
