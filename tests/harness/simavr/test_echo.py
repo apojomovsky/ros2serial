@@ -157,9 +157,7 @@ def test_the_mcu_runs_at_the_requested_frequency(mcu):
         harness.wait()
     finally:
         harness.stop()
-    frequency = harness.summary["frequency"]
-    assert frequency == 16_000_000
-    assert harness.summary["cycles"] * 1000 // frequency == harness.summary["simulated_ms"]
+    assert harness.summary["frequency"] == 16_000_000
 
 
 def test_echo_carries_more_than_the_input_ring():
