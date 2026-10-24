@@ -6,6 +6,13 @@ set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$root" || exit 2
 build=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/harness/simavr
+# One lock for the harness build directory, held for the whole run: a direct
+# run and a suite run of one tree must not write the same ELF and binary.
+if [ -z "${R2S_SIMAVR_LOCKED:-}" ]; then
+  mkdir -p "$build" || exit 1
+  exec env R2S_SIMAVR_LOCKED=1 bash "$root/scripts/with-build-lock.sh" "$build/.lock" \
+    bash "$root/tests/harness/simavr/run.sh" "$@"
+fi
 mkdir -p "$build" || exit 1
 
 status=0
