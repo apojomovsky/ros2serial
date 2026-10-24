@@ -48,6 +48,20 @@ def test_joint_state_resolves_with_configured_bounds():
     assert resolved["std_msgs/msg/Header"].field("frame_id").string_bound == 24
 
 
+def test_a_fixed_array_is_not_a_sequence():
+    resolved = bounds.resolve(repository(), ["sensor_msgs/msg/Imu"], bounds=HEADER_BOUNDS)
+
+    assert resolved["sensor_msgs/msg/Imu"].field("orientation_covariance").is_sequence is False
+
+
+def test_a_bounded_array_is_a_sequence():
+    resolved = bounds.resolve(repository(), ["sensor_msgs/msg/JointState"], bounds=JOINT_STATE_BOUNDS)
+
+    joint_state = resolved["sensor_msgs/msg/JointState"]
+    assert joint_state.field("name").is_sequence is True
+    assert joint_state.field("position").is_sequence is True
+
+
 def test_the_default_string_bound_resolves_a_scalar_string():
     resolved = bounds.resolve(repository(), ["std_msgs/msg/Header"], default_string_bound=16)
 
