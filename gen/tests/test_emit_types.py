@@ -117,7 +117,7 @@ def test_a_scalar_string_is_a_nul_terminated_char_array(tmp_path):
 def test_a_fixed_array_keeps_its_length_and_gets_no_count(tmp_path):
     text = emit_type(
         "test_msgs/msg/Fixed",
-        repository=repository_for(tmp_path, {"test_msgs/msg/Fixed": "uint8 values[4]"}),
+        repository=repository_for(tmp_path, {"test_msgs/msg/Fixed": "uint8[4] values"}),
     )
 
     assert "uint8_t values[4];" in text
@@ -127,8 +127,8 @@ def test_a_fixed_array_keeps_its_length_and_gets_no_count(tmp_path):
 @pytest.mark.parametrize(
     ("declaration", "expected"),
     [
-        ("uint8 values[<=4]", "    struct {\n        uint8_t data[4];\n        uint8_t size;\n    } values;"),
-        ("uint8 values[<=256]", "    struct {\n        uint8_t data[256];\n        uint16_t size;\n    } values;"),
+        ("uint8[<=4] values", "    struct {\n        uint8_t data[4];\n        uint8_t size;\n    } values;"),
+        ("uint8[<=256] values", "    struct {\n        uint8_t data[256];\n        uint16_t size;\n    } values;"),
     ],
 )
 def test_a_bounded_sequence_is_a_struct_with_its_count(tmp_path, declaration, expected):
@@ -154,7 +154,7 @@ def test_a_fixed_array_of_strings_holds_a_char_array_per_element(tmp_path):
     text = emit_type(
         "test_msgs/msg/Names",
         default_string_bound=5,
-        repository=repository_for(tmp_path, {"test_msgs/msg/Names": "string names[3]"}),
+        repository=repository_for(tmp_path, {"test_msgs/msg/Names": "string[3] names"}),
     )
 
     assert "char names[3][6];" in text

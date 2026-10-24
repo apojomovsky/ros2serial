@@ -19,6 +19,7 @@ class ResolvedField:
     name: str
     type_name: str
     is_array: bool
+    is_sequence: bool
     array_bound: int | None
     string_bound: int | None
 
@@ -117,7 +118,14 @@ def resolve(
                 raise MessageError(where, "unbounded string", fix)
         if field.type_name not in PRIMITIVES:
             visit(field.type_name, stack)
-        return ResolvedField(field.name, field.type_name, field.is_array, array_bound, string_bound)
+        return ResolvedField(
+            name=field.name,
+            type_name=field.type_name,
+            is_array=field.is_array,
+            is_sequence=field.is_array and field.array_length is None,
+            array_bound=array_bound,
+            string_bound=string_bound,
+        )
 
     for type_name in type_names:
         visit(canonical_type_name(type_name), ())
