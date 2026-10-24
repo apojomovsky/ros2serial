@@ -2,7 +2,27 @@
 #ifndef R2S_GENERATED_H
 #define R2S_GENERATED_H
 
+#include <stddef.h>
 #include <stdint.h>
+
+typedef struct {
+    uint8_t byte;
+    uint16_t following;
+} r2s_generated_count_alignment_t;
+
+#define R2S_COUNT_ALIGNMENT offsetof(r2s_generated_count_alignment_t, following)
+
+#define R2S_ROUND_UP(value, alignment) (((value) + (alignment) - 1) / (alignment) * (alignment))
+
+/* A count member sits where the compiler aligns a member that follows the
+ * elements ([DSC-20]); the check below fails the build when it does not. */
+#define R2S_COUNT_CHECK(owner, field, count, alignment)                                                      \
+    typedef char                                                                                             \
+        r2s_count_check_##owner##__##field[((offsetof(owner, field.size) - offsetof(owner, field.data)) ==   \
+                                            R2S_ROUND_UP((count) * sizeof(((owner *)0)->field.data[0]),      \
+                                                         (alignment)))                                       \
+                                               ? 1                                                           \
+                                               : -1]
 
 typedef struct builtin_interfaces__msg__Time {
     int32_t sec;
@@ -33,5 +53,10 @@ typedef struct sensor_msgs__msg__JointState {
         uint8_t size;
     } effort;
 } sensor_msgs__msg__JointState;
+
+R2S_COUNT_CHECK(sensor_msgs__msg__JointState, name, 4, 1);
+R2S_COUNT_CHECK(sensor_msgs__msg__JointState, position, 4, 1);
+R2S_COUNT_CHECK(sensor_msgs__msg__JointState, velocity, 4, 1);
+R2S_COUNT_CHECK(sensor_msgs__msg__JointState, effort, 4, 1);
 
 #endif
