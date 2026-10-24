@@ -12,7 +12,9 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 
-add_library(r2s_bridge_component SHARED src/bridge.cpp)
+add_library(r2s_bridge_component SHARED
+  src/bridge.cpp
+  src/termios_transport.cpp)
 target_include_directories(r2s_bridge_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -67,6 +69,10 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_session_without_executor test/test_session_without_executor.cpp)
   target_link_libraries(test_session_without_executor r2s_bridge_test_support)
+
+  # openpty comes from libutil; the pty test uses it instead of a device.
+  ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
+  target_link_libraries(test_termios_transport r2s_bridge_component util)
 endif()
 
 ament_export_targets(export_r2s_bridge HAS_LIBRARY_TARGET)
