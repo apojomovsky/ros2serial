@@ -132,6 +132,36 @@ def test_a_list_bound_on_a_sequence_that_is_not_of_strings_is_an_error():
     )
 
 
+@pytest.mark.parametrize("declaration", ["string[4] names", "string[<=4] names"])
+def test_a_list_bound_resolves_a_declared_string_array(tmp_path, declaration):
+    root = tmp_path / "messages"
+    write_message(root, "demo_msgs/msg/Sample", declaration + "\n")
+
+    resolved = bounds.resolve(
+        msgs.MessageRepository(msg_paths=[root]),
+        ["demo_msgs/msg/Sample"],
+        bounds={"demo_msgs/msg/Sample.names": [4, 12]},
+    )
+
+    field = resolved["demo_msgs/msg/Sample"].field("names")
+    assert field.array_bound == 4
+    assert field.string_bound == 12
+
+
+def test_a_list_bound_whose_count_differs_from_a_declared_bound_is_an_error(tmp_path):
+    root = tmp_path / "messages"
+    write_message(root, "demo_msgs/msg/Sample", "string[<=4] names\n")
+
+    with pytest.raises(msgs.MessageError) as caught:
+        bounds.resolve(
+            msgs.MessageRepository(msg_paths=[root]),
+            ["demo_msgs/msg/Sample"],
+            bounds={"demo_msgs/msg/Sample.names": [3, 12]},
+        )
+
+    assert str(caught.value) == ("demo_msgs/msg/Sample.names: the sequence length is already bounded; remove the count")
+
+
 @pytest.mark.parametrize(
     ("declaration", "expected"),
     [
