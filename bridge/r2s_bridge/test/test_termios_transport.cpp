@@ -100,7 +100,7 @@ TEST(TermiosTransport, ConfiguresThePortForRawNonBlockingIo)
     EXPECT_EQ(attributes.c_iflag & IXON, 0u);
     EXPECT_EQ(attributes.c_iflag & ICRNL, 0u);
     EXPECT_EQ(attributes.c_cflag & CSIZE, CS8);
-    EXPECT_EQ(attributes.c_cc[VMIN], 0);
+    EXPECT_EQ(attributes.c_cc[VMIN], 1);
     EXPECT_EQ(attributes.c_cc[VTIME], 0);
 }
 

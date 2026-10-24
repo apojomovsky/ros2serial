@@ -12,7 +12,9 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 
-add_library(r2s_bridge_component SHARED src/bridge.cpp)
+add_library(r2s_bridge_component SHARED
+  src/bridge.cpp
+  src/termios_transport.cpp)
 target_include_directories(r2s_bridge_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
