@@ -12,11 +12,16 @@ BUILD_ARGS := $(shell grep -v '^\#' ci/versions.env | sed 's/^/--build-arg /')
 REPO_ROOT := $(abspath $(shell git rev-parse --git-common-dir 2>/dev/null)/..)
 CACHE := $(HOME)/.cache/ros2serial
 BUILD_DIR := $(CACHE)/build$(subst /,-,$(CURDIR))
+# The image mounts the repository at its host path, so the suite can tell a
+# tree another container also sees (this repository) from one only this
+# container has (a test's temporary copy), whose path repeats in every
+# container and must not key a shared lock.
+export R2S_HOST_MOUNT := $(REPO_ROOT)
 TTY := $(shell [ -t 0 ] && echo -it)
 PASS_VARS := LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E PR_TITLE COMMIT_RANGE BASE PR_BODY TEST
 
 DOCKER_BASE = docker run --rm $(TTY) --user $$(id -u):$$(id -g) \
-	-v $(REPO_ROOT):$(REPO_ROOT) -w $(CURDIR) -v $(CACHE):$(CACHE) -e R2S_BUILD_DIR=$(BUILD_DIR) -e R2S_CACHE_DIR=$(CACHE)
+	-v $(REPO_ROOT):$(REPO_ROOT) -w $(CURDIR) -v $(CACHE):$(CACHE) -e R2S_BUILD_DIR=$(BUILD_DIR) -e R2S_CACHE_DIR=$(CACHE) -e R2S_HOST_MOUNT=$(REPO_ROOT)
 DOCKER_RUN = $(DOCKER_BASE) $(foreach v,$(PASS_VARS),-e $(v)) $(IMAGE)
 in_image = $(if $(R2S_IN_IMAGE),$(1),$(DOCKER_RUN) $(1))
 pending = echo "make $(1): not available until $(2)"; exit 1
