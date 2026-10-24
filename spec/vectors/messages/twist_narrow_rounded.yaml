@@ -1,5 +1,5 @@
 name: twist_narrow_rounded
-covers: [ENC-1, ENC-10, ENC-11]
+covers: [ENC-1, ENC-11]
 type: geometry_msgs/msg/Twist
 profile: {narrow_float64: true}
 # 1 + 2^-24 and 1 + 3 * 2^-24 are exact ties in binary32: the first rounds

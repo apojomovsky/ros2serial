@@ -1,5 +1,5 @@
 name: twist_narrow_exact
-covers: [ENC-1, ENC-10, ENC-11]
+covers: [ENC-1, ENC-11]
 type: geometry_msgs/msg/Twist
 profile: {narrow_float64: true}
 message:

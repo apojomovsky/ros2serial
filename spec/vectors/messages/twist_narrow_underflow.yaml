@@ -1,5 +1,5 @@
 name: twist_narrow_underflow
-covers: [ENC-1, ENC-10, ENC-11]
+covers: [ENC-1, ENC-11]
 type: geometry_msgs/msg/Twist
 profile: {narrow_float64: true}
 # 1.5 * 2^-149 is a tie in binary32 subnormals and rounds to the even 2^-148;
