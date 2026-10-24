@@ -94,6 +94,10 @@ TermiosTransport::TermiosTransport(const TermiosOptions &options)
 #ifdef CRTSCTS
     attributes.c_cflag &= ~static_cast<tcflag_t>(CRTSCTS);
 #endif
+    attributes.c_cflag &= ~static_cast<tcflag_t>(CSTOPB);
+    // cfmakeraw clears IXON only, so a port arriving with IXOFF set would keep
+    // emitting XOFF toward the MCU.
+    attributes.c_iflag &= ~static_cast<tcflag_t>(IXON | IXOFF | IXANY);
     // VMIN 1 with O_NONBLOCK reports EAGAIN on an empty queue; VMIN 0 returns
     // zero bytes instead, which is indistinguishable from a hangup.
     attributes.c_cc[VMIN] = 1;

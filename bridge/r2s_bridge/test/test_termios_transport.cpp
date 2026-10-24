@@ -4,6 +4,11 @@
 #include <termios.h>
 #include <unistd.h>
 
+#if defined(__linux__)
+#include <linux/serial.h>
+#include <sys/ioctl.h>
+#endif
+
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
@@ -92,14 +97,19 @@ termios AttributesOf(int fd)
 TEST(TermiosTransport, ConfiguresThePortForRawNonBlockingIo)
 {
     Pty pty;
+    termios initial = AttributesOf(pty.slave());
+    initial.c_iflag |= IXOFF | IXANY;
+    initial.c_cflag |= CSTOPB;
+    ASSERT_EQ(tcsetattr(pty.slave(), TCSANOW, &initial), 0);
     TermiosTransport transport(OptionsFor(pty));
 
     const termios attributes = AttributesOf(pty.slave());
     EXPECT_EQ(attributes.c_lflag & ICANON, 0u);
     EXPECT_EQ(attributes.c_lflag & ECHO, 0u);
-    EXPECT_EQ(attributes.c_iflag & IXON, 0u);
+    EXPECT_EQ(attributes.c_iflag & (IXON | IXOFF | IXANY), 0u);
     EXPECT_EQ(attributes.c_iflag & ICRNL, 0u);
     EXPECT_EQ(attributes.c_cflag & CSIZE, CS8);
+    EXPECT_EQ(attributes.c_cflag & CSTOPB, 0u);
     EXPECT_EQ(attributes.c_cc[VMIN], 1);
     EXPECT_EQ(attributes.c_cc[VTIME], 0);
 }
@@ -130,6 +140,9 @@ TEST(TermiosTransport, SetsHupclWhenRequested)
 TEST(TermiosTransport, ClearsHupclWhenDisabled)
 {
     Pty pty;
+    termios initial = AttributesOf(pty.slave());
+    initial.c_cflag |= HUPCL;
+    ASSERT_EQ(tcsetattr(pty.slave(), TCSANOW, &initial), 0);
     TermiosOptions options = OptionsFor(pty);
     options.hupcl = false;
     TermiosTransport transport(options);
@@ -269,6 +282,12 @@ TEST(TermiosTransport, RejectsAPortThatCannotBeOpened)
 TEST(TermiosTransport, KeepsAPortThatRejectsLowLatencyUsable)
 {
     Pty pty;
+#if defined(__linux__)
+    struct serial_struct settings {
+    };
+    ASSERT_NE(::ioctl(pty.slave(), TIOCGSERIAL, &settings), 0)
+        << "this test needs a pty that rejects TIOCGSERIAL";
+#endif
     TermiosOptions options = OptionsFor(pty);
     options.low_latency = true;
     TermiosTransport transport(options);
