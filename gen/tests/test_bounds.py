@@ -114,7 +114,8 @@ def test_a_list_bound_on_a_sequence_that_is_not_of_strings_is_an_error():
         bounds.resolve(repository(), ["sensor_msgs/msg/JointState"], bounds=configured)
 
     assert str(caught.value) == (
-        "sensor_msgs/msg/JointState.position: a list bound is [count, string_bound], which needs a sequence of strings"
+        "sensor_msgs/msg/JointState.position: a list bound is [count, string_bound], "
+        "which needs a sequence of strings; use an integer bound instead"
     )
 
 
