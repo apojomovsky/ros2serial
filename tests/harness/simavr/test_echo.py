@@ -86,9 +86,9 @@ class Harness:
             line = self._read_line(remaining)
             if not line:
                 if self._proc.poll() is None:
-                    raise AssertionError(
-                        f"no pty line from the harness in {START_TIMEOUT:.0f} s:\n" + "".join(self._output)
-                    )
+                    # Alive but silent, or its output already closed: a duration
+                    # in the message would claim a timeout that may not have run.
+                    raise AssertionError("the harness did not announce its pty:\n" + "".join(self._output))
                 raise AssertionError(
                     f"the harness exited with {self._proc.returncode} before the pty was ready:\n"
                     + "".join(self._output)
