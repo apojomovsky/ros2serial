@@ -28,6 +28,12 @@ uint16_t fake_port_tx_len(void);
 uint16_t fake_port_tx_frame_count(void);
 const uint8_t *fake_port_tx_frame(uint16_t index, uint16_t *len);
 
+/* How many r2s_port_write() calls the core made since the reset or the last
+ * fake_port_tx_clear(), and the longest of them. A core that writes in chunks
+ * shows a longest call of its chunk size. */
+uint16_t fake_port_tx_write_calls(void);
+uint16_t fake_port_tx_write_max(void);
+
 /* r2s_port_tick() returns the set value; advance adds to it, wrapping. */
 void fake_port_set_tick(uint32_t tick);
 void fake_port_advance(uint32_t ticks);

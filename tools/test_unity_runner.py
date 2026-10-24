@@ -90,8 +90,33 @@ def test_malformed_vectors_fail_with_the_file_and_case(tmp_path):
 
 def test_unknown_kinds_are_rejected(tmp_path, capsys):
     f = write(tmp_path, "x.yaml", "covers: [FRM-1]\ncases: []\n")
-    assert unity_runner.main(["vectors", "frames", "check.c", str(tmp_path / "out.c"), str(f)]) == 2
+    assert unity_runner.main(["vectors", "bogus", "check.c", str(tmp_path / "out.c"), str(f)]) == 2
     assert "kind" in capsys.readouterr().out
+
+
+FRAME = """name: float32_topic16
+covers: [FRM-1]
+topic_id: 16
+seq: 0
+payload: "00 00 c0 3f"
+frame: "10 00 00 00 c0 3f 1e 49"
+wire: "10 02 01 01 c0 3f 1e 49 05 00"
+"""
+
+
+def test_a_frame_file_is_one_case_named_for_its_file(tmp_path):
+    f = write(tmp_path, "float32_topic16.yaml", FRAME)
+    out = unity_runner.vector_runner("frames", [f])
+    assert "r2s_run_test(test_frames_float32_topic16, " in out
+    assert re.search(r"r2s_vec_check_frames\(&v_float32_topic16\)", out)
+    assert "16u, 0u," in out
+    assert '"' + str(f) + '"' in out and "case 0" not in out
+
+
+def test_a_frame_field_out_of_range_is_rejected(tmp_path):
+    f = write(tmp_path, "bad.yaml", FRAME.replace("topic_id: 16", "topic_id: 256"))
+    with pytest.raises(unity_runner.VectorError, match="bad.yaml: topic_id"):
+        unity_runner.vector_runner("frames", [f])
 
 
 def test_the_cli_writes_the_runner(tmp_path):

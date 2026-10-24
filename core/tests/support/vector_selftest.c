@@ -47,3 +47,10 @@ void r2s_vec_check_varint(const r2s_vec_varint_t *v)
     check_rule(v->where, v->reject);
     check_blob(v->where, v->covers, "encoded", v->encoded, v->encoded_len, v->encoded_hex);
 }
+
+void r2s_vec_check_frames(const r2s_vec_frames_t *v)
+{
+    check_blob(v->where, v->covers, "payload", v->payload, v->payload_len, v->payload_hex);
+    check_blob(v->where, v->covers, "frame", v->frame, v->frame_len, v->frame_hex);
+    check_blob(v->where, v->covers, "wire", v->wire, v->wire_len, v->wire_hex);
+}

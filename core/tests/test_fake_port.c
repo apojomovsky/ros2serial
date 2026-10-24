@@ -115,6 +115,8 @@ void test_fake_port_reset_restores_every_control(void)
     TEST_ASSERT_EQUAL_UINT16(0xFFFF, r2s_port_tx_free());
     TEST_ASSERT_EQUAL_HEX32(0, r2s_port_boot_id());
     TEST_ASSERT_EQUAL_UINT16(0, fake_port_take_overruns());
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_write_calls());
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_write_max());
 }
 
 void test_fake_port_unlimited_tx_free_never_shrinks(void)
@@ -158,6 +160,18 @@ void test_fake_port_tx_clear_starts_a_new_capture(void)
 
     TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_len());
     TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_write_calls());
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_write_max());
+}
+
+void test_fake_port_records_each_write_and_the_longest(void)
+{
+    r2s_port_write((const uint8_t *)"\x11\x22", 2);
+    r2s_port_write((const uint8_t *)"\x33", 1);
+    r2s_port_write((const uint8_t *)"\x44\x55\x66", 3);
+
+    TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_write_calls());
+    TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_write_max());
 }
 
 void test_fake_port_scripts_a_full_exchange_byte_by_byte(void)
