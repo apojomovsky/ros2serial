@@ -58,9 +58,8 @@ void test_tx_zero_bytes_become_code_bytes(void)
     assert_sent(16, 3, payload, sizeof payload);
 }
 
-/* A group of 254 non-zero bytes ends with its own code byte, so the encoder
- * emits FF and then a trailing empty group (COB-3). */
-void test_tx_254_non_zero_bytes_end_in_a_trailing_empty_group(void)
+/* A run of 254 non-zero bytes carries its own group code inside the frame. */
+void test_tx_a_run_of_254_non_zero_bytes_carries_its_group_code(void)
 {
     uint8_t payload[254];
 
@@ -103,6 +102,18 @@ void test_tx_a_blocking_port_never_reports_busy(void)
     send(16, 0, payload, sizeof payload);
 
     assert_sent(16, 0, payload, sizeof payload);
+}
+
+/* Every write carries bytes, even when the frame ends on a chunk boundary. */
+void test_tx_no_write_is_empty(void)
+{
+    const uint8_t payload[] = {0x11, 0x22};
+    uint16_t len;
+
+    send(16, 0, payload, sizeof payload);
+    (void)fake_port_tx(&len);
+    TEST_ASSERT_EQUAL_UINT16((uint16_t)((len + R2S_TX_CHUNK - 1u) / R2S_TX_CHUNK),
+                             fake_port_tx_write_calls());
 }
 
 void test_tx_every_write_is_at_most_one_chunk(void)

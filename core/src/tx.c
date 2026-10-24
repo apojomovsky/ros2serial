@@ -24,8 +24,12 @@ static struct {
 
 static void flush(void)
 {
-    r2s_port_write(tx.chunk, tx.chunk_len);
-    tx.chunk_len = 0u;
+    /* A frame that ends on a chunk boundary leaves the chunk empty, and an
+     * empty write is a call the port does not need. */
+    if (tx.chunk_len > 0u) {
+        r2s_port_write(tx.chunk, tx.chunk_len);
+        tx.chunk_len = 0u;
+    }
 }
 
 static void emit(uint8_t byte)
