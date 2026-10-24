@@ -8,6 +8,7 @@ through that script, so a bare pytest run fails on the missing build.
 import os
 import select
 import subprocess
+import threading
 import time
 
 import pytest
@@ -162,20 +163,23 @@ def test_the_mcu_runs_at_the_requested_frequency(mcu):
 
 
 def test_echo_carries_more_than_the_input_ring():
-    # The ring holds 4095 bytes and the UART FIFO 64, so a longer burst has to
-    # come back paced by the pty rather than dropped. Pacing it from both ends
-    # also keeps the pty's own buffers from filling.
+    # One burst larger than the ring, written while the echo drains: the pty
+    # then holds more than the ring's free space, which is where a chunk-sized
+    # read would drop the remainder. Slicing the write instead would keep the
+    # ring half empty and never reach that path.
     payload = bytes(range(256)) * 20
     with Harness("atmega328p") as harness:
-        with serial.Serial(harness.pty, 115200, timeout=1) as port:
+        with serial.Serial(harness.pty, 115200, timeout=0.2) as port:
             echoed = bytearray()
-            sent = 0
+            writer = threading.Thread(target=port.write, args=(payload,))
+            writer.start()
             deadline = time.monotonic() + 10
-            while time.monotonic() < deadline and (sent < len(payload) or len(echoed) < len(payload)):
-                if sent < len(payload):
-                    sent += port.write(payload[sent : sent + 512])
-                if len(echoed) < len(payload):
-                    echoed += port.read(512)
+            while len(echoed) < len(payload) and time.monotonic() < deadline:
+                # pyserial treats a zero-length read as a disconnect, and a pty
+                # reports readiness that then reads empty, so the fd is read here.
+                if select.select([port.fileno()], [], [], 0.2)[0]:
+                    echoed += os.read(port.fileno(), len(payload) - len(echoed))
+            writer.join(timeout=5)
     assert bytes(echoed) == payload
 
 
