@@ -67,6 +67,10 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_session_without_executor test/test_session_without_executor.cpp)
   target_link_libraries(test_session_without_executor r2s_bridge_test_support)
+
+  # openpty comes from libutil; the pty test uses it instead of a device.
+  ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
+  target_link_libraries(test_termios_transport r2s_bridge_component util)
 endif()
 
 ament_export_targets(export_r2s_bridge HAS_LIBRARY_TARGET)
