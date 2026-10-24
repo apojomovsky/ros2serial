@@ -136,15 +136,21 @@ static void uart_xoff(struct avr_irq_t *irq, uint32_t value, void *param)
 static void read_client(void)
 {
     unsigned char chunk[INPUT_CHUNK];
-    ssize_t count;
-    while ((count = read(harness.master_fd, chunk, sizeof chunk)) > 0) {
+    for (;;) {
+        /* Read only what the ring holds, so the pty keeps the rest and the
+           writer gets backpressure instead of a silent drop. */
+        size_t free_slots = (harness.ring_head + INPUT_RING - harness.ring_tail - 1) % INPUT_RING;
+        if (free_slots == 0) {
+            break;
+        }
+        size_t want = free_slots < sizeof chunk ? free_slots : sizeof chunk;
+        ssize_t count = read(harness.master_fd, chunk, want);
+        if (count <= 0) {
+            break;
+        }
         for (ssize_t i = 0; i < count; i++) {
-            size_t next = (harness.ring_tail + 1) % INPUT_RING;
-            if (next == harness.ring_head) {
-                return; /* Full ring: the pty keeps the rest until the AVR drains it. */
-            }
             harness.ring[harness.ring_tail] = chunk[i];
-            harness.ring_tail = next;
+            harness.ring_tail = (harness.ring_tail + 1) % INPUT_RING;
         }
     }
     flush_input();
@@ -286,8 +292,10 @@ int main(int argc, char **argv)
         fprintf(stderr, "r2s_simavr: unknown mcu %s\n", harness.options.mcu);
         return EXIT_USAGE;
     }
-    harness.avr->frequency = (uint32_t)harness.options.frequency;
     avr_init(harness.avr);
+    /* avr_init resets the clock from the core table, so the flag goes after it
+       or the firmware would run 16 times slower than it was built for. */
+    harness.avr->frequency = (uint32_t)harness.options.frequency;
     avr_load_firmware(harness.avr, &firmware);
 
     if (harness.options.stack_paint) {
@@ -347,8 +355,8 @@ int main(int argc, char **argv)
     }
 
     unsigned long long wall = monotonic_ms() - harness.start_ms;
-    printf("r2s_simavr: stop cycles=%llu simulated_ms=%llu wall_ms=%llu",
-           (unsigned long long)harness.avr->cycle, simulated_ms(&harness), wall);
+    printf("r2s_simavr: stop cycles=%llu simulated_ms=%llu wall_ms=%llu frequency=%u",
+           (unsigned long long)harness.avr->cycle, simulated_ms(&harness), wall, harness.avr->frequency);
     if (harness.options.stack_paint) {
         printf(" stack_peak=%u", stack_peak(&harness));
     }

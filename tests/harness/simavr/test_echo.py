@@ -148,6 +148,38 @@ def test_echo_returns_every_byte_value(mcu):
 
 
 @pytest.mark.parametrize("mcu", sorted(SRAM_BYTES))
+def test_the_mcu_runs_at_the_requested_frequency(mcu):
+    # avr_init resets the clock from the core table, so a harness that sets it
+    # too early runs the firmware 16 times slower than it was built for.
+    harness = Harness(mcu, "--run-ms", "200")
+    try:
+        harness.wait()
+    finally:
+        harness.stop()
+    frequency = harness.summary["frequency"]
+    assert frequency == 16_000_000
+    assert harness.summary["cycles"] * 1000 // frequency == harness.summary["simulated_ms"]
+
+
+def test_echo_carries_more_than_the_input_ring():
+    # The ring holds 4095 bytes and the UART FIFO 64, so a longer burst has to
+    # come back paced by the pty rather than dropped. Pacing it from both ends
+    # also keeps the pty's own buffers from filling.
+    payload = bytes(range(256)) * 20
+    with Harness("atmega328p") as harness:
+        with serial.Serial(harness.pty, 115200, timeout=1) as port:
+            echoed = bytearray()
+            sent = 0
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline and (sent < len(payload) or len(echoed) < len(payload)):
+                if sent < len(payload):
+                    sent += port.write(payload[sent : sent + 512])
+                if len(echoed) < len(payload):
+                    echoed += port.read(512)
+    assert bytes(echoed) == payload
+
+
+@pytest.mark.parametrize("mcu", sorted(SRAM_BYTES))
 def test_stack_paint_tracks_call_depth(mcu):
     harness = Harness(mcu, "--stack-paint", "--run-ms", "300", image="deep")
     try:
