@@ -51,6 +51,8 @@ def test_pip_installs_the_generator_into_a_fresh_venv(tmp_path):
     assert printed.returncode == 0, printed.stderr
     assert f"r2s-gen {__version__}" in printed.stdout
     assert f"protocol version {PROTOCOL_VERSION}" in printed.stdout
+    site_packages = next((venv / "lib").glob("python*/site-packages"))
+    assert (site_packages / "r2s_gen" / "snapshots" / "jazzy" / "sensor_msgs" / "msg" / "Imu.msg").is_file()
 
 
 @pytest.mark.skipif(shutil.which("colcon") is None, reason="colcon is not installed")
@@ -81,6 +83,7 @@ def test_colcon_builds_the_ament_python_package(tmp_path):
     assert (installed / "share" / "r2s_gen" / "package.xml").is_file()
     # The entry script needs the workspace's site-packages, as the ament pythonpath hook sets it.
     site_packages = next((installed / "lib").glob("python*/site-packages"))
+    assert (site_packages / "r2s_gen" / "snapshots" / "jazzy" / "std_msgs" / "msg" / "Header.msg").is_file()
     printed = run(
         [str(installed / "lib" / "r2s_gen" / "r2s-gen"), "version"],
         env=clean_env(PYTHONPATH=str(site_packages)),

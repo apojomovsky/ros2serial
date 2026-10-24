@@ -19,6 +19,7 @@ setup(
     description="The ros2serial code generator",
     license="MIT",
     packages=find_packages(include=["r2s_gen", "r2s_gen.*"]),
+    package_data={"r2s_gen": ["snapshots/README.md", "snapshots/*/*/msg/*.msg"]},
     python_requires=">=3.10",
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/r2s_gen"]),
