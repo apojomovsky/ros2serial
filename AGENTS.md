@@ -13,6 +13,13 @@ ros2serial brings rosserial's experience to ROS 2: publish and subscribe from sm
 3. **Text artifacts at every boundary.** A frame is a hex string, a message is a vector file, a generated file is a golden snapshot. A failure bisects to a boundary before anyone reads code.
 4. **Correct over silent.** Unsupported input fails with a precise message. Never "fix" an error by producing wrong bytes.
 
+## Repository layout
+
+`docs/00-design.md` Part II carries the layout. A directory keeps its `.gitkeep`
+only while it is empty: the pull request that adds its first file deletes it.
+`scripts/check_layout.py` fails on a placeholder left in a directory that holds
+tracked files.
+
 ## Build and toolchain
 
 - Everything runs in the Docker dev image: avr-gcc and avr-libc, arduino-cli with a pinned AVR core, a host gcc of version 10 or newer, ROS Jazzy, simavr, Python tooling. Nothing toolchain-related is installed on the host.

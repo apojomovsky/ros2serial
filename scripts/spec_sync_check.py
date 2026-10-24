@@ -57,7 +57,8 @@ def _changed(root: Path, base: str) -> list[str]:
 def check(root: Path, base: str) -> list[str]:
     changed = _changed(root, base)
     spec_changed = SPEC in changed
-    vectors_changed = any(path.startswith(VECTORS) for path in changed)
+    # A .gitkeep carries no vector, so adding or removing one changes none.
+    vectors_changed = any(path.startswith(VECTORS) and not path.endswith("/.gitkeep") for path in changed)
     problems = []
     if spec_changed and not vectors_changed:
         old = _rules(_show(root, base))
