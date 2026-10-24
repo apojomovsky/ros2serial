@@ -1,0 +1,6 @@
+name: float32_min_normal
+covers: [ENC-3]
+type: std_msgs/msg/Float32
+profile: {narrow_float64: false}
+message: {data: 1.1754943508222875e-38}
+payload: "00 00 80 00"

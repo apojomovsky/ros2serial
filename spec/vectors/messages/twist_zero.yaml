@@ -1,0 +1,8 @@
+name: twist_zero
+covers: [ENC-1, ENC-4]
+type: geometry_msgs/msg/Twist
+profile: {narrow_float64: false}
+message:
+  linear: {x: 0.0, y: 0.0, z: 0.0}
+  angular: {x: 0.0, y: 0.0, z: 0.0}
+payload: "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"

@@ -1,0 +1,8 @@
+name: twist_narrow_exact
+covers: [ENC-1, ENC-10, ENC-11]
+type: geometry_msgs/msg/Twist
+profile: {narrow_float64: true}
+message:
+  linear: {x: 1.5, y: -2.0, z: 0.5}
+  angular: {x: 1.0, y: -0.0, z: 3.0}
+payload: "00 00 c0 3f 00 00 00 c0 00 00 00 3f 00 00 80 3f 00 00 00 80 00 00 40 40"

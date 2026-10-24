@@ -1,0 +1,8 @@
+name: twist_narrow_overflow
+covers: [ENC-1, ENC-10, ENC-11]
+type: geometry_msgs/msg/Twist
+profile: {narrow_float64: true}
+message:
+  linear: {x: 1.0e+300, y: -1.0e+300, z: 1.7976931348623157e+308}
+  angular: {x: -1.7976931348623157e+308, y: 3.4028234663852886e+38, z: .inf}
+payload: "00 00 80 7f 00 00 80 ff 00 00 80 7f 00 00 80 ff ff ff 7f 7f 00 00 80 7f"

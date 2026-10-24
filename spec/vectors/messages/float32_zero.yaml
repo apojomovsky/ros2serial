@@ -1,0 +1,6 @@
+name: float32_zero
+covers: [ENC-3]
+type: std_msgs/msg/Float32
+profile: {narrow_float64: false}
+message: {data: 0.0}
+payload: "00 00 00 00"
