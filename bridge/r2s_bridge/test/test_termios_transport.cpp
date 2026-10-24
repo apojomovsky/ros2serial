@@ -264,16 +264,36 @@ TEST(TermiosTransport, RejectsAPortThatCannotBeOpened)
     }
 }
 
-TEST(TermiosTransport, RequestsLowLatencyOnAPortThatRejectsIt)
+// A pty refuses TIOCGSERIAL, so this covers only that the refused request
+// leaves the port usable; the latency effect itself needs a real adapter.
+TEST(TermiosTransport, KeepsAPortThatRejectsLowLatencyUsable)
 {
     Pty pty;
     TermiosOptions options = OptionsFor(pty);
     options.low_latency = true;
-
     TermiosTransport transport(options);
 
-    std::uint8_t buffer[1]{};
-    EXPECT_EQ(transport.read(buffer, sizeof buffer), (IoResult{0, IoStatus::kWouldBlock}));
+    const std::uint8_t outgoing[] = {0x5a};
+    ASSERT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{1, IoStatus::kOk}));
+
+    std::uint8_t received[1]{};
+    ASSERT_EQ(::read(pty.master(), received, sizeof received), 1);
+    EXPECT_EQ(received[0], 0x5a);
+}
+
+TEST(TermiosTransport, KeepsAPortWithLowLatencyDisabledUsable)
+{
+    Pty pty;
+    TermiosOptions options = OptionsFor(pty);
+    options.low_latency = false;
+    TermiosTransport transport(options);
+
+    const std::uint8_t outgoing[] = {0x5a};
+    ASSERT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{1, IoStatus::kOk}));
+
+    std::uint8_t received[1]{};
+    ASSERT_EQ(::read(pty.master(), received, sizeof received), 1);
+    EXPECT_EQ(received[0], 0x5a);
 }
 
 } // namespace
