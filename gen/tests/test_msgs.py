@@ -69,6 +69,7 @@ def test_every_bundled_distro_resolves_joint_state(distro):
     message = repository.load("sensor_msgs/msg/JointState")
 
     assert [field.name for field in message.fields] == ["header", "name", "position", "velocity", "effort"]
+    assert message.path.parts[-4] == distro
 
 
 def test_the_message_records_the_file_it_came_from(tmp_path):
@@ -208,3 +209,38 @@ def test_a_malformed_line_names_the_file_and_line(tmp_path):
         repository.load("demo_msgs/msg/Sample")
 
     assert str(caught.value) == f"{path}:1: expected a type and a field name; write it as 'float32 value'"
+
+
+@pytest.mark.parametrize(
+    ("declaration", "length"),
+    [
+        ("float64[0] values", "0"),
+        ("float64[-1] values", "-1"),
+        ("float64[<=0] values", "0"),
+        ("string<=0 name", "0"),
+    ],
+)
+def test_a_declared_length_below_one_is_an_error(tmp_path, declaration, length):
+    root = source_tree(tmp_path)
+    path = write_message(root, "demo_msgs/msg/Sample", declaration + "\n")
+    repository = msgs.MessageRepository(msg_paths=[root])
+
+    with pytest.raises(msgs.MessageError) as caught:
+        repository.load("demo_msgs/msg/Sample")
+
+    assert str(caught.value) == f"{path}:1: '{length}' is not a length; write a whole number of at least 1"
+
+
+@pytest.mark.parametrize(("declaration", "name"), [("float32 bad-name", "bad-name"), ("float32 9bad", "9bad")])
+def test_an_invalid_field_name_names_the_file_and_line(tmp_path, declaration, name):
+    root = source_tree(tmp_path)
+    path = write_message(root, "demo_msgs/msg/Sample", declaration + "\n")
+    repository = msgs.MessageRepository(msg_paths=[root])
+
+    with pytest.raises(msgs.MessageError) as caught:
+        repository.load("demo_msgs/msg/Sample")
+
+    assert str(caught.value) == (
+        f"{path}:1: '{name}' is not a field name; "
+        "use lowercase letters, digits and single underscores, starting with a letter"
+    )

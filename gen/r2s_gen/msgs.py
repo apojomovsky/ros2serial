@@ -42,6 +42,7 @@ _TYPE = re.compile(
     r"(?:\[(?P<array>[^\]]*)\])?$"
 )
 _CONSTANT = re.compile(r"^(?P<type>\S+)\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?P<value>.*)$")
+_FIELD_NAME = re.compile(r"^(?!.*__)(?!.*_$)[a-z][a-z0-9_]*$")
 
 
 class MessageError(Exception):
@@ -115,9 +116,12 @@ def _canonical_reference(reference: str, package: str, where: str) -> str:
 
 def _count(text: str, where: str) -> int:
     try:
-        return int(text)
+        value = int(text)
     except ValueError:
-        raise MessageError(where, f"'{text}' is not a length", "write a whole number") from None
+        raise MessageError(where, f"'{text}' is not a length", "write a whole number of at least 1") from None
+    if value < 1:
+        raise MessageError(where, f"'{text}' is not a length", "write a whole number of at least 1")
+    return value
 
 
 def _parse_type(token: str, package: str, where: str) -> dict:
@@ -125,7 +129,7 @@ def _parse_type(token: str, package: str, where: str) -> dict:
     if match is None:
         raise MessageError(where, f"'{token}' is not a type", "write a primitive type or package/Type")
     base = match["base"]
-    string_bound = int(match["string_bound"]) if match["string_bound"] is not None else None
+    string_bound = _count(match["string_bound"], where) if match["string_bound"] is not None else None
     array = match["array"]
     if string_bound is not None and base not in ("string", "wstring"):
         raise MessageError(where, f"'<=' bound on '{base}'", "bound only a string this way")
@@ -176,6 +180,12 @@ def parse_message(text: str, type_name: str, path: Path) -> Message:
             raise MessageError(where, "expected a type and a field name", f"write it as '{line} value'")
         parsed = _parse_type(tokens[0], package, where)
         name = tokens[1]
+        if _FIELD_NAME.fullmatch(name) is None:
+            raise MessageError(
+                where,
+                f"'{name}' is not a field name",
+                "use lowercase letters, digits and single underscores, starting with a letter",
+            )
         if name in names:
             raise MessageError(where, f"'{name}' is declared twice", "rename one of them")
         names.add(name)
