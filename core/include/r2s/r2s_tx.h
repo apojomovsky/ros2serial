@@ -35,15 +35,13 @@ extern "C" {
  * which is what r2s_tx_begin() accepts. */
 uint16_t r2s_tx_wire_bound(uint16_t payload_len);
 
-/* Starts a frame on topic_id with sequence seq, whose payload will be
- * payload_len bytes. It reserves the frame's space from the port first and
- * writes nothing unless it gets all of it, so a publish never blocks and never
- * leaves half a frame on the wire.
- *
- * Returns R2S_OK with the frame started; R2S_ERR_TX_BUSY when the port cannot
- * take the whole frame right now, so the caller may try again later; or
- * R2S_ERR_BOUNDS, writing nothing, when the frame would be longer than
- * R2S_MAX_FRAME (FRM-11) or a frame is already active. */
+/* Starts a frame on topic_id with sequence seq, whose payload is payload_len
+ * bytes. It reserves the whole frame's space from the port first and writes
+ * nothing unless it gets all of it, so a publish never blocks and never leaves
+ * half a frame on the wire. Returns R2S_OK; R2S_ERR_TX_BUSY when the port
+ * cannot take the frame now, so the caller may try later; or R2S_ERR_BOUNDS,
+ * writing nothing, when the frame would be longer than R2S_MAX_FRAME (FRM-11)
+ * or one is already active. */
 r2s_status_t r2s_tx_begin(uint8_t topic_id, uint8_t seq, uint16_t payload_len);
 
 /* Adds one payload byte to the active frame, in order. Returns R2S_OK, or

@@ -5,6 +5,7 @@
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_port.h"
 #include "r2s/r2s_rcobs.h"
+#include "r2s/r2s_tx.h"
 #include "r2s/r2s_varint.h"
 
 int main()
@@ -20,6 +21,9 @@ int main()
         return 1;
     }
     if (r2s_framer_poll(&frame) != 0 || r2s_framer_counters()->rx_frames != 0) {
+        return 1;
+    }
+    if (r2s_tx_wire_bound(0) != 6) {
         return 1;
     }
     r2s_rcobs_encoder_init(&enc);

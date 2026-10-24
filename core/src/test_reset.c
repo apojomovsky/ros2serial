@@ -4,11 +4,13 @@
 #include "r2s/r2s.h"
 
 #include "r2s/r2s_framer.h"
+#include "r2s/r2s_tx.h"
 
 #ifdef R2S_TESTING
 void r2s_test_reset(void)
 {
     r2s_framer_test_reset();
+    r2s_tx_test_reset();
 }
 #else
 /* ISO C needs at least one declaration in a translation unit. */
