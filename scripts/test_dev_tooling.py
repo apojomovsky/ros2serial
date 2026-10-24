@@ -159,6 +159,7 @@ def test_the_suite_refuses_a_second_run_on_the_same_tree(tmp_path):
     tree.mkdir()
     (tree / "scripts").mkdir()
     shutil.copy2(ROOT / "scripts/ci-test.sh", tree / "scripts/ci-test.sh")
+    shutil.copy2(ROOT / "scripts/suite-lock.sh", tree / "scripts/suite-lock.sh")
     lock = tmp_path / "suite.lock"
     env = {**os.environ, "R2S_SUITE_LOCK": str(lock), "R2S_SUITE_LOCK_TREE": str(tree), "LINT": "1"}
     holder = subprocess.Popen(
@@ -176,12 +177,55 @@ def test_the_suite_refuses_a_second_run_on_the_same_tree(tmp_path):
         holder.wait()
 
 
+def test_two_containers_do_not_share_the_lock_of_their_copies(tmp_path):
+    """pytest copies the tree to one path in every container.
+
+    Each container's copy is its own tree, so the first container's suite must
+    not refuse the second's, while a second run of one copy still must.
+    """
+    tree = tmp_path / "tree"
+    (tree / "scripts").mkdir(parents=True)
+    for name in ("ci-test.sh", "suite-lock.sh"):
+        shutil.copy2(ROOT / "scripts" / name, tree / "scripts" / name)
+
+    def env(container):
+        return {
+            **os.environ,
+            "LINT": "1",
+            "R2S_HOST_MOUNT": str(tmp_path / "host"),
+            "TMPDIR": str(tmp_path / container / "tmp"),
+        }
+
+    def lock_of(container):
+        out = run(["bash", str(tree / "scripts" / "suite-lock.sh"), str(tree)], env=env(container))
+        assert out.returncode == 0, out.stderr
+        return out.stdout.strip()
+
+    lock = lock_of("one")
+    holder = subprocess.Popen(
+        ["bash", str(ROOT / "scripts/with-build-lock.sh"), lock, "sleep", "5"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        time.sleep(0.5)
+        same = run(["bash", "scripts/ci-test.sh"], cwd=tree, env=env("one"))
+        assert same.returncode == 75, same.stdout + same.stderr
+        other = run(["bash", "scripts/ci-test.sh"], cwd=tree, env=env("two"))
+        assert other.returncode != 75, other.stdout + other.stderr
+        assert "already running" not in other.stderr
+    finally:
+        holder.kill()
+        holder.wait()
+
+
 def test_the_suite_queues_when_asked(tmp_path):
     """Asked to wait, the second run waits and then runs."""
     tree = tmp_path / "tree"
     tree.mkdir()
     (tree / "scripts").mkdir()
     shutil.copy2(ROOT / "scripts/ci-test.sh", tree / "scripts/ci-test.sh")
+    shutil.copy2(ROOT / "scripts/suite-lock.sh", tree / "scripts/suite-lock.sh")
     lock = tmp_path / "suite.lock"
     env = {
         **os.environ,
@@ -208,7 +252,7 @@ def test_the_suite_runs_without_flock(tmp_path):
     """A host without flock runs the suite unlocked, as the build lock does."""
     stub = tmp_path / "bin"
     stub.mkdir()
-    for name in ("bash", "cat", "dirname", "grep", "mkdir", "mktemp", "rm", "sed", "tail", "tr"):
+    for name in ("bash", "cat", "dirname", "grep", "mkdir", "mktemp", "rm", "sed", "sha256sum", "tail", "tr"):
         found = shutil.which(name)
         if found:
             (stub / name).symlink_to(found)

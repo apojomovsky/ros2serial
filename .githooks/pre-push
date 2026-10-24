@@ -24,7 +24,7 @@ fi
 # The stamp records the tree and the suite definition that already passed, so
 # pushing the same tree twice does not run the suite twice.
 stamp="$(git rev-parse --absolute-git-dir)/r2s-pre-push-stamp"
-key="$(git rev-parse 'HEAD^{tree}') $(cat "$root"/.githooks/* "$root/scripts/ci-test.sh" "$root/Makefile" | sha256sum | cut -c1-16)"
+key="$(git rev-parse 'HEAD^{tree}') $(cat "$root"/.githooks/* "$root/scripts/ci-test.sh" "$root/scripts/suite-lock.sh" "$root/Makefile" | sha256sum | cut -c1-16)"
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$key" ]; then
   echo "pre-push: suite already passed on this tree"
   exit 0

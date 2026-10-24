@@ -16,21 +16,19 @@ unset TEST
 
 # One suite at a time per tree. A second run would wait on the same lock and
 # then test a tree the first run had already changed, so it says so and stops
-# instead. The lock lives in the cache, under the tree's path, so a run of a
-# copy of the tree takes its own lock and does not collide with the run that
-# copied it.
-cache=${R2S_CACHE_DIR:-}
-if [ -z "$cache" ] && [ -n "${R2S_BUILD_DIR:-}" ]; then
-  cache=$(dirname "$R2S_BUILD_DIR")
-fi
-cache=${cache:-$HOME/.cache/ros2serial}
-suite_lock=$cache/$(echo "$root" | tr / -)/suite.lock
+# instead. scripts/suite-lock.sh keys the lock by the tree, so a copy takes its
+# own lock and does not collide with the run that copied it, nor with a copy
+# at the same path in another container.
+suite_lock=$(bash "$root/scripts/suite-lock.sh" "$root") || {
+  echo "the suite lock cannot be located for this tree" >&2
+  exit 1
+}
 if [ -n "${R2S_SUITE_LOCK:-}" ] && [ "${R2S_SUITE_LOCK_TREE:-}" = "$root" ]; then
   suite_lock=$R2S_SUITE_LOCK
 fi
 mkdir -p "$(dirname "$suite_lock")" 2>/dev/null || {
   echo "the suite lock directory cannot be created ($suite_lock)" >&2
-  echo "set R2S_CACHE_DIR to a writable directory" >&2
+  echo "set R2S_CACHE_DIR or TMPDIR to a writable directory" >&2
   exit 1
 }
 # The lock is taken here and held for the whole run, so a second suite run
@@ -48,7 +46,7 @@ if command -v flock >/dev/null 2>&1; then
       exit 1
     }
   elif ! flock -n 9; then
-    echo "the suite is already running for this repository ($suite_lock)" >&2
+    echo "the suite is already running for this repository ($root, lock $suite_lock)" >&2
     echo "wait for it, or set R2S_SUITE_LOCK_WAIT=1 to queue" >&2
     exit 75
   fi
