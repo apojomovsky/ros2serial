@@ -72,7 +72,7 @@ The list is still based on prior knowledge of rosserial; the Phase 0 archaeology
 ```
  build time                                        runtime
  ----------                                        -------
- .msg files ──► r2s-gen (rosidl_parser) ──►  MCU firmware                          host
+ .msg files ──► r2s-gen (.msg parser) ──►  MCU firmware                          host
  r2s.yaml or               │                 ┌──────────────────────┐   serial   ┌─────────────────────┐
  X-macro list              ▼                 │ user code            │  (rCOBS    │ r2s bridge (rclcpp) │
                  C99 headers and sources:    │  └ C++ layer (opt.)  │ ◄─frames─► │  ├ session          │
