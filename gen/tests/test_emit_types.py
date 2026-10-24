@@ -296,3 +296,14 @@ def test_a_wide_bounded_sequence_inside_a_nested_message_takes_even_storage(tmp_
     text = emit_type("test_msgs/msg/Outer", repository=repository)
 
     assert "        test_msgs__msg__Inner data[257];\n        uint16_t size;" in text
+
+
+def test_a_wide_bounded_sequence_of_empty_messages_is_padded(tmp_path):
+    repository = repository_for(
+        tmp_path,
+        {"test_msgs/msg/Inner": "", "test_msgs/msg/Outer": "Inner[<=257] values"},
+    )
+
+    text = emit_type("test_msgs/msg/Outer", repository=repository)
+
+    assert "        test_msgs__msg__Inner data[257];\n        uint8_t _pad;\n        uint16_t size;" in text

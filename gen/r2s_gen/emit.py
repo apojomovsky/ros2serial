@@ -128,7 +128,9 @@ def _element_parity(field: ResolvedField, resolved: Mapping[str, ResolvedMessage
 
 
 def _message_parity(message: ResolvedMessage, resolved: Mapping[str, ResolvedMessage]) -> int:
-    """1 when the packed storage of the message's fields takes an odd number of bytes."""
+    """1 when the emitted struct's packed storage takes an odd number of bytes."""
+    if not message.fields:
+        return 1
     parity = 0
     for field in message.fields:
         parity ^= _storage_parity(field, resolved)
