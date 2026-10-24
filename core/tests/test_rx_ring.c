@@ -115,10 +115,10 @@ void test_rx_ring_partial_read_then_push_keeps_the_order(void)
     TEST_ASSERT_EQUAL_HEX8(0x44, buf[2]);
 }
 
-/* The producer runs while the consumer copies, the ring stays full, and the
- * indices wrap several times. A reader that sampled head into a type wider
- * than a byte could see half of an update on an 8-bit target and lose or
- * repeat a byte here. */
+/* The producer runs while the consumer copies, on a full ring, so every byte
+ * must come back exactly once and in order. The index is one byte because an
+ * 8-bit target cannot read a wider one atomically; the host cannot show that
+ * tear, so it rests on review and the target builds. */
 void test_rx_ring_producer_and_consumer_interleave_on_a_full_ring(void)
 {
     uint16_t pushed = 0;
@@ -144,5 +144,23 @@ void test_rx_ring_wraparound_keeps_the_byte_order(void)
     for (uint16_t i = 0; i < (uint16_t)(4u * R2S_RX_RING_SIZE); i++) {
         r2s_rx_push((uint8_t)i);
         TEST_ASSERT_EQUAL_HEX8((uint8_t)i, read_one());
+    }
+}
+
+/* One read that starts near the end of the buffer and continues past it: the
+ * copy has to wrap where the ring does. */
+void test_rx_ring_read_crosses_the_buffer_end(void)
+{
+    static uint8_t buf[R2S_RX_RING_SIZE];
+
+    for (uint16_t i = 0; i < (uint16_t)(R2S_RX_RING_SIZE - 2u); i++) {
+        r2s_rx_push((uint8_t)i);
+        TEST_ASSERT_EQUAL_HEX8((uint8_t)i, read_one());
+    }
+    push_run(0x40, CAPACITY);
+
+    TEST_ASSERT_EQUAL_UINT16(CAPACITY, r2s_port_read(buf, sizeof buf));
+    for (uint16_t i = 0; i < CAPACITY; i++) {
+        TEST_ASSERT_EQUAL_HEX8((uint8_t)(0x40 + (uint8_t)i), buf[i]);
     }
 }

@@ -35,6 +35,9 @@ uint16_t r2s_port_read(uint8_t *buf, uint16_t max)
     uint8_t tail = rx.tail;
     uint16_t n = 0;
 
+    /* head is read before any slot it publishes: on a core that reorders, a
+     * slot load hoisted above it would return a byte never pushed. */
+    R2S_MEMORY_BARRIER();
     while (n < max && tail != head) {
         buf[n] = rx.buf[tail & MASK];
         n++;
