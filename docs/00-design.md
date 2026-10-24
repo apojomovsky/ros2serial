@@ -370,7 +370,7 @@ Node(
 
 ## Code generator and packaging
 
-`r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required) that reuses `rosidl_parser`. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources, the optional C++ headers, and the compact-mode node map. It also builds the bundled Arduino library (common types with default bounds) that the X-macro path uses. Outputs are laid out to be usable as:
+`r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required). It parses the `.msg` grammar itself, since `rosidl_parser` ships only with a ROS installation and the bundled snapshots make the ROS-free path complete. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources, the optional C++ headers, and the compact-mode node map. It also builds the bundled Arduino library (common types with default bounds) that the X-macro path uses. Outputs are laid out to be usable as:
 
 - an Arduino library (Library Manager), the default path;
 - a PlatformIO library;
