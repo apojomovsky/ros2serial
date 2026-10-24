@@ -45,9 +45,9 @@ class Transport
     // when the read failed.
     virtual IoResult read(std::uint8_t *buffer, std::size_t capacity) = 0;
 
-    // Writes size bytes and returns how many the link accepted, which may be
-    // fewer. kWouldBlock means it accepted nothing this time; the caller keeps
-    // the rest for the next write.
+    // Writes size bytes, where size is at least one, and returns how many the
+    // link accepted, which may be fewer. kWouldBlock means it accepted nothing
+    // this time; the caller keeps the rest for the next write.
     virtual IoResult write(const std::uint8_t *data, std::size_t size) = 0;
 
     // Closes the link. Reads and writes afterwards report kClosed.
