@@ -196,3 +196,103 @@ def test_an_empty_message_gets_the_member_c99_requires(tmp_path):
     )
 
     assert "uint8_t structure_needs_at_least_one_member;" in text
+
+
+def test_a_wide_bounded_sequence_of_odd_storage_is_padded_before_its_count(tmp_path):
+    text = emit_type(
+        "test_msgs/msg/Sequence",
+        repository=repository_for(tmp_path, {"test_msgs/msg/Sequence": "uint8[<=257] values"}),
+    )
+
+    assert (
+        "    struct {\n        uint8_t data[257];\n        uint8_t _pad;\n        uint16_t size;\n    } values;" in text
+    )
+
+
+def test_a_wide_bounded_sequence_of_even_storage_has_no_padding(tmp_path):
+    text = emit_type(
+        "test_msgs/msg/Sequence",
+        repository=repository_for(tmp_path, {"test_msgs/msg/Sequence": "uint8[<=256] values"}),
+    )
+
+    assert "        uint8_t data[256];\n        uint16_t size;" in text
+
+
+def test_a_wide_bounded_sequence_of_odd_nested_messages_is_padded(tmp_path):
+    repository = repository_for(
+        tmp_path,
+        {"test_msgs/msg/Inner": "uint8[3] data", "test_msgs/msg/Outer": "Inner[<=257] values"},
+    )
+
+    text = emit_type("test_msgs/msg/Outer", repository=repository)
+
+    assert "        test_msgs__msg__Inner data[257];\n        uint8_t _pad;\n        uint16_t size;" in text
+
+
+def test_a_wide_bounded_sequence_of_even_nested_messages_has_no_padding(tmp_path):
+    repository = repository_for(
+        tmp_path,
+        {"test_msgs/msg/Inner": "uint16 value", "test_msgs/msg/Outer": "Inner[<=257] values"},
+    )
+
+    text = emit_type("test_msgs/msg/Outer", repository=repository)
+
+    assert "_pad" not in text
+
+
+def test_the_count_of_a_wide_bounded_sequence_is_padded_on_avr(tmp_path):
+    header = emit_type(
+        "test_msgs/msg/Sequence",
+        repository=repository_for(tmp_path, {"test_msgs/msg/Sequence": "uint8[<=257] values"}),
+    )
+    (tmp_path / "r2s_generated.h").write_text(header, encoding="utf-8")
+    source = tmp_path / "offset.c"
+    source.write_text(
+        "#include <stddef.h>\n"
+        '#include "r2s_generated.h"\n'
+        "\n"
+        "typedef char count_at_258["
+        "(offsetof(test_msgs__msg__Sequence, values.size) == 258) ? 1 : -1];\n",
+        encoding="utf-8",
+    )
+
+    compiled = subprocess.run(
+        [
+            "avr-gcc",
+            "-mmcu=atmega328p",
+            "-std=c99",
+            "-pedantic",
+            "-Werror",
+            "-I",
+            str(tmp_path),
+            "-c",
+            str(source),
+            "-o",
+            str(tmp_path / "offset.o"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert compiled.returncode == 0, compiled.stderr
+
+
+def test_a_wide_bounded_sequence_of_odd_strings_is_padded(tmp_path):
+    text = emit_type(
+        "test_msgs/msg/Names",
+        default_string_bound=4,
+        repository=repository_for(tmp_path, {"test_msgs/msg/Names": "string[<=301] names"}),
+    )
+
+    assert "        char data[301][5];\n        uint8_t _pad;\n        uint16_t size;" in text
+
+
+def test_a_wide_bounded_sequence_inside_a_nested_message_takes_even_storage(tmp_path):
+    repository = repository_for(
+        tmp_path,
+        {"test_msgs/msg/Inner": "uint8[<=300] data", "test_msgs/msg/Outer": "Inner[<=257] values"},
+    )
+
+    text = emit_type("test_msgs/msg/Outer", repository=repository)
+
+    assert "        test_msgs__msg__Inner data[257];\n        uint16_t size;" in text

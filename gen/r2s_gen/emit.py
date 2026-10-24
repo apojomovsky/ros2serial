@@ -13,6 +13,8 @@ from r2s_gen.version import __version__
 
 INDENT = "    "
 
+_ONE_BYTE = frozenset({"bool", "byte", "char", "uint8", "int8"})
+
 _SCALARS = {
     "bool": "uint8_t",
     "byte": "uint8_t",
@@ -45,7 +47,7 @@ def emit_types(resolved: Mapping[str, ResolvedMessage]) -> str:
     ]
     for type_name in _ordered(resolved):
         lines.append("")
-        lines.extend(_struct(resolved[type_name]))
+        lines.extend(_struct(resolved[type_name], resolved))
     lines.extend(["", "#endif", ""])
     return "\n".join(lines)
 
@@ -69,11 +71,11 @@ def _ordered(resolved: Mapping[str, ResolvedMessage]) -> list[str]:
     return ordered
 
 
-def _struct(message: ResolvedMessage) -> list[str]:
+def _struct(message: ResolvedMessage, resolved: Mapping[str, ResolvedMessage]) -> list[str]:
     name = _c_name(message.type_name)
     lines = [f"typedef struct {name} {{"]
     for field in message.fields:
-        lines.extend(_field(field))
+        lines.extend(_field(field, resolved))
     if not message.fields:
         # C99 has no empty struct, and an empty .msg is valid.
         lines.append(f"{INDENT}uint8_t structure_needs_at_least_one_member;")
@@ -81,7 +83,7 @@ def _struct(message: ResolvedMessage) -> list[str]:
     return lines
 
 
-def _field(field: ResolvedField) -> list[str]:
+def _field(field: ResolvedField, resolved: Mapping[str, ResolvedMessage]) -> list[str]:
     string = field.type_name == "string"
     elements = _element(field)
     if not field.is_array:
@@ -100,9 +102,48 @@ def _field(field: ResolvedField) -> list[str]:
         lines.append(f"{INDENT * 2}char data[{count}][{field.string_bound + 1}];")
     else:
         lines.append(f"{INDENT * 2}{elements} data[{count}];")
+    # [DSC-20] puts the count at a multiple of its width from the field start,
+    # so a two-byte count needs the byte a weaker-alignment target would omit.
+    if counter == "uint16_t" and _odd_elements(field, resolved):
+        lines.append(f"{INDENT * 2}uint8_t _pad;")
     lines.append(f"{INDENT * 2}{counter} size;")
     lines.append(f"{INDENT}}} {field.name};")
     return lines
+
+
+def _odd_elements(field: ResolvedField, resolved: Mapping[str, ResolvedMessage]) -> bool:
+    """Whether `count` elements of the field's type take an odd number of bytes."""
+    return bool((field.array_bound % 2) and _element_parity(field, resolved))
+
+
+def _element_parity(field: ResolvedField, resolved: Mapping[str, ResolvedMessage]) -> int:
+    """1 when one element of the field's type takes an odd number of bytes."""
+    if field.type_name == "string":
+        return (field.string_bound + 1) % 2
+    if field.type_name in _ONE_BYTE:
+        return 1
+    if field.type_name in _SCALARS:
+        return 0
+    return _message_parity(resolved[field.type_name], resolved)
+
+
+def _message_parity(message: ResolvedMessage, resolved: Mapping[str, ResolvedMessage]) -> int:
+    """1 when the packed storage of the message's fields takes an odd number of bytes."""
+    parity = 0
+    for field in message.fields:
+        parity ^= _storage_parity(field, resolved)
+    return parity
+
+
+def _storage_parity(field: ResolvedField, resolved: Mapping[str, ResolvedMessage]) -> int:
+    elements = _element_parity(field, resolved)
+    if not field.is_array:
+        return elements
+    if not field.is_sequence:
+        return elements if field.array_bound % 2 else 0
+    if field.array_bound > 255:
+        return 0
+    return (elements * field.array_bound + 1) % 2
 
 
 def _element(field: ResolvedField) -> str:
