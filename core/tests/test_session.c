@@ -8,9 +8,7 @@
 #include "fake_port.h"
 #include "frames.h"
 #include "r2s/r2s.h"
-#include "r2s/r2s_crc.h"
 #include "r2s/r2s_framer.h"
-#include "r2s/r2s_rcobs.h"
 #include "r2s/r2s_session.h"
 #include "r2s/r2s_tx.h"
 #include "unity.h"
@@ -19,7 +17,6 @@
 #define WIRE_MAX (R2S_FRAMER_RX_CAPACITY + 1u)
 
 static uint8_t wire[WIRE_MAX];
-static uint8_t decoded[WIRE_MAX];
 
 /* The announced table for the one-topic tests: the shape of
  * spec/vectors/frames/topic.yaml, so the TOPIC the core sends carries the
@@ -110,28 +107,22 @@ static uint16_t hello_payload(uint8_t *out, uint32_t boot_id, uint8_t topic_coun
     return len;
 }
 
-/* Checks the index-th captured frame against its topic, seq and payload, the
- * same comparison the frames conformance test makes. */
+/* Checks the index-th captured frame against the wire form of its topic, seq
+ * and payload, the same comparison the frames conformance test makes. */
 static void assert_tx(uint16_t index, uint8_t topic_id, uint8_t seq, const uint8_t *payload,
                       uint16_t payload_len)
 {
+    static uint8_t expected[WIRE_MAX];
     char label[64];
     uint16_t encoded_len;
     const uint8_t *encoded;
-    uint8_t *start = NULL;
-    uint16_t decoded_len = 0;
+    uint16_t expected_len = r2s_test_frame(expected, topic_id, seq, payload, payload_len);
 
     snprintf(label, sizeof label, "tx frame %u", index);
     encoded = fake_port_tx_frame(index, &encoded_len);
     TEST_ASSERT_NOT_NULL_MESSAGE(encoded, label);
-    TEST_ASSERT_LESS_OR_EQUAL_UINT16_MESSAGE((uint16_t)sizeof decoded, encoded_len, label);
-    memcpy(decoded, encoded, encoded_len);
-    TEST_ASSERT_EQUAL_INT8_MESSAGE(R2S_RCOBS_OK, r2s_rcobs_decode(decoded, encoded_len, &start, &decoded_len),
-                                   label);
-    TEST_ASSERT_EQUAL_HEX8_MESSAGE(topic_id, start[0], label);
-    TEST_ASSERT_EQUAL_HEX8_MESSAGE(seq, start[1], label);
-    TEST_ASSERT_EQUAL_HEX16_MESSAGE(0, r2s_crc16_update_buf(R2S_CRC16_INIT, start, decoded_len), label);
-    R2S_ASSERT_BYTES(payload, payload_len, start + 2u, (uint16_t)(decoded_len - 4u), label);
+    /* The captured frame stops at its delimiter, which the built wire keeps. */
+    R2S_ASSERT_BYTES(expected, (uint16_t)(expected_len - 1u), encoded, encoded_len, label);
 }
 
 /* covers: SES-1, CTL-2, CTL-7, CTL-8, CTL-10, FRM-9 */
@@ -147,7 +138,7 @@ void test_session_boot_sends_hello_and_announces(void)
     assert_tx(0, 0, 0, expected, len);
 }
 
-/* covers: SES-2, SES-6 */
+/* covers: SES-2, SES-6, SES-9, CTL-4 */
 void test_session_a_full_handshake_reaches_connected(void)
 {
     const uint8_t hello_req[] = {0x01u, 0x01u};
@@ -535,6 +526,5 @@ void test_session_without_a_configuration_announces_no_name_and_no_topics(void)
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
     len = hello_payload(expected, 0x44332211u, 0);
     expected[17] = 0x00u;
-    len = 18u;
-    assert_tx(0, 0, 0, expected, len);
+    assert_tx(0, 0, 0, expected, (uint16_t)(len - 4u));
 }
