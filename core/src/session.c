@@ -88,14 +88,17 @@ r2s_status_t r2s_session_configure(const char *node_name, const r2s_session_topi
         return R2S_ERR_BOUNDS;
     }
     /* 17 fixed bytes, the length varint and the name: exact, so names of 128
-     * bytes or more, whose varint takes two bytes, fit exactly. */
-    if (17u + (size_t)varint_len((uint16_t)name_len) + name_len > (size_t)(R2S_MAX_FRAME - R2S_TX_OVERHEAD)) {
+     * bytes or more, whose varint takes two bytes, fit exactly. The sums run
+     * in 32 bits, because on a 16-bit size_t a name near 64 KB would wrap a
+     * size_t sum back under the limit. */
+    if ((uint32_t)17u + (uint32_t)varint_len((uint16_t)name_len) + (uint32_t)name_len >
+        (uint32_t)(R2S_MAX_FRAME - R2S_TX_OVERHEAD)) {
         return R2S_ERR_BOUNDS;
     }
     for (i = 0u; i < topic_count; i++) {
         size_t type_len;
         size_t topic_len;
-        size_t need;
+        uint32_t need;
 
         if (topics[i].type_name == NULL || topics[i].topic_name == NULL) {
             return R2S_ERR_BOUNDS;
@@ -105,9 +108,9 @@ r2s_status_t r2s_session_configure(const char *node_name, const r2s_session_topi
         if (type_len > R2S_VARINT_MAX || topic_len > R2S_VARINT_MAX) {
             return R2S_ERR_BOUNDS;
         }
-        need = 12u + (size_t)varint_len((uint16_t)type_len) + type_len +
-               (size_t)varint_len((uint16_t)topic_len) + topic_len;
-        if (need > (size_t)(R2S_MAX_FRAME - R2S_TX_OVERHEAD)) {
+        need = (uint32_t)12u + (uint32_t)varint_len((uint16_t)type_len) + (uint32_t)type_len +
+               (uint32_t)varint_len((uint16_t)topic_len) + (uint32_t)topic_len;
+        if (need > (uint32_t)(R2S_MAX_FRAME - R2S_TX_OVERHEAD)) {
             return R2S_ERR_BOUNDS;
         }
     }
@@ -186,8 +189,9 @@ static void put_string(const char *text)
 static uint16_t hello_len(void)
 {
     size_t name_len = strlen(session.node_name);
+    uint32_t len = (uint32_t)17u + (uint32_t)varint_len((uint16_t)name_len) + (uint32_t)name_len;
 
-    return (uint16_t)(17u + (size_t)varint_len((uint16_t)name_len) + name_len);
+    return (uint16_t)len;
 }
 
 static void send_hello(void)
