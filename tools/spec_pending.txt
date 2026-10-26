@@ -91,7 +91,6 @@ FRM-3   C8
 FRM-4   C8
 FRM-5   C8
 FRM-9   C8
-FRM-10  H3
 FRM-15  C8
 GEN-1   S4
 HB-2    C8

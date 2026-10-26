@@ -14,6 +14,8 @@ find_package(rclcpp_components REQUIRED)
 
 add_library(r2s_bridge_component SHARED
   src/bridge.cpp
+  src/core_port.cpp
+  src/framing.cpp
   src/termios_transport.cpp)
 target_include_directories(r2s_bridge_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -22,6 +24,25 @@ target_link_libraries(r2s_bridge_component PUBLIC
   rclcpp::rclcpp
   rclcpp_components::component)
 target_compile_options(r2s_bridge_component PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
+# The core's framer, rCOBS and CRC compiled for the host, so the bridge and
+# the MCU share one framing implementation (docs/00-design.md, Code reuse
+# between MCU and host). The host's maximum decoded frame is 65277 and is not
+# announced (FRM-10).
+add_library(r2s_core_framing STATIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src/crc.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src/framer.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src/rcobs.c)
+target_include_directories(r2s_core_framing PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../core/include)
+set_target_properties(r2s_core_framing PROPERTIES
+  C_STANDARD 99
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+  POSITION_INDEPENDENT_CODE ON)
+target_compile_definitions(r2s_core_framing PUBLIC R2S_MAX_FRAME=65277)
+target_compile_options(r2s_core_framing PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(r2s_bridge_component PRIVATE r2s_core_framing)
 rclcpp_components_register_nodes(r2s_bridge_component "r2s_bridge::Bridge")
 
 add_executable(bridge src/main.cpp)

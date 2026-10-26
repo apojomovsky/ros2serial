@@ -905,6 +905,7 @@ The generator computes the REP-2011 RIHS01 hash for each type. Default approach:
 
 - Package `r2s_bridge`, component `r2s_bridge::Bridge`, executable `bridge`.
 - One instance per serial port. `/dev/serial/by-id/...` paths are recommended in the docs.
+- Receive framing is the core's `framer.c`, `rcobs.c` and `crc.c` compiled for the host (FRM-10). The core framer keeps one state per process, so one `FrameReader` is live per process.
 
 ### Parameters
 
