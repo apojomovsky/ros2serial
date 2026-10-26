@@ -390,11 +390,9 @@ def _exact_float32(value) -> bool:
         return True
     try:
         number = float(value)
+        return not math.isnan(number) and struct.unpack("<f", struct.pack("<f", number))[0] == number
     except (OverflowError, ValueError):
         return False
-    if math.isnan(number):
-        return False
-    return struct.unpack("<f", struct.pack("<f", number))[0] == number
 
 
 def check_float32_exact(name: str, data: dict) -> list[str]:
@@ -412,10 +410,11 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
             where = f"{message.type_name}.{field.name}"
             if field.type_name == "float32":
                 elements = expected if field.is_array else [expected]
-                for element in elements:
+                for index, element in enumerate(elements):
                     if isinstance(element, dict) or _exact_float32(element):
                         continue
-                    problems.append(f"{name}/message: {where} must be exactly representable in binary32")
+                    position = f"[{index}]" if field.is_array else ""
+                    problems.append(f"{name}/message: {where}{position} must be exactly representable in binary32")
             elif field.type_name not in msgs.PRIMITIVES:
                 nested = _MESSAGES.load(field.type_name)
                 if field.is_array:
@@ -446,9 +445,12 @@ def check_message(name: str, data: dict) -> list[str]:
         return []
     try:
         exact = check_float32_exact(name, data)
+    except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError):
+        exact = []
+    try:
         payload = messages.encode(_MESSAGES, data["type"], data["message"], narrow=narrow)
     except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError) as e:
-        return [f"{name}/message: the reference does not make it: {e}"]
+        return [*exact, f"{name}/message: the reference does not make it: {e}"]
     problems = exact
     if payload != expected:
         problems.append(f"{name}/payload: not the payload the reference makes")

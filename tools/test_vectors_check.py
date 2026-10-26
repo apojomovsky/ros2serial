@@ -371,7 +371,8 @@ payload: "00 00 c0 3f"
     ],
 )
 def test_a_malformed_message_vector_is_reported_not_a_crash(tmp_path, name, text):
-    problems = vectors_check.check_tree(make_tree(tmp_path, {name: text + "profile: {narrow_float64: false}\n"}))
+    vector = text + 'profile: {narrow_float64: false}\npayload: ""\n'
+    problems = vectors_check.check_tree(make_tree(tmp_path, {name: vector}))
     assert problems, (name, text)
     assert all(problem.startswith(name) for problem in problems), problems
 
@@ -411,5 +412,30 @@ payload: "00 00 c0 3f cd cc 8c 3f"
     monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
     vectors = make_tree(tmp_path / "vectors", files)
     assert vectors_check.check_tree(vectors) == [
-        "messages/nested.yaml/message: demo_msgs/msg/Inner.pair must be exactly representable in binary32"
+        "messages/nested.yaml/message: demo_msgs/msg/Inner.pair[1] must be exactly representable in binary32"
+    ]
+
+
+def test_an_out_of_range_float32_does_not_hide_an_inexact_sibling(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "Two.msg").write_text("float32 first\nfloat32 second\n", encoding="utf-8")
+    files = {
+        "messages/mixed.yaml": """
+name: mixed
+covers: [ENC-3]
+type: demo_msgs/msg/Two
+profile: {narrow_float64: false}
+message: {first: 1.1, second: 1.0e+300}
+payload: ""
+"""
+    }
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    vectors = make_tree(tmp_path / "vectors", files)
+    assert vectors_check.check_tree(vectors) == [
+        "messages/mixed.yaml/message: demo_msgs/msg/Two.first must be exactly representable in binary32",
+        "messages/mixed.yaml/message: demo_msgs/msg/Two.second must be exactly representable in binary32",
+        "messages/mixed.yaml/message: the reference does not make it: "
+        "demo_msgs/msg/Two.second: 1e+300 does not fit binary32",
     ]
