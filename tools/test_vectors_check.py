@@ -322,3 +322,35 @@ wire: "01 00 03 02 00 02 00 00 00 00 00 00 00 00 00 94 35 77 00 00 00 00 00 00"
     }
     problems = vectors_check.check_tree(make_tree(tmp_path, files))
     assert any("nanosec is not below 10^9" in p for p in problems), problems
+
+
+def test_a_message_vector_must_carry_the_payload_the_reference_makes(tmp_path):
+    files = {
+        "messages/wrong.yaml": """
+name: wrong
+covers: [ENC-3]
+type: std_msgs/msg/Float32
+profile: {narrow_float64: false}
+message: {data: 1.5}
+payload: "00 00 00 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert problems == ["messages/wrong.yaml/payload: not the payload the reference makes"]
+
+
+def test_a_message_vector_on_an_unknown_type_is_reported(tmp_path):
+    files = {
+        "messages/unknown.yaml": """
+name: unknown
+covers: [ENC-3]
+type: demo_msgs/msg/Missing
+profile: {narrow_float64: false}
+message: {data: 1.5}
+payload: "00 00 c0 3f"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert len(problems) == 1, problems
+    assert problems[0].startswith("messages/unknown.yaml/message: "), problems
+    assert "no message definition found" in problems[0], problems
