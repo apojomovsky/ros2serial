@@ -17,10 +17,12 @@ FLOORS = {"core": (95.0, 90.0), "bridge": (90.0, 80.0)}
 class Figure:
     line: float
     branch: float
+    lines: int = 0
+    branches: int = 0
 
 
 def _percent(covered: float, total: float) -> float:
-    return 100.0 if total == 0 else 100.0 * covered / total
+    return 0.0 if total == 0 else 100.0 * covered / total
 
 
 def read_summary(path: str) -> Figure:
@@ -28,12 +30,18 @@ def read_summary(path: str) -> Figure:
     return Figure(
         line=_percent(payload["line_covered"], payload["line_total"]),
         branch=_percent(payload["branch_covered"], payload["branch_total"]),
+        lines=payload["line_total"],
+        branches=payload["branch_total"],
     )
 
 
 def check(component: str, head: Figure, base: Figure | None) -> list[str]:
     if component not in FLOORS:
         return [f"coverage: unknown component {component}"]
+    if head.lines == 0 and head.branches == 0:
+        return [f"coverage: {component} measured no lines"]
+    if base is not None and base.lines == 0 and base.branches == 0:
+        return [f"coverage: {component} measured no lines on base"]
     problems = []
     floor_line, floor_branch = FLOORS[component]
     if head.line < floor_line:

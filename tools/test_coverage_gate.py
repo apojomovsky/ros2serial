@@ -55,9 +55,11 @@ def test_an_unknown_component_is_a_problem(tmp_path):
     assert coverage_gate.check_files("gen", head, None) != []
 
 
-def test_empty_totals_count_as_covered(tmp_path):
+def test_an_empty_measurement_is_a_problem(tmp_path):
     head = write_summary(tmp_path / "head.json", 0, 0, 0, 0)
-    assert coverage_gate.check_files("core", head, None) == []
+    assert coverage_gate.check_files("core", head, None) == ["coverage: core measured no lines"]
+    full = write_summary(tmp_path / "full.json", 96, 100, 90, 100)
+    assert coverage_gate.check_files("core", full, head) == ["coverage: core measured no lines on base"]
 
 
 def test_main_reports_one_line_per_failure(tmp_path, capsys):
