@@ -39,6 +39,9 @@ install(DIRECTORY include/ DESTINATION include)
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(class_loader REQUIRED)
+  find_package(yaml-cpp REQUIRED)
+
+  set(R2S_CORE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../core)
 
   # The fakes are shared by every bridge test, so they build once instead of
   # being copied into each test file.
@@ -69,6 +72,14 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_session_without_executor test/test_session_without_executor.cpp)
   target_link_libraries(test_session_without_executor r2s_bridge_test_support)
+
+  # The frame vectors live at the repository root; the framing test feeds each
+  # one byte by byte through the linked core framer and compares the frame.
+  ament_add_gtest(test_framing test/test_framing.cpp)
+  target_include_directories(test_framing PRIVATE ${R2S_CORE_DIR}/include)
+  target_compile_definitions(test_framing PRIVATE
+    R2S_FRAMES_VECTOR_DIR="${R2S_CORE_DIR}/../spec/vectors/frames")
+  target_link_libraries(test_framing r2s_bridge_test_support yaml-cpp::yaml-cpp)
 
   # openpty comes from libutil; the pty test uses it instead of a device.
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
