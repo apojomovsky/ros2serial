@@ -67,7 +67,7 @@ def test_the_suite_does_not_pass_test_down_to_its_own_tests(tmp_path):
     copy = tmp_path / "copy"
     (copy / "scripts").mkdir(parents=True)
     (copy / "tools").mkdir()
-    for name in ("ci-test.sh", "clean-git-env.sh"):
+    for name in ("ci-test.sh", "clean-git-env.sh", "suite-lock.sh"):
         shutil.copy2(ROOT / "scripts" / name, copy / "scripts" / name)
     (copy / "scripts" / "test_probe_env.py").write_text(
         '"""Records the environment the script tests are started with."""\n'
