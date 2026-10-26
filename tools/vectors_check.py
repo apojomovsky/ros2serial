@@ -2,12 +2,13 @@
 """Validate every conformance vector against the JSON Schema of its kind.
 
 The kind is the directory under spec/vectors/; its schema is
-spec/schema/vectors/<kind>.json. A frame vector is also checked against the
-reference codec, so that the bytes it carries are the bytes the reference
-makes. Exits 1 with one line per problem, naming the file and the key path.
+spec/schema/vectors/<kind>.json. Frame and message vectors are also checked
+against the reference codec, so that the bytes they carry are the bytes the
+reference makes. Exits 1 with one line per problem, naming the file and the key path.
 """
 
 import json
+import math
 import struct
 import sys
 from pathlib import Path
@@ -19,7 +20,11 @@ ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS = ROOT / "spec" / "schema" / "vectors"
 sys.path.insert(0, str(ROOT / "gen"))
 
-from r2s_gen.reference import crc, rcobs  # noqa: E402
+from r2s_gen import msgs  # noqa: E402
+from r2s_gen.reference import crc, messages, rcobs  # noqa: E402
+from r2s_gen.reference.errors import Rejected  # noqa: E402
+
+_MESSAGES = msgs.MessageRepository()
 
 
 def _schemas() -> dict[str, jsonschema.protocols.Validator]:
@@ -380,19 +385,94 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
     return problems
 
 
+def _exact_float32(value) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return True
+    try:
+        number = float(value)
+        return not math.isnan(number) and struct.unpack("<f", struct.pack("<f", number))[0] == number
+    except (OverflowError, ValueError):
+        return False
+
+
+def check_float32_exact(name: str, data: dict) -> list[str]:
+    """Report float32 vector numbers which binary32 cannot hold exactly."""
+    try:
+        message = _MESSAGES.load(data["type"])
+        values = data["message"]
+    except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError):
+        return []
+    problems = []
+
+    def visit(message, values) -> None:
+        for field in message.fields:
+            expected = values[field.name]
+            where = f"{message.type_name}.{field.name}"
+            if field.type_name == "float32":
+                elements = expected if field.is_array else [expected]
+                for index, element in enumerate(elements):
+                    if isinstance(element, dict) or _exact_float32(element):
+                        continue
+                    position = f"[{index}]" if field.is_array else ""
+                    problems.append(f"{name}/message: {where}{position} must be exactly representable in binary32")
+            elif field.type_name not in msgs.PRIMITIVES:
+                nested = _MESSAGES.load(field.type_name)
+                if field.is_array:
+                    for item in expected:
+                        visit(nested, item)
+                else:
+                    visit(nested, expected)
+
+    try:
+        visit(message, values)
+    except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError):
+        return []
+    return problems
+
+
+def check_message(name: str, data: dict) -> list[str]:
+    """Check a message vector against the reference codec.
+
+    The payload must be the one the reference makes from the vector's message,
+    so a vector cannot drift from the implementation that generates them.
+    """
+    try:
+        expected = bytes.fromhex(data["payload"])
+        narrow = data["profile"]["narrow_float64"]
+    except (KeyError, TypeError, ValueError):
+        # The schema reports a field that is missing or out of range, so there
+        # is nothing to add here.
+        return []
+    try:
+        exact = check_float32_exact(name, data)
+    except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError):
+        exact = []
+    try:
+        payload = messages.encode(_MESSAGES, data["type"], data["message"], narrow=narrow)
+    except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError) as e:
+        return [*exact, f"{name}/message: the reference does not make it: {e}"]
+    problems = exact
+    if payload != expected:
+        problems.append(f"{name}/payload: not the payload the reference makes")
+    return problems
+
+
 def check_tree(vectors: Path) -> list[str]:
     validators = _schemas()
     problems = []
     for path in sorted(p for p in vectors.rglob("*") if p.is_file() and p.name != ".gitkeep"):
         name = path.relative_to(vectors).as_posix()
         problems += check_file(path, name, validators)
-        if name.startswith("frames/") and path.suffix == ".yaml":
+        if name.startswith(("frames/", "messages/")) and path.suffix == ".yaml":
             try:
                 data = yaml.safe_load(path.read_text())
             except yaml.YAMLError:
                 continue
             if isinstance(data, dict):
-                problems += check_frame(name, data)
+                if name.startswith("frames/"):
+                    problems += check_frame(name, data)
+                else:
+                    problems += check_message(name, data)
     return problems
 
 
