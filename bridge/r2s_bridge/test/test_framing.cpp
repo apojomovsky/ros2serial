@@ -46,12 +46,12 @@ std::vector<std::uint8_t> bytes_of(const std::string &hex)
 }
 
 // The encoded form of a decoded_size-byte frame (topic_id 0x10, seq 0, the
-// rest 0xAA but for the CRC), built with the core's encoder and check and
+// rest fill but for the CRC), built with the core's encoder and check and
 // ended by the framer's delimiter. The core's vectors already pin both, so
 // this helper only sizes the frames for the limit tests below.
-std::vector<std::uint8_t> wire_of(std::size_t decoded_size)
+std::vector<std::uint8_t> wire_of(std::size_t decoded_size, std::uint8_t fill = 0xAAu)
 {
-    std::vector<std::uint8_t> decoded(decoded_size, 0xAAu);
+    std::vector<std::uint8_t> decoded(decoded_size, fill);
     decoded[0u] = 0x10u;
     decoded[1u] = 0x00u;
     const std::uint16_t crc = r2s_crc16_update_buf(R2S_CRC16_INIT, decoded.data(), decoded_size - 2u);
@@ -151,7 +151,10 @@ TEST(FrameReader, AcceptsADecodedFrameAtTheHostMaximum)
 
 TEST(FrameReader, DropsADecodedFrameOneByteOverTheHostMaximum)
 {
-    const std::vector<std::uint8_t> wire = wire_of(kHostMaxFrame + 1u);
+    // Zero fill keeps the encoding inside the buffer bound, so the decoded
+    // limit is the rule that drops this frame, not the overflow below it.
+    const std::vector<std::uint8_t> wire = wire_of(kHostMaxFrame + 1u, 0x00u);
+    EXPECT_LE(wire.size(), 65536u);
 
     FakeTransport transport;
     ManualClock clock;
