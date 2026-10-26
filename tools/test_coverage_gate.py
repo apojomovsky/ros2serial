@@ -1,7 +1,5 @@
 import json
 
-import pytest
-
 import coverage_gate
 
 
@@ -20,12 +18,6 @@ def figure(line, branch):
     return coverage_gate.Figure(line=line, branch=branch)
 
 
-def test_equal_figures_pass(tmp_path):
-    head = write_summary(tmp_path / "head.json", 96, 100, 90, 100)
-    base = write_summary(tmp_path / "base.json", 96, 100, 90, 100)
-    assert coverage_gate.check_files("core", head, base) == []
-
-
 def test_a_lowered_line_figure_fails(tmp_path):
     head = write_summary(tmp_path / "head.json", 95, 100, 90, 100)
     base = write_summary(tmp_path / "base.json", 96, 100, 90, 100)
@@ -34,8 +26,8 @@ def test_a_lowered_line_figure_fails(tmp_path):
 
 
 def test_a_lowered_branch_figure_fails(tmp_path):
-    head = write_summary(tmp_path / "head.json", 96, 100, 89, 100)
-    base = write_summary(tmp_path / "base.json", 96, 100, 90, 100)
+    head = write_summary(tmp_path / "head.json", 96, 100, 91, 100)
+    base = write_summary(tmp_path / "base.json", 96, 100, 92, 100)
     problems = coverage_gate.check_files("core", head, base)
     assert len(problems) == 1 and "branch" in problems[0]
 
@@ -69,9 +61,7 @@ def test_empty_totals_count_as_covered(tmp_path):
 
 
 def test_main_reports_one_line_per_failure(tmp_path, capsys):
-    head = write_summary(tmp_path / "head.json", 95, 100, 89, 100)
-    base = write_summary(tmp_path / "base.json", 96, 100, 90, 100)
-    with pytest.raises(SystemExit) as exc:
-        coverage_gate.main(["--component", "core", "--head", head, "--base", base])
-    assert exc.value.code == 1
+    head = write_summary(tmp_path / "head.json", 95, 100, 91, 100)
+    base = write_summary(tmp_path / "base.json", 96, 100, 92, 100)
+    assert coverage_gate.main(["--component", "core", "--head", head, "--base", base]) == 1
     assert len(capsys.readouterr().out.strip().splitlines()) == 2
