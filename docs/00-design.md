@@ -846,7 +846,7 @@ void r2s_on_<name>(const <Type> *msg);               /* subscribed topics: proto
 | `float64` | `double` (32 bits on default avr-gcc, epic-cc and common PIC toolchains, where the topic is narrow) |
 | `string<=N` | `char name[N + 1]`, NUL-terminated |
 | `T[N]` | `T name[N]` |
-| `T[<=N]` | `struct { T data[N]; uint8_t size; }` (`uint16_t size` if N > 255); the elements come first, and the count member follows at a distance rounded up to a multiple of its width |
+| `T[<=N]` | `struct { T data[N]; uint8_t size; }` (`uint16_t size` if N > 255); the elements come first, and the count member follows at a distance rounded up to a multiple of its alignment on the build's target, which the generated header asserts at compile time |
 | Nested message | Nested struct |
 
 ## Code generator specification
