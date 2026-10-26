@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build and test every bridge package in the ROS environment the caller runs
-# in: the dev image locally, the ros:<distro>-ros-base container in CI. The
+# in: the dev image locally, the pinned distro container in CI. The
 # workspace lives under the shared build directory, outside the checkout.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
