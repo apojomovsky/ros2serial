@@ -134,7 +134,7 @@ TEST(FrameReader, ReadsTheTickWhenTheDelimiterArrives)
 TEST(FrameReader, AcceptsADecodedFrameAtTheHostMaximum)
 {
     const std::vector<std::uint8_t> wire = wire_of(kHostMaxFrame);
-    EXPECT_LE(wire.size(), 65536u);
+    EXPECT_LE(wire.size(), 65535u);
 
     FakeTransport transport;
     ManualClock clock;
@@ -154,7 +154,7 @@ TEST(FrameReader, DropsADecodedFrameOneByteOverTheHostMaximum)
     // Zero fill keeps the encoding inside the buffer bound, so the decoded
     // limit is the rule that drops this frame, not the overflow below it.
     const std::vector<std::uint8_t> wire = wire_of(kHostMaxFrame + 1u, 0x00u);
-    EXPECT_LE(wire.size(), 65536u);
+    EXPECT_LE(wire.size(), 65535u);
 
     FakeTransport transport;
     ManualClock clock;
