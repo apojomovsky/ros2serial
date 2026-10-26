@@ -11,6 +11,7 @@
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_session.h"
 #include "r2s/r2s_tx.h"
+#include "r2s/r2s_varint.h"
 #include "unity.h"
 
 /* One frame at the encoded limit, plus its delimiter. */
@@ -82,6 +83,8 @@ static uint16_t hello_payload(uint8_t *out, uint32_t boot_id, uint8_t topic_coun
 {
     const char *name = "node";
     size_t name_len = strlen(name);
+    uint8_t varint[R2S_VARINT_MAX_BYTES];
+    uint8_t varint_len = r2s_varint_encode((uint16_t)name_len, varint);
     uint16_t len;
 
     out[0] = 0x02u;
@@ -101,9 +104,9 @@ static uint16_t hello_payload(uint8_t *out, uint32_t boot_id, uint8_t topic_coun
     out[14] = (uint8_t)((R2S_TICK_HZ >> 24u) & 0xFFu);
     out[15] = EXPECTED_FEATURES;
     out[16] = topic_count;
-    out[17] = (uint8_t)(name_len);
-    memcpy(out + 18u, name, name_len);
-    len = (uint16_t)(18u + name_len);
+    memcpy(out + 17u, varint, varint_len);
+    memcpy(out + 17u + varint_len, name, name_len);
+    len = (uint16_t)(17u + varint_len + name_len);
     return len;
 }
 
@@ -136,6 +139,77 @@ void test_session_boot_sends_hello_and_announces(void)
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
     len = hello_payload(expected, 0x44332211u, 1);
     assert_tx(0, 0, 0, expected, len);
+}
+
+/* covers: CTL-16 */
+void test_session_names_of_128_bytes_or_more_travel_whole(void)
+{
+    static char big_node[201];
+    static char big_type[201];
+    static char big_topic[201];
+    static uint8_t expected[560];
+    static r2s_session_topic_t big[1];
+    const uint8_t hello_req[] = {0x01u, 0x01u};
+    const uint8_t topic_req[] = {0x03u, 0x00u};
+    const uint8_t hash[8] = {0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u};
+    uint8_t *end = expected;
+    uint16_t hello_len;
+    uint16_t topic_len;
+
+    memset(big_node, 'n', sizeof big_node - 1u);
+    memset(big_type, 't', sizeof big_type - 1u);
+    memset(big_topic, 'p', sizeof big_topic - 1u);
+    big[0].topic_id = 0x10u;
+    big[0].flags = 0x02u;
+    memcpy(big[0].type_hash, hash, sizeof hash);
+    big[0].type_name = big_type;
+    big[0].topic_name = big_topic;
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure(big_node, big, 1));
+    fake_port_set_boot_id(0x44332211u);
+    r2s_init();
+
+    /* The HELLO carries the 200-byte name behind a two-byte varint. */
+    *end++ = 0x02u;
+    *end++ = R2S_PROTOCOL_VERSION;
+    *end++ = 0x00u;
+    *end++ = 0x11u;
+    *end++ = 0x22u;
+    *end++ = 0x33u;
+    *end++ = 0x44u;
+    *end++ = (uint8_t)(R2S_MAX_FRAME & 0xFFu);
+    *end++ = (uint8_t)((R2S_MAX_FRAME >> 8u) & 0xFFu);
+    *end++ = (uint8_t)(R2S_FRAMER_RX_CAPACITY & 0xFFu);
+    *end++ = (uint8_t)((R2S_FRAMER_RX_CAPACITY >> 8u) & 0xFFu);
+    *end++ = (uint8_t)(R2S_TICK_HZ & 0xFFu);
+    *end++ = (uint8_t)((R2S_TICK_HZ >> 8u) & 0xFFu);
+    *end++ = (uint8_t)((R2S_TICK_HZ >> 16u) & 0xFFu);
+    *end++ = (uint8_t)((R2S_TICK_HZ >> 24u) & 0xFFu);
+    *end++ = EXPECTED_FEATURES;
+    *end++ = 0x01u;
+    end += r2s_varint_encode(200u, end);
+    memcpy(end, big_node, 200u);
+    end += 200u;
+    hello_len = (uint16_t)(end - expected);
+    assert_tx(0, 0, 0, expected, hello_len);
+
+    /* The TOPIC carries both 200-byte names the same way. */
+    feed_host(0, 0, hello_req, sizeof hello_req);
+    end = expected;
+    *end++ = 0x04u;
+    *end++ = 0x00u;
+    *end++ = 0x10u;
+    *end++ = 0x02u;
+    memcpy(end, hash, sizeof hash);
+    end += sizeof hash;
+    end += r2s_varint_encode(200u, end);
+    memcpy(end, big_type, 200u);
+    end += 200u;
+    end += r2s_varint_encode(200u, end);
+    memcpy(end, big_topic, 200u);
+    end += 200u;
+    topic_len = (uint16_t)(end - expected);
+    feed_host(0, 1, topic_req, sizeof topic_req);
+    assert_tx(2, 0, 2, expected, topic_len);
 }
 
 /* covers: SES-2, SES-6, SES-9, CTL-4 */
@@ -396,21 +470,20 @@ void test_session_sequence_numbers_increment_and_restart_after_each_handshake(vo
     assert_tx(6, 4, 0, heartbeat_next, sizeof heartbeat_next);
 }
 
-/* covers: SES-4 */
-void test_session_announcing_reports_not_connected(void)
+/* READY is the only way out of ANNOUNCING; the publish gate reads
+ * r2s_connected() once the codec lands it. */
+void test_session_announcing_holds_until_ready(void)
 {
     const uint8_t topic_req[] = {0x03u, 0x00u};
 
     configure(one_topic, 1, 0x44332211u);
-    /* No publish path exists yet; the state it would gate on stays clear
-     * until READY, and the codec will return R2S_ERR_NOT_CONNECTED on it. */
     TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
     feed_host(0, 0, topic_req, sizeof topic_req);
     TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
     TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
 }
 
-/* covers: FRM-15 */
+/* A sequence gap is accepted, not dropped, and leaves the link alone. */
 void test_session_user_frames_with_a_sequence_gap_do_not_disturb_the_link(void)
 {
     const uint8_t hello_req[] = {0x01u, 0x01u};

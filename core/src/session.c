@@ -58,7 +58,7 @@ static struct {
     uint32_t last_hb_tick;
     uint32_t last_nack_tick;
     uint8_t heard;
-} session;
+} session = {.node_name = ""};
 
 static uint32_t ms_to_ticks(uint32_t ms)
 {
@@ -84,7 +84,12 @@ r2s_status_t r2s_session_configure(const char *node_name, const r2s_session_topi
         return R2S_ERR_BOUNDS;
     }
     name_len = strlen(node_name);
-    if (name_len > R2S_VARINT_MAX || name_len > (size_t)(R2S_MAX_FRAME - R2S_TX_OVERHEAD - 18u)) {
+    if (name_len > R2S_VARINT_MAX) {
+        return R2S_ERR_BOUNDS;
+    }
+    /* 17 fixed bytes, the length varint and the name: exact, so names of 128
+     * bytes or more, whose varint takes two bytes, fit exactly. */
+    if (17u + (size_t)varint_len((uint16_t)name_len) + name_len > (size_t)(R2S_MAX_FRAME - R2S_TX_OVERHEAD)) {
         return R2S_ERR_BOUNDS;
     }
     for (i = 0u; i < topic_count; i++) {
@@ -176,11 +181,13 @@ static void put_string(const char *text)
     }
 }
 
-/* The HELLO payload is 17 fixed bytes, a varint and the node name, so a
- * configured name always fits: configure() checked it against R2S_MAX_FRAME. */
+/* The HELLO payload is 17 fixed bytes, the name length varint and the name.
+ * configure() bounds the name, so the casts cannot truncate. */
 static uint16_t hello_len(void)
 {
-    return (uint16_t)(18u + strlen(session.node_name));
+    size_t name_len = strlen(session.node_name);
+
+    return (uint16_t)(17u + (size_t)varint_len((uint16_t)name_len) + name_len);
 }
 
 static void send_hello(void)
