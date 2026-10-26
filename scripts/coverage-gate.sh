@@ -32,8 +32,10 @@ fi
 measure_core() {
   local tree=$1 build=$2 out=$3
   R2S_BUILD_DIR=$build bash "$tree/scripts/core-test.sh" coverage >&2 || return 1
-  gcovr --root "$tree" --filter 'core/src/' --object-directory "$build/core/coverage" \
-    --exclude-unreachable-branches --json-summary -o "$out" --print-summary "$build/core/coverage" >&2 || return 1
+  # gcov resolves the relative paths CMake records against the process
+  # directory, so this runs from the measured tree as core-test.sh does.
+  ( cd "$tree" && gcovr --root "$tree" --filter 'core/src/' --object-directory "$build/core/coverage" \
+    --exclude-unreachable-branches --json-summary -o "$out" --print-summary "$build/core/coverage" >&2 ) || return 1
 }
 
 measure_bridge() {
@@ -66,11 +68,12 @@ measure_bridge() {
   # CMake's compiler probes leave stubs gcov cannot resolve, and gcovr reads
   # them before filtering. They are build-system internals, not bridge code.
   find "$workspace/build" -type d -name 'CompilerId*' -prune -exec rm -rf {} + >&2 || return 1
-  gcovr --root "$tree" --filter 'bridge/r2s_bridge/(src|include)/' \
+  # Same process-directory rule as above: run from the measured tree.
+  ( cd "$tree" && gcovr --root "$tree" --filter 'bridge/r2s_bridge/(src|include)/' \
     --exclude '.*/src/bridge\.cpp' --exclude '.*/src/main\.cpp' \
     --exclude '.*/include/r2s_bridge/bridge\.hpp' --exclude '.*/CMakeFiles/.*' \
     --object-directory "$workspace/build" --exclude-unreachable-branches \
-    --json-summary -o "$out" --print-summary "$workspace/build" >&2 || return 1
+    --json-summary -o "$out" --print-summary "$workspace/build" >&2 ) || return 1
 }
 
 gate_component() {
