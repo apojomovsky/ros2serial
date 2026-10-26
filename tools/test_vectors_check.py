@@ -439,3 +439,27 @@ payload: ""
         "messages/mixed.yaml/message: the reference does not make it: "
         "demo_msgs/msg/Two.second: 1e+300 does not fit binary32",
     ]
+
+
+def test_a_cyclic_alias_in_a_message_is_reported_not_a_crash(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "A.msg").write_text("B b\n", encoding="utf-8")
+    (definitions / "B.msg").write_text("A a\n", encoding="utf-8")
+    files = {
+        "messages/cycle.yaml": """
+name: cycle
+covers: [ENC-3]
+type: demo_msgs/msg/A
+profile: {narrow_float64: false}
+message: &x
+  b: {a: *x}
+payload: ""
+"""
+    }
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    vectors = make_tree(tmp_path / "vectors", files)
+    problems = vectors_check.check_tree(vectors)
+    assert problems, "a cyclic alias must be reported, not crash"
+    assert all(problem.startswith("messages/cycle.yaml") for problem in problems), problems
