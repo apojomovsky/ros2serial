@@ -1,6 +1,7 @@
 """The `vectors` subcommand: payload hex from the reference codec, reproducing the hand vectors."""
 
 import re
+import sys
 
 import pytest
 import yaml
@@ -135,3 +136,11 @@ def test_a_missing_message_file_names_the_path(capsys, tmp_path):
         f"r2s-gen: error: {missing}: cannot read the message file "
         f"([Errno 2] No such file or directory: '{missing}'); check the path\n"
     )
+
+
+def test_without_pyyaml_names_the_missing_dependency(capsys, monkeypatch):
+    monkeypatch.setitem(sys.modules, "yaml", None)
+    code, out, err = run(capsys, "--type", "std_msgs/msg/Float32", "--message", "{data: 1.5}")
+    assert code == 1
+    assert out == ""
+    assert err == "r2s-gen: error: vectors needs PyYAML; install it with pip install pyyaml\n"

@@ -7,6 +7,7 @@ this module is the shell every one of them hangs off.
 import argparse
 import sys
 
+from r2s_gen import vectors
 from r2s_gen.version import PROTOCOL_VERSION, __version__
 
 
@@ -25,6 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True, metavar="command")
     version = subparsers.add_parser("version", help="print the generator version and the protocol version")
     version.set_defaults(run=_print_version)
+    vectors.add_parser(subparsers)
     return parser
 
 
