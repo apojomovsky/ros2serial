@@ -1,0 +1,6 @@
+name: float32_positive_infinity
+covers: [ENC-3]
+type: std_msgs/msg/Float32
+profile: {narrow_float64: false}
+message: {data: .inf}
+payload: "00 00 80 7f"

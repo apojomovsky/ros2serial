@@ -1,0 +1,6 @@
+name: float32_nan_quiet
+covers: [ENC-3]
+type: std_msgs/msg/Float32
+profile: {narrow_float64: false}
+message: {data: {bits: "7fc00001"}}
+payload: "01 00 c0 7f"

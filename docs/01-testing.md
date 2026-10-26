@@ -174,6 +174,7 @@ cases:
 ```
 
 - The first message vectors (Float32, Twist) are computed by hand and reviewed. The Python reference must reproduce them before it generates any further vector.
+- A message vector writes a float value as a YAML number, or as `{bits: "<hex>"}`, the IEEE 754 bit pattern most significant bit first: 8 hex digits in a `float32` field, 16 in a `float64` one. Bits are the only way to write a NaN payload. A number in a `float32` field must be exactly representable in binary32, and one in a `float64` field is the binary64 value its decimal rounds to. YAML 1.1 reads a number without a decimal point or a signed exponent, such as `1e300`, as a string, so a number here carries both (`1.0e+300`). A narrow vector states binary64 values and its payload holds the binary32 that [ENC-11] makes; it never carries a NaN, because the rule says only that a NaN stays a NaN and IEEE 754 leaves its payload to the implementation, so a test asserts the predicate instead.
 - Session vectors (handshake transcripts as ordered lists of host and MCU frames) and time vectors (tick, correction and expected `r2s_now()` results, including wraparound and maximum drift) are produced by the reference, reviewed by hand once, then frozen.
 - Changing a frozen vector is a breaking wire change: it needs the `!` marker and a protocol version decision.
 - `tools/vectors_check.py` validates every file against its schema.
