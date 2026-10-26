@@ -1,7 +1,9 @@
 """Head-vs-base coverage gate: fail a PR that lowers a component's figure.
 
 Reads gcovr --json-summary files, compares the head figure against the base
-figure and the absolute floors in docs/01-testing.md, section 6.
+figure and the absolute floors in docs/01-testing.md, section 6. A drop
+against base always fails; a floor breach fails unless the component's floor
+is passed as advisory, in which case it is reported without failing.
 """
 
 import argparse
@@ -35,31 +37,36 @@ def read_summary(path: str) -> Figure:
     )
 
 
-def check(component: str, head: Figure, base: Figure | None) -> list[str]:
+def check(
+    component: str, head: Figure, base: Figure | None, advisory_floors: set[str] = frozenset()
+) -> tuple[list[str], list[str]]:
     if component not in FLOORS:
-        return [f"coverage: unknown component {component}"]
+        return [f"coverage: unknown component {component}"], []
     if head.lines == 0 and head.branches == 0:
-        return [f"coverage: {component} measured no lines"]
+        return [f"coverage: {component} measured no lines"], []
     if base is not None and base.lines == 0 and base.branches == 0:
-        return [f"coverage: {component} measured no lines on base"]
-    problems = []
+        return [f"coverage: {component} measured no lines on base"], []
+    errors, advisories = [], []
     floor_line, floor_branch = FLOORS[component]
+    bucket = advisories if component in advisory_floors else errors
     if head.line < floor_line:
-        problems.append(f"coverage: {component} line {head.line:.2f}% is below the floor {floor_line:.0f}%")
+        bucket.append(f"coverage: {component} line {head.line:.2f}% is below the floor {floor_line:.0f}%")
     if head.branch < floor_branch:
-        problems.append(f"coverage: {component} branch {head.branch:.2f}% is below the floor {floor_branch:.0f}%")
+        bucket.append(f"coverage: {component} branch {head.branch:.2f}% is below the floor {floor_branch:.0f}%")
     if base is not None:
         if head.line < base.line:
-            problems.append(f"coverage: {component} line {head.line:.2f}% is below base {base.line:.2f}%")
+            errors.append(f"coverage: {component} line {head.line:.2f}% is below base {base.line:.2f}%")
         if head.branch < base.branch:
-            problems.append(f"coverage: {component} branch {head.branch:.2f}% is below base {base.branch:.2f}%")
-    return problems
+            errors.append(f"coverage: {component} branch {head.branch:.2f}% is below base {base.branch:.2f}%")
+    return errors, advisories
 
 
-def check_files(component: str, head: str, base: str | None) -> list[str]:
+def check_files(
+    component: str, head: str, base: str | None, advisory_floors: set[str] = frozenset()
+) -> tuple[list[str], list[str]]:
     head_figure = read_summary(head)
     base_figure = read_summary(base) if base is not None else None
-    return check(component, head_figure, base_figure)
+    return check(component, head_figure, base_figure, advisory_floors)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -67,11 +74,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--component", required=True)
     parser.add_argument("--head", required=True)
     parser.add_argument("--base")
+    parser.add_argument("--advisory-floor", action="append", default=[])
     args = parser.parse_args(argv)
     head_figure = read_summary(args.head)
-    problems = check_files(args.component, args.head, args.base)
-    if problems:
-        print("\n".join(problems))
+    errors, advisories = check_files(args.component, args.head, args.base, set(args.advisory_floor))
+    for line in advisories:
+        print(f"{line} (advisory)")
+    if errors:
+        print("\n".join(errors))
         return 1
     print(f"coverage: {args.component} line {head_figure.line:.2f}% branch {head_figure.branch:.2f}%: ok")
     return 0

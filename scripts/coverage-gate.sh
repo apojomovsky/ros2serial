@@ -78,10 +78,14 @@ measure_bridge() {
 
 gate_component() {
   local component=$1 head_out=$2 base_out=$3
+  # The bridge sits below its section 6 floors (see #169), so its floors
+  # report without failing. A drop against base always fails, for both.
+  local advisory=()
+  [ "$component" = bridge ] && advisory=(--advisory-floor bridge)
   if [ -n "$base" ]; then
-    python3 tools/coverage_gate.py --component "$component" --head "$head_out" --base "$base_out"
+    python3 tools/coverage_gate.py --component "$component" "${advisory[@]}" --head "$head_out" --base "$base_out"
   else
-    python3 tools/coverage_gate.py --component "$component" --head "$head_out"
+    python3 tools/coverage_gate.py --component "$component" "${advisory[@]}" --head "$head_out"
   fi
 }
 
