@@ -72,6 +72,11 @@ void r2s_framer_release(void);
  * reads them for the heartbeat. */
 const r2s_framer_counters_t *r2s_framer_counters(void);
 
+/* Counts a frame the session refused ([SYS-5]): the framer accepted it, but
+ * the session took no other action on it. The heartbeat reports it in
+ * dropped_frames. */
+void r2s_framer_count_refused(void);
+
 #ifdef __cplusplus
 }
 #endif
