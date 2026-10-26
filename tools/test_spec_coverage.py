@@ -162,6 +162,17 @@ def test_bridge_test_packages_are_scanned(tmp_path):
     assert problems(root) == []
 
 
+def test_the_bridge_package_tests_are_scanned(tmp_path):
+    root = tree(
+        tmp_path,
+        {
+            "spec/vectors/rcobs/a.yaml": "covers: [AAA-1]\ncases: []\n",
+            "bridge/r2s_bridge/test/test_y.cpp": "// covers: AAA-2\n",
+        },
+    )
+    assert problems(root) == []
+
+
 def test_marker_shaped_lines_inside_python_strings_are_not_markers(tmp_path):
     src = 'import textwrap\n\nV = textwrap.dedent("""\\\n    covers: [AAA-2]\n    cases: []\n""")\n'
     root = tree(tmp_path, {"spec/vectors/rcobs/a.yaml": "covers: [AAA-1]\ncases: []\n", "gen/tests/test_g.py": src})
