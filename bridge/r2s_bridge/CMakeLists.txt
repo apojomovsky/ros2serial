@@ -14,6 +14,8 @@ find_package(rclcpp_components REQUIRED)
 
 add_library(r2s_bridge_component SHARED
   src/bridge.cpp
+  src/core_port.cpp
+  src/framing.cpp
   src/termios_transport.cpp)
 target_include_directories(r2s_bridge_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -22,6 +24,25 @@ target_link_libraries(r2s_bridge_component PUBLIC
   rclcpp::rclcpp
   rclcpp_components::component)
 target_compile_options(r2s_bridge_component PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
+# The core's framer, rCOBS and CRC compiled for the host, so the bridge and
+# the MCU share one framing implementation (docs/00-design.md, Code reuse
+# between MCU and host). The host's maximum decoded frame is 65277 and is not
+# announced (FRM-10).
+add_library(r2s_core_framing STATIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src/crc.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src/framer.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src/rcobs.c)
+target_include_directories(r2s_core_framing PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../core/include)
+set_target_properties(r2s_core_framing PROPERTIES
+  C_STANDARD 99
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+  POSITION_INDEPENDENT_CODE ON)
+target_compile_definitions(r2s_core_framing PUBLIC R2S_MAX_FRAME=65277)
+target_compile_options(r2s_core_framing PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(r2s_bridge_component PRIVATE r2s_core_framing)
 rclcpp_components_register_nodes(r2s_bridge_component "r2s_bridge::Bridge")
 
 add_executable(bridge src/main.cpp)
@@ -39,6 +60,9 @@ install(DIRECTORY include/ DESTINATION include)
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(class_loader REQUIRED)
+  find_package(yaml-cpp REQUIRED)
+
+  set(R2S_CORE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../core)
 
   # The fakes are shared by every bridge test, so they build once instead of
   # being copied into each test file.
@@ -69,6 +93,14 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_session_without_executor test/test_session_without_executor.cpp)
   target_link_libraries(test_session_without_executor r2s_bridge_test_support)
+
+  # The frame vectors live at the repository root; the framing test feeds each
+  # one byte by byte through the linked core framer and compares the frame.
+  ament_add_gtest(test_framing test/test_framing.cpp)
+  target_include_directories(test_framing PRIVATE ${R2S_CORE_DIR}/include)
+  target_compile_definitions(test_framing PRIVATE
+    R2S_FRAMES_VECTOR_DIR="${R2S_CORE_DIR}/../spec/vectors/frames")
+  target_link_libraries(test_framing r2s_bridge_test_support yaml-cpp::yaml-cpp)
 
   # openpty comes from libutil; the pty test uses it instead of a device.
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
