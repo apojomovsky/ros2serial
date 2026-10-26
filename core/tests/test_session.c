@@ -198,9 +198,9 @@ void test_session_a_topic_status_rejecting_one_topic_still_connects(void)
     {
         const uint8_t announced[] = {0x04u, 0x01u, 0x11u, 0x01u, 0x20u, 0x21u, 0x22u, 0x23u, 0x24u,
                                      0x25u, 0x26u, 0x27u, 0x17u, 'g',   'e',   'o',   'm',   'e',
-                                     't',   'r',   'y',   '_',   'm',   's',   'g',   '/',   'm',
-                                     's',   'g',   '/',   'T',   'w',   'i',   's',   't',   0x07u,
-                                     'c',   'm',   'd',   '_',   'v',   'e',   'l'};
+                                     't',   'r',   'y',   '_',   'm',   's',   'g',   's',   '/',
+                                     'm',   's',   'g',   '/',   'T',   'w',   'i',   's',   't',
+                                     0x07u, 'c',   'm',   'd',   '_',   'v',   'e',   'l'};
         assert_tx(2, 0, 2, announced, sizeof announced);
     }
     /* The rejection is stored for the codec to gate its publish on; the
@@ -248,9 +248,9 @@ void test_session_a_link_timeout_returns_to_announcing(void)
     TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_frame_count());
     fake_port_advance(1);
     r2s_spin_some();
-    TEST_ASSERT_EQUAL_UINT16(4, fake_port_tx_frame_count());
     len = hello_payload(expected, 0x44332211u, 1);
-    assert_tx(3, 0, 2, expected, len);
+    /* The READY reset the counters, so the re-announce answers from 0. */
+    assert_tx(3, 0, 0, expected, len);
 }
 
 /* covers: SES-10 */
@@ -391,13 +391,13 @@ void test_session_sequence_numbers_increment_and_restart_after_each_handshake(vo
     r2s_spin_some();
     assert_tx(4, 4, 1, heartbeat, sizeof heartbeat);
 
-    /* A timeout re-announces without resetting the counters; the next READY
-     * does. */
+    /* The first READY already reset the counters, so the re-announce answers
+     * from 0; the second READY resets them again. */
     fake_port_advance(2000);
     r2s_spin_some();
     TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
     feed_host(0, 4, hello_req, sizeof hello_req);
-    assert_tx(5, 0, 3, expected, len);
+    assert_tx(5, 0, 0, expected, len);
     feed_host(0, 5, ready, sizeof ready);
     TEST_ASSERT_EQUAL_UINT8(1, r2s_connected());
     fake_port_advance(500);

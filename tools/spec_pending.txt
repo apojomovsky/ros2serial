@@ -2,19 +2,12 @@
 # (docs/00-design.md, Epics and seed tickets). tools/spec_coverage.py fails
 # once a listed rule is covered, and on a PR only rules the PR adds to the spec
 # may join the list.
-CTL-2   C8
 CTL-3   H4
-CTL-4   C8
-CTL-5   C8
-CTL-7   C8
-CTL-8   C8
+CTL-5   C9
 CTL-9   H4
-CTL-10  C8
-CTL-11  C8
+CTL-11  Y3
 CTL-12  H5
 CTL-13  H5
-CTL-14  C8
-CTL-15  C8
 DSC-1   G7
 DSC-2   G7
 DSC-3   G7
@@ -87,30 +80,12 @@ ERR-5   P5
 ERR-6   P5
 FRM-1   S4
 FRM-2   S4
-FRM-3   C8
-FRM-4   C8
-FRM-5   C8
-FRM-9   C8
 FRM-10  H3
-FRM-15  C8
 GEN-1   S4
-HB-2    C8
-HB-3    C8
 LOG-1   P1
 LOG-2   P1
 LOG-3   P1
 LOG-4   P1
-SES-1   C8
-SES-2   C8
-SES-3   C8
-SES-4   C8
-SES-5   C8
-SES-6   C8
-SES-7   C8
-SES-8   C8
-SES-9   C8
-SES-10  C8
-SES-11  C8
 SES-12  H4
 SES-13  H4
 SES-14  H4
@@ -126,8 +101,6 @@ SES-23  P3
 SES-24  P3
 SES-25  P3
 SYS-3   S5
-SYS-4   C8
-SYS-5   C8
 TIM-1   P2
 TIM-3   P2
 TIM-4   P2
