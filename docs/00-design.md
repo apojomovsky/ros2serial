@@ -961,7 +961,7 @@ Scenario numbers in the tickets below refer to the key end-to-end scenarios in `
 | `release.yml` | Tag | Changelog (git-cliff), Python package to PyPI, Arduino library zip, PlatformIO package, epic-hal module bundle (Phase 5) |
 
 Rules:
-- Every job runs in a pinned container image or pinned action versions. Toolchain versions (avr-gcc, arduino-cli core, ROS images, epic-cc bundle) are pinned in one file, `ci/versions.env`.
+- Every job runs in a pinned container image or pinned action versions. Toolchain versions (avr-gcc, arduino-cli core, ROS images, epic-cc bundle) are pinned in one file, `ci/versions.env`. An image is pinned by digest as well as tag, so an upstream rebuild cannot change a job's toolchain without a commit here.
 - The ROS jobs use the official `ros:<distro>` images or `ros-tooling/setup-ros` plus `ros-tooling/action-ros-ci`.
 - PR comments from fork PRs are posted by a separate `workflow_run` job, since a fork PR's token cannot write comments.
 - The self-hosted hardware runner only runs `workflow_dispatch` jobs started by maintainers. It never runs code from pull requests.

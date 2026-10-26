@@ -57,17 +57,30 @@ jobs:
       - uses: ./.github/actions/dev-image
       - run: make test E2E=avr
 
+  # The bridge job's distro images, resolved from ci/versions.env before it
+  # starts: a job's container is fixed before any step runs, so the bridge job
+  # cannot read the file itself.
+  bridge-images:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.pins.outputs.matrix }}
+      images: ${{ steps.pins.outputs.images }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - id: pins
+        run: bash scripts/bridge-images.sh >> "$GITHUB_OUTPUT"
+
   # The bridge is built and tested on every supported distro, in that distro's
-  # own image. The dev image is the jazzy one, so the local run and the jazzy
-  # job share a toolchain.
+  # own pinned image. The dev image is the jazzy one, so the local run and the
+  # jazzy job share a toolchain.
   bridge:
+    needs: bridge-images
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
-      matrix:
-        distro: [jazzy, lyrical]
+      matrix: ${{ fromJSON(needs.bridge-images.outputs.matrix) }}
     container:
-      image: ros:${{ matrix.distro }}-ros-base
+      image: ${{ fromJSON(needs.bridge-images.outputs.images)[matrix.distro] }}
     steps:
       - uses: actions/checkout@v4.2.2
       - run: make test BRIDGE=1

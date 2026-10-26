@@ -70,11 +70,11 @@ def test_an_image_pinned_for_another_distro_is_refused(tmp_path):
     assert "ROS_JAZZY_IMAGE" in result.stderr
 
 
-def test_two_distros_pinning_one_image_are_refused(tmp_path):
-    result = run(tree(tmp_path, PINS + f"ROS_HUMBLE_IMAGE={JAZZY}\n"))
+def test_a_distro_pinned_twice_is_refused(tmp_path):
+    result = run(tree(tmp_path, PINS + f"ROS_JAZZY_IMAGE={JAZZY}\n"))
     assert result.returncode == 1
-    assert "ROS_HUMBLE_IMAGE" in result.stderr
     assert "ROS_JAZZY_IMAGE" in result.stderr
+    assert "more than once" in result.stderr
 
 
 def test_a_file_without_pins_is_refused(tmp_path):
