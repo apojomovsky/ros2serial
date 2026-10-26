@@ -381,7 +381,7 @@ The generator targets a ROS distro explicitly (`distro:` in the config, default 
 
 ## Host bridge
 
-- C++ (rclcpp), packaged as a component so several bridges (one per serial port) can share a process.
+- C++ (rclcpp), packaged as a component so several bridges (one per serial port) can share a process. The framing allows one live link per process until the framer gains a per-instance state (#122).
 - Generic publishers and subscriptions, plus introspection-based conversion from packed to CDR.
 - Serial I/O behind a small interface; termios first (research ticket R8).
 - Board quirks handled explicitly: opening a Uno's port toggles DTR and resets the board, and the bootloader runs for up to about 2 s. The bridge waits for the MCU's unsolicited `HELLO` (up to `boot_wait_ms`) before sending `HELLO_REQ`, so it does not talk to the bootloader. `hupcl:=false` avoids the reset where the adapter allows it.
@@ -904,7 +904,8 @@ The generator computes the REP-2011 RIHS01 hash for each type. Default approach:
 ### Executable and component
 
 - Package `r2s_bridge`, component `r2s_bridge::Bridge`, executable `bridge`.
-- One instance per serial port. `/dev/serial/by-id/...` paths are recommended in the docs.
+- One instance per serial port and one link per process. `/dev/serial/by-id/...` paths are recommended in the docs.
+- Receive framing is the core's `framer.c`, `rcobs.c` and `crc.c` compiled for the host (FRM-10). The core framer keeps one state per process, so one `FrameReader` is live per process.
 
 ### Parameters
 
