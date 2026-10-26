@@ -239,3 +239,13 @@ def test_a_value_the_field_cannot_hold_is_an_error_naming_the_field(tmp_path):
 
     with pytest.raises(ValueError, match="demo_msgs/msg/Small.value: no value"):
         messages.encode(repo, "demo_msgs/msg/Small", {})
+
+
+def test_a_number_too_large_for_binary_floating_point_is_a_value_error(tmp_path):
+    repo = demo(tmp_path, "demo_msgs/msg/Floats", "float32 single\nfloat64 wide")
+
+    with pytest.raises(ValueError, match="demo_msgs/msg/Floats.single"):
+        messages.encode(repo, "demo_msgs/msg/Floats", {"single": 1e300, "wide": 0.0})
+
+    with pytest.raises(ValueError, match="demo_msgs/msg/Floats.wide"):
+        messages.encode(repo, "demo_msgs/msg/Floats", {"single": 0.0, "wide": 10**400})

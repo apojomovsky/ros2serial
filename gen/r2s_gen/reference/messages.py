@@ -37,8 +37,10 @@ def encode(
     """The payload of `message` for `type_name`, or an error naming what it cannot encode.
 
     A string field takes `str` (encoded as UTF-8) or `bytes`; a bool takes a
-    `bool` or 0 and 1. A value the field cannot hold is a `ValueError`, while
-    input a rule of the spec refuses is a `Rejected` naming that rule.
+    `bool` or 0 and 1. A number is converted with binary32 rounding, so a vector
+    must only write a number which is already exactly representable. A value the
+    field cannot hold is a `ValueError`, while input a rule of the spec refuses
+    is a `Rejected` naming that rule.
     """
     out = bytearray()
     _encode_message(repository, repository.load(type_name), message, narrow, out)
@@ -66,7 +68,7 @@ def decode(
 
 def narrow(value: float) -> float:
     """The binary64 that [ENC-11]'s roundTiesToEven makes of `value` in binary32."""
-    return struct.unpack("<f", _binary32(value, overflow_to_infinity=True))[0]
+    return struct.unpack("<f", _binary32("<narrow>", value, overflow_to_infinity=True))[0]
 
 
 def _encode_message(
@@ -203,15 +205,18 @@ def _float_bytes(where: str, value: Any, width: int, narrow: bool) -> bytes:
     if isinstance(value, Mapping):
         pattern = _pattern(where, value, width)
         if narrow:
-            return _binary32(struct.unpack("<d", pattern)[0], overflow_to_infinity=True)
+            return _binary32(where, struct.unpack("<d", pattern)[0], overflow_to_infinity=True)
         return pattern
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{where}: expected a number or {{bits: ...}}, not {value!r}")
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError:
+        raise ValueError(f"{where}: {value!r} does not fit binary64") from None
     if width == 4 or narrow:
         # A float32 field holds a binary32 already, so a value too large for one
         # is a mistake in the input; [ENC-11] makes a wide value an infinity.
-        return _binary32(number, overflow_to_infinity=narrow)
+        return _binary32(where, number, overflow_to_infinity=narrow)
     return struct.pack("<d", number)
 
 
@@ -227,12 +232,12 @@ def _pattern(where: str, value: Mapping[str, Any], width: int) -> bytes:
     return bytes.fromhex(bits)[::-1]
 
 
-def _binary32(number: float, *, overflow_to_infinity: bool) -> bytes:
+def _binary32(where: str, number: float, *, overflow_to_infinity: bool) -> bytes:
     try:
         return struct.pack("<f", number)
     except OverflowError:
         if not overflow_to_infinity:
-            raise ValueError(f"{number!r} does not fit binary32") from None
+            raise ValueError(f"{where}: {number!r} does not fit binary32") from None
         return struct.pack("<f", math.copysign(math.inf, number))
 
 

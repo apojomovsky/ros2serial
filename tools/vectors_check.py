@@ -8,6 +8,7 @@ reference makes. Exits 1 with one line per problem, naming the file and the key 
 """
 
 import json
+import math
 import struct
 import sys
 from pathlib import Path
@@ -384,6 +385,52 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
     return problems
 
 
+def _exact_float32(value) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return True
+    try:
+        number = float(value)
+    except (OverflowError, ValueError):
+        return False
+    if math.isnan(number):
+        return False
+    return struct.unpack("<f", struct.pack("<f", number))[0] == number
+
+
+def check_float32_exact(name: str, data: dict) -> list[str]:
+    """Report float32 vector numbers which binary32 cannot hold exactly."""
+    try:
+        message = _MESSAGES.load(data["type"])
+        values = data["message"]
+    except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError):
+        return []
+    problems = []
+
+    def visit(message, values) -> None:
+        for field in message.fields:
+            expected = values[field.name]
+            where = f"{message.type_name}.{field.name}"
+            if field.type_name == "float32":
+                elements = expected if field.is_array else [expected]
+                for element in elements:
+                    if isinstance(element, dict) or _exact_float32(element):
+                        continue
+                    problems.append(f"{name}/message: {where} must be exactly representable in binary32")
+            elif field.type_name not in msgs.PRIMITIVES:
+                nested = _MESSAGES.load(field.type_name)
+                if field.is_array:
+                    for item in expected:
+                        visit(nested, item)
+                else:
+                    visit(nested, expected)
+
+    try:
+        visit(message, values)
+    except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError):
+        return []
+    return problems
+
+
 def check_message(name: str, data: dict) -> list[str]:
     """Check a message vector against the reference codec.
 
@@ -398,12 +445,14 @@ def check_message(name: str, data: dict) -> list[str]:
         # is nothing to add here.
         return []
     try:
+        exact = check_float32_exact(name, data)
         payload = messages.encode(_MESSAGES, data["type"], data["message"], narrow=narrow)
-    except (msgs.MessageError, Rejected, ValueError) as e:
+    except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError) as e:
         return [f"{name}/message: the reference does not make it: {e}"]
+    problems = exact
     if payload != expected:
-        return [f"{name}/payload: not the payload the reference makes"]
-    return []
+        problems.append(f"{name}/payload: not the payload the reference makes")
+    return problems
 
 
 def check_tree(vectors: Path) -> list[str]:

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 import vectors_check
+from r2s_gen import msgs
 
 VALID = {
     "crc/check.yaml": """
@@ -354,3 +355,61 @@ payload: "00 00 c0 3f"
     assert len(problems) == 1, problems
     assert problems[0].startswith("messages/unknown.yaml/message: "), problems
     assert "no message definition found" in problems[0], problems
+
+
+@pytest.mark.parametrize(
+    ("name", "text"),
+    [
+        ("messages/missing_message.yaml", "name: x\ncovers: [ENC-3]\ntype: std_msgs/msg/Float32\n"),
+        ("messages/null_message.yaml", "name: x\ncovers: [ENC-3]\ntype: std_msgs/msg/Float32\nmessage: null\n"),
+        ("messages/number_message.yaml", "name: x\ncovers: [ENC-3]\ntype: std_msgs/msg/Float32\nmessage: 5\n"),
+        ("messages/number_type.yaml", "name: x\ncovers: [ENC-3]\ntype: 5\nmessage: {data: 1.5}\n"),
+        (
+            "messages/huge_number.yaml",
+            f"name: x\ncovers: [ENC-3]\ntype: std_msgs/msg/Float32\nmessage: {{data: {'1' * 400}}}\n",
+        ),
+    ],
+)
+def test_a_malformed_message_vector_is_reported_not_a_crash(tmp_path, name, text):
+    problems = vectors_check.check_tree(make_tree(tmp_path, {name: text + "profile: {narrow_float64: false}\n"}))
+    assert problems, (name, text)
+    assert all(problem.startswith(name) for problem in problems), problems
+
+
+def test_a_float32_vector_number_must_be_exactly_representable(tmp_path):
+    files = {
+        "messages/inexact.yaml": """
+name: inexact
+covers: [ENC-3]
+type: std_msgs/msg/Float32
+profile: {narrow_float64: false}
+message: {data: 1.1}
+payload: "cd cc 8c 3f"
+"""
+    }
+    assert vectors_check.check_tree(make_tree(tmp_path, files)) == [
+        "messages/inexact.yaml/message: std_msgs/msg/Float32.data must be exactly representable in binary32"
+    ]
+
+
+def test_exact_float32_rule_applies_inside_nested_arrays(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "Outer.msg").write_text("Inner inner\n", encoding="utf-8")
+    (definitions / "Inner.msg").write_text("float32[2] pair\n", encoding="utf-8")
+    files = {
+        "messages/nested.yaml": """
+name: nested
+covers: [ENC-3]
+type: demo_msgs/msg/Outer
+profile: {narrow_float64: false}
+message: {inner: {pair: [1.5, 1.1]}}
+payload: "00 00 c0 3f cd cc 8c 3f"
+"""
+    }
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    vectors = make_tree(tmp_path / "vectors", files)
+    assert vectors_check.check_tree(vectors) == [
+        "messages/nested.yaml/message: demo_msgs/msg/Inner.pair must be exactly representable in binary32"
+    ]
