@@ -243,7 +243,7 @@ void r2s_rx_push(uint8_t byte);   /* ISR-safe; only with R2S_WITH_RX_RING */
 
 Many HALs already keep their own interrupt-driven ring (Arduino's `HardwareSerial`, epic-hal's `lib/serial`). On those, `r2s_port_read` reads from it and the core keeps no second ring, which would waste RAM on a small part.
 
-For ports without a ring, `R2S_WITH_RX_RING` enables a single-producer, single-consumer ring fed by `r2s_rx_push` from the UART interrupt; the core then provides `r2s_port_read` itself. It is safe on any target because:
+For ports without a ring, `R2S_WITH_RX_RING` enables a single-producer, single-consumer ring fed by `r2s_rx_push` from the UART interrupt; the core then provides `r2s_port_read` itself. `R2S_RX_RING_SIZE` sets the slots, a power of two from 2 to 256, and one slot stays empty so a full ring never looks like an empty one: the default 256 holds the wire form of a default-maximum frame. A byte that arrives on a full ring is dropped. It is safe on any target because:
 
 - The ring is at most 256 bytes, so head and tail are `uint8_t`. A one-byte store is atomic on every MCU we target, so no locks or disabling interrupts are needed.
 - Only the ISR writes `head` and only `spin_some` writes `tail`. Both are `volatile`.
