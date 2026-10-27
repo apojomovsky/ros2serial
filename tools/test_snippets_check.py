@@ -165,3 +165,27 @@ def test_nested_docs_dir_is_checked(tmp_path):
     problems = snippets_check.check_tree(root)
     assert len(problems) == 1
     assert "docs/sub/a.md:3" in problems[0]
+
+
+def test_indented_python_body_is_dedented(tmp_path):
+    text = "# T\n\n1. Step:\n\n   ```python\n   x = 1\n   ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
+
+
+@needs_gcc
+def test_deeply_nested_broken_snippet_fails(tmp_path):
+    text = "# T\n\n1. Outer:\n   1. Inner:\n\n      ```c\n      int broken = ;\n      ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "README.md:6" in problems[0]
+
+
+@needs_gcc
+def test_marker_in_indented_code_block_is_inert(tmp_path):
+    text = "# T\n\n    <!-- snippet: skip until #94 -->\n\n" + C_BROKEN
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "README.md:5" in problems[0]

@@ -31,10 +31,12 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-
-MARKER = re.compile(r"^\s*<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#([0-9]+)[ \t]*-->\s*$")
-MARKER_LIKE = re.compile(r"^\s*<!--[ \t]*snippet:.*-->\s*$")
-FENCE = re.compile(r"^ {0,3}```")
+MARKER = re.compile(r"^ {0,3}<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#([0-9]+)[ \t]*-->\s*$")
+MARKER_LIKE = re.compile(r"^ {0,3}<!--[ \t]*snippet:.*-->\s*$")
+# A fence may sit inside a list item at any depth. A marker deeper than three
+# spaces is an indented code block, literal text, so markers stay at column 0
+# to 3 while fences nest freely.
+FENCE = re.compile(r"^ *```")
 
 LANGUAGES = ("c", "cpp", "python", "yaml")
 EXTENSION = {"c": ".c", "cpp": ".cpp", "python": ".py", "yaml": ".yaml"}
@@ -51,7 +53,15 @@ class Snippet:
 
 def _ticket(marker_line: str) -> int:
     # Only called on lines MARKER already matched, so group(1) exists.
-    return int(MARKER.search(marker_line).group(1))
+    return int(MARKER.match(marker_line).group(1))
+
+
+def _dedent(line: str, width: int) -> str:
+    # CommonMark strips up to the fence's own indentation from each body line.
+    taken = 0
+    while taken < width and taken < len(line) and line[taken] == " ":
+        taken += 1
+    return line[taken:]
 
 
 def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
@@ -100,11 +110,12 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
         if language not in LANGUAGES:
             problems.append(f"{rel}:{open_line}: unknown snippet language {language!r}")
             continue
-        snippets.append(Snippet(rel, open_line, language, "\n".join(body) + "\n", ticket))
+        code = "\n".join(_dedent(line, fence.end() - 3) for line in body) + "\n"
+        snippets.append(Snippet(rel, open_line, language, code, ticket))
     for lineno, text in markers.items():
         if lineno in used:
             continue
-        if MARKER.search(text):
+        if MARKER.match(text):
             problems.append(f"{rel}:{lineno}: snippet marker above no fence")
         else:
             problems.append(f"{rel}:{lineno}: snippet marker without a ticket number")
