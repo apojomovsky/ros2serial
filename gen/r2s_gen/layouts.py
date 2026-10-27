@@ -58,8 +58,8 @@ def config_hash(loaded: Config) -> str:
 
 
 def _defined(header: str, name: str) -> bool:
-    """Whether the header names `name` with any value at all."""
-    return re.search(rf"^#define {name} ", header, re.MULTILINE) is not None
+    """Whether the header names `name`, with or without a value."""
+    return re.search(rf"^#define {name}( |$)", header, re.MULTILINE) is not None
 
 
 def build_defines(header: str, source: str = "r2s_generated.h") -> list[str]:
@@ -137,7 +137,7 @@ def _cmake_lists(source: str, digest: str) -> str:
         'file(STRINGS r2s_generated.h R2S_MAX_FRAME_LINE REGEX "^#define R2S_MAX_FRAME [0-9]+u$")',
         'file(STRINGS r2s_generated.h R2S_MAX_NEST_LINE REGEX "^#define R2S_MAX_NEST [0-9]+u$")',
         'file(STRINGS r2s_generated.h R2S_TOPIC_MAX_COUNT_LINE REGEX "^#define R2S_TOPIC_MAX_COUNT [0-9]+u$")',
-        'file(STRINGS r2s_generated.h R2S_TOPIC_MAX_COUNT_ANY REGEX "^#define R2S_TOPIC_MAX_COUNT ")',
+        'file(STRINGS r2s_generated.h R2S_TOPIC_MAX_COUNT_ANY REGEX "^#define R2S_TOPIC_MAX_COUNT( |$)")',
         "if(NOT R2S_MAX_FRAME_LINE OR NOT R2S_MAX_NEST_LINE)",
         '  message(FATAL_ERROR "r2s_generated.h names no frame or nesting limit")',
         "endif()",

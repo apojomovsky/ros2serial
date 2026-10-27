@@ -21,7 +21,7 @@ target_include_directories(r2s_generated PUBLIC "${R2S_CORE_DIR}/include" "${CMA
 file(STRINGS r2s_generated.h R2S_MAX_FRAME_LINE REGEX "^#define R2S_MAX_FRAME [0-9]+u$")
 file(STRINGS r2s_generated.h R2S_MAX_NEST_LINE REGEX "^#define R2S_MAX_NEST [0-9]+u$")
 file(STRINGS r2s_generated.h R2S_TOPIC_MAX_COUNT_LINE REGEX "^#define R2S_TOPIC_MAX_COUNT [0-9]+u$")
-file(STRINGS r2s_generated.h R2S_TOPIC_MAX_COUNT_ANY REGEX "^#define R2S_TOPIC_MAX_COUNT ")
+file(STRINGS r2s_generated.h R2S_TOPIC_MAX_COUNT_ANY REGEX "^#define R2S_TOPIC_MAX_COUNT( |$)")
 if(NOT R2S_MAX_FRAME_LINE OR NOT R2S_MAX_NEST_LINE)
   message(FATAL_ERROR "r2s_generated.h names no frame or nesting limit")
 endif()
