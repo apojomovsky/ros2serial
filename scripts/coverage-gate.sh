@@ -53,9 +53,12 @@ gcovr_tree() {
   local tree=$1 out=$2 obj=$3 filter_src=$4 array=$5
   # shellcheck source=/dev/null
   source "$filter_src"
+  declare -p "$array" >/dev/null 2>&1 || { echo "coverage: $filter_src defines no $array" >&2; return 1; }
   local -n wanted=$array
   [ "${#wanted[@]}" -gt 0 ] || { echo "coverage: $filter_src defines no $array" >&2; return 1; }
-  ( cd "$tree" && gcovr --root "$tree" "${wanted[@]}" --object-directory "$obj" \
+  # --config /dev/null keeps gcovr from loading gcovr.cfg, gcovr.toml or a
+  # [tool.gcovr] section out of the measured tree: only the pinned file rules.
+  ( cd "$tree" && gcovr --config /dev/null --root "$tree" "${wanted[@]}" --object-directory "$obj" \
     --exclude-unreachable-branches --json-summary -o "$out" --print-summary "$obj" >&2 )
 }
 
