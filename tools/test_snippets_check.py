@@ -235,3 +235,14 @@ def test_closer_up_to_three_past_opener_closes(tmp_path):
     text = "# T\n\n```c\nint v = 1;\n  ```\n"
     root = write_tree(tmp_path, {"README.md": text})
     assert snippets_check.check_tree(root) == []
+
+
+@needs_gcc
+def test_inner_fence_past_container_is_content(tmp_path):
+    # Opener at column 2, inner fence at column 4: the inner fence is body
+    # text, so the broken line after it still reaches the compiler.
+    text = "# T\n\n  ```c\n  int v = 1;\n    ```\n    int broken = ;\n  ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "README.md:3" in problems[0] and "does not compile" in problems[0]
