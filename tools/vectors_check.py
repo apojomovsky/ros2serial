@@ -50,6 +50,28 @@ def _message(error: jsonschema.ValidationError) -> str:
     return error.message
 
 
+def _has_cycle(root) -> bool:
+    # Aliases let one mapping or list appear inside itself. The walks below
+    # assume a tree, so find a cycle with an explicit stack before they run.
+    if not isinstance(root, (dict, list, set)):
+        return False
+    end = object()
+    path = {id(root)}
+    stack = [(iter(root.values() if isinstance(root, dict) else root), id(root))]
+    while stack:
+        children, owner = stack[-1]
+        child = next(children, end)
+        if child is end:
+            path.discard(owner)
+            stack.pop()
+        elif isinstance(child, (dict, list, set)):
+            if id(child) in path:
+                return True
+            path.add(id(child))
+            stack.append((iter(child.values() if isinstance(child, dict) else child), id(child)))
+    return False
+
+
 def check_file(path: Path, name: str, validators: dict) -> list[str]:
     kind = name.split("/", 1)[0]
     if kind not in validators:
@@ -60,6 +82,8 @@ def check_file(path: Path, name: str, validators: dict) -> list[str]:
         data = yaml.safe_load(path.read_text())
     except yaml.YAMLError as e:
         return [f"{name}: not valid YAML: {e}".splitlines()[0]]
+    if _has_cycle(data):
+        return [f"{name}: cyclic YAML alias"]
     errors = []
     for e in validators[kind].iter_errors(data):
         # When an alternative fails only inside one field, the case clearly meant
