@@ -169,49 +169,22 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
     fprintf(stderr, "r2s_posix: cmd_vel n=%lu\n", (unsigned long)s_cmd_vel_count);
 }
 
-/* One log_text line: the tag, a space, and the value in decimal. The line
- * keeps the whole value while it fits the handwritten String bound of 8
- * characters, and falls back to the value alone otherwise, so the boot id
- * in the line matches the HELLO for ids up to 8 digits. */
-static void publish_log_text(const char *tag, uint32_t value)
+/* One log_text line: the value as 8 hex digits. Fixed width fits the
+ * handwritten String bound of 8 characters for every id. */
+static r2s_status_t publish_log_text(uint32_t value)
 {
     std_msgs__msg__String msg;
-    char digits[10];
-    uint8_t ndigits = 0u;
-    uint8_t tag_len = 0u;
-    uint8_t len = 0u;
     uint8_t i;
 
     memset(&msg, 0, sizeof msg);
-    while (tag[tag_len] != '\0') {
-        tag_len++;
-    }
-    do {
-        digits[ndigits] = (char)('0' + (value % 10u));
-        ndigits++;
-        value /= 10u;
-    } while (value != 0u && ndigits < sizeof digits);
-    if ((unsigned)tag_len + 1u + (unsigned)ndigits <= sizeof msg.data - 1u) {
-        memcpy(msg.data, tag, tag_len);
-        len = tag_len;
-        msg.data[len] = ' ';
-        len++;
-        for (i = 0u; i < ndigits; i++) {
-            msg.data[len] = digits[ndigits - 1u - i];
-            len++;
-        }
-    } else {
-        uint8_t keep = ndigits < sizeof msg.data - 1u ? ndigits : (uint8_t)(sizeof msg.data - 1u);
-        uint8_t k = keep;
+    for (i = 0u; i < 8u; i++) {
+        int digit = (int)((value >> 28u) & 0xFu);
 
-        while (k != 0u) {
-            k--;
-            msg.data[len] = digits[k];
-            len++;
-        }
+        msg.data[i] = (char)(digit < 10 ? '0' + digit : 'a' + (digit - 10));
+        value <<= 4u;
     }
-    msg.data[len] = '\0';
-    (void)r2s_publish_log_text(&msg);
+    msg.data[8] = '\0';
+    return r2s_publish_log_text(&msg);
 }
 
 static void sleep_1ms(void)
@@ -268,8 +241,10 @@ int main(int argc, char **argv)
             continue;
         }
         if (opts.log_text != NULL && log_booted == 0u) {
-            publish_log_text("boot", boot_id);
-            log_booted = 1u;
+            /* A lost boot line is retried: it is the only one of its kind. */
+            if (publish_log_text(boot_id) == R2S_OK) {
+                log_booted = 1u;
+            }
         }
         if (opts.pub != NULL && (uint32_t)(now - last_pub) >= interval) {
             std_msgs__msg__Float32 msg;
@@ -279,7 +254,7 @@ int main(int argc, char **argv)
                 sent++;
                 last_pub = now;
                 if (opts.log_text != NULL && sent % 10u == 0u) {
-                    publish_log_text("n", sent);
+                    (void)publish_log_text(sent);
                 }
             }
         }

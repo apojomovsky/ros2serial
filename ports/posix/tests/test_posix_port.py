@@ -343,7 +343,7 @@ def test_connected_publishes_log_text(tmp_path):
         _topic, _seq, payload = read_frame(fw.master, want=18)
         text, end = take_string(payload, 0)
         assert end == len(payload), "bytes after the log string"
-        assert str(hello["boot"]) in text
+        assert text == format(hello["boot"], "08x")
         batteries = 0
         while True:
             topic, _seq, payload = read_frame(fw.master)
@@ -360,14 +360,14 @@ def test_connected_publishes_log_text(tmp_path):
 # covers: SES-9, SES-10
 def test_log_text_keeps_large_boot_id(tmp_path):
     boot = tmp_path / "boot"
-    boot.write_text("999\n")
+    boot.write_text("70000\n")
     with Firmware("--rate", "20", boot=str(boot)) as fw:
         hello, _topics, _host = do_handshake(fw)
-        assert hello["boot"] == 1000
+        assert hello["boot"] == 70001
         _topic, _seq, payload = read_frame(fw.master, want=18)
         text, end = take_string(payload, 0)
         assert end == len(payload), "bytes after the log string"
-        assert text == "1000"
+        assert text == "00011171"
 
 
 def test_subscribes_twist(tmp_path):
