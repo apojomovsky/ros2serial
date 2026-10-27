@@ -48,16 +48,17 @@ from r2s_gen.msgs import MessageError
 
 try:
     defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_generated.h")
-except MessageError as error:
+except (MessageError, OSError) as error:
     print(f"r2s-gen: error: {error}", file=sys.stderr)
     raise SystemExit(1)
 print(" ".join("-D" + define for define in defines))
 EOF
 ) || exit 1
-# An empty flag string would compile a firmware that silently ignores every
-# subscription, so the limits must travel in it, not just the codec flag.
+# A flag string without the limits would compile a firmware that silently
+# ignores every subscription or refuses its own table, so every value must
+# be present and non-empty.
 case "$extras" in
-    *R2S_WITH_CODEC*R2S_MAX_FRAME=*R2S_MAX_NEST=*) ;;
+    *R2S_WITH_CODEC*R2S_MAX_FRAME=[0-9]*R2S_MAX_NEST=[0-9]*) ;;
     *)
         echo "build-examples: the extracted flags name no limits ($extras)" >&2
         exit 1
