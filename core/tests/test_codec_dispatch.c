@@ -42,6 +42,11 @@ static const r2s_session_topic_t narrow_topics[] = {
      {0x10u, 0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u},
      "geometry_msgs/msg/Twist",
      "cmd_vel"},
+    {R2S_HANDWRITTEN_LOG_TEXT_ID,
+     0x02u,
+     {0x20u, 0x21u, 0x22u, 0x23u, 0x24u, 0x25u, 0x26u, 0x27u},
+     "std_msgs/msg/String",
+     "log_text"},
 };
 
 static void configure(uint32_t boot_id)
@@ -180,16 +185,58 @@ void test_codec_publish_unconfigured_topic_sends_nothing(void)
     TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
 }
 
-void test_codec_publish_without_space_sends_nothing(void)
+/* covers: DSC-35 */
+void test_codec_publish_bound_violation_sends_nothing(void)
 {
-    std_msgs__msg__Float32 battery = {1.5f};
+    std_msgs__msg__String text;
+    const uint8_t status_log_text[] = {0x05u, R2S_HANDWRITTEN_LOG_TEXT_ID, 0x00u};
+    static uint8_t payload[R2S_MAX_FRAME];
+    uint16_t len;
 
     configure(0x44332211u);
     handshake();
+    feed_host(0, 6, status_log_text, sizeof status_log_text);
+    memset(&text, 0, sizeof text);
+    memcpy(text.data, "hi", 3u);
+    {
+        r2s_codec_out_t sink = {payload, (uint16_t)sizeof payload, 0u, 0u};
+        uint8_t field = 0xFFu;
+
+        TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_codec_encode(&R2S_HANDWRITTEN_TABLE, R2S_HANDWRITTEN_STRING, &text,
+                                                        0u, &sink, &field));
+        len = sink.len;
+    }
+    fake_port_tx_clear();
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_publish_log_text(&text));
+    assert_tx(0, R2S_HANDWRITTEN_LOG_TEXT_ID, 0, payload, len);
+    memset(text.data, 'x', sizeof text.data);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_publish_log_text(&text));
+    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+}
+
+void test_codec_publish_without_space_sends_nothing(void)
+{
+    std_msgs__msg__Float32 battery = {1.5f};
+    static uint8_t payload[R2S_MAX_FRAME];
+    uint16_t len;
+
+    configure(0x44332211u);
+    handshake();
+    {
+        r2s_codec_out_t sink = {payload, (uint16_t)sizeof payload, 0u, 0u};
+        uint8_t field = 0xFFu;
+
+        TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_codec_encode(&R2S_HANDWRITTEN_TABLE, R2S_HANDWRITTEN_FLOAT32,
+                                                        &battery, 0u, &sink, &field));
+        len = sink.len;
+    }
     fake_port_tx_clear();
     fake_port_set_tx_free(9u);
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_TX_BUSY, r2s_publish_battery(&battery));
     TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    fake_port_set_tx_free(0xFFFFu);
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_publish_battery(&battery));
+    assert_tx(0, R2S_HANDWRITTEN_BATTERY_ID, 0, payload, len);
 }
 
 /* The session returns the flags it was configured with, which publish and
@@ -251,6 +298,8 @@ void test_codec_sequence_restarts_after_each_handshake(void)
     static const geometry_msgs__msg__Twist sent = {{1.5, -2.0, 0.5}, {1.0, -0.0, 3.0}};
     static uint8_t payload[R2S_MAX_FRAME];
     const uint8_t hello_req[] = {0x01u, R2S_PROTOCOL_VERSION};
+    const uint8_t status_battery[] = {0x05u, R2S_HANDWRITTEN_BATTERY_ID, 0x00u};
+    const uint8_t status_cmd_vel[] = {0x05u, R2S_HANDWRITTEN_CMD_VEL_ID, 0x00u};
     const uint8_t ready[] = {0x06u};
     uint16_t len;
     uint8_t index;
@@ -266,7 +315,9 @@ void test_codec_sequence_restarts_after_each_handshake(void)
     TEST_ASSERT_EQUAL_UINT16(254, r2s_session_rx_lost(index));
     TEST_ASSERT_EQUAL_UINT8(3, got_calls);
     feed_host(0, 6, hello_req, sizeof hello_req);
-    feed_host(0, 7, ready, sizeof ready);
+    feed_host(0, 7, status_battery, sizeof status_battery);
+    feed_host(0, 8, status_cmd_vel, sizeof status_cmd_vel);
+    feed_host(0, 9, ready, sizeof ready);
     TEST_ASSERT_EQUAL_UINT8(1, r2s_connected());
     feed_host(R2S_HANDWRITTEN_CMD_VEL_ID, 5, payload, len);
     TEST_ASSERT_EQUAL_UINT8(4, got_calls);
@@ -288,7 +339,7 @@ void test_codec_narrow_uses_the_announced_flags(void)
     TEST_ASSERT_EQUAL_UINT8(0, got_calls);
     TEST_ASSERT_EQUAL_UINT16((uint16_t)(drops_before + 1u), r2s_framer_counters()->dropped_frames);
 
-    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", narrow_topics, 2u));
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", narrow_topics, 3u));
     handshake();
     feed_host(R2S_HANDWRITTEN_CMD_VEL_ID, 0, payload, len);
     TEST_ASSERT_EQUAL_UINT8(1, got_calls);
@@ -320,7 +371,7 @@ void test_codec_frame_on_unknown_or_publish_topic_is_refused(void)
 
     configure(0x44332211u);
     handshake();
-    feed_host(18, 0, payload, len);
+    feed_host(19, 0, payload, len);
     feed_host(R2S_HANDWRITTEN_BATTERY_ID, 0, payload, len);
     TEST_ASSERT_EQUAL_UINT8(0, got_calls);
     TEST_ASSERT_EQUAL_UINT16((uint16_t)(drops_before + 2u), r2s_framer_counters()->dropped_frames);

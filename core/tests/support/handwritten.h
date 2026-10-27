@@ -1,7 +1,7 @@
 /* Handwritten message code for the codec tests: C structs, descriptor tables
- * and the topic configuration for Float32 and Twist. It stands in for the
- * files G7 and G8 will generate, with the same bytes (spec/protocol.md,
- * section 9), until G8 replaces it in its own test firmware. */
+ * and the topic configuration for Float32, Twist and a bounded String. It
+ * stands in for the files G7 and G8 will generate, with the same bytes
+ * (spec/protocol.md, section 9), until G8 replaces it in its own firmware. */
 #ifndef R2S_TEST_HANDWRITTEN_H
 #define R2S_TEST_HANDWRITTEN_H
 
@@ -13,7 +13,8 @@
 #include "r2s/r2s_session.h"
 
 /* The C structs the descriptors below describe (docs/00-design.md, "C type
- * mapping"): one float, and two nested triples of doubles. */
+ * mapping"): one float, two nested triples of doubles, and a bounded string
+ * for the publish bound path. */
 typedef struct {
     float data;
 } std_msgs__msg__Float32;
@@ -29,15 +30,21 @@ typedef struct {
     geometry_msgs__msg__Vector3 angular;
 } geometry_msgs__msg__Twist;
 
+typedef struct {
+    char data[9];
+} std_msgs__msg__String;
+
 /* Type indices in the handwritten table, in the depth-first order [DSC-11]
  * fixes: each nested type is numbered before the type that names it. */
 #define R2S_HANDWRITTEN_FLOAT32 0u
 #define R2S_HANDWRITTEN_VECTOR3 1u
 #define R2S_HANDWRITTEN_TWIST 2u
+#define R2S_HANDWRITTEN_STRING 3u
 
 /* The user topic IDs of the test firmware. */
 #define R2S_HANDWRITTEN_BATTERY_ID 16u
 #define R2S_HANDWRITTEN_CMD_VEL_ID 17u
+#define R2S_HANDWRITTEN_LOG_TEXT_ID 18u
 
 /* The narrow flag every topic carries on a build whose double is 32 bits,
  * where the flag is the truth for the wire ([ENC-12], [CTL-5]). */
@@ -59,6 +66,10 @@ r2s_status_t r2s_handwritten_configure(void);
  * error when the host did not accept the topic, and with the bounds error
  * when the message does not fit, sending nothing in each case. */
 r2s_status_t r2s_publish_battery(const std_msgs__msg__Float32 *msg);
+
+/* Publishes on log_text; fails like the battery wrapper. Over-long strings
+ * fail with the bounds error and send nothing ([DSC-35]). */
+r2s_status_t r2s_publish_log_text(const std_msgs__msg__String *msg);
 
 /* Handles a cmd_vel frame. The test binary implements it; dispatch calls it
  * from r2s_spin_some(), never from inside a publish. */

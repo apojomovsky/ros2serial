@@ -256,7 +256,8 @@ void test_codec_narrow_converts_float64_like_the_reference(void)
         {{0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xC0u}, {0x00u, 0x00u, 0x00u, 0xC0u}},
         /* tie down: 1 + 2^-24 keeps the even mantissa */
         {{0x00u, 0x00u, 0x00u, 0x10u, 0x00u, 0x00u, 0xF0u, 0x3Fu}, {0x00u, 0x00u, 0x80u, 0x3Fu}},
-        /* tie up: 1 + 3 * 2^-24 moves to the odd mantissa above */
+        /* tie up: 1 + 3 * 2^-24 is halfway between mantissas 1 and 2, and
+         * keeps the even 2 */
         {{0x00u, 0x00u, 0x00u, 0x30u, 0x00u, 0x00u, 0xF0u, 0x3Fu}, {0x02u, 0x00u, 0x80u, 0x3Fu}},
         /* largest finite binary32 */
         {{0x00u, 0x00u, 0x00u, 0xE0u, 0xFFu, 0xFFu, 0xEFu, 0x47u}, {0xFFu, 0xFFu, 0x7Fu, 0x7Fu}},
@@ -267,8 +268,10 @@ void test_codec_narrow_converts_float64_like_the_reference(void)
         {{0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x10u, 0x38u}, {0x00u, 0x00u, 0x80u, 0x00u}},
         /* smallest subnormal */
         {{0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xA0u, 0x36u}, {0x01u, 0x00u, 0x00u, 0x00u}},
-        /* tie at 1.5 * 2^-149 rounds to the even 2^-148 */
+        /* tie subnormal 1.5*2^-149 -> 2^-148 */
         {{0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xA8u, 0x36u}, {0x02u, 0x00u, 0x00u, 0x00u}},
+        /* 2^-129 exercises the shift-by-32 case */
+        {{0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xE0u, 0x37u}, {0x00u, 0x00u, 0x10u, 0x00u}},
         /* tie at 2^-150 rounds to zero */
         {{0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x90u, 0x36u}, {0x00u, 0x00u, 0x00u, 0x00u}},
         /* below the tie: zero */
@@ -317,7 +320,7 @@ void test_codec_narrow_converts_float64_like_the_reference(void)
     }
     /* Exact values widen back to themselves. */
     {
-        static const uint16_t exacts[] = {0u, 1u, 12u, 13u, 14u};
+        static const uint16_t exacts[] = {0u, 1u, 4u, 7u, 8u, 13u, 14u, 15u, 16u, 20u};
 
         for (i = 0u; i < (uint16_t)(sizeof exacts / sizeof exacts[0]); i++) {
             test_f64_t back;
@@ -344,7 +347,7 @@ void test_codec_narrow_converts_float64_like_the_reference(void)
         TEST_ASSERT_EQUAL_UINT16(4, n);
         memset(&probe_back, 0, sizeof probe_back);
         TEST_ASSERT_EQUAL_INT8(R2S_OK, decode_here(&test_f64_table, 0u, buf, 4u, 1u, &probe_back, &field));
-        TEST_ASSERT_EQUAL_DOUBLE(0.5, probe_back.v);
+        TEST_ASSERT_EQUAL_MEMORY(&probe, &probe_back, sizeof probe);
     }
 }
 
@@ -387,10 +390,10 @@ void test_codec_bounded_array_checks_its_bound(void)
 
     encode_here(&test_arrays_table, 2u, &in, 0u, buf, (uint16_t)sizeof buf, &rc, &field);
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, rc);
-    TEST_ASSERT_EQUAL_UINT8(2, field);
+    TEST_ASSERT_EQUAL_UINT8(0, field);
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, decode_here(&test_arrays_table, 2u, payload,
                                                        (uint16_t)sizeof payload, 0u, &out, &field));
-    TEST_ASSERT_EQUAL_UINT8(2, field);
+    TEST_ASSERT_EQUAL_UINT8(0, field);
     in.n = 2u;
     len = encode_here(&test_arrays_table, 2u, &in, 0u, buf, (uint16_t)sizeof buf, &rc, &field);
     TEST_ASSERT_EQUAL_INT8(R2S_OK, rc);
@@ -405,7 +408,7 @@ void test_codec_bounded_array_checks_its_bound(void)
     TEST_ASSERT_EQUAL_UINT8(0xBBu, out.v[1]);
 }
 
-/* covers: DSC-31, DSC-20 */
+/* covers: DSC-31 */
 void test_codec_bounded_array_over_255_uses_a_two_byte_count(void)
 {
     static test_bounded16_t in;

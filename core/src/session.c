@@ -149,12 +149,14 @@ uint8_t r2s_session_topic_status(uint8_t index)
     return session.status[index];
 }
 
-uint8_t r2s_session_next_tx_seq(uint8_t index)
+uint8_t r2s_session_tx_seq(uint8_t index)
 {
-    uint8_t seq = session.tx_seq[index];
+    return session.tx_seq[index];
+}
 
-    session.tx_seq[index] = (uint8_t)(seq + 1u);
-    return seq;
+void r2s_session_advance_tx_seq(uint8_t index)
+{
+    session.tx_seq[index] = (uint8_t)(session.tx_seq[index] + 1u);
 }
 
 uint16_t r2s_session_note_rx_seq(uint8_t index, uint8_t seq)

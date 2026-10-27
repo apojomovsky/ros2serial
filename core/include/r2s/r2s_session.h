@@ -69,10 +69,13 @@ uint8_t r2s_session_find_topic(uint8_t topic_id);
 uint8_t r2s_session_topic_flags(uint8_t index);
 uint8_t r2s_session_topic_status(uint8_t index);
 
-/* The seq the next publish on the topic at index carries, advancing the
- * topic's counter ([FRM-4], [FRM-5]). A publish that finds no space keeps its
- * number, which the receiver counts as one lost frame ([FRM-15]). */
-uint8_t r2s_session_next_tx_seq(uint8_t index);
+/* The seq the next publish on the topic at index will carry, without
+ * advancing the topic's counter ([FRM-4], [FRM-5]). */
+uint8_t r2s_session_tx_seq(uint8_t index);
+
+/* Advances the topic's seq past a frame the transmitter accepted, so a frame
+ * that found no space keeps the number the next publish retries with. */
+void r2s_session_advance_tx_seq(uint8_t index);
 
 /* Counts a received frame on the topic at index against its expected seq and
  * returns the topic's lost frames since boot ([FRM-15]). A gap is not an

@@ -32,11 +32,12 @@ static r2s_status_t publish(uint8_t id, uint8_t index, uint16_t type, const void
     if (rc != R2S_OK) {
         return rc;
     }
-    seq = r2s_session_next_tx_seq(index);
+    seq = r2s_session_tx_seq(index);
     rc = r2s_tx_begin(id, seq, out.len);
     if (rc != R2S_OK) {
         return rc;
     }
+    r2s_session_advance_tx_seq(index);
     out.to_tx = 1u;
     out.len = 0u;
     (void)r2s_codec_encode(&R2S_HANDWRITTEN_TABLE, type, msg, narrow, &out, &field);
@@ -48,6 +49,12 @@ r2s_status_t r2s_publish_battery(const std_msgs__msg__Float32 *msg)
 {
     return publish(R2S_HANDWRITTEN_BATTERY_ID, r2s_session_find_topic(R2S_HANDWRITTEN_BATTERY_ID),
                    R2S_HANDWRITTEN_FLOAT32, msg);
+}
+
+r2s_status_t r2s_publish_log_text(const std_msgs__msg__String *msg)
+{
+    return publish(R2S_HANDWRITTEN_LOG_TEXT_ID, r2s_session_find_topic(R2S_HANDWRITTEN_LOG_TEXT_ID),
+                   R2S_HANDWRITTEN_STRING, msg);
 }
 
 void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, uint16_t len)
