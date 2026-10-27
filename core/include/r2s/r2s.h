@@ -9,7 +9,7 @@
 
 /* The wire protocol version (spec/protocol.md, GEN-2). A change on the wire
  * that an older peer cannot handle bumps it. */
-#define R2S_PROTOCOL_VERSION 1
+#define R2S_PROTOCOL_VERSION 2
 
 /* What every core call returns: 0 for success, a negative error code. */
 typedef int8_t r2s_status_t;
