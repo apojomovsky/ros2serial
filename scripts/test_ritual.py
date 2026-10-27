@@ -670,6 +670,7 @@ def test_the_pr_title_workflow_uses_the_range_script():
     text = (ROOT / ".github/workflows/pr-title.yml").read_text()
     assert "scripts/pr-title-range.sh" in text
     assert "BASE_REF: ${{ github.event.pull_request.base.ref }}" in text
+    assert 'range="$(bash scripts/pr-title-range.sh)" || exit 1' in text
     assert "pull_request.base.sha" not in text
 
 
