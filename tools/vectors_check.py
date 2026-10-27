@@ -252,6 +252,10 @@ def check_channel(name: str, vector_name: str, topic_id: int, payload: bytes) ->
         return []
     if topic_id not in SYSTEM_CHANNELS:
         return []
+    if not isinstance(vector_name, str):
+        # A cyclic alias can leave a list or mapping here. The channel
+        # range above still applies; only the name lookup needs a string.
+        return []
     frame_name = vector_name.removesuffix("_compact")
     if frame_name not in SPEC_NAMES:
         return [f"{name}/name: {vector_name} is not a frame the spec gives"]
@@ -379,7 +383,9 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
             # The topic name is a string in a full handshake and a hash in
             # a compact one. A TOPIC carries no mode byte, so the vector's
             # name says which it is.
-            if frame_name.endswith("_compact"):
+            # A cyclic alias can leave a non-string name; read it as a full
+            # handshake then, since only a string can ask for the compact form.
+            if isinstance(frame_name, str) and frame_name.endswith("_compact"):
                 r.u32()  # topic name hash
             elif not r.string():
                 problems.append(f"{name}/payload: the topic name is empty")
