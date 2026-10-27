@@ -387,7 +387,7 @@ def test_log_text_boot_line_retried_after_reject(tmp_path):
             assert parsed["index"] == index
             host.topic_status(parsed["id"], 1 if parsed["id"] == 18 else 0)
         host.ready()
-        quiet_until = time.monotonic() + 2.0
+        quiet_until = time.monotonic() + 1.2
         while True:
             remaining = quiet_until - time.monotonic()
             if remaining <= 0:
