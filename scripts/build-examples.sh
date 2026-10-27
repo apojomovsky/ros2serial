@@ -48,9 +48,17 @@ from r2s_gen import layouts
 print(" ".join("-D" + define for define in layouts.build_defines(open(sys.argv[1]).read())))
 EOF
 ) || status=1
-for fqbn in arduino:avr:uno arduino:avr:mega; do
-  arduino-cli compile --fqbn "$fqbn" --build-property "compiler.c.extra_flags=$extras" --library "$stage" \
-    examples/arduino_minimal || status=1
+for board in uno mega; do
+  out="$build/arduino_minimal/$board"
+  arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$extras" \
+    --library "$stage" --output-dir "$out" examples/arduino_minimal || status=1
+  # The receive buffer proves the limits reached the core: it exists only
+  # with the codec enabled, and without the flags the linker drops it while
+  # the firmware silently ignores every subscription.
+  if ! avr-nm "$out/arduino_minimal.ino.elf" 2>/dev/null | grep -q r2s_rx_buf; then
+    echo "arduino_minimal ($board): the firmware links no receive buffer" >&2
+    status=1
+  fi
 done
 
 exit "$status"
