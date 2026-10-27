@@ -857,7 +857,7 @@ void r2s_on_<name>(const <Type> *msg);               /* subscribed topics: proto
 r2s-gen generate --config r2s.yaml --out <dir> [--msg-path <dir>]... [--layout cmake|arduino|platformio|epic-hal] [--cpp]
 r2s-gen bundle   --distro <name> --out <dir>                    # the Arduino library with bundled types
 r2s-gen check    --config r2s.yaml [--msg-path <dir>]...       # validate only, exit code 0 or 1
-r2s-gen vectors  --type <pkg/msg/Type> --message <yaml>         # print payload hex from the reference codec
+r2s-gen vectors  --type <pkg/msg/Type> --message <yaml> [--msg-path <dir>]... [--distro <name>] [--narrow]
 r2s-gen version
 ```
 
