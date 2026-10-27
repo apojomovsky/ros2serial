@@ -627,7 +627,11 @@ TEST(SessionHandshake, AcceptsTheHelloThatAnswersTheRestart)
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
     fixture.advance_to(900);
     fixture.drain_units();
-    // The restart's HELLO_REQ is answered; the walk must begin again from it.
+    // One tick past the restart, the abandoned walk would fire its stale
+    // deadline; only a disarmed walk stays silent here.
+    fixture.advance_to(901);
+    EXPECT_TRUE(fixture.drain_units().empty()) << "the abandoned walk sends nothing after the restart";
+    // The restart's HELLO_REQ is answered, so the walk begins again from it.
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
     const auto units = fixture.drain_units();
     ASSERT_EQ(units.size(), 1u);
