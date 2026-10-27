@@ -2,6 +2,7 @@
 // deadlines, retries and reset rules that a transcript cannot pin to a
 // millisecond. Time is the manual clock's alone.
 // covers: SES-12, SES-13, SES-14, SES-15, SES-16, SES-17, SES-18, SES-19, SES-20, SES-21, CTL-3, CTL-9
+// covers: CTL-13
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -462,6 +463,46 @@ TEST(SessionHandshake, SendsReadyAfterTheLastTopic)
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
     ASSERT_EQ(fixture.session().topics().size(), 1u);
     EXPECT_EQ(fixture.session().topics()[0].topic_name, "battery");
+}
+
+TEST(SessionHandshake, RejectsOneTopicAndKeepsTheOthers)
+{
+    Fixture fixture([](const TopicInfo &info) {
+        return info.topic_id == 0x10u ? kTopicStatusHashMismatch : kTopicStatusOk;
+    });
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 2u));
+    fixture.drain_units();
+    fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+    const auto first = fixture.drain_units();
+    ASSERT_EQ(first.size(), 2u) << "TOPIC_STATUS, then the next TOPIC_REQ";
+    EXPECT_EQ(hex_of(first[0]), hex_of(wire_of(with_check({kControl, 1u, 0x05u, 0x10u, 0x02u}))))
+        << "the rejected topic answers 2 (hash mismatch)";
+    fixture.deliver_frame(kControl, 0u, topic_payload(1u, 0x11u, "charge"));
+    const auto last = fixture.drain_units();
+    ASSERT_EQ(last.size(), 2u) << "TOPIC_STATUS, then READY";
+    EXPECT_EQ(hex_of(last[0]), hex_of(wire_of(with_check({kControl, 3u, 0x05u, 0x11u, 0x00u}))))
+        << "the kept topic answers 0 (ok)";
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+    ASSERT_EQ(fixture.session().topics().size(), 2u);
+    EXPECT_EQ(fixture.session().topics()[0].status, kTopicStatusHashMismatch);
+    EXPECT_EQ(fixture.session().topics()[1].status, kTopicStatusOk);
+}
+
+TEST(SessionHandshake, AnswersUnknownTypeWithStatus1)
+{
+    Fixture fixture([](const TopicInfo &) { return kTopicStatusUnknownType; });
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    fixture.drain_units();
+    fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 2u) << "TOPIC_STATUS, then READY";
+    EXPECT_EQ(hex_of(units[0]), hex_of(wire_of(with_check({kControl, 1u, 0x05u, 0x10u, 0x01u}))))
+        << "the unknown type answers 1";
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+    ASSERT_EQ(fixture.session().topics().size(), 1u);
+    EXPECT_EQ(fixture.session().topics()[0].status, kTopicStatusUnknownType);
 }
 
 TEST(SessionHandshake, ReportsWhetherTheNewTableMatchesTheOldOne)
