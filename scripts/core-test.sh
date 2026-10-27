@@ -81,6 +81,13 @@ if [ "$build_only" = 0 ]; then
     echo "-- core: posix FAILED"
     failed+=("posix")
   fi
+  echo "-- core: avr-flash"
+  if bash "$root/core/tests/avr/check.sh"; then
+    echo "-- core: avr-flash ok"
+  else
+    echo "-- core: avr-flash FAILED"
+    failed+=("avr-flash")
+  fi
 fi
 if [ "${#failed[@]}" -gt 0 ]; then
   echo "core configurations failed: ${failed[*]}"

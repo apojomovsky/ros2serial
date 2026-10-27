@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 
+#include "r2s/r2s_arch.h"
 #include "r2s/r2s_rx.h"
 
 /* The wire protocol version (spec/protocol.md, GEN-2). A change on the wire
@@ -35,10 +36,98 @@ void r2s_spin_some(void);
 /* Nonzero while the handshake completed and user traffic may flow. */
 uint8_t r2s_connected(void);
 
+#ifdef R2S_WITH_LOG
+/* Flash-string diagnostics on the log channel (spec/protocol.md, section
+ * 7.3): one function family per level, one function per value type, so no
+ * target needs varargs or a format string. Each call sends one frame, or
+ * drops the line when it does not fit or the transmitter is busy. */
+
+/* Debug lines (level 10): a plain line, one per value type, and a RAM-text
+ * line. The value travels in the kind LOG-3 names for its type. */
+void r2s_log_debug(r2s_fstr_t text);
+void r2s_log_debug_u16(r2s_fstr_t text, uint16_t v);
+void r2s_log_debug_i16(r2s_fstr_t text, int16_t v);
+void r2s_log_debug_u32(r2s_fstr_t text, uint32_t v);
+void r2s_log_debug_i32(r2s_fstr_t text, int32_t v);
+void r2s_log_debug_f32(r2s_fstr_t text, float v);
+void r2s_log_debug_ram(const char *text);
+
+/* Info lines (level 20), same shapes as debug. */
+void r2s_log_info(r2s_fstr_t text);
+void r2s_log_info_u16(r2s_fstr_t text, uint16_t v);
+void r2s_log_info_i16(r2s_fstr_t text, int16_t v);
+void r2s_log_info_u32(r2s_fstr_t text, uint32_t v);
+void r2s_log_info_i32(r2s_fstr_t text, int32_t v);
+void r2s_log_info_f32(r2s_fstr_t text, float v);
+void r2s_log_info_ram(const char *text);
+
+/* Warn lines (level 30), same shapes as debug. */
+void r2s_log_warn(r2s_fstr_t text);
+void r2s_log_warn_u16(r2s_fstr_t text, uint16_t v);
+void r2s_log_warn_i16(r2s_fstr_t text, int16_t v);
+void r2s_log_warn_u32(r2s_fstr_t text, uint32_t v);
+void r2s_log_warn_i32(r2s_fstr_t text, int32_t v);
+void r2s_log_warn_f32(r2s_fstr_t text, float v);
+void r2s_log_warn_ram(const char *text);
+
+/* Error lines (level 40), same shapes as debug. */
+void r2s_log_error(r2s_fstr_t text);
+void r2s_log_error_u16(r2s_fstr_t text, uint16_t v);
+void r2s_log_error_i16(r2s_fstr_t text, int16_t v);
+void r2s_log_error_u32(r2s_fstr_t text, uint32_t v);
+void r2s_log_error_i32(r2s_fstr_t text, int32_t v);
+void r2s_log_error_f32(r2s_fstr_t text, float v);
+void r2s_log_error_ram(const char *text);
+
+/* Fatal lines (level 50), same shapes as debug. */
+void r2s_log_fatal(r2s_fstr_t text);
+void r2s_log_fatal_u16(r2s_fstr_t text, uint16_t v);
+void r2s_log_fatal_i16(r2s_fstr_t text, int16_t v);
+void r2s_log_fatal_u32(r2s_fstr_t text, uint32_t v);
+void r2s_log_fatal_i32(r2s_fstr_t text, int32_t v);
+void r2s_log_fatal_f32(r2s_fstr_t text, float v);
+void r2s_log_fatal_ram(const char *text);
+
+/* The literal forms: they wrap the text so it stays in flash on AVR. Other
+ * value types call the function with R2S_FSTR(lit) directly. */
+#define R2S_LOG_DEBUG(lit) r2s_log_debug(R2S_FSTR(lit))
+#define R2S_LOG_DEBUG_U16(lit, v) r2s_log_debug_u16(R2S_FSTR(lit), (v))
+#define R2S_LOG_INFO(lit) r2s_log_info(R2S_FSTR(lit))
+#define R2S_LOG_INFO_U16(lit, v) r2s_log_info_u16(R2S_FSTR(lit), (v))
+#define R2S_LOG_WARN(lit) r2s_log_warn(R2S_FSTR(lit))
+#define R2S_LOG_WARN_U16(lit, v) r2s_log_warn_u16(R2S_FSTR(lit), (v))
+#define R2S_LOG_ERROR(lit) r2s_log_error(R2S_FSTR(lit))
+#define R2S_LOG_ERROR_U16(lit, v) r2s_log_error_u16(R2S_FSTR(lit), (v))
+#define R2S_LOG_FATAL(lit) r2s_log_fatal(R2S_FSTR(lit))
+#define R2S_LOG_FATAL_U16(lit, v) r2s_log_fatal_u16(R2S_FSTR(lit), (v))
+
+/* The session calls this on every handshake, so the log seq restarts with it
+ * ([FRM-4]); firmware never calls it. */
+void r2s_log_note_connected(void);
+#else
+/* Without R2S_WITH_LOG the literal forms compile out, so one firmware builds
+ * for tiers with and without logging. */
+#define R2S_LOG_DEBUG(lit) ((void)0)
+#define R2S_LOG_DEBUG_U16(lit, v) ((void)0)
+#define R2S_LOG_INFO(lit) ((void)0)
+#define R2S_LOG_INFO_U16(lit, v) ((void)0)
+#define R2S_LOG_WARN(lit) ((void)0)
+#define R2S_LOG_WARN_U16(lit, v) ((void)0)
+#define R2S_LOG_ERROR(lit) ((void)0)
+#define R2S_LOG_ERROR_U16(lit, v) ((void)0)
+#define R2S_LOG_FATAL(lit) ((void)0)
+#define R2S_LOG_FATAL_U16(lit, v) ((void)0)
+#endif
+
 #ifdef R2S_TESTING
 /* Host test builds only: returns every core module to its state after
  * power-up, so each test starts from the same place. */
 void r2s_test_reset(void);
+#endif
+
+#if defined(R2S_WITH_LOG) && defined(R2S_TESTING)
+/* Host test builds only: the same reset, as r2s_test_reset() calls it. */
+void r2s_log_test_reset(void);
 #endif
 
 #ifdef __cplusplus
