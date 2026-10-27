@@ -16,10 +16,11 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
+from r2s_gen import bounds, config, msgs, topics
 from r2s_gen.bounds import ResolvedMessage
+from r2s_gen.config import Config
 from r2s_gen.msgs import MessageError
 from r2s_gen.version import __version__
-from r2s_gen import bounds, config, msgs, topics
 
 LAYOUTS = ("arduino", "cmake")
 
