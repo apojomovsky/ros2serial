@@ -40,11 +40,12 @@ typedef struct {
 } r2s_topic_t;
 
 /* Binds the table the accessors read. The table outlives the call: the static
- * paths pass their constant table in flash. Returns R2S_OK, or R2S_ERR_BOUNDS
- * when a nonzero count has no table, the count is above
- * R2S_TOPIC_MAX_COUNT, or a name is missing, leaving the previous binding
- * unchanged. Reading a table in flash needs the C12 byte-wise readers; until
- * they land, direct reads suit RAM and host builds. */
+ * paths pass their constant table in flash. The bind is the single gate for
+ * the table: it refuses a missing table, a count above R2S_TOPIC_MAX_COUNT,
+ * a missing name, a name beyond the varint range, or an entry that does not
+ * fit the announce frame, leaving the previous binding unchanged. Reading a
+ * table in flash needs the C12 byte-wise readers; until they land, direct
+ * reads suit RAM and host builds. */
 r2s_status_t r2s_topics_configure(const r2s_topic_t *topics, uint8_t count);
 
 /* The number of bound topics, 0 when no table is bound. */

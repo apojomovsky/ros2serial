@@ -42,11 +42,15 @@ extern "C" {
 #define R2S_SESSION_MAX_TOPICS R2S_TOPIC_MAX_COUNT
 #endif
 
+/* The record type C8 named r2s_session_topic_t is r2s_topic_t now; the alias
+ * keeps that firmware compiling with the same layout. */
+typedef r2s_topic_t r2s_session_topic_t;
+
 /* Hands the session its node name and topic table. Call once before
  * r2s_init(); a call afterwards changes what later frames announce. Returns
- * R2S_OK, or R2S_ERR_BOUNDS when the table is larger than
- * R2S_SESSION_MAX_TOPICS, a name is missing, or a name does not fit a varint,
- * leaving the previous configuration unchanged. */
+ * R2S_OK, or R2S_ERR_BOUNDS when the node name is missing or does not fit
+ * the hello frame, or when the bind refuses the table, leaving the previous
+ * configuration unchanged. */
 r2s_status_t r2s_session_configure(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count);
 
 /* The index of the configured topic with this user topic_id, or 0xFF when the

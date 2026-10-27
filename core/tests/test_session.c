@@ -614,6 +614,30 @@ void test_session_a_refused_configuration_changes_nothing(void)
     assert_tx(2, 0, 2, topic_frame_payload, sizeof topic_frame_payload);
 }
 
+/* A topic name beyond the varint range is refused with nothing announced
+ * anew: the previous name and table survive. */
+void test_session_a_huge_topic_name_changes_nothing(void)
+{
+    static char huge_name[65537];
+    static const r2s_topic_t huge_table[] = {
+        {0x10u, 0x00u, {0u}, "std_msgs/msg/Float32", huge_name},
+    };
+    const uint8_t hello_req[] = {0x01u, 0x01u};
+    const uint8_t topic_req[] = {0x03u, 0x00u};
+    uint8_t expected[64];
+    uint16_t len;
+
+    memset(huge_name, 'n', sizeof huge_name - 1u);
+    huge_name[sizeof huge_name - 1u] = '\0';
+    configure(one_topic, 1u, 0x44332211u);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_session_configure("other", huge_table, 1u));
+    len = hello_payload(expected, 0x44332211u, 1);
+    feed_host(0, 0, hello_req, sizeof hello_req);
+    assert_tx(1, 0, 1, expected, len);
+    feed_host(0, 1, topic_req, sizeof topic_req);
+    assert_tx(2, 0, 2, topic_frame_payload, sizeof topic_frame_payload);
+}
+
 void test_session_without_a_configuration_announces_no_name_and_no_topics(void)
 {
     uint8_t expected[64];

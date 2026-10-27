@@ -87,9 +87,8 @@ static uint8_t varint_len(uint16_t value)
 r2s_status_t r2s_session_configure(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count)
 {
     size_t name_len;
-    uint8_t i;
 
-    if (node_name == NULL || (topics == NULL && topic_count != 0u) || topic_count > R2S_SESSION_MAX_TOPICS) {
+    if (node_name == NULL) {
         return R2S_ERR_BOUNDS;
     }
     name_len = strlen(node_name);
@@ -104,25 +103,9 @@ r2s_status_t r2s_session_configure(const char *node_name, const r2s_topic_t *top
         (uint32_t)(R2S_MAX_FRAME - R2S_TX_OVERHEAD)) {
         return R2S_ERR_BOUNDS;
     }
-    for (i = 0u; i < topic_count; i++) {
-        size_t type_len;
-        size_t topic_len;
-        uint32_t need;
-
-        if (topics[i].type_name == NULL || topics[i].topic_name == NULL) {
-            return R2S_ERR_BOUNDS;
-        }
-        type_len = strlen(topics[i].type_name);
-        topic_len = strlen(topics[i].topic_name);
-        if (type_len > R2S_VARINT_MAX || topic_len > R2S_VARINT_MAX) {
-            return R2S_ERR_BOUNDS;
-        }
-        need = (uint32_t)12u + (uint32_t)varint_len((uint16_t)type_len) + (uint32_t)type_len +
-               (uint32_t)varint_len((uint16_t)topic_len) + (uint32_t)topic_len;
-        if (need > (uint32_t)(R2S_MAX_FRAME - R2S_TX_OVERHEAD)) {
-            return R2S_ERR_BOUNDS;
-        }
-    }
+    /* The bind is the single gate for the table: it validates names and
+     * sizes, and binds only a table it accepts, so a refusal below changes
+     * nothing announced. */
     if (r2s_topics_configure(topics, topic_count) != R2S_OK) {
         return R2S_ERR_BOUNDS;
     }
