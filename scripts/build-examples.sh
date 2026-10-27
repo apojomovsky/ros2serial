@@ -53,7 +53,16 @@ except MessageError as error:
     raise SystemExit(1)
 print(" ".join("-D" + define for define in defines))
 EOF
-) || status=1
+) || exit 1
+# An empty flag string would compile a firmware that silently ignores every
+# subscription, so the limits must travel in it, not just the codec flag.
+case "$extras" in
+    *R2S_WITH_CODEC*R2S_MAX_FRAME=*R2S_MAX_NEST=*) ;;
+    *)
+        echo "build-examples: the extracted flags name no limits ($extras)" >&2
+        exit 1
+        ;;
+esac
 for board in uno mega; do
   out="$build/arduino_minimal/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$extras" \
