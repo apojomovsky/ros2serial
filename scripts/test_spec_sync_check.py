@@ -157,6 +157,18 @@ def test_deleting_a_vector_needs_no_spec_change(tmp_path):
     assert problems(root) == []
 
 
+def test_a_vector_that_cannot_be_read_without_a_spec_change_fails(tmp_path):
+    root = repo_with(tmp_path, LOCAL)
+    target = root / "spec/vectors/frames/a.yaml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.symlink_to(target.name)
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "change")
+    assert problems(root) == [
+        "spec/vectors changed without spec/protocol.md changes: spec/vectors/frames/a.yaml names no rule"
+    ]
+
+
 def test_a_branch_that_changes_neither_passes(tmp_path):
     root = repo_with(tmp_path, LOCAL)
     write(root, "core.c", "int x;\n")
