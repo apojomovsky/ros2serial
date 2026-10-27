@@ -71,6 +71,17 @@ for c in "${configs[@]}"; do
     failed+=("$c")
   fi
 done
+# The posix port's contract tests run once, under the default compiler: they
+# prove the firmware the end-to-end tests launch, not another core build.
+if [ "$build_only" = 0 ]; then
+  echo "-- core: posix"
+  if bash "$root/ports/posix/run.sh"; then
+    echo "-- core: posix ok"
+  else
+    echo "-- core: posix FAILED"
+    failed+=("posix")
+  fi
+fi
 if [ "${#failed[@]}" -gt 0 ]; then
   echo "core configurations failed: ${failed[*]}"
   exit 1
