@@ -5,6 +5,9 @@ Check 8 of the takeoff ritual. A rule in a section whose heading ends in
 `(local)` specifies bytes that never appear on the wire, so a test covers it
 and a branch that changes only such rules needs no vector. Every other rule
 crosses the wire, and a change to one comes with a change under spec/vectors.
+The other way round, a branch that changes only vectors needs no spec change
+when every rule ID its vectors cover is already defined: new vectors for old
+rules are the seed tickets' daily work. A vector naming an unknown rule fails.
 
 Usage: spec_sync_check.py --base origin/master
 Prints one line per problem and exits 1 while any remain.
@@ -54,6 +57,38 @@ def _changed(root: Path, base: str) -> list[str]:
     return [line for line in result.stdout.splitlines() if line]
 
 
+def _unknown_covers(root: Path, changed: list[str]) -> list[str]:
+    """Rule IDs the changed vectors cover that the branch's spec does not define.
+
+    A changed vector whose covers cannot be read names nothing checkable, so
+    its path stands in for the unknown ID. A deleted vector names nothing.
+    """
+    import yaml
+
+    try:
+        defined = set(_rules((root / SPEC).read_text(encoding="utf-8")))
+    except OSError:
+        return [SPEC]
+    unknown = []
+    for path in changed:
+        if not path.startswith(VECTORS) or path.endswith("/.gitkeep"):
+            continue
+        if not path.endswith(".yaml"):
+            unknown.append(path)
+            continue
+        try:
+            doc = yaml.safe_load((root / path).read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            unknown.append(path)
+            continue
+        covers = doc.get("covers") if isinstance(doc, dict) else None
+        if not isinstance(covers, list) or not all(isinstance(rule, str) for rule in covers):
+            unknown.append(path)
+            continue
+        unknown += [rule for rule in covers if rule not in defined]
+    return sorted(set(unknown))
+
+
 def check(root: Path, base: str) -> list[str]:
     changed = _changed(root, base)
     spec_changed = SPEC in changed
@@ -70,7 +105,9 @@ def check(root: Path, base: str) -> list[str]:
         if wire:
             problems.append(f"{SPEC} changed without spec/vectors changes: {', '.join(wire)} crosses the wire")
     if vectors_changed and not spec_changed:
-        problems.append(f"spec/vectors changed without {SPEC} changes")
+        unknown = _unknown_covers(root, changed)
+        if unknown:
+            problems.append(f"spec/vectors changed without {SPEC} changes: {', '.join(unknown)} names no rule")
     return problems
 
 

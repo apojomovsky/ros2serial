@@ -130,10 +130,24 @@ def test_a_wire_rule_with_a_vector_change_passes(tmp_path):
     assert problems(root) == []
 
 
-def test_a_vector_change_without_a_spec_change_fails(tmp_path):
+def test_a_vector_covering_a_known_rule_without_a_spec_change_passes(tmp_path):
     root = repo_with(tmp_path, LOCAL)
     write(root, "spec/vectors/frames/a.yaml", "covers: [FRM-1]\ncases: []\n")
-    assert problems(root) == ["spec/vectors changed without spec/protocol.md changes"]
+    assert problems(root) == []
+
+
+def test_a_vector_naming_an_unknown_rule_without_a_spec_change_fails(tmp_path):
+    root = repo_with(tmp_path, LOCAL)
+    write(root, "spec/vectors/frames/a.yaml", "covers: [FRM-9]\ncases: []\n")
+    assert problems(root) == ["spec/vectors changed without spec/protocol.md changes: FRM-9 names no rule"]
+
+
+def test_a_vector_without_checkable_covers_without_a_spec_change_fails(tmp_path):
+    root = repo_with(tmp_path, LOCAL)
+    write(root, "spec/vectors/frames/a.yaml", "name: a\n")
+    assert problems(root) == [
+        "spec/vectors changed without spec/protocol.md changes: spec/vectors/frames/a.yaml names no rule"
+    ]
 
 
 def test_a_branch_that_changes_neither_passes(tmp_path):
