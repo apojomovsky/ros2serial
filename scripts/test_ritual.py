@@ -596,3 +596,65 @@ def test_the_release_workflow_calls_the_subject_script():
     """The tag job's check is a script so that its test cannot drift from it."""
     text = (ROOT / ".github/workflows/cut-release.yml").read_text()
     assert "scripts/release-subject.sh" in text
+
+
+def test_a_docs_title_survives_a_merged_in_master(tmp_path):
+    """The title check covers the branch's own commits, not master's.
+
+    When master moves on with a feat commit and the branch merges it in, a
+    range from the old base puts master's feat inside the range and a docs
+    title fails. The merge-base range holds only the branch's commits.
+    """
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "docs(core): describe the thing")
+    old_base = git(wt, "rev-parse", "HEAD").stdout.strip()
+    commit(main, {"b.txt": "b\n"}, "feat(core): a new thing")
+    git(main, "push", "-q", "origin", "master")
+    git(wt, "fetch", "-q", "origin")
+    git(wt, "merge", "-q", "--no-edit", "origin/master")
+    stale = f"{old_base}..HEAD"
+    stale_result = run(
+        [
+            "python3",
+            str(ROOT / "scripts/commit_check.py"),
+            "--title",
+            "docs(core): describe the thing",
+            "--covers-range",
+            stale,
+        ],
+        wt,
+    )
+    assert stale_result.returncode == 1, stale_result.stdout + stale_result.stderr
+    stale_subjects = git(wt, "log", "--no-merges", "--format=%s", stale).stdout.splitlines()
+    assert "feat(core): a new thing" in stale_subjects
+    merge_base = git(wt, "merge-base", "origin/master", "HEAD").stdout.strip()
+    fresh_range = f"{merge_base}..HEAD"
+    subjects = git(wt, "log", "--no-merges", "--format=%s", fresh_range).stdout.splitlines()
+    assert subjects == ["docs(core): describe the thing"]
+    fresh = run(
+        [
+            "python3",
+            str(ROOT / "scripts/commit_check.py"),
+            "--title",
+            "docs(core): describe the thing",
+            "--covers-range",
+            fresh_range,
+        ],
+        wt,
+    )
+    assert fresh.returncode == 0, fresh.stdout + fresh.stderr
+    # The workflow checks out refs/pull/N/merge, a merge of the PR head into
+    # the base, so the range from the merge base must stay non-empty there too.
+    head = git(wt, "rev-parse", "HEAD").stdout.strip()
+    git(wt, "checkout", "-q", "--detach", "origin/master")
+    git(wt, "merge", "-q", "--no-edit", "--no-ff", head)
+    merge_ref_base = git(wt, "merge-base", "origin/master", "HEAD").stdout.strip()
+    merge_subjects = git(wt, "log", "--no-merges", "--format=%s", f"{merge_ref_base}..HEAD").stdout.splitlines()
+    assert merge_subjects == ["docs(core): describe the thing"]
+
+
+def test_the_pr_title_workflow_takes_its_range_from_the_merge_base():
+    """The payload base.sha goes stale when master moves, so the range comes from the merge base."""
+    text = (ROOT / ".github/workflows/pr-title.yml").read_text()
+    assert "merge-base" in text
+    assert "pull_request.base.sha" not in text
