@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # The single suite script: CI runs exactly this, and so does `make test`.
 # Scope with one or more of LINT=1 SCRIPTS=1 COMMITS=1 CORE=1 GEN=1 BRIDGE=1
-# E2E=<backend> COVERAGE=1 DOCS=1; no scope runs everything. COMMITS checks COMMIT_RANGE
-# (default origin/master..HEAD) and PR_TITLE when set, then runs the prose gate
-# on the same range. Exits non-zero if any section fails.
+# E2E=<backend> COVERAGE=1 DOCS=1 EXAMPLES=1; no scope runs everything.
+# COMMITS checks COMMIT_RANGE (default origin/master..HEAD) and PR_TITLE when set,
+# then runs the prose gate on the same range. Exits non-zero if any section fails.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 # shellcheck source=scripts/clean-git-env.sh
@@ -55,7 +55,7 @@ else
 fi
 
 scoped=0
-for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E COVERAGE DOCS; do [ -n "${!v:-}" ] && scoped=1; done
+for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E COVERAGE DOCS EXAMPLES; do [ -n "${!v:-}" ] && scoped=1; done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }
 
 failed=()
@@ -129,6 +129,7 @@ if wants GEN; then section gen python3 -m pytest gen; fi
 if wants BRIDGE; then section bridge bash scripts/bridge-test.sh; fi
 if wants COVERAGE; then section coverage bash scripts/coverage-gate.sh; fi
 if wants DOCS; then section docs python3 tools/snippets_check.py; fi
+if wants EXAMPLES; then section examples bash scripts/build-examples.sh; fi
 if wants E2E; then
   case "${E2E:-}" in
     "") section e2e-avr bash tests/harness/simavr/run.sh

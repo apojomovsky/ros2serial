@@ -17,17 +17,9 @@ extern "C" {
 #define R2S_TOPIC_MAX_COUNT 16u
 #endif
 
-/* Flash placement for the topic table. The canonical home of this macro is
- * r2s_arch.h (C12); until it lands, the topics header carries the same
- * guarded default as the codec, so generated tables emit the same bytes. */
-#ifndef R2S_FLASH
-#ifdef __AVR__
-#include <avr/pgmspace.h>
-#define R2S_FLASH PROGMEM
-#else
-#define R2S_FLASH
-#endif
-#endif
+/* Table placement lives in r2s_arch.h, so the generator emits the same macro
+ * the core reads. */
+#include "r2s/r2s_arch.h"
 
 /* One announced topic: its user topic_id, its CTL-4 flags, the first 8 bytes
  * of its RIHS01 type hash, and its type and topic names. */
@@ -43,9 +35,9 @@ typedef struct {
  * paths pass their constant table in flash. The bind is the single gate for
  * the table: it refuses a missing table, a count above R2S_TOPIC_MAX_COUNT,
  * a missing name, a name beyond the varint range, or an entry that does not
- * fit the announce frame, leaving the previous binding unchanged. Reading a
- * table in flash needs the C12 byte-wise readers; until they land, direct
- * reads suit RAM and host builds. */
+ * fit the announce frame, leaving the previous binding unchanged. The table
+ * carries R2S_FLASH; the byte-wise readers serve the descriptor tables, and
+ * the topic entries gain them in #189. */
 r2s_status_t r2s_topics_configure(const r2s_topic_t *topics, uint8_t count);
 
 /* The number of bound topics, 0 when no table is bound. */
