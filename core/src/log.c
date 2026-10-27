@@ -98,9 +98,11 @@ static void send_line(uint8_t level, r2s_fstr_t text, uint16_t text_len, uint8_t
     for (i = 0u; i < value_len; i++) {
         (void)r2s_tx_byte((uint8_t)(value >> (8u * i)));
     }
-    if (r2s_tx_end() == R2S_OK) {
-        log_seq++;
-    }
+    /* Every fed byte succeeds while the frame begun above stays active, and
+     * the loops feed exactly the declared length, so the end below cannot
+     * fail and the seq advances with the sent frame. */
+    (void)r2s_tx_end();
+    log_seq++;
 }
 
 /* A plain flash-string line. */

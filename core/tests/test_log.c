@@ -104,7 +104,7 @@ void test_log_macro_u16_wraps_the_literal(void)
 
 void test_log_ram_sends_runtime_text(void)
 {
-    char text[] = "runtime";
+    static const char text[] = "runtime";
 
     r2s_log_error_ram(text);
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
@@ -209,6 +209,22 @@ void test_log_every_level_covers_every_value_type(void)
 void test_log_null_text_sends_nothing(void)
 {
     r2s_log_info(NULL);
+    r2s_log_info_u16(NULL, 0u);
     r2s_log_info_ram(NULL);
     TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+}
+
+void test_log_text_past_the_varint_range_sends_nothing(void)
+{
+    static char huge[R2S_VARINT_MAX + 2u];
+
+    memset(huge, 'y', sizeof huge - 1u);
+    huge[sizeof huge - 1u] = '\0';
+    r2s_log_info(R2S_FSTR(huge));
+    r2s_log_info_u16(R2S_FSTR(huge), 0u);
+    r2s_log_info_ram(huge);
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    R2S_LOG_INFO("kept");
+    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    assert_log(0, 0, 20u, "kept", 0u, NULL, 0u);
 }
