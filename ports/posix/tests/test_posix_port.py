@@ -236,10 +236,13 @@ class Host:
         return token
 
 
-def do_handshake(fw):
+def do_handshake(fw, host=None):
     """HELLO_REQ, one TOPIC_REQ per announced topic with an ok status each,
-    then READY: returns the parsed HELLO and the TOPICs in index order."""
-    host = Host(fw.master)
+    then READY: returns the parsed HELLO and the TOPICs in index order. The
+    host models the bridge side, so a rebooted firmware reuses the same one
+    and its token counter keeps counting."""
+    host = host or Host(fw.master)
+    host.master = fw.master
     _, _, payload = read_frame(fw.master, want=0)
     hello = parse_hello(payload)
     host.hello_req()
@@ -300,18 +303,18 @@ def test_handshake_reaches_connected(tmp_path):
 
 # covers: SES-10, SES-19, SES-21
 def test_restarted_firmware_is_detected_as_a_reset(tmp_path):
-    with Firmware("--rate", "20") as fw:
-        hello, _topics, host = do_handshake(fw)
-        assigned = host.next_token - 1
-        assert hello["token"] == 0, "no token before the first READY"
-        assert assigned != 0
-        assert fw.stop() == -signal.SIGTERM
+    fw = Firmware("--rate", "20")
+    hello, _topics, host = do_handshake(fw)
+    assigned = host.next_token - 1
+    assert hello["token"] == 0, "no token before the first READY"
+    assert assigned != 0
+    assert fw.stop() == -signal.SIGTERM
     with Firmware("--rate", "20") as fw:
         _, _, payload = read_frame(fw.master, want=0)
         rebooted = parse_hello(payload)
         assert rebooted["token"] == 0, "a reboot wipes the RAM token"
         assert rebooted["token"] != assigned, "the host tells the reboot from a reconnect"
-        _hello, _topics, host = do_handshake(fw)
+        _hello, _topics, host = do_handshake(fw, host)
         assert host.next_token - 1 != assigned, "the re-handshake assigns a fresh token"
         _topic, _seq, payload = read_frame(fw.master, want=16)
         assert len(payload) == 4, "the re-handshake connects again"
