@@ -87,10 +87,11 @@ def test_unclosed_fence_fails(tmp_path):
     assert "README.md:3" in problems[0]
 
 
-def test_yaml_snippet_parses(tmp_path):
+def test_valid_yaml_snippet_is_skipped_by_tag(tmp_path, capsys):
     text = "# T\n\n```yaml\nnode: base\ntopics:\n  - name: battery\n```\n"
     root = write_tree(tmp_path, {"README.md": text})
     assert snippets_check.check_tree(root) == []
+    assert "(yaml)" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("tag", ["sh", "console", "text", "json", "yaml"])
@@ -273,3 +274,18 @@ def test_quoted_tagged_fence_is_reported(tmp_path):
     problems = snippets_check.check_tree(root)
     assert len(problems) == 1
     assert "never opened a snippet" in problems[0]
+
+
+def test_quoted_tolerated_fence_is_reported(tmp_path):
+    text = "# T\n\n> ```yaml\n> node: [unclosed\n> ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "never opened a snippet" in problems[0]
+
+
+def test_marker_above_tolerated_fence_skips_by_tag(tmp_path, capsys):
+    text = "# T\n\n<!-- snippet: skip until #94 -->\n```text\nhello\n```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
+    assert "skipped by tag" in capsys.readouterr().out

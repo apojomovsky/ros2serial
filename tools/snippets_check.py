@@ -143,7 +143,7 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
         if fence and 0 <= raw - base <= 3:
             words = line[fence.end() :].split()
             open_line = i + 1
-            if words and words[0] in LANGUAGES:
+            if words and (words[0] in LANGUAGES or words[0] in SKIPPED_TAGS):
                 opened.add(open_line)
             indent = raw
             i += 1
@@ -200,7 +200,7 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
         problems.append(f"{rel}:{lineno}: {_marker_problem(kind)}")
     for number, text in enumerate(lines, start=1):
         tag = SWEEP.match(text)
-        if tag and tag.group(1) in LANGUAGES and number not in opened:
+        if tag and tag.group(1) in LANGUAGES + SKIPPED_TAGS and number not in opened:
             problems.append(f"{rel}:{number}: tagged fence never opened a snippet")
     return snippets, problems
 
@@ -256,13 +256,13 @@ def check_tree(root: Path) -> list[str]:
             snippets, found = extract(path, rel)
             problems += found
             for snippet in snippets:
-                if snippet.ticket is not None:
-                    print(f"skip {rel}:{snippet.line} ({snippet.language}) until #{snippet.ticket}")
-                    skipped += 1
-                    continue
                 if snippet.skipped_tag is not None:
                     print(f"skip {rel}:{snippet.line} ({snippet.skipped_tag}): skipped by tag, not compiled")
                     by_tag += 1
+                    continue
+                if snippet.ticket is not None:
+                    print(f"skip {rel}:{snippet.line} ({snippet.language}) until #{snippet.ticket}")
+                    skipped += 1
                     continue
                 failed = compile_snippet(snippet, root, workdir)
                 if failed is None:
