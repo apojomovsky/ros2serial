@@ -55,17 +55,15 @@ else
 fi
 
 scoped=0
-scope_names=""
-for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E COVERAGE DOCS EXAMPLES; do
-  if [ -n "${!v:-}" ]; then scoped=1; scope_names="$scope_names $v"; fi
-done
+for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E COVERAGE DOCS EXAMPLES; do [ -n "${!v:-}" ] && scoped=1; done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }
 
 failed=()
-ran=0
+ran_scopes=""
+scope_now=""
 section() {
   local name=$1; shift
-  ran=$((ran + 1))
+  case " $ran_scopes " in *" $scope_now "*) ;; *) ran_scopes="$ran_scopes $scope_now" ;; esac
   echo "== $name"
   if "$@"; then echo "== $name: ok"; else echo "== $name: FAILED"; failed+=("$name"); fi
 }
@@ -112,7 +110,7 @@ spec_coverage() {
 }
 lint_workflows() { need actionlint && actionlint .github/workflows/*.yml; }
 
-if wants LINT; then
+if wants LINT; then scope_now=LINT
   section layout python3 scripts/check_layout.py
   section python-lint lint_python
   section c-format bash scripts/c-format.sh
@@ -122,20 +120,20 @@ if wants LINT; then
   section spec-coverage spec_coverage
   section zone python3 tools/zone_check.py
 fi
-if wants COMMITS; then
+if wants COMMITS; then scope_now=COMMITS
   section commits check_commits
   section prose check_prose
 fi
-if wants SCRIPTS; then
+if wants SCRIPTS; then scope_now=SCRIPTS
   section scripts-tests python3 -m pytest scripts tools
 fi
-if wants CORE; then section core bash scripts/core-test.sh; fi
-if wants GEN; then section gen python3 -m pytest gen; fi
-if wants BRIDGE; then section bridge bash scripts/bridge-test.sh; fi
-if wants COVERAGE; then section coverage bash scripts/coverage-gate.sh; fi
-if wants DOCS; then section docs python3 tools/snippets_check.py; fi
-if wants EXAMPLES; then section examples bash scripts/build-examples.sh; fi
-if wants E2E; then
+if wants CORE; then scope_now=CORE; section core bash scripts/core-test.sh; fi
+if wants GEN; then scope_now=GEN; section gen python3 -m pytest gen; fi
+if wants BRIDGE; then scope_now=BRIDGE; section bridge bash scripts/bridge-test.sh; fi
+if wants COVERAGE; then scope_now=COVERAGE; section coverage bash scripts/coverage-gate.sh; fi
+if wants DOCS; then scope_now=DOCS; section docs python3 tools/snippets_check.py; fi
+if wants EXAMPLES; then scope_now=EXAMPLES; section examples bash scripts/build-examples.sh; fi
+if wants E2E; then scope_now=E2E
   case "${E2E:-}" in
     "") section e2e-avr bash tests/harness/simavr/run.sh
         section e2e-posix pending "V1" ;;
@@ -148,12 +146,20 @@ if wants E2E; then
   esac
 fi
 
-if [ "$scoped" = 1 ] && [ "$ran" = 0 ]; then
-  echo "no section ran for scope:$scope_names" >&2
-  exit 1
+empty=""
+if [ "$scoped" = 1 ]; then
+  for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E COVERAGE DOCS EXAMPLES; do
+    if [ -n "${!v:-}" ]; then
+      case " $ran_scopes " in *" $v "*) ;; *) empty="$empty $v" ;; esac
+    fi
+  done
+fi
+if [ -n "$empty" ]; then
+  echo "no section ran for scope:$empty" >&2
 fi
 if [ "${#failed[@]}" -gt 0 ]; then
   echo "failed sections: ${failed[*]}"
   exit 1
 fi
+if [ -n "$empty" ]; then exit 1; fi
 echo "all sections passed"
