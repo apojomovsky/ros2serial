@@ -109,7 +109,8 @@ if(BUILD_TESTING)
   ament_add_gtest(test_session test/test_session.cpp)
   target_include_directories(test_session PRIVATE ${R2S_CORE_DIR}/include)
   target_compile_definitions(test_session PRIVATE
-    R2S_SESSION_VECTOR_DIR="${R2S_CORE_DIR}/../spec/vectors/session")
+    R2S_SESSION_VECTOR_DIR="${R2S_CORE_DIR}/../spec/vectors/session"
+    R2S_FRAMES_VECTOR_DIR="${R2S_CORE_DIR}/../spec/vectors/frames")
   target_link_libraries(test_session r2s_bridge_test_support yaml-cpp::yaml-cpp)
 
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)

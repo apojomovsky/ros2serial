@@ -418,6 +418,23 @@ TEST(SessionHandshake, AcceptsAnMcuWhoseDoubleIs32Bits)
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
 }
 
+// The HELLO the MCU core's own vector file announces, byte for byte
+// (spec/vectors/frames/hello.yaml): the two sides agree on the wire, not just
+// on this test's builder.
+TEST(SessionHandshake, AcceptsTheHelloOfTheMcusOwnVector)
+{
+    const YAML::Node vector = YAML::LoadFile(std::string(R2S_FRAMES_VECTOR_DIR) + "/hello.yaml");
+    const std::vector<std::uint8_t> payload = bytes_of(vector["payload"].as<std::string>());
+    ASSERT_FALSE(payload.empty());
+
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, payload);
+    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking)
+        << "one topic to collect, so the walk has just begun";
+    EXPECT_EQ(fixture.session().boot_id(), 0x44332211u);
+}
+
 TEST(SessionHandshake, RefusesATickRateThatIsNotThousandTimesADivisor)
 {
     Fixture fixture;
