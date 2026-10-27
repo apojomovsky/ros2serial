@@ -104,14 +104,15 @@ def test_generate_is_byte_identical_run_to_run(tmp_path):
     assert first == second
 
 
-def test_every_file_names_the_version_and_config_hash(tmp_path):
+def test_every_file_names_the_version_and_wrappers_the_config_hash(tmp_path):
     loaded, files = generated("cmake", tmp_path)
     digest = layouts.config_hash(loaded)
 
     assert len(digest) == 16
     for name, text in files.items():
         assert f"r2s-gen {__version__}" in text, name
-        assert digest in text, name
+        if "r2s_generated" not in name:
+            assert digest in text, name
 
 
 def test_the_config_hash_moves_with_the_config(tmp_path):
@@ -132,22 +133,27 @@ def test_cpp_output_is_rejected_precisely(tmp_path):
 
 
 def test_a_compact_handshake_is_rejected_precisely(tmp_path):
-    loaded = load(POSIX_TEXT.replace("node: r2s_posix", "node: r2s_posix\nhandshake: compact"), tmp_path)
+    path = write_config(POSIX_TEXT.replace("node: r2s_posix", "node: r2s_posix\nhandshake: compact"), tmp_path)
+    loaded = config.load(path)
     repository, resolved = resolve_for(loaded)
 
     with pytest.raises(MessageError) as caught:
-        layouts.generate(loaded, resolved, repository, "cmake")
+        layouts.generate(loaded, resolved, repository, "cmake", source=str(path))
 
     assert str(caught.value) == (
-        f"{tmp_path / 'r2s.yaml'}: compact handshakes need the node map, which generate does not emit yet; "
-        "use handshake: full"
+        f"{path}: compact handshakes need the node map, which generate does not emit yet; use handshake: full"
     )
 
 
 def test_the_generate_command_writes_the_cmake_layout(tmp_path, capsys):
     out = tmp_path / "out"
 
-    assert cli.main(["generate", "--config", str(write_config(POSIX_TEXT, tmp_path)), "--out", str(out)]) == 0
+    assert (
+        cli.main(
+            ["generate", "--config", str(write_config(POSIX_TEXT, tmp_path)), "--out", str(out), "--layout", "cmake"]
+        )
+        == 0
+    )
     assert sorted(path.name for path in out.iterdir()) == ["CMakeLists.txt", "r2s_generated.c", "r2s_generated.h"]
 
 
@@ -168,7 +174,7 @@ def test_the_generate_command_rejects_an_unknown_layout(tmp_path, capsys):
         )
         == 1
     )
-    assert "--layout: unknown layout 'platformio'" in capsys.readerr().err
+    assert "--layout: unknown layout 'platformio'" in capsys.readouterr().err
 
 
 def test_the_cmake_layout_builds_as_a_static_library(tmp_path):
