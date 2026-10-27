@@ -68,6 +68,10 @@ install(TARGETS r2s_bridge_component
 install(TARGETS bridge RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 
+# The launch file and the example parameters install into the package share,
+# so the launch test and the e2e framework find them without the sources.
+install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
+
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(class_loader REQUIRED)
