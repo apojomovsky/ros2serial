@@ -288,4 +288,5 @@ def test_marker_above_tolerated_fence_skips_by_tag(tmp_path, capsys):
     text = "# T\n\n<!-- snippet: skip until #94 -->\n```text\nhello\n```\n"
     root = write_tree(tmp_path, {"README.md": text})
     assert snippets_check.check_tree(root) == []
-    assert "skipped by tag" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "skip README.md:4 (text): skipped by tag" in out

@@ -16,8 +16,8 @@ alone on the line above the fence:
 
 A marker without a ticket number is an error, and so is a marker above no
 fence. A line that only mentions a marker in passing is not one. The run
-prints every skipped snippet with its ticket, so none is forgotten. C and
-C++ snippets compile with -I core/include, so snippets using today's real
+prints every skipped snippet, with its ticket when it has one, so none is
+forgotten. C and C++ snippets compile with -I core/include, so snippets using today's real
 headers compile instead of being skipped.
 """
 
