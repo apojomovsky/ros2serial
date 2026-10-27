@@ -35,8 +35,9 @@ typedef struct {
  * paths pass their constant table in flash. The bind is the single gate for
  * the table: it refuses a missing table, a count above R2S_TOPIC_MAX_COUNT,
  * a missing name, a name beyond the varint range, or an entry that does not
- * fit the announce frame, leaving the previous binding unchanged. Tables in
- * flash are read through the r2s_arch.h byte-wise readers. */
+ * fit the announce frame, leaving the previous binding unchanged. The table
+ * carries R2S_FLASH; the byte-wise readers serve the descriptor tables, and
+ * the topic entries gain them in #189. */
 r2s_status_t r2s_topics_configure(const r2s_topic_t *topics, uint8_t count);
 
 /* The number of bound topics, 0 when no table is bound. */
