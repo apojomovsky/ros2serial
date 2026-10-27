@@ -23,8 +23,10 @@
 
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include <rcl_interfaces/msg/parameter_value.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <sensor_msgs/msg/nav_sat_fix.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/byte.hpp>
 #include <std_msgs/msg/char.hpp>
@@ -1121,6 +1123,277 @@ TEST(ConverterFieldPath, StopsAtEmptyNestedArrays)
     ASSERT_TRUE(converter.install_plan_for_test("fake/msg/EmptyArr", &handle));
     EXPECT_EQ(converter.field_path("fake/msg/EmptyArr", 0), "items");
     EXPECT_EQ(converter.field_path("fake/msg/EmptyArr", 1), "");
+}
+TEST(ConverterRoundTrip, PackedToCdrToPackedReturnsTheOriginal)
+{
+    Converter converter;
+    std::vector<std::filesystem::path> files;
+    for (const auto &entry : std::filesystem::directory_iterator(R2S_MESSAGES_VECTOR_DIR)) {
+        if (entry.path().extension() == ".yaml") {
+            files.push_back(entry.path());
+        }
+    }
+    std::sort(files.begin(), files.end());
+    ASSERT_FALSE(files.empty()) << "no message vectors found";
+
+    for (const auto &file : files) {
+        const YAML::Node node = YAML::LoadFile(file);
+        const std::string name = node["name"].as<std::string>();
+        const std::string type = node["type"].as<std::string>();
+        if (type != "std_msgs/msg/Float32" && type != "geometry_msgs/msg/Twist") {
+            continue;
+        }
+        SCOPED_TRACE(name);
+        const bool narrow = node["profile"]["narrow_float64"].as<bool>();
+        const std::vector<std::uint8_t> payload = bytes_of(node["payload"].as<std::string>());
+        std::vector<std::uint8_t> cdr;
+        const ConvertResult forward = converter.to_cdr(type, narrow, payload.data(), payload.size(), cdr);
+        ASSERT_EQ(forward.fail, ConvertFail::kNone);
+        std::vector<std::uint8_t> packed;
+        const ConvertResult back = converter.from_cdr(type, narrow, cdr.data(), cdr.size(), packed);
+        ASSERT_EQ(back.fail, ConvertFail::kNone) << "field " << static_cast<int>(back.field);
+        if (packed != payload) {
+            ADD_FAILURE() << "round trip differs\n got: " << hex_of(packed) << "\nwant: " << hex_of(payload);
+        }
+    }
+}
+
+TEST(ConverterFromCdr, RejectsAnEmptyMessage)
+{
+    Converter converter;
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result = converter.from_cdr("std_msgs/msg/Float32", false, nullptr, 0u, packed);
+    EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
+}
+
+TEST(ConverterFromCdr, RejectsANulInAString)
+{
+    Converter converter;
+    // CDR encapsulation, a length of 3, and "a" plus NUL plus "b".
+    const std::vector<std::uint8_t> cdr{0x00, 0x01, 0x00, 0x00, 0x03, 0x00,
+                                        0x00, 0x00, 0x61, 0x00, 0x62, 0x00};
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+        converter.from_cdr("std_msgs/msg/String", false, cdr.data(), cdr.size(), packed);
+    EXPECT_EQ(result.fail, ConvertFail::kNulInString);
+    EXPECT_EQ(result.field, 0u);
+    EXPECT_EQ(converter.field_path("std_msgs/msg/String", 0u), "data");
+}
+
+TEST(ConverterFromCdr, RejectsAnUnreadableMessage)
+{
+    Converter converter;
+    const std::vector<std::uint8_t> cdr{0x00};
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+        converter.from_cdr("std_msgs/msg/Float32", false, cdr.data(), cdr.size(), packed);
+    EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
+}
+TEST(ConverterFromCdr, ConvertsScalarsAndStrings)
+{
+    Converter converter;
+    const auto expect = [&converter](const std::string &type, const std::vector<std::uint8_t> &cdr,
+                                     const std::vector<std::uint8_t> &want) {
+        SCOPED_TRACE(type);
+        std::vector<std::uint8_t> packed;
+        const ConvertResult result = converter.from_cdr(type, false, cdr.data(), cdr.size(), packed);
+        EXPECT_EQ(result.fail, ConvertFail::kNone);
+        EXPECT_EQ(packed, want);
+    };
+    std_msgs::msg::String text;
+    text.data = "hi";
+    expect("std_msgs/msg/String", serialize_ref(text), {0x02, 0x68, 0x69});
+    std_msgs::msg::UInt64 wide;
+    wide.data = 0x0102030405060708ull;
+    expect("std_msgs/msg/UInt64", serialize_ref(wide), {0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01});
+    std_msgs::msg::UInt16 narrow16;
+    narrow16.data = 0x0102;
+    expect("std_msgs/msg/UInt16", serialize_ref(narrow16), {0x02, 0x01});
+    std_msgs::msg::Int32 signed32;
+    signed32.data = -2;
+    expect("std_msgs/msg/Int32", serialize_ref(signed32), {0xFE, 0xFF, 0xFF, 0xFF});
+    std_msgs::msg::Float32 single;
+    single.data = 1.5F;
+    expect("std_msgs/msg/Float32", serialize_ref(single), {0x00, 0x00, 0xC0, 0x3F});
+    std_msgs::msg::Bool flag;
+    flag.data = true;
+    expect("std_msgs/msg/Bool", serialize_ref(flag), {0x01});
+    flag.data = false;
+    expect("std_msgs/msg/Bool", serialize_ref(flag), {0x00});
+}
+
+TEST(ConverterFromCdr, ConvertsBooleanSequences)
+{
+    Converter converter;
+    rcl_interfaces::msg::ParameterValue param;
+    param.type = 1;
+    param.bool_value = true;
+    param.integer_value = -1;
+    param.double_value = 1.5;
+    param.string_value = "s";
+    param.byte_array_value = {0xAA};
+    param.bool_array_value = {true, false};
+    param.integer_array_value = {7};
+    param.double_array_value = {0.5};
+    param.string_array_value = {"x"};
+    const std::vector<std::uint8_t> cdr = serialize_ref(param);
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+        converter.from_cdr("rcl_interfaces/msg/ParameterValue", false, cdr.data(), cdr.size(), packed);
+    ASSERT_EQ(result.fail, ConvertFail::kNone) << "field " << static_cast<int>(result.field);
+    const std::vector<std::uint8_t> want{
+        0x01, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xF8, 0x3F, 0x01, 0x73, 0x01, 0xAA, 0x02, 0x01, 0x00, 0x01, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x3F, 0x01, 0x01, 0x78};
+    EXPECT_EQ(packed, want);
+}
+
+TEST(ConverterFromCdr, EncodesMultiByteVarints)
+{
+    Converter converter;
+    std_msgs::msg::String text;
+    text.data = std::string(200, 'y');
+    const std::vector<std::uint8_t> cdr = serialize_ref(text);
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+        converter.from_cdr("std_msgs/msg/String", false, cdr.data(), cdr.size(), packed);
+    ASSERT_EQ(result.fail, ConvertFail::kNone);
+    ASSERT_EQ(packed.size(), 202u);
+    EXPECT_EQ(packed[0], 0xC8u);
+    EXPECT_EQ(packed[1], 0x01u);
+    EXPECT_EQ(std::vector<std::uint8_t>(packed.begin() + 2u, packed.end()),
+              std::vector<std::uint8_t>(200u, 'y'));
+}
+
+TEST(ConverterFromCdr, RejectsAnOverlongElement)
+{
+    Converter converter;
+    sensor_msgs::msg::JointState state;
+    state.name = {std::string(70000, 'y')};
+    const std::vector<std::uint8_t> cdr = serialize_ref(state);
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+        converter.from_cdr("sensor_msgs/msg/JointState", false, cdr.data(), cdr.size(), packed);
+    EXPECT_EQ(result.fail, ConvertFail::kOverBound);
+    EXPECT_EQ(result.field, 5u) << "the name field in depth-first order";
+    EXPECT_TRUE(packed.empty()) << "no partial payload escapes";
+}
+
+TEST(ConverterFromCdr, RefusesAnOverlongSequence)
+{
+    Converter converter;
+    sensor_msgs::msg::JointState state;
+    state.position.assign(70000u, 0.0);
+    const std::vector<std::uint8_t> cdr = serialize_ref(state);
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+        converter.from_cdr("sensor_msgs/msg/JointState", false, cdr.data(), cdr.size(), packed);
+    EXPECT_EQ(result.fail, ConvertFail::kOverBound);
+    EXPECT_EQ(result.field, 6u) << "the position field in depth-first order";
+}
+
+TEST(ConverterFromCdr, RefusesAnOverlongNestedString)
+{
+    Converter converter;
+    sensor_msgs::msg::NavSatFix fix;
+    fix.header.frame_id = std::string(70000, 'z');
+    const std::vector<std::uint8_t> cdr = serialize_ref(fix);
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+        converter.from_cdr("sensor_msgs/msg/NavSatFix", false, cdr.data(), cdr.size(), packed);
+    EXPECT_EQ(result.fail, ConvertFail::kOverBound);
+    EXPECT_EQ(result.field, 4u) << "the frame_id field in depth-first order";
+    EXPECT_TRUE(packed.empty()) << "no partial payload escapes";
+}
+
+TEST(ConverterFromCdr, RejectsAnUnknownType)
+{
+    Converter converter;
+    std::vector<std::uint8_t> packed;
+    const std::vector<std::uint8_t> cdr{0x00};
+    const ConvertResult result = converter.from_cdr("nope/msg/Nope", false, cdr.data(), cdr.size(), packed);
+    EXPECT_EQ(result.fail, ConvertFail::kUnknownType);
+}
+
+TEST(ConverterFromCdr, RefusesAPlanWithoutAMiddlewareHandle)
+{
+    Converter converter;
+    static MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "NoMw";
+    members.member_count_ = 0;
+    members.size_of_ = 1;
+    members.init_function = fake_noop_init;
+    members.fini_function = fake_noop_fini;
+    static const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/NoMw", &handle));
+    std::vector<std::uint8_t> packed;
+    const std::vector<std::uint8_t> cdr{0x00, 0x01, 0x00, 0x00};
+    EXPECT_EQ(converter.from_cdr("fake/msg/NoMw", false, cdr.data(), cdr.size(), packed).fail,
+              ConvertFail::kUnsupportedField);
+}
+
+TEST(ConverterFromCdr, ConvertsJointState)
+{
+    Converter converter;
+    sensor_msgs::msg::JointState state;
+    state.header.stamp.sec = 1;
+    state.header.stamp.nanosec = 2;
+    state.header.frame_id = "f";
+    state.name = {"ab"};
+    state.position = {1.0};
+    const std::vector<std::uint8_t> cdr = serialize_ref(state);
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+        converter.from_cdr("sensor_msgs/msg/JointState", false, cdr.data(), cdr.size(), packed);
+    ASSERT_EQ(result.fail, ConvertFail::kNone) << "field " << static_cast<int>(result.field);
+    const std::vector<std::uint8_t> want{0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01,
+                                         0x66, 0x01, 0x02, 0x61, 0x62, 0x01, 0x00, 0x00, 0x00,
+                                         0x00, 0x00, 0x00, 0xF0, 0x3F, 0x00, 0x00};
+    EXPECT_EQ(packed, want);
+}
+
+TEST(ConverterFromCdr, RoundTripsImuBothWidths)
+{
+    Converter converter;
+    sensor_msgs::msg::Imu imu;
+    imu.header.frame_id = "imu";
+    imu.angular_velocity.x = 1.0;
+    imu.linear_acceleration.z = -2.0;
+    const std::vector<std::uint8_t> cdr = serialize_ref(imu);
+    for (const bool narrow : {false, true}) {
+        SCOPED_TRACE(narrow ? "narrow" : "full");
+        std::vector<std::uint8_t> packed;
+        const ConvertResult back =
+            converter.from_cdr("sensor_msgs/msg/Imu", narrow, cdr.data(), cdr.size(), packed);
+        ASSERT_EQ(back.fail, ConvertFail::kNone) << "field " << static_cast<int>(back.field);
+        std::vector<std::uint8_t> again;
+        const ConvertResult forth =
+            converter.to_cdr("sensor_msgs/msg/Imu", narrow, packed.data(), packed.size(), again);
+        ASSERT_EQ(forth.fail, ConvertFail::kNone);
+        EXPECT_EQ(again, cdr) << "the packed form converts back byte-identically";
+    }
+    std::vector<std::uint8_t> full;
+    ASSERT_EQ(converter.from_cdr("sensor_msgs/msg/Imu", false, cdr.data(), cdr.size(), full).fail,
+              ConvertFail::kNone);
+    std::vector<std::uint8_t> slim;
+    ASSERT_EQ(converter.from_cdr("sensor_msgs/msg/Imu", true, cdr.data(), cdr.size(), slim).fail,
+              ConvertFail::kNone);
+    EXPECT_LT(slim.size(), full.size()) << "narrow packs every float64 in four bytes";
+}
+
+TEST(ConverterFromCdr, RefusesAnOverlongString)
+{
+    Converter converter;
+    std_msgs::msg::String text;
+    text.data = std::string(70000, 'x');
+    const std::vector<std::uint8_t> cdr = serialize_ref(text);
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+        converter.from_cdr("std_msgs/msg/String", false, cdr.data(), cdr.size(), packed);
+    EXPECT_EQ(result.fail, ConvertFail::kOverBound);
+    EXPECT_EQ(result.field, 0u);
+    EXPECT_TRUE(packed.empty()) << "no partial payload escapes";
 }
 
 } // namespace
