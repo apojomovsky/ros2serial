@@ -33,12 +33,18 @@
 #define HELLO_REPEAT_MS 1000u
 #define HELLO_NACK_MS 100u
 
-/* The CTL-2 feature bits this build sets. Time, log, parameters and the
- * reliable channel set theirs when they land; bit 4 is informational. */
+/* The CTL-2 feature bits this build sets. Time, parameters and the reliable
+ * channel set theirs when they land; bit 4 is informational. Log (bit 1)
+ * rides on R2S_WITH_LOG, like the logging calls it announces. */
 #if DBL_MANT_DIG == FLT_MANT_DIG
-#define R2S_FEATURE_BITS 0x10u
+#define R2S_FEATURE_BASE 0x10u
 #else
-#define R2S_FEATURE_BITS 0x00u
+#define R2S_FEATURE_BASE 0x00u
+#endif
+#ifdef R2S_WITH_LOG
+#define R2S_FEATURE_BITS (R2S_FEATURE_BASE | 0x02u)
+#else
+#define R2S_FEATURE_BITS R2S_FEATURE_BASE
 #endif
 
 /* tick_hz is 1000 times a divisor of 10^6, so a tick converts to nanoseconds
@@ -176,6 +182,9 @@ static void enter_connected(uint32_t now)
     session.state = CONNECTED;
     session.tx_seq_ctrl = 0u;
     session.tx_seq_hb = 0u;
+#ifdef R2S_WITH_LOG
+    r2s_log_note_connected();
+#endif
     session.last_hb_tick = now;
 }
 

@@ -34,7 +34,7 @@ def copy_tree(dest: Path) -> Path:
     return dest
 
 
-SCOPES = ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN", "BRIDGE", "E2E", "COVERAGE", "DOCS")
+SCOPES = ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN", "BRIDGE", "E2E", "COVERAGE", "DOCS", "EXAMPLES")
 
 
 def run_lint(root: Path) -> subprocess.CompletedProcess:
@@ -107,3 +107,45 @@ def test_lint_fails_on_a_layout_problem(tmp_path):
     result = run_lint(root)
     assert result.returncode != 0
     assert "proposal-v4.md" in result.stdout + result.stderr
+
+
+def run_scope(
+    root: Path, scope: str, stubs: Path | None = None, build_dir: Path | None = None
+) -> subprocess.CompletedProcess:
+    """Run ci-test.sh on the copy with only `scope` set; stubs shadow the example toolchain."""
+    env = {k: v for k, v in os.environ.items() if k not in SCOPES}
+    env["PATH"] = os.pathsep.join([str(Path(sys.executable).parent), env.get("PATH", "")])
+    env[scope] = "1"
+    if stubs is not None:
+        env["PATH"] = os.pathsep.join([str(stubs), env["PATH"]])
+    if build_dir is not None:
+        env["R2S_BUILD_DIR"] = str(build_dir)
+    return subprocess.run(["bash", "scripts/ci-test.sh"], cwd=root, capture_output=True, text=True, env=env)
+
+
+def stub_toolbox(path: Path) -> Path:
+    """Fake the example toolchain: every build step succeeds and the ELF carries the buffer."""
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "cmake").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    (path / "arduino-cli").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    (path / "avr-size").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    (path / "avr-nm").write_text("#!/usr/bin/env bash\necho '008001eb b r2s_rx_buf'\n", encoding="utf-8")
+    for tool in ("cmake", "arduino-cli", "avr-size", "avr-nm"):
+        (path / tool).chmod(0o755)
+    return path
+
+
+def test_docs_scope_runs_its_section(tmp_path):
+    result = run_scope(copy_tree(tmp_path), "DOCS")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "== docs" in result.stdout
+
+
+def test_examples_scope_runs_its_section(tmp_path):
+    result = run_scope(
+        copy_tree(tmp_path), "EXAMPLES", stubs=stub_toolbox(tmp_path / "bin"), build_dir=tmp_path / "build"
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "== examples" in result.stdout

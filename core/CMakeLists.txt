@@ -22,7 +22,7 @@ add_compile_definitions(R2S_TESTING)
 add_compile_definitions(R2S_MAX_FRAME=512)
 # The test firmware configures topics with dispatch, and nests Twist two deep;
 # the generated configuration sets both per firmware.
-add_compile_definitions(R2S_WITH_CODEC R2S_MAX_NEST=2)
+add_compile_definitions(R2S_WITH_CODEC R2S_MAX_NEST=2 R2S_WITH_LOG)
 set(R2S_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 set(R2S_WARNINGS
     -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow

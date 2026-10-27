@@ -17,6 +17,9 @@ void r2s_test_reset(void)
     r2s_framer_test_reset();
     r2s_rx_test_reset();
     r2s_tx_test_reset();
+#ifdef R2S_WITH_LOG
+    r2s_log_test_reset();
+#endif
 }
 #else
 /* ISO C needs at least one declaration in a translation unit. */
