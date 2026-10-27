@@ -38,21 +38,30 @@ typedef struct {
  * a missing name, a name beyond the varint range, or an entry that does not
  * fit the announce frame, leaving the previous binding unchanged. The table
  * itself carries R2S_FLASH while its name strings stay in RAM, so every read
- * below goes through R2S_FLASH_READ_BYTE. */
+ * below goes through R2S_FLASH_READ_BYTE on AVR and reads plain memory
+ * elsewhere. A RAM table binds through r2s_topics_configure_ram instead:
+ * flash and RAM addresses overlap on AVR, so the readers cannot tell them
+ * apart and the caller names the table's home. */
 r2s_status_t r2s_topics_configure(const r2s_topic_t *topics, uint8_t count);
+
+/* Binds a RAM table, as the runtime registration path fills one. The same
+ * gate as above, with plain reads: the right entry point for a table the
+ * firmware wrote at runtime rather than carrying in flash. */
+r2s_status_t r2s_topics_configure_ram(const r2s_topic_t *topics, uint8_t count);
 
 /* The number of bound topics, 0 when no table is bound. */
 uint8_t r2s_topic_count(void);
 
 /* The entry at index, or NULL past the count. The pointer stays valid until
- * the next configure or test reset. The entry itself may live in flash: only
- * dereference the pointer for a RAM table, and copy a flash entry out first. */
+ * the next configure or test reset. Only dereference it for a RAM table: a
+ * flash entry's bytes live in the flash address space on AVR, where a plain
+ * dereference fetches the wrong bytes. Copy a flash entry out first. */
 const r2s_topic_t *r2s_topic_get(uint8_t index);
 
-/* A RAM copy of the entry at index, read through R2S_FLASH_READ_BYTE, so the
- * announce path serves a flash table and a RAM table alike. The names stay
- * RAM strings through the copy. R2S_OK, or R2S_ERR_BOUNDS past the count or
- * for a NULL out, leaving out unchanged. */
+/* A RAM copy of the entry at index, read through the bound table's own
+ * readers, so the announce path serves a flash table and a RAM table alike.
+ * The names stay RAM strings through the copy. R2S_OK, or R2S_ERR_BOUNDS
+ * past the count or for a NULL out, leaving out unchanged. */
 r2s_status_t r2s_topic_copy(uint8_t index, r2s_topic_t *out);
 
 /* The index of the entry with this topic_id, or 0xFF when the table names no

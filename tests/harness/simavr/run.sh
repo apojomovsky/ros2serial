@@ -23,11 +23,16 @@ for mcu in atmega328p atmega2560; do
     avr-gcc -mmcu="$mcu" -DF_CPU=16000000UL -Os -Wall -Wextra -Werror \
       -o "$build/$image-$mcu.elf" "tests/harness/simavr/${image}_firmware.c" || status=1
   done
-  # The announce firmware links the core, so a PROGMEM topic table announces
-  # through the same sources the host tests cover.
+  # The announce firmware links the core, so the topic table announces
+  # through the same sources the host tests cover. Built twice from one
+  # source: the flash image binds its PROGMEM table, the RAM image the same
+  # table from RAM through the runtime entry points.
   mapfile -t core_sources < <(ls "$root"/core/src/*.c | grep -v test_reset.c)
   avr-gcc -mmcu="$mcu" -DF_CPU=16000000UL -Os -Wall -Wextra -Werror -I "$root/core/include" \
     -o "$build/announce-$mcu.elf" tests/harness/simavr/announce_firmware.c "${core_sources[@]}" || status=1
+  avr-gcc -mmcu="$mcu" -DF_CPU=16000000UL -Os -Wall -Wextra -Werror -DR2S_ANNOUNCE_RAM_TABLE \
+    -I "$root/core/include" -o "$build/announce-ram-$mcu.elf" tests/harness/simavr/announce_firmware.c \
+    "${core_sources[@]}" || status=1
 done
 if [ "$status" -ne 0 ]; then
   echo "the simavr harness or its firmware did not build" >&2

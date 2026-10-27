@@ -90,7 +90,8 @@ static uint8_t varint_len(uint16_t value)
     return r2s_varint_encode(value, out);
 }
 
-r2s_status_t r2s_session_configure(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count)
+static r2s_status_t bind(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count,
+                         uint8_t table_in_flash)
 {
     size_t name_len;
 
@@ -111,12 +112,27 @@ r2s_status_t r2s_session_configure(const char *node_name, const r2s_topic_t *top
     }
     /* The bind is the single gate for the table: it validates names and
      * sizes, and binds only a table it accepts, so a refusal below changes
-     * nothing announced. */
-    if (r2s_topics_configure(topics, topic_count) != R2S_OK) {
+     * nothing announced. Flash and RAM tables bind through their own entry
+     * point, because their addresses overlap on AVR. */
+    if (table_in_flash != 0u) {
+        if (r2s_topics_configure(topics, topic_count) != R2S_OK) {
+            return R2S_ERR_BOUNDS;
+        }
+    } else if (r2s_topics_configure_ram(topics, topic_count) != R2S_OK) {
         return R2S_ERR_BOUNDS;
     }
     session.node_name = node_name;
     return R2S_OK;
+}
+
+r2s_status_t r2s_session_configure(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count)
+{
+    return bind(node_name, topics, topic_count, 1u);
+}
+
+r2s_status_t r2s_session_configure_ram(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count)
+{
+    return bind(node_name, topics, topic_count, 0u);
 }
 
 uint8_t r2s_session_find_topic(uint8_t topic_id)

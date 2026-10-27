@@ -597,6 +597,22 @@ void test_session_flags_past_the_count_are_zero(void)
     TEST_ASSERT_EQUAL_UINT8(0u, r2s_session_topic_flags(0xFFu));
 }
 
+/* A RAM table announces exactly what it configures, like a flash table. */
+void test_session_a_ram_table_announces_what_it_configures(void)
+{
+    const uint8_t topic_req[] = {0x03u, 0x00u};
+    uint8_t expected[64];
+    uint16_t len;
+
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure_ram("node", one_topic, 1));
+    fake_port_set_boot_id(0x44332211u);
+    r2s_init();
+    len = hello_payload(expected, 0x44332211u, 1);
+    assert_tx(0, 0, 0, expected, len);
+    feed_host(0, 1, topic_req, sizeof topic_req);
+    assert_tx(1, 0, 1, topic_frame_payload, sizeof topic_frame_payload);
+}
+
 /* A refused configure leaves the announced name and topics unchanged. */
 void test_session_a_refused_configuration_changes_nothing(void)
 {

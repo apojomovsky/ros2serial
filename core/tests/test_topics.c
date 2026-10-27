@@ -1,5 +1,5 @@
-/* The flash-table topic accessors over the handwritten table: count, copies,
- * lookup by index and by topic ID, and out-of-range access. */
+/* The topic accessors over the handwritten flash table and RAM tables: count,
+ * copies, lookup by index and by topic ID, and out-of-range access. */
 
 #include <string.h>
 
@@ -97,7 +97,7 @@ void test_topics_null_table_with_count_fails_unchanged(void)
 
 void test_topics_configure_replaces_table(void)
 {
-    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_topics_configure(single_topic, 1u));
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_topics_configure_ram(single_topic, 1u));
     TEST_ASSERT_EQUAL_UINT8(1u, r2s_topic_count());
     TEST_ASSERT_EQUAL_UINT8(0u, r2s_topic_find(0x10u));
     TEST_ASSERT_EQUAL_UINT8(0xFFu, r2s_topic_find(R2S_HANDWRITTEN_CMD_VEL_ID));
@@ -116,7 +116,7 @@ void test_topics_count_above_max_is_refused(void)
         big[i].topic_name = "n";
     }
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_handwritten_configure());
-    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure(big, R2S_TOPIC_MAX_COUNT + 1u));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure_ram(big, R2S_TOPIC_MAX_COUNT + 1u));
     TEST_ASSERT_EQUAL_UINT8(3u, r2s_topic_count());
     TEST_ASSERT_EQUAL_UINT8(0u, r2s_topic_find(R2S_HANDWRITTEN_BATTERY_ID));
 }
@@ -131,8 +131,8 @@ void test_topics_nameless_entry_is_refused(void)
     };
 
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_handwritten_configure());
-    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure(no_type, 1u));
-    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure(no_name, 1u));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure_ram(no_type, 1u));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure_ram(no_name, 1u));
     TEST_ASSERT_EQUAL_UINT8(3u, r2s_topic_count());
 }
 
@@ -149,8 +149,8 @@ void test_topics_name_beyond_varint_range_is_refused(void)
     memset(huge, 't', sizeof huge - 1u);
     huge[sizeof huge - 1u] = '\0';
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_handwritten_configure());
-    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure(huge_type, 1u));
-    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure(huge_topic, 1u));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure_ram(huge_type, 1u));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure_ram(huge_topic, 1u));
     TEST_ASSERT_EQUAL_UINT8(3u, r2s_topic_count());
 }
 
@@ -167,7 +167,7 @@ void test_topics_entry_not_fitting_a_frame_is_refused(void)
     memset(big_topic, 'n', sizeof big_topic - 1u);
     big_topic[sizeof big_topic - 1u] = '\0';
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_handwritten_configure());
-    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure(big_names, 1u));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure_ram(big_names, 1u));
     TEST_ASSERT_EQUAL_UINT8(3u, r2s_topic_count());
     TEST_ASSERT_EQUAL_UINT8(0u, r2s_topic_find(R2S_HANDWRITTEN_BATTERY_ID));
 }
@@ -217,4 +217,54 @@ void test_topics_copy_to_null_fails(void)
 {
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_handwritten_configure());
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topic_copy(0u, NULL));
+}
+
+void test_topics_ram_table_binds_and_reads(void)
+{
+    r2s_topic_t copy;
+
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_topics_configure_ram(single_topic, 1u));
+    TEST_ASSERT_EQUAL_UINT8(1u, r2s_topic_count());
+    TEST_ASSERT_EQUAL_UINT8(0u, r2s_topic_find(0x10u));
+    TEST_ASSERT_EQUAL_UINT8(0u, r2s_topic_find(R2S_HANDWRITTEN_BATTERY_ID));
+    TEST_ASSERT_EQUAL_UINT8(0xFFu, r2s_topic_find(R2S_HANDWRITTEN_CMD_VEL_ID));
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_topic_copy(0u, &copy));
+    TEST_ASSERT_EQUAL_UINT8(0x10u, copy.topic_id);
+    TEST_ASSERT_EQUAL_STRING("std_msgs/msg/Float32", copy.type_name);
+    TEST_ASSERT_EQUAL_STRING("solo", copy.topic_name);
+}
+
+void test_topics_ram_refusals_leave_the_binding_unchanged(void)
+{
+    static r2s_topic_t big[R2S_TOPIC_MAX_COUNT + 1u];
+    uint8_t i;
+
+    for (i = 0u; i < R2S_TOPIC_MAX_COUNT + 1u; i++) {
+        big[i].topic_id = i;
+        big[i].type_name = "t";
+        big[i].topic_name = "n";
+    }
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_handwritten_configure());
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure_ram(NULL, 1u));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure_ram(big, R2S_TOPIC_MAX_COUNT + 1u));
+    TEST_ASSERT_EQUAL_UINT8(3u, r2s_topic_count());
+    TEST_ASSERT_EQUAL_UINT8(0u, r2s_topic_find(R2S_HANDWRITTEN_BATTERY_ID));
+}
+
+void test_topics_binding_follows_rebinds_between_flash_and_ram(void)
+{
+    r2s_topic_t copy;
+
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_handwritten_configure());
+    TEST_ASSERT_EQUAL_UINT8(3u, r2s_topic_count());
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_topics_configure_ram(single_topic, 1u));
+    TEST_ASSERT_EQUAL_UINT8(1u, r2s_topic_count());
+    TEST_ASSERT_EQUAL_UINT8(0u, r2s_topic_find(0x10u));
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_topic_copy(0u, &copy));
+    TEST_ASSERT_EQUAL_STRING("solo", copy.topic_name);
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_handwritten_configure());
+    TEST_ASSERT_EQUAL_UINT8(3u, r2s_topic_count());
+    TEST_ASSERT_EQUAL_UINT8(2u, r2s_topic_find(R2S_HANDWRITTEN_LOG_TEXT_ID));
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_topic_copy(2u, &copy));
+    TEST_ASSERT_EQUAL_STRING("log_text", copy.topic_name);
 }

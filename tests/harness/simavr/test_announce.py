@@ -1,5 +1,6 @@
-"""The flash-table announce over simavr: a PROGMEM topic table configures on the
-MCU and the handshake announces exactly what it configures (#189).
+"""The table announce over simavr: a topic table configures on the MCU and the
+handshake announces exactly what it configures, from a PROGMEM table and from
+a RAM table (#189).
 
 The test ignores the boot HELLO: the firmware transmits it in its first
 simulated microseconds, before simavr's UART delivers every byte, so its head
@@ -102,9 +103,10 @@ def read_topic(port, index, seq):
     assert at == len(payload)
 
 
+@pytest.mark.parametrize("image", ["announce", "announce-ram"])
 @pytest.mark.parametrize("mcu", ["atmega328p", "atmega2560"])
-def test_a_progmem_table_announces_its_topics_and_node_name(mcu):
-    with Harness(mcu, *RUN_MS, image="announce") as harness:
+def test_a_table_announces_its_topics_and_node_name(mcu, image):
+    with Harness(mcu, *RUN_MS, image=image) as harness:
         with serial.Serial(harness.pty, 115200, timeout=2) as port:
             drain(port)
             solicit_hello(port, 0)
@@ -113,8 +115,9 @@ def test_a_progmem_table_announces_its_topics_and_node_name(mcu):
     assert harness.stop() == 0
 
 
-def test_an_out_of_range_topic_request_leaves_the_session_answering():
-    with Harness("atmega328p", *RUN_MS, image="announce") as harness:
+@pytest.mark.parametrize("image", ["announce", "announce-ram"])
+def test_an_out_of_range_topic_request_leaves_the_session_answering(image):
+    with Harness("atmega328p", *RUN_MS, image=image) as harness:
         with serial.Serial(harness.pty, 115200, timeout=2) as port:
             drain(port)
             solicit_hello(port, 0)

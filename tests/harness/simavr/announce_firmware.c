@@ -1,7 +1,9 @@
-/* Announce firmware for the simavr harness: a PROGMEM topic table behind the
- * C13 accessors, announced over UART0. The table lives in flash while its
- * names stay in RAM, as the generator emits them (G7); the session reads
- * every entry byte through R2S_FLASH_READ_BYTE (#189). */
+/* Announce firmware for the simavr harness: a topic table behind the C13
+ * accessors, announced over UART0. Built twice: the flash image carries the
+ * table in PROGMEM, as the generator emits it (G7), and the RAM image binds
+ * the same table from RAM through the runtime entry points. The names stay
+ * in RAM in both images; the session reads every entry byte through the
+ * bound table's own readers (#189). */
 
 #include <avr/io.h>
 #include <stdint.h>
@@ -15,9 +17,15 @@
 #define BAUD 115200UL
 #define UBRR_VALUE (F_CPU / 16UL / BAUD - 1UL)
 
+#ifdef R2S_ANNOUNCE_RAM_TABLE
+#define ANNOUNCE_PLACE
+#else
+#define ANNOUNCE_PLACE R2S_FLASH
+#endif
+
 /* Two topics with distinct IDs, directions, hashes and names, so the test
  * tells a swapped or truncated announce apart from the right one. */
-static const r2s_topic_t R2S_FLASH announce_topics[] = {
+static const r2s_topic_t ANNOUNCE_PLACE announce_topics[] = {
     {16u, 0x00u, {0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u}, "std_msgs/msg/Float32", "battery"},
     {17u,
      0x01u,
@@ -71,7 +79,11 @@ int main(void)
     UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
     /* A rejected table still boots and announces what it bound, so the test
      * sees the refusal as a count of zero instead of silence. */
+#ifdef R2S_ANNOUNCE_RAM_TABLE
+    (void)r2s_session_configure_ram("announce", announce_topics, 2u);
+#else
     (void)r2s_session_configure("announce", announce_topics, 2u);
+#endif
     r2s_init();
     for (;;) {
         r2s_spin_some();
