@@ -178,24 +178,46 @@ def test_the_generate_command_rejects_an_unknown_layout(tmp_path, capsys):
     assert "--layout: unknown layout 'platformio'" in capsys.readouterr().err
 
 
-def test_the_cmake_layout_builds_as_a_static_library(tmp_path):
-    _, files = generated("cmake", tmp_path)
+def configure_lib(tmp_path, files):
+    """Configure the cmake layout against the in-tree core, returning the result."""
     source = tmp_path / "lib"
     for name, text in files.items():
         path = source / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
-    build = tmp_path / "build"
-
-    configured = subprocess.run(
-        ["cmake", "-S", str(source), "-B", str(build), f"-DR2S_CORE_DIR={CORE}"],
+    return subprocess.run(
+        ["cmake", "-S", str(source), "-B", str(tmp_path / "build"), f"-DR2S_CORE_DIR={CORE}"],
         capture_output=True,
         text=True,
     )
+
+
+def test_the_cmake_layout_builds_as_a_static_library(tmp_path):
+    _, files = generated("cmake", tmp_path)
+
+    configured = configure_lib(tmp_path, files)
     assert configured.returncode == 0, configured.stderr
-    built = subprocess.run(["cmake", "--build", str(build)], capture_output=True, text=True)
+    built = subprocess.run(["cmake", "--build", str(tmp_path / "build")], capture_output=True, text=True)
     assert built.returncode == 0, built.stderr
-    assert list(build.glob("libr2s_generated.a"))
+    assert list((tmp_path / "build").glob("libr2s_generated.a"))
+
+
+def test_the_cmake_layout_rejects_a_malformed_topic_limit(tmp_path):
+    loaded = Config(
+        node="wide",
+        topics=tuple(Topic(name=f"t{i}", type_name="std_msgs/msg/Float32", direction="pub") for i in range(17)),
+        bounds={},
+    )
+    repository = msgs.MessageRepository()
+    resolved = bounds.resolve(repository, ["std_msgs/msg/Float32"])
+    files = layouts.generate(loaded, resolved, repository, "cmake")
+    broken = files["r2s_generated.h"].replace("#define R2S_TOPIC_MAX_COUNT 17u", "#define R2S_TOPIC_MAX_COUNT 17")
+    assert broken != files["r2s_generated.h"]
+
+    configured = configure_lib(tmp_path, dict(files, **{"r2s_generated.h": broken}))
+
+    assert configured.returncode != 0
+    assert "malformed topic limit" in configured.stderr
 
 
 def test_the_arduino_properties_name_the_node_and_the_toolchain(tmp_path):
