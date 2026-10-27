@@ -446,6 +446,7 @@ def test_a_cyclic_alias_in_a_message_is_reported_not_a_crash(tmp_path, monkeypat
     definitions.mkdir(parents=True)
     (definitions / "A.msg").write_text("B b\n", encoding="utf-8")
     (definitions / "B.msg").write_text("A a\n", encoding="utf-8")
+    (definitions / "Single.msg").write_text("float32 data\n", encoding="utf-8")
     (definitions / "Arr.msg").write_text("Single[] items\n", encoding="utf-8")
     files = {
         "messages/cycle.yaml": """
@@ -486,3 +487,6 @@ payload: ""
     shared = {"data": 1.5}
     assert not vectors_check._has_cycle({"first": shared, "second": [shared]})
     assert not vectors_check._has_cycle({"a": [1, None, "x"]})
+    closing = {}
+    closing["round"] = closing
+    assert vectors_check._has_cycle({"seen": shared, "nested": {"seen": shared, "loop": closing}})
