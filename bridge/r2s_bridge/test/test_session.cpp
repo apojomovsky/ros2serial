@@ -79,6 +79,14 @@ std::vector<std::uint8_t> wire_of(const std::vector<std::uint8_t> &decoded)
     return wire;
 }
 
+// A control payload as the decoded frame that carries it.
+std::vector<std::uint8_t> with_topic_frame(const std::vector<std::uint8_t> &payload)
+{
+    std::vector<std::uint8_t> frame{kControl, 0u};
+    frame.insert(frame.end(), payload.begin(), payload.end());
+    return frame;
+}
+
 // A decoded frame without its check, now with it ([CHK-3]).
 std::vector<std::uint8_t> with_check(std::vector<std::uint8_t> frame)
 {
@@ -237,8 +245,6 @@ class Fixture
     std::unique_ptr<Session> session_;
 };
 
-// ---- the transcript vectors -------------------------------------------
-
 struct Step {
     bool from_host = false;
     std::vector<std::uint8_t> decoded;
@@ -320,8 +326,6 @@ TEST_P(SessionTranscript, ReplaysTheTranscriptInOrder)
 
 INSTANTIATE_TEST_SUITE_P(Transcripts, SessionTranscript, ::testing::ValuesIn(transcript_vectors()));
 
-// ---- boot wait --------------------------------------------------------
-
 TEST(SessionBootWait, SendsNothingBeforeBootWaitExpires)
 {
     Fixture fixture;
@@ -347,8 +351,6 @@ TEST(SessionBootWait, LeavesBootWaitOnAnUnsolicitedHello)
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
     EXPECT_EQ(fixture.session().boot_id(), 0x1000u);
 }
-
-// ---- handshake --------------------------------------------------------
 
 TEST(SessionHandshake, RepeatsHelloReqEvery500msUntilAHelloArrives)
 {
@@ -516,8 +518,6 @@ TEST(SessionHandshake, ReportsWhetherTheNewTableMatchesTheOldOne)
     EXPECT_FALSE(identical[2]);
 }
 
-// ---- connected --------------------------------------------------------
-
 TEST(SessionConnected, SendsAHeartbeatEvery500ms)
 {
     Fixture fixture;
@@ -597,7 +597,156 @@ TEST(SessionConnected, RecordsTheMcuCountersFromAHeartbeat)
     EXPECT_EQ(counters.dropped_frames, 4u);
 }
 
-// ---- the link ---------------------------------------------------------
+TEST(SessionHandshake, StartsTheHandshakeOverWhenTheRetriesAreSpent)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    for (std::uint32_t t = 100; t < 900; t += 100) {
+        fixture.advance_to(t);
+    }
+    fixture.advance_to(900);
+    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
+    fixture.drain_units();
+    // The walk is abandoned, so the cadence is HELLO_REQ's again: no TOPIC_REQ
+    // in between, and the request lands 500 ms later.
+    for (std::uint32_t t = 901; t < 1400; ++t) {
+        fixture.advance_to(t);
+        EXPECT_TRUE(fixture.drain_units().empty()) << "nothing but HELLO_REQ at 500 ms, got a frame at " << t;
+    }
+    fixture.advance_to(1400);
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 1u) << "one HELLO_REQ, and no TOPIC_REQ";
+    EXPECT_EQ(units[0][2], 0x01u) << "a HELLO_REQ";
+}
+
+TEST(SessionHandshake, AcceptsTheHelloThatAnswersTheRestart)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    fixture.advance_to(900);
+    fixture.drain_units();
+    // The restart's HELLO_REQ is answered; the walk must begin again from it.
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 1u);
+    EXPECT_EQ(units[0][2], 0x03u) << "the TOPIC_REQ of the new walk";
+}
+
+TEST(SessionLink, DoesNotResumeAWalkOnAReopenedLink)
+{
+    ManualClock clock;
+    std::uint32_t now = 0;
+    int opens = 0;
+    // The faulted link latches closed, so a reopen is a second fake port.
+    FakeTransport first;
+    FakeTransport second;
+    std::unique_ptr<Session> session;
+    session = std::make_unique<Session>(
+        SessionConfig{}, clock,
+        [&opens, &first, &second]() -> std::unique_ptr<Transport> {
+            ++opens;
+            return std::unique_ptr<Transport>(new Link(opens == 1 ? first : second));
+        },
+        [](const TopicInfo &) { return std::uint8_t{0}; });
+    const auto advance = [&clock, &session, &now](std::uint32_t ms) {
+        while (now < ms) {
+            clock.advance(kTick);
+            ++now;
+            session->poll();
+        }
+    };
+    advance(100);
+    first.script_read(wire_of(with_check(with_topic_frame(hello_payload(0x1000u, 2u)))));
+    session->poll();
+    first.script_read(IoStatus::kClosed);
+    session->poll();
+    ASSERT_EQ(session->state(), SessionState::kDisconnected);
+    // The second open waits its boot wait out in silence. Only HELLO_REQ may
+    // go out: the dead link's walk must not resume here ([SES-13], [SES-14]).
+    advance(3700);
+    EXPECT_EQ(session->state(), SessionState::kHandshaking);
+    const std::vector<std::vector<std::uint8_t>> units = units_of([&second]() {
+        std::vector<std::uint8_t> all;
+        for (const auto &write : second.writes()) {
+            all.insert(all.end(), write.begin(), write.end());
+        }
+        return all;
+    }());
+    ASSERT_EQ(units.size(), 1u) << "one HELLO_REQ, and no TOPIC_REQ";
+    EXPECT_EQ(units[0][2], 0x01u);
+}
+
+TEST(SessionConnected, UsesTheConfiguredHeartbeatPeriod)
+{
+    SessionConfig config;
+    config.heartbeat_period_ms = 100;
+    Fixture fixture([](const TopicInfo &) { return std::uint8_t{0}; }, config);
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u));
+    fixture.drain_units();
+    fixture.advance_to(109);
+    EXPECT_TRUE(fixture.drain_units().empty());
+    fixture.advance_to(110);
+    EXPECT_EQ(fixture.drain_units().size(), 1u) << "the period comes from the config";
+}
+
+TEST(SessionHandshake, RefusesAMaxFrameAboveTheProtocolLimit)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u);
+    hello[7] = 0xFEu; // max_frame low byte: 65278, one above 65277
+    hello[8] = 0xFEu;
+    fixture.deliver_frame(kControl, 0u, hello);
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
+    EXPECT_FALSE(fixture.session().has_boot_id());
+}
+
+TEST(SessionHandshake, RefusesACompactHandshake)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u);
+    hello[2] = 0x01u; // the handshake mode byte ([CTL-1])
+    fixture.deliver_frame(kControl, 0u, hello);
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
+}
+
+TEST(SessionHandshake, RefusesATruncatedHello)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u);
+    hello.resize(10u);
+    fixture.deliver_frame(kControl, 0u, hello);
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
+    EXPECT_FALSE(fixture.session().has_boot_id());
+}
+
+TEST(SessionHandshake, RefusesANodeNameWithBytesLeftOver)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u);
+    hello.push_back(0x00u); // a byte after the name
+    fixture.deliver_frame(kControl, 0u, hello);
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
+}
+
+TEST(SessionHandshake, RefusesAVarintThatIsNotTheShortestForm)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u);
+    // The name length is one byte at the end of the fixed fields; write it as
+    // the two-byte form of a value below 128 ([VAR-4]).
+    hello[17] = 0x84u;
+    hello.insert(hello.begin() + 18, 0x00u);
+    fixture.deliver_frame(kControl, 0u, hello);
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
+}
 
 TEST(SessionLink, ReopensThePortWhenItIsNotThereYet)
 {
@@ -623,6 +772,54 @@ TEST(SessionLink, ReopensThePortWhenItIsNotThereYet)
     session.poll();
     EXPECT_EQ(opens, 2) << "a retry every reconnect_period_ms";
     EXPECT_EQ(session.state(), SessionState::kBootWait);
+}
+
+// A write that fails mid-frame is the same hangup as a failed read, and the
+// receive loop must not keep reading through the reader it just closed.
+TEST(SessionLink, ReturnsToDisconnectedOnAWriteError)
+{
+    ManualClock clock;
+    std::uint32_t now = 0;
+    FakeTransport incoming;
+    // Reads reach the fake, writes fail: the port died while the host was
+    // answering the HELLO with its TOPIC_REQ.
+    class FailingWrites final : public Transport
+    {
+      public:
+        explicit FailingWrites(FakeTransport &inner) : inner_(inner)
+        {
+        }
+        IoResult read(std::uint8_t *buffer, std::size_t capacity) override
+        {
+            return inner_.read(buffer, capacity);
+        }
+        IoResult write(const std::uint8_t *, std::size_t) override
+        {
+            return {0u, IoStatus::kError};
+        }
+        void close() override
+        {
+        }
+
+      private:
+        FakeTransport &inner_;
+    };
+    Session session(
+        SessionConfig{}, clock,
+        [&incoming]() { return std::unique_ptr<Transport>(new FailingWrites(incoming)); },
+        [](const TopicInfo &) { return std::uint8_t{0}; });
+    while (now < 100) {
+        clock.advance(kTick);
+        ++now;
+        session.poll();
+    }
+    incoming.script_read(wire_of(with_check(with_topic_frame(hello_payload(0x1000u, 1u)))));
+    // A second frame waits behind the one being answered: the loop must stop
+    // at the close, not read it through the reader the close dropped.
+    incoming.script_read(wire_of(with_check(with_topic_frame(hello_payload(0x2000u, 0u)))));
+    session.poll();
+    EXPECT_EQ(session.state(), SessionState::kDisconnected)
+        << "reading after the close would hand the dead link's frame to the session";
 }
 
 TEST(SessionLink, ReturnsToDisconnectedOnAPortError)

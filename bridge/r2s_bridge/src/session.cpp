@@ -39,7 +39,6 @@ constexpr std::uint8_t kHeartbeatTopic = 4u;
 constexpr std::int64_t kHelloReqPeriodMs = 500;
 constexpr std::int64_t kTopicTimeoutMs = 200;
 constexpr int kTopicRetries = 3;
-constexpr std::int64_t kHeartbeatPeriodMs = 500;
 
 // The handshake mode byte ([CTL-1]).
 constexpr std::uint8_t kModeFull = 0u;
@@ -117,6 +116,11 @@ class Reader
             }
             length |= static_cast<std::uint32_t>(byte & 0x7Fu) << shift;
             if ((byte & 0x80u) == 0u) {
+                // A zero group above the first means the value had a shorter
+                // form, which [VAR-4] refuses.
+                if (shift != 0u && byte == 0u) {
+                    return false;
+                }
                 break;
             }
             shift += 7u;
@@ -187,8 +191,6 @@ struct Session::Impl {
         }
     }
 
-    // ---- the link -------------------------------------------------------
-
     void try_open()
     {
         next_open_ms = now_ms() + config.reconnect_period_ms;
@@ -207,7 +209,6 @@ struct Session::Impl {
         pending.clear();
         state = SessionState::kBootWait;
         boot_wait_deadline_ms = now_ms() + config.boot_wait_ms;
-        hello_ack = false;
     }
 
     void close_link()
@@ -218,11 +219,10 @@ struct Session::Impl {
         }
         transport.reset();
         pending.clear();
+        awaiting_topic = false;
         state = SessionState::kDisconnected;
         next_open_ms = now_ms() + config.reconnect_period_ms;
     }
-
-    // ---- transmit -------------------------------------------------------
 
     // Queues one frame: the payload through the check, then rCOBS and the
     // delimiter, so the bytes are the ones [FRM-1] and [CHK-3] give.
@@ -293,20 +293,18 @@ struct Session::Impl {
     {
         queue_frame(kHeartbeatTopic, seq_heartbeat, {});
         ++seq_heartbeat;
-        next_heartbeat_ms = now_ms() + kHeartbeatPeriodMs;
+        next_heartbeat_ms = now_ms() + config.heartbeat_period_ms;
     }
-
-    // ---- the handshake --------------------------------------------------
 
     void begin_handshake_wait()
     {
         state = SessionState::kHandshaking;
-        hello_ack = false;
         next_hello_req_ms = now_ms();
     }
 
     void restart_handshake()
     {
+        awaiting_topic = false;
         requested_index = 0;
         retries = 0;
         collected.clear();
@@ -338,7 +336,7 @@ struct Session::Impl {
         seq_control = 0;
         seq_heartbeat = 0;
         last_rx_ms = now_ms();
-        next_heartbeat_ms = now_ms() + kHeartbeatPeriodMs;
+        next_heartbeat_ms = now_ms() + config.heartbeat_period_ms;
         if (events.handshake_completed) {
             events.handshake_completed(identical);
         }
@@ -395,7 +393,6 @@ struct Session::Impl {
         }
         hello = facts;
         seen_boot_id = true;
-        hello_ack = true;
         // A HELLO that lands while connected is a reset, and the same HELLO
         // announces the new handshake, so no extra HELLO_REQ is needed
         // ([SES-19], [SES-21]).
@@ -494,8 +491,6 @@ struct Session::Impl {
         // the frame still keeps the link alive.
     }
 
-    // ---- the clock ------------------------------------------------------
-
     void run_timers()
     {
         const std::int64_t now = now_ms();
@@ -549,7 +544,7 @@ struct Session::Impl {
         flush();
         if (reader) {
             Frame frame;
-            while (reader->poll(frame)) {
+            while (reader && reader->poll(frame)) {
                 on_frame(frame);
                 reader->release();
                 flush();
@@ -583,7 +578,6 @@ struct Session::Impl {
 
     HelloFacts hello;
     bool seen_boot_id = false;
-    bool hello_ack = false;
     bool awaiting_topic = false;
     std::uint8_t requested_index = 0;
     int retries = 0;
