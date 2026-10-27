@@ -102,12 +102,18 @@ template <typename T> std::vector<std::uint8_t> serialize_ref(const T &msg)
 {
     // The middleware leaves CDR alignment padding unwritten; zeroing an
     // oversized buffer first makes the reference bytes deterministic, the
-    // same way the converter does.
+    // same way the converter does. A message outgrowing the initial buffer
+    // is zeroed and serialized a second time.
+    constexpr std::size_t kCapacity = 4096;
     rclcpp::Serialization<T> serializer;
-    rclcpp::SerializedMessage serialized(4096);
+    rclcpp::SerializedMessage serialized(kCapacity);
     rcl_serialized_message_t &rcl = serialized.get_rcl_serialized_message();
     std::memset(rcl.buffer, 0, rcl.buffer_capacity);
     serializer.serialize_message(&msg, &serialized);
+    if (rcl.buffer_capacity > kCapacity) {
+        std::memset(rcl.buffer, 0, rcl.buffer_capacity);
+        serializer.serialize_message(&msg, &serialized);
+    }
     return {rcl.buffer, rcl.buffer + rcl.buffer_length};
 }
 
@@ -547,6 +553,7 @@ namespace
 using rosidl_runtime_cpp::MessageInitialization;
 using rosidl_typesupport_introspection_cpp::MessageMember;
 using rosidl_typesupport_introspection_cpp::MessageMembers;
+using rosidl_typesupport_introspection_cpp::ROS_TYPE_BOOLEAN;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_DOUBLE;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_MESSAGE;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_UINT8;
@@ -782,6 +789,32 @@ TEST(ConverterSequences, RefusesOverBoundSequences)
     EXPECT_EQ(result.field, 0u);
 }
 
+TEST(ConverterSequences, ConvertsMessagesPastTheInitialBuffer)
+{
+    // A CDR larger than the initial serialize buffer reallocates mid-write,
+    // leaving garbage padding unless the grown buffer is zeroed again.
+    Converter converter;
+    sensor_msgs::msg::JointState msg;
+    msg.name = {std::string(5000, 'a')};
+
+    std::vector<std::uint8_t> payload(9, 0x00);
+    payload.insert(payload.end(), {0x01, 0x88, 0x27});
+    payload.insert(payload.end(), 5000, 'a');
+    payload.insert(payload.end(), {0x00, 0x00, 0x00});
+
+    std::vector<std::uint8_t> first;
+    ConvertResult result =
+        converter.to_cdr("sensor_msgs/msg/JointState", false, payload.data(), payload.size(), first);
+    ASSERT_EQ(result.fail, ConvertFail::kNone) << "field " << static_cast<int>(result.field);
+    std::vector<std::uint8_t> second;
+    result = converter.to_cdr("sensor_msgs/msg/JointState", false, payload.data(), payload.size(), second);
+    ASSERT_EQ(result.fail, ConvertFail::kNone) << "field " << static_cast<int>(result.field);
+    EXPECT_EQ(first, second);
+    if (first != serialize_ref(msg) || second != serialize_ref(msg)) {
+        ADD_FAILURE() << "CDR differs from rclcpp serialization";
+    }
+}
+
 TEST(ConverterPlans, RefusesConversionWithoutAMiddlewareHandle)
 {
     Converter converter;
@@ -810,6 +843,124 @@ TEST(ConverterPlans, RefusesConversionWithoutAMiddlewareHandle)
         converter.to_cdr("fake/msg/BoundedEmpty", false, payload.data(), payload.size(), cdr);
     EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
     EXPECT_EQ(result.field, 0xFFu);
+}
+
+struct FakeInner {
+    std::uint8_t x;
+};
+
+struct FakeOuter {
+    FakeInner items[2];
+    std::uint8_t after;
+};
+
+void *fake_outer_get(void *memory, std::size_t index)
+{
+    return &static_cast<FakeOuter *>(memory)->items[index];
+}
+
+TEST(ConverterFieldPath, PassesThroughFixedNestedArrays)
+{
+    Converter converter;
+    MessageMember element{};
+    element.name_ = "x";
+    element.type_id_ = ROS_TYPE_UINT8;
+    MessageMembers inner{};
+    inner.message_namespace_ = "fake";
+    inner.message_name_ = "Inner";
+    inner.member_count_ = 1;
+    inner.size_of_ = sizeof(FakeInner);
+    inner.members_ = &element;
+    const rosidl_message_type_support_t inner_handle = fake_ts_for(&inner);
+    MessageMember items{};
+    items.name_ = "items";
+    items.type_id_ = ROS_TYPE_MESSAGE;
+    items.is_array_ = true;
+    items.array_size_ = 2;
+    items.members_ = &inner_handle;
+    items.get_function = fake_outer_get;
+    MessageMember after{};
+    after.name_ = "after";
+    after.type_id_ = ROS_TYPE_UINT8;
+    MessageMember outer[2];
+    outer[0] = items;
+    outer[1] = after;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "Outer";
+    members.member_count_ = 2;
+    members.size_of_ = sizeof(FakeOuter);
+    members.members_ = outer;
+    members.init_function = fake_noop_init;
+    members.fini_function = fake_noop_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/Outer", &handle));
+    EXPECT_EQ(converter.field_path("fake/msg/Outer", 0), "items");
+    EXPECT_EQ(converter.field_path("fake/msg/Outer", 1), "items.x");
+    EXPECT_EQ(converter.field_path("fake/msg/Outer", 2), "items.x");
+    EXPECT_EQ(converter.field_path("fake/msg/Outer", 3), "after");
+    EXPECT_EQ(converter.field_path("fake/msg/Outer", 4), "");
+}
+
+struct FakeBools {
+    std::vector<bool> values;
+};
+
+void fake_bools_init(void *memory, MessageInitialization)
+{
+    new (&static_cast<FakeBools *>(memory)->values) std::vector<bool>();
+}
+
+void fake_bools_fini(void *memory)
+{
+    static_cast<FakeBools *>(memory)->values.~vector();
+}
+
+void fake_bools_assign(void *memory, std::size_t index, const void *value)
+{
+    static_cast<FakeBools *>(memory)->values[index] = *static_cast<const bool *>(value);
+}
+
+void fake_bools_resize(void *memory, std::size_t size)
+{
+    static_cast<FakeBools *>(memory)->values.resize(size);
+}
+
+TEST(ConverterSequences, ConvertsBooleanSequencesThroughAssign)
+{
+    Converter converter;
+    MessageMember member{};
+    member.name_ = "data";
+    member.type_id_ = ROS_TYPE_BOOLEAN;
+    member.is_array_ = true;
+    member.is_upper_bound_ = true;
+    member.array_size_ = 5;
+    member.assign_function = fake_bools_assign;
+    member.resize_function = fake_bools_resize;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "Bools";
+    members.member_count_ = 1;
+    members.size_of_ = sizeof(FakeBools);
+    members.members_ = &member;
+    members.init_function = fake_bools_init;
+    members.fini_function = fake_bools_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/Bools", &handle));
+
+    std::vector<std::uint8_t> cdr;
+    ConvertResult result =
+        converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x01, 0x01}.data(), 2, cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
+    EXPECT_EQ(result.field, 0xFFu);
+
+    result = converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x02}.data(), 1, cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 0u);
+
+    result = converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x01, 0x02}.data(), 2, cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kBadBool);
+    EXPECT_EQ(result.field, 0u);
 }
 
 void *fake_empty_get(void * /*memory*/, std::size_t /*index*/)

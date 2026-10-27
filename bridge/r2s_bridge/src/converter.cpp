@@ -56,6 +56,7 @@ struct Op {
     std::size_t bound = 0;
     std::string path;
     void *(*get)(void *, std::size_t) = nullptr;
+    void (*assign)(void *, std::size_t, const void *) = nullptr;
     void (*resize)(void *, std::size_t) = nullptr;
     std::vector<Op> nested;
 };
@@ -266,17 +267,31 @@ ConvertFail decode_scalar(std::uint8_t type, bool narrow, Reader &reader, std::u
 ConvertFail decode_ops(const std::vector<Op> &ops, std::uint8_t *base, Reader &reader, bool narrow,
                        std::uint32_t &counter, std::uint8_t &field);
 
-ConvertFail decode_element(const Op &op, std::uint8_t *dst, Reader &reader, bool narrow, std::uint32_t here,
-                           std::uint32_t &counter, std::uint8_t &field)
+ConvertFail decode_element(const Op &op, std::uint8_t *base, std::uint32_t i, Reader &reader, bool narrow,
+                           std::uint32_t here, std::uint32_t &counter, std::uint8_t &field)
 {
     if (op.type == ROS_TYPE_MESSAGE) {
-        return decode_ops(op.nested, dst, reader, narrow, counter, field);
+        // Only addressable elements reach here; a null getter means boolean
+        // scalars, handled below.
+        return decode_ops(op.nested, static_cast<std::uint8_t *>(op.get(base, i)), reader, narrow, counter,
+                          field);
     }
-    const ConvertFail fail = decode_scalar(op.type, narrow, reader, dst);
+    if (op.get != nullptr) {
+        const ConvertFail fail =
+            decode_scalar(op.type, narrow, reader, static_cast<std::uint8_t *>(op.get(base, i)));
+        if (fail != ConvertFail::kNone) {
+            field = static_cast<std::uint8_t>(here);
+        }
+        return fail;
+    }
+    bool value = false;
+    const ConvertFail fail = decode_scalar(op.type, narrow, reader, reinterpret_cast<std::uint8_t *>(&value));
     if (fail != ConvertFail::kNone) {
         field = static_cast<std::uint8_t>(here);
+        return fail;
     }
-    return fail;
+    op.assign(base, i, &value);
+    return ConvertFail::kNone;
 }
 
 ConvertFail decode_ops(const std::vector<Op> &ops, std::uint8_t *base, Reader &reader, bool narrow,
@@ -304,8 +319,8 @@ ConvertFail decode_ops(const std::vector<Op> &ops, std::uint8_t *base, Reader &r
                 op.resize(base + op.offset, count);
             }
             for (std::uint32_t i = 0; i < count; ++i) {
-                std::uint8_t *dst = static_cast<std::uint8_t *>(op.get(base + op.offset, i));
-                const ConvertFail fail = decode_element(op, dst, reader, narrow, here, counter, field);
+                const ConvertFail fail =
+                    decode_element(op, base + op.offset, i, reader, narrow, here, counter, field);
                 if (fail != ConvertFail::kNone) {
                     return fail;
                 }
@@ -326,22 +341,12 @@ ConvertFail decode_ops(const std::vector<Op> &ops, std::uint8_t *base, Reader &r
     return ConvertFail::kNone;
 }
 
-// The indices one element of a nested array consumes, counting one
-// representative element. A variable inner array makes later indices depend on
-// its runtime counts, which an index alone cannot name; the representative
-// span keeps the common single-level case exact.
-std::uint32_t span_of(const std::vector<Op> &ops)
-{
-    std::uint32_t span = 0;
-    for (const Op &op : ops) {
-        ++span;
-        if (op.type == ROS_TYPE_MESSAGE) {
-            span += span_of(op.nested);
-        }
-    }
-    return span;
-}
-
+// The dotted path of a depth-first index. A fixed nested array holds exactly
+// its bound elements, so the walk passes through it to the siblings after
+// it. A sequence holds a runtime count the index alone cannot name: indices
+// past one map into its elements in order, which is exact while every outer
+// element carries the same count and otherwise names the first layout that
+// covers the index.
 bool path_of(const std::vector<Op> &ops, std::uint32_t &counter, std::uint8_t want, std::string &out)
 {
     for (const Op &op : ops) {
@@ -358,10 +363,19 @@ bool path_of(const std::vector<Op> &ops, std::uint32_t &counter, std::uint8_t wa
                 return true;
             }
         } else if (!op.nested.empty()) {
-            const std::uint32_t span = span_of(op.nested);
-            const std::uint32_t slot = here + 1u + ((want - here - 1u) % span);
-            std::uint32_t local = here + 1u;
-            return path_of(op.nested, local, slot, out);
+            if (!op.is_sequence) {
+                for (std::size_t k = 0; k < op.bound; ++k) {
+                    if (path_of(op.nested, counter, want, out)) {
+                        return true;
+                    }
+                }
+            } else {
+                while (counter <= want) {
+                    if (path_of(op.nested, counter, want, out)) {
+                        return true;
+                    }
+                }
+            }
         }
     }
     return false;
@@ -400,12 +414,18 @@ bool build_ops(const MessageMembers *members, const std::string &prefix, std::ve
         }
         if (member.is_array_) {
             // A null getter means a boolean sequence, whose std::vector<bool>
-            // has no addressable elements; refusing beats mis-converting.
+            // has no addressable elements; its assign callback fills elements
+            // through a temporary instead. Anything else without a getter
+            // cannot be read back, so refusing beats mis-converting.
             if (member.get_function == nullptr) {
-                return false;
+                if (member.type_id_ != ROS_TYPE_BOOLEAN || member.assign_function == nullptr) {
+                    return false;
+                }
+                op.assign = member.assign_function;
+            } else {
+                op.get = member.get_function;
             }
             op.is_array = true;
-            op.get = member.get_function;
             if (member.resize_function != nullptr) {
                 op.is_sequence = true;
                 op.resize = member.resize_function;
@@ -441,7 +461,9 @@ struct SerializedGuard {
 
 // The middleware leaves CDR alignment padding unwritten, so the padding holds
 // whatever was in the buffer. Zeroing an oversized buffer first makes the
-// bytes deterministic, and rmw shrinks it in place, so the zeros survive.
+// bytes deterministic. When the message outgrows the initial buffer, rmw
+// reallocates, and the fresh bytes hold garbage again, so the buffer is
+// zeroed and serialized a second time; the grown capacity suffices then.
 constexpr std::size_t kSerializeCapacity = 4096;
 
 void serialize_message(const rosidl_message_type_support_t *cpp_ts, const std::uint8_t *storage,
@@ -456,12 +478,21 @@ void serialize_message(const rosidl_message_type_support_t *cpp_ts, const std::u
     }
     // GCOVR_EXCL_STOP
     guard.owned = true;
+    const auto run = [&]() { return rmw_serialize(storage, cpp_ts, &guard.msg); };
     std::memset(guard.msg.buffer, 0, guard.msg.buffer_capacity);
     // GCOVR_EXCL_START: rmw fails only when it cannot grow the buffer.
-    if (rmw_serialize(storage, cpp_ts, &guard.msg) != RMW_RET_OK) {
+    if (run() != RMW_RET_OK) {
         throw std::runtime_error("r2s_bridge::Converter: rmw_serialize failed");
     }
     // GCOVR_EXCL_STOP
+    if (guard.msg.buffer_capacity > kSerializeCapacity) {
+        std::memset(guard.msg.buffer, 0, guard.msg.buffer_capacity);
+        // GCOVR_EXCL_START: the second run cannot grow the buffer again.
+        if (run() != RMW_RET_OK) {
+            throw std::runtime_error("r2s_bridge::Converter: rmw_serialize failed");
+        }
+        // GCOVR_EXCL_STOP
+    }
     cdr.assign(guard.msg.buffer, guard.msg.buffer + guard.msg.buffer_length);
 }
 
