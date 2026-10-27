@@ -588,6 +588,15 @@ void test_session_an_unannounceable_configuration_is_refused(void)
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", one_topic, 1));
 }
 
+/* Flags past the count read as zero instead of dereferencing past the table. */
+void test_session_flags_past_the_count_are_zero(void)
+{
+    configure(one_topic, 1, 0x44332211u);
+    TEST_ASSERT_EQUAL_UINT8(0x03u, r2s_session_topic_flags(0u));
+    TEST_ASSERT_EQUAL_UINT8(0u, r2s_session_topic_flags(1u));
+    TEST_ASSERT_EQUAL_UINT8(0u, r2s_session_topic_flags(0xFFu));
+}
+
 /* A refused configure leaves the announced name and topics unchanged. */
 void test_session_a_refused_configuration_changes_nothing(void)
 {

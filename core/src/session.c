@@ -126,7 +126,12 @@ uint8_t r2s_session_find_topic(uint8_t topic_id)
 
 uint8_t r2s_session_topic_flags(uint8_t index)
 {
-    return r2s_topic_get(index)->flags;
+    r2s_topic_t topic;
+
+    if (r2s_topic_copy(index, &topic) != R2S_OK) {
+        return 0u;
+    }
+    return topic.flags;
 }
 
 uint8_t r2s_session_topic_status(uint8_t index)
@@ -263,24 +268,30 @@ static void send_hello(void)
 
 static void send_topic(uint8_t index)
 {
-    const r2s_topic_t *topic = r2s_topic_get(index);
-    uint16_t type_len = (uint16_t)strlen(topic->type_name);
-    uint16_t topic_len = (uint16_t)strlen(topic->topic_name);
-    uint16_t len = (uint16_t)(12u + varint_len(type_len) + type_len + varint_len(topic_len) + topic_len);
+    r2s_topic_t topic;
+    uint16_t type_len;
+    uint16_t topic_len;
+    uint16_t len;
     uint8_t i;
+
+    /* on_control refuses an index past the count, so the copy holds. */
+    (void)r2s_topic_copy(index, &topic);
+    type_len = (uint16_t)strlen(topic.type_name);
+    topic_len = (uint16_t)strlen(topic.topic_name);
+    len = (uint16_t)(12u + varint_len(type_len) + type_len + varint_len(topic_len) + topic_len);
 
     if (r2s_tx_begin(0u, session.tx_seq_ctrl, len) != R2S_OK) {
         return;
     }
     put_byte(OP_TOPIC);
     put_byte(index);
-    put_byte(topic->topic_id);
-    put_byte(topic->flags);
+    put_byte(topic.topic_id);
+    put_byte(topic.flags);
     for (i = 0u; i < 8u; i++) {
-        put_byte(topic->type_hash[i]);
+        put_byte(topic.type_hash[i]);
     }
-    put_string(topic->type_name);
-    put_string(topic->topic_name);
+    put_string(topic.type_name);
+    put_string(topic.topic_name);
     if (r2s_tx_end() == R2S_OK) {
         session.tx_seq_ctrl++;
     }
@@ -346,14 +357,13 @@ static void on_control(uint32_t now, const uint8_t *payload, uint16_t len)
             refuse();
             return;
         }
-        for (i = 0u; i < r2s_topic_count(); i++) {
-            if (r2s_topic_get(i)->topic_id == payload[1]) {
-                session.status[i] = payload[2];
-                return;
-            }
+        i = r2s_topic_find(payload[1]);
+        if (i == 0xFFu) {
+            refuse();
+            break;
         }
-        refuse();
-        break;
+        session.status[i] = payload[2];
+        return;
     case OP_READY:
         if (len != 1u) {
             refuse();

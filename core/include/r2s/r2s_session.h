@@ -60,7 +60,7 @@ uint8_t r2s_session_find_topic(uint8_t topic_id);
 
 /* The announced CTL-4 flags and the last TOPIC_STATUS of the topic at index:
  * the flags are the truth for the wire ([CTL-5]), and 0xFF status means the
- * host has not resolved the topic yet. */
+ * host has not resolved the topic yet. Flags past the count read as 0. */
 uint8_t r2s_session_topic_flags(uint8_t index);
 uint8_t r2s_session_topic_status(uint8_t index);
 

@@ -1,5 +1,5 @@
-/* The flash-table topic accessors over the handwritten table: count, lookup by
- * index and by topic ID, and out-of-range access. */
+/* The flash-table topic accessors over the handwritten table: count, copies,
+ * lookup by index and by topic ID, and out-of-range access. */
 
 #include <string.h>
 
@@ -170,4 +170,51 @@ void test_topics_entry_not_fitting_a_frame_is_refused(void)
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topics_configure(big_names, 1u));
     TEST_ASSERT_EQUAL_UINT8(3u, r2s_topic_count());
     TEST_ASSERT_EQUAL_UINT8(0u, r2s_topic_find(R2S_HANDWRITTEN_BATTERY_ID));
+}
+
+void test_topics_copy_matches_the_bound_entry(void)
+{
+    r2s_topic_t copy;
+    const r2s_topic_t *entry;
+
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_handwritten_configure());
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_topic_copy(2u, &copy));
+    entry = r2s_topic_get(2u);
+    if (entry == NULL) {
+        TEST_FAIL_MESSAGE("bound table entry missing");
+        return;
+    }
+    TEST_ASSERT_EQUAL_UINT8(entry->topic_id, copy.topic_id);
+    TEST_ASSERT_EQUAL_UINT8(entry->flags, copy.flags);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(entry->type_hash, copy.type_hash, 8u);
+    TEST_ASSERT_EQUAL_STRING(entry->type_name, copy.type_name);
+    TEST_ASSERT_EQUAL_STRING(entry->topic_name, copy.topic_name);
+}
+
+void test_topics_copy_past_count_fails_leaving_output_untouched(void)
+{
+    r2s_topic_t copy;
+    r2s_topic_t sentinel;
+
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_handwritten_configure());
+    memset(&copy, 0xA5, sizeof copy);
+    memset(&sentinel, 0xA5, sizeof sentinel);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topic_copy(3u, &copy));
+    TEST_ASSERT_EQUAL_INT(0, memcmp(&copy, &sentinel, sizeof copy));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topic_copy(0xFFu, &copy));
+    TEST_ASSERT_EQUAL_INT(0, memcmp(&copy, &sentinel, sizeof copy));
+}
+
+void test_topics_copy_without_a_table_fails(void)
+{
+    r2s_topic_t copy;
+
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_topics_configure(NULL, 0u));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topic_copy(0u, &copy));
+}
+
+void test_topics_copy_to_null_fails(void)
+{
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_handwritten_configure());
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_topic_copy(0u, NULL));
 }
