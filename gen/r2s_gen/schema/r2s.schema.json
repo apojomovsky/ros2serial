@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "r2s.yaml: the ros2serial generator configuration",
+  "type": "object",
+  "required": ["node", "topics"],
+  "additionalProperties": false,
+  "properties": {
+    "node": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$"},
+    "distro": {"type": "string", "enum": ["jazzy", "lyrical", "rolling"], "default": "jazzy"},
+    "handshake": {"type": "string", "enum": ["full", "compact"], "default": "full"},
+    "tier": {"type": "string", "enum": ["S", "M", "L"], "default": "M"},
+    "features": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["time", "log", "params", "reliable", "rx_ring"]},
+      "default": ["time", "log"]
+    },
+    "topics": {"type": "array", "items": {"$ref": "#/$defs/topic"}},
+    "bounds": {
+      "type": "object",
+      "properties": {"default_string_bound": {"type": "integer", "minimum": 0}},
+      "patternProperties": {
+        "^[A-Za-z][A-Za-z0-9_]*/msg/[A-Za-z][A-Za-z0-9_]*\\.[A-Za-z][A-Za-z0-9_]*$": {"$ref": "#/$defs/bound"}
+      },
+      "additionalProperties": false
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"max_frame": {"type": "integer", "minimum": 1}}
+    }
+  },
+  "$defs": {
+    "topic": {
+      "type": "object",
+      "required": ["name", "type", "direction"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*(/[A-Za-z0-9_]+)*$"},
+        "type": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*/msg/[A-Za-z][A-Za-z0-9_]*$"},
+        "direction": {"type": "string", "enum": ["pub", "sub"]},
+        "qos": {
+          "type": "string",
+          "enum": ["best_effort", "keep_latest", "reliable"],
+          "default": "best_effort"
+        },
+        "narrow_float64": {"type": "boolean", "default": false}
+      }
+    },
+    "bound": {
+      "anyOf": [
+        {"type": "integer", "minimum": 0},
+        {
+          "type": "array",
+          "prefixItems": [{"type": "integer", "minimum": 1}, {"type": "integer", "minimum": 0}],
+          "minItems": 2,
+          "maxItems": 2
+        }
+      ]
+    }
+  }
+}

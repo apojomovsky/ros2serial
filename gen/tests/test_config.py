@@ -1,6 +1,7 @@
 """Config validation: every schema rule has a failing config with a golden message."""
 
 import json
+import sys
 
 import jsonschema
 import pytest
@@ -500,3 +501,116 @@ def test_check_rejects_a_missing_file(capsys, tmp_path):
     out, err = capsys.readouterr()
     assert out == ""
     assert f"r2s-gen: error: {missing}: cannot read the config" in err
+
+
+def test_a_nonmapping_bounds_is_an_error(tmp_path):
+    path = write(tmp_path / "r2s.yaml", "node: base_controller\ntopics: []\nbounds: 5\n")
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert (
+        str(caught.value)
+        == f"{path}: bounds: expected a mapping; write bounds: with one package/msg/Type.field per line"
+    )
+
+
+def test_a_nonmapping_limits_is_an_error(tmp_path):
+    path = write(tmp_path / "r2s.yaml", "node: base_controller\ntopics: []\nlimits: 5\n")
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == f"{path}: limits: expected a mapping; write limits: with max_frame: <bytes>"
+
+
+def test_a_nonmapping_topic_is_an_error(tmp_path):
+    path = write(tmp_path / "r2s.yaml", "node: base_controller\ntopics:\n  - battery\n")
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert (
+        str(caught.value)
+        == f"{path}: topics[0]: expected a topic entry; write - name: <topic> with type: and direction:"
+    )
+
+
+def test_a_negative_pair_string_bound_is_an_error(tmp_path):
+    path = write(
+        tmp_path / "r2s.yaml",
+        "node: base_controller\ntopics: []\nbounds:\n  sensor_msgs/msg/JointState.name: [4, -1]\n",
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: bounds['sensor_msgs/msg/JointState.name']: the string bound must be at least 0; raise it"
+    )
+
+
+def test_a_bounds_pair_with_three_entries_is_an_error(tmp_path):
+    path = write(
+        tmp_path / "r2s.yaml",
+        "node: base_controller\ntopics: []\nbounds:\n  sensor_msgs/msg/JointState.name: [4, 12, 7]\n",
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: bounds['sensor_msgs/msg/JointState.name']: a list bound is [count, string_bound]; "
+        "give the count and the string bound"
+    )
+
+
+def test_a_missing_pyyaml_is_an_error(tmp_path, monkeypatch):
+    path = write(tmp_path / "r2s.yaml", VALID)
+    monkeypatch.setitem(sys.modules, "yaml", None)
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == f"{path}: cannot read the config without PyYAML; install it with pip install pyyaml"
+
+
+def test_a_missing_jsonschema_is_an_error(tmp_path, monkeypatch):
+    path = write(tmp_path / "r2s.yaml", VALID)
+    monkeypatch.setitem(sys.modules, "jsonschema", None)
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: cannot validate the config without jsonschema; install it with pip install jsonschema"
+    )
+
+
+def test_a_string_pair_count_is_an_error(tmp_path):
+    path = write(
+        tmp_path / "r2s.yaml",
+        "node: base_controller\ntopics: []\nbounds:\n  sensor_msgs/msg/JointState.name: [four, 12]\n",
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: bounds['sensor_msgs/msg/JointState.name']: the sequence bound must be an integer; give a whole number"
+    )
+
+
+def test_a_string_pair_string_bound_is_an_error(tmp_path):
+    path = write(
+        tmp_path / "r2s.yaml",
+        "node: base_controller\ntopics: []\nbounds:\n  sensor_msgs/msg/JointState.name: [4, twelve]\n",
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: bounds['sensor_msgs/msg/JointState.name']: the string bound must be an integer; "
+        "give a whole number of characters"
+    )
