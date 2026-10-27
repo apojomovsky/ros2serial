@@ -4,4 +4,8 @@
 # moves on and is merged in, putting base commits inside the range.
 set -uo pipefail
 base="origin/${BASE_REF:-master}"
-printf '%s..HEAD\n' "$(git merge-base "$base" HEAD)"
+if ! sha=$(git merge-base "$base" HEAD); then
+  echo "pr-title-range: no merge base between $base and HEAD" >&2
+  exit 1
+fi
+printf '%s..HEAD\n' "$sha"

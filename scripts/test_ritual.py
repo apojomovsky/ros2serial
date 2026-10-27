@@ -669,4 +669,34 @@ def test_the_pr_title_workflow_uses_the_range_script():
     """The range expression is a script so that its test cannot drift from it."""
     text = (ROOT / ".github/workflows/pr-title.yml").read_text()
     assert "scripts/pr-title-range.sh" in text
+    assert "BASE_REF: ${{ github.event.pull_request.base.ref }}" in text
     assert "pull_request.base.sha" not in text
+
+
+def test_the_pr_range_script_uses_the_merge_base_not_the_tip(tmp_path):
+    """A branch behind master still gets its own commits, not the base tip.
+
+    The merge base and the base tip diverge here, so printing the tip instead
+    would resolve a different base with the same subjects.
+    """
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "docs(core): describe the thing")
+    commit(main, {"b.txt": "b\n"}, "feat(core): a new thing")
+    git(main, "push", "-q", "origin", "master")
+    git(wt, "fetch", "-q", "origin")
+    out = run(["bash", str(ROOT / "scripts/pr-title-range.sh")], wt, {"BASE_REF": "master"})
+    assert out.returncode == 0, out.stdout + out.stderr
+    base_sha = out.stdout.strip().removesuffix("..HEAD")
+    tip = git(wt, "rev-parse", "origin/master").stdout.strip()
+    assert base_sha != tip
+    assert base_sha == git(wt, "merge-base", "origin/master", "HEAD").stdout.strip()
+    subjects = git(wt, "log", "--no-merges", "--format=%s", out.stdout.strip()).stdout.splitlines()
+    assert subjects == ["docs(core): describe the thing"]
+
+
+def test_the_pr_range_script_reports_an_unresolvable_base(tmp_path):
+    """A base with no merge base fails loudly instead of printing an empty range."""
+    _, wt = fixture(tmp_path)
+    out = run(["bash", str(ROOT / "scripts/pr-title-range.sh")], wt, {"BASE_REF": "no-such-branch"})
+    assert out.returncode != 0
+    assert "no merge base" in out.stderr
