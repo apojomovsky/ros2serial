@@ -50,6 +50,32 @@ def _message(error: jsonschema.ValidationError) -> str:
     return error.message
 
 
+def _has_cycle(root) -> bool:
+    # Aliases let one mapping or list appear inside itself. The walks below
+    # assume a tree, so find a cycle with an explicit stack before they run.
+    # Fully explored nodes are remembered, so a shared alias costs one walk.
+    if not isinstance(root, (dict, list, set)):
+        return False
+    end = object()
+    path = {id(root)}
+    done = set()
+    stack = [(iter(root.values() if isinstance(root, dict) else root), id(root))]
+    while stack:
+        children, owner = stack[-1]
+        child = next(children, end)
+        if child is end:
+            path.discard(owner)
+            done.add(owner)
+            stack.pop()
+        elif isinstance(child, (dict, list, set)):
+            if id(child) in path:
+                return True
+            if id(child) not in done:
+                path.add(id(child))
+                stack.append((iter(child.values() if isinstance(child, dict) else child), id(child)))
+    return False
+
+
 def check_file(path: Path, name: str, validators: dict) -> list[str]:
     kind = name.split("/", 1)[0]
     if kind not in validators:
@@ -60,6 +86,8 @@ def check_file(path: Path, name: str, validators: dict) -> list[str]:
         data = yaml.safe_load(path.read_text())
     except yaml.YAMLError as e:
         return [f"{name}: not valid YAML: {e}".splitlines()[0]]
+    if _has_cycle(data):
+        return [f"{name}: cyclic YAML alias"]
     errors = []
     for e in validators[kind].iter_errors(data):
         # When an alternative fails only inside one field, the case clearly meant
@@ -113,6 +141,32 @@ def check_frame(name: str, data: dict) -> list[str]:
     frame_name = data.get("name", "")
     problems += check_channel(name, frame_name, topic_id, payload)
     problems += check_payload(name, frame_name, payload, topic_id)
+    return problems
+
+
+def check_session(name: str, data: dict) -> list[str]:
+    """Check each transcript step carries a well-formed decoded frame.
+
+    A step's bytes must parse as hexadecimal, hold at least topic, seq and
+    the check ([FRM-7]), and leave the zero residue ([CHK-4]). The steps stay
+    an ordered exchange: the host side proves the order in its own test.
+    """
+    problems = []
+    steps = data.get("steps") if isinstance(data, dict) else None
+    if not isinstance(steps, list):
+        return []
+    for i, step in enumerate(steps):
+        if not isinstance(step, dict):
+            continue
+        try:
+            frame = bytes.fromhex(step["frame"])
+        except (KeyError, TypeError, ValueError) as e:
+            problems.append(f"{name}/steps/{i}/frame: not hexadecimal bytes: {e}")
+            continue
+        if len(frame) < 4:
+            problems.append(f"{name}/steps/{i}/frame: shorter than 4 bytes")
+        elif crc.crc16(frame) != 0:
+            problems.append(f"{name}/steps/{i}/frame: the frame check does not leave zero")
     return problems
 
 
@@ -423,9 +477,19 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
                 else:
                     visit(nested, expected)
 
+    # A cyclic YAML alias walks nested messages until the stack runs out.
     try:
         visit(message, values)
-    except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError):
+    except (
+        msgs.MessageError,
+        Rejected,
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+        OverflowError,
+        RecursionError,
+    ):
         return []
     return problems
 
@@ -447,9 +511,19 @@ def check_message(name: str, data: dict) -> list[str]:
         exact = check_float32_exact(name, data)
     except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError):
         exact = []
+    # The encoder walks the same nested messages, so it meets the same cycle.
     try:
         payload = messages.encode(_MESSAGES, data["type"], data["message"], narrow=narrow)
-    except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError) as e:
+    except (
+        msgs.MessageError,
+        Rejected,
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+        OverflowError,
+        RecursionError,
+    ) as e:
         return [*exact, f"{name}/message: the reference does not make it: {e}"]
     problems = exact
     if payload != expected:
@@ -463,7 +537,7 @@ def check_tree(vectors: Path) -> list[str]:
     for path in sorted(p for p in vectors.rglob("*") if p.is_file() and p.name != ".gitkeep"):
         name = path.relative_to(vectors).as_posix()
         problems += check_file(path, name, validators)
-        if name.startswith(("frames/", "messages/")) and path.suffix == ".yaml":
+        if name.startswith(("frames/", "messages/", "session/")) and path.suffix == ".yaml":
             try:
                 data = yaml.safe_load(path.read_text())
             except yaml.YAMLError:
@@ -471,6 +545,8 @@ def check_tree(vectors: Path) -> list[str]:
             if isinstance(data, dict):
                 if name.startswith("frames/"):
                     problems += check_frame(name, data)
+                elif name.startswith("session/"):
+                    problems += check_session(name, data)
                 else:
                     problems += check_message(name, data)
     return problems

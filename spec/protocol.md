@@ -247,10 +247,10 @@ DISCONNECTED --port open--> BOOT_WAIT --HELLO or boot_wait_ms--> HANDSHAKING --a
 - [SES-13] After it opens the port, the host waits up to 2500 ms for an unsolicited HELLO before it sends anything, so that a board reset by DTR is not talking to its bootloader.
 - [SES-14] In HANDSHAKING the host sends HELLO_REQ every 500 ms until a HELLO arrives.
 - [SES-15] The host refuses a HELLO whose protocol version it does not support, and logs an error naming both versions.
-- [SES-16] For each topic index, the host sends TOPIC_REQ with a 200 ms timeout and at most 3 retries, resolves the type support, checks the hash, sends TOPIC_STATUS, and creates or reuses the publisher or subscription.
+- [SES-16] For each topic index, the host sends TOPIC_REQ with a 200 ms timeout and at most 3 retries, resolves the type support, checks the hash, sends TOPIC_STATUS, and creates or reuses the publisher or subscription. When the retries are spent without a TOPIC, it abandons the walk and returns to HANDSHAKING.
 - [SES-17] The host sends READY when every topic is resolved.
 - [SES-18] In CONNECTED the host sends a heartbeat every 500 ms and forwards user traffic.
-- [SES-19] The host detects a reset when a HELLO arrives while it is connected, or when a HELLO carries a different `boot_id`.
+- [SES-19] The host detects a reset when a HELLO arrives while it is connected, or when a HELLO carries a different `boot_id`. A HELLO that repeats the `boot_id` of the handshake under way, while topics are still being collected, changes nothing: the walk answering the first HELLO continues.
 - [SES-20] On a re-handshake the host keeps its publishers and subscriptions when the new topic table is identical to the previous one, and destroys and recreates them otherwise.
 - [SES-21] The host returns to DISCONNECTED on a port error, and to HANDSHAKING on a link timeout or a reset.
 

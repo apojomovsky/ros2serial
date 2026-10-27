@@ -43,8 +43,8 @@ payload: "00 00 c0 3f"
 name: handshake
 covers: [SES-1]
 steps:
-  - {from: host, frame: "00 00 01 01"}
-  - {from: mcu, frame: "00 00 02 01", at_ms: 3}
+  - {from: host, frame: "00 00 01 01 70 0b"}
+  - {from: mcu, frame: "00 00 02 01 18 21", at_ms: 3}
 """,
     "time/wraparound.yaml": """
 name: wraparound
@@ -90,8 +90,20 @@ def test_gitkeep_and_empty_kind_directories_are_ignored(tmp_path):
         ("messages/bad_type.yaml", VALID["messages/float32_1_5.yaml"].replace("std_msgs/msg/", "std_msgs/"), "type"),
         (
             "session/bad_from.yaml",
-            "name: x\ncovers: [SES-1]\nsteps:\n  - {from: bridge, frame: '00'}\n",
+            "name: x\ncovers: [SES-1]\nsteps:\n  - {from: bridge, frame: '00 00 02 01 18 21'}\n",
             "steps/0/from",
+        ),
+        # A step carries a frame with its check, so a frame without one that
+        # leaves no zero residue is reported on its step.
+        (
+            "session/bad_check.yaml",
+            "name: x\ncovers: [SES-1]\nsteps:\n  - {from: mcu, frame: '00 00 02 01 00 00'}\n",
+            "steps/0/frame",
+        ),
+        (
+            "session/short_frame.yaml",
+            "name: x\ncovers: [SES-1]\nsteps:\n  - {from: mcu, frame: '00 00'}\n",
+            "shorter than 4 bytes",
         ),
         ("crc/both.yaml", "covers: [FRM-5]\ncases:\n  - {text: 'a', data: '61', crc: 1}\n", "cases/0"),
         ("crc/no_covers.yaml", "cases:\n  - {text: 'a', crc: 1}\n", "covers"),
@@ -439,3 +451,57 @@ payload: ""
         "messages/mixed.yaml/message: the reference does not make it: "
         "demo_msgs/msg/Two.second: 1e+300 does not fit binary32",
     ]
+
+
+def test_a_cyclic_alias_in_a_message_is_reported_not_a_crash(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "A.msg").write_text("B b\n", encoding="utf-8")
+    (definitions / "B.msg").write_text("A a\n", encoding="utf-8")
+    (definitions / "Single.msg").write_text("float32 data\n", encoding="utf-8")
+    (definitions / "Arr.msg").write_text("Single[] items\n", encoding="utf-8")
+    files = {
+        "messages/cycle.yaml": """
+name: cycle
+covers: [ENC-3]
+type: demo_msgs/msg/A
+profile: {narrow_float64: false}
+message: &x
+  b: {a: *x}
+payload: ""
+""",
+        "messages/cycle_covers.yaml": """
+name: cycle_covers
+covers: &c [ENC-3, *c]
+type: demo_msgs/msg/Single
+profile: {narrow_float64: false}
+message: {data: 1.5}
+payload: "00 00 c0 3f"
+""",
+        "messages/cycle_array.yaml": """
+name: cycle_array
+covers: [ENC-3]
+type: demo_msgs/msg/Arr
+profile: {narrow_float64: false}
+message: &m
+  items: [*m]
+payload: ""
+""",
+    }
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    vectors = make_tree(tmp_path / "vectors", files)
+    problems = vectors_check.check_tree(vectors)
+    assert problems == [
+        "messages/cycle.yaml: cyclic YAML alias",
+        "messages/cycle.yaml/message: the reference does not make it: maximum recursion depth exceeded",
+        "messages/cycle_array.yaml: cyclic YAML alias",
+        "messages/cycle_array.yaml/message: the reference does not make it: demo_msgs/msg/Single.data: no value",
+        "messages/cycle_covers.yaml: cyclic YAML alias",
+    ], problems
+    shared = {"data": 1.5}
+    assert not vectors_check._has_cycle({"first": shared, "second": [shared]})
+    assert not vectors_check._has_cycle({"a": [1, None, "x"]})
+    closing = {}
+    closing["round"] = closing
+    assert vectors_check._has_cycle({"seen": shared, "nested": {"seen": shared, "loop": closing}})
