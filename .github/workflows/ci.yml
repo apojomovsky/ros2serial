@@ -121,7 +121,9 @@ jobs:
     runs-on: ubuntu-24.04
     continue-on-error: true
     steps:
-      - run: echo "pending G10, see docs/00-design.md"
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test EXAMPLES=1
   budgets:
     runs-on: ubuntu-24.04
     continue-on-error: true

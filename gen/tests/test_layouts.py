@@ -214,7 +214,7 @@ def test_the_cmake_example_matches_the_generator(tmp_path):
     files = layouts.generate(loaded, resolved, repository, "cmake", source=config_path.name)
 
     for name, text in files.items():
-        assert text == (EXAMPLES / "cmake_minimal" / name).read_text(encoding="utf-8"), name
+        assert text == (EXAMPLES / "cmake_minimal" / "lib" / name).read_text(encoding="utf-8"), name
 
 
 def test_the_arduino_example_matches_the_generator(tmp_path):
