@@ -169,6 +169,18 @@ def test_a_vector_that_cannot_be_read_without_a_spec_change_fails(tmp_path):
     ]
 
 
+def test_a_vector_that_is_not_utf8_without_a_spec_change_fails(tmp_path):
+    root = repo_with(tmp_path, LOCAL)
+    target = root / "spec/vectors/frames/a.yaml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b"covers: [FRM-1]\n\xff\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "change")
+    assert problems(root) == [
+        "spec/vectors changed without spec/protocol.md changes: spec/vectors/frames/a.yaml names no rule"
+    ]
+
+
 def test_a_branch_that_changes_neither_passes(tmp_path):
     root = repo_with(tmp_path, LOCAL)
     write(root, "core.c", "int x;\n")

@@ -81,7 +81,7 @@ def _unknown_covers(root: Path, changed: list[str]) -> list[str]:
         except FileNotFoundError:
             # A deleted vector names nothing.
             continue
-        except (OSError, yaml.YAMLError):
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
             unknown.append(path)
             continue
         covers = doc.get("covers") if isinstance(doc, dict) else None
