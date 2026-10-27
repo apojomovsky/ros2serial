@@ -729,8 +729,28 @@ payload: "01 2a"
 frame: "01 00 01 2a 1a 88"
 wire: "01 02 01 2a 1a 88 05 00"
 """,
+        "frames/cycle_map.yaml": """
+name: &n {a: *n}
+covers: [SYS-2, TIM-10]
+topic_id: 1
+seq: 0
+payload: "01 2a"
+frame: "01 00 01 2a 1a 88"
+wire: "01 02 01 2a 1a 88 05 00"
+""",
+        "frames/bad_name.yaml": """
+name: [ping]
+covers: [SYS-2, TIM-10]
+topic_id: 1
+seq: 0
+payload: "01 2a"
+frame: "01 00 01 2a 1a 88"
+wire: "01 02 01 2a 1a 88 05 00"
+""",
     }
     vectors = make_tree(tmp_path / "vectors", files)
     assert vectors_check.check_tree(vectors) == [
+        "frames/bad_name.yaml: name: ['ping'] is not of type 'string'",
         "frames/cycle.yaml: cyclic YAML alias",
+        "frames/cycle_map.yaml: cyclic YAML alias",
     ]
