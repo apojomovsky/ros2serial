@@ -596,3 +596,108 @@ def test_the_release_workflow_calls_the_subject_script():
     """The tag job's check is a script so that its test cannot drift from it."""
     text = (ROOT / ".github/workflows/cut-release.yml").read_text()
     assert "scripts/release-subject.sh" in text
+
+
+def test_a_docs_title_survives_a_merged_in_master(tmp_path):
+    """The title check covers the branch's own commits, not master's.
+
+    When master moves on with a feat commit and the branch merges it in, a
+    range from the old base puts master's feat inside the range and a docs
+    title fails. The merge-base range holds only the branch's commits.
+    """
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "docs(core): describe the thing")
+    old_base = git(wt, "rev-parse", "HEAD").stdout.strip()
+    commit(main, {"b.txt": "b\n"}, "feat(core): a new thing")
+    git(main, "push", "-q", "origin", "master")
+    git(wt, "fetch", "-q", "origin")
+    git(wt, "merge", "-q", "--no-edit", "origin/master")
+    stale = f"{old_base}..HEAD"
+    stale_result = run(
+        [
+            "python3",
+            str(ROOT / "scripts/commit_check.py"),
+            "--title",
+            "docs(core): describe the thing",
+            "--covers-range",
+            stale,
+        ],
+        wt,
+    )
+    assert stale_result.returncode == 1, stale_result.stdout + stale_result.stderr
+    stale_subjects = git(wt, "log", "--no-merges", "--format=%s", stale).stdout.splitlines()
+    assert "feat(core): a new thing" in stale_subjects
+    script = str(ROOT / "scripts/pr-title-range.sh")
+    fresh_range = run(["bash", script], wt, {"BASE_REF": "master"}).stdout.strip()
+    subjects = git(wt, "log", "--no-merges", "--format=%s", fresh_range).stdout.splitlines()
+    assert subjects == ["docs(core): describe the thing"]
+    fresh = run(
+        [
+            "python3",
+            str(ROOT / "scripts/commit_check.py"),
+            "--title",
+            "docs(core): describe the thing",
+            "--covers-range",
+            fresh_range,
+        ],
+        wt,
+    )
+    assert fresh.returncode == 0, fresh.stdout + fresh.stderr
+    # The merge ref can be built from the older base after the branch merged
+    # the newer one, so the script must stay exact on that checkout too.
+    head = git(wt, "rev-parse", "HEAD").stdout.strip()
+    git(wt, "checkout", "-q", "--detach", old_base)
+    git(wt, "merge", "-q", "--no-edit", "--no-ff", head, "-m", "stale merge ref")
+    stale_ref_range = run(["bash", script], wt, {"BASE_REF": "master"}).stdout.strip()
+    stale_ref_subjects = git(wt, "log", "--no-merges", "--format=%s", stale_ref_range).stdout.splitlines()
+    assert stale_ref_subjects == ["docs(core): describe the thing"]
+    stale_ref = run(
+        [
+            "python3",
+            str(ROOT / "scripts/commit_check.py"),
+            "--title",
+            "docs(core): describe the thing",
+            "--covers-range",
+            stale_ref_range,
+        ],
+        wt,
+    )
+    assert stale_ref.returncode == 0, stale_ref.stdout + stale_ref.stderr
+
+
+def test_the_pr_title_workflow_uses_the_range_script():
+    """The range expression is a script so that its test cannot drift from it."""
+    text = (ROOT / ".github/workflows/pr-title.yml").read_text()
+    assert "scripts/pr-title-range.sh" in text
+    assert "BASE_REF: ${{ github.event.pull_request.base.ref }}" in text
+    assert 'range="$(bash scripts/pr-title-range.sh)" || exit 1' in text
+    assert "pull_request.base.sha" not in text
+
+
+def test_the_pr_range_script_uses_the_merge_base_not_the_tip(tmp_path):
+    """A branch behind master still gets its own commits, not the base tip.
+
+    The merge base and the base tip diverge here, so printing the tip instead
+    would resolve a different base with the same subjects.
+    """
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "docs(core): describe the thing")
+    commit(main, {"b.txt": "b\n"}, "feat(core): a new thing")
+    git(main, "push", "-q", "origin", "master")
+    git(wt, "fetch", "-q", "origin")
+    out = run(["bash", str(ROOT / "scripts/pr-title-range.sh")], wt, {"BASE_REF": "master"})
+    assert out.returncode == 0, out.stdout + out.stderr
+    base_sha = out.stdout.strip().removesuffix("..HEAD")
+    tip = git(wt, "rev-parse", "origin/master").stdout.strip()
+    assert base_sha != tip
+    assert base_sha == git(wt, "merge-base", "origin/master", "HEAD").stdout.strip()
+    subjects = git(wt, "log", "--no-merges", "--format=%s", out.stdout.strip()).stdout.splitlines()
+    assert subjects == ["docs(core): describe the thing"]
+
+
+def test_the_pr_range_script_reports_an_unresolvable_base(tmp_path):
+    """A base with no merge base fails loudly instead of printing an empty range."""
+    _, wt = fixture(tmp_path)
+    out = run(["bash", str(ROOT / "scripts/pr-title-range.sh")], wt, {"BASE_REF": "no-such-branch"})
+    assert out.returncode != 0
+    assert "no merge base" in out.stderr
