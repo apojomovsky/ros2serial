@@ -439,24 +439,54 @@ int8_t r2s_codec_encode(const r2s_codec_table_t *table, uint16_t type, const voi
             continue;
         }
         if (kind == R2S_CODEC_STR) {
-            uint32_t n = 0u;
+            uint16_t stride = (uint16_t)(aux + 1u);
 
-            stack[sp].next++;
-            while (n <= aux && at[n] != 0u) {
-                n++;
-            }
-            if (n > aux) {
-                *field = (uint8_t)(visited - 1u);
-                return R2S_ERR_BOUNDS;
-            }
-            if (emit_varint(out, (uint16_t)n) != R2S_OK) {
-                *field = (uint8_t)(visited - 1u);
-                return R2S_ERR_BOUNDS;
-            }
-            for (uint32_t k = 0u; k < n; k++) {
-                if (emit_byte(out, at[k]) != R2S_OK) {
+            if (mode == R2S_CODEC_SCALAR) {
+                elems = 1u;
+            } else if (mode == R2S_CODEC_FIXED) {
+                elems = count;
+            } else {
+                uint32_t elems_end = (uint32_t)count * stride;
+                uint16_t member = count_offset(elems_end, (uint8_t)((mode & R2S_CODEC_COUNT16) != 0u));
+                uint16_t stored;
+
+                if ((mode & R2S_CODEC_COUNT16) != 0u) {
+                    memcpy(&stored, at + member, 2u);
+                } else {
+                    stored = at[member];
+                }
+                if (stored > count) {
                     *field = (uint8_t)(visited - 1u);
                     return R2S_ERR_BOUNDS;
+                }
+                if (emit_varint(out, stored) != R2S_OK) {
+                    *field = (uint8_t)(visited - 1u);
+                    return R2S_ERR_BOUNDS;
+                }
+                elems = stored;
+            }
+            stack[sp].next++;
+            for (i = 0u; i < elems; i++) {
+                const uint8_t *item = at + (uint16_t)(i * stride);
+                uint32_t n = 0u;
+                uint32_t k;
+
+                while (n <= aux && item[n] != 0u) {
+                    n++;
+                }
+                if (n > aux) {
+                    *field = (uint8_t)(visited - 1u);
+                    return R2S_ERR_BOUNDS;
+                }
+                if (emit_varint(out, (uint16_t)n) != R2S_OK) {
+                    *field = (uint8_t)(visited - 1u);
+                    return R2S_ERR_BOUNDS;
+                }
+                for (k = 0u; k < n; k++) {
+                    if (emit_byte(out, item[k]) != R2S_OK) {
+                        *field = (uint8_t)(visited - 1u);
+                        return R2S_ERR_BOUNDS;
+                    }
                 }
             }
             continue;
@@ -730,32 +760,63 @@ int8_t r2s_codec_decode(const r2s_codec_table_t *table, uint16_t type, const uin
             continue;
         }
         if (kind == R2S_CODEC_STR) {
-            uint16_t length;
-            uint16_t k;
+            uint16_t stride = (uint16_t)(aux + 1u);
 
+            if (mode == R2S_CODEC_SCALAR) {
+                elems = 1u;
+            } else if (mode == R2S_CODEC_FIXED) {
+                elems = count;
+            } else {
+                uint16_t stored;
+
+                if (take_varint(&p, end, &stored) != R2S_OK) {
+                    *field = (uint8_t)(visited - 1u);
+                    return R2S_ERR_DECODE;
+                }
+                if (stored > count) {
+                    *field = (uint8_t)(visited - 1u);
+                    return R2S_ERR_BOUNDS;
+                }
+                if ((mode & R2S_CODEC_COUNT16) != 0u) {
+                    uint16_t member = count_offset((uint32_t)count * stride, 1u);
+
+                    memcpy(at + member, &stored, 2u);
+                } else {
+                    uint16_t member = count_offset((uint32_t)count * stride, 0u);
+
+                    at[member] = (uint8_t)stored;
+                }
+                elems = stored;
+            }
             stack[sp].next++;
-            if (take_varint(&p, end, &length) != R2S_OK) {
-                *field = (uint8_t)(visited - 1u);
-                return R2S_ERR_DECODE;
-            }
-            if (length > aux) {
-                *field = (uint8_t)(visited - 1u);
-                return R2S_ERR_BOUNDS;
-            }
-            for (k = 0u; k < length; k++) {
-                uint8_t byte;
+            for (i = 0u; i < elems; i++) {
+                uint8_t *item = at + (uint16_t)(i * stride);
+                uint16_t length;
+                uint16_t k;
 
-                if (take_byte(&p, end, &byte) != R2S_OK) {
+                if (take_varint(&p, end, &length) != R2S_OK) {
                     *field = (uint8_t)(visited - 1u);
                     return R2S_ERR_DECODE;
                 }
-                if (byte == 0u) {
+                if (length > aux) {
                     *field = (uint8_t)(visited - 1u);
-                    return R2S_ERR_DECODE;
+                    return R2S_ERR_BOUNDS;
                 }
-                at[k] = byte;
+                for (k = 0u; k < length; k++) {
+                    uint8_t byte;
+
+                    if (take_byte(&p, end, &byte) != R2S_OK) {
+                        *field = (uint8_t)(visited - 1u);
+                        return R2S_ERR_DECODE;
+                    }
+                    if (byte == 0u) {
+                        *field = (uint8_t)(visited - 1u);
+                        return R2S_ERR_DECODE;
+                    }
+                    item[k] = byte;
+                }
+                item[length] = 0u;
             }
-            at[length] = 0u;
             continue;
         }
         width = elem_bytes(kind);
