@@ -954,13 +954,83 @@ TEST(ConverterFieldPath, AdmitsUnknownPathsPastSequences)
     EXPECT_EQ(converter.field_path("fake/msg/Cloud", 5), "");
 }
 
+TEST(ConverterFieldPath, AdmitsUnknownPathsPastNestedSequences)
+{
+    // A sequence nested in a submessage: indices inside it and the
+    // siblings after it in every enclosing level depend on its runtime
+    // count. Unknown propagates all the way out instead of misaligning
+    // the outer walk.
+    Converter converter;
+    MessageMember element{};
+    element.name_ = "x";
+    element.type_id_ = ROS_TYPE_UINT8;
+    MessageMembers inner{};
+    inner.message_namespace_ = "fake";
+    inner.message_name_ = "Inner";
+    inner.member_count_ = 1;
+    inner.size_of_ = 1;
+    inner.members_ = &element;
+    const rosidl_message_type_support_t element_handle = fake_ts_for(&inner);
+    MessageMember items{};
+    items.name_ = "items";
+    items.type_id_ = ROS_TYPE_MESSAGE;
+    items.is_array_ = true;
+    items.is_upper_bound_ = true;
+    items.members_ = &element_handle;
+    items.get_function = fake_outer_get;
+    items.resize_function = fake_noop_resize;
+    MessageMember tail{};
+    tail.name_ = "tail";
+    tail.type_id_ = ROS_TYPE_UINT8;
+    MessageMember sub[2];
+    sub[0] = items;
+    sub[1] = tail;
+    MessageMembers sub_members{};
+    sub_members.message_namespace_ = "fake";
+    sub_members.message_name_ = "Sub";
+    sub_members.member_count_ = 2;
+    sub_members.size_of_ = 2;
+    sub_members.members_ = sub;
+    const rosidl_message_type_support_t sub_handle = fake_ts_for(&sub_members);
+    MessageMember inner_field{};
+    inner_field.name_ = "inner";
+    inner_field.type_id_ = ROS_TYPE_MESSAGE;
+    inner_field.members_ = &sub_handle;
+    MessageMember after{};
+    after.name_ = "after";
+    after.type_id_ = ROS_TYPE_UINT8;
+    MessageMember top[2];
+    top[0] = inner_field;
+    top[1] = after;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "Outer";
+    members.member_count_ = 2;
+    members.size_of_ = 3;
+    members.members_ = top;
+    members.init_function = fake_noop_init;
+    members.fini_function = fake_noop_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/NestedSeq", &handle));
+    EXPECT_EQ(converter.field_path("fake/msg/NestedSeq", 0), "inner");
+    EXPECT_EQ(converter.field_path("fake/msg/NestedSeq", 1), "inner.items");
+    EXPECT_EQ(converter.field_path("fake/msg/NestedSeq", 2), "");
+    EXPECT_EQ(converter.field_path("fake/msg/NestedSeq", 3), "");
+}
+
 struct FakeBools {
     std::vector<bool> values;
 };
 
+// The values the boolean assign callback receives, in order. The message
+// storage itself lives inside the converter, so the test observes the
+// callback instead.
+std::vector<std::pair<std::size_t, bool>> assigned_bools;
+
 void fake_bools_init(void *memory, MessageInitialization)
 {
     new (&static_cast<FakeBools *>(memory)->values) std::vector<bool>();
+    assigned_bools.clear();
 }
 
 void fake_bools_fini(void *memory)
@@ -971,6 +1041,7 @@ void fake_bools_fini(void *memory)
 void fake_bools_assign(void *memory, std::size_t index, const void *value)
 {
     static_cast<FakeBools *>(memory)->values[index] = *static_cast<const bool *>(value);
+    assigned_bools.emplace_back(index, *static_cast<const bool *>(value));
 }
 
 void fake_bools_resize(void *memory, std::size_t size)
@@ -1005,6 +1076,8 @@ TEST(ConverterSequences, ConvertsBooleanSequencesThroughAssign)
         converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x01, 0x01}.data(), 2, cdr);
     EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
     EXPECT_EQ(result.field, 0xFFu);
+    const std::vector<std::pair<std::size_t, bool>> want_assigned{{0, true}};
+    EXPECT_EQ(assigned_bools, want_assigned);
 
     result = converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x02}.data(), 1, cdr);
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);

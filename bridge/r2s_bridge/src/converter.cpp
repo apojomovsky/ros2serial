@@ -344,34 +344,43 @@ ConvertFail decode_ops(const std::vector<Op> &ops, std::uint8_t *base, Reader &r
 // The dotted path of a depth-first index. A fixed nested array holds exactly
 // its bound elements, so the walk passes through it to the siblings after
 // it. A sequence holds a runtime count: the index of anything inside or
-// after one depends on that count, which the type alone cannot name, so
-// there is no path for those indices and the caller falls back to the index.
-bool path_of(const std::vector<Op> &ops, std::uint32_t &counter, std::uint8_t want, std::string &out)
+// after one depends on that count, which the type alone cannot name. Unknown
+// propagates all the way out, so a sequence nested in a submessage does not
+// misalign the outer walk: the caller falls back to the index.
+enum class Path : std::uint8_t {
+    kFound,
+    kNotHere,
+    kUnknown,
+};
+
+Path path_of(const std::vector<Op> &ops, std::uint32_t &counter, std::uint8_t want, std::string &out)
 {
     for (const Op &op : ops) {
         const std::uint32_t here = counter++;
         if (here == want) {
             out = op.path;
-            return true;
+            return Path::kFound;
         }
         if (op.type != ROS_TYPE_MESSAGE) {
             continue;
         }
         if (!op.is_array) {
-            if (path_of(op.nested, counter, want, out)) {
-                return true;
+            const Path nested = path_of(op.nested, counter, want, out);
+            if (nested != Path::kNotHere) {
+                return nested;
             }
         } else if (!op.is_sequence) {
             for (std::size_t k = 0; k < op.bound; ++k) {
-                if (path_of(op.nested, counter, want, out)) {
-                    return true;
+                const Path nested = path_of(op.nested, counter, want, out);
+                if (nested != Path::kNotHere) {
+                    return nested;
                 }
             }
         } else {
-            return false;
+            return Path::kUnknown;
         }
     }
-    return false;
+    return Path::kNotHere;
 }
 
 bool build_ops(const MessageMembers *members, const std::string &prefix, std::vector<Op> &ops,
@@ -571,7 +580,7 @@ std::string Converter::field_path(const std::string &type_name, std::uint8_t ind
     }
     std::uint32_t counter = 0;
     std::string out;
-    if (path_of(plan->fields, counter, index, out)) {
+    if (path_of(plan->fields, counter, index, out) == Path::kFound) {
         return out;
     }
     return "";
