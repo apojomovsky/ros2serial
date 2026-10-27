@@ -4,8 +4,6 @@
 # may join the list.
 CTL-5   C9
 CTL-11  Y3
-CTL-12  H5
-CTL-13  H5
 DSC-1   G7
 DSC-2   G7
 DSC-3   G7

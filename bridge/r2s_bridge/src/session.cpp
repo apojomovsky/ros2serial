@@ -430,7 +430,17 @@ struct Session::Impl {
             log(SessionLog::kError, "TOPIC refused: the names do not match the payload");
             return;
         }
-        const std::uint8_t verdict = resolve ? resolve(info) : 0u;
+        const std::uint8_t verdict = resolve ? resolve(info) : kTopicStatusOk;
+        // The MCU stores the verdict per topic ([SES-2]); the host logs the
+        // refusals, since the wire carries only the code.
+        if (verdict == kTopicStatusUnknownType) {
+            log(SessionLog::kError,
+                "TOPIC refused: unknown type '" + info.type_name + "' for topic '" + info.topic_name + "'");
+        } else if (verdict == kTopicStatusHashMismatch) {
+            log(SessionLog::kError, "TOPIC refused: the hash of '" + info.type_name +
+                                        "' is not the installed one, for topic '" + info.topic_name + "'");
+        }
+        info.status = verdict;
         collected.push_back(info);
         send_control({kTopicStatus, info.topic_id, verdict});
         ++requested_index;

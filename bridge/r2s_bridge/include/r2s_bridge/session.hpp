@@ -33,6 +33,13 @@ enum class SessionLog : std::uint8_t {
     kInfo,
 };
 
+// The TOPIC_STATUS verdicts ([CTL-13]): 3 names a topic the bridge cannot
+// serve yet, when two announced topics claim one name; H7 detects it.
+constexpr std::uint8_t kTopicStatusOk = 0u;
+constexpr std::uint8_t kTopicStatusUnknownType = 1u;
+constexpr std::uint8_t kTopicStatusHashMismatch = 2u;
+constexpr std::uint8_t kTopicStatusNameConflict = 3u;
+
 // One announced topic, as the TOPIC frame carries it. The flags are the wire
 // bits ([CTL-4]); H5 checks the hash and H7 routes the traffic.
 struct TopicInfo {
@@ -41,6 +48,10 @@ struct TopicInfo {
     std::array<std::uint8_t, 8> type_hash{};
     std::string type_name;
     std::string topic_name;
+    // The host's TOPIC_STATUS verdict for this topic, one of the codes above.
+    // H7 forwards only topics with 0. It is the host's answer, not the MCU's
+    // announcement, so it never decides whether two tables match.
+    std::uint8_t status = kTopicStatusOk;
 
     // True when the MCU publishes the topic, false when it subscribes.
     bool device_to_host() const
@@ -101,9 +112,9 @@ struct SessionConfig {
 // counts as a failed open.
 using TransportFactory = std::function<std::unique_ptr<Transport>()>;
 
-// Answers one announced topic with its TOPIC_STATUS ([CTL-13]): 0 ok,
-// 1 unknown type, 2 hash mismatch, 3 name conflict. H5 loads the verdict from
-// the installed type support; tests script it.
+// Answers one announced topic with its TOPIC_STATUS verdict, one of the
+// codes above. type_support.hpp loads the verdict from the installed type
+// support; tests script it.
 using TopicResolver = std::function<std::uint8_t(const TopicInfo &)>;
 
 // The session's observable edge: log lines the bridge forwards to its
