@@ -24,6 +24,7 @@ import rclpy
 from launch.actions import ExecuteProcess, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.substitutions import FindPackageShare
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -167,7 +168,10 @@ class TestBridgePosixLaunch(unittest.TestCase):
     def test_mcu_to_host_float_flow(self):
         node = rclpy.create_node("h9_flow_probe")
         received = []
-        node.create_subscription(Float32, "battery", received.append, 10)
+        # The bridge publishes MCU topics best effort ([SES-31]), so the probe
+        # subscribes best effort too; a reliable probe would never match.
+        best_effort = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
+        node.create_subscription(Float32, "battery", received.append, best_effort)
         try:
             deadline = time.monotonic() + FLOW_TIMEOUT
             while len(received) < 3:
