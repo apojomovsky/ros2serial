@@ -16,6 +16,7 @@ constexpr std::int64_t kNanosecondsPerTick = 1000000;
 
 r2s_bridge::Transport *installed_transport = nullptr;
 const r2s_bridge::Clock *installed_clock = nullptr;
+bool installed_fault = false;
 } // namespace
 
 namespace r2s_bridge
@@ -28,6 +29,7 @@ bool attach_core_port(Transport &transport, const Clock &clock)
     }
     installed_transport = &transport;
     installed_clock = &clock;
+    installed_fault = false;
     return true;
 }
 
@@ -35,6 +37,17 @@ void detach_core_port()
 {
     installed_transport = nullptr;
     installed_clock = nullptr;
+    installed_fault = false;
+}
+
+bool link_faulted()
+{
+    return installed_fault;
+}
+
+void clear_link_fault()
+{
+    installed_fault = false;
 }
 
 } // namespace r2s_bridge
@@ -45,7 +58,13 @@ extern "C" uint16_t r2s_port_read(uint8_t *buf, uint16_t max)
         return 0u;
     }
     const r2s_bridge::IoResult got = installed_transport->read(buf, max);
-    return got.status == r2s_bridge::IoStatus::kOk ? static_cast<uint16_t>(got.bytes) : 0u;
+    if (got.status == r2s_bridge::IoStatus::kOk) {
+        return static_cast<uint16_t>(got.bytes);
+    }
+    if (got.status != r2s_bridge::IoStatus::kWouldBlock) {
+        installed_fault = true;
+    }
+    return 0u;
 }
 
 extern "C" uint32_t r2s_port_tick(void)
