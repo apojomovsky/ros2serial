@@ -480,10 +480,13 @@ payload: ""
     monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
     vectors = make_tree(tmp_path / "vectors", files)
     problems = vectors_check.check_tree(vectors)
-    assert "messages/cycle.yaml: cyclic YAML alias" in problems, problems
-    assert "messages/cycle_array.yaml: cyclic YAML alias" in problems, problems
-    assert "messages/cycle_covers.yaml: cyclic YAML alias" in problems, problems
-    assert all(problem.startswith("messages/") for problem in problems), problems
+    assert problems == [
+        "messages/cycle.yaml: cyclic YAML alias",
+        "messages/cycle.yaml/message: the reference does not make it: maximum recursion depth exceeded",
+        "messages/cycle_array.yaml: cyclic YAML alias",
+        "messages/cycle_array.yaml/message: the reference does not make it: demo_msgs/msg/Single.data: no value",
+        "messages/cycle_covers.yaml: cyclic YAML alias",
+    ], problems
     shared = {"data": 1.5}
     assert not vectors_check._has_cycle({"first": shared, "second": [shared]})
     assert not vectors_check._has_cycle({"a": [1, None, "x"]})
