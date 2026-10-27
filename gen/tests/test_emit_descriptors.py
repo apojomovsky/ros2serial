@@ -27,7 +27,7 @@ ROUND_TRIP_BOUNDS = {
     VECTOR3: {},
     "builtin_interfaces/msg/Time": {},
     "geometry_msgs/msg/Quaternion": {},
-    "sensor_msgs/msg/Imu": {},
+    "sensor_msgs/msg/Imu": dict(HEADER_BOUNDS),
     "std_msgs/msg/Header": HEADER_BOUNDS,
     "sensor_msgs/msg/JointState": JOINT_STATE_BOUNDS,
 }
@@ -175,28 +175,34 @@ def test_every_entry_states_a_valid_kind_mode_count_and_aux(tmp_path):
     repository = repository_for(
         tmp_path, {"test_msgs/msg/Inner": "uint8 tag\nfloat64 value", "test_msgs/msg/Cover": COVER_FIELDS}
     )
-    _, table = build(["test_msgs/msg/Cover"], repository=repository)
+    resolved, table = build(["test_msgs/msg/Cover"], repository=repository)
+    fields = {(message.type_name, field.name): field for message in resolved.values() for field in message.fields}
 
     for entry in table.entries:
         assert 0 <= entry.kind <= 12
         assert entry.mode in (0, 1, 2, 0x82)
         assert (entry.count == 0) == (entry.mode == 0)
         assert (entry.mode == 0x82) == (entry.count > 255)
-        assert (entry.aux == 0) == (entry.kind not in (11, 12))
-        if entry.kind == 12:
+        if entry.kind == 11:
+            assert entry.aux == fields[(entry.owner, entry.field)].string_bound
+        elif entry.kind == 12:
+            assert entry.aux == table.index_of[fields[(entry.owner, entry.field)].type_name]
             assert entry.aux < table.index_of[entry.owner]
+        else:
+            assert entry.aux == 0
 
 
 def test_a_wide_sequence_counts_its_elements_in_two_bytes(tmp_path):
-    # covers: DSC-14, DSC-15, DSC-20
+    # covers: DSC-14, DSC-15, DSC-20, DSC-48
     repository = repository_for(tmp_path, {"test_msgs/msg/Wide": "uint64[<=300] values"})
     resolved, table = build(["test_msgs/msg/Wide"], repository=repository)
 
     assert [(entry.mode, entry.count) for entry in table.entries] == [(0x82, 300)]
+    text = descriptors.emit_c(table)
+    assert "R2S_FIELD_CHECK(test_msgs__msg__Wide, values, values.size);" in text
     (tmp_path / "r2s_generated.h").write_text(emit.emit_types(resolved), encoding="utf-8")
     (tmp_path / "check.c").write_text(
-        '#include "r2s_generated.h"\n' + descriptors.emit_c(table) + "\nint main(void)\n{\n    return 0;\n}\n",
-        encoding="utf-8",
+        '#include "r2s_generated.h"\n' + text + "\nint main(void)\n{\n    return 0;\n}\n", encoding="utf-8"
     )
     for compiler, args in (("cc", []), ("avr-gcc", ["-mmcu=atmega328p"])):
         compiled = subprocess.run(
@@ -347,3 +353,76 @@ def test_descriptors_cover_every_kind_and_mode(narrow, tmp_path):
         assert walk_encode(table, resolved, "test_msgs/msg/Cover", message, narrow=narrow) == payload
         decoded = walk_decode(table, resolved, "test_msgs/msg/Cover", payload, narrow=narrow)
         assert matches(repository, "test_msgs/msg/Cover", message, decoded, narrow=narrow), message
+
+
+def test_an_unknown_root_has_no_descriptor_table():
+    with pytest.raises(msgs.MessageError, match="unknown message type"):
+        descriptors.build({}, ["test_msgs/msg/Missing"])
+
+
+def test_an_unresolvable_nested_type_has_no_descriptor_table():
+    resolved = {
+        "test_msgs/msg/Outer": bounds.ResolvedMessage(
+            "test_msgs/msg/Outer",
+            (bounds.ResolvedField("inner", "test_msgs/msg/Missing", False, False, None, None),),
+        )
+    }
+
+    with pytest.raises(msgs.MessageError, match="unknown field type"):
+        descriptors.build(resolved, ["test_msgs/msg/Outer"])
+
+
+def test_a_recursive_type_has_no_descriptor_table():
+    # covers: DSC-12
+    resolved = {
+        "test_msgs/msg/Loop": bounds.ResolvedMessage(
+            "test_msgs/msg/Loop",
+            (bounds.ResolvedField("next", "test_msgs/msg/Loop", False, False, None, None),),
+        )
+    }
+
+    with pytest.raises(msgs.MessageError, match="DSC-12"):
+        descriptors.build(resolved, ["test_msgs/msg/Loop"])
+
+
+def test_an_unbounded_sequence_has_no_descriptor_form_even_unresolved():
+    # covers: DSC-22, DSC-41
+    resolved = {
+        "test_msgs/msg/Open": bounds.ResolvedMessage(
+            "test_msgs/msg/Open",
+            (bounds.ResolvedField("values", "uint8", True, True, None, None),),
+        )
+    }
+
+    with pytest.raises(msgs.MessageError, match="DSC-22"):
+        descriptors.build(resolved, ["test_msgs/msg/Open"])
+
+
+def test_a_zero_length_array_has_no_descriptor_form():
+    # covers: DSC-44, DSC-41
+    resolved = {
+        "test_msgs/msg/Empty": bounds.ResolvedMessage(
+            "test_msgs/msg/Empty",
+            (bounds.ResolvedField("values", "uint8", True, False, 0, None),),
+        )
+    }
+
+    with pytest.raises(msgs.MessageError, match="DSC-44"):
+        descriptors.build(resolved, ["test_msgs/msg/Empty"])
+
+
+def test_a_struct_of_exactly_65535_bytes_has_a_descriptor_form(tmp_path):
+    repository = repository_for(tmp_path, {"test_msgs/msg/Full": "uint8[65535] values"})
+
+    _, table = build(["test_msgs/msg/Full"], repository=repository)
+
+    assert table.entries[0].count == 65535
+
+
+def test_no_roots_make_an_empty_table_with_a_nesting_bound_of_one():
+    # covers: DSC-39
+    table = descriptors.build({}, [])
+
+    assert table.records == () and table.entries == ()
+    assert table.max_nest == 1
+    assert "#define R2S_MAX_NEST 1u" in descriptors.emit_c(table)
