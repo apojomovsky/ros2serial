@@ -174,18 +174,33 @@ def test_indented_python_body_is_dedented(tmp_path):
 
 
 @needs_gcc
-def test_deeply_nested_broken_snippet_fails(tmp_path):
+def test_deeply_nested_snippet_is_ignored(tmp_path):
+    # Fences past column 3 are indented code blocks, literal text, so a
+    # snippet nested two list levels deep is not checked.
     text = "# T\n\n1. Outer:\n   1. Inner:\n\n      ```c\n      int broken = ;\n      ```\n"
     root = write_tree(tmp_path, {"README.md": text})
-    problems = snippets_check.check_tree(root)
-    assert len(problems) == 1
-    assert "README.md:6" in problems[0]
+    assert snippets_check.check_tree(root) == []
 
 
 @needs_gcc
-def test_marker_in_indented_code_block_is_inert(tmp_path):
+def test_indented_marker_is_diagnosed(tmp_path):
     text = "# T\n\n    <!-- snippet: skip until #94 -->\n\n" + C_BROKEN
     root = write_tree(tmp_path, {"README.md": text})
     problems = snippets_check.check_tree(root)
+    assert any("starts past column 3" in p for p in problems)
+
+
+@needs_gcc
+def test_literal_fence_in_indented_block_hides_nothing(tmp_path):
+    text = "# T\n\n    ```\n    example\n\n```c\nint broken = ;\n```\n\n    ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert any("does not compile" in p for p in problems)
+
+
+def test_deeper_closing_fence_is_content(tmp_path):
+    text = "# T\n\n```python\nx = 1\n    ```\n```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
     assert len(problems) == 1
-    assert "README.md:5" in problems[0]
+    assert "README.md:3" in problems[0]

@@ -33,10 +33,13 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 MARKER = re.compile(r"^ {0,3}<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#([0-9]+)[ \t]*-->\s*$")
 MARKER_LIKE = re.compile(r"^ {0,3}<!--[ \t]*snippet:.*-->\s*$")
-# A fence may sit inside a list item at any depth. A marker deeper than three
-# spaces is an indented code block, literal text, so markers stay at column 0
-# to 3 while fences nest freely.
-FENCE = re.compile(r"^ *```")
+# A fence opens at column 0 to 3 only: deeper is an indented code block,
+# literal text, so a literal fence can never swallow a real snippet. The
+# closer must sit at the opener's own indent; anything else is body text. A
+# marker deeper than three spaces is literal text too, so it gets its own
+# diagnostic instead of silently doing nothing.
+FENCE = re.compile(r"^ {0,3}```")
+MARKER_ANY = re.compile(r"^\s*<!--[ \t]*snippet:.*-->\s*$")
 
 LANGUAGES = ("c", "cpp", "python", "yaml")
 EXTENSION = {"c": ".c", "cpp": ".cpp", "python": ".py", "yaml": ".yaml"}
@@ -64,6 +67,13 @@ def _dedent(line: str, width: int) -> str:
     return line[taken:]
 
 
+def _indent_of(line: str) -> int:
+    taken = 0
+    while taken < len(line) and line[taken] == " ":
+        taken += 1
+    return taken
+
+
 def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
     lines = path.read_text(encoding="utf-8").splitlines()
     snippets: list[Snippet] = []
@@ -72,7 +82,7 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
     used: set[int] = set()
     i = 0
     while i < len(lines):
-        if MARKER_LIKE.match(lines[i]):
+        if MARKER_ANY.match(lines[i]):
             markers[i + 1] = lines[i]
             i += 1
             continue
@@ -82,9 +92,13 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
             continue
         words = lines[i][fence.end() :].split()
         open_line = i + 1
+        indent = fence.end() - 3
         i += 1
         body: list[str] = []
-        while i < len(lines) and not FENCE.match(lines[i]):
+        while i < len(lines):
+            closer = FENCE.match(lines[i])
+            if closer and _indent_of(lines[i]) == indent:
+                break
             body.append(lines[i])
             i += 1
         if i == len(lines):
@@ -100,8 +114,11 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
         if j >= 0 and MARKER.match(lines[j]):
             ticket = _ticket(lines[j])
             used.add(j + 1)
-        elif j >= 0 and MARKER_LIKE.match(lines[j]):
-            problems.append(f"{rel}:{j + 1}: snippet marker without a ticket number")
+        elif j >= 0 and MARKER_ANY.match(lines[j]):
+            if MARKER_LIKE.match(lines[j]):
+                problems.append(f"{rel}:{j + 1}: snippet marker without a ticket number")
+            else:
+                problems.append(f"{rel}:{j + 1}: snippet marker starts past column 3, so it is literal text")
             used.add(j + 1)
         if len(words) > 1:
             problems.append(f"{rel}:{open_line}: unexpected info string after {words[0]!r}")
@@ -117,8 +134,10 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
             continue
         if MARKER.match(text):
             problems.append(f"{rel}:{lineno}: snippet marker above no fence")
-        else:
+        elif MARKER_LIKE.match(text):
             problems.append(f"{rel}:{lineno}: snippet marker without a ticket number")
+        else:
+            problems.append(f"{rel}:{lineno}: snippet marker starts past column 3, so it is literal text")
     return snippets, problems
 
 
