@@ -13,12 +13,13 @@
     X(SUB, cmd_vel, geometry_msgs, Twist) \
     X(SUB, joints, sensor_msgs, JointState)
 
-extern "C" {
-#include <ros2serial.h>
-}
-/* The core needs the bundled limits as defines (R2S_WITH_CODEC and the
+/* The header carries C linkage, so the sketch includes it plainly; only the
+ * port functions and handlers below still need their own extern "C" block.
+ * The core needs the bundled limits as defines (R2S_WITH_CODEC and the
  * R2S_MAX_* values from r2s_bundled.h); the example build passes them
  * through compiler.c.extra_flags, since a library sets none of its own. */
+#include <ros2serial.h>
+
 static uint32_t s_boot_id;
 static uint32_t s_cmd_vel_count;
 static uint32_t s_joints_count;

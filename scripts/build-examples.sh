@@ -119,7 +119,7 @@ for board in uno mega; do
     echo "arduino_xmacro ($board): the firmware links no receive buffer" >&2
     status=1
   fi
-  for unused in sensor_msgs_Imu geometry_msgs_Quaternion; do
+  for unused in sensor_msgs_Imu geometry_msgs_Quaternion std_msgs_Header; do
     if avr-nm "$out/arduino_xmacro.ino.elf" 2>/dev/null | grep -q "r2s_bundled_table_$unused"; then
       echo "arduino_xmacro ($board): the linker kept the unused $unused table" >&2
       status=1
