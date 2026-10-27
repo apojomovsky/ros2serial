@@ -57,16 +57,20 @@ def config_hash(loaded: Config) -> str:
     return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()[:16]
 
 
+def _defined(header: str, name: str) -> bool:
+    """Whether the header names `name` at all, however malformed its value."""
+    return re.search(rf"^#define {name} ", header, re.MULTILINE) is not None
+
+
 def build_defines(header: str, source: str = "r2s_generated.h") -> list[str]:
     """The -D flags a non-CMake build needs: the codec flag plus the header's limits."""
     defines = ["R2S_WITH_CODEC"]
     for name in ("R2S_MAX_FRAME", "R2S_MAX_NEST", "R2S_TOPIC_MAX_COUNT"):
         match = re.search(rf"^#define {name} ([0-9]+)u$", header, re.MULTILINE)
-        if match is None:
-            if name == "R2S_TOPIC_MAX_COUNT":
-                continue
+        if match is not None:
+            defines.append(f"{name}={match.group(1)}")
+        elif name != "R2S_TOPIC_MAX_COUNT" or _defined(header, name):
             raise MessageError(source, f"no {name} limit", "regenerate the sources")
-        defines.append(f"{name}={match.group(1)}")
     return defines
 
 
