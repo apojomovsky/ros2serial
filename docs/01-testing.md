@@ -218,7 +218,7 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 - **Error-path coverage is 100%:** every `R2S_ERR_*` code and every counter is triggered by at least one test.
 - **Mutation testing** runs nightly with Mull (C and C++, LLVM-based) and mutmut (Python); research ticket R13 confirms the tools. Surviving mutants are triaged: either a test is added, or the mutant is recorded as equivalent with a one-line reason.
 - Lines excluded from coverage carry an exclusion comment with a reason, and the exclusions are counted in the report.
-- The bridge floors report as advisory until its tests catch up (#169); every other floor fails the gate, and head-vs-base fails for all components.
+- The bridge floors report as advisory until its tests catch up (#169). Core is measured head-vs-base and against its floors; the generator gate is #168, and the `cpp/` and `scripts/`/`tools/` floors are not gated yet.
 - The floors start at these values from the first ticket of each component, rather than being raised later: tests are written first, so there is no untested backlog to catch up on.
 
 ## 7. When tests run
