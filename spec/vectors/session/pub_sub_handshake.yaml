@@ -31,8 +31,8 @@ steps:
     note: "every topic resolved, so READY"
   - from: host
     frame: "04 00 d8 97"
-    at_ms: 900
+    at_ms: 850
     note: "first heartbeat in CONNECTED, 500 ms after READY"
   - from: host
     frame: "04 01 51 86"
-    at_ms: 1400
+    at_ms: 1350
