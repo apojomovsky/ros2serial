@@ -23,6 +23,18 @@ typedef int8_t r2s_status_t;
 extern "C" {
 #endif
 
+/* Starts the session: reads the boot ID once, sends HELLO and enters
+ * ANNOUNCING (SES-1). The table set by r2s_session_configure() stays; without
+ * one the node announces itself nameless with no topics. */
+void r2s_init(void);
+
+/* Pulls bytes, answers the host, sends heartbeats and watches the link: up to
+ * R2S_SPIN_MAX_FRAMES frames per call, then the timers. */
+void r2s_spin_some(void);
+
+/* Nonzero while the handshake completed and user traffic may flow. */
+uint8_t r2s_connected(void);
+
 #ifdef R2S_TESTING
 /* Host test builds only: returns every core module to its state after
  * power-up, so each test starts from the same place. */

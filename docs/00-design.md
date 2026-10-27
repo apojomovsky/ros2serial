@@ -381,7 +381,7 @@ The generator targets a ROS distro explicitly (`distro:` in the config, default 
 
 ## Host bridge
 
-- C++ (rclcpp), packaged as a component so several bridges (one per serial port) can share a process.
+- C++ (rclcpp), packaged as a component so several bridges (one per serial port) can share a process. The framing allows one live link per process until the framer gains a per-instance state (#122).
 - Generic publishers and subscriptions, plus introspection-based conversion from packed to CDR.
 - Serial I/O behind a small interface; termios first (research ticket R8).
 - Board quirks handled explicitly: opening a Uno's port toggles DTR and resets the board, and the bootloader runs for up to about 2 s. The bridge waits for the MCU's unsolicited `HELLO` (up to `boot_wait_ms`) before sending `HELLO_REQ`, so it does not talk to the bootloader. `hupcl:=false` avoids the reset where the adapter allows it.
@@ -857,7 +857,7 @@ void r2s_on_<name>(const <Type> *msg);               /* subscribed topics: proto
 r2s-gen generate --config r2s.yaml --out <dir> [--msg-path <dir>]... [--layout cmake|arduino|platformio|epic-hal] [--cpp]
 r2s-gen bundle   --distro <name> --out <dir>                    # the Arduino library with bundled types
 r2s-gen check    --config r2s.yaml [--msg-path <dir>]...       # validate only, exit code 0 or 1
-r2s-gen vectors  --type <pkg/msg/Type> --message <yaml>         # print payload hex from the reference codec
+r2s-gen vectors  --type <pkg/msg/Type> --message <yaml> [--msg-path <dir>]... [--distro <name>] [--narrow]
 r2s-gen version
 ```
 
@@ -897,14 +897,15 @@ Generator errors are precise and actionable: file, key or field path, what is wr
 
 ### Type hash
 
-The generator computes the REP-2011 RIHS01 hash for each type. Default approach: reuse `rosidl_generator_type_description`'s algorithm (research ticket R3 decides whether it is imported or vendored). A test compares the generator's hash with the one in the installed type support for every bundled type, on every supported distro.
+The generator computes the REP-2011 RIHS01 hash for each type in `gen/r2s_gen/typehash.py`, from the parsed `.msg` model with only the standard library (R3: neither pip nor vendored modules are needed, since the hash input excludes defaults). A test compares the generator's hash with the one in the installed type support for every bundled type, on every supported distro.
 
 ## Bridge specification
 
 ### Executable and component
 
 - Package `r2s_bridge`, component `r2s_bridge::Bridge`, executable `bridge`.
-- One instance per serial port. `/dev/serial/by-id/...` paths are recommended in the docs.
+- One instance per serial port and one link per process. `/dev/serial/by-id/...` paths are recommended in the docs.
+- Receive framing is the core's `framer.c`, `rcobs.c` and `crc.c` compiled for the host (FRM-10). The core framer keeps one state per process, so one `FrameReader` is live per process.
 
 ### Parameters
 
@@ -975,7 +976,7 @@ Each one ends as an issue comment whose first line starts with `Findings` and, w
 | --- | --- | --- | --- |
 | R1 | rosserial archaeology: features, RAM per pub/sub, time sync, reconnection, failure modes, the exact C++ API surface sketches use | Feature catalog with source links; updates to the parity table and the compatibility API | Parity table in Part I |
 | R2 | Prior art: rosserial-like projects for ROS 2, micro-ROS on small parts, zenoh-pico over serial, ROS 2 hosts for the original rosserial protocol | Annotated list and a go/no-go recommendation | Proceed |
-| R3 | Can `rosidl_parser` and the RIHS01 algorithm be used without a ROS install (pip), or must they be vendored | Working proof inside `gen/` with a hash test | Vendor the needed modules with attribution |
+| R3 | Can `rosidl_parser` and the RIHS01 algorithm be used without a ROS install (pip), or must they be vendored | Working proof inside `gen/` with a hash test | Decided in #71: compute in `gen/r2s_gen/typehash.py` with the standard library only; no pip package, no vendored modules |
 | R4 | Generic service and client APIs per supported distro | API inventory with versions | Generic where present, introspection-based typed services elsewhere |
 | R5 | simavr: UART-to-pty bridging for ATmega328P/2560, tick source, EEPROM, stack painting, run in CI | `tests/harness/simavr/` running echo firmware (Uno + Mega) in CI | None needed: blocks only the e2e-avr job |
 | R6 | PIC end-to-end under MPLAB SIM through epic-hal's mdb gate: UART input and output, tick, EEPROM (Phase 5) | Working echo test in CI | Build-only PIC canary |
