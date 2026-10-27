@@ -27,7 +27,7 @@ LAST_USER_TOPIC_ID = 255
 MAX_USER_TOPICS = LAST_USER_TOPIC_ID - FIRST_USER_TOPIC_ID + 1
 FRAME_OVERHEAD = 4
 FRAME_LIMIT = 65277
-DEFAULT_SESSION_MAX_TOPICS = 16
+DEFAULT_TOPIC_MAX_COUNT = 16
 
 _DIRECTION_FLAGS = {"pub": 0x00, "sub": 0x01}
 _QOS_FLAGS = {"best_effort": 0x00, "keep_latest": 0x04, "reliable": 0x08}
@@ -296,11 +296,11 @@ def emit_h(table: TopicTable) -> str:
         f"#define R2S_MAX_FRAME {table.max_frame}u",
         "#endif",
     ]
-    if len(table.entries) > DEFAULT_SESSION_MAX_TOPICS:
+    if len(table.entries) > DEFAULT_TOPIC_MAX_COUNT:
         lines.extend(
             [
-                "#ifndef R2S_SESSION_MAX_TOPICS",
-                f"#define R2S_SESSION_MAX_TOPICS {len(table.entries)}u",
+                "#ifndef R2S_TOPIC_MAX_COUNT",
+                f"#define R2S_TOPIC_MAX_COUNT {len(table.entries)}u",
                 "#endif",
             ]
         )
@@ -308,7 +308,7 @@ def emit_h(table: TopicTable) -> str:
         [
             "",
             '#include "r2s/r2s_codec.h"',
-            '#include "r2s/r2s_session.h"',
+            '#include "r2s/r2s_topics.h"',
             "",
         ]
     )
@@ -343,7 +343,7 @@ def emit_h(table: TopicTable) -> str:
             "",
             "/* The announced topics and the descriptor table the wrappers encode",
             " * with; a board that renames topics at launch copies this table. */",
-            "extern const r2s_session_topic_t R2S_FLASH r2s_topics[R2S_TOPIC_COUNT];",
+            "extern const r2s_topic_t R2S_FLASH r2s_topics[R2S_TOPIC_COUNT];",
             "extern const r2s_codec_table_t r2s_generated_table;",
         ]
     )
@@ -369,7 +369,7 @@ def emit_c(table: TopicTable) -> str:
         "",
         "/* The announced topics (CTL-4, CTL-12): the hashes are the first 8 bytes",
         " * of each type's RIHS01 hash, and R2S_NARROW_FLAG carries ENC-12. */",
-        "const r2s_session_topic_t R2S_FLASH r2s_topics[R2S_TOPIC_COUNT] = {",
+        "const r2s_topic_t R2S_FLASH r2s_topics[R2S_TOPIC_COUNT] = {",
     ]
     for entry in table.entries:
         digest = ", ".join(f"0x{byte:02x}u" for byte in entry.type_hash)

@@ -369,7 +369,7 @@ def test_a_buffer_named_topic_still_compiles(tmp_path):
     compile_pair(tmp_path, header, source)
 
 
-def test_a_session_table_above_16_raises_the_session_limit():
+def test_a_topic_table_above_16_raises_the_topic_limit():
     loaded = Config(
         node="base_controller",
         topics=tuple(Topic(name=f"t{i}", type_name="std_msgs/msg/Float32", direction="pub") for i in range(17)),
@@ -385,4 +385,4 @@ def test_a_session_table_above_16_raises_the_session_limit():
     resolved = bounds.resolve(repository, ["std_msgs/msg/Float32"])
     header, _source = topics.generate(loaded, resolved, repository)
 
-    assert "#define R2S_SESSION_MAX_TOPICS 17u" in header
+    assert "#define R2S_TOPIC_MAX_COUNT 17u" in header
