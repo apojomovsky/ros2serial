@@ -37,8 +37,20 @@ cp examples/arduino_minimal/lib/src/r2s_generated.h examples/arduino_minimal/lib
 cp core/include/r2s/*.h "$stage/src/r2s/" || status=1
 cp core/src/*.c "$stage/src/" || status=1
 rm -f "$stage/src/test_reset.c"
+# The core never includes the generated header, so the limits travel as -D
+# flags read from it: the same set the cmake layout passes as definitions.
+# A library cannot set its own flags on this toolchain, hence --build-property.
+extras=$(PYTHONPATH="$root/gen" python3 - "$stage/src/r2s_generated.h" <<'EOF'
+import sys
+
+from r2s_gen import layouts
+
+print(" ".join("-D" + define for define in layouts.build_defines(open(sys.argv[1]).read())))
+EOF
+) || status=1
 for fqbn in arduino:avr:uno arduino:avr:mega; do
-  arduino-cli compile --fqbn "$fqbn" --library "$stage" examples/arduino_minimal || status=1
+  arduino-cli compile --fqbn "$fqbn" --build-property "compiler.c.extra_flags=$extras" --library "$stage" \
+    examples/arduino_minimal || status=1
 done
 
 exit "$status"

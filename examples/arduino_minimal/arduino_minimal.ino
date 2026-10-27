@@ -7,6 +7,9 @@
 extern "C" {
 #include <r2s_generated.h>
 }
+/* The core needs the generated limits as defines (R2S_WITH_CODEC and the
+ * R2S_MAX_* values from r2s_generated.h); the example build passes them
+ * through compiler.c.extra_flags, since a library sets none of its own. */
 static uint32_t s_boot_id;
 static uint32_t s_cmd_vel_count;
 static uint32_t s_sent;
