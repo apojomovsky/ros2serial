@@ -1,0 +1,47 @@
+name: pub_sub_handshake
+covers: [SES-9, SES-16, SES-17, SES-18, CTL-4, ENC-10, HB-2, HB-4]
+steps:
+  - from: mcu
+    frame: "00 00 02 01 00 21 43 65 87 00 02 03 02 40 42 0f 00 00 02 04 64 65 6d 6f 9d 7f"
+    at_ms: 300
+    note: "unsolicited HELLO after boot: full mode, two topics"
+  - from: host
+    frame: "00 00 03 00 49 29"
+    at_ms: 300
+  - from: mcu
+    frame: "00 01 04 00 10 00 71 70 d3 d8 f8 41 f7 be 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 07 62 61 74 74 65 72 79 58 f5"
+    at_ms: 300
+    note: "Float32 publisher on topic 16, announced full"
+  - from: host
+    frame: "00 01 05 10 00 1f 80"
+    at_ms: 300
+  - from: host
+    frame: "00 02 03 01 78 8d"
+    at_ms: 350
+  - from: mcu
+    frame: "00 02 04 01 11 03 9c 45 bf 16 fe 09 83 d8 17 67 65 6f 6d 65 74 72 79 5f 6d 73 67 73 2f 6d 73 67 2f 54 77 69 73 74 07 63 6d 64 5f 76 65 6c 53 ed"
+    at_ms: 350
+    note: "Twist subscriber on topic 17, announced narrow"
+  - from: host
+    frame: "00 03 05 11 00 b1 a0"
+    at_ms: 350
+  - from: host
+    frame: "00 04 06 65 3b"
+    at_ms: 350
+    note: "every topic resolved, so READY"
+  - from: mcu
+    frame: "04 00 05 00 00 00 00 00 00 00 7a bb"
+    at_ms: 850
+    note: "heartbeat in CONNECTED: five frames accepted, none dropped"
+  - from: host
+    frame: "04 00 d8 97"
+    at_ms: 850
+    note: "host heartbeat in CONNECTED, 500 ms after READY"
+  - from: mcu
+    frame: "04 01 06 00 00 00 00 00 00 00 57 7c"
+    at_ms: 1350
+    note: "six accepted with the 850 ms host heartbeat"
+  - from: host
+    frame: "04 01 51 86"
+    at_ms: 1350
+    note: "500 ms after the previous heartbeat"

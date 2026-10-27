@@ -85,7 +85,7 @@ Work is plain GitHub issues.
 5. Warnings: C and C++ builds clean under `-Werror` (`make check-warnings`), cppcheck clean, UBSan clean on host builds.
 6. Lint: ruff, clang-format, ament linters.
 7. Zone check: `tools/zone_check.py` (no function pointers, float operations or C++ includes in `core/`).
-8. Spec sync: if `spec/protocol.md` changed, vectors changed in the same PR, and the other way round.
+8. Spec sync: if `spec/protocol.md` changed, vectors changed in the same PR. A vectors-only PR passes when every rule ID its vectors cover is already defined there; a vector naming an unknown rule fails.
 9. Prose: `scripts/prose-diff.sh` lists every added comment block; the mechanical rules (8-line cap, no decoration, no narrative, no em-dashes) fail the ritual. Content judgment stays with the author.
 10. PR body: real newlines, `Closes #N`, a `## Review` section.
 11. Hooks installed.

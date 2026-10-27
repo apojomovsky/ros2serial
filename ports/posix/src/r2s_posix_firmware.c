@@ -1,4 +1,4 @@
-/* Test firmware: the handwritten Float32, Twist and bounded-String topics on
+/* Test firmware: the generated Float32, Twist and bounded-String topics on
  * a pty, with launch-time names, so the end-to-end tests drive the real core
  * as a process (docs/00-design.md, C10). */
 #define _POSIX_C_SOURCE 200809L
@@ -11,20 +11,16 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "handwritten.h"
 #include "r2s/r2s.h"
 #include "r2s/r2s_port.h"
 #include "r2s/r2s_session.h"
+#include "r2s_generated.h"
 
 #include "r2s_posix_port.h"
 
 /* Publish rates in Hz, from once a second to the loop's 1 ms granularity. */
 #define RATE_MIN 1u
 #define RATE_MAX 100u
-
-static const uint8_t battery_hash[8] = {0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u};
-static const uint8_t cmd_vel_hash[8] = {0x10u, 0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u};
-static const uint8_t log_text_hash[8] = {0x20u, 0x21u, 0x22u, 0x23u, 0x24u, 0x25u, 0x26u, 0x27u};
 
 struct options {
     const char *port;
@@ -35,34 +31,43 @@ struct options {
     unsigned rate;
 };
 
-/* The placeholder hashes match core/tests/support/handwritten.c until the
- * generator emits this table (G8); the names come from the command line. */
-static uint8_t fill_topics(const struct options *opts, r2s_session_topic_t *topics)
+/* The name a generated topic launches under: its command-line option, or
+ * NULL with drop set to drop it. An entry the list below does not know keeps
+ * the name the generator emitted, so a wider configuration still configures. */
+static const char *rename_for(const struct options *opts, const char *name, uint8_t *drop)
+{
+    if (strcmp(name, "battery") == 0) {
+        *drop = (opts->pub == NULL);
+        return opts->pub;
+    }
+    if (strcmp(name, "cmd_vel") == 0) {
+        *drop = (opts->sub == NULL);
+        return opts->sub;
+    }
+    if (strcmp(name, "log_text") == 0) {
+        *drop = (opts->log_text == NULL);
+        return opts->log_text;
+    }
+    *drop = 0u;
+    return name;
+}
+
+/* Copies the generated topic table, swapping in the command-line names. */
+static uint8_t fill_topics(const struct options *opts, r2s_topic_t *topics)
 {
     uint8_t count = 0u;
+    uint8_t i;
 
-    if (opts->pub != NULL) {
-        topics[count].topic_id = R2S_HANDWRITTEN_BATTERY_ID;
-        topics[count].flags = R2S_HANDWRITTEN_NARROW;
-        memcpy(topics[count].type_hash, battery_hash, sizeof battery_hash);
-        topics[count].type_name = "std_msgs/msg/Float32";
-        topics[count].topic_name = opts->pub;
-        count++;
-    }
-    if (opts->sub != NULL) {
-        topics[count].topic_id = R2S_HANDWRITTEN_CMD_VEL_ID;
-        topics[count].flags = (uint8_t)(0x01u | R2S_HANDWRITTEN_NARROW);
-        memcpy(topics[count].type_hash, cmd_vel_hash, sizeof cmd_vel_hash);
-        topics[count].type_name = "geometry_msgs/msg/Twist";
-        topics[count].topic_name = opts->sub;
-        count++;
-    }
-    if (opts->log_text != NULL) {
-        topics[count].topic_id = R2S_HANDWRITTEN_LOG_TEXT_ID;
-        topics[count].flags = R2S_HANDWRITTEN_NARROW;
-        memcpy(topics[count].type_hash, log_text_hash, sizeof log_text_hash);
-        topics[count].type_name = "std_msgs/msg/String";
-        topics[count].topic_name = opts->log_text;
+    for (i = 0u; i < R2S_TOPIC_COUNT; i++) {
+        const char *rename;
+        uint8_t drop;
+
+        topics[count] = r2s_topics[i];
+        rename = rename_for(opts, r2s_topics[i].topic_name, &drop);
+        if (drop != 0u) {
+            continue;
+        }
+        topics[count].topic_name = rename;
         count++;
     }
     return count;
@@ -197,7 +202,7 @@ static void sleep_1ms(void)
 int main(int argc, char **argv)
 {
     struct options opts;
-    r2s_session_topic_t topics[3];
+    r2s_topic_t topics[R2S_TOPIC_COUNT];
     uint8_t count;
     uint32_t interval;
     uint32_t last_pub;
