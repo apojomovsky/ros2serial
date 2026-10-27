@@ -479,7 +479,9 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
 
     # A cyclic YAML alias walks nested messages until the stack runs out.
     # Findings made before the walk aborts are still worth reporting, next
-    # to the encode error check_message adds for the same vector.
+    # to the encode error check_message adds for the same vector. The walk
+    # revisits the same field once per recursion level, so identical lines
+    # collapse to one.
     try:
         visit(message, values)
     except (
@@ -492,7 +494,7 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
         OverflowError,
         RecursionError,
     ):
-        return problems
+        return list(dict.fromkeys(problems))
     return problems
 
 

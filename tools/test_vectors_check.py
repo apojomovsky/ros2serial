@@ -457,14 +457,14 @@ payload: ""
 def test_an_aborted_exact_walk_keeps_the_findings_it_already_made(tmp_path, monkeypatch):
     definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
     definitions.mkdir(parents=True)
-    (definitions / "Two.msg").write_text("float32 first\nfloat32 second\n", encoding="utf-8")
+    (definitions / "Two.msg").write_text("float32 first\nfloat32 second\nfloat32 third\n", encoding="utf-8")
     files = {
         "messages/abort.yaml": """
 name: abort
 covers: [ENC-3]
 type: demo_msgs/msg/Two
 profile: {narrow_float64: false}
-message: {first: 1.1}
+message: {first: 1.1, second: 1.2}
 payload: ""
 """
     }
@@ -473,7 +473,34 @@ payload: ""
     vectors = make_tree(tmp_path / "vectors", files)
     assert vectors_check.check_tree(vectors) == [
         "messages/abort.yaml/message: demo_msgs/msg/Two.first must be exactly representable in binary32",
-        "messages/abort.yaml/message: the reference does not make it: demo_msgs/msg/Two.second: no value",
+        "messages/abort.yaml/message: demo_msgs/msg/Two.second must be exactly representable in binary32",
+        "messages/abort.yaml/message: the reference does not make it: demo_msgs/msg/Two.third: no value",
+    ]
+
+
+def test_a_cyclic_exact_walk_reports_each_distinct_finding_once(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "A.msg").write_text("float32 data\nA child\n", encoding="utf-8")
+    files = {
+        "messages/flood.yaml": """
+name: flood
+covers: [ENC-3]
+type: demo_msgs/msg/A
+profile: {narrow_float64: false}
+message: &x
+  data: 1.1
+  child: *x
+payload: ""
+"""
+    }
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    vectors = make_tree(tmp_path / "vectors", files)
+    assert vectors_check.check_tree(vectors) == [
+        "messages/flood.yaml: cyclic YAML alias",
+        "messages/flood.yaml/message: demo_msgs/msg/A.data must be exactly representable in binary32",
+        "messages/flood.yaml/message: the reference does not make it: maximum recursion depth exceeded",
     ]
 
 
@@ -502,6 +529,35 @@ payload: "{payload}"
         "demo_msgs/msg/Arr.items[0].demo_msgs/msg/Single.data must be exactly representable in binary32",
         "messages/nested_array.yaml/message: "
         "demo_msgs/msg/Arr.items[1].demo_msgs/msg/Single.data must be exactly representable in binary32",
+    ]
+
+
+def test_nested_array_positions_survive_a_plain_nested_parent(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "Single.msg").write_text("float32 data\n", encoding="utf-8")
+    (definitions / "Inner.msg").write_text("Single[] singles\n", encoding="utf-8")
+    (definitions / "Outer.msg").write_text("Inner mid\n", encoding="utf-8")
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    message = {"mid": {"singles": [{"data": 1.1}, {"data": 1.2}]}}
+    payload = messages.encode(repository, "demo_msgs/msg/Outer", message, narrow=False).hex(" ")
+    files = {
+        "messages/nested_plain.yaml": f"""
+name: nested_plain
+covers: [ENC-3]
+type: demo_msgs/msg/Outer
+profile: {{narrow_float64: false}}
+message: {{mid: {{singles: [{{data: 1.1}}, {{data: 1.2}}]}}}}
+payload: "{payload}"
+"""
+    }
+    vectors = make_tree(tmp_path / "vectors", files)
+    assert vectors_check.check_tree(vectors) == [
+        "messages/nested_plain.yaml/message: "
+        "demo_msgs/msg/Inner.singles[0].demo_msgs/msg/Single.data must be exactly representable in binary32",
+        "messages/nested_plain.yaml/message: "
+        "demo_msgs/msg/Inner.singles[1].demo_msgs/msg/Single.data must be exactly representable in binary32",
     ]
 
 
