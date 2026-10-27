@@ -82,8 +82,29 @@ def load(path: str | Path) -> Config:
     """Read and validate the config file; every problem is a MessageError."""
     raw = _read(path)
     data = _parse(path, raw)
+    _string_keys(path, data)
     _check_schema(path, data)
     return _model(path, data)
+
+
+def _string_keys(path: str | Path, data: dict) -> None:
+    """Every mapping key must be a string; schema validation assumes string keys."""
+    _string_keys_at(str(path), data)
+    topics = data.get("topics")
+    if isinstance(topics, list):
+        for index, entry in enumerate(topics):
+            if isinstance(entry, dict):
+                _string_keys_at(f"{path}: topics[{index}]", entry)
+    for section in ("bounds", "limits"):
+        mapping = data.get(section)
+        if isinstance(mapping, dict):
+            _string_keys_at(f"{path}: {section}", mapping)
+
+
+def _string_keys_at(where: str, mapping: dict) -> None:
+    for key in mapping:
+        if not isinstance(key, str):
+            raise MessageError(where, f"key {key} must be a string", "quote the key")
 
 
 def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
@@ -115,6 +136,8 @@ def run(args: argparse.Namespace) -> int:
 def _read(path: str | Path) -> str:
     try:
         return Path(path).read_text(encoding="utf-8")
+    except UnicodeDecodeError as error:
+        raise MessageError(str(path), f"cannot read the config ({error})", "save the file as UTF-8") from error
     except OSError as error:
         raise MessageError(str(path), f"cannot read the config ({error})", "check the path") from error
 
@@ -266,7 +289,7 @@ def _describe_pattern(path: str, error: Any) -> MessageError:
         return MessageError(
             path,
             f"'{value}' is not a valid topic name",
-            "use letters, digits, underscores and slashes, starting with a letter",
+            "use letters, digits, underscores and slashes, starting with a letter or underscore",
         )
     return MessageError(
         path,

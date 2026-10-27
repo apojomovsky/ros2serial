@@ -258,7 +258,7 @@ def test_a_topic_name_with_a_space_is_an_error(tmp_path):
 
     assert str(caught.value) == (
         f"{path}: topics[0].name: 'bat tery' is not a valid topic name; "
-        "use letters, digits, underscores and slashes, starting with a letter"
+        "use letters, digits, underscores and slashes, starting with a letter or underscore"
     )
 
 
@@ -617,3 +617,104 @@ def test_a_string_pair_string_bound_is_an_error(tmp_path):
         f"{path}: bounds['sensor_msgs/msg/JointState.name']: the string bound must be an integer; "
         "give a whole number of characters"
     )
+
+
+def test_a_topic_missing_name_is_an_error(tmp_path):
+    path = write(
+        tmp_path / "r2s.yaml",
+        "node: base_controller\ntopics:\n  - type: std_msgs/msg/Float32\n    direction: pub\n",
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == f"{path}: topics[0]: missing required key 'name'; add name: <topic>"
+
+
+def test_a_topic_missing_type_is_an_error(tmp_path):
+    path = write(
+        tmp_path / "r2s.yaml",
+        "node: base_controller\ntopics:\n  - name: battery\n    direction: pub\n",
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == f"{path}: topics[0]: missing required key 'type'; add type: <package/msg/Type>"
+
+
+def test_an_unknown_limits_key_is_an_error(tmp_path):
+    path = write(tmp_path / "r2s.yaml", "node: base_controller\ntopics: []\nlimits:\n  max_bytes: 3\n")
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == f"{path}: limits: unknown key 'max_bytes'; remove it (expected one of: max_frame)"
+
+
+def test_a_nonstring_root_key_is_an_error(tmp_path):
+    path = write(tmp_path / "r2s.yaml", "1: x\nnode: base_controller\ntopics: []\n")
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == f"{path}: key 1 must be a string; quote the key"
+
+
+def test_a_nonstring_topic_key_is_an_error(tmp_path):
+    path = write(
+        tmp_path / "r2s.yaml",
+        "node: base_controller\ntopics:\n  - 1: x\n    name: battery\n"
+        "    type: std_msgs/msg/Float32\n    direction: pub\n",
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == f"{path}: topics[0]: key 1 must be a string; quote the key"
+
+
+def test_a_nonstring_bounds_key_is_an_error(tmp_path):
+    path = write(tmp_path / "r2s.yaml", "node: base_controller\ntopics: []\nbounds:\n  1: 2\n")
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == f"{path}: bounds: key 1 must be a string; quote the key"
+
+
+def test_a_non_utf8_file_is_an_error(tmp_path):
+    path = tmp_path / "r2s.yaml"
+    path.write_bytes("node: base_controller # caf\xe9\ntopics: []\n".encode("latin-1"))
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: cannot read the config ('utf-8' codec can't decode byte 0xe9 in position 27: "
+        "invalid continuation byte); save the file as UTF-8"
+    )
+
+
+def test_a_digit_token_topic_is_an_error(tmp_path):
+    path = write(
+        tmp_path / "r2s.yaml",
+        "node: base_controller\ntopics:\n  - name: battery/1\n    type: std_msgs/msg/Float32\n    direction: pub\n",
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: topics[0].name: 'battery/1' is not a valid topic name; "
+        "use letters, digits, underscores and slashes, starting with a letter or underscore"
+    )
+
+
+def test_an_underscore_topic_is_valid(tmp_path):
+    loaded = load_text(
+        tmp_path,
+        "node: base_controller\ntopics:\n  - name: _battery\n    type: std_msgs/msg/Float32\n    direction: pub\n",
+    )
+
+    assert [topic.name for topic in loaded.topics] == ["_battery"]

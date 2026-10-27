@@ -35,7 +35,7 @@
       "required": ["name", "type", "direction"],
       "additionalProperties": false,
       "properties": {
-        "name": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*(/[A-Za-z0-9_]+)*$"},
+        "name": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*(/[A-Za-z_][A-Za-z0-9_]*)*$"},
         "type": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*/msg/[A-Za-z][A-Za-z0-9_]*$"},
         "direction": {"type": "string", "enum": ["pub", "sub"]},
         "qos": {
