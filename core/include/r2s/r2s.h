@@ -107,17 +107,18 @@ void r2s_log_note_connected(void);
 #else
 /* Without R2S_WITH_LOG the literal forms compile out, so one firmware builds
  * for tiers with and without logging. The sizeof mentions keep logged values
- * used without emitting anything; the + 0 keeps bit-fields usable. */
-#define R2S_LOG_DEBUG(lit) ((void)sizeof((lit) + 0))
-#define R2S_LOG_DEBUG_U16(lit, v) ((void)sizeof((lit) + 0), (void)sizeof((v) + 0))
-#define R2S_LOG_INFO(lit) ((void)sizeof((lit) + 0))
-#define R2S_LOG_INFO_U16(lit, v) ((void)sizeof((lit) + 0), (void)sizeof((v) + 0))
-#define R2S_LOG_WARN(lit) ((void)sizeof((lit) + 0))
-#define R2S_LOG_WARN_U16(lit, v) ((void)sizeof((lit) + 0), (void)sizeof((v) + 0))
-#define R2S_LOG_ERROR(lit) ((void)sizeof((lit) + 0))
-#define R2S_LOG_ERROR_U16(lit, v) ((void)sizeof((lit) + 0), (void)sizeof((v) + 0))
-#define R2S_LOG_FATAL(lit) ((void)sizeof((lit) + 0))
-#define R2S_LOG_FATAL_U16(lit, v) ((void)sizeof((lit) + 0), (void)sizeof((v) + 0))
+ * used without emitting anything; the + 0 on the value keeps bit-fields
+ * usable. Literals stay plain, so clang does not see an array decay. */
+#define R2S_LOG_DEBUG(lit) ((void)sizeof(lit))
+#define R2S_LOG_DEBUG_U16(lit, v) ((void)sizeof(lit), (void)sizeof((v) + 0))
+#define R2S_LOG_INFO(lit) ((void)sizeof(lit))
+#define R2S_LOG_INFO_U16(lit, v) ((void)sizeof(lit), (void)sizeof((v) + 0))
+#define R2S_LOG_WARN(lit) ((void)sizeof(lit))
+#define R2S_LOG_WARN_U16(lit, v) ((void)sizeof(lit), (void)sizeof((v) + 0))
+#define R2S_LOG_ERROR(lit) ((void)sizeof(lit))
+#define R2S_LOG_ERROR_U16(lit, v) ((void)sizeof(lit), (void)sizeof((v) + 0))
+#define R2S_LOG_FATAL(lit) ((void)sizeof(lit))
+#define R2S_LOG_FATAL_U16(lit, v) ((void)sizeof(lit), (void)sizeof((v) + 0))
 #endif
 
 #ifdef R2S_TESTING

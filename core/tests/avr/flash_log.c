@@ -72,26 +72,31 @@ int main(void)
 {
     touch_tables();
 #ifdef R2S_AVR_CHECK_LOGS
-    /* A variable value and a bit-field: the no-op macros of a tier without
-     * logging must keep them used without evaluating them, or the build
-     * fails. Every literal form appears, so the no-log build expands each
-     * no-op macro. */
-    uint16_t adc = (uint16_t)(sink + 1u);
+    /* One variable per value macro: the no-op macros of a tier without
+     * logging must keep each one used, or the build fails on the unused
+     * variable. A bit-field joins one call, which the no-op macro must
+     * accept without evaluating. Every literal form appears, so the no-log
+     * build expands each no-op macro. */
+    uint16_t v_debug = (uint16_t)(sink + 1u);
+    uint16_t v_info = (uint16_t)(sink + 2u);
+    uint16_t v_warn = (uint16_t)(sink + 3u);
+    uint16_t v_error = (uint16_t)(sink + 4u);
+    uint16_t v_fatal = (uint16_t)(sink + 5u);
     struct {
         unsigned ready : 1;
     } bits = {1u};
 
     R2S_LOG_DEBUG("booting");
-    R2S_LOG_DEBUG_U16("adc=", adc);
+    R2S_LOG_DEBUG_U16("adc=", v_debug);
     R2S_LOG_DEBUG_U16("ready=", bits.ready);
     R2S_LOG_INFO("battery low log line");
-    R2S_LOG_INFO_U16("adc=", adc);
-    R2S_LOG_WARN_U16("adc counts=", adc);
+    R2S_LOG_INFO_U16("adc=", v_info);
+    R2S_LOG_WARN_U16("adc counts=", v_warn);
     R2S_LOG_WARN("link unstable");
     R2S_LOG_ERROR("link lost log line");
-    R2S_LOG_ERROR_U16("adc=", adc);
+    R2S_LOG_ERROR_U16("adc=", v_error);
     R2S_LOG_FATAL("halted");
-    R2S_LOG_FATAL_U16("adc=", adc);
+    R2S_LOG_FATAL_U16("adc=", v_fatal);
 #endif
     return 0;
 }
