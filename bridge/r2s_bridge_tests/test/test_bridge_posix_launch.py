@@ -171,7 +171,7 @@ class TestBridgePosixLaunch(unittest.TestCase):
         # The bridge publishes MCU topics best effort ([SES-31]), so the probe
         # subscribes best effort too; a reliable probe would never match.
         best_effort = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
-        node.create_subscription(Float32, "battery", received.append, best_effort)
+        node.create_subscription(Float32, "battery", lambda msg: received.append(msg.data), best_effort)
         try:
             deadline = time.monotonic() + FLOW_TIMEOUT
             while len(received) < 3:
