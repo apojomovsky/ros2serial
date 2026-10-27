@@ -351,7 +351,7 @@ TEST(SessionBootWait, LeavesBootWaitOnAnUnsolicitedHello)
     fixture.advance_to(100);
     fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
-    EXPECT_EQ(fixture.session().token(), 0u);
+    EXPECT_EQ(fixture.session().token(), 1u) << "the completed handshake assigns token 1";
 }
 
 TEST(SessionHandshake, RepeatsHelloReqEvery500msUntilAHelloArrives)
@@ -410,7 +410,7 @@ TEST(SessionHandshake, RefusesAFeaturesByteWithAReservedBit)
 {
     Fixture fixture;
     fixture.advance_to(10);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u, 0x40u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 2u, 0x40u));
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
     EXPECT_FALSE(fixture.session().has_token());
 }
@@ -420,7 +420,7 @@ TEST(SessionHandshake, AcceptsAnMcuWhoseDoubleIs32Bits)
     Fixture fixture;
     fixture.advance_to(10);
     // Bit 4 is informational, and every AVR build sets it ([CTL-2]).
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u, 0x10u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 2u, 0x10u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
 }
 
@@ -445,9 +445,9 @@ TEST(SessionHandshake, RefusesATickRateThatIsNotThousandTimesADivisor)
 {
     Fixture fixture;
     fixture.advance_to(10);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u, 0u, 1500u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 2u, 0u, 1500u));
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u, 0u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 2u, 0u, 1000u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected) << "1 kHz is a valid form";
 }
 
