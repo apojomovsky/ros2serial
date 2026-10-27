@@ -45,25 +45,9 @@ extern "C" {
 #define R2S_MAX_NEST 1u
 #endif
 
-/* Flash access for the descriptor tables. The canonical home of these two is
- * r2s_arch.h (C12); until it lands, the codec carries guarded defaults with
- * the same names the generator will emit, so G7 emits the same bytes. */
-#ifndef R2S_FLASH
-#ifdef __AVR__
-#include <avr/pgmspace.h>
-#define R2S_FLASH PROGMEM
-#else
-#define R2S_FLASH
-#endif
-#endif
-
-#ifndef R2S_FLASH_READ_BYTE
-#ifdef __AVR__
-#define R2S_FLASH_READ_BYTE(p) pgm_read_byte(p)
-#else
-#define R2S_FLASH_READ_BYTE(p) (*(p))
-#endif
-#endif
+/* Table placement and byte reads live in r2s_arch.h, so the generator emits
+ * the same macros the core reads. */
+#include "r2s/r2s_arch.h"
 
 /* The two descriptor tables ([DSC-1]): the type records and the field entries,
  * both little-endian ([DSC-4]) and read through R2S_FLASH_READ_BYTE. */

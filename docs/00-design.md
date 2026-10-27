@@ -745,9 +745,10 @@ The byte layout, the order of the entries, the storage of each kind and the vali
 
 ### Public headers
 
-<!-- snippet: skip until #68 -->
 ```c
 /* r2s.h */
+#include <stdint.h>
+#include "r2s/r2s_arch.h"
 typedef int8_t r2s_status_t;          /* 0 ok, negative errors */
 #define R2S_OK                    0
 #define R2S_ERR_NOT_CONNECTED    (-1)
