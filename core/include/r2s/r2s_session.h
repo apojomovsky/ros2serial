@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "r2s/r2s.h"
+#include "r2s/r2s_topics.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,29 +35,23 @@ extern "C" {
 #define R2S_SPIN_MAX_FRAMES 8u
 #endif
 
-/* Topics the handshake can announce. The generated configuration raises it
- * when the firmware needs more. */
+/* Topics the handshake can announce: the per-topic state arrays below hold
+ * this many entries. The generated configuration raises it together with
+ * R2S_TOPIC_MAX_COUNT when the firmware needs more. */
 #ifndef R2S_SESSION_MAX_TOPICS
-#define R2S_SESSION_MAX_TOPICS 16u
+#define R2S_SESSION_MAX_TOPICS R2S_TOPIC_MAX_COUNT
 #endif
 
-/* One announced topic: its user topic_id, its CTL-4 flags, the first 8 bytes
- * of its RIHS01 type hash, and its type and topic names. */
-typedef struct {
-    uint8_t topic_id;
-    uint8_t flags;
-    uint8_t type_hash[8];
-    const char *type_name;
-    const char *topic_name;
-} r2s_session_topic_t;
+/* The record type C8 named r2s_session_topic_t is r2s_topic_t now; the alias
+ * keeps that firmware compiling with the same layout. */
+typedef r2s_topic_t r2s_session_topic_t;
 
 /* Hands the session its node name and topic table. Call once before
  * r2s_init(); a call afterwards changes what later frames announce. Returns
- * R2S_OK, or R2S_ERR_BOUNDS when the table is larger than
- * R2S_SESSION_MAX_TOPICS, a name is missing, or a name does not fit a varint,
- * leaving the previous configuration unchanged. */
-r2s_status_t r2s_session_configure(const char *node_name, const r2s_session_topic_t *topics,
-                                   uint8_t topic_count);
+ * R2S_OK, or R2S_ERR_BOUNDS when the node name is missing or does not fit
+ * the hello frame, or when the bind refuses the table, leaving the previous
+ * configuration unchanged. */
+r2s_status_t r2s_session_configure(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count);
 
 /* The index of the configured topic with this user topic_id, or 0xFF when the
  * table names no such topic. The codec's dispatch and publish wrappers use it
