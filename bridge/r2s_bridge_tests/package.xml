@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematyp="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>r2s_bridge_tests</name>
+  <version>0.0.0</version>
+  <description>Integration tests for the r2s_bridge launch file against the posix virtual MCU.</description>
+  <maintainer email="apojomovsky@gmail.com">Alexis Pojomovsky</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <test_depend>launch_ros</test_depend>
+  <test_depend>launch_testing</test_depend>
+  <test_depend>launch_testing_ament_cmake</test_depend>
+  <test_depend>r2s_bridge</test_depend>
+  <test_depend>rclpy</test_depend>
+  <test_depend>std_msgs</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
