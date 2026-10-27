@@ -17,7 +17,8 @@ add_library(r2s_bridge_component SHARED
   src/core_port.cpp
   src/framing.cpp
   src/session.cpp
-  src/termios_transport.cpp)
+  src/termios_transport.cpp
+  src/type_support.cpp)
 target_include_directories(r2s_bridge_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -111,6 +112,11 @@ if(BUILD_TESTING)
     R2S_SESSION_VECTOR_DIR="${R2S_CORE_DIR}/../spec/vectors/session"
     R2S_FRAMES_VECTOR_DIR="${R2S_CORE_DIR}/../spec/vectors/frames")
   target_link_libraries(test_session r2s_bridge_test_support yaml-cpp::yaml-cpp)
+
+  # The type support test loads the installed message packages for real, so
+  # it needs them at test time (std_msgs) as well as at build time.
+  ament_add_gtest(test_type_support test/test_type_support.cpp)
+  target_link_libraries(test_type_support r2s_bridge_test_support)
 
   # openpty comes from libutil; the pty test uses it instead of a device.
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
