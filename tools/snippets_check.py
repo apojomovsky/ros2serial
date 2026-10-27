@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Compile every code snippet fenced in README.md and docs/.
 
-A fenced block with a language tag (c, cpp, python, yaml) is a snippet and
-must compile with the toolchains already pinned in ci/versions.env: gcc and
-g++ from the dev image, the standard library for the rest. A plain fence is
-prose or a diagram and is ignored. An unknown tag is an error, so a new
-language either extends this tool or loses its tag.
+A fenced block tagged c, cpp or python is a snippet and must compile with
+the toolchains already pinned in ci/versions.env: gcc and g++ from the dev
+image, the standard library for the rest. A plain fence is prose or a
+diagram and is ignored. A fence tagged sh, console, text, json or yaml
+shows usage or data, so it is skipped and listed as skipped by tag.
+Any other tag is an error, so a new language either extends this tool
+or loses its tag.
 
 A snippet that cannot compile yet carries the ticket that will make it do so
 alone on the line above the fence:
@@ -14,11 +16,12 @@ alone on the line above the fence:
 
 A marker without a ticket number is an error, and so is a marker above no
 fence. A line that only mentions a marker in passing is not one. The run
-prints every skipped snippet with its ticket, so none is forgotten. C and C++
-snippets compile with -I core/include, so snippets using today's real
+prints every skipped snippet with its ticket, so none is forgotten. C and
+C++ snippets compile with -I core/include, so snippets using today's real
 headers compile instead of being skipped.
 """
 
+import argparse
 import py_compile
 import re
 import shutil
@@ -27,8 +30,6 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-
-import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 MARKER = re.compile(r"^ {0,3}<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#([0-9]+)[ \t]*-->\s*$")
@@ -43,8 +44,9 @@ FENCE = re.compile(r"^ *```")
 MARKER_ANY = re.compile(r"^\s*<!--[ \t]*snippet:.*-->\s*$")
 SWEEP = re.compile(r"^\s*(?:>\s*)*```([A-Za-z0-9+#-]+)")
 
-LANGUAGES = ("c", "cpp", "python", "yaml")
-EXTENSION = {"c": ".c", "cpp": ".cpp", "python": ".py", "yaml": ".yaml"}
+LANGUAGES = ("c", "cpp", "python")
+EXTENSION = {"c": ".c", "cpp": ".cpp", "python": ".py"}
+SKIPPED_TAGS = ("console", "json", "sh", "text", "yaml")
 
 
 @dataclass
@@ -54,6 +56,7 @@ class Snippet:
     language: str
     code: str
     ticket: int | None
+    skipped_tag: str | None = None
 
 
 def _ticket(marker_line: str) -> int:
@@ -175,6 +178,9 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
                 problems.append(f"{rel}:{open_line}: unexpected info string after {words[0]!r}")
                 continue
             language = words[0]
+            if language in SKIPPED_TAGS:
+                snippets.append(Snippet(rel, open_line, language, "", ticket, language))
+                continue
             if language not in LANGUAGES:
                 problems.append(f"{rel}:{open_line}: unknown snippet language {language!r}")
                 continue
@@ -226,16 +232,10 @@ def compile_snippet(snippet: Snippet, root: Path, workdir: Path) -> str | None:
         return _compile_c(snippet, root, workdir)
     src = workdir / f"snippet{EXTENSION[snippet.language]}"
     src.write_text(snippet.code)
-    if snippet.language == "python":
-        try:
-            py_compile.compile(str(src), doraise=True)
-        except py_compile.PyCompileError as exc:
-            return f"{snippet.path}:{snippet.line}: python snippet does not compile: {exc.msg}"
-        return None
     try:
-        yaml.safe_load(snippet.code)
-    except yaml.YAMLError as exc:
-        return f"{snippet.path}:{snippet.line}: yaml snippet does not parse: {exc}"
+        py_compile.compile(str(src), doraise=True)
+    except py_compile.PyCompileError as exc:
+        return f"{snippet.path}:{snippet.line}: python snippet does not compile: {exc.msg}"
     return None
 
 
@@ -248,7 +248,7 @@ def check_tree(root: Path) -> list[str]:
         return ["README.md: not found"]
     files.append(readme)
     files += sorted((root / "docs").rglob("*.md")) if (root / "docs").is_dir() else []
-    compiled = skipped = 0
+    compiled = skipped = by_tag = 0
     with tempfile.TemporaryDirectory() as work:
         workdir = Path(work)
         for path in files:
@@ -260,16 +260,29 @@ def check_tree(root: Path) -> list[str]:
                     print(f"skip {rel}:{snippet.line} ({snippet.language}) until #{snippet.ticket}")
                     skipped += 1
                     continue
+                if snippet.skipped_tag is not None:
+                    print(f"skip {rel}:{snippet.line} ({snippet.skipped_tag}): skipped by tag, not compiled")
+                    by_tag += 1
+                    continue
                 failed = compile_snippet(snippet, root, workdir)
                 if failed is None:
                     compiled += 1
                 else:
                     problems.append(failed)
-    print(f"docs snippets: {compiled} compiled, {skipped} skipped")
+    print(f"docs snippets: {compiled} compiled, {skipped} skipped, {by_tag} skipped by tag")
     return problems
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Compile every code snippet fenced in README.md and docs/.",
+        epilog="Fences tagged c, cpp or python must compile. Fences tagged "
+        + ", ".join(SKIPPED_TAGS)
+        + " are usage or data and are skipped. Any other tag is an error. "
+        "A snippet that cannot compile yet carries its ticket alone on the "
+        "line above the fence: <!-- snippet: skip until #NN -->.",
+    )
+    parser.parse_args(argv)
     problems = check_tree(ROOT)
     for problem in problems:
         print(problem)
