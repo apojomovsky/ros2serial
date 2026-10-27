@@ -25,6 +25,9 @@ target_include_directories(r2s_posix_firmware PRIVATE
 file(STRINGS src/r2s_generated.h R2S_MAX_FRAME_LINE REGEX "^#define R2S_MAX_FRAME [0-9]+u$")
 file(STRINGS src/r2s_generated.h R2S_MAX_NEST_LINE REGEX "^#define R2S_MAX_NEST [0-9]+u$")
 file(STRINGS src/r2s_generated.h R2S_SESSION_MAX_TOPICS_LINE REGEX "^#define R2S_SESSION_MAX_TOPICS [0-9]+u$")
+# A generated header changes without any CMakeLists edit, so the limits above
+# go stale unless the configure step watches it.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS src/r2s_generated.h)
 if(NOT R2S_MAX_FRAME_LINE OR NOT R2S_MAX_NEST_LINE)
   message(FATAL_ERROR "r2s_generated.h names no frame or nesting limit")
 endif()
