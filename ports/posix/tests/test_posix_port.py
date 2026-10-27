@@ -437,6 +437,32 @@ def test_bad_rate_fails(tmp_path):
     assert "--rate" in error
 
 
+LAUNCH_NAME_CASES = [
+    ("--pub", "std_msgs/msg/Float32", 473),
+    ("--sub", "geometry_msgs/msg/Twist", 470),
+    ("--log-text", "std_msgs/msg/String", 474),
+]
+
+
+def test_launch_topic_name_over_limit_fails(tmp_path):
+    for flag, type_name, limit in LAUNCH_NAME_CASES:
+        name = "n" * (limit + 1)
+        code, error = run_once([flag, name], boot=str(tmp_path / "boot"))
+        assert code == 2
+        assert flag in error
+        assert name in error
+        assert str(limit + 1) in error
+        assert f"limit {limit}" in error
+        assert type_name in error
+
+
+def test_launch_topic_name_at_limit_passes_name_check(tmp_path):
+    for flag, _, limit in LAUNCH_NAME_CASES:
+        code, error = run_once([flag, "n" * limit], boot=str(tmp_path / "boot"))
+        assert code == 1
+        assert "does-not-exist" in error
+
+
 def test_missing_boot_file_env_fails(tmp_path):
     code, error = run_once([], keep_env=False)
     assert code == 2
