@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the simavr harness and the echo firmware for the ATmega328P and the
+# Build the simavr harness and its firmware images for the ATmega328P and the
 # ATmega2560, then run the harness's tests. Builds go under R2S_BUILD_DIR, so
 # the tree stays clean; the suite runs this script for E2E=avr.
 set -uo pipefail
@@ -23,6 +23,11 @@ for mcu in atmega328p atmega2560; do
     avr-gcc -mmcu="$mcu" -DF_CPU=16000000UL -Os -Wall -Wextra -Werror \
       -o "$build/$image-$mcu.elf" "tests/harness/simavr/${image}_firmware.c" || status=1
   done
+  # The announce firmware links the core, so a PROGMEM topic table announces
+  # through the same sources the host tests cover.
+  mapfile -t core_sources < <(ls "$root"/core/src/*.c | grep -v test_reset.c)
+  avr-gcc -mmcu="$mcu" -DF_CPU=16000000UL -Os -Wall -Wextra -Werror -I "$root/core/include" \
+    -o "$build/announce-$mcu.elf" tests/harness/simavr/announce_firmware.c "${core_sources[@]}" || status=1
 done
 if [ "$status" -ne 0 ]; then
   echo "the simavr harness or its firmware did not build" >&2
