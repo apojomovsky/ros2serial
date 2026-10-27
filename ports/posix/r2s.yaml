@@ -1,0 +1,17 @@
+# Test firmware configuration: the topics the posix virtual MCU announces
+# (docs/00-design.md, C10). The names are the launch-time defaults; the
+# firmware renames them from its command line. bounds gives the String field
+# the capacity the handwritten table used.
+node: r2s_posix
+topics:
+  - name: battery
+    type: std_msgs/msg/Float32
+    direction: pub
+  - name: cmd_vel
+    type: geometry_msgs/msg/Twist
+    direction: sub
+  - name: log_text
+    type: std_msgs/msg/String
+    direction: pub
+bounds:
+  std_msgs/msg/String.data: 8
