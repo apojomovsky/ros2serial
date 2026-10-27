@@ -208,9 +208,9 @@ static void parse_options(int argc, char **argv, struct options *opts)
 
     opts->port = argv[1];
     opts->node = "r2s_posix";
-    opts->pub = "battery";
-    opts->sub = "cmd_vel";
-    opts->log_text = "log_text";
+    opts->pub = kDefaultPub;
+    opts->sub = kDefaultSub;
+    opts->log_text = kDefaultLogText;
     opts->rate = 10u;
     for (i = 2; i < argc; i++) {
         const char *arg = argv[i];
