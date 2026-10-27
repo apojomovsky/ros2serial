@@ -58,20 +58,73 @@ def c_identifier(name: str) -> str:
     return name.replace("/", "_")
 
 
+_TAKEN = frozenset(
+    {
+        # The generated file's own helper and buffer, which a wrapper or a
+        # receive slot would otherwise redefine.
+        "one",
+        "rx_buf",
+        # A C keyword is no identifier in the receive union, so no topic
+        # takes one even when only its publish wrapper would compile.
+        "auto",
+        "break",
+        "case",
+        "char",
+        "const",
+        "continue",
+        "default",
+        "do",
+        "double",
+        "else",
+        "enum",
+        "extern",
+        "float",
+        "for",
+        "goto",
+        "if",
+        "inline",
+        "int",
+        "long",
+        "register",
+        "restrict",
+        "return",
+        "short",
+        "signed",
+        "sizeof",
+        "static",
+        "struct",
+        "switch",
+        "typedef",
+        "union",
+        "unsigned",
+        "void",
+        "volatile",
+        "while",
+    }
+)
+
+
 def check_collisions(names: Sequence[str], source: str) -> None:
     """Reject topic names that map onto the same C identifier, naming both."""
     seen: dict[str, str] = {}
     for index, name in enumerate(names):
         ident = c_identifier(name)
-        if ident in seen:
-            if seen[ident] != name:
+        key = ident.upper()
+        if key in seen:
+            if seen[key] != name:
                 raise MessageError(
                     f"{source}: topics[{index}].name",
-                    f"topic name '{name}' collides with '{seen[ident]}' as C identifier '{ident}'",
+                    f"topic name '{name}' collides with '{seen[key]}' as C identifier '{ident}'",
                     "rename one of the topics",
                 )
         else:
-            seen[ident] = name
+            seen[key] = name
+        if ident in _TAKEN:
+            raise MessageError(
+                f"{source}: topics[{index}].name",
+                f"topic name '{name}' has no C identifier the generated file can use ('{ident}' is taken)",
+                "rename the topic",
+            )
 
 
 def build(
@@ -327,42 +380,47 @@ def emit_c(table: TopicTable) -> str:
             "    r2s_field_entries,",
             "    R2S_FIELD_COUNT,",
             "};",
-            "",
-            "/* One publish path for every wrapper: measures the payload, reserves",
-            " * its wire form, then streams it, so a failed publish writes nothing. */",
-            "static r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint16_t type, const void *msg)",
-            "{",
-            "    r2s_codec_out_t out = {NULL, 0u, 0u, 0u};",
-            "    uint8_t narrow;",
-            "    uint8_t field = 0xFFu;",
-            "    uint8_t seq;",
-            "    int8_t rc;",
-            "",
-            "    if (r2s_connected() == 0u) {",
-            "        return R2S_ERR_NOT_CONNECTED;",
-            "    }",
-            "    if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {",
-            "        return R2S_ERR_TOPIC_REJECTED;",
-            "    }",
-            "    narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);",
-            "    rc = r2s_codec_encode(&r2s_generated_table, type, msg, narrow, &out, &field);",
-            "    if (rc != R2S_OK) {",
-            "        return rc;",
-            "    }",
-            "    seq = r2s_session_tx_seq(index);",
-            "    rc = r2s_tx_begin(topic_id, seq, out.len);",
-            "    if (rc != R2S_OK) {",
-            "        return rc;",
-            "    }",
-            "    r2s_session_advance_tx_seq(index);",
-            "    out.to_tx = 1u;",
-            "    out.len = 0u;",
-            "    (void)r2s_codec_encode(&r2s_generated_table, type, msg, narrow, &out, &field);",
-            "    (void)r2s_tx_end();",
-            "    return R2S_OK;",
-            "}",
         ]
     )
+    if any(entry.direction == "pub" for entry in table.entries):
+        lines.extend(
+            [
+                "",
+                "/* One publish path for every wrapper: measures the payload, reserves",
+                " * its wire form, then streams it, so a failed publish writes nothing. */",
+                "static r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint16_t type, const void *msg)",
+                "{",
+                "    r2s_codec_out_t out = {NULL, 0u, 0u, 0u};",
+                "    uint8_t narrow;",
+                "    uint8_t field = 0xFFu;",
+                "    uint8_t seq;",
+                "    int8_t rc;",
+                "",
+                "    if (r2s_connected() == 0u) {",
+                "        return R2S_ERR_NOT_CONNECTED;",
+                "    }",
+                "    if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {",
+                "        return R2S_ERR_TOPIC_REJECTED;",
+                "    }",
+                "    narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);",
+                "    rc = r2s_codec_encode(&r2s_generated_table, type, msg, narrow, &out, &field);",
+                "    if (rc != R2S_OK) {",
+                "        return rc;",
+                "    }",
+                "    seq = r2s_session_tx_seq(index);",
+                "    rc = r2s_tx_begin(topic_id, seq, out.len);",
+                "    if (rc != R2S_OK) {",
+                "        return rc;",
+                "    }",
+                "    r2s_session_advance_tx_seq(index);",
+                "    out.to_tx = 1u;",
+                "    out.len = 0u;",
+                "    (void)r2s_codec_encode(&r2s_generated_table, type, msg, narrow, &out, &field);",
+                "    (void)r2s_tx_end();",
+                "    return R2S_OK;",
+                "}",
+            ]
+        )
     for entry in table.entries:
         if entry.direction == "pub":
             lines.extend(
