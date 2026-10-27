@@ -163,20 +163,30 @@ static size_t topic_name_limit(const char *type_name)
 
 /* A launch name that would not fit the announce entry is rejected here, with
  * its length and the limit, instead of failing configure with no detail. The
- * type names repeat the table fill_topics builds below. */
-static void check_topic_name(const char *flag, const char *name, const char *type_name)
+ * type comes from the generated table, so the limit tracks the generator. A
+ * default name the table no longer carries needs no check: no flag renames
+ * it. */
+static void check_renamed_name(const char *flag, const char *name, const char *default_name)
 {
-    size_t len;
-    size_t limit;
+    uint8_t i;
 
     check_name(flag, name);
-    len = strlen(name);
-    limit = topic_name_limit(type_name);
-    if (len > limit) {
-        fprintf(stderr, "r2s_posix: %s topic name '%s' too long: %lu chars, limit %lu for type '%s'\n", flag,
-                name, (unsigned long)len, (unsigned long)limit, type_name);
-        usage(stderr);
-        exit(2);
+    for (i = 0u; i < R2S_TOPIC_COUNT; i++) {
+        size_t len;
+        size_t limit;
+
+        if (strcmp(r2s_topics[i].topic_name, default_name) != 0) {
+            continue;
+        }
+        len = strlen(name);
+        limit = topic_name_limit(r2s_topics[i].type_name);
+        if (len > limit) {
+            fprintf(stderr, "r2s_posix: %s topic name '%s' too long: %lu chars, limit %lu for type '%s'\n",
+                    flag, name, (unsigned long)len, (unsigned long)limit, r2s_topics[i].type_name);
+            usage(stderr);
+            exit(2);
+        }
+        return;
     }
 }
 
@@ -220,13 +230,13 @@ static void parse_options(int argc, char **argv, struct options *opts)
     }
     check_name("--node", opts->node);
     if (opts->pub != NULL) {
-        check_topic_name("--pub", opts->pub, "std_msgs/msg/Float32");
+        check_renamed_name("--pub", opts->pub, "battery");
     }
     if (opts->sub != NULL) {
-        check_topic_name("--sub", opts->sub, "geometry_msgs/msg/Twist");
+        check_renamed_name("--sub", opts->sub, "cmd_vel");
     }
     if (opts->log_text != NULL) {
-        check_topic_name("--log-text", opts->log_text, "std_msgs/msg/String");
+        check_renamed_name("--log-text", opts->log_text, "log_text");
     }
 }
 
