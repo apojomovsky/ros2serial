@@ -5,7 +5,6 @@
 CTL-11  Y3
 DSC-27  C9
 ENC-12  C9
-ENC-13  S4
 ERR-1   P5
 ERR-2   P5
 ERR-3   P5
