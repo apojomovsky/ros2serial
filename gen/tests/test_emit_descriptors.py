@@ -249,7 +249,7 @@ def test_a_wide_sequence_counts_its_elements_in_two_bytes(tmp_path):
     (tmp_path / "check.c").write_text(
         '#include "r2s_generated.h"\n' + text + "\nint main(void)\n{\n    return 0;\n}\n", encoding="utf-8"
     )
-    for compiler, args in (("cc", []), ("avr-gcc", ["-mmcu=atmega328p"])):
+    for compiler, args, output in (("cc", [], "check_host.o"), ("avr-gcc", ["-mmcu=atmega328p"], "check_avr.o")):
         compiled = subprocess.run(
             [
                 compiler,
@@ -264,12 +264,16 @@ def test_a_wide_sequence_counts_its_elements_in_two_bytes(tmp_path):
                 "-c",
                 str(tmp_path / "check.c"),
                 "-o",
-                str(tmp_path / "check.o"),
+                str(tmp_path / output),
             ],
             capture_output=True,
             text=True,
         )
         assert compiled.returncode == 0, f"{compiler}: {compiled.stderr}"
+    symbols = subprocess.run(["avr-objdump", "-t", str(tmp_path / "check_avr.o")], capture_output=True, text=True)
+    assert symbols.returncode == 0, symbols.stderr
+    placed = [line for line in symbols.stdout.splitlines() if "r2s_type_records" in line]
+    assert placed and ".progmem" in placed[0], symbols.stdout
 
 
 def test_a_narrow_sequence_counts_its_elements_in_one_byte(tmp_path):
@@ -366,6 +370,36 @@ def test_the_generated_header_configures_the_nesting_stack():
 
     assert "#ifndef R2S_MAX_NEST\n#define R2S_MAX_NEST 2u\n#endif" in header
     assert emit.emit_types(resolved).count("R2S_MAX_NEST") == 0
+
+
+def test_the_descriptors_see_the_header_nesting_bound(tmp_path):
+    # covers: DSC-39
+    resolved, table = build([FLOAT32, TWIST])
+    text = descriptors.emit_c(table)
+
+    assert text.index('"r2s_generated.h"') < text.index('"r2s/r2s_codec.h"')
+    (tmp_path / "r2s_generated.h").write_text(emit.emit_types(resolved, max_nest=table.max_nest), encoding="utf-8")
+    proof = tmp_path / "nest_descriptors.c"
+    proof.write_text(text + "typedef char r2s_nest_proof[(R2S_MAX_NEST == 2u) ? 1 : -1];\n", encoding="utf-8")
+    compiled = subprocess.run(
+        [
+            "cc",
+            "-std=c99",
+            "-pedantic",
+            "-Werror",
+            "-I",
+            str(tmp_path),
+            "-I",
+            str(CORE_INCLUDE),
+            "-c",
+            str(proof),
+            "-o",
+            str(tmp_path / "nest_descriptors.o"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert compiled.returncode == 0, compiled.stderr
 
 
 def test_the_core_sees_the_header_nesting_bound(tmp_path):
@@ -726,6 +760,9 @@ def test_core_codec_round_trips_generated_tables(narrow, tmp_path):
     )
     core = Path(__file__).resolve().parents[2] / "core" / "src"
     binary = tmp_path / "roundtrip"
+    # Firmware compiles the core with the generated header visible; -include
+    # proves the header alone configures the interpreter, with no -D.
+
     compiled = subprocess.run(
         [
             "cc",
@@ -736,7 +773,8 @@ def test_core_codec_round_trips_generated_tables(narrow, tmp_path):
             str(tmp_path),
             "-I",
             str(CORE_INCLUDE),
-            f"-DR2S_MAX_NEST={table.max_nest}u",
+            "-include",
+            str(tmp_path / "r2s_generated.h"),
             f"-DDRV_TYPES={len(table.records)}u",
             f"-DDRV_FIELDS={len(table.entries)}u",
             str(driver),
