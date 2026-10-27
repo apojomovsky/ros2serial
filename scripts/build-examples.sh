@@ -44,17 +44,24 @@ extras=$(PYTHONPATH="$root/gen" python3 - "$stage/src/r2s_generated.h" <<'EOF'
 import sys
 
 from r2s_gen import layouts
+from r2s_gen.msgs import MessageError
 
-print(" ".join("-D" + define for define in layouts.build_defines(open(sys.argv[1]).read())))
+try:
+    defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_generated.h")
+except MessageError as error:
+    print(f"r2s-gen: error: {error}", file=sys.stderr)
+    raise SystemExit(1)
+print(" ".join("-D" + define for define in defines))
 EOF
 ) || status=1
 for board in uno mega; do
   out="$build/arduino_minimal/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$extras" \
     --library "$stage" --output-dir "$out" examples/arduino_minimal || status=1
-  # The receive buffer proves the limits reached the core: it exists only
-  # with the codec enabled, and without the flags the linker drops it while
-  # the firmware silently ignores every subscription.
+  # The receive buffer proves the codec flag reached the core: it exists only
+  # with the codec enabled, and without it the linker drops the buffer while
+  # the firmware silently ignores every subscription. The limits travel in
+  # the same flag string, pinned by the generator's own tests.
   if ! avr-nm "$out/arduino_minimal.ino.elf" 2>/dev/null | grep -q r2s_rx_buf; then
     echo "arduino_minimal ($board): the firmware links no receive buffer" >&2
     status=1
