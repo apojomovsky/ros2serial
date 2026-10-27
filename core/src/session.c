@@ -48,11 +48,14 @@ typedef char r2s_tick_hz_form[(R2S_TICK_HZ >= 1000u && R2S_TICK_HZ % 1000u == 0u
                                   ? 1
                                   : -1];
 
+/* The bound table holds at most R2S_TOPIC_MAX_COUNT entries, and the session
+ * indexes its R2S_SESSION_MAX_TOPICS arrays by accessor index: the arrays
+ * cover every bindable count only when the bindable maximum fits them. */
+typedef char r2s_topic_max_within_session_max[(R2S_TOPIC_MAX_COUNT <= R2S_SESSION_MAX_TOPICS) ? 1 : -1];
+
 static struct {
     uint8_t state;
     const char *node_name;
-    const r2s_session_topic_t *topics;
-    uint8_t topic_count;
     uint8_t status[R2S_SESSION_MAX_TOPICS];
     uint8_t tx_seq[R2S_SESSION_MAX_TOPICS];
     uint8_t rx_expected[R2S_SESSION_MAX_TOPICS];
@@ -81,8 +84,7 @@ static uint8_t varint_len(uint16_t value)
     return r2s_varint_encode(value, out);
 }
 
-r2s_status_t r2s_session_configure(const char *node_name, const r2s_session_topic_t *topics,
-                                   uint8_t topic_count)
+r2s_status_t r2s_session_configure(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count)
 {
     size_t name_len;
     uint8_t i;
@@ -121,27 +123,21 @@ r2s_status_t r2s_session_configure(const char *node_name, const r2s_session_topi
             return R2S_ERR_BOUNDS;
         }
     }
+    if (r2s_topics_configure(topics, topic_count) != R2S_OK) {
+        return R2S_ERR_BOUNDS;
+    }
     session.node_name = node_name;
-    session.topics = topics;
-    session.topic_count = topic_count;
     return R2S_OK;
 }
 
 uint8_t r2s_session_find_topic(uint8_t topic_id)
 {
-    uint8_t i;
-
-    for (i = 0u; i < session.topic_count; i++) {
-        if (session.topics[i].topic_id == topic_id) {
-            return i;
-        }
-    }
-    return 0xFFu;
+    return r2s_topic_find(topic_id);
 }
 
 uint8_t r2s_session_topic_flags(uint8_t index)
 {
-    return session.topics[index].flags;
+    return r2s_topic_get(index)->flags;
 }
 
 uint8_t r2s_session_topic_status(uint8_t index)
@@ -184,7 +180,7 @@ static void enter_announcing(uint32_t now)
     }
     /* The seq counters restart with the handshake ([SES-11]); the lost count
      * stays, since it counts frames since boot ([FRM-15]). */
-    for (i = 0u; i < session.topic_count; i++) {
+    for (i = 0u; i < r2s_topic_count(); i++) {
         session.tx_seq[i] = 0u;
         session.rx_expected[i] = 0u;
     }
@@ -266,7 +262,7 @@ static void send_hello(void)
     put_u16(R2S_FRAMER_RX_CAPACITY);
     put_u32(R2S_TICK_HZ);
     put_byte(R2S_FEATURE_BITS);
-    put_byte(session.topic_count);
+    put_byte(r2s_topic_count());
     put_string(session.node_name);
     if (r2s_tx_end() == R2S_OK) {
         session.tx_seq_ctrl++;
@@ -275,7 +271,7 @@ static void send_hello(void)
 
 static void send_topic(uint8_t index)
 {
-    const r2s_session_topic_t *topic = &session.topics[index];
+    const r2s_topic_t *topic = r2s_topic_get(index);
     uint16_t type_len = (uint16_t)strlen(topic->type_name);
     uint16_t topic_len = (uint16_t)strlen(topic->topic_name);
     uint16_t len = (uint16_t)(12u + varint_len(type_len) + type_len + varint_len(topic_len) + topic_len);
@@ -347,7 +343,7 @@ static void on_control(uint32_t now, const uint8_t *payload, uint16_t len)
         send_hello();
         break;
     case OP_TOPIC_REQ:
-        if (len != 2u || payload[1] >= session.topic_count) {
+        if (len != 2u || payload[1] >= r2s_topic_count()) {
             refuse();
             return;
         }
@@ -358,8 +354,8 @@ static void on_control(uint32_t now, const uint8_t *payload, uint16_t len)
             refuse();
             return;
         }
-        for (i = 0u; i < session.topic_count; i++) {
-            if (session.topics[i].topic_id == payload[1]) {
+        for (i = 0u; i < r2s_topic_count(); i++) {
+            if (r2s_topic_get(i)->topic_id == payload[1]) {
                 session.status[i] = payload[2];
                 return;
             }
@@ -481,8 +477,7 @@ void r2s_session_test_reset(void)
 
     session.state = ANNOUNCING;
     session.node_name = "";
-    session.topics = NULL;
-    session.topic_count = 0u;
+    r2s_topics_test_reset();
     for (i = 0u; i < R2S_SESSION_MAX_TOPICS; i++) {
         session.status[i] = 0xFFu;
         session.tx_seq[i] = 0u;

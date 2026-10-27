@@ -6,12 +6,14 @@
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_rx.h"
 #include "r2s/r2s_session.h"
+#include "r2s/r2s_topics.h"
 #include "r2s/r2s_tx.h"
 
 #ifdef R2S_TESTING
 void r2s_test_reset(void)
 {
     r2s_session_test_reset();
+    r2s_topics_test_reset();
     r2s_framer_test_reset();
     r2s_rx_test_reset();
     r2s_tx_test_reset();

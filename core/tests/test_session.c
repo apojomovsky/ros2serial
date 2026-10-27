@@ -22,11 +22,11 @@ static uint8_t wire[WIRE_MAX];
 /* The announced table for the one-topic tests: the shape of
  * spec/vectors/frames/topic.yaml, so the TOPIC the core sends carries the
  * vector's payload. */
-static const r2s_session_topic_t one_topic[] = {
+static const r2s_topic_t one_topic[] = {
     {0x10u, 0x03u, {0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u}, "std_msgs/msg/Float32", "float"},
 };
 
-static const r2s_session_topic_t two_topics[] = {
+static const r2s_topic_t two_topics[] = {
     {0x10u,
      0x00u,
      {0x10u, 0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u},
@@ -52,7 +52,7 @@ static const uint8_t topic_frame_payload[] = {
     's',   't',   'd',   '_',   'm',   's',   'g',   's',   '/',   'm',   's',   'g',   '/',
     'F',   'l',   'o',   'a',   't',   '3',   '2',   0x05u, 'f',   'l',   'o',   'a',   't'};
 
-static void configure(const r2s_session_topic_t *topics, uint8_t count, uint32_t boot_id)
+static void configure(const r2s_topic_t *topics, uint8_t count, uint32_t boot_id)
 {
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", topics, count));
     fake_port_set_boot_id(boot_id);
@@ -148,7 +148,7 @@ void test_session_names_of_128_bytes_or_more_travel_whole(void)
     static char big_type[201];
     static char big_topic[201];
     static uint8_t expected[560];
-    static r2s_session_topic_t big[1];
+    static r2s_topic_t big[1];
     const uint8_t hello_req[] = {0x01u, 0x01u};
     const uint8_t topic_req[] = {0x03u, 0x00u};
     const uint8_t hash[8] = {0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u};
@@ -571,7 +571,7 @@ void test_session_a_spin_answers_every_queued_frame_and_ignores_user_topics(void
 void test_session_an_unannounceable_configuration_is_refused(void)
 {
     static char far_name[65537];
-    r2s_session_topic_t far[17];
+    r2s_topic_t far[17];
     uint8_t topic_count = 17;
 
     memset(far_name, 'a', sizeof far_name);
@@ -586,6 +586,32 @@ void test_session_an_unannounceable_configuration_is_refused(void)
 
     /* The refusals changed nothing: a valid table still configures. */
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", one_topic, 1));
+}
+
+/* A refused configure leaves the announced name and topics unchanged. */
+void test_session_a_refused_configuration_changes_nothing(void)
+{
+    static r2s_topic_t big[R2S_SESSION_MAX_TOPICS + 1u];
+    const uint8_t hello_req[] = {0x01u, 0x01u};
+    const uint8_t topic_req[] = {0x03u, 0x00u};
+    uint8_t expected[64];
+    uint16_t len;
+    uint8_t i;
+
+    for (i = 0u; i < R2S_SESSION_MAX_TOPICS + 1u; i++) {
+        big[i].topic_id = i;
+        big[i].type_name = "t";
+        big[i].topic_name = "n";
+    }
+    configure(one_topic, 1u, 0x44332211u);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_session_configure("other", big, R2S_SESSION_MAX_TOPICS + 1u));
+    /* The next HELLO still carries the configured name and one topic, and
+     * index 0 still resolves the configured entry. */
+    len = hello_payload(expected, 0x44332211u, 1);
+    feed_host(0, 0, hello_req, sizeof hello_req);
+    assert_tx(1, 0, 1, expected, len);
+    feed_host(0, 1, topic_req, sizeof topic_req);
+    assert_tx(2, 0, 2, topic_frame_payload, sizeof topic_frame_payload);
 }
 
 void test_session_without_a_configuration_announces_no_name_and_no_topics(void)
@@ -624,15 +650,15 @@ void test_session_a_name_that_does_not_fit_the_hello_frame_is_refused(void)
  * refused. */
 void test_session_a_nameless_or_oversized_topic_is_refused(void)
 {
-    static const r2s_session_topic_t no_type[] = {
+    static const r2s_topic_t no_type[] = {
         {0x10u, 0x03u, {0u}, NULL, "float"},
     };
-    static const r2s_session_topic_t no_name[] = {
+    static const r2s_topic_t no_name[] = {
         {0x10u, 0x03u, {0u}, "std_msgs/msg/Float32", NULL},
     };
     static char big_type[301];
     static char big_topic[301];
-    static r2s_session_topic_t big[1];
+    static r2s_topic_t big[1];
 
     memset(big_type, 't', sizeof big_type - 1u);
     big_type[sizeof big_type - 1u] = '\0';
