@@ -331,6 +331,42 @@ def test_the_golden_pair_compiles_as_c99(tmp_path):
     compile_pair(tmp_path, header, source)
 
 
+def test_the_generated_header_exposes_session_configure(tmp_path):
+    header, _source = generated_pair(tmp_path)
+    (tmp_path / "r2s_generated.h").write_text(header, encoding="utf-8")
+    (tmp_path / "user.c").write_text(
+        '#include "r2s_generated.h"\n'
+        "int main(void)\n"
+        "{\n"
+        '    return (int)r2s_session_configure("node", r2s_topics, R2S_TOPIC_COUNT);\n'
+        "}\n",
+        encoding="utf-8",
+    )
+
+    compiled = subprocess.run(
+        [
+            "cc",
+            "-std=c99",
+            "-pedantic",
+            "-Werror",
+            "-Wall",
+            "-Wextra",
+            "-I",
+            str(tmp_path),
+            "-I",
+            str(CORE_INCLUDE),
+            "-c",
+            str(tmp_path / "user.c"),
+            "-o",
+            str(tmp_path / "user.o"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert compiled.returncode == 0, compiled.stderr
+
+
 def test_a_publish_only_config_has_no_receive_buffer(tmp_path):
     loaded = load(
         "node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n    direction: pub\n",

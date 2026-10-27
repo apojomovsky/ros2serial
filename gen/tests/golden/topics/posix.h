@@ -40,6 +40,7 @@ typedef struct std_msgs__msg__String {
 #endif
 
 #include "r2s/r2s_codec.h"
+#include "r2s/r2s_session.h"
 #include "r2s/r2s_topics.h"
 
 #define R2S_TOPIC_BATTERY_ID 16u

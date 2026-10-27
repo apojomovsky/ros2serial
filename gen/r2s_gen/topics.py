@@ -308,6 +308,7 @@ def emit_h(table: TopicTable) -> str:
         [
             "",
             '#include "r2s/r2s_codec.h"',
+            '#include "r2s/r2s_session.h"',
             '#include "r2s/r2s_topics.h"',
             "",
         ]
