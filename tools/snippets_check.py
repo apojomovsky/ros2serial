@@ -33,12 +33,14 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 MARKER = re.compile(r"^ {0,3}<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#([0-9]+)[ \t]*-->\s*$")
 MARKER_LIKE = re.compile(r"^ {0,3}<!--[ \t]*snippet:.*-->\s*$")
-# A fence opens at column 0 to 3 only: deeper is an indented code block,
-# literal text, so a literal fence can never swallow a real snippet. The
-# closer must sit at the opener's own indent; anything else is body text. A
-# marker deeper than three spaces is literal text too, so it gets its own
-# diagnostic instead of silently doing nothing.
-FENCE = re.compile(r"^ {0,3}```")
+# A fence opens at column 0 to 3 of its container: deeper is an indented code
+# block, literal text, so a literal fence can never swallow a real snippet.
+# The closer may sit up to three columns past the container, as in CommonMark.
+# Indentation is relative to list items, which the scan tracks; two blank
+# lines close every container. A marker past column 3 of its container is
+# literal text too, so it gets its own diagnostic instead of silently doing
+# nothing.
+FENCE = re.compile(r"^ *```")
 MARKER_ANY = re.compile(r"^\s*<!--[ \t]*snippet:.*-->\s*$")
 
 LANGUAGES = ("c", "cpp", "python", "yaml")
@@ -74,6 +76,44 @@ def _indent_of(line: str) -> int:
     return taken
 
 
+LIST_ITEM = re.compile(r"( {0,3})([*+-]|\d{1,9}[.)])([ \t]*)")
+
+
+def _list_content(line: str, base: int) -> int | None:
+    # Content indent of the list item `line` starts, if it starts one in the
+    # container whose content starts at `base`. A missing separator means it
+    # starts none, as do five or more spaces after the marker, which count as
+    # one. Both rules follow CommonMark.
+    rest = line[base:]
+    match = LIST_ITEM.match(rest)
+    if match is None:
+        return None
+    lead, marker, gaps = match.groups()
+    if not gaps and match.end() < len(rest):
+        return None
+    gap = len(gaps) if 1 <= len(gaps) <= 4 and rest[match.end() :].strip() else 1
+    return base + len(lead) + len(marker) + gap
+
+
+def _marker_kind(line: str, base: int) -> str:
+    # What the marker-shaped comment on `line` is worth at container `base`:
+    # usable, ticketless, or literal text past column 3.
+    rel = line[base:]
+    if MARKER.match(rel):
+        return "ok"
+    if MARKER_LIKE.match(rel):
+        return "ticketless"
+    return "deep"
+
+
+def _marker_problem(kind: str) -> str:
+    if kind == "ok":
+        return "snippet marker above no fence"
+    if kind == "ticketless":
+        return "snippet marker without a ticket number"
+    return "snippet marker starts past column 3, so it is literal text"
+
+
 def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
     lines = path.read_text(encoding="utf-8").splitlines()
     snippets: list[Snippet] = []
@@ -81,63 +121,79 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
     markers: dict[int, str] = {}
     used: set[int] = set()
     i = 0
+    stack: list[int] = []
+    blanks = 0
     while i < len(lines):
-        if MARKER_ANY.match(lines[i]):
-            markers[i + 1] = lines[i]
+        line = lines[i]
+        if not line.strip():
+            blanks += 1
+            if blanks >= 2:
+                stack.clear()
             i += 1
             continue
-        fence = FENCE.match(lines[i])
-        if not fence:
+        blanks = 0
+        raw = _indent_of(line)
+        while stack and raw < stack[-1]:
+            stack.pop()
+        base = stack[-1] if stack else 0
+        if MARKER_ANY.match(line):
+            markers[i + 1] = _marker_kind(line, base)
             i += 1
             continue
-        words = lines[i][fence.end() :].split()
-        open_line = i + 1
-        indent = fence.end() - 3
-        i += 1
-        body: list[str] = []
-        while i < len(lines):
-            closer = FENCE.match(lines[i])
-            if closer and _indent_of(lines[i]) == indent:
+        fence = FENCE.match(line)
+        if fence and 0 <= raw - base <= 3:
+            words = line[fence.end() :].split()
+            open_line = i + 1
+            indent = raw
+            i += 1
+            body: list[str] = []
+            while i < len(lines):
+                closer = FENCE.match(lines[i])
+                if closer and _indent_of(lines[i]) - base <= 3:
+                    break
+                body.append(lines[i])
+                i += 1
+            if i == len(lines):
+                problems.append(f"{rel}:{open_line}: fence never closes")
                 break
-            body.append(lines[i])
             i += 1
-        if i == len(lines):
-            problems.append(f"{rel}:{open_line}: fence never closes")
-            break
+            if not words:
+                continue
+            ticket = None
+            j = open_line - 2
+            while j >= 0 and not lines[j].strip():
+                j -= 1
+            if j >= 0 and MARKER_ANY.match(lines[j]):
+                probe = list(stack)
+                while probe and _indent_of(lines[j]) < probe[-1]:
+                    probe.pop()
+                kind = _marker_kind(lines[j], probe[-1] if probe else 0)
+                if kind == "ok":
+                    ticket = _ticket(lines[j][probe[-1] if probe else 0 :])
+                else:
+                    problems.append(f"{rel}:{j + 1}: {_marker_problem(kind)}")
+                used.add(j + 1)
+            if len(words) > 1:
+                problems.append(f"{rel}:{open_line}: unexpected info string after {words[0]!r}")
+                continue
+            language = words[0]
+            if language not in LANGUAGES:
+                problems.append(f"{rel}:{open_line}: unknown snippet language {language!r}")
+                continue
+            code = "\n".join(_dedent(body_line, indent) for body_line in body) + "\n"
+            snippets.append(Snippet(rel, open_line, language, code, ticket))
+            continue
+        content = _list_content(line, base)
+        if content is not None:
+            if stack and stack[-1] == content:
+                stack.pop()
+            stack.append(content)
         i += 1
-        if not words:
-            continue
-        ticket = None
-        j = open_line - 2
-        while j >= 0 and not lines[j].strip():
-            j -= 1
-        if j >= 0 and MARKER.match(lines[j]):
-            ticket = _ticket(lines[j])
-            used.add(j + 1)
-        elif j >= 0 and MARKER_ANY.match(lines[j]):
-            if MARKER_LIKE.match(lines[j]):
-                problems.append(f"{rel}:{j + 1}: snippet marker without a ticket number")
-            else:
-                problems.append(f"{rel}:{j + 1}: snippet marker starts past column 3, so it is literal text")
-            used.add(j + 1)
-        if len(words) > 1:
-            problems.append(f"{rel}:{open_line}: unexpected info string after {words[0]!r}")
-            continue
-        language = words[0]
-        if language not in LANGUAGES:
-            problems.append(f"{rel}:{open_line}: unknown snippet language {language!r}")
-            continue
-        code = "\n".join(_dedent(line, fence.end() - 3) for line in body) + "\n"
-        snippets.append(Snippet(rel, open_line, language, code, ticket))
-    for lineno, text in markers.items():
+        continue
+    for lineno, kind in markers.items():
         if lineno in used:
             continue
-        if MARKER.match(text):
-            problems.append(f"{rel}:{lineno}: snippet marker above no fence")
-        elif MARKER_LIKE.match(text):
-            problems.append(f"{rel}:{lineno}: snippet marker without a ticket number")
-        else:
-            problems.append(f"{rel}:{lineno}: snippet marker starts past column 3, so it is literal text")
+        problems.append(f"{rel}:{lineno}: {_marker_problem(kind)}")
     return snippets, problems
 
 

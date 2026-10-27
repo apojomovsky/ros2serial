@@ -174,12 +174,14 @@ def test_indented_python_body_is_dedented(tmp_path):
 
 
 @needs_gcc
-def test_deeply_nested_snippet_is_ignored(tmp_path):
-    # Fences past column 3 are indented code blocks, literal text, so a
-    # snippet nested two list levels deep is not checked.
+def test_deeply_nested_broken_snippet_fails(tmp_path):
+    # A fence in a nested list item opens relative to the item, so a broken
+    # snippet nested two levels deep is still checked.
     text = "# T\n\n1. Outer:\n   1. Inner:\n\n      ```c\n      int broken = ;\n      ```\n"
     root = write_tree(tmp_path, {"README.md": text})
-    assert snippets_check.check_tree(root) == []
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "README.md:6" in problems[0]
 
 
 @needs_gcc
@@ -204,3 +206,17 @@ def test_deeper_closing_fence_is_content(tmp_path):
     problems = snippets_check.check_tree(root)
     assert len(problems) == 1
     assert "README.md:3" in problems[0]
+
+
+def test_closer_less_indented_than_opener_closes(tmp_path):
+    text = "# T\n\n1. Step:\n\n   ```python\n   x = 1\n```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
+
+
+@needs_gcc
+def test_nested_marker_skips_nested_snippet(tmp_path, capsys):
+    text = "# T\n\n1. Step:\n\n   <!-- snippet: skip until #94 -->\n\n   " + C_BROKEN
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
+    assert "#94" in capsys.readouterr().out
