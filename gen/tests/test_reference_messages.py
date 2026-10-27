@@ -18,6 +18,7 @@ BUNDLED = (
     "sensor_msgs/msg/JointState",
     "std_msgs/msg/Float32",
     "std_msgs/msg/Header",
+    "std_msgs/msg/String",
 )
 DISTROS = ("jazzy", "lyrical", "rolling")
 
