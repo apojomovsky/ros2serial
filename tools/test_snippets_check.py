@@ -246,3 +246,21 @@ def test_inner_fence_past_container_is_content(tmp_path):
     problems = snippets_check.check_tree(root)
     assert len(problems) == 1
     assert "README.md:3" in problems[0] and "does not compile" in problems[0]
+
+
+@needs_gcc
+def test_swallowed_tagged_fence_is_reported(tmp_path):
+    # The ```c line closes the outer plain fence instead of opening a
+    # snippet; the sweep reports it instead of silently passing the file.
+    text = "# T\n\n  ```\n  x = 1\n    ```\n```c\nint broken = ;\n```\n```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert any("never opened a snippet" in p for p in problems)
+
+
+def test_quoted_tagged_fence_is_reported(tmp_path):
+    text = "# T\n\n> ```c\n> int broken = ;\n> ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "never opened a snippet" in problems[0]

@@ -34,16 +34,14 @@ ROOT = Path(__file__).resolve().parent.parent
 MARKER = re.compile(r"^ {0,3}<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#([0-9]+)[ \t]*-->\s*$")
 MARKER_LIKE = re.compile(r"^ {0,3}<!--[ \t]*snippet:.*-->\s*$")
 # A fence opens at column 0 to 3 of its container: deeper is an indented code
-# block, literal text, so a literal fence can never swallow a real snippet.
-# The closer must sit no deeper than the opener plus three columns and no
-# deeper than three past the container; anything else is body text. The first
-# bound keeps a legitimate indented closer working, the second keeps an inner
-# fence from truncating the body and silently passing broken code. Indentation
-# is relative to list items, which the scan tracks; a dedented line pops back
-# out. A marker past column 3 of its container is literal text too, so it
-# gets its own diagnostic instead of silently doing nothing.
+# block, literal text. The closer sits no deeper than three past the container;
+# anything deeper is body text. A tagged fence the scan never opens, inside a
+# body or a quote, is reported instead of silently passing. Indentation is
+# relative to list items, which the scan tracks; a dedented line pops back
+# out. A marker past column 3 of its container gets its own diagnostic.
 FENCE = re.compile(r"^ *```")
 MARKER_ANY = re.compile(r"^\s*<!--[ \t]*snippet:.*-->\s*$")
+SWEEP = re.compile(r"^\s*(?:>\s*)*```([A-Za-z0-9+#-]+)")
 
 LANGUAGES = ("c", "cpp", "python", "yaml")
 EXTENSION = {"c": ".c", "cpp": ".cpp", "python": ".py", "yaml": ".yaml"}
@@ -121,6 +119,7 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
     snippets: list[Snippet] = []
     problems: list[str] = []
     markers: dict[int, str] = {}
+    opened: set[int] = set()
     used: set[int] = set()
     i = 0
     stack: list[int] = []
@@ -141,12 +140,14 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
         if fence and 0 <= raw - base <= 3:
             words = line[fence.end() :].split()
             open_line = i + 1
+            if words and words[0] in LANGUAGES:
+                opened.add(open_line)
             indent = raw
             i += 1
             body: list[str] = []
             while i < len(lines):
                 closer = FENCE.match(lines[i])
-                if closer and _indent_of(lines[i]) <= indent + 3 and _indent_of(lines[i]) - base <= 3:
+                if closer and _indent_of(lines[i]) - base <= 3:
                     break
                 body.append(lines[i])
                 i += 1
@@ -191,6 +192,10 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
         if lineno in used:
             continue
         problems.append(f"{rel}:{lineno}: {_marker_problem(kind)}")
+    for number, text in enumerate(lines, start=1):
+        tag = SWEEP.match(text)
+        if tag and tag.group(1) in LANGUAGES and number not in opened:
+            problems.append(f"{rel}:{number}: tagged fence never opened a snippet")
     return snippets, problems
 
 
