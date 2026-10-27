@@ -49,11 +49,12 @@ _ALIGNMENT_PROBE = """typedef struct {
                                                : -1]"""
 
 
-def emit_types(resolved: Mapping[str, ResolvedMessage]) -> str:
+def emit_types(resolved: Mapping[str, ResolvedMessage], max_nest: int | None = None) -> str:
     """The generated header holding every type in `resolved`, dependencies first.
 
     Fields must be resolved and bounded, which `bounds.resolve` guarantees; the
-    output depends only on the data, not on the mapping's order.
+    output depends only on the data, not on the mapping's order. A given
+    `max_nest` also configures the codec's nesting stack ([DSC-39]).
     """
     sequenced = _has_sequences(resolved)
     includes = ["#include <stddef.h>", "#include <stdint.h>"] if sequenced else ["#include <stdint.h>"]
@@ -64,6 +65,17 @@ def emit_types(resolved: Mapping[str, ResolvedMessage]) -> str:
         "",
         *includes,
     ]
+    if max_nest is not None:
+        lines.extend(
+            [
+                "",
+                "/* The deepest nesting the firmware's tables use; the codec sizes its",
+                " * stack from it, and a build that sets it first keeps its value. */",
+                "#ifndef R2S_MAX_NEST",
+                f"#define R2S_MAX_NEST {max_nest}u",
+                "#endif",
+            ]
+        )
     if sequenced:
         lines.extend(["", *_ALIGNMENT_PROBE.splitlines()])
     for type_name in _ordered(resolved):

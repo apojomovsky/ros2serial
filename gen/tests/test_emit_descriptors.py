@@ -1,6 +1,7 @@
 """C emission: descriptor tables in the spec section 9 format, and their C99 compilation."""
 
 import random
+import struct
 import subprocess
 from pathlib import Path
 
@@ -14,6 +15,8 @@ FLOAT32 = "std_msgs/msg/Float32"
 TWIST = "geometry_msgs/msg/Twist"
 VECTOR3 = "geometry_msgs/msg/Vector3"
 HEADER_BOUNDS = {"std_msgs/msg/Header.frame_id": 130}
+CORE_INCLUDE = Path(__file__).resolve().parents[2] / "core" / "include"
+CORE_SUPPORT = Path(__file__).resolve().parents[2] / "core" / "tests" / "support"
 JOINT_STATE_BOUNDS = {
     **HEADER_BOUNDS,
     "sensor_msgs/msg/JointState.name": [130, 130],
@@ -78,7 +81,7 @@ def build(roots, bound_map=None, repository=None):
 def compiled_bytes(tmp_path, resolved, roots):
     """The type records and field entries the emitted C holds, read from a host run."""
     table = descriptors.build(resolved, roots)
-    (tmp_path / "r2s_generated.h").write_text(emit.emit_types(resolved), encoding="utf-8")
+    (tmp_path / "r2s_generated.h").write_text(emit.emit_types(resolved, max_nest=table.max_nest), encoding="utf-8")
     (tmp_path / "r2s_descriptors.c").write_text(descriptors.emit_c(table), encoding="utf-8")
     dump = tmp_path / "dump.c"
     dump.write_text(
@@ -86,8 +89,9 @@ def compiled_bytes(tmp_path, resolved, roots):
             [
                 "#include <stdio.h>",
                 "#include <stdint.h>",
-                "extern const uint8_t r2s_type_records[];",
-                "extern const uint8_t r2s_field_entries[];",
+                '#include "r2s/r2s_codec.h"',
+                "extern const uint8_t R2S_FLASH r2s_type_records[];",
+                "extern const uint8_t R2S_FLASH r2s_field_entries[];",
                 "int main(void)",
                 "{",
                 f"    fwrite(r2s_type_records, 1, {len(table.records) * 5}, stdout);",
@@ -108,6 +112,8 @@ def compiled_bytes(tmp_path, resolved, roots):
             "-Werror",
             "-I",
             str(tmp_path),
+            "-I",
+            str(CORE_INCLUDE),
             str(dump),
             str(tmp_path / "r2s_descriptors.c"),
             "-o",
@@ -149,12 +155,51 @@ def test_twist_descriptor_bytes_match_the_hand_derivation(tmp_path):
 
 
 def test_an_empty_message_has_a_record_with_no_entries(tmp_path):
-    # covers: DSC-7
+    # covers: DSC-7, DSC-48
     repository = repository_for(tmp_path, {"test_msgs/msg/Empty": ""})
-    _, table = build(["test_msgs/msg/Empty"], repository=repository)
+    resolved, table = build(["test_msgs/msg/Empty"], repository=repository)
 
     assert [(record.field_count, record.first_field) for record in table.records] == [(0, 0)]
     assert table.entries == ()
+    (tmp_path / "r2s_generated.h").write_text(emit.emit_types(resolved, max_nest=table.max_nest), encoding="utf-8")
+    (tmp_path / "r2s_descriptors.c").write_text(descriptors.emit_c(table), encoding="utf-8")
+    link = tmp_path / "link.c"
+    link.write_text(
+        "\n".join(
+            [
+                "#include <stdint.h>",
+                '#include "r2s/r2s_codec.h"',
+                "extern const uint8_t R2S_FLASH r2s_type_records[];",
+                "extern const uint8_t R2S_FLASH r2s_field_entries[];",
+                "const uint8_t *tables[] = {r2s_type_records, r2s_field_entries};",
+                "int main(void)",
+                "{",
+                "    return (int)(tables[0][0] + tables[1][0]);",
+                "}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    linked = subprocess.run(
+        [
+            "cc",
+            "-std=c99",
+            "-pedantic",
+            "-Werror",
+            "-I",
+            str(tmp_path),
+            "-I",
+            str(CORE_INCLUDE),
+            str(link),
+            str(tmp_path / "r2s_descriptors.c"),
+            "-o",
+            str(tmp_path / "link"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert linked.returncode == 0, linked.stderr
 
 
 def test_entries_follow_declaration_order_with_nested_types_before_their_owners(tmp_path):
@@ -200,7 +245,7 @@ def test_a_wide_sequence_counts_its_elements_in_two_bytes(tmp_path):
     assert [(entry.mode, entry.count) for entry in table.entries] == [(0x82, 300)]
     text = descriptors.emit_c(table)
     assert "R2S_FIELD_CHECK(test_msgs__msg__Wide, values, values.size);" in text
-    (tmp_path / "r2s_generated.h").write_text(emit.emit_types(resolved), encoding="utf-8")
+    (tmp_path / "r2s_generated.h").write_text(emit.emit_types(resolved, max_nest=table.max_nest), encoding="utf-8")
     (tmp_path / "check.c").write_text(
         '#include "r2s_generated.h"\n' + text + "\nint main(void)\n{\n    return 0;\n}\n", encoding="utf-8"
     )
@@ -214,6 +259,8 @@ def test_a_wide_sequence_counts_its_elements_in_two_bytes(tmp_path):
                 "-Werror",
                 "-I",
                 str(tmp_path),
+                "-I",
+                str(CORE_INCLUDE),
                 "-c",
                 str(tmp_path / "check.c"),
                 "-o",
@@ -310,6 +357,56 @@ def test_nesting_depth_counts_nested_messages_but_not_arrays(tmp_path):
     assert build(["test_msgs/msg/Outer"], repository=repository)[1].max_nest == 3
     assert build(["test_msgs/msg/Inner"], repository=repository)[1].max_nest == 1
     assert build([FLOAT32])[1].max_nest == 1
+
+
+def test_the_generated_header_configures_the_nesting_stack():
+    # covers: DSC-39
+    resolved, table = build([FLOAT32, TWIST])
+    header = emit.emit_types(resolved, max_nest=table.max_nest)
+
+    assert "#ifndef R2S_MAX_NEST\n#define R2S_MAX_NEST 2u\n#endif" in header
+    assert emit.emit_types(resolved).count("R2S_MAX_NEST") == 0
+
+
+def test_the_core_sees_the_header_nesting_bound(tmp_path):
+    # covers: DSC-39
+    resolved, table = build([FLOAT32, TWIST])
+    (tmp_path / "r2s_generated.h").write_text(emit.emit_types(resolved, max_nest=table.max_nest), encoding="utf-8")
+    proof = tmp_path / "nest_proof.c"
+    proof.write_text(
+        "\n".join(
+            [
+                '#include "r2s_generated.h"',
+                '#include "r2s/r2s_codec.h"',
+                "typedef char r2s_nest_proof[(R2S_MAX_NEST == 2u) ? 1 : -1];",
+                "int main(void)",
+                "{",
+                "    return 0;",
+                "}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    compiled = subprocess.run(
+        [
+            "cc",
+            "-std=c99",
+            "-pedantic",
+            "-Werror",
+            "-I",
+            str(tmp_path),
+            "-I",
+            str(CORE_INCLUDE),
+            "-c",
+            str(proof),
+            "-o",
+            str(tmp_path / "nest_proof.o"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert compiled.returncode == 0, compiled.stderr
 
 
 def test_the_emitted_descriptors_match_the_golden():
@@ -425,4 +522,265 @@ def test_no_roots_make_an_empty_table_with_a_nesting_bound_of_one():
 
     assert table.records == () and table.entries == ()
     assert table.max_nest == 1
-    assert "#define R2S_MAX_NEST 1u" in descriptors.emit_c(table)
+    assert "#define R2S_MAX_NEST 1u" in emit.emit_types({}, max_nest=table.max_nest)
+
+
+def test_wide_values_match_the_hand_derivation(tmp_path):
+    # covers: DSC-4, DSC-5, DSC-13, DSC-14, DSC-15, DSC-16, DSC-17, DSC-18, DSC-19
+    repository = repository_for(
+        tmp_path,
+        {"test_msgs/msg/Demo": "uint8[200] pad\nuint64[<=500] wide\nstring<=300 text"},
+    )
+    resolved, table = build(["test_msgs/msg/Demo"], repository=repository)
+    records, entries = compiled_bytes(tmp_path, resolved, ["test_msgs/msg/Demo"])
+
+    assert records.hex(" ") == "a0 11 00 00 03"
+    assert entries.hex(" ") == "01 01 00 00 c8 00 00 00 07 82 c8 00 f4 01 00 00 0b 00 70 10 00 00 2c 01"
+
+
+def test_generated_tables_match_c9_handwritten_tables(tmp_path):
+    # covers: DSC-1, DSC-2, DSC-3, DSC-4
+    demo = repository_for(tmp_path, {"std_msgs/msg/String": "string<=8 data"})
+    resolved = resolve(msgs.MessageRepository(), [FLOAT32, TWIST])
+    resolved.update(resolve(demo, ["std_msgs/msg/String"]))
+    roots = [FLOAT32, TWIST, "std_msgs/msg/String"]
+    table = descriptors.build(resolved, roots)
+    assert [record.type_name for record in table.records] == [
+        FLOAT32,
+        VECTOR3,
+        TWIST,
+        "std_msgs/msg/String",
+    ]
+    (tmp_path / "r2s_generated.h").write_text(emit.emit_types(resolved, max_nest=table.max_nest), encoding="utf-8")
+    (tmp_path / "r2s_descriptors.c").write_text(descriptors.emit_c(table), encoding="utf-8")
+    compare = tmp_path / "compare.c"
+    compare.write_text(
+        "\n".join(
+            [
+                "#include <stdint.h>",
+                "#include <stdio.h>",
+                "#include <string.h>",
+                '#include "handwritten.h"',
+                '#include "r2s/r2s_codec.h"',
+                "extern const uint8_t R2S_FLASH r2s_type_records[];",
+                "extern const uint8_t R2S_FLASH r2s_field_entries[];",
+                "r2s_status_t r2s_session_configure(const char *node_name,",
+                "                                   const r2s_session_topic_t *topics,",
+                "                                   uint8_t topic_count) { return R2S_OK; }",
+                "int main(void)",
+                "{",
+                "    if (R2S_HANDWRITTEN_TABLE.type_count != 4u || R2S_HANDWRITTEN_TABLE.field_count != 7u) {",
+                "        return 1;",
+                "    }",
+                "    if (memcmp(R2S_HANDWRITTEN_TABLE.types, r2s_type_records, 4u * 5u) != 0) {",
+                "        return 1;",
+                "    }",
+                "    if (memcmp(R2S_HANDWRITTEN_TABLE.fields, r2s_field_entries, 7u * 8u) != 0) {",
+                "        return 1;",
+                "    }",
+                '    printf("match\\n");',
+                "    return 0;",
+                "}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    binary = tmp_path / "compare"
+    compiled = subprocess.run(
+        [
+            "cc",
+            "-std=c99",
+            "-pedantic",
+            "-Werror",
+            "-I",
+            str(tmp_path),
+            "-I",
+            str(CORE_INCLUDE),
+            "-I",
+            str(CORE_SUPPORT),
+            str(compare),
+            str(tmp_path / "r2s_descriptors.c"),
+            str(CORE_SUPPORT / "handwritten.c"),
+            "-o",
+            str(binary),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert compiled.returncode == 0, compiled.stderr
+    run = subprocess.run([str(binary)], capture_output=True, text=True)
+    assert run.returncode == 0
+    assert run.stdout == "match\n"
+
+
+@pytest.mark.parametrize("narrow", [False, True])
+def test_core_codec_round_trips_generated_tables(narrow, tmp_path):
+    # covers: DSC-5, DSC-17, DSC-18, DSC-19, DSC-21
+    repository = msgs.MessageRepository()
+    merged = {}
+    for bound_map in ROUND_TRIP_BOUNDS.values():
+        merged.update(bound_map)
+    roots = sorted(ROUND_TRIP_BOUNDS)
+    # JointState carries a bounded string sequence, which the core interpreter
+    # does not read yet (issue #182); the walker round trip above pins its bytes.
+    roots = [name for name in roots if name != "sensor_msgs/msg/JointState"]
+    resolved = resolve(repository, roots, merged)
+    table = descriptors.build(resolved, roots)
+    (tmp_path / "r2s_generated.h").write_text(emit.emit_types(resolved, max_nest=table.max_nest), encoding="utf-8")
+    (tmp_path / "r2s_descriptors.c").write_text(descriptors.emit_c(table), encoding="utf-8")
+    driver = tmp_path / "driver.c"
+    driver.write_text(
+        "\n".join(
+            [
+                "#include <stdint.h>",
+                "#include <stdio.h>",
+                "#include <string.h>",
+                '#include "r2s/r2s_codec.h"',
+                '#include "r2s/r2s_port.h"',
+                "extern const uint8_t R2S_FLASH r2s_type_records[];",
+                "extern const uint8_t R2S_FLASH r2s_field_entries[];",
+                "static const r2s_codec_table_t TABLE = {",
+                "    r2s_type_records, DRV_TYPES, r2s_field_entries, DRV_FIELDS,",
+                "};",
+                "static uint8_t msg[65535u];",
+                "static uint8_t payload[65535u];",
+                "static uint8_t encoded[65535u];",
+                "uint16_t r2s_port_read(uint8_t *buf, uint16_t max)",
+                "{",
+                "    (void)buf;",
+                "    (void)max;",
+                "    return 0;",
+                "}",
+                "void r2s_port_write(const uint8_t *buf, uint16_t len)",
+                "{",
+                "    (void)buf;",
+                "    (void)len;",
+                "}",
+                "uint16_t r2s_port_tx_free(void)",
+                "{",
+                "    return 0xffffu;",
+                "}",
+                "uint32_t r2s_port_tick(void)",
+                "{",
+                "    return 0;",
+                "}",
+                "uint32_t r2s_port_boot_id(void)",
+                "{",
+                "    return 0;",
+                "}",
+                "int main(void)",
+                "{",
+                "    for (;;) {",
+                "        uint8_t head[5];",
+                "        size_t got = fread(head, 1, 5, stdin);",
+                "        uint16_t type;",
+                "        uint8_t narrow;",
+                "        uint16_t len;",
+                "        uint8_t field = 0;",
+                "        uint8_t status = 0;",
+                "        uint16_t outlen = 0;",
+                "        r2s_codec_out_t out;",
+                "        if (got == 0) {",
+                "            return 0;",
+                "        }",
+                "        if (got != 5) {",
+                "            return 1;",
+                "        }",
+                "        type = (uint16_t)(head[0] | ((uint16_t)head[1] << 8));",
+                "        narrow = head[2];",
+                "        len = (uint16_t)(head[3] | ((uint16_t)head[4] << 8));",
+                "        if (len > sizeof(payload) || fread(payload, 1, len, stdin) != len) {",
+                "            return 1;",
+                "        }",
+                "        memset(msg, 0, sizeof(msg));",
+                "        out.buf = encoded;",
+                "        out.cap = (uint16_t)sizeof(encoded);",
+                "        out.to_tx = 0;",
+                "        out.len = 0;",
+                "        if (r2s_codec_decode(&TABLE, type, payload, len, narrow, msg, &field) != R2S_OK) {",
+                "            status = 2;",
+                "        } else if (r2s_codec_encode(&TABLE, type, msg, narrow, &out, &field) != R2S_OK) {",
+                "            status = 1;",
+                "        } else {",
+                "            outlen = out.len;",
+                "        }",
+                "        if (fputc(status, stdout) == EOF) {",
+                "            return 1;",
+                "        }",
+                "        if (fputc((int)(outlen & 0xffu), stdout) == EOF) {",
+                "            return 1;",
+                "        }",
+                "        if (fputc((int)((outlen >> 8) & 0xffu), stdout) == EOF) {",
+                "            return 1;",
+                "        }",
+                "        if (outlen > 0 && fwrite(encoded, 1, outlen, stdout) != outlen) {",
+                "            return 1;",
+                "        }",
+                "    }",
+                "}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    core = Path(__file__).resolve().parents[2] / "core" / "src"
+    binary = tmp_path / "roundtrip"
+    compiled = subprocess.run(
+        [
+            "cc",
+            "-std=c99",
+            "-pedantic",
+            "-Werror",
+            "-I",
+            str(tmp_path),
+            "-I",
+            str(CORE_INCLUDE),
+            f"-DR2S_MAX_NEST={table.max_nest}u",
+            f"-DDRV_TYPES={len(table.records)}u",
+            f"-DDRV_FIELDS={len(table.entries)}u",
+            str(driver),
+            str(tmp_path / "r2s_descriptors.c"),
+            str(core / "codec.c"),
+            str(core / "varint.c"),
+            str(core / "tx.c"),
+            str(core / "crc.c"),
+            str(core / "framer.c"),
+            str(core / "rcobs.c"),
+            "-o",
+            str(binary),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert compiled.returncode == 0, compiled.stderr
+    rng = random.Random(f"{SEED}-core-codec-{narrow}")
+    asked = []
+    wanted = []
+    for type_name in roots:
+        for _ in range(8):
+            message = random_message(repository, type_name, rng)
+            payload = messages.encode(repository, type_name, message, narrow=narrow)
+            asked.append(
+                struct.pack("<H", table.index_of[type_name])
+                + bytes([1 if narrow else 0])
+                + struct.pack("<H", len(payload))
+                + payload
+            )
+            wanted.append((type_name, message, payload))
+    run = subprocess.run([str(binary)], input=b"".join(asked), capture_output=True)
+    assert run.returncode == 0
+    pos = 0
+    for type_name, message, payload in wanted:
+        assert run.stdout[pos] == 0, (payload.hex(" "), run.stdout[pos])
+        outlen = run.stdout[pos + 1] | (run.stdout[pos + 2] << 8)
+        out = bytes(run.stdout[pos + 3 : pos + 3 + outlen])
+        pos += 3 + outlen
+        if narrow:
+            # A narrow NaN stays a NaN with an implementation-defined payload,
+            # so the bytes may differ where the value is a NaN.
+            decoded = messages.decode(repository, type_name, out, narrow=True)
+            assert matches(repository, type_name, message, decoded, narrow=True), (message, out.hex(" "))
+        else:
+            assert out == payload
+    assert pos == len(run.stdout)

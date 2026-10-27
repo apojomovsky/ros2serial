@@ -717,6 +717,8 @@ DISCONNECTED ──port open──► BOOT_WAIT ──HELLO or boot_wait_ms─�
 
 The generator emits, for each message type used, a type record and a list of field entries, as constant data in flash. One interpreter in `core/src/codec.c` encodes and decodes any type from them. It is iterative, keeps an explicit nesting stack of `R2S_MAX_NEST` frames (generated: the deepest nesting among the types used), and reads descriptors through `R2S_FLASH_READ_BYTE()`.
 
+Sizes and offsets stay `sizeof` and `offsetof` expressions over the generated structs, so one file describes every build's own structs. The tables carry `R2S_FLASH`, and the generated header sets `R2S_MAX_NEST` for the interpreter.
+
 **Type record (5 bytes):** `size u16` (`sizeof` of the C struct, for array strides), `first_field u16`, `field_count u8`.
 
 **Field entry (8 bytes):**
