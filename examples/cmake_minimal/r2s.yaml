@@ -1,0 +1,9 @@
+# Minimal CMake example: one published Float32 and one subscribed Twist.
+node: hello_cmake
+topics:
+  - name: battery
+    type: std_msgs/msg/Float32
+    direction: pub
+  - name: cmd_vel
+    type: geometry_msgs/msg/Twist
+    direction: sub
