@@ -241,7 +241,7 @@ int main(int argc, char **argv)
             continue;
         }
         if (opts.log_text != NULL && log_booted == 0u) {
-            /* A lost boot line is retried: it is the only one of its kind. */
+            /* A boot line that fails to publish is retried until it sends. */
             if (publish_log_text(boot_id) == R2S_OK) {
                 log_booted = 1u;
             }

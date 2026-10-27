@@ -370,6 +370,41 @@ def test_log_text_keeps_large_boot_id(tmp_path):
         assert text == "00011171"
 
 
+# covers: SES-9
+def test_log_text_boot_line_retried_after_reject(tmp_path):
+    with Firmware("--rate", "20", boot=str(tmp_path / "boot")) as fw:
+        host = Host(fw.master)
+        _topic, _seq, payload = read_frame(fw.master, want=0)
+        hello = parse_hello(payload)
+        host.hello_req()
+        for index in range(hello["count"]):
+            host.topic_req(index)
+            while True:
+                _topic, _seq, payload = read_frame(fw.master, want=0)
+                if payload[0] == TOPIC_OP:
+                    break
+            parsed = parse_topic(payload)
+            assert parsed["index"] == index
+            host.topic_status(parsed["id"], 1 if parsed["id"] == 18 else 0)
+        host.ready()
+        quiet_until = time.monotonic() + 2.0
+        while True:
+            remaining = quiet_until - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                topic, _seq, _payload = read_frame(fw.master, timeout=remaining)
+            except AssertionError as error:
+                assert "timed out" in str(error), f"lost the firmware: {error}"
+                break
+            assert topic != 18, "log_text published while the host rejects it"
+        host.topic_status(18, 0)
+        _topic, _seq, payload = read_frame(fw.master, want=18)
+        text, end = take_string(payload, 0)
+        assert end == len(payload), "bytes after the log string"
+        assert text == format(hello["boot"], "08x")
+
+
 def test_subscribes_twist(tmp_path):
     with Firmware("--rate", "1", boot=str(tmp_path / "boot")) as fw:
         _hello, _topics, host = do_handshake(fw)
