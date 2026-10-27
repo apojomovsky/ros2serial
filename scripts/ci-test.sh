@@ -55,7 +55,7 @@ else
 fi
 
 scoped=0
-for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E COVERAGE; do [ -n "${!v:-}" ] && scoped=1; done
+for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E COVERAGE DOCS; do [ -n "${!v:-}" ] && scoped=1; done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }
 
 failed=()
@@ -128,6 +128,7 @@ if wants CORE; then section core bash scripts/core-test.sh; fi
 if wants GEN; then section gen python3 -m pytest gen; fi
 if wants BRIDGE; then section bridge bash scripts/bridge-test.sh; fi
 if wants COVERAGE; then section coverage bash scripts/coverage-gate.sh; fi
+if wants DOCS; then section docs python3 tools/snippets_check.py; fi
 if wants E2E; then
   case "${E2E:-}" in
     "") section e2e-avr bash tests/harness/simavr/run.sh

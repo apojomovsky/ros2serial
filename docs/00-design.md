@@ -135,6 +135,7 @@ bounds:
 
 **2. An X-macro list in the sketch** (Arduino, no Python involved). The Arduino library ships descriptors for a bundle of common types (`std_msgs`, `geometry_msgs`, `sensor_msgs`) with documented default bounds:
 
+<!-- snippet: skip until #77 -->
 ```c
 #define R2S_NODE_NAME "base_controller"
 #define R2S_TOPICS(X) \
@@ -235,6 +236,7 @@ The bridge loads the type support for each type name and compares the hash with 
 The core never registers an interrupt or touches a UART. It pulls received bytes from the port inside `r2s_spin_some()` and pushes encoded bytes to the port while publishing:
 
 ```c
+#include <stdint.h>
 void r2s_spin_some(void);   /* pull bytes, decode, dispatch, heartbeats, time */
 void r2s_rx_push(uint8_t byte);   /* ISR-safe; only with R2S_WITH_RX_RING */
 ```
@@ -283,6 +285,7 @@ The tick comes from the port: `micros()` on Arduino (1 MHz nominal, 4 µs resolu
 
 One node per firmware, so the API needs no node handle. Names follow rosserial where possible and ROS 2 conventions where they differ (`spin_some`, `msg` in type names). Generated message types reuse the rosidl C naming (`geometry_msgs__msg__Twist`), so ROS 2 users recognize them. They are not ABI-compatible with `rosidl_generator_c`, but the two never get linked together.
 
+<!-- snippet: skip until #75 -->
 ```c
 #include "r2s_generated.h"        /* from r2s-gen, or the X-macro list */
 
@@ -313,6 +316,7 @@ Logging is non-variadic, one function per value type, and takes flash strings: `
 
 **Static topics (every C++ target, including PIC).** The topic list comes from the X-macro or `r2s.yaml`, and the dispatch `switch` is generated, so every handler call is direct:
 
+<!-- snippet: skip until #94 -->
 ```cpp
 #define R2S_NODE_NAME "base_controller"
 #define R2S_TOPICS(X) \
@@ -330,6 +334,7 @@ void loop()  { battery.data = read_battery(); r2s::pub::battery.publish(battery)
 
 **rosserial-compatible runtime registration (gcc-class targets, Phase 2).** Existing rosserial sketches port by changing the include:
 
+<!-- snippet: skip until #145 -->
 ```cpp
 #include <ros2serial/ros.h>
 #include <ros2serial/std_msgs/Float32.h>
@@ -735,6 +740,7 @@ The byte layout, the order of the entries, the storage of each kind and the vali
 
 ### Public headers
 
+<!-- snippet: skip until #68 -->
 ```c
 /* r2s.h */
 typedef int8_t r2s_status_t;          /* 0 ok, negative errors */
@@ -775,6 +781,7 @@ typedef const char *r2s_fstr_t;
 ```
 
 ```c
+#include <stdint.h>
 /* r2s_varint.h: lengths as unsigned LEB128 (spec/protocol.md, section 5).
    Not part of the firmware API: the codec uses it, and so does the bridge,
    which reads and writes the lengths of a packed payload. */
@@ -791,6 +798,7 @@ int8_t r2s_varint_decode(const uint8_t *data, uint16_t len, uint16_t *value, uin
 ```
 
 ```c
+#include <stdint.h>
 /* r2s_rcobs.h: the framing that removes every 0x00 from a frame
    (spec/protocol.md, section 4). Not part of the firmware API: the core's
    framing uses it, and so does the bridge. */
@@ -813,6 +821,7 @@ int8_t r2s_rcobs_decode(uint8_t *buf, uint16_t len, uint8_t **decoded, uint16_t 
 Each port implements these as ordinary functions, resolved at link time:
 
 ```c
+#include <stdint.h>
 /* r2s_port.h */
 uint16_t r2s_port_read(uint8_t *buf, uint16_t max);       /* non-blocking; returns bytes read (core provides it with R2S_WITH_RX_RING) */
 void     r2s_port_write(const uint8_t *buf, uint16_t len); /* must accept len bytes when tx_free said so */
@@ -827,6 +836,7 @@ The core calls `r2s_port_read` with `max = 1` while it assembles a frame, so it 
 
 For each topic in the list (generator or X-macro):
 
+<!-- snippet: skip until #75 -->
 ```c
 r2s_status_t r2s_publish_<name>(const <Type> *msg);   /* published topics */
 void r2s_on_<name>(const <Type> *msg);               /* subscribed topics: prototype generated, user implements */
@@ -1149,7 +1159,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 
 ## Ticket template and definition of done
 
-```markdown
+```
 ## Context
 Why this ticket exists; link to the section of the design document.
 
