@@ -13,8 +13,11 @@
 
 #include "handwritten.h"
 #include "r2s/r2s.h"
+#include "r2s/r2s_framer.h"
 #include "r2s/r2s_port.h"
 #include "r2s/r2s_session.h"
+#include "r2s/r2s_tx.h"
+#include "r2s/r2s_varint.h"
 
 #include "r2s_posix_port.h"
 
@@ -110,6 +113,68 @@ static void check_name(const char *flag, const char *name)
     }
 }
 
+/* Bytes one TOPIC announce entry needs for this type and topic-name length.
+ * The sum repeats the gate in core/src/topics.c, so the launch check below
+ * predicts r2s_session_configure() exactly. Lengths past the varint range
+ * saturate: configure refuses those too. */
+static uint32_t announce_need(const char *type_name, uint32_t topic_len)
+{
+    uint8_t len_buf[R2S_VARINT_MAX_BYTES];
+    size_t type_len = strlen(type_name);
+    uint32_t need;
+
+    if (topic_len > (uint32_t)R2S_VARINT_MAX || type_len > (size_t)R2S_VARINT_MAX) {
+        return UINT32_MAX;
+    }
+    need = 12u;
+    need += (uint32_t)r2s_varint_encode((uint16_t)type_len, len_buf);
+    need += (uint32_t)type_len;
+    need += (uint32_t)r2s_varint_encode((uint16_t)topic_len, len_buf);
+    need += topic_len;
+    return need;
+}
+
+/* Longest launch name for this type that still fits one TOPIC announce entry
+ * under the build's frame limit. The guess above the true limit steps down
+ * to the exact edge, so the configured names stay the length bound. */
+static size_t topic_name_limit(const char *type_name)
+{
+    uint32_t budget = (uint32_t)R2S_MAX_FRAME - (uint32_t)R2S_TX_OVERHEAD;
+    uint32_t fixed = announce_need(type_name, 0u) - 1u;
+    uint32_t limit;
+
+    if (fixed >= budget) {
+        return 0u;
+    }
+    limit = budget - fixed - 1u;
+    if (limit > (uint32_t)R2S_VARINT_MAX) {
+        limit = (uint32_t)R2S_VARINT_MAX;
+    }
+    while (limit > 0u && announce_need(type_name, limit) > budget) {
+        limit--;
+    }
+    return (size_t)limit;
+}
+
+/* A launch name that would not fit the announce entry is rejected here, with
+ * its length and the limit, instead of failing configure with no detail. The
+ * type names repeat the table fill_topics builds below. */
+static void check_topic_name(const char *flag, const char *name, const char *type_name)
+{
+    size_t len;
+    size_t limit;
+
+    check_name(flag, name);
+    len = strlen(name);
+    limit = topic_name_limit(type_name);
+    if (len > limit) {
+        fprintf(stderr, "r2s_posix: %s topic name '%s' too long: %lu chars, limit %lu for type '%s'\n", flag,
+                name, (unsigned long)len, (unsigned long)limit, type_name);
+        usage(stderr);
+        exit(2);
+    }
+}
+
 static void parse_options(int argc, char **argv, struct options *opts)
 {
     int i;
@@ -150,13 +215,13 @@ static void parse_options(int argc, char **argv, struct options *opts)
     }
     check_name("--node", opts->node);
     if (opts->pub != NULL) {
-        check_name("--pub", opts->pub);
+        check_topic_name("--pub", opts->pub, "std_msgs/msg/Float32");
     }
     if (opts->sub != NULL) {
-        check_name("--sub", opts->sub);
+        check_topic_name("--sub", opts->sub, "geometry_msgs/msg/Twist");
     }
     if (opts->log_text != NULL) {
-        check_name("--log-text", opts->log_text);
+        check_topic_name("--log-text", opts->log_text, "std_msgs/msg/String");
     }
 }
 
