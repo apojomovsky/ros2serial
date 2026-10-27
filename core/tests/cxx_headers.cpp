@@ -1,6 +1,7 @@
 // The core's headers from C++: the bridge and the C++ layer include them and
 // link the C objects, which needs C linkage on every declaration.
 #include "r2s/r2s.h"
+#include "r2s/r2s_codec.h"
 #include "r2s/r2s_crc.h"
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_port.h"
