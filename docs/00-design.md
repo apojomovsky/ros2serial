@@ -957,7 +957,7 @@ Scenario numbers in the tickets below refer to the key end-to-end scenarios in `
 
 | Workflow | Trigger | Jobs |
 | --- | --- | --- |
-| `ci.yml` | Push and PR | `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `cpp`; `bridge` (colcon build and test in `ros:jazzy` and `ros:lyrical`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `pic-canary` (advisory, from Phase 2); `budgets` (size table as a PR comment, fails on budget breach) |
+| `ci.yml` | Push and PR | `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component, fails on a drop); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `cpp`; `bridge` (colcon build and test in `ros:jazzy` and `ros:lyrical`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `pic-canary` (advisory, from Phase 2); `budgets` (size table as a PR comment, fails on budget breach) |
 | `nightly.yml` | Schedule | Long fuzzing, long fault injection, big-endian qemu, extended hypothesis runs, Rolling distro |
 | `release.yml` | Tag | Changelog (git-cliff), Python package to PyPI, Arduino library zip, PlatformIO package, epic-hal module bundle (Phase 5) |
 
