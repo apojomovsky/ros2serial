@@ -601,3 +601,141 @@ void test_session_without_a_configuration_announces_no_name_and_no_topics(void)
     expected[17] = 0x00u;
     assert_tx(0, 0, 0, expected, (uint16_t)(len - 4u));
 }
+
+/* A configuration without topics is valid: the node announces its name and
+ * an empty table, and a null table with topics is not. */
+void test_session_a_configuration_without_topics_is_accepted(void)
+{
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", NULL, 0u));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_session_configure("node", NULL, 1u));
+}
+
+/* A name that fits the varint but not the hello frame is refused. */
+void test_session_a_name_that_does_not_fit_the_hello_frame_is_refused(void)
+{
+    static char long_name[601];
+
+    memset(long_name, 'b', sizeof long_name - 1u);
+    long_name[sizeof long_name - 1u] = '\0';
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_session_configure(long_name, one_topic, 1));
+}
+
+/* A topic without names, or one whose announcement does not fit a frame, is
+ * refused. */
+void test_session_a_nameless_or_oversized_topic_is_refused(void)
+{
+    static const r2s_session_topic_t no_type[] = {
+        {0x10u, 0x03u, {0u}, NULL, "float"},
+    };
+    static const r2s_session_topic_t no_name[] = {
+        {0x10u, 0x03u, {0u}, "std_msgs/msg/Float32", NULL},
+    };
+    static char big_type[301];
+    static char big_topic[301];
+    static r2s_session_topic_t big[1];
+
+    memset(big_type, 't', sizeof big_type - 1u);
+    big_type[sizeof big_type - 1u] = '\0';
+    memset(big_topic, 'n', sizeof big_topic - 1u);
+    big_topic[sizeof big_topic - 1u] = '\0';
+    big[0] = one_topic[0];
+    big[0].type_name = big_type;
+    big[0].topic_name = big_topic;
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_session_configure("node", no_type, 1));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_session_configure("node", no_name, 1));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_session_configure("node", big, 1));
+}
+
+/* A frame that finds no space is not started: the boot hello, a topic and
+ * the heartbeat all wait for room instead of sending half a frame. */
+void test_session_frames_wait_for_space_instead_of_sending_half(void)
+{
+    const uint8_t topic_req[] = {0x03u, 0x00u};
+    const uint8_t hello_req[] = {0x01u, R2S_PROTOCOL_VERSION};
+    const uint8_t ready[] = {0x06u};
+
+    configure(one_topic, 1, 0x44332211u);
+    fake_port_tx_clear();
+    fake_port_set_tx_free(9u);
+    r2s_init();
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    fake_port_set_tx_free(0xFFFFu);
+    feed_host(0, 0, hello_req, sizeof hello_req);
+    feed_host(0, 1, topic_req, sizeof topic_req);
+    fake_port_tx_clear();
+    fake_port_set_tx_free(9u);
+    feed_host(0, 2, topic_req, sizeof topic_req);
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    fake_port_set_tx_free(0xFFFFu);
+    feed_host(0, 3, ready, sizeof ready);
+    TEST_ASSERT_EQUAL_UINT8(1, r2s_connected());
+    fake_port_tx_clear();
+    fake_port_set_tx_free(9u);
+    fake_port_advance(500);
+    r2s_spin_some();
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    fake_port_set_tx_free(0xFFFFu);
+}
+
+/* A topic request past the table, and a status the table does not know, are
+ * refused without a reply. */
+void test_session_unknown_topic_requests_are_refused(void)
+{
+    const uint8_t hello_req[] = {0x01u, R2S_PROTOCOL_VERSION};
+    const uint8_t bad_req[] = {0x03u, 0x05u};
+    const uint8_t bad_status[] = {0x05u, 0x10u, 0x09u};
+    const uint16_t drops_before = r2s_framer_counters()->dropped_frames;
+
+    configure(one_topic, 1, 0x44332211u);
+    feed_host(0, 0, hello_req, sizeof hello_req);
+    feed_host(0, 1, bad_req, sizeof bad_req);
+    feed_host(0, 2, bad_status, sizeof bad_status);
+    TEST_ASSERT_EQUAL_UINT16((uint16_t)(drops_before + 2u), r2s_framer_counters()->dropped_frames);
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+}
+
+/* Once connected, a repeated ready, a heartbeat and a later channel's frame
+ * are accepted and ignored: the link is already up. */
+void test_session_connected_ignores_redundant_and_later_frames(void)
+{
+    const uint8_t hello_req[] = {0x01u, R2S_PROTOCOL_VERSION};
+    const uint8_t ping[] = {0x01u, 0x2au};
+    const uint8_t ready[] = {0x06u};
+
+    configure(one_topic, 1, 0x44332211u);
+    feed_host(0, 0, hello_req, sizeof hello_req);
+    feed_host(0, 1, ready, sizeof ready);
+    TEST_ASSERT_EQUAL_UINT8(1, r2s_connected());
+    fake_port_tx_clear();
+    feed_host(0, 2, ready, sizeof ready);
+    feed_host(4, 0, NULL, 0);
+    feed_host(1, 0, ping, sizeof ping);
+    TEST_ASSERT_EQUAL_UINT8(1, r2s_connected());
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+}
+
+/* A spin serves at most R2S_SPIN_MAX_FRAMES frames, leaving the rest queued
+ * for the next one. */
+void test_session_a_spin_serves_at_most_eight_frames(void)
+{
+    static uint8_t queued[WIRE_MAX];
+    const uint8_t hello_req[] = {0x01u, R2S_PROTOCOL_VERSION};
+    const uint8_t ready[] = {0x06u};
+    uint16_t before;
+    uint8_t user[] = {0x00u};
+    uint16_t i;
+
+    configure(one_topic, 1, 0x44332211u);
+    feed_host(0, 0, hello_req, sizeof hello_req);
+    feed_host(0, 1, ready, sizeof ready);
+    before = r2s_framer_counters()->rx_frames;
+    for (i = 0u; i < 10u; i++) {
+        uint16_t wire_len = r2s_test_frame(queued, 16, (uint8_t)i, user, sizeof user);
+
+        fake_port_queue_rx(queued, wire_len);
+    }
+    r2s_spin_some();
+    TEST_ASSERT_EQUAL_UINT16((uint16_t)(before + 8u), r2s_framer_counters()->rx_frames);
+    r2s_spin_some();
+    TEST_ASSERT_EQUAL_UINT16((uint16_t)(before + 10u), r2s_framer_counters()->rx_frames);
+}

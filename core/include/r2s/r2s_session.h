@@ -58,6 +58,34 @@ typedef struct {
 r2s_status_t r2s_session_configure(const char *node_name, const r2s_session_topic_t *topics,
                                    uint8_t topic_count);
 
+/* The index of the configured topic with this user topic_id, or 0xFF when the
+ * table names no such topic. The codec's dispatch and publish wrappers use it
+ * to reach the state below. */
+uint8_t r2s_session_find_topic(uint8_t topic_id);
+
+/* The announced CTL-4 flags and the last TOPIC_STATUS of the topic at index:
+ * the flags are the truth for the wire ([CTL-5]), and 0xFF status means the
+ * host has not resolved the topic yet. */
+uint8_t r2s_session_topic_flags(uint8_t index);
+uint8_t r2s_session_topic_status(uint8_t index);
+
+/* The seq the next publish on the topic at index will carry, without
+ * advancing the topic's counter ([FRM-4], [FRM-5]). */
+uint8_t r2s_session_tx_seq(uint8_t index);
+
+/* Advances the topic's seq past a frame the transmitter accepted, so a frame
+ * that found no space keeps the number the next publish retries with. */
+void r2s_session_advance_tx_seq(uint8_t index);
+
+/* Counts a received frame on the topic at index against its expected seq and
+ * returns the topic's lost frames since boot ([FRM-15]). A gap is not an
+ * error; only the count moves. */
+uint16_t r2s_session_note_rx_seq(uint8_t index, uint8_t seq);
+
+/* The lost frames of the topic at index since boot: the only observation of
+ * the [FRM-15] count, which no heartbeat counter carries. */
+uint16_t r2s_session_rx_lost(uint8_t index);
+
 #ifdef R2S_TESTING
 /* Host test builds only: the same reset, as r2s_test_reset() calls it. */
 void r2s_session_test_reset(void);
