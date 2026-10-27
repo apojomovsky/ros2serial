@@ -897,7 +897,7 @@ Generator errors are precise and actionable: file, key or field path, what is wr
 
 ### Type hash
 
-The generator computes the REP-2011 RIHS01 hash for each type. Default approach: reuse `rosidl_generator_type_description`'s algorithm (research ticket R3 decides whether it is imported or vendored). A test compares the generator's hash with the one in the installed type support for every bundled type, on every supported distro.
+The generator computes the REP-2011 RIHS01 hash for each type in `gen/r2s_gen/typehash.py`, from the parsed `.msg` model with only the standard library (R3: neither pip nor vendored modules are needed, since the hash input excludes defaults). A test compares the generator's hash with the one in the installed type support for every bundled type, on every supported distro.
 
 ## Bridge specification
 
@@ -976,7 +976,7 @@ Each one ends as an issue comment whose first line starts with `Findings` and, w
 | --- | --- | --- | --- |
 | R1 | rosserial archaeology: features, RAM per pub/sub, time sync, reconnection, failure modes, the exact C++ API surface sketches use | Feature catalog with source links; updates to the parity table and the compatibility API | Parity table in Part I |
 | R2 | Prior art: rosserial-like projects for ROS 2, micro-ROS on small parts, zenoh-pico over serial, ROS 2 hosts for the original rosserial protocol | Annotated list and a go/no-go recommendation | Proceed |
-| R3 | Can `rosidl_parser` and the RIHS01 algorithm be used without a ROS install (pip), or must they be vendored | Working proof inside `gen/` with a hash test | Vendor the needed modules with attribution |
+| R3 | Can `rosidl_parser` and the RIHS01 algorithm be used without a ROS install (pip), or must they be vendored | Working proof inside `gen/` with a hash test | Decided in #71: compute in `gen/r2s_gen/typehash.py` with the standard library only; no pip package, no vendored modules |
 | R4 | Generic service and client APIs per supported distro | API inventory with versions | Generic where present, introspection-based typed services elsewhere |
 | R5 | simavr: UART-to-pty bridging for ATmega328P/2560, tick source, EEPROM, stack painting, run in CI | `tests/harness/simavr/` running echo firmware (Uno + Mega) in CI | None needed: blocks only the e2e-avr job |
 | R6 | PIC end-to-end under MPLAB SIM through epic-hal's mdb gate: UART input and output, tick, EEPROM (Phase 5) | Working echo test in CI | Build-only PIC canary |
