@@ -150,6 +150,13 @@ def test_a_vector_without_checkable_covers_without_a_spec_change_fails(tmp_path)
     ]
 
 
+def test_deleting_a_vector_needs_no_spec_change(tmp_path):
+    root = repo_with(tmp_path, LOCAL, {"spec/vectors/frames/a.yaml": "covers: [FRM-1]\n"})
+    git(root, "rm", "-q", "spec/vectors/frames/a.yaml")
+    git(root, "commit", "-q", "-m", "change")
+    assert problems(root) == []
+
+
 def test_a_branch_that_changes_neither_passes(tmp_path):
     root = repo_with(tmp_path, LOCAL)
     write(root, "core.c", "int x;\n")

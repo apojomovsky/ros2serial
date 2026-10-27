@@ -78,8 +78,13 @@ def _unknown_covers(root: Path, changed: list[str]) -> list[str]:
             continue
         try:
             doc = yaml.safe_load((root / path).read_text(encoding="utf-8"))
-        except (OSError, yaml.YAMLError):
+        except yaml.YAMLError:
             unknown.append(path)
+            continue
+        except OSError:
+            # A deleted vector names nothing; an unreadable one fails.
+            if (root / path).exists():
+                unknown.append(path)
             continue
         covers = doc.get("covers") if isinstance(doc, dict) else None
         if not isinstance(covers, list) or not all(isinstance(rule, str) for rule in covers):
