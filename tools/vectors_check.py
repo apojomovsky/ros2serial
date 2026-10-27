@@ -476,18 +476,18 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
                 entering = seen | {id(expected)}
                 if field.is_array:
                     for index, item in enumerate(expected):
-                        if id(item) in seen:
+                        if id(item) in entering:
                             continue
-                        visit(nested, item, f"{where}[{index}].", seen | {id(item)})
+                        visit(nested, item, f"{where}[{index}].", entering | {id(item)})
                 else:
                     visit(nested, expected, trail, entering)
 
     # A cyclic YAML alias would revisit one mapping per recursion level until
-    # the stack runs out. Mappings already on the path are skipped instead,
-    # so a cycle cannot flood the output; finite data with repeated types is
-    # still walked in full. Findings made before any other abort are still
-    # worth reporting, next to the encode error check_message adds for the
-    # same vector.
+    # the stack runs out. Containers already on the path are skipped instead,
+    # so a directly self-referential message cannot flood the output; finite
+    # data with repeated types is still walked in full. Findings made before
+    # any other abort are still worth reporting, next to the encode error
+    # check_message adds for the same vector.
     try:
         visit(message, values, seen=frozenset({id(values)}))
     except (
