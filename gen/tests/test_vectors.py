@@ -144,3 +144,42 @@ def test_without_pyyaml_names_the_missing_dependency(capsys, monkeypatch):
     assert code == 1
     assert out == ""
     assert err == "r2s-gen: error: vectors needs PyYAML; install it with pip install pyyaml\n"
+
+
+def test_a_scalar_for_an_array_field_is_an_error(capsys, tmp_path):
+    write_message(tmp_path / "messages", "demo_msgs/msg/Items", "uint8[] values")
+    code, out, err = run(
+        capsys,
+        "--type",
+        "demo_msgs/msg/Items",
+        "--message",
+        "{values: 5}",
+        "--msg-path",
+        str(tmp_path / "messages"),
+    )
+    assert code == 1
+    assert out == ""
+    assert err == "r2s-gen: error: 'int' object is not iterable\n"
+
+
+def test_a_sourced_prefix_shadows_the_snapshot(capsys, tmp_path, monkeypatch):
+    write_message(tmp_path / "prefix" / "share", "std_msgs/msg/Float32", "float64 data")
+    monkeypatch.setenv("AMENT_PREFIX_PATH", str(tmp_path / "prefix"))
+    monkeypatch.setenv("ROS_DISTRO", "jazzy")
+    code, out, err = run(capsys, "--type", "std_msgs/msg/Float32", "--message", "{data: 1.5}")
+    assert code == 0, err
+    assert out == "00 00 00 00 00 00 f8 3f\n"
+    assert err == ""
+
+
+def test_a_sourced_distro_other_than_the_configured_one_warns(capsys, tmp_path, monkeypatch):
+    write_message(tmp_path / "prefix" / "share", "std_msgs/msg/Float32", "float64 data")
+    monkeypatch.setenv("AMENT_PREFIX_PATH", str(tmp_path / "prefix"))
+    monkeypatch.setenv("ROS_DISTRO", "lyrical")
+    code, out, err = run(capsys, "--type", "std_msgs/msg/Float32", "--message", "{data: 1.5}")
+    assert code == 0, err
+    assert out == "00 00 00 00 00 00 f8 3f\n"
+    assert err == (
+        "r2s-gen: warning: the sourced ROS distro is 'lyrical' but 'jazzy' is configured; "
+        "search paths may resolve different definitions\n"
+    )

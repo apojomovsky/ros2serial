@@ -7,6 +7,7 @@ reference, so its output is what a message vector writes in `payload`.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -42,13 +43,26 @@ def run(args: argparse.Namespace) -> int:
     """Encode the message and print its payload hex; a bad input is exit 1."""
     try:
         values = _read_message(args.message)
-        repository = msgs.MessageRepository(msg_paths=args.msg_path, distro=args.distro)
-        payload = messages.encode(repository, args.type, values, narrow=args.narrow)
-    except (msgs.MessageError, ValueError) as error:
+        payload = messages.encode(_repository(args), args.type, values, narrow=args.narrow)
+    except (msgs.MessageError, ValueError, TypeError) as error:
         print(f"r2s-gen: error: {error}", file=sys.stderr)
         return 1
     print(payload.hex(" "))
     return 0
+
+
+def _repository(args: argparse.Namespace) -> msgs.MessageRepository:
+    """The repository from the message paths, the sourced ROS prefixes and the distro."""
+    prefixes = [Path(entry) for entry in os.environ.get("AMENT_PREFIX_PATH", "").split(os.pathsep) if entry]
+    repository = msgs.MessageRepository(
+        msg_paths=args.msg_path,
+        ament_prefix_path=prefixes,
+        distro=args.distro,
+        sourced_distro=os.environ.get("ROS_DISTRO"),
+    )
+    for warning in repository.warnings:
+        print(f"r2s-gen: warning: {warning}", file=sys.stderr)
+    return repository
 
 
 def _read_message(spec: str) -> Mapping:
