@@ -11,6 +11,12 @@ from support import vector_files, write_message
 HEX = re.compile(r"^$|^[0-9a-f]{2}( [0-9a-f]{2})*$")
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_ros_env(monkeypatch):
+    monkeypatch.delenv("AMENT_PREFIX_PATH", raising=False)
+    monkeypatch.delenv("ROS_DISTRO", raising=False)
+
+
 def run(capsys, *argv):
     code = cli.main(["vectors", *argv])
     out, err = capsys.readouterr()
@@ -183,3 +189,11 @@ def test_a_sourced_distro_other_than_the_configured_one_warns(capsys, tmp_path, 
         "r2s-gen: warning: the sourced ROS distro is 'lyrical' but 'jazzy' is configured; "
         "search paths may resolve different definitions\n"
     )
+
+
+def test_no_searched_prefix_means_no_distro_warning(capsys, monkeypatch):
+    monkeypatch.setenv("ROS_DISTRO", "rolling")
+    code, out, err = run(capsys, "--type", "std_msgs/msg/Float32", "--message", "{data: 1.5}")
+    assert code == 0, err
+    assert out == "00 00 c0 3f\n"
+    assert err == ""

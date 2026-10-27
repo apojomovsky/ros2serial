@@ -54,11 +54,14 @@ def run(args: argparse.Namespace) -> int:
 def _repository(args: argparse.Namespace) -> msgs.MessageRepository:
     """The repository from the message paths, the sourced ROS prefixes and the distro."""
     prefixes = [Path(entry) for entry in os.environ.get("AMENT_PREFIX_PATH", "").split(os.pathsep) if entry]
+    sourced = os.environ.get("ROS_DISTRO") or None
+    if not prefixes:
+        sourced = None
     repository = msgs.MessageRepository(
         msg_paths=args.msg_path,
         ament_prefix_path=prefixes,
         distro=args.distro,
-        sourced_distro=os.environ.get("ROS_DISTRO"),
+        sourced_distro=sourced,
     )
     for warning in repository.warnings:
         print(f"r2s-gen: warning: {warning}", file=sys.stderr)
