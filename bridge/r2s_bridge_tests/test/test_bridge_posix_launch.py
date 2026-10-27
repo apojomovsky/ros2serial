@@ -105,6 +105,9 @@ def build_posix_firmware(scratch):
     return firmware
 
 
+_BOOT_ENV = "R2S_POSIX_BOOT_ID_FILE"
+
+
 def _prepare():
     global _SCRATCH, _FIRMWARE, _RELAY
     _SCRATCH = tempfile.TemporaryDirectory(prefix="r2s-h9-")
@@ -124,6 +127,7 @@ def generate_test_description():
     firmware = ExecuteProcess(
         cmd=[str(_FIRMWARE), _RELAY.mcu_port, "--rate", "20"],
         output="screen",
+        additional_env={_BOOT_ENV: str(Path(_SCRATCH.name) / "boot")},
     )
     return launch.LaunchDescription([bridge, firmware, launch_testing.actions.ReadyToTest()])
 
