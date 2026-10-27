@@ -15,8 +15,6 @@
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_port.h"
 #include "r2s/r2s_session.h"
-#include "r2s/r2s_tx.h"
-#include "r2s/r2s_varint.h"
 #include "r2s_generated.h"
 
 #include "r2s_posix_port.h"
@@ -24,6 +22,12 @@
 /* Publish rates in Hz, from once a second to the loop's 1 ms granularity. */
 #define RATE_MIN 1u
 #define RATE_MAX 100u
+
+/* Default topic names the command-line flags rename: rename_for and the
+ * launch check key on these, so a generator rename edits one place. */
+static const char *const kDefaultPub = "battery";
+static const char *const kDefaultSub = "cmd_vel";
+static const char *const kDefaultLogText = "log_text";
 
 struct options {
     const char *port;
@@ -39,15 +43,15 @@ struct options {
  * the name the generator emitted, so a wider configuration still configures. */
 static const char *rename_for(const struct options *opts, const char *name, uint8_t *drop)
 {
-    if (strcmp(name, "battery") == 0) {
+    if (strcmp(name, kDefaultPub) == 0) {
         *drop = (opts->pub == NULL);
         return opts->pub;
     }
-    if (strcmp(name, "cmd_vel") == 0) {
+    if (strcmp(name, kDefaultSub) == 0) {
         *drop = (opts->sub == NULL);
         return opts->sub;
     }
-    if (strcmp(name, "log_text") == 0) {
+    if (strcmp(name, kDefaultLogText) == 0) {
         *drop = (opts->log_text == NULL);
         return opts->log_text;
     }
@@ -118,54 +122,58 @@ static void check_name(const char *flag, const char *name)
     }
 }
 
-/* Bytes one TOPIC announce entry needs for this type and topic-name length.
- * The sum repeats the gate in core/src/topics.c, so the launch check below
- * predicts r2s_session_configure() exactly. Lengths past the varint range
- * saturate: configure refuses those too. */
-static uint32_t announce_need(const char *type_name, uint32_t topic_len)
+/* Scratch entry the limit probe below binds: overlong candidates are refused,
+ * and the real r2s_session_configure() rebinds the table before use. Static
+ * storage, so the pointer the core keeps stays valid until then. */
+static r2s_topic_t s_probe;
+static char s_probe_name[R2S_MAX_FRAME];
+
+/* Whether the core gate binds this entry with a topic name of len x's: the
+ * probe asks r2s_topics_configure() itself instead of copying its sum. */
+static uint8_t probe_fits(const r2s_topic_t *entry, uint32_t len)
 {
-    uint8_t len_buf[R2S_VARINT_MAX_BYTES];
-    size_t type_len = strlen(type_name);
-    uint32_t need;
+    uint32_t i;
 
-    if (topic_len > (uint32_t)R2S_VARINT_MAX || type_len > (size_t)R2S_VARINT_MAX) {
-        return UINT32_MAX;
-    }
-    need = 12u;
-    need += (uint32_t)r2s_varint_encode((uint16_t)type_len, len_buf);
-    need += (uint32_t)type_len;
-    need += (uint32_t)r2s_varint_encode((uint16_t)topic_len, len_buf);
-    need += topic_len;
-    return need;
-}
-
-/* Longest launch name for this type that still fits one TOPIC announce entry
- * under the build's frame limit. The guess above the true limit steps down
- * to the exact edge, so the configured names stay the length bound. */
-static size_t topic_name_limit(const char *type_name)
-{
-    uint32_t budget = (uint32_t)R2S_MAX_FRAME - (uint32_t)R2S_TX_OVERHEAD;
-    uint32_t fixed = announce_need(type_name, 0u) - 1u;
-    uint32_t limit;
-
-    if (fixed >= budget) {
+    if (len >= (uint32_t)R2S_MAX_FRAME) {
         return 0u;
     }
-    limit = budget - fixed - 1u;
-    if (limit > (uint32_t)R2S_VARINT_MAX) {
-        limit = (uint32_t)R2S_VARINT_MAX;
+    s_probe = *entry;
+    for (i = 0u; i < len; i++) {
+        s_probe_name[i] = 'x';
     }
-    while (limit > 0u && announce_need(type_name, limit) > budget) {
-        limit--;
+    s_probe_name[len] = '\0';
+    s_probe.topic_name = s_probe_name;
+    return (uint8_t)(r2s_topics_configure(&s_probe, 1u) == R2S_OK);
+}
+
+/* Longest launch name for this entry the core gate still binds: a binary
+ * search finds the exact edge, so the configured names stay the length
+ * bound with no hidden headroom. */
+static size_t entry_name_limit(const r2s_topic_t *entry)
+{
+    uint32_t lo = 0u;
+    uint32_t hi = (uint32_t)R2S_MAX_FRAME;
+
+    if (probe_fits(entry, 0u) == 0u) {
+        return 0u;
     }
-    return (size_t)limit;
+    while (lo + 1u < hi) {
+        uint32_t mid = lo + (hi - lo) / 2u;
+
+        if (probe_fits(entry, mid) != 0u) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    return (size_t)lo;
 }
 
 /* A launch name that would not fit the announce entry is rejected here, with
  * its length and the limit, instead of failing configure with no detail. The
- * type comes from the generated table, so the limit tracks the generator. A
- * default name the table no longer carries needs no check: no flag renames
- * it. */
+ * limit is probed from the generated table, so it tracks the generator. A
+ * flag whose default name the table no longer carries is rejected too: the
+ * rename would silently do nothing. */
 static void check_renamed_name(const char *flag, const char *name, const char *default_name)
 {
     uint8_t i;
@@ -179,7 +187,7 @@ static void check_renamed_name(const char *flag, const char *name, const char *d
             continue;
         }
         len = strlen(name);
-        limit = topic_name_limit(r2s_topics[i].type_name);
+        limit = entry_name_limit(&r2s_topics[i]);
         if (len > limit) {
             fprintf(stderr, "r2s_posix: %s topic name '%s' too long: %lu chars, limit %lu for type '%s'\n",
                     flag, name, (unsigned long)len, (unsigned long)limit, r2s_topics[i].type_name);
@@ -188,6 +196,10 @@ static void check_renamed_name(const char *flag, const char *name, const char *d
         }
         return;
     }
+    fprintf(stderr, "r2s_posix: %s names a topic the configuration does not carry: '%s'\n", flag,
+            default_name);
+    usage(stderr);
+    exit(2);
 }
 
 static void parse_options(int argc, char **argv, struct options *opts)
@@ -230,13 +242,13 @@ static void parse_options(int argc, char **argv, struct options *opts)
     }
     check_name("--node", opts->node);
     if (opts->pub != NULL) {
-        check_renamed_name("--pub", opts->pub, "battery");
+        check_renamed_name("--pub", opts->pub, kDefaultPub);
     }
     if (opts->sub != NULL) {
-        check_renamed_name("--sub", opts->sub, "cmd_vel");
+        check_renamed_name("--sub", opts->sub, kDefaultSub);
     }
     if (opts->log_text != NULL) {
-        check_renamed_name("--log-text", opts->log_text, "log_text");
+        check_renamed_name("--log-text", opts->log_text, kDefaultLogText);
     }
 }
 
