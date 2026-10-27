@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 import vectors_check
 from r2s_gen import msgs
+from r2s_gen.reference import messages
 
 VALID = {
     "crc/check.yaml": """
@@ -450,6 +451,57 @@ payload: ""
         "messages/mixed.yaml/message: demo_msgs/msg/Two.second must be exactly representable in binary32",
         "messages/mixed.yaml/message: the reference does not make it: "
         "demo_msgs/msg/Two.second: 1e+300 does not fit binary32",
+    ]
+
+
+def test_an_aborted_exact_walk_keeps_the_findings_it_already_made(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "Two.msg").write_text("float32 first\nfloat32 second\n", encoding="utf-8")
+    files = {
+        "messages/abort.yaml": """
+name: abort
+covers: [ENC-3]
+type: demo_msgs/msg/Two
+profile: {narrow_float64: false}
+message: {first: 1.1}
+payload: ""
+"""
+    }
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    vectors = make_tree(tmp_path / "vectors", files)
+    assert vectors_check.check_tree(vectors) == [
+        "messages/abort.yaml/message: demo_msgs/msg/Two.first must be exactly representable in binary32",
+        "messages/abort.yaml/message: the reference does not make it: demo_msgs/msg/Two.second: no value",
+    ]
+
+
+def test_nested_message_array_elements_name_their_positions(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "Single.msg").write_text("float32 data\n", encoding="utf-8")
+    (definitions / "Arr.msg").write_text("Single[] items\n", encoding="utf-8")
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    message = {"items": [{"data": 1.1}, {"data": 1.2}]}
+    payload = messages.encode(repository, "demo_msgs/msg/Arr", message, narrow=False).hex(" ")
+    files = {
+        "messages/nested_array.yaml": f"""
+name: nested_array
+covers: [ENC-3]
+type: demo_msgs/msg/Arr
+profile: {{narrow_float64: false}}
+message: {{items: [{{data: 1.1}}, {{data: 1.2}}]}}
+payload: "{payload}"
+"""
+    }
+    vectors = make_tree(tmp_path / "vectors", files)
+    assert vectors_check.check_tree(vectors) == [
+        "messages/nested_array.yaml/message: "
+        "demo_msgs/msg/Arr.items[0].demo_msgs/msg/Single.data must be exactly representable in binary32",
+        "messages/nested_array.yaml/message: "
+        "demo_msgs/msg/Arr.items[1].demo_msgs/msg/Single.data must be exactly representable in binary32",
     ]
 
 
