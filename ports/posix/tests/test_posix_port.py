@@ -260,8 +260,8 @@ def test_hello_announces_firmware(tmp_path):
         hello = parse_hello(payload)
     assert hello["version"] == 1
     assert hello["mode"] == 0
-    assert hello["max_frame"] == 512
-    assert hello["rx_capacity"] == 512 + 512 // 254 + 1
+    assert hello["max_frame"] == 52
+    assert hello["rx_capacity"] == 52 + 52 // 254 + 1
     # covers: CTL-8
     assert hello["tick_hz"] == 1000
     # covers: CTL-10
