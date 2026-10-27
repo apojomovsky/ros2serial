@@ -24,12 +24,24 @@ r2s_ring_library(r2s_rx_ring)
 r2s_ring_library(r2s_rx_ring_min 2)
 
 add_library(r2s_test_support STATIC support/bytes.c support/fake_port.c support/fake_port_unity.c
-                                       support/frames.c support/rcobs.c)
+                                       support/frames.c support/handwritten.c support/rcobs.c)
 target_include_directories(r2s_test_support PUBLIC support)
 target_compile_options(r2s_test_support PRIVATE ${R2S_WARNINGS})
 target_link_libraries(r2s_test_support PUBLIC unity r2s_core)
 # Unity calls setUp and tearDown, so they are linked as an object, not from an archive.
 target_sources(r2s_test_support INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/support/hooks.c")
+# The default dispatch is linked the same way, as an object in every test
+# binary: an archive member would not be extracted for a symbol the core only
+# names later. The link tests override it with their strong definition.
+target_sources(r2s_test_support INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/support/dispatch_default.c")
+
+# The handwritten publish wrappers and dispatch, with the handler their tests
+# provide: only the link tests need them, so they stay out of the shared
+# support library.
+add_library(r2s_handwritten_firmware STATIC support/handwritten_firmware.c)
+target_include_directories(r2s_handwritten_firmware PUBLIC support)
+target_compile_options(r2s_handwritten_firmware PRIVATE ${R2S_WARNINGS})
+target_link_libraries(r2s_handwritten_firmware PUBLIC r2s_core)
 
 # Test functions are found by the generated runner, not declared in headers.
 set(R2S_TEST_WARNINGS ${R2S_WARNINGS})
@@ -95,10 +107,13 @@ endfunction()
 file(GLOB unit_tests CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" test_*.c)
 # The ring tests have their own builds (r2s_rx_ring, r2s_rx_ring_min), so they
 # are registered below with those libraries instead of the shared support.
-list(REMOVE_ITEM unit_tests test_rx_ring.c test_rx_ring_min.c)
+# The dispatch test also links the handwritten firmware wiring, which carries
+# the handler the test provides.
+list(REMOVE_ITEM unit_tests test_rx_ring.c test_rx_ring_min.c test_codec_dispatch.c)
 foreach(source ${unit_tests})
   r2s_unit_test(${source})
 endforeach()
+r2s_unit_test(test_codec_dispatch.c unity r2s_test_support r2s_handwritten_firmware)
 
 add_executable(cxx_headers cxx_headers.cpp)
 target_link_libraries(cxx_headers PRIVATE r2s_test_support)
@@ -130,7 +145,7 @@ set_tests_properties(selftest_mismatch.test_must_fail_selftest_rejects_mistransc
 # The self-test runs the fixtures and every published vector of each kind
 # through support/vector_selftest.c, so the transcription is checked before
 # the modules (C2 to C4) register their own checks for the same files.
-set(R2S_VECTOR_KINDS crc frames rcobs varint)
+set(R2S_VECTOR_KINDS crc frames messages rcobs varint)
 foreach(kind ${R2S_VECTOR_KINDS})
   file(GLOB fixtures CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/vectors/${kind}/*.yaml")
   file(GLOB published CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/${kind}/*.yaml")
@@ -151,10 +166,13 @@ r2s_vector_test(vectors_rcobs rcobs vectors/rcobs_check.c ${rcobs_vectors})
 file(GLOB frames_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/frames/*.yaml")
 r2s_vector_test(vectors_frames frames vectors/frames_check.c ${frames_vectors})
 
+file(GLOB messages_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/messages/*.yaml")
+r2s_vector_test(vectors_messages messages vectors/messages_check.c ${messages_vectors})
+
 # Vector kinds the C runner does not read yet, each with the ticket that adds
 # it. A kind with files that is in neither list would be silently skipped, so
 # it stops the configure step instead.
-set(R2S_VECTOR_KINDS_PENDING messages:C9 session:C8 time:S7)
+set(R2S_VECTOR_KINDS_PENDING session:C8 time:S7)
 file(GLOB kind_dirs LIST_DIRECTORIES true "${R2S_REPO_ROOT}/spec/vectors/*")
 foreach(dir ${kind_dirs})
   get_filename_component(kind "${dir}" NAME)
