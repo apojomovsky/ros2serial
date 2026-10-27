@@ -39,11 +39,23 @@ Bridge::Bridge(const rclcpp::NodeOptions &options) : rclcpp::Node("r2s_bridge", 
     declare_parameter<int>("tx_budget_pct", 50);
     declare_parameter<int>("qos_depth", 10);
 
+    const auto forward_log = [this](SessionLog level, const std::string &text) {
+        switch (level) {
+        case SessionLog::kError:
+            RCLCPP_ERROR(get_logger(), "%s", text.c_str());
+            break;
+        case SessionLog::kWarning:
+            RCLCPP_WARN(get_logger(), "%s", text.c_str());
+            break;
+        case SessionLog::kInfo:
+            RCLCPP_INFO(get_logger(), "%s", text.c_str());
+            break;
+        }
+    };
     RouterParams pacing;
     pacing.rate_default_hz = get_parameter("rate_limit.default_hz").as_double();
-    pacing.rate_limits = parse_rate_overrides(
-        get_parameter("rate_limit.overrides").as_string_array(),
-        [this](const std::string &text) { RCLCPP_ERROR(get_logger(), "%s", text.c_str()); });
+    pacing.rate_limits =
+        parse_rate_overrides(get_parameter("rate_limit.overrides").as_string_array(), forward_log);
     pacing.tx_budget_pct = static_cast<int>(get_parameter("tx_budget_pct").as_int());
     const int depth = static_cast<int>(get_parameter("qos_depth").as_int());
     if (depth < 1) {
@@ -65,9 +77,9 @@ Bridge::Bridge(const rclcpp::NodeOptions &options) : rclcpp::Node("r2s_bridge", 
     serial.hupcl = get_parameter("hupcl").as_bool();
 
     router_ = std::make_unique<Router>(
-        get_node_topics_interface(), get_logger(),
+        get_node_topics_interface(),
         [serial]() { return std::unique_ptr<Transport>(new TermiosTransport(serial)); }, clock_,
-        std::move(pacing), nullptr, std::move(link));
+        std::move(pacing), forward_log, std::move(link));
     timer_ = create_wall_timer(kPollPeriod, [this]() { router_->poll(); });
 }
 

@@ -8,9 +8,10 @@
 namespace r2s_bridge
 {
 
-void Scheduler::configure(std::vector<SchedulerTopic> topics, double budget_bytes_per_sec)
+void Scheduler::configure(std::vector<SchedulerTopic> topics, double budget_bytes_per_sec,
+                          double max_burst_bytes)
 {
-    if (budget_bytes_per_sec < 0.0) {
+    if (budget_bytes_per_sec < 0.0 || max_burst_bytes < 0.0) {
         throw std::invalid_argument("r2s_bridge::Scheduler: the budget must not be negative");
     }
     entries_.clear();
@@ -26,7 +27,11 @@ void Scheduler::configure(std::vector<SchedulerTopic> topics, double budget_byte
     }
     cursor_ = 0;
     budget_bytes_per_sec_ = budget_bytes_per_sec;
-    budget_tokens_ = budget_bytes_per_sec;
+    // The burst carries at least one frame of the caller's maximum, so a
+    // large frame goes out instead of stalling; the refill rate still caps
+    // the average ([SES-28]).
+    budget_capacity_ = budget_bytes_per_sec > 0.0 ? std::max(budget_bytes_per_sec, max_burst_bytes) : 0.0;
+    budget_tokens_ = budget_capacity_;
     budget_started_ = false;
 }
 
@@ -37,6 +42,9 @@ void Scheduler::submit(std::uint8_t topic_id, std::vector<std::uint8_t> payload)
         return;
     }
     if (entry->topic.keep_latest) {
+        if (!entry->queue.empty()) {
+            ++entry->dropped;
+        }
         entry->queue.clear();
         entry->queue.push_back(std::move(payload));
         return;
@@ -73,7 +81,7 @@ void Scheduler::accrue_budget(std::chrono::nanoseconds now)
     }
     const double elapsed = std::chrono::duration<double>(now - budget_seen).count();
     budget_seen = now;
-    budget_tokens_ = std::min(budget_bytes_per_sec_, budget_tokens_ + elapsed * budget_bytes_per_sec_);
+    budget_tokens_ = std::min(budget_capacity_, budget_tokens_ + elapsed * budget_bytes_per_sec_);
 }
 std::size_t Scheduler::queued(std::uint8_t topic_id) const
 {

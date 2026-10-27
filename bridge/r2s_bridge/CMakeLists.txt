@@ -136,6 +136,7 @@ if(BUILD_TESTING)
   # compares every message vector with rclcpp serialization, so it needs the
   # message C++ headers at build time and the packages at test time.
   find_package(geometry_msgs REQUIRED)
+  find_package(rcl_interfaces REQUIRED)
   find_package(sensor_msgs REQUIRED)
   find_package(std_msgs REQUIRED)
   ament_add_gtest(test_converter test/test_converter.cpp)
@@ -145,6 +146,7 @@ if(BUILD_TESTING)
     r2s_bridge_component
     yaml-cpp::yaml-cpp
     geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
+    rcl_interfaces::rcl_interfaces__rosidl_typesupport_cpp
     sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
     std_msgs::std_msgs__rosidl_typesupport_cpp)
 

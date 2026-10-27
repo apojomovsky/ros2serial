@@ -24,9 +24,9 @@ namespace r2s_bridge
 
 class Converter;
 
-// Where the router logs when the caller does not hand it a sink: tests
-// capture the sink, production lets the messages reach the node logger.
-using LogSink = std::function<void(const std::string &)>;
+// Where the router logs: tests capture the sink, production forwards it to
+// the node logger with its severity.
+using LogSink = std::function<void(SessionLog, const std::string &)>;
 
 // The bridge parameters behind the pacing (docs/00-design.md, E4).
 struct RouterParams {
@@ -51,12 +51,11 @@ class Router
     // budget outside 0 to 100, no baud, a negative default rate).
     // session_config carries the H4 link timing; the pacing params above are
     // the H7 ones.
-    Router(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, rclcpp::Logger logger,
-           TransportFactory open, const Clock &clock, RouterParams params, LogSink sink = nullptr,
+    Router(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,
+           const Clock &clock, RouterParams params, LogSink sink,
            SessionConfig session_config = SessionConfig());
     ~Router();
     Router(const Router &) = delete;
-    Router &operator=(const Router &) = delete;
 
     // Advances the session and flushes due host-to-MCU frames.
     void poll();

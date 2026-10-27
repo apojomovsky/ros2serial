@@ -3,10 +3,10 @@
 // sends is assembled here from the core's CRC and rCOBS.
 #include "r2s_bridge/session.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <map>
 #include <stdexcept>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -657,8 +657,12 @@ McuCounters Session::mcu_counters() const
     return impl_->mcu;
 }
 
-void Session::send_user(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload)
+bool Session::send_user(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload)
 {
+    const std::size_t cap = std::max<std::uint16_t>(impl_->hello.rx_capacity, impl_->hello.max_frame);
+    if (!impl_->pending.empty() && impl_->pending.size() >= cap) {
+        return false;
+    }
     std::uint8_t seq = 0;
     const auto found = impl_->user_seq_.find(topic_id);
     if (found != impl_->user_seq_.end()) {
@@ -667,6 +671,7 @@ void Session::send_user(std::uint8_t topic_id, const std::vector<std::uint8_t> &
     impl_->queue_frame(topic_id, seq, payload);
     impl_->user_seq_[topic_id] = static_cast<std::uint8_t>(seq + 1u);
     impl_->flush();
+    return true;
 }
 
 std::uint16_t Session::mcu_max_frame() const

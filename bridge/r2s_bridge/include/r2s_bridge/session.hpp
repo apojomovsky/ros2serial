@@ -148,7 +148,10 @@ class Session
     McuCounters mcu_counters() const;
     // Queues one host-to-MCU payload on its topic, assigning the topic's next
     // seq and flushing the link. The seq restarts at 0 after each handshake.
-    void send_user(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload);
+    // False when the link already holds the MCU's receive capacity in unsent
+    // bytes: the frame waits for the link instead of growing the host heap
+    // ([SES-32]). True always goes out when nothing is pending.
+    bool send_user(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload);
     // The MCU's announced receive limits, 0 before the first HELLO. A sender
     // stays within both ([FRM-11]).
     std::uint16_t mcu_max_frame() const;

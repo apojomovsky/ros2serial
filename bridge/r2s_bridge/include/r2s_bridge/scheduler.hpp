@@ -26,17 +26,23 @@ class Scheduler
 {
   public:
     // Replaces every topic and clears queues, buckets and counters.
-    // Throws std::invalid_argument on a negative rate or budget.
-    void configure(std::vector<SchedulerTopic> topics, double budget_bytes_per_sec);
+    // max_burst_bytes raises the bucket capacity to at least one frame of
+    // the caller's maximum (see [SES-28]). Throws std::invalid_argument on
+    // a negative rate, budget or burst.
+    void configure(std::vector<SchedulerTopic> topics, double budget_bytes_per_sec,
+                   double max_burst_bytes = 0.0);
 
     // Queues one packed payload. A keep-latest topic keeps only the newest
     // ([SES-26]); a queued topic past its bound drops the oldest and counts
-    // it ([SES-30]). An unknown topic id is ignored.
+    // it ([SES-30]). An unknown topic id is ignored. A keep-latest
+    // replacement is dropped and counted too.
     void submit(std::uint8_t topic_id, std::vector<std::uint8_t> payload);
 
     // Sends what is due: at most one frame per topic, in handshake order from
     // after the topic that sent last ([SES-29]). A frame goes out only with a
-    // per-topic permit and enough global bytes ([SES-27], [SES-28]).
+    // per-topic permit and enough global bytes ([SES-27], [SES-28]). send
+    // reports whether the frame left; on false the frame stays queued and
+    // the pass stops ([SES-32]).
     template <typename Send> void poll(std::chrono::nanoseconds now, Send &&send)
     {
         if (entries_.empty()) {
@@ -60,11 +66,13 @@ class Scheduler
             if (budget_tokens_ < static_cast<double>(bytes)) {
                 continue;
             }
+            if (!send(entry.topic.topic_id, entry.queue.front())) {
+                break;
+            }
             if (entry.topic.rate_hz > 0.0) {
                 entry.rate_tokens -= 1.0;
             }
             budget_tokens_ -= static_cast<double>(bytes);
-            send(entry.topic.topic_id, entry.queue.front());
             entry.queue.erase(entry.queue.begin());
             last_sent = at;
             sent_any = true;
@@ -99,6 +107,7 @@ class Scheduler
     std::vector<Entry> entries_;
     std::size_t cursor_ = 0;
     double budget_bytes_per_sec_ = 0.0;
+    double budget_capacity_ = 0.0;
     double budget_tokens_ = 0.0;
     std::chrono::nanoseconds budget_seen{0};
     bool budget_started_ = false;

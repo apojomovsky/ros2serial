@@ -19,7 +19,9 @@
 
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/float32.hpp>
+#include <std_msgs/msg/string.hpp>
 
 #include "frame_helpers.hpp"
 #include "manual_clock.hpp"
@@ -61,9 +63,9 @@ class RouterFixture
         : max_frame_(max_frame), node_(std::make_shared<rclcpp::Node>(name, "robot1", options))
     {
         router_ = std::make_unique<Router>(
-            node_->get_node_topics_interface(), node_->get_logger(),
+            node_->get_node_topics_interface(),
             [this]() { return std::unique_ptr<Transport>(new HelperLink(transport_)); }, clock_,
-            std::move(params), [this](const std::string &text) { logged_.push_back(text); });
+            std::move(params), [this](SessionLog, const std::string &text) { logged_.push_back(text); });
     }
 
     void advance(std::uint32_t ms)
@@ -81,10 +83,13 @@ class RouterFixture
     }
 
     // Answers what the session asks until CONNECTED: a Float32 publisher
-    // "battery" and a Twist subscription "cmd_vel".
-    void handshake(std::uint8_t cmd_vel_flags = 0x01u, std::uint32_t boot_id = 7u)
+    // "battery" and a Twist subscription "cmd_vel", with an optional String
+    // topic "log_text" in either direction.
+    static constexpr std::uint8_t kLogText = 18u;
+    void handshake(std::uint8_t cmd_vel_flags = 0x01u, std::uint32_t boot_id = 7u, bool with_log_text = false,
+                   std::uint8_t log_text_flags = 0x00u)
     {
-        deliver_frame(kHelperControl, 0u, helper_hello(boot_id, 2u, max_frame_));
+        deliver_frame(kHelperControl, 0u, helper_hello(boot_id, with_log_text ? 3u : 2u, max_frame_));
         expect_topic_req(0u);
         const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
         deliver_frame(
@@ -95,9 +100,22 @@ class RouterFixture
         deliver_frame(kHelperControl, 2u,
                       helper_topic(1u, kCmdVel, cmd_vel_flags, twist_hash.data(), "geometry_msgs/msg/Twist",
                                    "cmd_vel"));
+        if (with_log_text) {
+            expect_topic_req(2u);
+            const std::array<std::uint8_t, 8> string_hash = installed_hash("std_msgs/msg/String");
+            deliver_frame(kHelperControl, 3u,
+                          helper_topic(2u, kLogText, log_text_flags, string_hash.data(),
+                                       "std_msgs/msg/String", "log_text"));
+        }
         drain();
-        EXPECT_EQ(router_->publisher_count(), 1u);
-        EXPECT_EQ(router_->subscription_count(), 1u);
+        const bool log_is_pub = with_log_text && (log_text_flags & 0x01u) == 0u;
+        EXPECT_EQ(router_->publisher_count(), log_is_pub ? 2u : 1u);
+        EXPECT_EQ(router_->subscription_count(), with_log_text && !log_is_pub ? 2u : 1u);
+    }
+
+    std::vector<std::uint8_t> hello_two()
+    {
+        return helper_hello(7u, 2u, max_frame_);
     }
 
     // One drained unit, decoded, with its CRC checked.
@@ -279,6 +297,159 @@ TEST_F(RouterNode, BadPayloadLogsTheTopicAndField)
     EXPECT_TRUE(logged_has(fixture.logged(), "data")) << "the drop names the field path";
 }
 
+TEST_F(RouterNode, TrailingBytesLogged)
+{
+    RouterFixture fixture("trail", remapped(), RouterParams{});
+    fixture.handshake();
+    std::vector<float> received;
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
+        "power/battery", rclcpp::QoS(10).best_effort(),
+        [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
+    fixture.deliver_frame(kBattery, 0u, {0x00, 0x00, 0xC0, 0x3F, 0xFF});
+    rclcpp::spin_some(fixture.node());
+    EXPECT_TRUE(received.empty()) << "a payload with trailing bytes is dropped, never published";
+    EXPECT_TRUE(logged_has(fixture.logged(), "battery")) << "the drop names the topic";
+}
+
+TEST_F(RouterNode, BadVarintLogged)
+{
+    RouterFixture fixture("varint", remapped(), RouterParams{});
+    fixture.handshake(0x01u, 7u, true);
+    std::vector<std::string> received;
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::String>(
+        "log_text", rclcpp::QoS(10).best_effort(),
+        [&received](const std_msgs::msg::String &msg) { received.push_back(msg.data); });
+    fixture.deliver_frame(RouterFixture::kLogText, 0u, {0x80, 0x00});
+    rclcpp::spin_some(fixture.node());
+    EXPECT_TRUE(received.empty()) << "a malformed length is dropped, never published";
+    EXPECT_TRUE(logged_has(fixture.logged(), "log_text")) << "the drop names the topic";
+}
+
+TEST_F(RouterNode, NulInStringLoggedWithFieldPath)
+{
+    RouterFixture fixture("nul", remapped(), RouterParams{});
+    fixture.handshake(0x01u, 7u, true);
+    std::vector<std::string> received;
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::String>(
+        "log_text", rclcpp::QoS(10).best_effort(),
+        [&received](const std_msgs::msg::String &msg) { received.push_back(msg.data); });
+    fixture.deliver_frame(RouterFixture::kLogText, 0u, {0x03, 0x61, 0x00, 0x62});
+    rclcpp::spin_some(fixture.node());
+    EXPECT_TRUE(received.empty()) << "a string with NUL is dropped, never published";
+    EXPECT_TRUE(logged_has(fixture.logged(), "log_text")) << "the drop names the topic";
+    EXPECT_TRUE(logged_has(fixture.logged(), "data")) << "the drop names the field path";
+}
+
+TEST_F(RouterNode, OverlongRosStringDropped)
+{
+    RouterFixture fixture("long", remapped(), RouterParams{});
+    fixture.handshake(0x01u, 7u, true, 0x01u);
+    auto pub = fixture.node()->create_publisher<std_msgs::msg::String>("log_text", 10);
+    std_msgs::msg::String text;
+    text.data = std::string(70000, 'x');
+    pub->publish(text);
+    rclcpp::spin_some(fixture.node());
+    fixture.advance(1u);
+    EXPECT_TRUE(fixture.drain().empty()) << "an overlong string never goes out";
+    EXPECT_TRUE(logged_has(fixture.logged(), "log_text")) << "the drop names the topic";
+}
+
+TEST_F(RouterNode, BadNameTopicGetsNoRoute)
+{
+    RouterFixture fixture("badname", remapped(), RouterParams{});
+    fixture.deliver_frame(kHelperControl, 0u, fixture.hello_two());
+    fixture.expect_topic_req(0u);
+    const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
+    fixture.deliver_frame(
+        kHelperControl, 1u,
+        helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
+    fixture.expect_topic_req(1u);
+    const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
+    fixture.deliver_frame(
+        kHelperControl, 2u,
+        helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "not a topic name"));
+    fixture.drain();
+    EXPECT_EQ(fixture.router().publisher_count(), 1u);
+    EXPECT_EQ(fixture.router().subscription_count(), 0u) << "an uncreatable name gets no route";
+    EXPECT_TRUE(logged_has(fixture.logged(), "not a topic name")) << "the refusal names the topic";
+}
+
+TEST_F(RouterNode, UnknownTypeTopicGetsNoRoute)
+{
+    RouterFixture fixture("unknowntype", remapped(), RouterParams{});
+    fixture.deliver_frame(kHelperControl, 0u, fixture.hello_two());
+    fixture.expect_topic_req(0u);
+    const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
+    fixture.deliver_frame(
+        kHelperControl, 1u,
+        helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
+    fixture.expect_topic_req(1u);
+    const std::array<std::uint8_t, 8> zero{};
+    fixture.deliver_frame(kHelperControl, 2u,
+                          helper_topic(1u, kCmdVel, 0x01u, zero.data(), "nope/msg/Nope", "nope"));
+    fixture.drain();
+    EXPECT_EQ(fixture.router().publisher_count(), 1u);
+    EXPECT_EQ(fixture.router().subscription_count(), 0u) << "an unknown type gets no route";
+    EXPECT_TRUE(logged_has(fixture.logged(), "nope")) << "the refusal names the topic";
+}
+
+TEST_F(RouterNode, BadBoolLoggedWithFieldPath)
+{
+    RouterFixture fixture("badbool", remapped(), RouterParams{});
+    fixture.deliver_frame(kHelperControl, 0u, helper_hello(9u, 1u, 512u));
+    fixture.expect_topic_req(0u);
+    const std::array<std::uint8_t, 8> bool_hash = installed_hash("std_msgs/msg/Bool");
+    fixture.deliver_frame(kHelperControl, 1u,
+                          helper_topic(0u, kBattery, 0x00u, bool_hash.data(), "std_msgs/msg/Bool", "flag"));
+    fixture.drain();
+    EXPECT_EQ(fixture.router().publisher_count(), 1u);
+    std::vector<bool> received;
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Bool>(
+        "flag", rclcpp::QoS(10).best_effort(),
+        [&received](const std_msgs::msg::Bool &msg) { received.push_back(msg.data); });
+    fixture.deliver_frame(kBattery, 0u, {0x02});
+    rclcpp::spin_some(fixture.node());
+    EXPECT_TRUE(received.empty()) << "a bad bool byte is dropped, never published";
+    EXPECT_TRUE(logged_has(fixture.logged(), "flag")) << "the drop names the topic";
+    EXPECT_TRUE(logged_has(fixture.logged(), "data")) << "the drop names the field path";
+}
+
+TEST_F(RouterNode, FramesOutsideARouteAreIgnored)
+{
+    RouterFixture fixture("stray", remapped(), RouterParams{});
+    fixture.handshake();
+    std::vector<float> received;
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
+        "power/battery", rclcpp::QoS(10).best_effort(),
+        [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
+    fixture.deliver_frame(20u, 0u, {0x00, 0x00, 0xC0, 0x3F});
+    fixture.deliver_frame(kCmdVel, 0u, {0x01});
+    rclcpp::spin_some(fixture.node());
+    EXPECT_TRUE(received.empty()) << "no route means no publication";
+}
+
+TEST_F(RouterNode, KeepLatestSubDropsTheOlderMessage)
+{
+    RouterFixture fixture("latest", remapped(), RouterParams{});
+    fixture.handshake(0x05u);
+    auto pub = fixture.node()->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+    geometry_msgs::msg::Twist first;
+    first.linear.x = 1.0;
+    pub->publish(first);
+    rclcpp::spin_some(fixture.node());
+    geometry_msgs::msg::Twist second;
+    second.linear.x = 2.0;
+    pub->publish(second);
+    rclcpp::spin_some(fixture.node());
+    fixture.advance(1u);
+    EXPECT_EQ(fixture.router().dropped(kCmdVel), 1u) << "the replaced message is counted";
+    const std::vector<std::uint8_t> decoded = fixture.expect_one_frame();
+    ASSERT_GE(decoded.size(), 12u);
+    const std::vector<std::uint8_t> want{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40};
+    EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 2u, decoded.begin() + 10u), want)
+        << "only the newest message goes out";
+}
+
 TEST_F(RouterNode, OversizeRosMessageIsDropped)
 {
     RouterFixture fixture("big", remapped(), RouterParams{}, 20u);
@@ -290,6 +461,7 @@ TEST_F(RouterNode, OversizeRosMessageIsDropped)
     fixture.advance(1u);
     EXPECT_TRUE(fixture.drain().empty()) << "a frame past max_frame never goes out";
     EXPECT_TRUE(logged_has(fixture.logged(), "cmd_vel")) << "the drop names the topic";
+    EXPECT_EQ(fixture.router().dropped(kCmdVel), 0u) << "the pacer never saw it";
 }
 
 TEST_F(RouterNode, IdenticalRehandshakeKeepsRoutes)
@@ -309,6 +481,37 @@ TEST_F(RouterNode, IdenticalRehandshakeKeepsRoutes)
     EXPECT_FLOAT_EQ(received[0], 1.5F);
 }
 
+TEST_F(RouterNode, RateOverrideKeysOnTheAnnouncedName)
+{
+    RouterParams params;
+    params.rate_limits["cmd_vel"] = 1.0;
+    rclcpp::NodeOptions options;
+    options.arguments({"--ros-args", "-r", "cmd_vel:=steer/cmd_vel"});
+    RouterFixture fixture("remaprate", options, params);
+    fixture.handshake();
+    EXPECT_EQ(topic_map(fixture.node()).count("/robot1/steer/cmd_vel"), 1u)
+        << "the launch remapping renames the subscription";
+    auto pub = fixture.node()->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+    geometry_msgs::msg::Twist twist;
+    pub->publish(twist);
+    rclcpp::spin_some(fixture.node());
+    fixture.advance(1u);
+    EXPECT_EQ(fixture.drain().size(), 1u) << "the first frame goes out at once";
+    pub->publish(twist);
+    rclcpp::spin_some(fixture.node());
+    fixture.advance(1u);
+    EXPECT_TRUE(fixture.drain().empty()) << "the announced-name override paces the remapped topic";
+    fixture.advance(1000u);
+    const std::vector<std::vector<std::uint8_t>> last = fixture.drain();
+    ASSERT_EQ(last.size(), 2u) << "the heartbeat and the paced frame";
+    const std::vector<std::uint8_t> heartbeat = fixture.checked_decode(last[0]);
+    ASSERT_GE(heartbeat.size(), 1u);
+    EXPECT_EQ(heartbeat[0], 4u) << "the heartbeat goes out on its period";
+    const std::vector<std::uint8_t> paced = fixture.checked_decode(last[1]);
+    ASSERT_GE(paced.size(), 4u);
+    EXPECT_EQ(paced[0], kCmdVel) << "the second frame follows its second";
+}
+
 TEST_F(RouterNode, RejectsNonsenseParams)
 {
     RouterParams no_depth;
@@ -320,13 +523,20 @@ TEST_F(RouterNode, RejectsNonsenseParams)
     RouterParams no_baud;
     no_baud.baud = 0;
     EXPECT_THROW(RouterFixture("p3", remapped(), no_baud), std::invalid_argument);
+    RouterParams no_default;
+    no_default.rate_default_hz = -1.0;
+    EXPECT_THROW(RouterFixture("p4", remapped(), no_default), std::invalid_argument);
+    RouterParams no_override;
+    no_override.rate_limits["cmd_vel"] = -2.0;
+    EXPECT_THROW(RouterFixture("p5", remapped(), no_override), std::invalid_argument);
 }
 
 TEST(RouterOverrides, ParsesTopicRates)
 {
     std::vector<std::string> logged;
-    const std::map<std::string, double> rates = parse_rate_overrides(
-        {"cmd_vel=20", "battery=0.5"}, [&logged](const std::string &text) { logged.push_back(text); });
+    const std::map<std::string, double> rates =
+        parse_rate_overrides({"cmd_vel=20", "battery=0.5"},
+                             [&logged](SessionLog, const std::string &text) { logged.push_back(text); });
     EXPECT_EQ(rates.size(), 2u);
     EXPECT_DOUBLE_EQ(rates.at("cmd_vel"), 20.0);
     EXPECT_DOUBLE_EQ(rates.at("battery"), 0.5);
@@ -336,11 +546,13 @@ TEST(RouterOverrides, ParsesTopicRates)
 TEST(RouterOverrides, SkipsMalformedEntries)
 {
     std::vector<std::string> logged;
-    const std::map<std::string, double> rates = parse_rate_overrides(
-        {"bogus", "cmd_vel=-1", "again=1=2"}, [&logged](const std::string &text) { logged.push_back(text); });
+    const std::map<std::string, double> rates =
+        parse_rate_overrides({"bogus", "cmd_vel=-1", "again=1=2", "x=="},
+                             [&logged](SessionLog, const std::string &text) { logged.push_back(text); });
     EXPECT_TRUE(rates.empty());
     EXPECT_TRUE(logged_has(logged, "bogus"));
     EXPECT_TRUE(logged_has(logged, "cmd_vel=-1"));
+    EXPECT_TRUE(logged_has(logged, "x=="));
 }
 
 } // namespace

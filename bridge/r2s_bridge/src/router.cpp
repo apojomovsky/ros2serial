@@ -71,7 +71,7 @@ std::map<std::string, double> parse_rate_overrides(const std::vector<std::string
         }
         if (!why.empty()) {
             if (sink) {
-                sink("rate_limit.overrides: ignoring '" + entry + "': " + why);
+                sink(SessionLog::kError, "rate_limit.overrides: ignoring '" + entry + "': " + why);
             }
             continue;
         }
@@ -81,12 +81,11 @@ std::map<std::string, double> parse_rate_overrides(const std::vector<std::string
 }
 
 struct Router::Impl {
-    Impl(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr in_topics, rclcpp::Logger in_logger,
-         TransportFactory in_open, const Clock &in_clock, RouterParams in_params, LogSink in_sink,
-         SessionConfig session_config)
-        : topics(in_topics), logger(in_logger), params(std::move(in_params)), sink(std::move(in_sink)),
-          clock(in_clock), session_(session_config, in_clock, std::move(in_open), resolve_topic_type,
-                                    SessionEvents{log_event(), handshake_event(), user_event()})
+    Impl(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr in_topics, TransportFactory in_open,
+         const Clock &in_clock, RouterParams in_params, LogSink in_sink, SessionConfig session_config)
+        : topics(in_topics), params(std::move(in_params)), sink(std::move(in_sink)), clock(in_clock),
+          session_(session_config, in_clock, std::move(in_open), resolve_topic_type,
+                   SessionEvents{log_event(), handshake_event(), user_event()})
     {
         if (params.qos_depth < 1u) {
             throw std::invalid_argument("r2s_bridge::Router: qos_depth must be at least 1");
@@ -126,21 +125,7 @@ struct Router::Impl {
 
     void emit(SessionLog level, const std::string &text)
     {
-        if (sink) {
-            sink(text);
-            return;
-        }
-        switch (level) {
-        case SessionLog::kError:
-            RCLCPP_ERROR(logger, "%s", text.c_str());
-            break;
-        case SessionLog::kWarning:
-            RCLCPP_WARN(logger, "%s", text.c_str());
-            break;
-        case SessionLog::kInfo:
-            RCLCPP_INFO(logger, "%s", text.c_str());
-            break;
-        }
+        sink(level, text);
     }
 
     rclcpp::QoS route_qos(const TopicInfo &info) const
@@ -195,7 +180,8 @@ struct Router::Impl {
             pacing.push_back(paced);
             routes[info.topic_id] = std::move(route);
         }
-        scheduler_.configure(std::move(pacing), budget_bytes_per_sec);
+        const double burst = static_cast<double>(Scheduler::encoded_frame_bound(session_.mcu_max_frame()));
+        scheduler_.configure(std::move(pacing), budget_bytes_per_sec, burst);
     }
 
     void on_user_frame(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload)
@@ -270,7 +256,6 @@ struct Router::Impl {
     };
 
     rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics;
-    rclcpp::Logger logger;
     RouterParams params;
     LogSink sink;
     const Clock &clock;
@@ -281,10 +266,9 @@ struct Router::Impl {
     Session session_;
 };
 
-Router::Router(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, rclcpp::Logger logger,
-               TransportFactory open, const Clock &clock, RouterParams params, LogSink sink,
-               SessionConfig session_config)
-    : impl_(std::make_unique<Impl>(std::move(topics), logger, std::move(open), clock, std::move(params),
+Router::Router(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,
+               const Clock &clock, RouterParams params, LogSink sink, SessionConfig session_config)
+    : impl_(std::make_unique<Impl>(std::move(topics), std::move(open), clock, std::move(params),
                                    std::move(sink), std::move(session_config)))
 {
 }
@@ -297,7 +281,7 @@ void Router::poll()
     const std::chrono::nanoseconds now = impl_->clock.now();
     std::lock_guard<std::mutex> guard(impl_->mutex);
     impl_->scheduler_.poll(now, [this](std::uint8_t id, const std::vector<std::uint8_t> &payload) {
-        impl_->session_.send_user(id, payload);
+        return impl_->session_.send_user(id, payload);
     });
 }
 

@@ -56,7 +56,6 @@ struct Op {
     std::size_t bound = 0;
     std::string path;
     void *(*get)(void *, std::size_t) = nullptr;
-    const void *(*get_const)(const void *, std::size_t) = nullptr;
     void (*assign)(void *, std::size_t, const void *) = nullptr;
     void (*resize)(void *, std::size_t) = nullptr;
     std::size_t (*size)(const void *) = nullptr;
@@ -430,7 +429,6 @@ bool build_ops(const MessageMembers *members, const std::string &prefix, std::ve
             } else {
                 op.get = member.get_function;
             }
-            op.get_const = member.get_const_function;
             op.size = member.size_function;
             op.fetch = member.fetch_function;
             op.is_array = true;
@@ -596,7 +594,7 @@ ConvertFail encode_scalar(std::uint8_t type, bool narrow, const void *value, std
         return ConvertFail::kNone;
     }
     }
-    return ConvertFail::kUnsupportedField;
+    return ConvertFail::kUnsupportedField; // GCOVR_EXCL_LINE: installed types never carry unknown kinds
 }
 
 ConvertFail encode_ops(const std::vector<Op> &ops, const std::uint8_t *base, bool narrow,
@@ -610,33 +608,31 @@ ConvertFail encode_element(const Op &op, const std::uint8_t *base, std::uint32_t
                            std::uint8_t &field)
 {
     if (op.type == ROS_TYPE_MESSAGE) {
-        if (op.get == nullptr && op.get_const == nullptr) {
-            return ConvertFail::kUnsupportedField;
+        if (op.get == nullptr) {
+            return ConvertFail::kUnsupportedField; // GCOVR_EXCL_LINE: generators always provide nested
+                                                   // getters
         }
-        const void *at =
-            op.get_const != nullptr ? op.get_const(base, i) : op.get(const_cast<std::uint8_t *>(base), i);
-        return encode_ops(op.nested, static_cast<const std::uint8_t *>(at), narrow, out, counter, field);
+        return encode_ops(op.nested,
+                          static_cast<const std::uint8_t *>(op.get(const_cast<std::uint8_t *>(base), i)),
+                          narrow, out, counter, field);
     }
     if (op.get != nullptr) {
-        const void *at =
-            op.get_const != nullptr ? op.get_const(base, i) : op.get(const_cast<std::uint8_t *>(base), i);
-        const ConvertFail fail = encode_scalar(op.type, narrow, at, out);
+        const ConvertFail fail =
+            encode_scalar(op.type, narrow, op.get(const_cast<std::uint8_t *>(base), i), out);
         if (fail != ConvertFail::kNone) {
             field = static_cast<std::uint8_t>(here);
         }
         return fail;
     }
     if (op.fetch == nullptr) {
-        return ConvertFail::kUnsupportedField;
+        return ConvertFail::kUnsupportedField; // GCOVR_EXCL_LINE: generators always provide fetch here
     }
+    // A boolean element encodes as one byte and cannot fail, so there is no
+    // field to report.
     bool value = false;
     op.fetch(base, i, &value);
-    const std::uint8_t byte = value ? 1u : 0u;
-    const ConvertFail fail = encode_scalar(op.type, narrow, &byte, out);
-    if (fail != ConvertFail::kNone) {
-        field = static_cast<std::uint8_t>(here);
-    }
-    return fail;
+    put_byte(out, value ? 1u : 0u);
+    return ConvertFail::kNone;
 }
 
 // The counter walks field definitions in depth-first order exactly as
@@ -650,7 +646,7 @@ ConvertFail encode_ops(const std::vector<Op> &ops, const std::uint8_t *base, boo
             std::uint32_t count = static_cast<std::uint32_t>(op.bound);
             if (op.is_sequence) {
                 if (op.size == nullptr) {
-                    return ConvertFail::kUnsupportedField;
+                    return ConvertFail::kUnsupportedField; // GCOVR_EXCL_LINE: generators always provide sizes
                 }
                 const std::size_t have = op.size(base + op.offset);
                 if (have > kMaxWireLength || (op.bound != kUnbounded && have > op.bound)) {

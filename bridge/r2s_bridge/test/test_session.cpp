@@ -2,7 +2,7 @@
 // deadlines, retries and reset rules that a transcript cannot pin to a
 // millisecond. Time is the manual clock's alone.
 // covers: SES-12, SES-13, SES-14, SES-15, SES-16, SES-17, SES-18, SES-19, SES-20, SES-21, CTL-3, CTL-9
-// covers: CTL-13
+// covers: CTL-13, SES-32
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -928,6 +928,48 @@ TEST(SessionTopics, DuplicateNameInOneDirectionIsAConflict)
     EXPECT_EQ(fixture.session().topics()[0].status, kTopicStatusOk);
     EXPECT_EQ(fixture.session().topics()[1].status, kTopicStatusNameConflict);
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
+TEST(SessionSend, RefusesFramesPastTheMcuCapacity)
+{
+    ManualClock clock;
+    FakeTransport transport;
+    Session session(
+        SessionConfig{}, clock, [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
+        [](const TopicInfo &) { return std::uint8_t{0}; });
+    clock.advance(std::chrono::milliseconds(10));
+    session.poll();
+    std::vector<std::uint8_t> hello{kControl, 0u};
+    const std::vector<std::uint8_t> payload = hello_payload(0x1000u, 1u);
+    hello.insert(hello.end(), payload.begin(), payload.end());
+    transport.script_read(wire_of(with_check(hello)));
+    session.poll();
+    std::vector<std::uint8_t> topic{kControl, 1u};
+    const std::vector<std::uint8_t> announced = topic_payload(0u, 16u, "x");
+    topic.insert(topic.end(), announced.begin(), announced.end());
+    transport.script_read(wire_of(with_check(topic)));
+    session.poll();
+    EXPECT_EQ(session.state(), SessionState::kConnected);
+    EXPECT_EQ(session.mcu_max_frame(), 512u);
+    EXPECT_EQ(session.mcu_rx_capacity(), 515u);
+    transport.discard_writes();
+    transport.limit_write(0u);
+    std::size_t accepted = 0;
+    bool refused = false;
+    for (int i = 0; i < 200; ++i) {
+        if (session.send_user(16u, {0x01, 0x02, 0x03, 0x04})) {
+            ++accepted;
+        } else {
+            refused = true;
+            break;
+        }
+    }
+    EXPECT_GT(accepted, 0u) << "the frame in flight always goes out";
+    EXPECT_TRUE(refused) << "a wedged link stops the pacer instead of growing the heap";
+    EXPECT_LT(accepted, 200u);
+    transport.limit_write(1000000u);
+    session.poll();
+    EXPECT_TRUE(session.send_user(16u, {0x01})) << "the link takes frames again once it drains";
 }
 
 } // namespace
