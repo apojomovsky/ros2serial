@@ -280,12 +280,13 @@ TEST(ConverterFieldPath, NamesTheOffendingField)
     EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 1), "header.stamp");
     EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 4), "header.frame_id");
     EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 5), "poses");
-    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 6), "poses.position");
-    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 7), "poses.position.x");
-    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 10), "poses.orientation");
-    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 14), "poses.orientation.w");
-    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 15), "poses.position");
-    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 23), "poses.orientation.w");
+    // Anything inside or after a nested-message sequence depends on its
+    // runtime count, which the type alone cannot name.
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 6), "");
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 10), "");
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 14), "");
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 15), "");
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 23), "");
     EXPECT_EQ(converter.field_path("no_such_pkg/msg/Nope", 0), "");
 }
 TEST(ConverterScalars, ConvertsEveryIntegerWidth)
@@ -556,6 +557,7 @@ using rosidl_typesupport_introspection_cpp::MessageMembers;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_BOOLEAN;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_DOUBLE;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_MESSAGE;
+using rosidl_typesupport_introspection_cpp::ROS_TYPE_STRING;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_UINT8;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_WSTRING;
 
@@ -900,6 +902,56 @@ TEST(ConverterFieldPath, PassesThroughFixedNestedArrays)
     EXPECT_EQ(converter.field_path("fake/msg/Outer", 2), "items.x");
     EXPECT_EQ(converter.field_path("fake/msg/Outer", 3), "after");
     EXPECT_EQ(converter.field_path("fake/msg/Outer", 4), "");
+}
+
+void fake_noop_resize(void *, std::size_t)
+{
+}
+
+TEST(ConverterFieldPath, AdmitsUnknownPathsPastSequences)
+{
+    // The reviewer's repro shape: a nested-message sequence followed by a
+    // sibling. The sibling's index depends on the runtime count, so the
+    // type alone cannot name it: an empty path is honest, while the
+    // array's child path would be confidently wrong.
+    Converter converter;
+    MessageMember name{};
+    name.name_ = "name";
+    name.type_id_ = ROS_TYPE_STRING;
+    MessageMembers field_inner{};
+    field_inner.message_namespace_ = "fake";
+    field_inner.message_name_ = "Field";
+    field_inner.member_count_ = 1;
+    field_inner.size_of_ = sizeof(std::string);
+    field_inner.members_ = &name;
+    const rosidl_message_type_support_t field_handle = fake_ts_for(&field_inner);
+    MessageMember fields{};
+    fields.name_ = "fields";
+    fields.type_id_ = ROS_TYPE_MESSAGE;
+    fields.is_array_ = true;
+    fields.is_upper_bound_ = true;
+    fields.members_ = &field_handle;
+    fields.get_function = fake_outer_get;
+    fields.resize_function = fake_noop_resize;
+    MessageMember sibling{};
+    sibling.name_ = "is_bigendian";
+    sibling.type_id_ = ROS_TYPE_BOOLEAN;
+    MessageMember top[2];
+    top[0] = fields;
+    top[1] = sibling;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "Cloud";
+    members.member_count_ = 2;
+    members.size_of_ = 2 * sizeof(void *);
+    members.members_ = top;
+    members.init_function = fake_noop_init;
+    members.fini_function = fake_noop_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/Cloud", &handle));
+    EXPECT_EQ(converter.field_path("fake/msg/Cloud", 0), "fields");
+    EXPECT_EQ(converter.field_path("fake/msg/Cloud", 1), "");
+    EXPECT_EQ(converter.field_path("fake/msg/Cloud", 5), "");
 }
 
 struct FakeBools {

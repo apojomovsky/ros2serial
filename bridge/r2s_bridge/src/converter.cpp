@@ -343,10 +343,9 @@ ConvertFail decode_ops(const std::vector<Op> &ops, std::uint8_t *base, Reader &r
 
 // The dotted path of a depth-first index. A fixed nested array holds exactly
 // its bound elements, so the walk passes through it to the siblings after
-// it. A sequence holds a runtime count the index alone cannot name: indices
-// past one map into its elements in order, which is exact while every outer
-// element carries the same count and otherwise names the first layout that
-// covers the index.
+// it. A sequence holds a runtime count: the index of anything inside or
+// after one depends on that count, which the type alone cannot name, so
+// there is no path for those indices and the caller falls back to the index.
 bool path_of(const std::vector<Op> &ops, std::uint32_t &counter, std::uint8_t want, std::string &out)
 {
     for (const Op &op : ops) {
@@ -362,20 +361,14 @@ bool path_of(const std::vector<Op> &ops, std::uint32_t &counter, std::uint8_t wa
             if (path_of(op.nested, counter, want, out)) {
                 return true;
             }
-        } else if (!op.nested.empty()) {
-            if (!op.is_sequence) {
-                for (std::size_t k = 0; k < op.bound; ++k) {
-                    if (path_of(op.nested, counter, want, out)) {
-                        return true;
-                    }
-                }
-            } else {
-                while (counter <= want) {
-                    if (path_of(op.nested, counter, want, out)) {
-                        return true;
-                    }
+        } else if (!op.is_sequence) {
+            for (std::size_t k = 0; k < op.bound; ++k) {
+                if (path_of(op.nested, counter, want, out)) {
+                    return true;
                 }
             }
+        } else {
+            return false;
         }
     }
     return false;
