@@ -587,7 +587,7 @@ def test_missing_default_topic_flag_fails(tmp_path):
         command, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=START_TIMEOUT, env=env
     )
     assert proc.returncode == 2
-    assert "--sub" in proc.stderr
+    assert "r2s_posix: --sub names a topic" in proc.stderr
     assert "cmd_vel" in proc.stderr
 
 
