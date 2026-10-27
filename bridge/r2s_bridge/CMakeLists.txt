@@ -113,6 +113,11 @@ if(BUILD_TESTING)
     R2S_FRAMES_VECTOR_DIR="${R2S_CORE_DIR}/../spec/vectors/frames")
   target_link_libraries(test_session r2s_bridge_test_support yaml-cpp::yaml-cpp)
 
+  # The type support test loads the installed message packages for real, so
+  # it needs them at test time (std_msgs) as well as at build time.
+  ament_add_gtest(test_type_support test/test_type_support.cpp)
+  target_link_libraries(test_type_support r2s_bridge_test_support)
+
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
   target_link_libraries(test_termios_transport r2s_bridge_component util)
 endif()
