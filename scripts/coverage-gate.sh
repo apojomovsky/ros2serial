@@ -28,18 +28,39 @@ trap cleanup EXIT
 if [ -n "$base" ]; then
   git worktree add --detach "$work/base" "$base" >&2 || exit 1
 fi
+# Both sides are judged by one ruler: the base commit's filter set. A PR that
+# narrows the filters still measures its head with the old set, so a new
+# uncovered file lowers the head figure instead of vanishing. Bases that
+# predate the filters file fall back to the head copy.
+if [ -n "$base" ] && git show "$base:scripts/coverage-filters.sh" >"$work/filters.sh" 2>/dev/null; then
+  :
+else
+  cp "$root/scripts/coverage-filters.sh" "$work/filters.sh" || exit 1
+fi
 
 measure_core() {
-  local tree=$1 build=$2 out=$3
+  local tree=$1 build=$2 out=$3 filters=$4
   R2S_BUILD_DIR=$build bash "$tree/scripts/core-test.sh" coverage >&2 || return 1
-  # gcov resolves the relative paths CMake records against the process
-  # directory, so this runs from the measured tree as core-test.sh does.
-  ( cd "$tree" && gcovr --root "$tree" --filter 'core/src/' --object-directory "$build/core/coverage" \
-    --exclude-unreachable-branches --json-summary -o "$out" --print-summary "$build/core/coverage" >&2 ) || return 1
+  gcovr_tree "$tree" "$out" "$build/core/coverage" "$filters" CORE_FILTER || return 1
+}
+
+# One gcovr call for every measurement. gcov resolves the relative paths
+# CMake records against the process directory, so this runs from the measured
+# tree as core-test.sh does. The filter set comes from the named file, one
+# ruler for both sides (see above); an empty ruler is a hard error, never an
+# unfiltered run.
+gcovr_tree() {
+  local tree=$1 out=$2 obj=$3 filter_src=$4 array=$5
+  # shellcheck source=/dev/null
+  source "$filter_src"
+  local -n wanted=$array
+  [ "${#wanted[@]}" -gt 0 ] || { echo "coverage: $filter_src defines no $array" >&2; return 1; }
+  ( cd "$tree" && gcovr --root "$tree" "${wanted[@]}" --object-directory "$obj" \
+    --exclude-unreachable-branches --json-summary -o "$out" --print-summary "$obj" >&2 )
 }
 
 measure_bridge() {
-  local tree=$1 workspace=$2 out=$3
+  local tree=$1 workspace=$2 out=$3 filters=$4
   : "${ROS_DISTRO:?ROS_DISTRO is not set: run it in a ROS container}"
   if [ -z "${AMENT_PREFIX_PATH:-}" ] && [ -f "/opt/ros/$ROS_DISTRO/setup.bash" ]; then
     # shellcheck source=/dev/null
@@ -68,12 +89,7 @@ measure_bridge() {
   # CMake's compiler probes leave stubs gcov cannot resolve, and gcovr reads
   # them before filtering. They are build-system internals, not bridge code.
   find "$workspace/build" -type d -name 'CompilerId*' -prune -exec rm -rf {} + >&2 || return 1
-  # Same process-directory rule as above: run from the measured tree.
-  ( cd "$tree" && gcovr --root "$tree" --filter 'bridge/r2s_bridge/(src|include)/' \
-    --exclude '.*/src/bridge\.cpp' --exclude '.*/src/main\.cpp' \
-    --exclude '.*/include/r2s_bridge/bridge\.hpp' --exclude '.*/CMakeFiles/.*' \
-    --object-directory "$workspace/build" --exclude-unreachable-branches \
-    --json-summary -o "$out" --print-summary "$workspace/build" >&2 ) || return 1
+  gcovr_tree "$tree" "$out" "$workspace/build" "$filters" BRIDGE_FILTER || return 1
 }
 
 gate_component() {
@@ -90,17 +106,14 @@ gate_component() {
 }
 
 echo "== coverage: core on HEAD"
-measure_core "$root" "$work/head" "$work/core-head.json" || exit 1
+measure_core "$root" "$work/head" "$work/core-head.json" "$work/filters.sh" || exit 1
 echo "== coverage: bridge on HEAD"
-measure_bridge "$root" "$work/head/bridge" "$work/bridge-head.json" || exit 1
+measure_bridge "$root" "$work/head/bridge" "$work/bridge-head.json" "$work/filters.sh" || exit 1
 if [ -n "$base" ]; then
-  # Base builds live outside the base worktree: an object directory inside
-  # the measured root confuses gcovr's path matching, so head and base both
-  # build outside the tree they measure.
   echo "== coverage: core on $base"
-  measure_core "$work/base" "$work/base-build" "$work/core-base.json" || exit 1
+  measure_core "$work/base" "$work/base-build" "$work/core-base.json" "$work/filters.sh" || exit 1
   echo "== coverage: bridge on $base"
-  measure_bridge "$work/base" "$work/base-build/bridge" "$work/bridge-base.json" || exit 1
+  measure_bridge "$work/base" "$work/base-build/bridge" "$work/bridge-base.json" "$work/filters.sh" || exit 1
 fi
 
 failed=0
