@@ -17,17 +17,9 @@ extern "C" {
 #define R2S_TOPIC_MAX_COUNT 16u
 #endif
 
-/* Flash placement for the topic table. The canonical home of this macro is
- * r2s_arch.h (C12); until it lands, the topics header carries the same
- * guarded default as the codec, so generated tables emit the same bytes. */
-#ifndef R2S_FLASH
-#ifdef __AVR__
-#include <avr/pgmspace.h>
-#define R2S_FLASH PROGMEM
-#else
-#define R2S_FLASH
-#endif
-#endif
+/* Table placement lives in r2s_arch.h, so the generator emits the same macro
+ * the core reads. */
+#include "r2s/r2s_arch.h"
 
 /* One announced topic: its user topic_id, its CTL-4 flags, the first 8 bytes
  * of its RIHS01 type hash, and its type and topic names. */

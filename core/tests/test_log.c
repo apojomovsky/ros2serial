@@ -165,10 +165,50 @@ void test_log_seq_restarts_after_a_handshake(void)
 void test_log_flash_macros_read_placed_tables(void)
 {
     static const uint8_t R2S_FLASH table[] = {0x05u, 0xABu, 0xCDu};
+
     uint8_t i;
 
     for (i = 0u; i < 3u; i++) {
         TEST_ASSERT_EQUAL_UINT8(table[i], R2S_FLASH_READ_BYTE(table + i));
     }
     TEST_ASSERT_EQUAL_UINT8(5u, R2S_FLASH_READ_BYTE(table));
+}
+
+void test_log_every_level_covers_every_value_type(void)
+{
+    static const uint8_t one_u16[] = {0x01u, 0x00u};
+
+    r2s_log_debug_u16(R2S_FSTR("u"), 1u);
+    r2s_log_debug_i16(R2S_FSTR("i"), -1);
+    r2s_log_debug_f32(R2S_FSTR("f"), 0.5f);
+    r2s_log_debug_ram("d");
+    r2s_log_info_u32(R2S_FSTR("u"), 1u);
+    r2s_log_info_i32(R2S_FSTR("i"), -1);
+    r2s_log_info_f32(R2S_FSTR("f"), 0.5f);
+    r2s_log_info_ram("i");
+    r2s_log_warn_i16(R2S_FSTR("i"), -1);
+    r2s_log_warn_u32(R2S_FSTR("u"), 1u);
+    r2s_log_warn_i32(R2S_FSTR("i"), -1);
+    r2s_log_warn_f32(R2S_FSTR("f"), 0.5f);
+    r2s_log_warn_ram("w");
+    r2s_log_error_u16(R2S_FSTR("u"), 1u);
+    r2s_log_error_i16(R2S_FSTR("i"), -1);
+    r2s_log_error_u32(R2S_FSTR("u"), 1u);
+    r2s_log_error_i32(R2S_FSTR("i"), -1);
+    r2s_log_error_f32(R2S_FSTR("f"), 0.5f);
+    r2s_log_fatal_u16(R2S_FSTR("u"), 1u);
+    r2s_log_fatal_i16(R2S_FSTR("i"), -1);
+    r2s_log_fatal_u32(R2S_FSTR("u"), 1u);
+    r2s_log_fatal_i32(R2S_FSTR("i"), -1);
+    r2s_log_fatal_f32(R2S_FSTR("f"), 0.5f);
+    r2s_log_fatal_ram("f");
+    TEST_ASSERT_EQUAL_UINT16(24, fake_port_tx_frame_count());
+    assert_log(0, 0, 10u, "u", 1u, one_u16, sizeof one_u16);
+}
+
+void test_log_null_text_sends_nothing(void)
+{
+    r2s_log_info(NULL);
+    r2s_log_info_ram(NULL);
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
 }
