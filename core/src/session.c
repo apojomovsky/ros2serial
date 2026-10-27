@@ -12,6 +12,10 @@
 #include "r2s/r2s_tx.h"
 #include "r2s/r2s_varint.h"
 
+#ifdef R2S_WITH_CODEC
+#include "r2s/r2s_codec.h"
+#endif
+
 /* The link states (SES-1, SES-6, SES-7). */
 #define ANNOUNCING 0u
 #define CONNECTED 1u
@@ -50,6 +54,9 @@ static struct {
     const r2s_session_topic_t *topics;
     uint8_t topic_count;
     uint8_t status[R2S_SESSION_MAX_TOPICS];
+    uint8_t tx_seq[R2S_SESSION_MAX_TOPICS];
+    uint8_t rx_expected[R2S_SESSION_MAX_TOPICS];
+    uint16_t rx_lost[R2S_SESSION_MAX_TOPICS];
     uint8_t tx_seq_ctrl;
     uint8_t tx_seq_hb;
     uint32_t boot_id;
@@ -120,6 +127,52 @@ r2s_status_t r2s_session_configure(const char *node_name, const r2s_session_topi
     return R2S_OK;
 }
 
+uint8_t r2s_session_find_topic(uint8_t topic_id)
+{
+    uint8_t i;
+
+    for (i = 0u; i < session.topic_count; i++) {
+        if (session.topics[i].topic_id == topic_id) {
+            return i;
+        }
+    }
+    return 0xFFu;
+}
+
+uint8_t r2s_session_topic_flags(uint8_t index)
+{
+    return session.topics[index].flags;
+}
+
+uint8_t r2s_session_topic_status(uint8_t index)
+{
+    return session.status[index];
+}
+
+uint8_t r2s_session_tx_seq(uint8_t index)
+{
+    return session.tx_seq[index];
+}
+
+void r2s_session_advance_tx_seq(uint8_t index)
+{
+    session.tx_seq[index] = (uint8_t)(session.tx_seq[index] + 1u);
+}
+
+uint16_t r2s_session_note_rx_seq(uint8_t index, uint8_t seq)
+{
+    /* Both differences wrap mod 256 in uint8_t, which is the count [FRM-15]
+     * names; the widening sum keeps every gap. */
+    session.rx_lost[index] += (uint16_t)(uint8_t)(seq - session.rx_expected[index]);
+    session.rx_expected[index] = (uint8_t)(seq + 1u);
+    return session.rx_lost[index];
+}
+
+uint16_t r2s_session_rx_lost(uint8_t index)
+{
+    return session.rx_lost[index];
+}
+
 static void enter_announcing(uint32_t now)
 {
     uint8_t i;
@@ -128,6 +181,12 @@ static void enter_announcing(uint32_t now)
     session.heard = 0u;
     for (i = 0u; i < R2S_SESSION_MAX_TOPICS; i++) {
         session.status[i] = 0xFFu;
+    }
+    /* The seq counters restart with the handshake ([SES-11]); the lost count
+     * stays, since it counts frames since boot ([FRM-15]). */
+    for (i = 0u; i < session.topic_count; i++) {
+        session.tx_seq[i] = 0u;
+        session.rx_expected[i] = 0u;
     }
     session.last_hello_tick = now;
     session.last_nack_tick = now - ms_to_ticks(HELLO_NACK_MS);
@@ -347,11 +406,21 @@ static void on_frame(const r2s_frame_t *frame)
             answer_with_hello(frame->tick);
         }
     } else if (topic >= 16u) {
+#ifdef R2S_WITH_CODEC
+        /* A configured topic dispatches while connected; in ANNOUNCING the
+         * frame is answered like any other non-handshake frame ([SES-3]). */
+        if (session.state == CONNECTED) {
+            r2s_codec_dispatch(topic, frame->data[1], payload, payload_len);
+        } else {
+            answer_with_hello(frame->tick);
+        }
+#else
         /* A user topic has no consumer until the codec lands; it is accepted
          * and ignored, and in ANNOUNCING answered so the host notices. */
         if (session.state == ANNOUNCING) {
             answer_with_hello(frame->tick);
         }
+#endif
     } else {
         /* Reserved IDs are ignored without counting and without a reply, ahead
          * of the ANNOUNCING rule (SYS-4 over SES-3). */
@@ -416,6 +485,9 @@ void r2s_session_test_reset(void)
     session.topic_count = 0u;
     for (i = 0u; i < R2S_SESSION_MAX_TOPICS; i++) {
         session.status[i] = 0xFFu;
+        session.tx_seq[i] = 0u;
+        session.rx_expected[i] = 0u;
+        session.rx_lost[i] = 0u;
     }
     session.tx_seq_ctrl = 0u;
     session.tx_seq_hb = 0u;

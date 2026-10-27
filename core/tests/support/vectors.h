@@ -56,10 +56,25 @@ typedef struct {
     const char *wire_hex;
 } r2s_vec_frames_t;
 
+typedef struct {
+    const char *where;
+    const char *covers;
+    const char *type;
+    uint8_t narrow;
+    const uint8_t *payload;
+    uint16_t payload_len;
+    const char *payload_hex;
+    const uint8_t *encode; /* the struct bytes the vector's message holds */
+    uint16_t encode_len;
+    const uint8_t *decode; /* the struct bytes the payload decodes to */
+    uint16_t decode_len;
+} r2s_vec_messages_t;
+
 /* One check per kind, linked in by the test executable: the runner
  * self-test, or the conformance test of the module that implements the kind. */
 void r2s_vec_check_crc(const r2s_vec_crc_t *v);
 void r2s_vec_check_frames(const r2s_vec_frames_t *v);
+void r2s_vec_check_messages(const r2s_vec_messages_t *v);
 void r2s_vec_check_rcobs(const r2s_vec_rcobs_t *v);
 void r2s_vec_check_varint(const r2s_vec_varint_t *v);
 
