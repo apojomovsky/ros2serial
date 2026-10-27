@@ -43,8 +43,8 @@ payload: "00 00 c0 3f"
 name: handshake
 covers: [SES-1]
 steps:
-  - {from: host, frame: "00 00 01 01"}
-  - {from: mcu, frame: "00 00 02 01", at_ms: 3}
+  - {from: host, frame: "00 00 01 01 70 0b"}
+  - {from: mcu, frame: "00 00 02 01 18 21", at_ms: 3}
 """,
     "time/wraparound.yaml": """
 name: wraparound
@@ -90,8 +90,20 @@ def test_gitkeep_and_empty_kind_directories_are_ignored(tmp_path):
         ("messages/bad_type.yaml", VALID["messages/float32_1_5.yaml"].replace("std_msgs/msg/", "std_msgs/"), "type"),
         (
             "session/bad_from.yaml",
-            "name: x\ncovers: [SES-1]\nsteps:\n  - {from: bridge, frame: '00'}\n",
+            "name: x\ncovers: [SES-1]\nsteps:\n  - {from: bridge, frame: '00 00 02 01 18 21'}\n",
             "steps/0/from",
+        ),
+        # A step carries a frame with its check, so a frame without one that
+        # leaves no zero residue is reported on its step.
+        (
+            "session/bad_check.yaml",
+            "name: x\ncovers: [SES-1]\nsteps:\n  - {from: mcu, frame: '00 00 02 01 00 00'}\n",
+            "steps/0/frame",
+        ),
+        (
+            "session/short_frame.yaml",
+            "name: x\ncovers: [SES-1]\nsteps:\n  - {from: mcu, frame: '00 00'}\n",
+            "shorter than 4 bytes",
         ),
         ("crc/both.yaml", "covers: [FRM-5]\ncases:\n  - {text: 'a', data: '61', crc: 1}\n", "cases/0"),
         ("crc/no_covers.yaml", "cases:\n  - {text: 'a', crc: 1}\n", "covers"),
