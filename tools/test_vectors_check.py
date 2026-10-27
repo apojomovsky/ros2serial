@@ -504,6 +504,57 @@ payload: ""
     ]
 
 
+def test_a_cyclic_array_walk_reports_each_distinct_finding_once(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "A.msg").write_text("float32 data\nA[] kids\n", encoding="utf-8")
+    files = {
+        "messages/flood_array.yaml": """
+name: flood_array
+covers: [ENC-3]
+type: demo_msgs/msg/A
+profile: {narrow_float64: false}
+message: &x
+  data: 1.1
+  kids: [*x]
+payload: ""
+"""
+    }
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    vectors = make_tree(tmp_path / "vectors", files)
+    assert vectors_check.check_tree(vectors) == [
+        "messages/flood_array.yaml: cyclic YAML alias",
+        "messages/flood_array.yaml/message: demo_msgs/msg/A.data must be exactly representable in binary32",
+        "messages/flood_array.yaml/message: the reference does not make it: maximum recursion depth exceeded",
+    ]
+
+
+def test_twin_fields_of_one_type_keep_both_findings_on_abort(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "Inner.msg").write_text("float32 data\n", encoding="utf-8")
+    (definitions / "Outer.msg").write_text("Inner a\nInner b\nfloat32 c\n", encoding="utf-8")
+    files = {
+        "messages/twins.yaml": """
+name: twins
+covers: [ENC-3]
+type: demo_msgs/msg/Outer
+profile: {narrow_float64: false}
+message: {a: {data: 1.1}, b: {data: 1.2}}
+payload: ""
+"""
+    }
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    vectors = make_tree(tmp_path / "vectors", files)
+    assert vectors_check.check_tree(vectors) == [
+        "messages/twins.yaml/message: demo_msgs/msg/Inner.data must be exactly representable in binary32",
+        "messages/twins.yaml/message: demo_msgs/msg/Inner.data must be exactly representable in binary32",
+        "messages/twins.yaml/message: the reference does not make it: demo_msgs/msg/Outer.c: no value",
+    ]
+
+
 def test_nested_message_array_elements_name_their_positions(tmp_path, monkeypatch):
     definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
     definitions.mkdir(parents=True)
