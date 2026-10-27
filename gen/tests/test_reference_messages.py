@@ -162,6 +162,18 @@ def test_a_sequence_is_a_varint_count_and_its_elements(tmp_path):
     assert messages.decode(repo, "demo_msgs/msg/Items", counted) == {"items": [7] * 130}
 
 
+# covers: ENC-13
+def test_the_same_message_encodes_identically_under_different_bounds(tmp_path):
+    tight = demo(tmp_path / "tight", "demo_msgs/msg/Entry", "string<=4 name\nint16[<=4] values")
+    loose = demo(tmp_path / "loose", "demo_msgs/msg/Entry", "string<=16 name\nint16[<=16] values")
+    message = {"name": "ab", "values": [1, 2, 3]}
+
+    assert messages.encode(tight, "demo_msgs/msg/Entry", message) == h("02 61 62 03 01 00 02 00 03 00")
+    assert messages.encode(loose, "demo_msgs/msg/Entry", message) == messages.encode(
+        tight, "demo_msgs/msg/Entry", message
+    )
+
+
 # covers: ENC-10
 def test_the_narrow_flag_changes_float64_fields_and_no_other(tmp_path):
     repo = demo(tmp_path, "demo_msgs/msg/Mixed", "float32 single\nfloat64 wide")
