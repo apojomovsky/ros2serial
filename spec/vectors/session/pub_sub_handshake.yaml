@@ -29,19 +29,19 @@ steps:
     frame: "00 04 06 65 3b"
     at_ms: 350
     note: "every topic resolved, so READY"
+  - from: host
+    frame: "04 00 d8 97"
+    at_ms: 850
+    note: "host heartbeat in CONNECTED, 500 ms after READY"
   - from: mcu
     frame: "04 00 05 00 00 00 00 00 00 00 7a bb"
     at_ms: 850
     note: "heartbeat in CONNECTED: five frames accepted, none dropped"
   - from: host
-    frame: "04 00 d8 97"
-    at_ms: 900
-    note: "host heartbeat in CONNECTED"
+    frame: "04 01 51 86"
+    at_ms: 1350
+    note: "500 ms after the previous heartbeat"
   - from: mcu
     frame: "04 01 06 00 00 00 00 00 00 00 57 7c"
     at_ms: 1350
-    note: "six frames accepted with the host heartbeat at 900 ms"
-  - from: host
-    frame: "04 01 51 86"
-    at_ms: 1400
-    note: "the host's own 500 ms cadence"
+    note: "six accepted with the 850 ms host heartbeat"
