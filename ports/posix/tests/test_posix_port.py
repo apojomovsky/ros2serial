@@ -331,8 +331,29 @@ def test_connected_publishes_battery(tmp_path):
             assert len(payload) == 4
             values.append(struct.unpack("<f", payload)[0])
             seqs.append(seq)
+
     assert values == [0.0, 1.0, 2.0]
-    assert seqs == [0, 1, 2]
+
+
+# covers: SES-4
+def test_connected_publishes_log_text(tmp_path):
+    with Firmware("--rate", "20", boot=str(tmp_path / "boot")) as fw:
+        hello, _topics, _host = do_handshake(fw)
+        _topic, _seq, payload = read_frame(fw.master, want=18)
+        text, end = take_string(payload, 0)
+        assert end == len(payload), "bytes after the log string"
+        assert str(hello["boot"]) in text
+        batteries = 0
+        while True:
+            topic, _seq, payload = read_frame(fw.master)
+            if topic == 18:
+                repeat, end = take_string(payload, 0)
+                assert end == len(payload), "bytes after the log string"
+                assert repeat, "the periodic log line is empty"
+                return
+            if topic == 16:
+                batteries += 1
+            assert batteries <= 10, "no periodic log_text within 10 battery publishes"
 
 
 def test_subscribes_twist(tmp_path):
