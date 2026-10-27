@@ -16,13 +16,32 @@ add_executable(r2s_posix_firmware
     ${R2S_CORE_SOURCES}
     src/r2s_posix_port.c
     src/r2s_posix_firmware.c
-    "${R2S_REPO_ROOT}/core/tests/support/handwritten.c"
-    "${R2S_REPO_ROOT}/core/tests/support/handwritten_firmware.c")
+    src/r2s_generated.c)
 target_include_directories(r2s_posix_firmware PRIVATE
-    "${R2S_REPO_ROOT}/core/include" "${R2S_REPO_ROOT}/core/tests/support" src)
-# The firmware builds the same configuration the core suite tests: the codec
-# with two nesting levels and a 512-byte maximum frame.
-target_compile_definitions(r2s_posix_firmware PRIVATE R2S_WITH_CODEC R2S_MAX_NEST=2 R2S_MAX_FRAME=512)
+    "${R2S_REPO_ROOT}/core/include" src)
+# The frame and nesting limits live in the generated header, but the core
+# translation units never include it, so the build reads them out as defines:
+# macros are per translation unit, and a default here would silently disagree.
+file(STRINGS src/r2s_generated.h R2S_MAX_FRAME_LINE REGEX "^#define R2S_MAX_FRAME [0-9]+u$")
+file(STRINGS src/r2s_generated.h R2S_MAX_NEST_LINE REGEX "^#define R2S_MAX_NEST [0-9]+u$")
+file(STRINGS src/r2s_generated.h R2S_TOPIC_MAX_COUNT_LINE REGEX "^#define R2S_TOPIC_MAX_COUNT [0-9]+u$")
+# A generated header changes without any CMakeLists edit, so the limits above
+# go stale unless the configure step watches it.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS src/r2s_generated.h)
+if(NOT R2S_MAX_FRAME_LINE OR NOT R2S_MAX_NEST_LINE)
+  message(FATAL_ERROR "r2s_generated.h names no frame or nesting limit")
+endif()
+string(REGEX MATCH "^#define R2S_MAX_FRAME ([0-9]+)u$" _ignored "${R2S_MAX_FRAME_LINE}")
+set(R2S_MAX_FRAME "${CMAKE_MATCH_1}")
+string(REGEX MATCH "^#define R2S_MAX_NEST ([0-9]+)u$" _ignored "${R2S_MAX_NEST_LINE}")
+set(R2S_MAX_NEST "${CMAKE_MATCH_1}")
+set(R2S_GENERATED_DEFS R2S_MAX_FRAME=${R2S_MAX_FRAME} R2S_MAX_NEST=${R2S_MAX_NEST})
+if(R2S_TOPIC_MAX_COUNT_LINE)
+  string(REGEX MATCH "^#define R2S_TOPIC_MAX_COUNT ([0-9]+)u$" _ignored
+    "${R2S_TOPIC_MAX_COUNT_LINE}")
+  list(APPEND R2S_GENERATED_DEFS R2S_TOPIC_MAX_COUNT=${CMAKE_MATCH_1})
+endif()
+target_compile_definitions(r2s_posix_firmware PRIVATE R2S_WITH_CODEC ${R2S_GENERATED_DEFS})
 target_compile_options(r2s_posix_firmware PRIVATE
     -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow
     -Wstrict-prototypes -Wmissing-prototypes -Wundef)

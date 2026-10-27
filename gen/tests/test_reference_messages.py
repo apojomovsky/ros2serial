@@ -18,6 +18,7 @@ BUNDLED = (
     "sensor_msgs/msg/JointState",
     "std_msgs/msg/Float32",
     "std_msgs/msg/Header",
+    "std_msgs/msg/String",
 )
 DISTROS = ("jazzy", "lyrical", "rolling")
 
@@ -160,6 +161,18 @@ def test_a_sequence_is_a_varint_count_and_its_elements(tmp_path):
     counted = messages.encode(repo, "demo_msgs/msg/Items", {"items": [7] * 130})
     assert counted[:2] == h("82 01")
     assert messages.decode(repo, "demo_msgs/msg/Items", counted) == {"items": [7] * 130}
+
+
+# covers: ENC-13
+def test_the_same_message_encodes_identically_under_different_bounds(tmp_path):
+    tight = demo(tmp_path / "tight", "demo_msgs/msg/Entry", "string<=4 name\nint16[<=4] values")
+    loose = demo(tmp_path / "loose", "demo_msgs/msg/Entry", "string<=16 name\nint16[<=16] values")
+    message = {"name": "ab", "values": [1, 2, 3]}
+
+    assert messages.encode(tight, "demo_msgs/msg/Entry", message) == h("02 61 62 03 01 00 02 00 03 00")
+    assert messages.encode(loose, "demo_msgs/msg/Entry", message) == messages.encode(
+        tight, "demo_msgs/msg/Entry", message
+    )
 
 
 # covers: ENC-10

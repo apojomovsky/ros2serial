@@ -130,10 +130,55 @@ def test_a_wire_rule_with_a_vector_change_passes(tmp_path):
     assert problems(root) == []
 
 
-def test_a_vector_change_without_a_spec_change_fails(tmp_path):
+def test_a_vector_covering_a_known_rule_without_a_spec_change_passes(tmp_path):
     root = repo_with(tmp_path, LOCAL)
     write(root, "spec/vectors/frames/a.yaml", "covers: [FRM-1]\ncases: []\n")
-    assert problems(root) == ["spec/vectors changed without spec/protocol.md changes"]
+    assert problems(root) == []
+
+
+def test_a_vector_naming_an_unknown_rule_without_a_spec_change_fails(tmp_path):
+    root = repo_with(tmp_path, LOCAL)
+    write(root, "spec/vectors/frames/a.yaml", "covers: [FRM-9]\ncases: []\n")
+    assert problems(root) == ["spec/vectors changed without spec/protocol.md changes: FRM-9 names no rule"]
+
+
+def test_a_vector_without_checkable_covers_without_a_spec_change_fails(tmp_path):
+    root = repo_with(tmp_path, LOCAL)
+    write(root, "spec/vectors/frames/a.yaml", "name: a\n")
+    assert problems(root) == [
+        "spec/vectors changed without spec/protocol.md changes: spec/vectors/frames/a.yaml names no rule"
+    ]
+
+
+def test_deleting_a_vector_needs_no_spec_change(tmp_path):
+    root = repo_with(tmp_path, LOCAL, {"spec/vectors/frames/a.yaml": "covers: [FRM-1]\n"})
+    git(root, "rm", "-q", "spec/vectors/frames/a.yaml")
+    git(root, "commit", "-q", "-m", "change")
+    assert problems(root) == []
+
+
+def test_a_vector_that_cannot_be_read_without_a_spec_change_fails(tmp_path):
+    root = repo_with(tmp_path, LOCAL)
+    target = root / "spec/vectors/frames/a.yaml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.symlink_to(target.name)
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "change")
+    assert problems(root) == [
+        "spec/vectors changed without spec/protocol.md changes: spec/vectors/frames/a.yaml names no rule"
+    ]
+
+
+def test_a_vector_that_is_not_utf8_without_a_spec_change_fails(tmp_path):
+    root = repo_with(tmp_path, LOCAL)
+    target = root / "spec/vectors/frames/a.yaml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b"covers: [FRM-1]\n\xff\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "change")
+    assert problems(root) == [
+        "spec/vectors changed without spec/protocol.md changes: spec/vectors/frames/a.yaml names no rule"
+    ]
 
 
 def test_a_branch_that_changes_neither_passes(tmp_path):

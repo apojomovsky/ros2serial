@@ -270,6 +270,18 @@ When the PR suite exceeds its budget, the slowest tests are made faster or moved
 | Budgets and performance | Flash, RAM and worst-case stack per example and tier; cycles per byte for framing and codec in simavr | avr-size, `tools/stack_report.py`, simavr cycle counts | Every PR |
 | Hardware in the loop | Real Uno and Mega | Self-hosted runner, `workflow_dispatch` by maintainers only | Phase 1 onwards; PIC boards in Phase 5 |
 
+Docs snippets follow `tools/snippets_check.py --help`. A fence tagged `c`,
+`cpp` or `python` is code and must compile. A fence tagged `sh`, `console`,
+`text`, `json` or `yaml` shows usage or data and is skipped, listed as
+skipped by tag; any other tag is an error. A snippet that cannot compile
+yet carries its ticket alone on the line above the fence:
+
+```text
+The marker lives inside a fenced block, so the check reads it as text:
+
+    <!-- snippet: skip until #94 -->
+```
+
 ## 10. Key end-to-end scenarios
 
 In `tests/e2e/`, each a launch_testing test parameterized by MCU backend (posix, simavr, hardware) and registration path:

@@ -260,8 +260,8 @@ def test_hello_announces_firmware(tmp_path):
         hello = parse_hello(payload)
     assert hello["version"] == 1
     assert hello["mode"] == 0
-    assert hello["max_frame"] == 512
-    assert hello["rx_capacity"] == 512 + 512 // 254 + 1
+    assert hello["max_frame"] == 52
+    assert hello["rx_capacity"] == 52 + 52 // 254 + 1
     # covers: CTL-8
     assert hello["tick_hz"] == 1000
     # covers: CTL-10
@@ -331,8 +331,78 @@ def test_connected_publishes_battery(tmp_path):
             assert len(payload) == 4
             values.append(struct.unpack("<f", payload)[0])
             seqs.append(seq)
+
     assert values == [0.0, 1.0, 2.0]
     assert seqs == [0, 1, 2]
+
+
+# covers: SES-9
+def test_connected_publishes_log_text(tmp_path):
+    with Firmware("--rate", "20", boot=str(tmp_path / "boot")) as fw:
+        hello, _topics, _host = do_handshake(fw)
+        _topic, _seq, payload = read_frame(fw.master, want=18)
+        text, end = take_string(payload, 0)
+        assert end == len(payload), "bytes after the log string"
+        assert text == format(hello["boot"], "08x")
+        batteries = 0
+        while True:
+            topic, _seq, payload = read_frame(fw.master)
+            if topic == 18:
+                repeat, end = take_string(payload, 0)
+                assert end == len(payload), "bytes after the log string"
+                assert repeat, "the periodic log line is empty"
+                return
+            if topic == 16:
+                batteries += 1
+            assert batteries <= 10, "no periodic log_text within 10 battery publishes"
+
+
+# covers: SES-9, SES-10
+def test_log_text_keeps_large_boot_id(tmp_path):
+    boot = tmp_path / "boot"
+    boot.write_text("70000\n")
+    with Firmware("--rate", "20", boot=str(boot)) as fw:
+        hello, _topics, _host = do_handshake(fw)
+        assert hello["boot"] == 70001
+        _topic, _seq, payload = read_frame(fw.master, want=18)
+        text, end = take_string(payload, 0)
+        assert end == len(payload), "bytes after the log string"
+        assert text == "00011171"
+
+
+# covers: SES-9
+def test_log_text_boot_line_retried_after_reject(tmp_path):
+    with Firmware("--rate", "20", boot=str(tmp_path / "boot")) as fw:
+        host = Host(fw.master)
+        _topic, _seq, payload = read_frame(fw.master, want=0)
+        hello = parse_hello(payload)
+        host.hello_req()
+        for index in range(hello["count"]):
+            host.topic_req(index)
+            while True:
+                _topic, _seq, payload = read_frame(fw.master, want=0)
+                if payload[0] == TOPIC_OP:
+                    break
+            parsed = parse_topic(payload)
+            assert parsed["index"] == index
+            host.topic_status(parsed["id"], 1 if parsed["id"] == 18 else 0)
+        host.ready()
+        quiet_until = time.monotonic() + 1.2
+        while True:
+            remaining = quiet_until - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                topic, _seq, _payload = read_frame(fw.master, timeout=remaining)
+            except AssertionError as error:
+                assert "timed out" in str(error), f"lost the firmware: {error}"
+                break
+            assert topic != 18, "log_text published while the host rejects it"
+        host.topic_status(18, 0)
+        _topic, _seq, payload = read_frame(fw.master, want=18)
+        text, end = take_string(payload, 0)
+        assert end == len(payload), "bytes after the log string"
+        assert text == format(hello["boot"], "08x")
 
 
 def test_subscribes_twist(tmp_path):

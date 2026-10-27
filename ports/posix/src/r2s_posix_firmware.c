@@ -1,4 +1,4 @@
-/* Test firmware: the handwritten Float32, Twist and bounded-String topics on
+/* Test firmware: the generated Float32, Twist and bounded-String topics on
  * a pty, with launch-time names, so the end-to-end tests drive the real core
  * as a process (docs/00-design.md, C10). */
 #define _POSIX_C_SOURCE 200809L
@@ -11,20 +11,16 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "handwritten.h"
 #include "r2s/r2s.h"
 #include "r2s/r2s_port.h"
 #include "r2s/r2s_session.h"
+#include "r2s_generated.h"
 
 #include "r2s_posix_port.h"
 
 /* Publish rates in Hz, from once a second to the loop's 1 ms granularity. */
 #define RATE_MIN 1u
 #define RATE_MAX 100u
-
-static const uint8_t battery_hash[8] = {0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u};
-static const uint8_t cmd_vel_hash[8] = {0x10u, 0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u};
-static const uint8_t log_text_hash[8] = {0x20u, 0x21u, 0x22u, 0x23u, 0x24u, 0x25u, 0x26u, 0x27u};
 
 struct options {
     const char *port;
@@ -35,34 +31,43 @@ struct options {
     unsigned rate;
 };
 
-/* The placeholder hashes match core/tests/support/handwritten.c until the
- * generator emits this table (G8); the names come from the command line. */
-static uint8_t fill_topics(const struct options *opts, r2s_session_topic_t *topics)
+/* The name a generated topic launches under: its command-line option, or
+ * NULL with drop set to drop it. An entry the list below does not know keeps
+ * the name the generator emitted, so a wider configuration still configures. */
+static const char *rename_for(const struct options *opts, const char *name, uint8_t *drop)
+{
+    if (strcmp(name, "battery") == 0) {
+        *drop = (opts->pub == NULL);
+        return opts->pub;
+    }
+    if (strcmp(name, "cmd_vel") == 0) {
+        *drop = (opts->sub == NULL);
+        return opts->sub;
+    }
+    if (strcmp(name, "log_text") == 0) {
+        *drop = (opts->log_text == NULL);
+        return opts->log_text;
+    }
+    *drop = 0u;
+    return name;
+}
+
+/* Copies the generated topic table, swapping in the command-line names. */
+static uint8_t fill_topics(const struct options *opts, r2s_topic_t *topics)
 {
     uint8_t count = 0u;
+    uint8_t i;
 
-    if (opts->pub != NULL) {
-        topics[count].topic_id = R2S_HANDWRITTEN_BATTERY_ID;
-        topics[count].flags = R2S_HANDWRITTEN_NARROW;
-        memcpy(topics[count].type_hash, battery_hash, sizeof battery_hash);
-        topics[count].type_name = "std_msgs/msg/Float32";
-        topics[count].topic_name = opts->pub;
-        count++;
-    }
-    if (opts->sub != NULL) {
-        topics[count].topic_id = R2S_HANDWRITTEN_CMD_VEL_ID;
-        topics[count].flags = (uint8_t)(0x01u | R2S_HANDWRITTEN_NARROW);
-        memcpy(topics[count].type_hash, cmd_vel_hash, sizeof cmd_vel_hash);
-        topics[count].type_name = "geometry_msgs/msg/Twist";
-        topics[count].topic_name = opts->sub;
-        count++;
-    }
-    if (opts->log_text != NULL) {
-        topics[count].topic_id = R2S_HANDWRITTEN_LOG_TEXT_ID;
-        topics[count].flags = R2S_HANDWRITTEN_NARROW;
-        memcpy(topics[count].type_hash, log_text_hash, sizeof log_text_hash);
-        topics[count].type_name = "std_msgs/msg/String";
-        topics[count].topic_name = opts->log_text;
+    for (i = 0u; i < R2S_TOPIC_COUNT; i++) {
+        const char *rename;
+        uint8_t drop;
+
+        topics[count] = r2s_topics[i];
+        rename = rename_for(opts, r2s_topics[i].topic_name, &drop);
+        if (drop != 0u) {
+            continue;
+        }
+        topics[count].topic_name = rename;
         count++;
     }
     return count;
@@ -169,6 +174,24 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
     fprintf(stderr, "r2s_posix: cmd_vel n=%lu\n", (unsigned long)s_cmd_vel_count);
 }
 
+/* One log_text line: the value as 8 hex digits. Fixed width fits the
+ * handwritten String bound of 8 characters for every id. */
+static r2s_status_t publish_log_text(uint32_t value)
+{
+    std_msgs__msg__String msg;
+    uint8_t i;
+
+    memset(&msg, 0, sizeof msg);
+    for (i = 0u; i < 8u; i++) {
+        int digit = (int)((value >> 28u) & 0xFu);
+
+        msg.data[i] = (char)(digit < 10 ? '0' + digit : 'a' + (digit - 10));
+        value <<= 4u;
+    }
+    msg.data[8] = '\0';
+    return r2s_publish_log_text(&msg);
+}
+
 static void sleep_1ms(void)
 {
     const struct timespec req = {0, 1000000L};
@@ -179,11 +202,13 @@ static void sleep_1ms(void)
 int main(int argc, char **argv)
 {
     struct options opts;
-    r2s_session_topic_t topics[3];
+    r2s_topic_t topics[R2S_TOPIC_COUNT];
     uint8_t count;
     uint32_t interval;
     uint32_t last_pub;
+    uint32_t boot_id;
     uint32_t sent = 0u;
+    uint8_t log_booted = 0u;
 
     setvbuf(stderr, NULL, _IONBF, 0);
     if (argc < 2) {
@@ -197,7 +222,7 @@ int main(int argc, char **argv)
     parse_options(argc, argv, &opts);
     /* Prime the counter before opening the port, so a bad boot file fails
      * before any byte reaches the line. */
-    (void)r2s_port_boot_id();
+    boot_id = r2s_port_boot_id();
     if (r2s_posix_open(opts.port) < 0) {
         fprintf(stderr, "r2s_posix: cannot open '%s': %s\n", opts.port, strerror(errno));
         return 1;
@@ -216,13 +241,26 @@ int main(int argc, char **argv)
 
         r2s_spin_some();
         now = r2s_port_tick();
-        if (opts.pub != NULL && r2s_connected() != 0u && (uint32_t)(now - last_pub) >= interval) {
+        if (r2s_connected() == 0u) {
+            sleep_1ms();
+            continue;
+        }
+        if (opts.log_text != NULL && log_booted == 0u) {
+            /* A boot line that fails to publish is retried until it sends. */
+            if (publish_log_text(boot_id) == R2S_OK) {
+                log_booted = 1u;
+            }
+        }
+        if (opts.pub != NULL && (uint32_t)(now - last_pub) >= interval) {
             std_msgs__msg__Float32 msg;
 
             msg.data = (float)sent;
             if (r2s_publish_battery(&msg) == R2S_OK) {
                 sent++;
                 last_pub = now;
+                if (opts.log_text != NULL && sent % 10u == 0u) {
+                    (void)publish_log_text(sent);
+                }
             }
         }
         sleep_1ms();
