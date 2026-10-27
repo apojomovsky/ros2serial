@@ -458,10 +458,10 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
         return []
     problems = []
 
-    def visit(message, values) -> None:
+    def visit(message, values, trail="", seen=frozenset()) -> None:
         for field in message.fields:
             expected = values[field.name]
-            where = f"{message.type_name}.{field.name}"
+            where = f"{trail}{message.type_name}.{field.name}"
             if field.type_name == "float32":
                 elements = expected if field.is_array else [expected]
                 for index, element in enumerate(elements):
@@ -471,15 +471,25 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
                     problems.append(f"{name}/message: {where}{position} must be exactly representable in binary32")
             elif field.type_name not in msgs.PRIMITIVES:
                 nested = _MESSAGES.load(field.type_name)
+                if id(expected) in seen:
+                    continue
+                entering = seen | {id(expected)}
                 if field.is_array:
-                    for item in expected:
-                        visit(nested, item)
+                    for index, item in enumerate(expected):
+                        if id(item) in entering:
+                            continue
+                        visit(nested, item, f"{where}[{index}].", entering | {id(item)})
                 else:
-                    visit(nested, expected)
+                    visit(nested, expected, trail, entering)
 
-    # A cyclic YAML alias walks nested messages until the stack runs out.
+    # A cyclic YAML alias would revisit one mapping per recursion level until
+    # the stack runs out. Containers already on the path are skipped instead,
+    # so a directly self-referential message cannot flood the output; finite
+    # data with repeated types is still walked in full. Findings made before
+    # any other abort are still worth reporting, next to the encode error
+    # check_message adds for the same vector.
     try:
-        visit(message, values)
+        visit(message, values, seen=frozenset({id(values)}))
     except (
         msgs.MessageError,
         Rejected,
@@ -490,7 +500,7 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
         OverflowError,
         RecursionError,
     ):
-        return []
+        return problems
     return problems
 
 
