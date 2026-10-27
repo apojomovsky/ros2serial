@@ -105,7 +105,8 @@ typedef struct {
 } test_outer_t;
 
 static const uint8_t test_nest_types[] = {
-    0x01u, 0x00u, 0x00u, 0x00u, 0x01u, 0x02u, 0x00u, 0x01u, 0x00u, 0x02u, 0x04u, 0x00u, 0x03u, 0x00u, 0x02u,
+    0x01u, 0x00u, 0x00u, 0x00u, 0x01u, 0x02u, 0x00u, 0x01u, 0x00u, 0x02u,
+    0x04u, 0x00u, 0x03u, 0x00u, 0x02u, 0x34u, 0x01u, 0x05u, 0x00u, 0x03u,
 };
 static const uint8_t test_nest_fields[] = {
     0x01u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, /* tag at 0 */
@@ -113,11 +114,28 @@ static const uint8_t test_nest_fields[] = {
     0x01u, 0x00u, 0x01u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, /* after at 1 */
     0x0Cu, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x01u, 0x00u, /* m1 at 0 */
     0x0Cu, 0x00u, 0x02u, 0x00u, 0x00u, 0x00u, 0x01u, 0x00u, /* m2 at 2 */
+    0x0Cu, 0x01u, 0x00u, 0x00u, 0x02u, 0x00u, 0x00u, 0x00u, /* fx[2] at 0 */
+    0x0Cu, 0x82u, 0x02u, 0x00u, 0x2Cu, 0x01u, 0x00u, 0x00u, /* b16[<=300] at 2 */
+    0x0Cu, 0x02u, 0x30u, 0x01u, 0x02u, 0x00u, 0x00u, 0x00u, /* bd[<=2] at 304 */
 };
-static const r2s_codec_table_t test_nest_table = {test_nest_types, 3u, test_nest_fields, 5u};
+static const r2s_codec_table_t test_nest_table = {test_nest_types, 4u, test_nest_fields, 8u};
 
-typedef char check_twist_size[sizeof(geometry_msgs__msg__Twist) == 48u ? 1 : -1];
-typedef char check_float32_size[sizeof(std_msgs__msg__Float32) == 4u ? 1 : -1];
+/* A holder of nested arrays: a fixed pair, a bounded run of up to 300 and a
+ * bounded pair, all over the depth-1 inner type so the holder itself stays
+ * within the nesting stack. */
+typedef struct {
+    test_inner_t fx[2];
+    test_inner_t b16[300];
+    uint16_t b16_n;
+    test_inner_t bd[2];
+    uint8_t bd_n;
+} test_holder_t;
+
+typedef char check_holder_size[sizeof(test_holder_t) == 308u ? 1 : -1];
+typedef char check_holder_b16[offsetof(test_holder_t, b16) == 2u ? 1 : -1];
+typedef char check_holder_b16_n[offsetof(test_holder_t, b16_n) == 302u ? 1 : -1];
+typedef char check_holder_bd[offsetof(test_holder_t, bd) == 304u ? 1 : -1];
+typedef char check_holder_bd_n[offsetof(test_holder_t, bd_n) == 306u ? 1 : -1];
 
 static uint16_t encode_here(const r2s_codec_table_t *table, uint16_t type, const void *msg, uint8_t narrow,
                             uint8_t *buf, uint16_t cap, int8_t *rc, uint8_t *field)
@@ -290,6 +308,15 @@ void test_codec_narrow_converts_float64_like_the_reference(void)
         {{0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF0u, 0x3Fu}, {0x00u, 0x00u, 0x80u, 0x3Fu}},
         {{0x9Au, 0x99u, 0x99u, 0x99u, 0x99u, 0x99u, 0xB9u, 0x3Fu}, {0xCDu, 0xCCu, 0xCCu, 0x3Du}},
         {{0x00u, 0x00u, 0x00u, 0x10u, 0x00u, 0x00u, 0x70u, 0x41u}, {0x00u, 0x00u, 0x80u, 0x4Bu}},
+        /* rounding at the top overflows to infinity */
+        {{0x00u, 0x00u, 0x00u, 0xF0u, 0xFFu, 0xFFu, 0xEFu, 0x47u}, {0x00u, 0x00u, 0x80u, 0x7Fu}},
+        /* subnormal ties: even stays, odd rounds up */
+        {{0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xB4u, 0x36u}, {0x02u, 0x00u, 0x00u, 0x00u}},
+        {{0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xBCu, 0x36u}, {0x04u, 0x00u, 0x00u, 0x00u}},
+        /* powers of two across the shift-by-32 case */
+        {{0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF0u, 0x37u}, {0x00u, 0x00u, 0x20u, 0x00u}},
+        {{0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x08u, 0x38u}, {0x00u, 0x00u, 0x60u, 0x00u}},
+        {{0x00u, 0x00u, 0x00u, 0x40u, 0x00u, 0x00u, 0xF0u, 0x37u}, {0x00u, 0x00u, 0x20u, 0x00u}},
         /* a NaN stays a NaN */
         {{0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF8u, 0x7Fu}, {0x00u, 0x00u, 0xC0u, 0x7Fu}},
     };
@@ -583,4 +610,162 @@ void test_codec_handwritten_types_round_trip(void)
     TEST_ASSERT_EQUAL_INT8(
         R2S_OK, decode_here(&R2S_HANDWRITTEN_TABLE, R2S_HANDWRITTEN_FLOAT32, buf, 4u, 1u, &fout, &field));
     TEST_ASSERT_EQUAL_MEMORY(&f32, &fout, sizeof f32);
+}
+
+/* covers: DSC-28, DSC-30, DSC-31 */
+void test_codec_nested_arrays_visit_each_element(void)
+{
+    test_holder_t in;
+    static uint8_t buf[32];
+    test_holder_t out;
+    int8_t rc;
+    uint8_t field;
+    uint16_t len;
+    uint16_t i;
+
+    memset(&in, 0, sizeof in);
+    for (i = 0u; i < 2u; i++) {
+        in.fx[i].tag = (uint8_t)(0xA0u + i);
+        in.bd[i].tag = (uint8_t)(0xC0u + i);
+    }
+    in.b16[0].tag = 0xE0u;
+    in.b16[1].tag = 0xE2u;
+    in.b16_n = 2u;
+    in.bd_n = 2u;
+    len = encode_here(&test_nest_table, 3u, &in, 0u, buf, (uint16_t)sizeof buf, &rc, &field);
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, rc);
+    TEST_ASSERT_EQUAL_UINT16(8, len);
+    memset(&out, 0, sizeof out);
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, decode_here(&test_nest_table, 3u, buf, len, 0u, &out, &field));
+    TEST_ASSERT_EQUAL_MEMORY(&in, &out, sizeof in);
+    TEST_ASSERT_EQUAL_UINT8(0xE2u, out.b16[1].tag);
+    TEST_ASSERT_EQUAL_UINT16(2u, out.b16_n);
+    TEST_ASSERT_EQUAL_UINT8(2u, out.bd_n);
+}
+
+/* covers: DSC-31, ENC-16 */
+void test_codec_nested_bounded_array_checks_its_bound(void)
+{
+    test_holder_t in;
+    static uint8_t buf[32];
+    uint8_t payload[] = {0xA0u, 0xA1u, 0xBDu, 0x02u};
+    test_holder_t out;
+    int8_t rc;
+    uint8_t field;
+
+    memset(&in, 0, sizeof in);
+    in.b16_n = 301u;
+    encode_here(&test_nest_table, 3u, &in, 0u, buf, (uint16_t)sizeof buf, &rc, &field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, rc);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, decode_here(&test_nest_table, 3u, payload,
+                                                       (uint16_t)sizeof payload, 0u, &out, &field));
+}
+
+/* covers: DSC-31 */
+void test_codec_empty_bounded_nested_array_sends_only_its_count(void)
+{
+    test_holder_t in;
+    static uint8_t buf[32];
+    test_holder_t out;
+    int8_t rc;
+    uint8_t field;
+    uint16_t len;
+    uint16_t i;
+
+    memset(&in, 0, sizeof in);
+    for (i = 0u; i < 2u; i++) {
+        in.fx[i].tag = (uint8_t)(0xA0u + i);
+    }
+    len = encode_here(&test_nest_table, 3u, &in, 0u, buf, (uint16_t)sizeof buf, &rc, &field);
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, rc);
+    TEST_ASSERT_EQUAL_UINT16(4, len);
+    TEST_ASSERT_EQUAL_HEX8(0x00u, buf[2]);
+    TEST_ASSERT_EQUAL_HEX8(0x00u, buf[3]);
+    memset(&out, 0xFFu, sizeof out);
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, decode_here(&test_nest_table, 3u, buf, len, 0u, &out, &field));
+    TEST_ASSERT_EQUAL_UINT16(0u, out.b16_n);
+    TEST_ASSERT_EQUAL_UINT8(0u, out.bd_n);
+    TEST_ASSERT_EQUAL_UINT8(0xA1u, out.fx[1].tag);
+}
+
+/* covers: DSC-36 */
+void test_codec_nested_array_truncated_varint_is_dropped(void)
+{
+    static const uint8_t payload[] = {0xA0u, 0xA1u, 0x80u};
+    test_holder_t out;
+    uint8_t field = 0xFFu;
+
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_DECODE, decode_here(&test_nest_table, 3u, payload,
+                                                       (uint16_t)sizeof payload, 0u, &out, &field));
+}
+
+/* covers: DSC-35 */
+void test_codec_buffer_too_small_fails_without_truncating(void)
+{
+    test_scalars_t scalars;
+    test_str_t text;
+    test_bounded_t bounded;
+    test_f64_t wide;
+    geometry_msgs__msg__Twist twist = {{1.5, -2.0, 0.5}, {1.0, -0.0, 3.0}};
+    test_mid_t mid;
+    static uint8_t buf[64];
+    int8_t rc;
+    uint8_t field;
+
+    memset(&scalars, 0, sizeof scalars);
+    encode_here(&test_scalars_table, 0u, &scalars, 0u, buf, 0u, &rc, &field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, rc);
+    memset(&text, 0, sizeof text);
+    encode_here(&test_arrays_table, 0u, &text, 0u, buf, 0u, &rc, &field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, rc);
+    memset(&bounded, 0, sizeof bounded);
+    bounded.n = 2u;
+    encode_here(&test_arrays_table, 2u, &bounded, 0u, buf, 0u, &rc, &field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, rc);
+    memset(&wide, 0, sizeof wide);
+    encode_here(&test_f64_table, 0u, &wide, 1u, buf, 0u, &rc, &field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, rc);
+    encode_here(&R2S_HANDWRITTEN_TABLE, R2S_HANDWRITTEN_TWIST, &twist, 0u, buf, 0u, &rc, &field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, rc);
+    TEST_ASSERT_EQUAL_UINT8(1, field);
+    mid.in.tag = 0xABu;
+    mid.after = 0xCDu;
+    encode_here(&test_nest_table, 1u, &mid, 0u, buf, 1u, &rc, &field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, rc);
+}
+
+/* covers: DSC-36 */
+void test_codec_truncated_payloads_report_their_entry(void)
+{
+    test_scalars_t sout;
+    test_str_t strout;
+    test_bounded_t bout;
+    test_f64_t fout;
+    test_mid_t mout;
+    uint8_t field = 0xFFu;
+    static const uint8_t one[] = {0x02u};
+    static const uint8_t varint[] = {0x80u};
+    static const uint8_t short_string[] = {0x05u, 0xAAu};
+    static const uint8_t short_bounded[] = {0x02u, 0xAAu};
+    static const uint8_t short_narrow[] = {0x00u, 0x00u};
+
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_DECODE, decode_here(&test_scalars_table, 0u, one, 0u, 0u, &sout, &field));
+    TEST_ASSERT_EQUAL_UINT8(0, field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_DECODE, decode_here(&test_arrays_table, 0u, varint,
+                                                       (uint16_t)sizeof varint, 0u, &strout, &field));
+    TEST_ASSERT_EQUAL_UINT8(0, field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_DECODE, decode_here(&test_arrays_table, 2u, varint,
+                                                       (uint16_t)sizeof varint, 0u, &bout, &field));
+    TEST_ASSERT_EQUAL_UINT8(0, field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_DECODE, decode_here(&test_arrays_table, 0u, short_string,
+                                                       (uint16_t)sizeof short_string, 0u, &strout, &field));
+    TEST_ASSERT_EQUAL_UINT8(0, field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_DECODE, decode_here(&test_arrays_table, 2u, short_bounded,
+                                                       (uint16_t)sizeof short_bounded, 0u, &bout, &field));
+    TEST_ASSERT_EQUAL_UINT8(0, field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_DECODE, decode_here(&test_f64_table, 0u, short_narrow,
+                                                       (uint16_t)sizeof short_narrow, 1u, &fout, &field));
+    TEST_ASSERT_EQUAL_UINT8(0, field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_DECODE, decode_here(&test_nest_table, 1u, one, 0u, 0u, &mout, &field));
+    TEST_ASSERT_EQUAL_UINT8(1, field);
 }

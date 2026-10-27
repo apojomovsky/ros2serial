@@ -163,7 +163,7 @@ static uint32_t narrow_f64(uint32_t hi, uint32_t lo)
         } else {
             count = fhi >> (shift - 32u);
             guard = (fhi >> (shift - 33u)) & 1u;
-            sticky = (fhi & ((1u << (shift - 32u)) - 1u)) | (lo == 0u ? 0u : 1u);
+            sticky = (fhi & ((1u << (shift - 33u)) - 1u)) | (lo == 0u ? 0u : 1u);
         }
         if (guard != 0u && (sticky != 0u || (count & 1u) != 0u)) {
             count++;
