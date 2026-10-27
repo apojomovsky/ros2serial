@@ -8,14 +8,18 @@ framing (`r2s_gen.reference.frames`), so a failure bisects to the firmware's
 bytes before anyone reads its source.
 """
 
+import dataclasses
 import os
 import pty
 import select
+import shutil
 import signal
 import struct
 import subprocess
 import time
+from pathlib import Path
 
+from r2s_gen import bounds, config, msgs, topics
 from r2s_gen.reference import frames as wire
 
 FIRMWARE = os.environ.get("R2S_POSIX_FW", "")
@@ -499,6 +503,92 @@ def test_launch_topic_name_at_limit_is_announced(tmp_path):
     with Firmware(*args, boot=str(tmp_path / "boot")) as fw:
         _, topics, _ = do_handshake(fw)
         assert [t["topic"] for t in topics] == ["n" * limit for _, _, limit in cases]
+
+
+# The Twist structs the dropped subscription's handler is declared with: the
+# firmware defines r2s_on_cmd_vel unconditionally, so a build without cmd_vel
+# pre-includes its message type, which the narrowed configuration no longer
+# emits. The layout is the standard Twist, never instantiated here.
+TWIST_SHIM = """\
+typedef struct geometry_msgs__msg__Vector3 {
+    double x;
+    double y;
+    double z;
+} geometry_msgs__msg__Vector3;
+typedef struct geometry_msgs__msg__Twist {
+    geometry_msgs__msg__Vector3 linear;
+    geometry_msgs__msg__Vector3 angular;
+} geometry_msgs__msg__Twist;
+"""
+
+
+def generated_define(header, name):
+    for line in header.splitlines():
+        if line.startswith(f"#define {name} "):
+            return line.split()[2]
+    return None
+
+
+def build_firmware_without_cmd_vel(tmp_path):
+    """A firmware binary built from the checked-in configuration minus cmd_vel."""
+    root = Path(__file__).resolve().parents[3]
+    loaded = config.load(root / "ports" / "posix" / "r2s.yaml")
+    narrowed = dataclasses.replace(loaded, topics=tuple(t for t in loaded.topics if t.name != "cmd_vel"))
+    assert len(narrowed.topics) == len(loaded.topics) - 1, "r2s.yaml names no cmd_vel topic to omit"
+    repository = msgs.MessageRepository()
+    roots = [topic.type_name for topic in narrowed.topics]
+    resolved = bounds.resolve(repository, roots, bounds=dict(narrowed.bounds))
+    header, source = topics.generate(narrowed, resolved, repository)
+    gen_dir = tmp_path / "narrowed"
+    gen_dir.mkdir()
+    (gen_dir / "r2s_generated.h").write_text(header, encoding="utf-8")
+    (gen_dir / "r2s_generated.c").write_text(source, encoding="utf-8")
+    (gen_dir / "twist_shim.h").write_text(TWIST_SHIM, encoding="utf-8")
+    # A quoted include resolves beside the including file first, so the port
+    # sources build as copies next to the narrowed pair: otherwise they pick
+    # up the checked-in generated headers from ports/posix/src/.
+    port_dir = root / "ports" / "posix" / "src"
+    for name in ("r2s_posix_port.c", "r2s_posix_port.h", "r2s_posix_firmware.c"):
+        shutil.copy(port_dir / name, gen_dir / name)
+    core = root / "core" / "src"
+    sources = sorted(p for p in core.glob("*.c") if p.name != "test_reset.c")
+    sources += [gen_dir / "r2s_posix_port.c", gen_dir / "r2s_posix_firmware.c", gen_dir / "r2s_generated.c"]
+    command = [
+        "cc",
+        "-std=c99",
+        "-I",
+        str(gen_dir),
+        "-I",
+        str(root / "core" / "include"),
+        "-I",
+        str(root / "ports" / "posix" / "src"),
+        "-DR2S_WITH_CODEC",
+        "-include",
+        str(gen_dir / "twist_shim.h"),
+        *[str(p) for p in sources],
+        "-o",
+        str(tmp_path / "r2s_posix_narrowed"),
+    ]
+    for name in ("R2S_MAX_FRAME", "R2S_MAX_NEST", "R2S_TOPIC_MAX_COUNT"):
+        value = generated_define(header, name)
+        if value is not None:
+            command.insert(-3, f"-D{name}={value}")
+    compiled = subprocess.run(command, capture_output=True, text=True, timeout=300)
+    assert compiled.returncode == 0, compiled.stderr
+    return tmp_path / "r2s_posix_narrowed"
+
+
+def test_missing_default_topic_flag_fails(tmp_path):
+    binary = build_firmware_without_cmd_vel(tmp_path)
+    command = [str(binary), "/dev/pts/does-not-exist"]
+    env = dict(os.environ)
+    env[BOOT_ENV] = str(tmp_path / "boot")
+    proc = subprocess.run(
+        command, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=START_TIMEOUT, env=env
+    )
+    assert proc.returncode == 2
+    assert "r2s_posix: --sub names a topic" in proc.stderr
+    assert "cmd_vel" in proc.stderr
 
 
 def test_missing_boot_file_env_fails(tmp_path):
