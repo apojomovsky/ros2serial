@@ -463,6 +463,15 @@ def test_launch_topic_name_at_limit_passes_name_check(tmp_path):
         assert "does-not-exist" in error
 
 
+def test_launch_topic_name_at_limit_is_announced(tmp_path):
+    args = []
+    for flag, _, limit in LAUNCH_NAME_CASES:
+        args += [flag, "n" * limit]
+    with Firmware(*args, boot=str(tmp_path / "boot")) as fw:
+        _, topics, _ = do_handshake(fw)
+        assert [t["topic"] for t in topics] == ["n" * limit for _, _, limit in LAUNCH_NAME_CASES]
+
+
 def test_missing_boot_file_env_fails(tmp_path):
     code, error = run_once([], keep_env=False)
     assert code == 2
