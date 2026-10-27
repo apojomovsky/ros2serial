@@ -1,8 +1,8 @@
-name: reset_new_boot_id
+name: reset_zero_token
 covers: [SES-16, SES-17, SES-19, SES-20, SES-21]
 steps:
   - from: mcu
-    frame: "00 00 02 01 00 78 56 34 12 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 30 e8"
+    frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f0 ad"
     at_ms: 100
   - from: host
     frame: "00 00 03 00 49 29"
@@ -23,7 +23,7 @@ steps:
     frame: "00 03 05 11 00 b1 a0"
     at_ms: 320
   - from: host
-    frame: "00 04 06 65 3b"
+    frame: "00 04 06 01 00 00 00 00 44"
     at_ms: 320
   - from: host
     frame: "04 00 d8 97"
@@ -35,9 +35,9 @@ steps:
     frame: "04 02 ca b4"
     at_ms: 1820
   - from: mcu
-    frame: "00 03 02 01 00 21 43 65 87 00 02 03 02 40 42 0f 00 00 01 04 6e 6f 64 65 3c 36"
+    frame: "00 03 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 01 04 6e 6f 64 65 c7 33"
     at_ms: 2000
-    note: "reset: a different boot id"
+    note: "reset: a zero token; the MCU rebooted"
   - from: host
     frame: "00 00 03 00 49 29"
     at_ms: 2000
@@ -48,7 +48,7 @@ steps:
     frame: "00 01 05 10 00 1f 80"
     at_ms: 2050
   - from: host
-    frame: "00 02 06 b5 6f"
+    frame: "00 02 06 02 00 00 00 37 79"
     at_ms: 2050
   - from: host
     frame: "04 00 d8 97"

@@ -2,7 +2,7 @@ name: pub_sub_handshake
 covers: [SES-9, SES-16, SES-17, SES-18, CTL-4, ENC-10, HB-2, HB-4]
 steps:
   - from: mcu
-    frame: "00 00 02 01 00 21 43 65 87 00 02 03 02 40 42 0f 00 00 02 04 64 65 6d 6f 9d 7f"
+    frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 64 65 6d 6f 66 7a"
     at_ms: 300
     note: "unsolicited HELLO after boot: full mode, two topics"
   - from: host
@@ -26,7 +26,7 @@ steps:
     frame: "00 03 05 11 00 b1 a0"
     at_ms: 350
   - from: host
-    frame: "00 04 06 65 3b"
+    frame: "00 04 06 01 00 00 00 00 44"
     at_ms: 350
     note: "every topic resolved, so READY"
   - from: mcu

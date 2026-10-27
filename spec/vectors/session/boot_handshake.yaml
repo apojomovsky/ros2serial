@@ -2,16 +2,16 @@ name: boot_handshake
 covers: [SES-13, SES-14, SES-16, SES-17, SES-18]
 steps:
   - from: mcu
-    frame: "00 00 02 01 00 78 56 34 12 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 30 e8"
+    frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f0 ad"
     at_ms: 300
   - from: host
     frame: "00 00 03 00 49 29"
     at_ms: 300
     note: "asked as soon as the HELLO lands"
   - from: mcu
-    frame: "00 01 02 01 00 78 56 34 12 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f9 61"
+    frame: "00 01 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 39 24"
     at_ms: 350
-    note: "retransmit with the same boot id; the host ignores it"
+    note: "retransmit with the same token; the host ignores it"
   - from: mcu
     frame: "00 02 04 00 10 00 00 01 02 03 04 05 06 07 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 07 62 61 74 74 65 72 79 41 1f"
     at_ms: 450
@@ -28,7 +28,7 @@ steps:
     frame: "00 03 05 11 00 b1 a0"
     at_ms: 550
   - from: host
-    frame: "00 04 06 65 3b"
+    frame: "00 04 06 01 00 00 00 00 44"
     at_ms: 550
   - from: host
     frame: "04 00 d8 97"
