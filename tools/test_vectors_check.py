@@ -583,6 +583,33 @@ payload: "{payload}"
     ]
 
 
+def test_repeated_types_with_finite_data_are_walked_in_full(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "A.msg").write_text("float32 d\nB b\n", encoding="utf-8")
+    (definitions / "B.msg").write_text("float32 e\nA a\n", encoding="utf-8")
+    files = {
+        "messages/repeated.yaml": """
+name: repeated
+covers: [ENC-3]
+type: demo_msgs/msg/A
+profile: {narrow_float64: false}
+message: {d: 1.1, b: {e: 1.2, a: {d: 1.3, b: {e: 1.4}}}}
+payload: ""
+"""
+    }
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    vectors = make_tree(tmp_path / "vectors", files)
+    assert vectors_check.check_tree(vectors) == [
+        "messages/repeated.yaml/message: demo_msgs/msg/A.d must be exactly representable in binary32",
+        "messages/repeated.yaml/message: demo_msgs/msg/B.e must be exactly representable in binary32",
+        "messages/repeated.yaml/message: demo_msgs/msg/A.d must be exactly representable in binary32",
+        "messages/repeated.yaml/message: demo_msgs/msg/B.e must be exactly representable in binary32",
+        "messages/repeated.yaml/message: the reference does not make it: demo_msgs/msg/B.a: no value",
+    ]
+
+
 def test_nested_array_positions_survive_a_plain_nested_parent(tmp_path, monkeypatch):
     definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
     definitions.mkdir(parents=True)
