@@ -263,6 +263,33 @@ def test_build_defines_rejects_a_header_without_the_frame_limit(tmp_path):
     assert str(caught.value) == "r2s_generated.h: no R2S_MAX_FRAME limit; regenerate the sources"
 
 
+def test_build_defines_rejects_a_header_without_the_nest_limit(tmp_path):
+    _, files = generated("cmake", tmp_path)
+    broken = files["r2s_generated.h"].replace("#define R2S_MAX_NEST 2u", "#define R2S_MAX_NEST 2")
+
+    with pytest.raises(MessageError) as caught:
+        layouts.build_defines(broken)
+
+    assert str(caught.value) == "r2s_generated.h: no R2S_MAX_NEST limit; regenerate the sources"
+
+
+def test_build_defines_rejects_a_malformed_topic_limit(tmp_path):
+    loaded = Config(
+        node="wide",
+        topics=tuple(Topic(name=f"t{i}", type_name="std_msgs/msg/Float32", direction="pub") for i in range(17)),
+        bounds={},
+    )
+    repository = msgs.MessageRepository()
+    resolved = bounds.resolve(repository, ["std_msgs/msg/Float32"])
+    files = layouts.generate(loaded, resolved, repository, "cmake")
+    broken = files["r2s_generated.h"].replace("#define R2S_TOPIC_MAX_COUNT 17u", "#define R2S_TOPIC_MAX_COUNT 17")
+
+    with pytest.raises(MessageError) as caught:
+        layouts.build_defines(broken)
+
+    assert str(caught.value) == "r2s_generated.h: no R2S_TOPIC_MAX_COUNT limit; regenerate the sources"
+
+
 ENCODE_MAIN = """\
 #include <stdint.h>
 #include <stdio.h>
