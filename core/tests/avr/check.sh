@@ -43,7 +43,9 @@ logs_ram=$(sram logs)
 [ "$base_ram" = "$logs_ram" ] \
   || { echo "avr-flash: log lines added $((logs_ram - base_ram)) bytes of RAM"; exit 1; }
 for line in "battery low log line" "adc counts=" "link lost log line"; do
-  avr-strings "$build/logs.elf" | grep -qF "$line" \
+  # No -q: grep quitting on the first match closes the pipe while avr-strings
+  # still writes, and pipefail turns its SIGPIPE into a false missing line.
+  avr-strings "$build/logs.elf" | grep -F "$line" > /dev/null \
     || { echo "avr-flash: log line missing from flash: $line"; exit 1; }
 done
 echo "avr-flash ok: SRAM unchanged at ${base_ram} bytes, log lines in flash"
