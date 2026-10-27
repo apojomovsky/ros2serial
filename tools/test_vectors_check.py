@@ -530,6 +530,31 @@ payload: ""
     ]
 
 
+def test_a_self_listed_array_keeps_later_findings(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "A.msg").write_text("A[] kids\nfloat32 data\n", encoding="utf-8")
+    files = {
+        "messages/flood_list.yaml": """
+name: flood_list
+covers: [ENC-3]
+type: demo_msgs/msg/A
+profile: {narrow_float64: false}
+message: {kids: &L [*L], data: 1.1}
+payload: ""
+"""
+    }
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    vectors = make_tree(tmp_path / "vectors", files)
+    assert vectors_check.check_tree(vectors) == [
+        "messages/flood_list.yaml: cyclic YAML alias",
+        "messages/flood_list.yaml/message: demo_msgs/msg/A.data must be exactly representable in binary32",
+        "messages/flood_list.yaml/message: the reference does not make it: "
+        "demo_msgs/msg/A.kids: expected a mapping of demo_msgs/msg/A's fields",
+    ]
+
+
 def test_twin_fields_of_one_type_keep_both_findings_on_abort(tmp_path, monkeypatch):
     definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
     definitions.mkdir(parents=True)
