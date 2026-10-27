@@ -28,6 +28,11 @@ static void drop(void)
     framer.counters.dropped_frames++;
 }
 
+void r2s_framer_count_refused(void)
+{
+    drop();
+}
+
 void r2s_framer_init(void)
 {
     framer.len = 0u;
