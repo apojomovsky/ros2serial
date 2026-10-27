@@ -13,6 +13,7 @@ file(GLOB R2S_CORE_SOURCES CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/core/src/*.c")
 list(REMOVE_ITEM R2S_CORE_SOURCES "${R2S_REPO_ROOT}/core/src/test_reset.c")
 
 add_executable(r2s_posix_firmware
+    ${R2S_CORE_SOURCES}
     src/r2s_posix_port.c
     src/r2s_posix_firmware.c
     "${R2S_REPO_ROOT}/core/tests/support/handwritten.c"
@@ -25,3 +26,13 @@ target_compile_definitions(r2s_posix_firmware PRIVATE R2S_WITH_CODEC R2S_MAX_NES
 target_compile_options(r2s_posix_firmware PRIVATE
     -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow
     -Wstrict-prototypes -Wmissing-prototypes -Wundef)
+
+enable_testing()
+# The tick lives in the port, not the core, so its checks link only the port
+# and run with no pty and no boot file.
+add_executable(r2s_posix_port_test tests/test_posix_port_tick.c src/r2s_posix_port.c)
+target_include_directories(r2s_posix_port_test PRIVATE "${R2S_REPO_ROOT}/core/include" src)
+target_compile_options(r2s_posix_port_test PRIVATE
+    -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow
+    -Wstrict-prototypes -Wmissing-prototypes -Wundef)
+add_test(NAME posix_port_tick COMMAND r2s_posix_port_test)

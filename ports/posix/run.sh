@@ -23,4 +23,5 @@ cmake -S ports/posix -B "$build" -G Ninja >"$build.configure.log" 2>&1 \
   || { cat "$build.configure.log"; exit 1; }
 cmake --build "$build" || exit 1
 [ "$build_only" = 1 ] && exit 0
+ctest --test-dir "$build" --output-on-failure || exit 1
 R2S_POSIX_FW="$build/r2s_posix_firmware" python3 -m pytest ports/posix/tests -q

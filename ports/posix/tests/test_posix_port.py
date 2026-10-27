@@ -26,7 +26,6 @@ STOP_TIMEOUT = 10.0
 
 HELLO_OP = 0x02
 TOPIC_OP = 0x04
-PONG_OP = 0x02
 
 
 def firmware_binary():
@@ -35,27 +34,34 @@ def firmware_binary():
     return FIRMWARE
 
 
+# Bytes read from the pty past the end of the wanted frame. One test runs one
+# firmware at a time, so a single buffer does, cleared on launch and on stop.
+_PENDING = bytearray()
+
+
 def read_frame(master, want=None, timeout=FRAME_TIMEOUT):
     """The next frame as (topic, seq, payload), skipping empty units and, when
-    want is set, frames on other topics such as heartbeats."""
+    want is set, frames on other topics such as heartbeats. Bytes past the
+    wanted frame stay buffered for the next call, since one read often holds
+    several frames."""
     deadline = time.monotonic() + timeout
-    unit = bytearray()
     while True:
-        remaining = deadline - time.monotonic()
-        assert remaining > 0, "timed out waiting for a frame"
-        ready, _, _ = select.select([master], [], [], remaining)
-        assert ready, "timed out waiting for a frame"
-        chunk = os.read(master, 4096)
-        assert chunk, "the firmware closed the pty"
-        for byte in chunk:
-            unit.append(byte)
-            if byte == 0x00:
-                frame = wire.decode(bytes(unit))
-                unit = bytearray()
-                if frame is None:
-                    continue
-                if want is None or frame[0] == want:
-                    return frame
+        while _PENDING.find(b"\x00") < 0:
+            remaining = deadline - time.monotonic()
+            assert remaining > 0, "timed out waiting for a frame"
+            ready, _, _ = select.select([master], [], [], remaining)
+            assert ready, "timed out waiting for a frame"
+            chunk = os.read(master, 4096)
+            assert chunk, "the firmware closed the pty"
+            _PENDING.extend(chunk)
+        end = _PENDING.find(b"\x00")
+        unit = bytes(_PENDING[: end + 1])
+        del _PENDING[: end + 1]
+        frame = wire.decode(unit)
+        if frame is None:
+            continue
+        if want is None or frame[0] == want:
+            return frame
 
 
 def take_varint(payload, pos):
@@ -117,16 +123,11 @@ def parse_topic(payload):
     }
 
 
-def parse_pong(payload, ping_id):
-    assert payload[0] == PONG_OP, f"expected PONG, got opcode {payload[0]:#04x}"
-    assert payload[1] == ping_id, f"pong answers ping {payload[1]}, not {ping_id}"
-    return int.from_bytes(payload[2:6], "little")
-
-
 class Firmware:
     """A firmware process on a pty pair, with its stderr captured."""
 
     def __init__(self, *args, boot=None, keep_env=True):
+        _PENDING.clear()
         self._master, slave = pty.openpty()
         try:
             cmd = [firmware_binary(), os.ttyname(slave), *args]
@@ -193,6 +194,7 @@ class Firmware:
             self._proc.communicate()
             raise AssertionError("the firmware ignored SIGTERM") from None
         os.close(self._master)
+        _PENDING.clear()
         return self._proc.returncode
 
     def __enter__(self):
@@ -225,9 +227,6 @@ class Host:
 
     def ready(self):
         self.send(0, b"\x06")
-
-    def ping(self, ping_id):
-        self.send(1, b"\x01" + bytes((ping_id,)))
 
 
 def do_handshake(fw):
@@ -291,21 +290,6 @@ def test_handshake_reaches_connected(tmp_path):
     assert hello["node"] == "r2s_posix"
 
 
-def test_tick_is_monotonic(tmp_path):
-    with Firmware("--rate", "1", boot=str(tmp_path / "boot")) as fw:
-        _hello, _topics, host = do_handshake(fw)
-        ticks = []
-        for ping_id in range(3):
-            host.ping(ping_id)
-            _, _, payload = read_frame(fw.master, want=1)
-            ticks.append(parse_pong(payload, ping_id))
-            if ping_id < 2:
-                read_frame(fw.master, want=4, timeout=2.0)
-    assert ticks == sorted(ticks)
-    span = ticks[-1] - ticks[0]
-    assert 500 <= span <= 10000, f"two heartbeats apart but the tick moved {span}"
-
-
 # covers: SES-10
 def test_boot_id_increments_across_restarts(tmp_path):
     boot = str(tmp_path / "boot")
@@ -365,7 +349,7 @@ def run_once(args, boot=None, keep_env=True):
         env[BOOT_ENV] = boot
     elif BOOT_ENV in env:
         del env[BOOT_ENV]
-    proc = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=START_TIMEOUT)
+    proc = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=START_TIMEOUT, env=env)
     return proc.returncode, proc.stderr.decode()
 
 
