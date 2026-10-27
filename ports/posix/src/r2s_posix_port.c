@@ -151,7 +151,7 @@ static uint32_t next_boot_id(const char *path)
         _exit(1);
     }
     if (n > 31) {
-        fprintf(stderr, "r2s_posix: boot ID file '%s' is not a decimal u32\n", path);
+        fprintf(stderr, "r2s_posix: boot ID file '%s' is too long to be a decimal u32\n", path);
         _exit(2);
     }
     if (n < 0) {

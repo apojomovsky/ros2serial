@@ -395,6 +395,39 @@ def test_unopenable_port_fails(tmp_path):
     assert "does-not-exist" in error
 
 
+# covers: FRM-4
+def test_host_seq_is_per_topic():
+    """The harness numbers frames per topic: the first frame on any topic
+    carries seq 0, whatever went before on other topics. A shared counter
+    would inflate the MCU's lost count with gaps that never existed."""
+    read_fd, write_fd = os.pipe()
+    try:
+        host = Host(write_fd)
+        host.send(0, b"\x01\x01")
+        host.send(0, b"\x03\x00")
+        host.send(17, struct.pack("<6d", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+        host.send(0, b"\x06")
+        host.send(17, struct.pack("<6d", 1.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+    finally:
+        os.close(write_fd)
+    frames = []
+    deadline = time.monotonic() + FRAME_TIMEOUT
+    unit = bytearray()
+    while len(frames) < 5 and time.monotonic() < deadline:
+        remaining = deadline - time.monotonic()
+        ready, _, _ = select.select([read_fd], [], [], remaining)
+        assert ready, "timed out waiting for the harness frames"
+        for byte in os.read(read_fd, 4096):
+            unit.append(byte)
+            if byte == 0x00:
+                frame = wire.decode(bytes(unit))
+                unit = bytearray()
+                if frame is not None:
+                    frames.append((frame[0], frame[1]))
+    os.close(read_fd)
+    assert frames == [(0, 0), (0, 1), (17, 0), (0, 2), (17, 1)]
+
+
 def test_help_names_options():
     proc = subprocess.run(
         [firmware_binary(), "--help"], stdin=subprocess.DEVNULL, capture_output=True, timeout=START_TIMEOUT
