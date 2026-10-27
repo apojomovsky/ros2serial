@@ -37,8 +37,42 @@ class Scheduler
     // Sends what is due: at most one frame per topic, in handshake order from
     // after the topic that sent last ([SES-29]). A frame goes out only with a
     // per-topic permit and enough global bytes ([SES-27], [SES-28]).
-    template <typename Send> void poll(std::chrono::nanoseconds now, Send &&send);
-
+    template <typename Send> void poll(std::chrono::nanoseconds now, Send &&send)
+    {
+        if (entries_.empty()) {
+            return;
+        }
+        accrue_budget(now);
+        const std::size_t count = entries_.size();
+        bool sent_any = false;
+        std::size_t last_sent = cursor_;
+        for (std::size_t step = 0; step < count; ++step) {
+            const std::size_t at = (cursor_ + step) % count;
+            Entry &entry = entries_[at];
+            accrue_entry(entry, now);
+            if (entry.queue.empty()) {
+                continue;
+            }
+            if (entry.topic.rate_hz > 0.0 && entry.rate_tokens < 1.0) {
+                continue;
+            }
+            const std::size_t bytes = encoded_frame_bound(entry.queue.front().size());
+            if (budget_tokens_ < static_cast<double>(bytes)) {
+                continue;
+            }
+            if (entry.topic.rate_hz > 0.0) {
+                entry.rate_tokens -= 1.0;
+            }
+            budget_tokens_ -= static_cast<double>(bytes);
+            send(entry.topic.topic_id, entry.queue.front());
+            entry.queue.erase(entry.queue.begin());
+            last_sent = at;
+            sent_any = true;
+        }
+        if (sent_any) {
+            cursor_ = (last_sent + 1u) % count;
+        }
+    }
     // Queued frames and dropped frames per topic, the latter for H8.
     std::size_t queued(std::uint8_t topic_id) const;
     std::size_t dropped(std::uint8_t topic_id) const;
@@ -59,6 +93,8 @@ class Scheduler
 
     const Entry *find(std::uint8_t topic_id) const;
     Entry *find(std::uint8_t topic_id);
+    void accrue_entry(Entry &entry, std::chrono::nanoseconds now);
+    void accrue_budget(std::chrono::nanoseconds now);
 
     std::vector<Entry> entries_;
     std::size_t cursor_ = 0;
@@ -67,10 +103,6 @@ class Scheduler
     std::chrono::nanoseconds budget_seen{0};
     bool budget_started_ = false;
 };
-
-template <typename Send> void Scheduler::poll(std::chrono::nanoseconds, Send &&)
-{
-}
 
 } // namespace r2s_bridge
 

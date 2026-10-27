@@ -10,6 +10,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -48,8 +49,11 @@ class Router
   public:
     // Throws std::invalid_argument on a nonsense param (no QoS depth, a
     // budget outside 0 to 100, no baud, a negative default rate).
+    // session_config carries the H4 link timing; the pacing params above are
+    // the H7 ones.
     Router(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, rclcpp::Logger logger,
-           TransportFactory open, const Clock &clock, RouterParams params, LogSink sink = nullptr);
+           TransportFactory open, const Clock &clock, RouterParams params, LogSink sink = nullptr,
+           SessionConfig session_config = SessionConfig());
     ~Router();
     Router(const Router &) = delete;
     Router &operator=(const Router &) = delete;
@@ -59,6 +63,9 @@ class Router
 
     std::size_t publisher_count() const;
     std::size_t subscription_count() const;
+    // The negotiated QoS of one routed topic, for tests and the H8
+    // diagnostics. Empty when the topic is not routed.
+    std::optional<rclcpp::QoS> endpoint_qos(std::uint8_t topic_id) const;
     // Pacer drops for one MCU topic id, for the H8 diagnostics.
     std::size_t dropped(std::uint8_t topic_id) const;
 

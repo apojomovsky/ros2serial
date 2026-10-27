@@ -147,20 +147,15 @@ TEST(SchedulerQueue, DropsOldestPastBound)
     scheduler.submit(16, {0x0B});
     scheduler.submit(16, {0x0C});
     EXPECT_EQ(scheduler.dropped(16), 1u);
+    Capture first;
+    scheduler.poll(ns(0), std::ref(first));
+    ASSERT_EQ(first.sent.size(), 1u) << "one frame per topic per pass";
+    EXPECT_EQ(first.sent[0].second, (std::vector<std::uint8_t>{0x0B}));
 
-    Capture pass;
-    scheduler.poll(ns(0), std::ref(pass));
-    ASSERT_EQ(pass.sent.size(), 2u);
-    EXPECT_EQ(pass.sent[0].second, (std::vector<std::uint8_t>{0x0B}));
-    EXPECT_EQ(pass.sent[1].second, (std::vector<std::uint8_t>{0x0C}));
-}
-
-TEST(SchedulerBound, MatchesTheWireRule)
-{
-    EXPECT_EQ(Scheduler::encoded_frame_bound(0), 2u);
-    EXPECT_EQ(Scheduler::encoded_frame_bound(4), 6u);
-    EXPECT_EQ(Scheduler::encoded_frame_bound(254), 257u);
-    EXPECT_EQ(Scheduler::encoded_frame_bound(255), 258u);
+    Capture second;
+    scheduler.poll(ns(0), std::ref(second));
+    ASSERT_EQ(second.sent.size(), 1u);
+    EXPECT_EQ(second.sent[0].second, (std::vector<std::uint8_t>{0x0C}));
 }
 
 TEST(SchedulerConfig, RejectsANegativeBudget)

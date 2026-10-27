@@ -259,6 +259,7 @@ DISCONNECTED --port open--> BOOT_WAIT --HELLO or boot_wait_ms--> HANDSHAKING --a
 - [SES-22] Right after READY, the host sends 8 PINGs 50 ms apart.
 - [SES-23] After that, the host sends one PING every 1000 ms for the first 10 s, and then every `time_sync.period_ms`, which defaults to 5000.
 - [SES-24] The estimator keeps the 16 most recent samples, uses the ones with the lowest round trip for the offset, and fits a line for the drift.
+- [SES-25] The host sends a CORRECTION after the initial burst, whenever the estimate moves by more than 100 µs, and at least every 5 s.
 
 ### 8.4 Host traffic shaping (local)
 

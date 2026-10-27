@@ -12,6 +12,7 @@
 #include <cstring>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -81,9 +82,9 @@ class RouterFixture
 
     // Answers what the session asks until CONNECTED: a Float32 publisher
     // "battery" and a Twist subscription "cmd_vel".
-    void handshake(std::uint8_t cmd_vel_flags = 0x01u)
+    void handshake(std::uint8_t cmd_vel_flags = 0x01u, std::uint32_t boot_id = 7u)
     {
-        deliver_frame(kHelperControl, 0u, helper_hello(7u, 2u, max_frame_));
+        deliver_frame(kHelperControl, 0u, helper_hello(boot_id, 2u, max_frame_));
         expect_topic_req(0u);
         const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
         deliver_frame(
@@ -94,6 +95,7 @@ class RouterFixture
         deliver_frame(kHelperControl, 2u,
                       helper_topic(1u, kCmdVel, cmd_vel_flags, twist_hash.data(), "geometry_msgs/msg/Twist",
                                    "cmd_vel"));
+        drain();
         EXPECT_EQ(router_->publisher_count(), 1u);
         EXPECT_EQ(router_->subscription_count(), 1u);
     }
@@ -106,7 +108,13 @@ class RouterFixture
         if (units.size() != 1u) {
             return {};
         }
-        const std::vector<std::uint8_t> decoded = helper_decode_unit(units[0]);
+        const std::vector<std::uint8_t> decoded = checked_decode(units[0]);
+        return decoded;
+    }
+
+    std::vector<std::uint8_t> checked_decode(const std::vector<std::uint8_t> &unit)
+    {
+        const std::vector<std::uint8_t> decoded = helper_decode_unit(unit);
         EXPECT_FALSE(decoded.empty()) << "the capture is not rCOBS";
         if (decoded.size() < 4u) {
             return {};
@@ -120,7 +128,10 @@ class RouterFixture
 
     void expect_topic_req(std::uint8_t index)
     {
-        const std::vector<std::uint8_t> decoded = expect_one_frame();
+        // An answered TOPIC leaves its STATUS next to the following REQ.
+        const std::vector<std::vector<std::uint8_t>> units = drain();
+        ASSERT_FALSE(units.empty());
+        const std::vector<std::uint8_t> decoded = checked_decode(units.back());
         ASSERT_GE(decoded.size(), 4u);
         EXPECT_EQ(decoded[0], kHelperControl);
         EXPECT_EQ(decoded[2], 0x03u) << "a TOPIC_REQ";
@@ -205,17 +216,17 @@ TEST_F(RouterNode, QosDepthSetsHistoryDepth)
     params.qos_depth = 7;
     RouterFixture fixture("qos", remapped(), params);
     fixture.handshake(0x09u);
-    for (int i = 0; i < 5; ++i) {
-        rclcpp::spin_some(fixture.node());
-    }
-    const auto pubs = fixture.node()->get_publishers_info_by_topic("/robot1/power/battery");
-    ASSERT_EQ(pubs.size(), 1u);
-    EXPECT_EQ(pubs[0].qos_profile().depth(), 7u);
-    EXPECT_EQ(pubs[0].qos_profile().reliability(), rclcpp::ReliabilityPolicy::BestEffort);
-    const auto subs = fixture.node()->get_subscriptions_info_by_topic("/robot1/cmd_vel");
-    ASSERT_EQ(subs.size(), 1u);
-    EXPECT_EQ(subs[0].qos_profile().depth(), 7u) << "the reliable flag selects reliable delivery";
-    EXPECT_EQ(subs[0].qos_profile().reliability(), rclcpp::ReliabilityPolicy::Reliable);
+    const std::optional<rclcpp::QoS> pub_qos = fixture.router().endpoint_qos(kBattery);
+    ASSERT_TRUE(pub_qos.has_value());
+    EXPECT_EQ(pub_qos->history(), rclcpp::HistoryPolicy::KeepLast);
+    EXPECT_EQ(pub_qos->depth(), 7u);
+    EXPECT_EQ(pub_qos->reliability(), rclcpp::ReliabilityPolicy::BestEffort);
+    const std::optional<rclcpp::QoS> sub_qos = fixture.router().endpoint_qos(kCmdVel);
+    ASSERT_TRUE(sub_qos.has_value());
+    EXPECT_EQ(sub_qos->history(), rclcpp::HistoryPolicy::KeepLast);
+    EXPECT_EQ(sub_qos->depth(), 7u) << "the reliable flag selects reliable delivery";
+    EXPECT_EQ(sub_qos->reliability(), rclcpp::ReliabilityPolicy::Reliable);
+    EXPECT_FALSE(fixture.router().endpoint_qos(18u).has_value()) << "no such topic is routed";
 }
 
 TEST_F(RouterNode, McuToHostForwardsTheConvertedMessage)
@@ -223,8 +234,10 @@ TEST_F(RouterNode, McuToHostForwardsTheConvertedMessage)
     RouterFixture fixture("up", remapped(), RouterParams{});
     fixture.handshake();
     std::vector<float> received;
+    // The bridge publishes best effort on this topic ([SES-31]), so the
+    // probe subscribes best effort too; a reliable probe would never match.
     auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
-        "power/battery", 10,
+        "power/battery", rclcpp::QoS(10).best_effort(),
         [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
     fixture.deliver_frame(kBattery, 0u, {0x00, 0x00, 0xC0, 0x3F});
     rclcpp::spin_some(fixture.node());
@@ -257,7 +270,7 @@ TEST_F(RouterNode, BadPayloadLogsTheTopicAndField)
     fixture.handshake();
     std::vector<float> received;
     auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
-        "power/battery", 10,
+        "power/battery", rclcpp::QoS(10).best_effort(),
         [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
     fixture.deliver_frame(kBattery, 0u, {0x00});
     rclcpp::spin_some(fixture.node());
@@ -277,6 +290,23 @@ TEST_F(RouterNode, OversizeRosMessageIsDropped)
     fixture.advance(1u);
     EXPECT_TRUE(fixture.drain().empty()) << "a frame past max_frame never goes out";
     EXPECT_TRUE(logged_has(fixture.logged(), "cmd_vel")) << "the drop names the topic";
+}
+
+TEST_F(RouterNode, IdenticalRehandshakeKeepsRoutes)
+{
+    RouterFixture fixture("re", remapped(), RouterParams{});
+    fixture.handshake();
+    std::vector<float> received;
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
+        "power/battery", rclcpp::QoS(10).best_effort(),
+        [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
+    fixture.handshake(0x01u, 8u);
+    EXPECT_EQ(fixture.router().publisher_count(), 1u);
+    EXPECT_EQ(fixture.router().subscription_count(), 1u);
+    fixture.deliver_frame(kBattery, 0u, {0x00, 0x00, 0xC0, 0x3F});
+    rclcpp::spin_some(fixture.node());
+    ASSERT_EQ(received.size(), 1u) << "traffic flows again after the re-handshake";
+    EXPECT_FLOAT_EQ(received[0], 1.5F);
 }
 
 TEST_F(RouterNode, RejectsNonsenseParams)

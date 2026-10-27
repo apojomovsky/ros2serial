@@ -4,6 +4,7 @@
 #include "r2s_bridge/session.hpp"
 
 #include <cstddef>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -335,6 +336,7 @@ struct Session::Impl {
         // The handshake is over, so every counter restarts at 0 ([FRM-4]).
         seq_control = 0;
         seq_heartbeat = 0;
+        user_seq_.clear();
         last_rx_ms = now_ms();
         next_heartbeat_ms = now_ms() + config.heartbeat_period_ms;
         if (events.handshake_completed) {
@@ -430,7 +432,7 @@ struct Session::Impl {
             log(SessionLog::kError, "TOPIC refused: the names do not match the payload");
             return;
         }
-        const std::uint8_t verdict = resolve ? resolve(info) : kTopicStatusOk;
+        std::uint8_t verdict = resolve ? resolve(info) : kTopicStatusOk;
         // The MCU stores the verdict per topic ([SES-2]); the host logs the
         // refusals, since the wire carries only the code.
         if (verdict == kTopicStatusUnknownType) {
@@ -439,6 +441,15 @@ struct Session::Impl {
         } else if (verdict == kTopicStatusHashMismatch) {
             log(SessionLog::kError, "TOPIC refused: the hash of '" + info.type_name +
                                         "' is not the installed one, for topic '" + info.topic_name + "'");
+        } else {
+            for (const TopicInfo &seen : collected) {
+                if (seen.topic_name == info.topic_name && seen.device_to_host() == info.device_to_host()) {
+                    verdict = kTopicStatusNameConflict;
+                    log(SessionLog::kError, "TOPIC refused: the name '" + info.topic_name +
+                                                "' is announced twice in one direction");
+                    break;
+                }
+            }
         }
         info.status = verdict;
         collected.push_back(info);
@@ -497,8 +508,17 @@ struct Session::Impl {
             mcu = counters;
             return;
         }
-        // The other system channels and user topics belong to later tickets;
-        // the frame still keeps the link alive.
+        if (topic_id < 16u || state != SessionState::kConnected) {
+            // A later ticket's system channel, or traffic outside a session:
+            // the frame still keeps the link alive.
+            return;
+        }
+        for (const TopicInfo &topic : topics) {
+            if (topic.topic_id == topic_id && topic.status == kTopicStatusOk && events.user_frame) {
+                events.user_frame(topic_id, std::vector<std::uint8_t>(payload, payload + len));
+                return;
+            }
+        }
     }
 
     void run_timers()
@@ -599,6 +619,9 @@ struct Session::Impl {
 
     std::uint8_t seq_control = 0;
     std::uint8_t seq_heartbeat = 0;
+    // The next seq per host-to-MCU topic id, restarting at 0 after each
+    // handshake ([FRM-4], [SES-11]).
+    std::map<std::uint8_t, std::uint8_t> user_seq_;
 };
 
 Session::Session(SessionConfig config, const Clock &clock, TransportFactory open, TopicResolver resolve,
@@ -634,18 +657,26 @@ McuCounters Session::mcu_counters() const
     return impl_->mcu;
 }
 
-void Session::send_user(std::uint8_t, const std::vector<std::uint8_t> &)
+void Session::send_user(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload)
 {
+    std::uint8_t seq = 0;
+    const auto found = impl_->user_seq_.find(topic_id);
+    if (found != impl_->user_seq_.end()) {
+        seq = found->second;
+    }
+    impl_->queue_frame(topic_id, seq, payload);
+    impl_->user_seq_[topic_id] = static_cast<std::uint8_t>(seq + 1u);
+    impl_->flush();
 }
 
 std::uint16_t Session::mcu_max_frame() const
 {
-    return 0u;
+    return impl_->seen_boot_id ? impl_->hello.max_frame : 0u;
 }
 
 std::uint16_t Session::mcu_rx_capacity() const
 {
-    return 0u;
+    return impl_->seen_boot_id ? impl_->hello.rx_capacity : 0u;
 }
 
 void Session::poll()

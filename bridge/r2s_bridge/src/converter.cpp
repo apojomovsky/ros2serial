@@ -56,8 +56,11 @@ struct Op {
     std::size_t bound = 0;
     std::string path;
     void *(*get)(void *, std::size_t) = nullptr;
+    const void *(*get_const)(const void *, std::size_t) = nullptr;
     void (*assign)(void *, std::size_t, const void *) = nullptr;
     void (*resize)(void *, std::size_t) = nullptr;
+    std::size_t (*size)(const void *) = nullptr;
+    void (*fetch)(const void *, std::size_t, void *) = nullptr;
     std::vector<Op> nested;
 };
 
@@ -427,6 +430,9 @@ bool build_ops(const MessageMembers *members, const std::string &prefix, std::ve
             } else {
                 op.get = member.get_function;
             }
+            op.get_const = member.get_const_function;
+            op.size = member.size_function;
+            op.fetch = member.fetch_function;
             op.is_array = true;
             if (member.resize_function != nullptr) {
                 op.is_sequence = true;
@@ -496,6 +502,185 @@ void serialize_message(const rosidl_message_type_support_t *cpp_ts, const std::u
         // GCOVR_EXCL_STOP
     }
     cdr.assign(guard.msg.buffer, guard.msg.buffer + guard.msg.buffer_length);
+}
+// The wire holds at most a 16-bit length: take_varint refuses more, so the
+// host never emits what its own decoder would reject.
+constexpr std::uint32_t kMaxWireLength = 0xFFFFu;
+
+void put_byte(std::vector<std::uint8_t> &out, std::uint8_t byte)
+{
+    out.push_back(byte);
+}
+
+// Little-endian bytes of an integer value, whatever the host order is.
+void put_u64(std::vector<std::uint8_t> &out, std::uint64_t value, std::size_t count)
+{
+    for (std::size_t i = 0; i < count; ++i) {
+        out.push_back(static_cast<std::uint8_t>(value >> (8 * i)));
+    }
+}
+
+void put_varint(std::vector<std::uint8_t> &out, std::uint32_t value)
+{
+    do {
+        std::uint8_t byte = static_cast<std::uint8_t>(value & 0x7Fu);
+        value >>= 7u;
+        if (value != 0u) {
+            byte |= 0x80u;
+        }
+        out.push_back(byte);
+    } while (value != 0u);
+}
+
+// One scalar from storage to the wire, mirroring decode_scalar. Narrow
+// packs float64 as binary32 through the hardware conversion, which is
+// roundTiesToEven under the default rounding mode: finite overflow becomes
+// an infinity of the same sign, tinies become subnormals or zeros, and a
+// NaN stays a NaN ([ENC-11]).
+ConvertFail encode_scalar(std::uint8_t type, bool narrow, const void *value, std::vector<std::uint8_t> &out)
+{
+    switch (type) {
+    case ROS_TYPE_BOOLEAN:
+    case ROS_TYPE_OCTET:
+    case ROS_TYPE_UINT8:
+    case ROS_TYPE_INT8:
+        put_byte(out, *static_cast<const std::uint8_t *>(value));
+        return ConvertFail::kNone;
+    case ROS_TYPE_UINT16:
+    case ROS_TYPE_INT16: {
+        std::uint16_t raw = 0;
+        std::memcpy(&raw, value, sizeof raw);
+        put_u64(out, raw, 2);
+        return ConvertFail::kNone;
+    }
+    case ROS_TYPE_UINT32:
+    case ROS_TYPE_INT32:
+    case ROS_TYPE_FLOAT: {
+        std::uint32_t raw = 0;
+        std::memcpy(&raw, value, sizeof raw);
+        put_u64(out, raw, 4);
+        return ConvertFail::kNone;
+    }
+    case ROS_TYPE_UINT64:
+    case ROS_TYPE_INT64: {
+        std::uint64_t raw = 0;
+        std::memcpy(&raw, value, sizeof raw);
+        put_u64(out, raw, 8);
+        return ConvertFail::kNone;
+    }
+    case ROS_TYPE_DOUBLE: {
+        if (narrow) {
+            double wide = 0;
+            std::memcpy(&wide, value, sizeof wide);
+            const float narrow_value = static_cast<float>(wide);
+            std::uint32_t raw = 0;
+            std::memcpy(&raw, &narrow_value, sizeof raw);
+            put_u64(out, raw, 4);
+        } else {
+            std::uint64_t raw = 0;
+            std::memcpy(&raw, value, sizeof raw);
+            put_u64(out, raw, 8);
+        }
+        return ConvertFail::kNone;
+    }
+    case ROS_TYPE_STRING: {
+        const std::string &text = *static_cast<const std::string *>(value);
+        if (std::memchr(text.data(), 0, text.size()) != nullptr) {
+            return ConvertFail::kNulInString;
+        }
+        if (text.size() > kMaxWireLength) {
+            return ConvertFail::kOverBound;
+        }
+        put_varint(out, static_cast<std::uint32_t>(text.size()));
+        out.insert(out.end(), text.begin(), text.end());
+        return ConvertFail::kNone;
+    }
+    }
+    return ConvertFail::kUnsupportedField;
+}
+
+ConvertFail encode_ops(const std::vector<Op> &ops, const std::uint8_t *base, bool narrow,
+                       std::vector<std::uint8_t> &out, std::uint32_t &counter, std::uint8_t &field);
+
+// One element of an array from storage to the wire: the addressable getter
+// when the introspection provides one, the fetch callback for boolean
+// sequences, whose std::vector<bool> has no addressable elements.
+ConvertFail encode_element(const Op &op, const std::uint8_t *base, std::uint32_t i, bool narrow,
+                           std::vector<std::uint8_t> &out, std::uint32_t here, std::uint32_t &counter,
+                           std::uint8_t &field)
+{
+    if (op.type == ROS_TYPE_MESSAGE) {
+        if (op.get == nullptr && op.get_const == nullptr) {
+            return ConvertFail::kUnsupportedField;
+        }
+        const void *at =
+            op.get_const != nullptr ? op.get_const(base, i) : op.get(const_cast<std::uint8_t *>(base), i);
+        return encode_ops(op.nested, static_cast<const std::uint8_t *>(at), narrow, out, counter, field);
+    }
+    if (op.get != nullptr) {
+        const void *at =
+            op.get_const != nullptr ? op.get_const(base, i) : op.get(const_cast<std::uint8_t *>(base), i);
+        const ConvertFail fail = encode_scalar(op.type, narrow, at, out);
+        if (fail != ConvertFail::kNone) {
+            field = static_cast<std::uint8_t>(here);
+        }
+        return fail;
+    }
+    if (op.fetch == nullptr) {
+        return ConvertFail::kUnsupportedField;
+    }
+    bool value = false;
+    op.fetch(base, i, &value);
+    const std::uint8_t byte = value ? 1u : 0u;
+    const ConvertFail fail = encode_scalar(op.type, narrow, &byte, out);
+    if (fail != ConvertFail::kNone) {
+        field = static_cast<std::uint8_t>(here);
+    }
+    return fail;
+}
+
+// The counter walks field definitions in depth-first order exactly as
+// decode_ops does, so an error names the same index both directions report.
+ConvertFail encode_ops(const std::vector<Op> &ops, const std::uint8_t *base, bool narrow,
+                       std::vector<std::uint8_t> &out, std::uint32_t &counter, std::uint8_t &field)
+{
+    for (const Op &op : ops) {
+        const std::uint32_t here = counter++;
+        if (op.is_array) {
+            std::uint32_t count = static_cast<std::uint32_t>(op.bound);
+            if (op.is_sequence) {
+                if (op.size == nullptr) {
+                    return ConvertFail::kUnsupportedField;
+                }
+                const std::size_t have = op.size(base + op.offset);
+                if (have > kMaxWireLength || (op.bound != kUnbounded && have > op.bound)) {
+                    field = static_cast<std::uint8_t>(here);
+                    return ConvertFail::kOverBound;
+                }
+                count = static_cast<std::uint32_t>(have);
+                put_varint(out, count);
+            }
+            for (std::uint32_t i = 0; i < count; ++i) {
+                const ConvertFail fail =
+                    encode_element(op, base + op.offset, i, narrow, out, here, counter, field);
+                if (fail != ConvertFail::kNone) {
+                    return fail;
+                }
+            }
+        } else if (op.type == ROS_TYPE_MESSAGE) {
+            const ConvertFail fail = encode_ops(op.nested, base + op.offset, narrow, out, counter, field);
+            if (fail != ConvertFail::kNone) {
+                return fail;
+            }
+        } else {
+            const ConvertFail fail = encode_scalar(op.type, narrow, base + op.offset, out);
+            if (fail != ConvertFail::kNone) {
+                field = static_cast<std::uint8_t>(here);
+                return fail;
+            }
+        }
+    }
+    return ConvertFail::kNone;
 }
 
 } // namespace
@@ -571,11 +756,43 @@ ConvertResult Converter::to_cdr(const std::string &type_name, bool narrow, const
     return ConvertResult{};
 }
 
-ConvertResult Converter::from_cdr(const std::string &, bool, const std::uint8_t *, std::size_t,
-                                  std::vector<std::uint8_t> &packed)
+ConvertResult Converter::from_cdr(const std::string &type_name, bool narrow, const std::uint8_t *data,
+                                  std::size_t size, std::vector<std::uint8_t> &packed)
 {
     packed.clear();
-    return ConvertResult{ConvertFail::kUnsupportedField, 0xFFu};
+    if (size == 0u) {
+        // An empty CDR message names no fields and reads nothing back.
+        return ConvertResult{ConvertFail::kUnsupportedField, 0xFFu};
+    }
+    ConvertFail why = ConvertFail::kNone;
+    const std::shared_ptr<Plan> plan = get_plan(type_name, why);
+    if (plan == nullptr) {
+        return ConvertResult{why, 0xFFu};
+    }
+    if (plan->cpp_ts == nullptr) {
+        // Hand-installed plans carry no middleware handle: nothing is
+        // deserialized through them.
+        return ConvertResult{ConvertFail::kUnsupportedField, 0xFFu};
+    }
+    std::vector<std::uint8_t> storage(plan->members->size_of_);
+    plan->members->init_function(storage.data(), MessageInitialization::ALL);
+    const MessageGuard guard{plan->members, storage.data()};
+    rmw_serialized_message_t msg{};
+    msg.buffer = const_cast<std::uint8_t *>(data);
+    msg.buffer_length = size;
+    msg.buffer_capacity = size;
+    msg.allocator = rcutils_get_default_allocator();
+    if (rmw_deserialize(&msg, plan->cpp_ts, storage.data()) != RMW_RET_OK) {
+        return ConvertResult{ConvertFail::kUnsupportedField, 0xFFu};
+    }
+    std::uint32_t counter = 0;
+    std::uint8_t field = 0xFFu;
+    const ConvertFail fail = encode_ops(plan->fields, storage.data(), narrow, packed, counter, field);
+    if (fail != ConvertFail::kNone) {
+        packed.clear();
+        return ConvertResult{fail, field};
+    }
+    return ConvertResult{};
 }
 
 std::string Converter::field_path(const std::string &type_name, std::uint8_t index)
