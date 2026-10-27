@@ -53,22 +53,26 @@ def _message(error: jsonschema.ValidationError) -> str:
 def _has_cycle(root) -> bool:
     # Aliases let one mapping or list appear inside itself. The walks below
     # assume a tree, so find a cycle with an explicit stack before they run.
+    # Fully explored nodes are remembered, so a shared alias costs one walk.
     if not isinstance(root, (dict, list, set)):
         return False
     end = object()
     path = {id(root)}
+    done = set()
     stack = [(iter(root.values() if isinstance(root, dict) else root), id(root))]
     while stack:
         children, owner = stack[-1]
         child = next(children, end)
         if child is end:
             path.discard(owner)
+            done.add(owner)
             stack.pop()
         elif isinstance(child, (dict, list, set)):
             if id(child) in path:
                 return True
-            path.add(id(child))
-            stack.append((iter(child.values() if isinstance(child, dict) else child), id(child)))
+            if id(child) not in done:
+                path.add(id(child))
+                stack.append((iter(child.values() if isinstance(child, dict) else child), id(child)))
     return False
 
 

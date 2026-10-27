@@ -446,7 +446,7 @@ def test_a_cyclic_alias_in_a_message_is_reported_not_a_crash(tmp_path, monkeypat
     definitions.mkdir(parents=True)
     (definitions / "A.msg").write_text("B b\n", encoding="utf-8")
     (definitions / "B.msg").write_text("A a\n", encoding="utf-8")
-    (definitions / "Single.msg").write_text("float32 data\n", encoding="utf-8")
+    (definitions / "Arr.msg").write_text("Single[] items\n", encoding="utf-8")
     files = {
         "messages/cycle.yaml": """
 name: cycle
@@ -465,12 +465,22 @@ profile: {narrow_float64: false}
 message: {data: 1.5}
 payload: "00 00 c0 3f"
 """,
+        "messages/cycle_array.yaml": """
+name: cycle_array
+covers: [ENC-3]
+type: demo_msgs/msg/Arr
+profile: {narrow_float64: false}
+message: &m
+  items: [*m]
+payload: ""
+""",
     }
     repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
     monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
     vectors = make_tree(tmp_path / "vectors", files)
     problems = vectors_check.check_tree(vectors)
     assert "messages/cycle.yaml: cyclic YAML alias" in problems, problems
+    assert "messages/cycle_array.yaml: cyclic YAML alias" in problems, problems
     assert "messages/cycle_covers.yaml: cyclic YAML alias" in problems, problems
     assert all(problem.startswith("messages/") for problem in problems), problems
     shared = {"data": 1.5}
