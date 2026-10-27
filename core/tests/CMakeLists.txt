@@ -105,6 +105,13 @@ target_link_libraries(cxx_headers PRIVATE r2s_test_support)
 target_compile_options(cxx_headers PRIVATE -Wall -Wextra -Werror)
 add_test(NAME cxx_headers COMMAND cxx_headers)
 
+# Power-up probe: its own main without the Unity reset, so it observes the
+# BSS defaults the firmware boots with.
+add_executable(powerup_hello powerup_hello.c)
+target_compile_options(powerup_hello PRIVATE ${R2S_TEST_WARNINGS})
+target_link_libraries(powerup_hello PRIVATE r2s_test_support)
+add_test(NAME powerup_hello COMMAND powerup_hello)
+
 r2s_unit_test(test_rx_ring.c unity r2s_rx_ring)
 r2s_unit_test(test_rx_ring_min.c unity r2s_rx_ring_min)
 

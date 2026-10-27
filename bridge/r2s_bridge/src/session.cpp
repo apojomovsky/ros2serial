@@ -44,8 +44,10 @@ constexpr std::int64_t kHeartbeatPeriodMs = 500;
 // The handshake mode byte ([CTL-1]).
 constexpr std::uint8_t kModeFull = 0u;
 
-// Every feature bit but 4 and 5 is reserved and MUST be 0 ([CTL-2], [CTL-3]).
-constexpr std::uint8_t kFeaturesReserved = 0xF0u;
+// Bits 6 and 7 are the reserved features and MUST be 0; bit 4 says the MCU's
+// `double` is 32 bits and bit 5 runtime registration, both informational
+// ([CTL-2], [CTL-3]).
+constexpr std::uint8_t kFeaturesReserved = 0xC0u;
 
 // The protocol's own frame limit ([FRM-9]).
 constexpr std::uint32_t kMaxFrameLimit = 65277u;

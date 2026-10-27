@@ -409,6 +409,15 @@ TEST(SessionHandshake, RefusesAFeaturesByteWithAReservedBit)
     EXPECT_FALSE(fixture.session().has_boot_id());
 }
 
+TEST(SessionHandshake, AcceptsAnMcuWhoseDoubleIs32Bits)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    // Bit 4 is informational, and every AVR build sets it ([CTL-2]).
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u, 0x10u));
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
 TEST(SessionHandshake, RefusesATickRateThatIsNotThousandTimesADivisor)
 {
     Fixture fixture;
