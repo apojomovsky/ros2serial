@@ -359,6 +359,21 @@ TEST(ConverterScalars, ConvertsEveryIntegerWidth)
     result = converter.to_cdr("std_msgs/msg/Int16", false, std::vector<std::uint8_t>{0x12}.data(), 1, cdr);
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
     EXPECT_EQ(result.field, 0u);
+
+    result = converter.to_cdr("std_msgs/msg/Int8", false, cdr.data(), 0, cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 0u);
+
+    result = converter.to_cdr("std_msgs/msg/Int32", false, std::vector<std::uint8_t>{0x01, 0x02, 0x03}.data(),
+                              3, cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 0u);
+
+    result =
+        converter.to_cdr("std_msgs/msg/Int64", false,
+                         std::vector<std::uint8_t>{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07}.data(), 7, cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 0u);
 }
 
 TEST(ConverterStrings, ConvertsLengthsAndRejectsBadOnes)
