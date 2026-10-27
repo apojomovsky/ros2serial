@@ -174,6 +174,24 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
     fprintf(stderr, "r2s_posix: cmd_vel n=%lu\n", (unsigned long)s_cmd_vel_count);
 }
 
+/* One log_text line: the value as 8 hex digits. Fixed width fits the
+ * handwritten String bound of 8 characters for every id. */
+static r2s_status_t publish_log_text(uint32_t value)
+{
+    std_msgs__msg__String msg;
+    uint8_t i;
+
+    memset(&msg, 0, sizeof msg);
+    for (i = 0u; i < 8u; i++) {
+        int digit = (int)((value >> 28u) & 0xFu);
+
+        msg.data[i] = (char)(digit < 10 ? '0' + digit : 'a' + (digit - 10));
+        value <<= 4u;
+    }
+    msg.data[8] = '\0';
+    return r2s_publish_log_text(&msg);
+}
+
 static void sleep_1ms(void)
 {
     const struct timespec req = {0, 1000000L};
@@ -188,7 +206,9 @@ int main(int argc, char **argv)
     uint8_t count;
     uint32_t interval;
     uint32_t last_pub;
+    uint32_t boot_id;
     uint32_t sent = 0u;
+    uint8_t log_booted = 0u;
 
     setvbuf(stderr, NULL, _IONBF, 0);
     if (argc < 2) {
@@ -202,7 +222,7 @@ int main(int argc, char **argv)
     parse_options(argc, argv, &opts);
     /* Prime the counter before opening the port, so a bad boot file fails
      * before any byte reaches the line. */
-    (void)r2s_port_boot_id();
+    boot_id = r2s_port_boot_id();
     if (r2s_posix_open(opts.port) < 0) {
         fprintf(stderr, "r2s_posix: cannot open '%s': %s\n", opts.port, strerror(errno));
         return 1;
@@ -221,13 +241,26 @@ int main(int argc, char **argv)
 
         r2s_spin_some();
         now = r2s_port_tick();
-        if (opts.pub != NULL && r2s_connected() != 0u && (uint32_t)(now - last_pub) >= interval) {
+        if (r2s_connected() == 0u) {
+            sleep_1ms();
+            continue;
+        }
+        if (opts.log_text != NULL && log_booted == 0u) {
+            /* A boot line that fails to publish is retried until it sends. */
+            if (publish_log_text(boot_id) == R2S_OK) {
+                log_booted = 1u;
+            }
+        }
+        if (opts.pub != NULL && (uint32_t)(now - last_pub) >= interval) {
             std_msgs__msg__Float32 msg;
 
             msg.data = (float)sent;
             if (r2s_publish_battery(&msg) == R2S_OK) {
                 sent++;
                 last_pub = now;
+                if (opts.log_text != NULL && sent % 10u == 0u) {
+                    (void)publish_log_text(sent);
+                }
             }
         }
         sleep_1ms();

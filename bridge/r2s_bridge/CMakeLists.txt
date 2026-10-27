@@ -11,9 +11,13 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
+find_package(rmw REQUIRED)
+find_package(rosidl_runtime_cpp REQUIRED)
+find_package(rosidl_typesupport_introspection_cpp REQUIRED)
 
 add_library(r2s_bridge_component SHARED
   src/bridge.cpp
+  src/converter.cpp
   src/core_port.cpp
   src/framing.cpp
   src/session.cpp
@@ -24,7 +28,10 @@ target_include_directories(r2s_bridge_component PUBLIC
   $<INSTALL_INTERFACE:include>)
 target_link_libraries(r2s_bridge_component PUBLIC
   rclcpp::rclcpp
-  rclcpp_components::component)
+  rclcpp_components::component
+  rmw::rmw
+  rosidl_runtime_cpp::rosidl_runtime_cpp
+  rosidl_typesupport_introspection_cpp::rosidl_typesupport_introspection_cpp)
 target_compile_options(r2s_bridge_component PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 # The core's framer, rCOBS and CRC compiled for the host, so the bridge and
@@ -117,6 +124,22 @@ if(BUILD_TESTING)
   # it needs them at test time (std_msgs) as well as at build time.
   ament_add_gtest(test_type_support test/test_type_support.cpp)
   target_link_libraries(test_type_support r2s_bridge_test_support)
+
+  # The converter test loads the installed message packages for real and
+  # compares every message vector with rclcpp serialization, so it needs the
+  # message C++ headers at build time and the packages at test time.
+  find_package(geometry_msgs REQUIRED)
+  find_package(sensor_msgs REQUIRED)
+  find_package(std_msgs REQUIRED)
+  ament_add_gtest(test_converter test/test_converter.cpp)
+  target_compile_definitions(test_converter PRIVATE
+    R2S_MESSAGES_VECTOR_DIR="${R2S_CORE_DIR}/../spec/vectors/messages")
+  target_link_libraries(test_converter
+    r2s_bridge_component
+    yaml-cpp::yaml-cpp
+    geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
+    sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
+    std_msgs::std_msgs__rosidl_typesupport_cpp)
 
   # openpty comes from libutil; the pty test uses it instead of a device.
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
