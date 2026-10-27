@@ -125,7 +125,8 @@ def sketch_dir(tmp_path, out_files):
     return root
 
 
-def compile_sketch(root, sources, extra=()):
+def compile_unit(root, source, extra=()):
+    obj = root / (Path(source).stem + ".o")
     compiled = subprocess.run(
         [
             "cc",
@@ -141,22 +142,36 @@ def compile_sketch(root, sources, extra=()):
             "-I",
             str(CORE_INCLUDE),
             *extra,
-            *sources,
+            "-c",
+            str(source),
             "-o",
-            str(root / "sketch"),
+            str(obj),
         ],
         capture_output=True,
         text=True,
     )
     assert compiled.returncode == 0, compiled.stderr
-    return compiled
+    return obj
+
+
+def compile_sketch(root, sources, core_sources, extra=()):
+    """Link the sketch: its translation units read the limits from the header,
+    while the core ones take them as defines, as the Arduino build does."""
+    objects = [compile_unit(root, source) for source in sources]
+    objects += [compile_unit(root, source, extra) for source in core_sources]
+    linked = subprocess.run(
+        ["cc", *[str(obj) for obj in objects], "-o", str(root / "sketch")],
+        capture_output=True,
+        text=True,
+    )
+    assert linked.returncode == 0, linked.stderr
 
 
 def c_bytes(payload):
     return ", ".join(f"0x{byte:02x}" for byte in payload)
 
 
-def host_sketch():
+def host_sketch(frame, nest):
     repository = msgs.MessageRepository(distro="jazzy")
     battery = messages.encode(repository, "std_msgs/msg/Float32", {"data": 1.5}, narrow=False)
     greeting = messages.encode(repository, "std_msgs/msg/String", {"data": "hi"}, narrow=False)
@@ -193,10 +208,9 @@ def host_sketch():
 
 """
         + SKETCH_TOPICS
+        + f'#define EXPECTED_FRAME {frame}u\n#define EXPECTED_NEST {nest}u\n#include "ros2serial.h"\n'
+        + "static geometry_msgs__msg__Twist got_twist;\n"
         + """\
-#include "ros2serial.h"
-
-static geometry_msgs__msg__Twist got_twist;
 static sensor_msgs__msg__JointState got_joints;
 static uint8_t got_twist_calls;
 static uint8_t got_joints_calls;
@@ -253,6 +267,8 @@ int main(void)
     uint8_t narrow = 0u;
 
     CHECK(R2S_TOPIC_COUNT == 4u);
+    CHECK(R2S_MAX_FRAME == EXPECTED_FRAME);
+    CHECK(R2S_MAX_NEST == EXPECTED_NEST);
     CHECK(r2s_topics[0].topic_id == 16u);
     CHECK(r2s_topics[3].topic_id == 19u);
     CHECK(r2s_topics[0].flags == (uint8_t)(0x00u | R2S_NARROW_FLAG));
@@ -431,7 +447,9 @@ void r2s_framer_count_refused(void)
 def test_the_expansion_matches_the_reference_on_the_host(tmp_path):
     out_files = files()
     root = sketch_dir(tmp_path, out_files)
-    (root / "sketch.c").write_text(host_sketch(), encoding="utf-8")
+    frame = frame_limit(out_files)
+    nest = nest_limit(out_files)
+    (root / "sketch.c").write_text(host_sketch(frame, nest), encoding="utf-8")
     (root / "stubs.c").write_text(STUBS, encoding="utf-8")
 
     compile_sketch(
@@ -440,13 +458,15 @@ def test_the_expansion_matches_the_reference_on_the_host(tmp_path):
             str(root / "sketch.c"),
             str(root / "stubs.c"),
             str(root / "src" / "r2s_bundled.c"),
+        ],
+        [
             str(CORE_SRC / "codec.c"),
             str(CORE_SRC / "varint.c"),
         ],
         extra=(
             "-DR2S_WITH_CODEC",
-            f"-DR2S_MAX_FRAME={frame_limit(out_files)}",
-            f"-DR2S_MAX_NEST={nest_limit(out_files)}",
+            f"-DR2S_MAX_FRAME={frame}",
+            f"-DR2S_MAX_NEST={nest}",
         ),
     )
     run = subprocess.run([str(root / "sketch")], capture_output=True, text=True)
@@ -518,15 +538,87 @@ def test_an_unknown_direction_in_the_list_fails(tmp_path):
     assert "FOO" in compiled.stderr
 
 
-def test_a_publish_only_list_compiles(tmp_path):
+def test_a_publish_only_list_compiles_cleanly(tmp_path):
     root = sketch_dir(tmp_path, files())
     body = '#define R2S_TOPICS(X) X(PUB, battery, std_msgs, Float32)\n#include "ros2serial.h"\n'
 
-    assert compile_case(root, body).returncode == 0
+    assert compile_strict(root, body).returncode == 0
 
 
-def test_a_subscribe_only_list_compiles(tmp_path):
+def test_a_subscribe_only_list_compiles_cleanly(tmp_path):
     root = sketch_dir(tmp_path, files())
     body = '#define R2S_TOPICS(X) X(SUB, cmd_vel, geometry_msgs, Twist)\n#include "ros2serial.h"\n'
 
-    assert compile_case(root, body).returncode == 0
+    assert compile_strict(root, body).returncode == 0
+
+
+def compile_strict(root, body):
+    """A list that compiles warning-free: what a `-Werror` sketch build needs."""
+    (root / "case.c").write_text(body, encoding="utf-8")
+
+    return subprocess.run(
+        [
+            "cc",
+            "-std=c99",
+            "-pedantic",
+            "-Werror",
+            "-Wall",
+            "-Wextra",
+            "-I",
+            str(root),
+            "-I",
+            str(root / "src"),
+            "-I",
+            str(CORE_INCLUDE),
+            "-c",
+            str(root / "case.c"),
+            "-o",
+            str(root / "case.o"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_a_cxx_sketch_includes_the_header_plainly(tmp_path):
+    root = sketch_dir(tmp_path, files())
+    (root / "case.cpp").write_text(
+        '#define R2S_NODE_NAME "test_cpp"\n'
+        "#define R2S_TOPICS(X) X(SUB, cmd_vel, geometry_msgs, Twist)\n"
+        '#include "ros2serial.h"\n'
+        'extern "C" {\n'
+        "void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)\n"
+        "{\n"
+        "    (void)msg;\n"
+        "}\n"
+        "}\n"
+        "int main()\n"
+        "{\n"
+        "    return 0;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    compiled = subprocess.run(
+        [
+            "g++",
+            "-std=c++11",
+            "-Werror",
+            "-Wall",
+            "-Wextra",
+            "-I",
+            str(root),
+            "-I",
+            str(root / "src"),
+            "-I",
+            str(CORE_INCLUDE),
+            "-c",
+            str(root / "case.cpp"),
+            "-o",
+            str(root / "case.o"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert compiled.returncode == 0, compiled.stderr

@@ -5,13 +5,16 @@
 #include <float.h>
 #include <stdint.h>
 
+/* The bundled types, tables and limits come first, so the sketch's
+ * translation unit reads the bundle's frame and nesting limits rather
+ * than the core defaults below. */
+#include "r2s_bundled.h"
+
 #include "r2s/r2s_codec.h"
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_session.h"
 #include "r2s/r2s_topics.h"
 #include "r2s/r2s_tx.h"
-
-#include "r2s_bundled.h"
 
 /* A sketch declares its topics as X-macro rows before including this header;
  * the header expands them into the topic table, the typed publish functions
@@ -19,6 +22,13 @@
  * stay in the library, which compiles without the list. */
 #ifndef R2S_TOPICS
 #error "Define R2S_TOPICS(X) as X(DIR, name, package, Type) rows before including <ros2serial.h>."
+#endif
+
+/* A C++ sketch includes this header plainly: the expansion below carries
+ * C linkage, so only the port functions and handlers still need an
+ * extern "C" block of their own. */
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 /* One slot per row, in configuration order: user topic IDs run from 16. */
@@ -61,9 +71,10 @@ typedef char r2s_slot_fit_check[(unsigned)R2S_SLOT_COUNT <= R2S_TOPIC_MAX_COUNT 
 const r2s_topic_t R2S_FLASH r2s_topics[] = {R2S_TOPICS(R2S_X_TABLE)};
 
 /* One publish path for every wrapper: measures the payload, reserves
- * its wire form, then streams it, so a failed publish writes nothing. */
-static r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint16_t type, const void *msg,
-                                    const r2s_codec_table_t *table)
+ * its wire form, then streams it, so a failed publish writes nothing.
+ * Inline, so a subscribe-only list leaves it unused without a warning. */
+static inline r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint16_t type, const void *msg,
+                                           const r2s_codec_table_t *table)
 {
     r2s_codec_out_t out = {NULL, 0u, 0u, 0u};
     uint8_t narrow;
@@ -153,6 +164,16 @@ void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, u
     uint8_t narrow;
     uint8_t field = 0xFFu;
 
+    /* A publish-only list expands no case below, so every name here is
+     * unused there; the casts keep that list warning-free. */
+    (void)seq;
+    (void)payload;
+    (void)len;
+    (void)index;
+    (void)narrow;
+    (void)field;
+    (void)r2s_rx_buf;
+
     switch (topic_id) {
         R2S_TOPICS(R2S_X_DISPATCH)
     default: {
@@ -161,5 +182,9 @@ void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, u
     }
     }
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
