@@ -3,7 +3,6 @@
 // sends is assembled here from the core's CRC and rCOBS.
 #include "r2s_bridge/session.hpp"
 
-#include <algorithm>
 #include <cstddef>
 #include <stdexcept>
 #include <string>
@@ -327,7 +326,8 @@ struct Session::Impl {
     void finish_handshake()
     {
         awaiting_topic = false;
-        const bool identical = !had_handshake && collected.empty() ? false : (collected == topics);
+        // The first handshake has no previous table, so nothing can match it.
+        const bool identical = had_handshake && collected == topics;
         topics = collected;
         had_handshake = true;
         state = SessionState::kConnected;
@@ -357,8 +357,8 @@ struct Session::Impl {
             return false;
         }
         if (facts.version != R2S_PROTOCOL_VERSION) {
-            log(SessionLog::kError, "HELLO refused: the MCU speaks protocol version " +
-                                        std::to_string(facts.version) + ", this host speaks " +
+            log(SessionLog::kError, "HELLO refused: the MCU protocol version is " +
+                                        std::to_string(facts.version) + ", the host protocol version is " +
                                         std::to_string(R2S_PROTOCOL_VERSION));
             return false;
         }

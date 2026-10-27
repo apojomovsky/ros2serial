@@ -104,7 +104,6 @@ if(BUILD_TESTING)
     R2S_FRAMES_VECTOR_DIR="${R2S_CORE_DIR}/../spec/vectors/frames")
   target_link_libraries(test_framing r2s_bridge_test_support yaml-cpp::yaml-cpp)
 
-  # openpty comes from libutil; the pty test uses it instead of a device.
   # The session reads the transcript vectors and drives the fake link and
   # the manual clock.
   ament_add_gtest(test_session test/test_session.cpp)
@@ -119,6 +118,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_type_support test/test_type_support.cpp)
   target_link_libraries(test_type_support r2s_bridge_test_support)
 
+  # openpty comes from libutil; the pty test uses it instead of a device.
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
   target_link_libraries(test_termios_transport r2s_bridge_component util)
 endif()
