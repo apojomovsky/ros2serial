@@ -6,6 +6,7 @@ rosserial for ROS 2: publish and subscribe to ROS 2 topics from small microcontr
 
 ## What it will look like
 
+<!-- snippet: skip until #77 -->
 ```c
 #define R2S_NODE_NAME "base_controller"
 #define R2S_TOPICS(X) \
