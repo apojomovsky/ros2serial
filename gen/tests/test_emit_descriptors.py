@@ -272,8 +272,8 @@ def test_a_wide_sequence_counts_its_elements_in_two_bytes(tmp_path):
         assert compiled.returncode == 0, f"{compiler}: {compiled.stderr}"
     symbols = subprocess.run(["avr-objdump", "-t", str(tmp_path / "check_avr.o")], capture_output=True, text=True)
     assert symbols.returncode == 0, symbols.stderr
-    placed = [line for line in symbols.stdout.splitlines() if "r2s_type_records" in line]
-    assert placed and ".progmem" in placed[0], symbols.stdout
+    placed = [line for line in symbols.stdout.splitlines() if "r2s_type_records" in line or "r2s_field_entries" in line]
+    assert len(placed) == 2 and all(".progmem" in line for line in placed), symbols.stdout
 
 
 def test_a_narrow_sequence_counts_its_elements_in_one_byte(tmp_path):
@@ -760,7 +760,7 @@ def test_core_codec_round_trips_generated_tables(narrow, tmp_path):
     )
     core = Path(__file__).resolve().parents[2] / "core" / "src"
     binary = tmp_path / "roundtrip"
-    # Firmware compiles the core with the generated header visible; -include
+    # The G8 (#75) firmware compiles the core with the generated header visible; -include
     # proves the header alone configures the interpreter, with no -D.
 
     compiled = subprocess.run(
