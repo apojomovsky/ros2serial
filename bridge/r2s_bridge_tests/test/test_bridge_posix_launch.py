@@ -54,28 +54,31 @@ class PtyRelay:
         self._thread.start()
 
     def _forward(self, source, target):
+        # A master reads EIO until its slave is open and after it closes, so
+        # a failure here only skips one turn: both processes open their slaves
+        # just after this thread starts.
         try:
             chunk = os.read(source, 4096)
         except OSError:
-            return False
+            time.sleep(0.005)
+            return
         if not chunk:
-            return False
+            return
         view = memoryview(chunk)
         while view:
             try:
                 written = os.write(target, view)
             except OSError:
-                return False
+                time.sleep(0.005)
+                return
             view = view[written:]
-        return True
 
     def _run(self):
-        live = True
-        while live and not self._stop.is_set():
+        while not self._stop.is_set():
             readable, _, _ = select.select([self._mcu_master, self._host_master], [], [], 0.05)
             for source in readable:
                 target = self._host_master if source == self._mcu_master else self._mcu_master
-                live = self._forward(source, target)
+                self._forward(source, target)
 
     def stop(self):
         self._stop.set()
