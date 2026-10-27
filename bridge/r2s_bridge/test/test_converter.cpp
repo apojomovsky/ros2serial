@@ -1122,6 +1122,61 @@ TEST(ConverterFieldPath, StopsAtEmptyNestedArrays)
     EXPECT_EQ(converter.field_path("fake/msg/EmptyArr", 0), "items");
     EXPECT_EQ(converter.field_path("fake/msg/EmptyArr", 1), "");
 }
+TEST(ConverterRoundTrip, PackedToCdrToPackedReturnsTheOriginal)
+{
+    Converter converter;
+    std::vector<std::filesystem::path> files;
+    for (const auto &entry : std::filesystem::directory_iterator(R2S_MESSAGES_VECTOR_DIR)) {
+        if (entry.path().extension() == ".yaml") {
+            files.push_back(entry.path());
+        }
+    }
+    std::sort(files.begin(), files.end());
+    ASSERT_FALSE(files.empty()) << "no message vectors found";
+
+    for (const auto &file : files) {
+        const YAML::Node node = YAML::LoadFile(file);
+        const std::string name = node["name"].as<std::string>();
+        const std::string type = node["type"].as<std::string>();
+        if (type != "std_msgs/msg/Float32" && type != "geometry_msgs/msg/Twist") {
+            continue;
+        }
+        SCOPED_TRACE(name);
+        const bool narrow = node["profile"]["narrow_float64"].as<bool>();
+        const std::vector<std::uint8_t> payload = bytes_of(node["payload"].as<std::string>());
+        std::vector<std::uint8_t> cdr;
+        const ConvertResult forward = converter.to_cdr(type, narrow, payload.data(), payload.size(), cdr);
+        ASSERT_EQ(forward.fail, ConvertFail::kNone);
+        std::vector<std::uint8_t> packed;
+        const ConvertResult back = converter.from_cdr(type, narrow, cdr.data(), cdr.size(), packed);
+        ASSERT_EQ(back.fail, ConvertFail::kNone) << "field " << static_cast<int>(back.field);
+        if (packed != payload) {
+            ADD_FAILURE() << "round trip differs\n got: " << hex_of(packed) << "\nwant: " << hex_of(payload);
+        }
+    }
+}
+
+TEST(ConverterFromCdr, RejectsAnEmptyMessage)
+{
+    Converter converter;
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result = converter.from_cdr("std_msgs/msg/Float32", false, nullptr, 0u, packed);
+    EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
+}
+
+TEST(ConverterFromCdr, RejectsANulInAString)
+{
+    Converter converter;
+    // CDR encapsulation, a length of 3, and "a" plus NUL plus "b".
+    const std::vector<std::uint8_t> cdr{0x00, 0x01, 0x00, 0x00, 0x03, 0x00,
+                                        0x00, 0x00, 0x61, 0x00, 0x62, 0x00};
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+        converter.from_cdr("std_msgs/msg/String", false, cdr.data(), cdr.size(), packed);
+    EXPECT_EQ(result.fail, ConvertFail::kNulInString);
+    EXPECT_EQ(result.field, 0u);
+    EXPECT_EQ(converter.field_path("std_msgs/msg/String", 0u), "data");
+}
 
 } // namespace
 } // namespace test

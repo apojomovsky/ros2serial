@@ -634,6 +634,20 @@ McuCounters Session::mcu_counters() const
     return impl_->mcu;
 }
 
+void Session::send_user(std::uint8_t, const std::vector<std::uint8_t> &)
+{
+}
+
+std::uint16_t Session::mcu_max_frame() const
+{
+    return 0u;
+}
+
+std::uint16_t Session::mcu_rx_capacity() const
+{
+    return 0u;
+}
+
 void Session::poll()
 {
     impl_->poll();

@@ -571,6 +571,13 @@ ConvertResult Converter::to_cdr(const std::string &type_name, bool narrow, const
     return ConvertResult{};
 }
 
+ConvertResult Converter::from_cdr(const std::string &, bool, const std::uint8_t *, std::size_t,
+                                  std::vector<std::uint8_t> &packed)
+{
+    packed.clear();
+    return ConvertResult{ConvertFail::kUnsupportedField, 0xFFu};
+}
+
 std::string Converter::field_path(const std::string &type_name, std::uint8_t index)
 {
     ConvertFail why = ConvertFail::kNone;

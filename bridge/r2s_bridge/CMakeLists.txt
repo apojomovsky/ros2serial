@@ -20,6 +20,8 @@ add_library(r2s_bridge_component SHARED
   src/converter.cpp
   src/core_port.cpp
   src/framing.cpp
+  src/router.cpp
+  src/scheduler.cpp
   src/session.cpp
   src/termios_transport.cpp
   src/type_support.cpp)
@@ -100,6 +102,11 @@ if(BUILD_TESTING)
   ament_add_gtest(test_manual_clock test/test_manual_clock.cpp)
   target_link_libraries(test_manual_clock r2s_bridge_test_support)
 
+  # The scheduler is plain C++ over a nanosecond clock, so its tests need no
+  # ROS context.
+  ament_add_gtest(test_scheduler test/test_scheduler.cpp)
+  target_link_libraries(test_scheduler r2s_bridge_test_support)
+
   ament_add_gtest(test_session_without_executor test/test_session_without_executor.cpp)
   target_link_libraries(test_session_without_executor r2s_bridge_test_support)
 
@@ -144,6 +151,17 @@ if(BUILD_TESTING)
   # openpty comes from libutil; the pty test uses it instead of a device.
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
   target_link_libraries(test_termios_transport r2s_bridge_component util)
+
+  # The router drives a real node with a scripted link and real type support,
+  # covering remapping, QoS and both traffic directions end to end.
+  ament_add_gtest(test_router test/test_router.cpp)
+  target_include_directories(test_router PRIVATE ${R2S_CORE_DIR}/include)
+  target_link_libraries(test_router
+    r2s_bridge_component
+    r2s_bridge_test_support
+    geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
+    sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
+    std_msgs::std_msgs__rosidl_typesupport_cpp)
 endif()
 
 ament_export_targets(export_r2s_bridge HAS_LIBRARY_TARGET)

@@ -138,9 +138,10 @@ std::vector<std::uint8_t> hello_payload(std::uint32_t boot_id, std::uint8_t topi
     return p;
 }
 
-std::vector<std::uint8_t> topic_payload(std::uint8_t index, std::uint8_t topic_id, const std::string &name)
+std::vector<std::uint8_t> topic_payload(std::uint8_t index, std::uint8_t topic_id, const std::string &name,
+                                        std::uint8_t flags = 0x00u)
 {
-    std::vector<std::uint8_t> p{0x04u, index, topic_id, 0x00u};
+    std::vector<std::uint8_t> p{0x04u, index, topic_id, flags};
     for (std::uint8_t i = 0; i < 8u; ++i) {
         p.push_back(i);
     }
@@ -892,6 +893,41 @@ TEST(SessionLink, RefusesANonPositivePeriod)
                      config, clock, []() { return std::unique_ptr<Transport>(); },
                      [](const TopicInfo &) { return std::uint8_t{0}; }),
                  std::invalid_argument);
+}
+// A decoded wire unit back to its frame, through the stateless decoder.
+std::vector<std::uint8_t> decoded_unit(std::vector<std::uint8_t> unit)
+{
+    unit.pop_back();
+    std::uint8_t *at = nullptr;
+    std::uint16_t len = 0;
+    if (r2s_rcobs_decode(unit.data(), static_cast<std::uint16_t>(unit.size()), &at, &len) != R2S_RCOBS_OK) {
+        return {};
+    }
+    return {at, at + len};
+}
+
+TEST(SessionTopics, DuplicateNameInOneDirectionIsAConflict)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 2u));
+    fixture.drain_units();
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 16u, "dup"));
+    fixture.drain_units();
+    fixture.deliver_frame(kControl, 2u, topic_payload(1u, 17u, "dup"));
+    bool refused = false;
+    for (const auto &unit : fixture.drain_units()) {
+        const std::vector<std::uint8_t> decoded = decoded_unit(unit);
+        if (decoded.size() >= 5u && decoded[0] == kControl && decoded[2] == 0x05u && decoded[3] == 17u &&
+            decoded[4] == kTopicStatusNameConflict) {
+            refused = true;
+        }
+    }
+    EXPECT_TRUE(refused) << "the second TOPIC_STATUS carries the conflict verdict";
+    ASSERT_EQ(fixture.session().topics().size(), 2u);
+    EXPECT_EQ(fixture.session().topics()[0].status, kTopicStatusOk);
+    EXPECT_EQ(fixture.session().topics()[1].status, kTopicStatusNameConflict);
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
 }
 
 } // namespace

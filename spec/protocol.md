@@ -259,7 +259,18 @@ DISCONNECTED --port open--> BOOT_WAIT --HELLO or boot_wait_ms--> HANDSHAKING --a
 - [SES-22] Right after READY, the host sends 8 PINGs 50 ms apart.
 - [SES-23] After that, the host sends one PING every 1000 ms for the first 10 s, and then every `time_sync.period_ms`, which defaults to 5000.
 - [SES-24] The estimator keeps the 16 most recent samples, uses the ones with the lowest round trip for the offset, and fits a line for the drift.
-- [SES-25] The host sends a CORRECTION after the initial burst, whenever the estimate moves by more than 100 µs, and at least every 5 s.
+
+### 8.4 Host traffic shaping (local)
+
+The rules below shape traffic inside the host. They never appear on the wire,
+so unit and integration tests cover them and no vector does.
+
+- [SES-26] For a host-to-MCU topic announced with the keep-latest flag, the host keeps only the newest message instead of queueing.
+- [SES-27] The host limits each host-to-MCU topic to its configured rate: `rate_limit.overrides` names a per-topic rate in hertz, and `rate_limit.default_hz` covers the topics without one. A rate of 0 sets no limit.
+- [SES-28] The host caps its total host-to-MCU bandwidth at `tx_budget_pct` percent of the link, counting encoded frame bytes against `baud` bits per second with ten bits per byte.
+- [SES-29] Host-to-MCU topics are serviced round-robin: each pass sends at most one frame per topic, in handshake order, resuming after the topic that sent last.
+- [SES-30] Each host-to-MCU queue holds `qos_depth` messages, or one when the topic is keep-latest. Past that the oldest message is dropped and counted.
+- [SES-31] A generic publisher or subscription created for an MCU topic keeps the last `qos_depth` messages, with reliable delivery when the announced flags name the reliable channel and best effort otherwise.
 
 ## 9. Codec descriptors (local)
 
