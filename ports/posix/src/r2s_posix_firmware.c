@@ -172,7 +172,7 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
 /* One log_text line: the tag, a space, and the value in decimal. The line
  * keeps the whole value while it fits the handwritten String bound of 8
  * characters, and falls back to the value alone otherwise, so the boot id
- * in the line is always the id in the HELLO. */
+ * in the line matches the HELLO for ids up to 8 digits. */
 static void publish_log_text(const char *tag, uint32_t value)
 {
     std_msgs__msg__String msg;

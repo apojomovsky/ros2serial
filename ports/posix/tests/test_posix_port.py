@@ -357,7 +357,7 @@ def test_connected_publishes_log_text(tmp_path):
             assert batteries <= 10, "no periodic log_text within 10 battery publishes"
 
 
-# covers: SES-9
+# covers: SES-9, SES-10
 def test_log_text_keeps_large_boot_id(tmp_path):
     boot = tmp_path / "boot"
     boot.write_text("999\n")
