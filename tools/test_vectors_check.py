@@ -716,3 +716,21 @@ payload: ""
     closing = {}
     closing["round"] = closing
     assert vectors_check._has_cycle({"seen": shared, "nested": {"seen": shared, "loop": closing}})
+
+
+def test_a_cyclic_alias_in_a_frames_name_is_reported_not_a_crash(tmp_path):
+    files = {
+        "frames/cycle.yaml": """
+name: &n [*n]
+covers: [SYS-2, TIM-10]
+topic_id: 1
+seq: 0
+payload: "01 2a"
+frame: "01 00 01 2a 1a 88"
+wire: "01 02 01 2a 1a 88 05 00"
+""",
+    }
+    vectors = make_tree(tmp_path / "vectors", files)
+    assert vectors_check.check_tree(vectors) == [
+        "frames/cycle.yaml: cyclic YAML alias",
+    ]
