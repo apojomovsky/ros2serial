@@ -14,7 +14,6 @@
 #include <cstring>
 #include <filesystem>
 #include <iomanip>
-#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -34,6 +33,7 @@
 #include <std_msgs/msg/int16.hpp>
 #include <std_msgs/msg/int32.hpp>
 #include <std_msgs/msg/int64.hpp>
+#include <std_msgs/msg/int8.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/u_int16.hpp>
 #include <std_msgs/msg/u_int32.hpp>
@@ -100,10 +100,14 @@ std::vector<std::uint8_t> le_float(float value)
 
 template <typename T> std::vector<std::uint8_t> serialize_ref(const T &msg)
 {
+    // The middleware leaves CDR alignment padding unwritten; zeroing an
+    // oversized buffer first makes the reference bytes deterministic, the
+    // same way the converter does.
     rclcpp::Serialization<T> serializer;
-    rclcpp::SerializedMessage serialized;
+    rclcpp::SerializedMessage serialized(4096);
+    rcl_serialized_message_t &rcl = serialized.get_rcl_serialized_message();
+    std::memset(rcl.buffer, 0, rcl.buffer_capacity);
     serializer.serialize_message(&msg, &serialized);
-    const rcl_serialized_message_t &rcl = serialized.get_rcl_serialized_message();
     return {rcl.buffer, rcl.buffer + rcl.buffer_length};
 }
 
@@ -261,11 +265,23 @@ TEST(ConverterFieldPath, NamesTheOffendingField)
     EXPECT_EQ(converter.field_path("sensor_msgs/msg/Imu", 3), "header.stamp.nanosec");
     EXPECT_EQ(converter.field_path("sensor_msgs/msg/Imu", 4), "header.frame_id");
     EXPECT_EQ(converter.field_path("sensor_msgs/msg/Imu", 5), "orientation");
-    EXPECT_EQ(converter.field_path("sensor_msgs/msg/Imu", 6), "orientation_covariance");
-    EXPECT_EQ(converter.field_path("sensor_msgs/msg/Imu", 10), "linear_acceleration_covariance");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/Imu", 6), "orientation.x");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/Imu", 9), "orientation.w");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/Imu", 10), "orientation_covariance");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/Imu", 11), "angular_velocity");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/Imu", 20), "linear_acceleration_covariance");
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 0), "header");
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 1), "header.stamp");
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 4), "header.frame_id");
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 5), "poses");
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 6), "poses.position");
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 7), "poses.position.x");
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 10), "poses.orientation");
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 14), "poses.orientation.w");
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 15), "poses.position");
+    EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 23), "poses.orientation.w");
     EXPECT_EQ(converter.field_path("no_such_pkg/msg/Nope", 0), "");
 }
-
 TEST(ConverterScalars, ConvertsEveryIntegerWidth)
 {
     Converter converter;
@@ -335,6 +351,14 @@ TEST(ConverterScalars, ConvertsEveryIntegerWidth)
         converter.to_cdr("std_msgs/msg/Bool", false, std::vector<std::uint8_t>{0x02}.data(), 1, cdr);
     EXPECT_EQ(result.fail, ConvertFail::kBadBool);
     EXPECT_EQ(result.field, 0u);
+
+    result = converter.to_cdr("std_msgs/msg/Bool", false, cdr.data(), 0, cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 0u);
+
+    result = converter.to_cdr("std_msgs/msg/Int16", false, std::vector<std::uint8_t>{0x12}.data(), 1, cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 0u);
 }
 
 TEST(ConverterStrings, ConvertsLengthsAndRejectsBadOnes)
@@ -400,7 +424,8 @@ TEST(ConverterSequences, ConvertsJointState)
     msg.name = {"a", "bb"};
     msg.position = {1.5, -2.0};
 
-    std::vector<std::uint8_t> payload{0x02, 0x01, 'a', 0x02, 'b', 'b', 0x02};
+    std::vector<std::uint8_t> payload(9, 0x00);
+    payload.insert(payload.end(), {0x02, 0x01, 'a', 0x02, 'b', 'b', 0x02});
     const std::vector<std::uint8_t> one_half = le_double(1.5);
     const std::vector<std::uint8_t> minus_two = le_double(-2.0);
     payload.insert(payload.end(), one_half.begin(), one_half.end());
@@ -410,15 +435,80 @@ TEST(ConverterSequences, ConvertsJointState)
     expect_cdr(converter, "sensor_msgs/msg/JointState", false, payload, serialize_ref(msg), "joint state");
 }
 
+TEST(ConverterSequences, ReportsSequenceFieldIndices)
+{
+    Converter converter;
+    std::vector<std::uint8_t> cdr;
+    const auto convert = [&](const std::vector<std::uint8_t> &payload) {
+        return converter.to_cdr("sensor_msgs/msg/JointState", false, payload.data(), payload.size(), cdr);
+    };
+
+    ConvertResult result = convert(std::vector<std::uint8_t>(9, 0x00));
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 5u);
+
+    std::vector<std::uint8_t> bad_count(9, 0x00);
+    bad_count.insert(bad_count.end(), {0x80, 0x80, 0x80});
+    result = convert(bad_count);
+    EXPECT_EQ(result.fail, ConvertFail::kBadVarint);
+    EXPECT_EQ(result.field, 5u);
+
+    std::vector<std::uint8_t> names(9, 0x00);
+    names.insert(names.end(), {0x01, 0x01, 'a', 0x01, 0x00, 0x00, 0x00});
+    result = convert(names);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 6u);
+}
+
 TEST(ConverterSequences, ConvertsPoseArray)
 {
     Converter converter;
     geometry_msgs::msg::PoseArray msg;
     msg.poses.resize(1);
 
-    std::vector<std::uint8_t> payload{0x01};
-    payload.insert(payload.end(), 56, 0x00);
+    std::vector<std::uint8_t> payload(9, 0x00);
+    payload.push_back(0x01);
+    payload.insert(payload.end(), 48, 0x00);
+    const std::vector<std::uint8_t> one = le_double(1.0);
+    payload.insert(payload.end(), one.begin(), one.end());
     expect_cdr(converter, "geometry_msgs/msg/PoseArray", false, payload, serialize_ref(msg), "pose array");
+}
+
+TEST(ConverterSequences, NumbersNestedArrayElementsDynamically)
+{
+    Converter converter;
+    std::vector<std::uint8_t> cdr;
+    const auto convert = [&](const std::vector<std::uint8_t> &payload) {
+        return converter.to_cdr("geometry_msgs/msg/PoseArray", false, payload.data(), payload.size(), cdr);
+    };
+
+    // poses is 5, its first position is 6: cutting inside position.y names 8.
+    std::vector<std::uint8_t> mid(9, 0x00);
+    mid.push_back(0x01);
+    mid.insert(mid.end(), 10, 0x00);
+    ConvertResult result = convert(mid);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 8u);
+
+    // Two poses consume 5 to 14 and 15 to 23: cutting the last byte names 23.
+    std::vector<std::uint8_t> two(9, 0x00);
+    two.push_back(0x02);
+    two.insert(two.end(), 111, 0x00);
+    result = convert(two);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 23u);
+}
+
+TEST(ConverterNested, ReportsNestedFieldIndices)
+{
+    Converter converter;
+    std::vector<std::uint8_t> cdr;
+    std::vector<std::uint8_t> payload{0x04, 0x03, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x03, 'i', 'm', 'u'};
+    payload.insert(payload.end(), 10, 0x00);
+    const ConvertResult result =
+        converter.to_cdr("sensor_msgs/msg/Imu", false, payload.data(), payload.size(), cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 7u);
 }
 
 TEST(ConverterNested, ConvertsImuWithFixedArrays)
@@ -429,20 +519,31 @@ TEST(ConverterNested, ConvertsImuWithFixedArrays)
     msg.header.frame_id = "imu";
 
     std::vector<std::uint8_t> payload{0x04, 0x03, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x03, 'i', 'm', 'u'};
-    payload.insert(payload.end(), 37 * 8, 0x00);
+    payload.insert(payload.end(), 3 * 8, 0x00);
+    const std::vector<std::uint8_t> one = le_double(1.0);
+    payload.insert(payload.end(), one.begin(), one.end());
+    payload.insert(payload.end(), 33 * 8, 0x00);
     expect_cdr(converter, "sensor_msgs/msg/Imu", false, payload, serialize_ref(msg), "imu");
 }
 
 namespace
 {
 
-using rosidl_typesupport_introspection_cpp::MessageInitialization;
+using rosidl_runtime_cpp::MessageInitialization;
 using rosidl_typesupport_introspection_cpp::MessageMember;
 using rosidl_typesupport_introspection_cpp::MessageMembers;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_DOUBLE;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_MESSAGE;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_UINT8;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_WSTRING;
+
+void fake_noop_init(void *, MessageInitialization)
+{
+}
+
+void fake_noop_fini(void *)
+{
+}
 
 rosidl_message_type_support_t fake_ts_for(const MessageMembers *members)
 {
@@ -465,10 +566,43 @@ TEST(ConverterPlans, RefusesKindsWithoutAWireForm)
     members.member_count_ = 1;
     members.size_of_ = sizeof(std::uint16_t);
     members.members_ = &member;
+    members.init_function = fake_noop_init;
+    members.fini_function = fake_noop_fini;
     const rosidl_message_type_support_t handle = fake_ts_for(&members);
-    EXPECT_FALSE(converter.install_plan_for_test("fake/msg/Wstring", &handle));
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/Wstring", &handle));
+
+    std::vector<std::uint8_t> cdr;
+    const std::vector<std::uint8_t> payload{0x00};
+    const ConvertResult result =
+        converter.to_cdr("fake/msg/Wstring", false, payload.data(), payload.size(), cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
+    EXPECT_EQ(result.field, 0u);
 }
 
+TEST(ConverterPlans, RefusesNullHandles)
+{
+    Converter converter;
+    EXPECT_FALSE(converter.install_plan_for_test("fake/msg/Null", nullptr));
+    const rosidl_message_type_support_t handle = fake_ts_for(nullptr);
+    EXPECT_FALSE(converter.install_plan_for_test("fake/msg/NullData", &handle));
+
+    MessageMember member{};
+    member.name_ = "data";
+    member.type_id_ = ROS_TYPE_UINT8;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "NoInit";
+    members.member_count_ = 1;
+    members.size_of_ = 1;
+    members.members_ = &member;
+    members.fini_function = fake_noop_fini;
+    const rosidl_message_type_support_t no_init = fake_ts_for(&members);
+    EXPECT_FALSE(converter.install_plan_for_test("fake/msg/NoInit", &no_init));
+    members.init_function = fake_noop_init;
+    members.fini_function = nullptr;
+    const rosidl_message_type_support_t no_fini = fake_ts_for(&members);
+    EXPECT_FALSE(converter.install_plan_for_test("fake/msg/NoFini", &no_fini));
+}
 TEST(ConverterPlans, RefusesMoreThan255Fields)
 {
     Converter converter;
@@ -483,6 +617,8 @@ TEST(ConverterPlans, RefusesMoreThan255Fields)
     members.member_count_ = 256;
     members.size_of_ = 256;
     members.members_ = many;
+    members.init_function = fake_noop_init;
+    members.fini_function = fake_noop_fini;
     const rosidl_message_type_support_t handle = fake_ts_for(&members);
     EXPECT_FALSE(converter.install_plan_for_test("fake/msg/Wide", &handle));
 }
@@ -505,6 +641,8 @@ TEST(ConverterPlans, RefusesDeepNesting)
         levels[i].member_count_ = 1;
         levels[i].size_of_ = 1;
         levels[i].members_ = &links[i];
+        levels[i].init_function = fake_noop_init;
+        levels[i].fini_function = fake_noop_fini;
     }
     links[39].name_ = "leaf";
     links[39].type_id_ = ROS_TYPE_UINT8;
@@ -513,6 +651,8 @@ TEST(ConverterPlans, RefusesDeepNesting)
     levels[39].member_count_ = 1;
     levels[39].size_of_ = 1;
     levels[39].members_ = &links[39];
+    levels[39].init_function = fake_noop_init;
+    levels[39].fini_function = fake_noop_fini;
     EXPECT_FALSE(converter.install_plan_for_test("fake/msg/Deep", &nested[0]));
 }
 
@@ -530,6 +670,8 @@ TEST(ConverterPlans, RefusesMissingArrayAccessors)
     fixed_members.member_count_ = 1;
     fixed_members.size_of_ = 3;
     fixed_members.members_ = &fixed;
+    fixed_members.init_function = fake_noop_init;
+    fixed_members.fini_function = fake_noop_fini;
     const rosidl_message_type_support_t fixed_handle = fake_ts_for(&fixed_members);
     EXPECT_FALSE(converter.install_plan_for_test("fake/msg/NoGet", &fixed_handle));
 
@@ -545,6 +687,8 @@ TEST(ConverterPlans, RefusesMissingArrayAccessors)
     bounded_members.member_count_ = 1;
     bounded_members.size_of_ = 1;
     bounded_members.members_ = &bounded;
+    bounded_members.init_function = fake_noop_init;
+    bounded_members.fini_function = fake_noop_fini;
     const rosidl_message_type_support_t bounded_handle = fake_ts_for(&bounded_members);
     EXPECT_FALSE(converter.install_plan_for_test("fake/msg/NoResize", &bounded_handle));
 }
@@ -562,6 +706,8 @@ TEST(ConverterPlans, RefusesMissingNestedMembers)
     members.member_count_ = 1;
     members.size_of_ = 1;
     members.members_ = &member;
+    members.init_function = fake_noop_init;
+    members.fini_function = fake_noop_fini;
     const rosidl_message_type_support_t handle = fake_ts_for(&members);
     EXPECT_FALSE(converter.install_plan_for_test("fake/msg/NoNested", &handle));
 }
@@ -619,6 +765,71 @@ TEST(ConverterSequences, RefusesOverBoundSequences)
         converter.to_cdr("fake/msg/Bounded", false, payload.data(), payload.size(), cdr);
     EXPECT_EQ(result.fail, ConvertFail::kOverBound);
     EXPECT_EQ(result.field, 0u);
+}
+
+TEST(ConverterPlans, RefusesConversionWithoutAMiddlewareHandle)
+{
+    Converter converter;
+    MessageMember member{};
+    member.name_ = "data";
+    member.type_id_ = ROS_TYPE_DOUBLE;
+    member.is_array_ = true;
+    member.is_upper_bound_ = true;
+    member.array_size_ = 5;
+    member.get_function = fake_bounded_get;
+    member.resize_function = fake_bounded_resize;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "Bounded";
+    members.member_count_ = 1;
+    members.size_of_ = sizeof(FakeBounded);
+    members.members_ = &member;
+    members.init_function = fake_bounded_init;
+    members.fini_function = fake_bounded_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/BoundedEmpty", &handle));
+
+    std::vector<std::uint8_t> cdr;
+    const std::vector<std::uint8_t> payload{0x00};
+    const ConvertResult result =
+        converter.to_cdr("fake/msg/BoundedEmpty", false, payload.data(), payload.size(), cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
+    EXPECT_EQ(result.field, 0xFFu);
+}
+
+void *fake_empty_get(void * /*memory*/, std::size_t /*index*/)
+{
+    return nullptr;
+}
+
+TEST(ConverterFieldPath, StopsAtEmptyNestedArrays)
+{
+    Converter converter;
+    MessageMembers empty{};
+    empty.message_namespace_ = "fake";
+    empty.message_name_ = "Empty";
+    empty.member_count_ = 0;
+    empty.size_of_ = 1;
+    const rosidl_message_type_support_t empty_handle = fake_ts_for(&empty);
+    MessageMember member{};
+    member.name_ = "items";
+    member.type_id_ = ROS_TYPE_MESSAGE;
+    member.is_array_ = true;
+    member.array_size_ = 2;
+    member.members_ = &empty_handle;
+    member.get_function = fake_empty_get;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "EmptyArr";
+    members.member_count_ = 1;
+    members.size_of_ = 1;
+    members.members_ = &member;
+    members.init_function = fake_noop_init;
+    members.fini_function = fake_noop_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/EmptyArr", &handle));
+    EXPECT_EQ(converter.field_path("fake/msg/EmptyArr", 0), "items");
+    EXPECT_EQ(converter.field_path("fake/msg/EmptyArr", 1), "");
 }
 
 } // namespace

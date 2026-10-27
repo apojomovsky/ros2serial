@@ -137,9 +137,9 @@ if(BUILD_TESTING)
   target_link_libraries(test_converter
     r2s_bridge_component
     yaml-cpp::yaml-cpp
-    geometry_msgs::geometry_msgs__rosidl_generator_cpp
-    sensor_msgs::sensor_msgs__rosidl_generator_cpp
-    std_msgs::std_msgs__rosidl_generator_cpp)
+    geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
+    sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
+    std_msgs::std_msgs__rosidl_typesupport_cpp)
 
   # openpty comes from libutil; the pty test uses it instead of a device.
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
