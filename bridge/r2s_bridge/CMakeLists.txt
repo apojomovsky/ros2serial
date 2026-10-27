@@ -16,6 +16,7 @@ add_library(r2s_bridge_component SHARED
   src/bridge.cpp
   src/core_port.cpp
   src/framing.cpp
+  src/session.cpp
   src/termios_transport.cpp)
 target_include_directories(r2s_bridge_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -103,6 +104,15 @@ if(BUILD_TESTING)
   target_link_libraries(test_framing r2s_bridge_test_support yaml-cpp::yaml-cpp)
 
   # openpty comes from libutil; the pty test uses it instead of a device.
+  # The session reads the transcript vectors and drives the fake link and
+  # the manual clock.
+  ament_add_gtest(test_session test/test_session.cpp)
+  target_include_directories(test_session PRIVATE ${R2S_CORE_DIR}/include)
+  target_compile_definitions(test_session PRIVATE
+    R2S_SESSION_VECTOR_DIR="${R2S_CORE_DIR}/../spec/vectors/session"
+    R2S_FRAMES_VECTOR_DIR="${R2S_CORE_DIR}/../spec/vectors/frames")
+  target_link_libraries(test_session r2s_bridge_test_support yaml-cpp::yaml-cpp)
+
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
   target_link_libraries(test_termios_transport r2s_bridge_component util)
 endif()

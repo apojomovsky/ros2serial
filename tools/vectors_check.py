@@ -144,6 +144,32 @@ def check_frame(name: str, data: dict) -> list[str]:
     return problems
 
 
+def check_session(name: str, data: dict) -> list[str]:
+    """Check each transcript step carries a well-formed decoded frame.
+
+    A step's bytes must parse as hexadecimal, hold at least topic, seq and
+    the check ([FRM-7]), and leave the zero residue ([CHK-4]). The steps stay
+    an ordered exchange: the host side proves the order in its own test.
+    """
+    problems = []
+    steps = data.get("steps") if isinstance(data, dict) else None
+    if not isinstance(steps, list):
+        return []
+    for i, step in enumerate(steps):
+        if not isinstance(step, dict):
+            continue
+        try:
+            frame = bytes.fromhex(step["frame"])
+        except (KeyError, TypeError, ValueError) as e:
+            problems.append(f"{name}/steps/{i}/frame: not hexadecimal bytes: {e}")
+            continue
+        if len(frame) < 4:
+            problems.append(f"{name}/steps/{i}/frame: shorter than 4 bytes")
+        elif crc.crc16(frame) != 0:
+            problems.append(f"{name}/steps/{i}/frame: the frame check does not leave zero")
+    return problems
+
+
 # The system channels of spec/protocol.md section 7. A channel's opcodes
 # name the layout its payload has, so a vector is checked by the channel and
 # the opcode it carries, not by the name it happens to have.
@@ -511,7 +537,7 @@ def check_tree(vectors: Path) -> list[str]:
     for path in sorted(p for p in vectors.rglob("*") if p.is_file() and p.name != ".gitkeep"):
         name = path.relative_to(vectors).as_posix()
         problems += check_file(path, name, validators)
-        if name.startswith(("frames/", "messages/")) and path.suffix == ".yaml":
+        if name.startswith(("frames/", "messages/", "session/")) and path.suffix == ".yaml":
             try:
                 data = yaml.safe_load(path.read_text())
             except yaml.YAMLError:
@@ -519,6 +545,8 @@ def check_tree(vectors: Path) -> list[str]:
             if isinstance(data, dict):
                 if name.startswith("frames/"):
                     problems += check_frame(name, data)
+                elif name.startswith("session/"):
+                    problems += check_session(name, data)
                 else:
                     problems += check_message(name, data)
     return problems

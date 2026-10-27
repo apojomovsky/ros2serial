@@ -99,5 +99,10 @@ bool FakeTransport::closed() const
     return closed_;
 }
 
+void FakeTransport::discard_writes()
+{
+    writes_.clear();
+}
+
 } // namespace test
 } // namespace r2s_bridge
