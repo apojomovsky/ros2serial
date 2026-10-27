@@ -439,3 +439,57 @@ payload: ""
         "messages/mixed.yaml/message: the reference does not make it: "
         "demo_msgs/msg/Two.second: 1e+300 does not fit binary32",
     ]
+
+
+def test_a_cyclic_alias_in_a_message_is_reported_not_a_crash(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "A.msg").write_text("B b\n", encoding="utf-8")
+    (definitions / "B.msg").write_text("A a\n", encoding="utf-8")
+    (definitions / "Single.msg").write_text("float32 data\n", encoding="utf-8")
+    (definitions / "Arr.msg").write_text("Single[] items\n", encoding="utf-8")
+    files = {
+        "messages/cycle.yaml": """
+name: cycle
+covers: [ENC-3]
+type: demo_msgs/msg/A
+profile: {narrow_float64: false}
+message: &x
+  b: {a: *x}
+payload: ""
+""",
+        "messages/cycle_covers.yaml": """
+name: cycle_covers
+covers: &c [ENC-3, *c]
+type: demo_msgs/msg/Single
+profile: {narrow_float64: false}
+message: {data: 1.5}
+payload: "00 00 c0 3f"
+""",
+        "messages/cycle_array.yaml": """
+name: cycle_array
+covers: [ENC-3]
+type: demo_msgs/msg/Arr
+profile: {narrow_float64: false}
+message: &m
+  items: [*m]
+payload: ""
+""",
+    }
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    vectors = make_tree(tmp_path / "vectors", files)
+    problems = vectors_check.check_tree(vectors)
+    assert problems == [
+        "messages/cycle.yaml: cyclic YAML alias",
+        "messages/cycle.yaml/message: the reference does not make it: maximum recursion depth exceeded",
+        "messages/cycle_array.yaml: cyclic YAML alias",
+        "messages/cycle_array.yaml/message: the reference does not make it: demo_msgs/msg/Single.data: no value",
+        "messages/cycle_covers.yaml: cyclic YAML alias",
+    ], problems
+    shared = {"data": 1.5}
+    assert not vectors_check._has_cycle({"first": shared, "second": [shared]})
+    assert not vectors_check._has_cycle({"a": [1, None, "x"]})
+    closing = {}
+    closing["round"] = closing
+    assert vectors_check._has_cycle({"seen": shared, "nested": {"seen": shared, "loop": closing}})
