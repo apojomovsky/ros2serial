@@ -437,6 +437,70 @@ def test_bad_rate_fails(tmp_path):
     assert "--rate" in error
 
 
+LAUNCH_NAME_TYPES = [
+    ("--pub", "std_msgs/msg/Float32"),
+    ("--sub", "geometry_msgs/msg/Twist"),
+    ("--log-text", "std_msgs/msg/String"),
+]
+
+
+def varint_len(value):
+    if value < 128:
+        return 1
+    if value < 16384:
+        return 2
+    return 3
+
+
+def topic_name_limit(type_name, max_frame):
+    """Longest launch name fitting one TOPIC announce entry: the same sum
+    the core gate refuses, from the frame limit the firmware announces."""
+    budget = max_frame - 4
+    fixed = 12 + varint_len(len(type_name)) + len(type_name)
+    limit = budget - fixed - 1
+    while limit > 0 and fixed + varint_len(limit) + limit > budget:
+        limit -= 1
+    return limit
+
+
+def launch_name_cases(tmp_path):
+    """Per-flag (flag, type, limit) from the frame limit this firmware build
+    announces, so the boundary tests track the generated limits (G8)."""
+    with Firmware(boot=str(tmp_path / "boot")) as fw:
+        _, _, payload = read_frame(fw.master, want=0)
+        max_frame = parse_hello(payload)["max_frame"]
+    return [(flag, type_name, topic_name_limit(type_name, max_frame)) for flag, type_name in LAUNCH_NAME_TYPES]
+
+
+def test_launch_topic_name_over_limit_fails(tmp_path):
+    for flag, type_name, limit in launch_name_cases(tmp_path):
+        name = "n" * (limit + 1)
+        code, error = run_once([flag, name], boot=str(tmp_path / "boot"))
+        assert code == 2
+        assert flag in error
+        assert name in error
+        assert str(limit + 1) in error
+        assert f"limit {limit}" in error
+        assert type_name in error
+
+
+def test_launch_topic_name_at_limit_passes_name_check(tmp_path):
+    for flag, _, limit in launch_name_cases(tmp_path):
+        code, error = run_once([flag, "n" * limit], boot=str(tmp_path / "boot"))
+        assert code == 1
+        assert "does-not-exist" in error
+
+
+def test_launch_topic_name_at_limit_is_announced(tmp_path):
+    cases = launch_name_cases(tmp_path)
+    args = []
+    for flag, _, limit in cases:
+        args += [flag, "n" * limit]
+    with Firmware(*args, boot=str(tmp_path / "boot")) as fw:
+        _, topics, _ = do_handshake(fw)
+        assert [t["topic"] for t in topics] == ["n" * limit for _, _, limit in cases]
+
+
 def test_missing_boot_file_env_fails(tmp_path):
     code, error = run_once([], keep_env=False)
     assert code == 2
