@@ -47,11 +47,6 @@ uint32_t r2s_port_tick(void)
     return 0u;
 }
 
-uint32_t r2s_port_boot_id(void)
-{
-    return 1u;
-}
-
 /* Reads every table byte through the flash reader, so the tables and the
  * reader stay live in both builds. */
 static void touch_tables(void)

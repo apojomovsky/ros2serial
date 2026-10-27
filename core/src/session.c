@@ -68,7 +68,7 @@ static struct {
     uint16_t rx_lost[R2S_SESSION_MAX_TOPICS];
     uint8_t tx_seq_ctrl;
     uint8_t tx_seq_hb;
-    uint32_t boot_id;
+    uint32_t token;
     uint32_t last_host_tick;
     uint32_t last_hello_tick;
     uint32_t last_hb_tick;
@@ -132,6 +132,11 @@ uint8_t r2s_session_topic_flags(uint8_t index)
 uint8_t r2s_session_topic_status(uint8_t index)
 {
     return session.status[index];
+}
+
+uint32_t r2s_session_token(void)
+{
+    return session.token;
 }
 
 uint8_t r2s_session_tx_seq(uint8_t index)
@@ -249,7 +254,7 @@ static void send_hello(void)
     put_byte(OP_HELLO);
     put_byte(R2S_PROTOCOL_VERSION);
     put_byte(0x00u);
-    put_u32(session.boot_id);
+    put_u32(session.token);
     put_u16(R2S_MAX_FRAME);
     put_u16(R2S_FRAMER_RX_CAPACITY);
     put_u32(R2S_TICK_HZ);
@@ -354,15 +359,27 @@ static void on_control(uint32_t now, const uint8_t *payload, uint16_t len)
         }
         refuse();
         break;
-    case OP_READY:
-        if (len != 1u) {
+    case OP_READY: {
+        /* The token lives in RAM from here (SES-10); a zero token or a
+         * short frame is refused and changes nothing. */
+        uint32_t token;
+
+        if (len != 5u) {
+            refuse();
+            return;
+        }
+        token = (uint32_t)payload[1] | ((uint32_t)payload[2] << 8u) | ((uint32_t)payload[3] << 16u) |
+                ((uint32_t)payload[4] << 24u);
+        if (token == 0u) {
             refuse();
             return;
         }
         if (session.state == ANNOUNCING) {
+            session.token = token;
             enter_connected(now);
         }
         break;
+    }
     default:
         refuse();
         break;
@@ -422,7 +439,7 @@ void r2s_init(void)
 {
     uint32_t now = r2s_port_tick();
 
-    session.boot_id = r2s_port_boot_id();
+    session.token = 0u;
     session.tx_seq_ctrl = 0u;
     session.tx_seq_hb = 0u;
     enter_announcing(now);
@@ -478,7 +495,7 @@ void r2s_session_test_reset(void)
     }
     session.tx_seq_ctrl = 0u;
     session.tx_seq_hb = 0u;
-    session.boot_id = 0u;
+    session.token = 0u;
     session.last_host_tick = 0u;
     session.last_hello_tick = 0u;
     session.last_hb_tick = 0u;
