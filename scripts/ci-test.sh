@@ -55,12 +55,17 @@ else
 fi
 
 scoped=0
-for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E COVERAGE DOCS EXAMPLES; do [ -n "${!v:-}" ] && scoped=1; done
+scope_names=""
+for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E COVERAGE DOCS EXAMPLES; do
+  if [ -n "${!v:-}" ]; then scoped=1; scope_names="$scope_names $v"; fi
+done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }
 
 failed=()
+ran=0
 section() {
   local name=$1; shift
+  ran=$((ran + 1))
   echo "== $name"
   if "$@"; then echo "== $name: ok"; else echo "== $name: FAILED"; failed+=("$name"); fi
 }
@@ -143,6 +148,10 @@ if wants E2E; then
   esac
 fi
 
+if [ "$scoped" = 1 ] && [ "$ran" = 0 ]; then
+  echo "no section ran for scope:$scope_names" >&2
+  exit 1
+fi
 if [ "${#failed[@]}" -gt 0 ]; then
   echo "failed sections: ${failed[*]}"
   exit 1
