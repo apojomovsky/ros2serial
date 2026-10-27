@@ -1,0 +1,7 @@
+name: float32_full
+covers: [ENC-3, FRM-4]
+topic_id: 16
+seq: 0
+payload: "00 00 c0 3f"
+frame: "10 00 00 00 c0 3f 1e 49"
+wire: "10 02 01 01 c0 3f 1e 49 05 00"
