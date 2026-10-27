@@ -61,9 +61,13 @@ def type_hash(repository: msgs.MessageRepository, type_name: str) -> str:
 
 
 def _individual_description(message: msgs.Message) -> dict:
+    fields = message.fields
+    if not fields:
+        # An empty .msg hashes as one uint8 member: the adapter's IDL template renders it so.
+        fields = (msgs.Field(name="structure_needs_at_least_one_member", type_name="uint8"),)
     return {
         "type_name": message.type_name,
-        "fields": [{"name": field.name, "type": _field_type(field, message.type_name)} for field in message.fields],
+        "fields": [{"name": field.name, "type": _field_type(field, message.type_name)} for field in fields],
     }
 
 

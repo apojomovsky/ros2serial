@@ -56,3 +56,34 @@ def test_a_wide_string_field_is_an_error_naming_the_field(tmp_path):
         typehash.type_hash(repository, "demo_msgs/msg/Sample")
 
     assert "name" in str(caught.value)
+
+
+def test_an_empty_message_hashes_with_the_placeholder_member(tmp_path):
+    write_message(tmp_path / "messages", "std_msgs/msg/Empty", "")
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "messages"])
+
+    assert (
+        typehash.type_hash(repository, "std_msgs/msg/Empty")
+        == "RIHS01_20b625256f32d5dbc0d04fee44f43c41e51c70d3502f84b4a08e7a9c26a96312"
+    )
+
+
+def test_bounded_fields_hash_with_bounded_type_ids(tmp_path):
+    write_message(tmp_path / "messages", "demo_msgs/msg/Bounded", "string<=7 name\nint32[<=4] values\n")
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "messages"])
+
+    assert (
+        typehash.type_hash(repository, "demo_msgs/msg/Bounded")
+        == "RIHS01_095b6afd2bc2ff082798196072602098e624d26812b92c459ef21279db79b097"
+    )
+
+
+def test_a_parent_of_an_empty_message_matches_the_oracle(tmp_path):
+    write_message(tmp_path / "messages", "std_msgs/msg/Empty", "")
+    write_message(tmp_path / "messages", "demo_msgs/msg/HasEmpty", "std_msgs/Empty e\n")
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "messages"])
+
+    assert (
+        typehash.type_hash(repository, "demo_msgs/msg/HasEmpty")
+        == "RIHS01_b226f514d364b3d9c9e46d48a9a445044e450b4e87ccd5915408f9f72a174dc8"
+    )
