@@ -43,6 +43,9 @@ class FakeTransport final : public Transport
     const std::vector<std::vector<std::uint8_t>> &writes() const;
     bool closed() const;
 
+    // Forgets every captured write, so a test can look at one step's output.
+    void discard_writes();
+
   private:
     struct QueuedRead {
         std::vector<std::uint8_t> bytes;

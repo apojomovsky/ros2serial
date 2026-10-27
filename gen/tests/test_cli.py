@@ -1,4 +1,4 @@
-"""The r2s-gen command line: the version command, and the refusal of every other command."""
+"""The r2s-gen command line: the version command, and the refusal of unknown ones."""
 
 from r2s_gen import cli
 from r2s_gen.version import PROTOCOL_VERSION, __version__

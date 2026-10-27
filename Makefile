@@ -66,7 +66,7 @@ fuzz: ## Run one libFuzzer target for 60 s
 size-report: ## Regenerate the flash, RAM and stack report
 	@$(call pending,size-report,P6 in docs/00-design.md)
 
-vectors: guard-main-clone cache-dir ## Validate every vector file (regeneration comes with G9)
+vectors: guard-main-clone cache-dir ## Validate every vector file
 	@$(call in_image,python3 tools/vectors_check.py)
 
 docs-gen: ## Regenerate reference docs (CLI, vectors, bridge parameters)

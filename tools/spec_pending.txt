@@ -2,8 +2,6 @@
 # (docs/00-design.md, Epics and seed tickets). tools/spec_coverage.py fails
 # once a listed rule is covered, and on a PR only rules the PR adds to the spec
 # may join the list.
-CTL-3   H4
-CTL-9   H4
 CTL-11  Y3
 CTL-12  H5
 CTL-13  H5
@@ -53,16 +51,6 @@ LOG-1   P1
 LOG-2   P1
 LOG-3   P1
 LOG-4   P1
-SES-12  H4
-SES-13  H4
-SES-14  H4
-SES-15  H4
-SES-16  H4
-SES-17  H4
-SES-18  H4
-SES-19  H4
-SES-20  H4
-SES-21  H4
 SES-22  P3
 SES-23  P3
 SES-24  P3

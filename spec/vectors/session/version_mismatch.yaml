@@ -1,0 +1,35 @@
+name: version_mismatch
+covers: [SES-13, SES-14, SES-15, SES-16, SES-17]
+steps:
+  - from: mcu
+    frame: "00 00 02 02 00 78 56 34 12 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 84 b1"
+    at_ms: 100
+    note: "refused: version 2 against the host 1"
+  - from: host
+    frame: "00 00 01 01 70 0b"
+    at_ms: 2500
+    note: "boot_wait_ms passed with no accepted HELLO"
+  - from: mcu
+    frame: "00 01 02 01 00 78 56 34 12 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f9 61"
+    at_ms: 2600
+  - from: host
+    frame: "00 01 03 00 95 73"
+    at_ms: 2600
+  - from: mcu
+    frame: "00 02 04 00 10 00 00 01 02 03 04 05 06 07 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 07 62 61 74 74 65 72 79 41 1f"
+    at_ms: 2650
+  - from: host
+    frame: "00 02 05 10 00 d2 a5"
+    at_ms: 2650
+  - from: host
+    frame: "00 03 03 01 a4 d7"
+    at_ms: 2650
+  - from: mcu
+    frame: "00 03 04 01 11 05 10 11 12 13 14 15 16 17 17 67 65 6f 6d 65 74 72 79 5f 6d 73 67 73 2f 6d 73 67 2f 54 77 69 73 74 07 63 6d 64 5f 76 65 6c e7 eb"
+    at_ms: 2700
+  - from: host
+    frame: "00 04 05 11 00 90 f7"
+    at_ms: 2700
+  - from: host
+    frame: "00 05 06 bd 22"
+    at_ms: 2700
