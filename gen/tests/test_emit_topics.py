@@ -129,7 +129,7 @@ def test_names_differing_only_by_case_collide():
     )
 
 
-@pytest.mark.parametrize("name", ["one", "rx_buf", "int", "switch"])
+@pytest.mark.parametrize("name", ["one", "int", "switch", "_Bool", "_Generic"])
 def test_taken_c_names_are_an_error(name):
     loaded = Config(
         node="base_controller",
@@ -355,6 +355,17 @@ def test_a_subscribe_only_config_compiles_without_a_publish_path(tmp_path):
 
     assert "r2s_publish_one" not in source
     assert "r2s_on_cmd_vel" in header
+    compile_pair(tmp_path, header, source)
+
+
+def test_a_buffer_named_topic_still_compiles(tmp_path):
+    loaded = load(
+        "node: base_controller\ntopics:\n  - name: rx_buf\n    type: std_msgs/msg/Float32\n    direction: sub\n",
+        tmp_path,
+    )
+    repository, resolved = resolve_for(loaded)
+    header, source = topics.generate(loaded, resolved, repository)
+
     compile_pair(tmp_path, header, source)
 
 

@@ -60,12 +60,13 @@ def c_identifier(name: str) -> str:
 
 _TAKEN = frozenset(
     {
-        # The generated file's own helper and buffer, which a wrapper or a
-        # receive slot would otherwise redefine.
+        # The generated file's own publish helper, which a wrapper would
+        # otherwise redefine.
         "one",
-        "rx_buf",
         # A C keyword is no identifier in the receive union, so no topic
-        # takes one even when only its publish wrapper would compile.
+        # takes one even when only its publish wrapper would compile. The
+        # underscore keywords sit with the rest: _Bool, _Complex and
+        # _Imaginary are C99, the others C11, and _Pragma is an operator.
         "auto",
         "break",
         "case",
@@ -100,6 +101,17 @@ _TAKEN = frozenset(
         "void",
         "volatile",
         "while",
+        "_Alignas",
+        "_Alignof",
+        "_Atomic",
+        "_Bool",
+        "_Complex",
+        "_Generic",
+        "_Imaginary",
+        "_Noreturn",
+        "_Pragma",
+        "_Static_assert",
+        "_Thread_local",
     }
 )
 
