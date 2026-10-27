@@ -33,13 +33,7 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
-        run: |
-          # The payload base.sha goes stale when the base moves on and is
-          # merged in, putting base commits inside the range. The merge base
-          # with the current base holds only the branch's own commits.
-          base="origin/${BASE_REF:-master}"
-          range="$(git merge-base "$base" HEAD)..HEAD"
-          COMMIT_RANGE="$range" COMMITS=1 bash scripts/ci-test.sh
+        run: COMMIT_RANGE="$(bash scripts/pr-title-range.sh)" COMMITS=1 bash scripts/ci-test.sh
       - name: The repository's merge settings
         # The rule is what the settings allow, so they are checked. The
         # default GITHUB_TOKEN cannot read them: the API hides the merge
