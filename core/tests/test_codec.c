@@ -53,10 +53,20 @@ static const uint8_t test_f64_types[] = {0x08u, 0x00u, 0x00u, 0x00u, 0x01u};
 static const uint8_t test_f64_fields[] = {0x0Au, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
 static const r2s_codec_table_t test_f64_table = {test_f64_types, 1u, test_f64_fields, 1u};
 
-/* A string, a fixed array and two bounded arrays, one with a 2-byte count. */
+/* A string, a fixed string array and a bounded one: each string element is
+ * aux + 1 bytes, and the bounded form keeps its count past the last one. */
 typedef struct {
     char name[6];
 } test_str_t;
+
+typedef struct {
+    char name[3][6];
+} test_fixed_str_t;
+
+typedef struct {
+    char data[4][6];
+    uint8_t n;
+} test_bounded_str_t;
 
 typedef struct {
     uint16_t v[3];
@@ -76,18 +86,22 @@ typedef char check_str_size[sizeof(test_str_t) == 6u ? 1 : -1];
 typedef char check_fixed_size[sizeof(test_fixed_t) == 6u ? 1 : -1];
 typedef char check_bounded_size[sizeof(test_bounded_t) == 5u ? 1 : -1];
 typedef char check_bounded16_count[offsetof(test_bounded16_t, n) == 300u ? 1 : -1];
+typedef char check_fixed_str_size[sizeof(test_fixed_str_t) == 18u ? 1 : -1];
+typedef char check_bounded_str_count[offsetof(test_bounded_str_t, n) == 24u ? 1 : -1];
 
 static const uint8_t test_arrays_types[] = {
-    0x06u, 0x00u, 0x00u, 0x00u, 0x01u, 0x06u, 0x00u, 0x01u, 0x00u, 0x01u,
-    0x05u, 0x00u, 0x02u, 0x00u, 0x01u, 0x2Eu, 0x01u, 0x03u, 0x00u, 0x01u,
+    0x06u, 0x00u, 0x00u, 0x00u, 0x01u, 0x06u, 0x00u, 0x01u, 0x00u, 0x01u, 0x05u, 0x00u, 0x02u, 0x00u, 0x01u,
+    0x2Eu, 0x01u, 0x03u, 0x00u, 0x01u, 0x12u, 0x00u, 0x04u, 0x00u, 0x01u, 0x19u, 0x00u, 0x05u, 0x00u, 0x01u,
 };
 static const uint8_t test_arrays_fields[] = {
     0x0Bu, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x05u, 0x00u, /* string<=5 at 0 */
     0x03u, 0x01u, 0x00u, 0x00u, 0x03u, 0x00u, 0x00u, 0x00u, /* u16[3] at 0 */
     0x01u, 0x02u, 0x00u, 0x00u, 0x04u, 0x00u, 0x00u, 0x00u, /* u8[<=4] at 0 */
     0x01u, 0x82u, 0x00u, 0x00u, 0x2Cu, 0x01u, 0x00u, 0x00u, /* u8[<=300] at 0 */
+    0x0Bu, 0x01u, 0x00u, 0x00u, 0x03u, 0x00u, 0x05u, 0x00u, /* string<=5[3] at 0 */
+    0x0Bu, 0x02u, 0x00u, 0x00u, 0x04u, 0x00u, 0x05u, 0x00u, /* string<=5[<=4] at 0 */
 };
-static const r2s_codec_table_t test_arrays_table = {test_arrays_types, 4u, test_arrays_fields, 4u};
+static const r2s_codec_table_t test_arrays_table = {test_arrays_types, 6u, test_arrays_fields, 6u};
 
 /* Three nesting levels: inner, middle and an outer too deep for the stack. */
 typedef struct {
@@ -495,6 +509,73 @@ void test_codec_string_needs_its_terminator_and_fits_its_bound(void)
     TEST_ASSERT_EQUAL_UINT8(0, field);
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_DECODE, decode_here(&test_arrays_table, 0u, with_nul,
                                                        (uint16_t)sizeof with_nul, 0u, &out, &field));
+    TEST_ASSERT_EQUAL_UINT8(0, field);
+}
+
+/* covers: DSC-30, DSC-32, ENC-7, ENC-8 */
+void test_codec_fixed_string_array_encodes_each_element(void)
+{
+    test_fixed_str_t in;
+    static uint8_t buf[32];
+    static const uint8_t want[] = {0x02u, 'h', 'i', 0x00u, 0x05u, 'a', 'b', 'c', 'd', 'e'};
+    uint8_t toolong[] = {0x06u, 'a', 'b', 'c', 'd', 'e', 'f'};
+    test_fixed_str_t out;
+    int8_t rc;
+    uint8_t field;
+    uint16_t len;
+
+    memset(&in, 0, sizeof in);
+    memcpy(in.name[0], "hi", 3u);
+    memcpy(in.name[2], "abcde", 6u);
+    len = encode_here(&test_arrays_table, 4u, &in, 0u, buf, (uint16_t)sizeof buf, &rc, &field);
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, rc);
+    TEST_ASSERT_EQUAL_UINT16((uint16_t)sizeof want, len);
+    TEST_ASSERT_EQUAL_MEMORY(want, buf, sizeof want);
+    memset(&out, 0, sizeof out);
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, decode_here(&test_arrays_table, 4u, buf, len, 0u, &out, &field));
+    TEST_ASSERT_EQUAL_STRING("hi", out.name[0]);
+    TEST_ASSERT_EQUAL_STRING("", out.name[1]);
+    TEST_ASSERT_EQUAL_STRING("abcde", out.name[2]);
+    memset(&in, 'x', sizeof in);
+    encode_here(&test_arrays_table, 4u, &in, 0u, buf, (uint16_t)sizeof buf, &rc, &field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, rc);
+    TEST_ASSERT_EQUAL_UINT8(0, field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, decode_here(&test_arrays_table, 4u, toolong,
+                                                       (uint16_t)sizeof toolong, 0u, &out, &field));
+    TEST_ASSERT_EQUAL_UINT8(0, field);
+}
+
+/* covers: DSC-31, DSC-32, ENC-7, ENC-9 */
+void test_codec_bounded_string_array_round_trips(void)
+{
+    test_bounded_str_t in;
+    static uint8_t buf[32];
+    static const uint8_t want[] = {0x02u, 0x02u, 'h', 'i', 0x02u, 'a', 'b'};
+    uint8_t overfull[] = {0x05u, 0x00u};
+    test_bounded_str_t out;
+    int8_t rc;
+    uint8_t field;
+    uint16_t len;
+
+    memset(&in, 0, sizeof in);
+    memcpy(in.data[0], "hi", 3u);
+    memcpy(in.data[1], "ab", 3u);
+    in.n = 2u;
+    len = encode_here(&test_arrays_table, 5u, &in, 0u, buf, (uint16_t)sizeof buf, &rc, &field);
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, rc);
+    TEST_ASSERT_EQUAL_UINT16((uint16_t)sizeof want, len);
+    TEST_ASSERT_EQUAL_MEMORY(want, buf, sizeof want);
+    memset(&out, 0, sizeof out);
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, decode_here(&test_arrays_table, 5u, buf, len, 0u, &out, &field));
+    TEST_ASSERT_EQUAL_UINT8(2u, out.n);
+    TEST_ASSERT_EQUAL_STRING("hi", out.data[0]);
+    TEST_ASSERT_EQUAL_STRING("ab", out.data[1]);
+    in.n = 5u;
+    encode_here(&test_arrays_table, 5u, &in, 0u, buf, (uint16_t)sizeof buf, &rc, &field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, rc);
+    TEST_ASSERT_EQUAL_UINT8(0, field);
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, decode_here(&test_arrays_table, 5u, overfull,
+                                                       (uint16_t)sizeof overfull, 0u, &out, &field));
     TEST_ASSERT_EQUAL_UINT8(0, field);
 }
 
