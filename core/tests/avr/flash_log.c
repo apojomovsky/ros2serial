@@ -72,8 +72,12 @@ int main(void)
 {
     touch_tables();
 #ifdef R2S_AVR_CHECK_LOGS
+    /* A variable value: the no-op macros of a tier without logging must keep
+     * it used, or the build fails on the unused variable. */
+    uint16_t adc = (uint16_t)(sink + 1u);
+
     R2S_LOG_INFO("battery low log line");
-    R2S_LOG_WARN_U16("adc counts=", 0u);
+    R2S_LOG_WARN_U16("adc counts=", adc);
     R2S_LOG_ERROR("link lost log line");
 #endif
     return 0;

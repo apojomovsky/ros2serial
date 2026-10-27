@@ -106,17 +106,18 @@ void r2s_log_fatal_ram(const char *text);
 void r2s_log_note_connected(void);
 #else
 /* Without R2S_WITH_LOG the literal forms compile out, so one firmware builds
- * for tiers with and without logging. */
-#define R2S_LOG_DEBUG(lit) ((void)0)
-#define R2S_LOG_DEBUG_U16(lit, v) ((void)0)
-#define R2S_LOG_INFO(lit) ((void)0)
-#define R2S_LOG_INFO_U16(lit, v) ((void)0)
-#define R2S_LOG_WARN(lit) ((void)0)
-#define R2S_LOG_WARN_U16(lit, v) ((void)0)
-#define R2S_LOG_ERROR(lit) ((void)0)
-#define R2S_LOG_ERROR_U16(lit, v) ((void)0)
-#define R2S_LOG_FATAL(lit) ((void)0)
-#define R2S_LOG_FATAL_U16(lit, v) ((void)0)
+ * for tiers with and without logging. The sizeof mentions keep logged values
+ * used without emitting anything. */
+#define R2S_LOG_DEBUG(lit) ((void)sizeof(lit))
+#define R2S_LOG_DEBUG_U16(lit, v) ((void)sizeof(lit), (void)sizeof(v))
+#define R2S_LOG_INFO(lit) ((void)sizeof(lit))
+#define R2S_LOG_INFO_U16(lit, v) ((void)sizeof(lit), (void)sizeof(v))
+#define R2S_LOG_WARN(lit) ((void)sizeof(lit))
+#define R2S_LOG_WARN_U16(lit, v) ((void)sizeof(lit), (void)sizeof(v))
+#define R2S_LOG_ERROR(lit) ((void)sizeof(lit))
+#define R2S_LOG_ERROR_U16(lit, v) ((void)sizeof(lit), (void)sizeof(v))
+#define R2S_LOG_FATAL(lit) ((void)sizeof(lit))
+#define R2S_LOG_FATAL_U16(lit, v) ((void)sizeof(lit), (void)sizeof(v))
 #endif
 
 #ifdef R2S_TESTING

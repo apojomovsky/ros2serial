@@ -31,7 +31,9 @@
 #define R2S_LOG_KIND_I32 4u
 #define R2S_LOG_KIND_F32 5u
 
-static uint8_t log_seq;
+static struct {
+    uint8_t seq;
+} log_state;
 
 #ifdef __AVR__
 /* A flash string lives in PROGMEM, so its length and bytes go through
@@ -83,7 +85,7 @@ static void send_line(uint8_t level, r2s_fstr_t text, uint16_t text_len, uint8_t
     if (len > (uint32_t)(R2S_MAX_FRAME - R2S_TX_OVERHEAD)) {
         return;
     }
-    if (r2s_tx_begin(R2S_LOG_TOPIC, log_seq, (uint16_t)len) != R2S_OK) {
+    if (r2s_tx_begin(R2S_LOG_TOPIC, log_state.seq, (uint16_t)len) != R2S_OK) {
         return;
     }
     (void)r2s_tx_byte(level);
@@ -102,7 +104,7 @@ static void send_line(uint8_t level, r2s_fstr_t text, uint16_t text_len, uint8_t
      * the loops feed exactly the declared length, so the end below cannot
      * fail and the seq advances with the sent frame. */
     (void)r2s_tx_end();
-    log_seq++;
+    log_state.seq++;
 }
 
 /* A plain flash-string line. */
@@ -337,13 +339,13 @@ void r2s_log_fatal_ram(const char *text)
 
 void r2s_log_note_connected(void)
 {
-    log_seq = 0u;
+    log_state.seq = 0u;
 }
 
 #ifdef R2S_TESTING
 void r2s_log_test_reset(void)
 {
-    log_seq = 0u;
+    log_state.seq = 0u;
 }
 #endif
 #else

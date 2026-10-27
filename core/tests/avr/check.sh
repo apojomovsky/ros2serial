@@ -23,7 +23,7 @@ common=(-mmcu=atmega328p -std=c99 -Os -Wall -Wextra -Werror -Wconversion -Wshado
 firmware="$root/core/tests/avr/flash_log.c"
 
 sram() {
-  avr-size -A "$build/$1.elf" | awk '/^\.data/ { data = $2 } /^\.bss/ { bss = $2 } END { print data + bss }'
+  avr-size -A "$build/$1.elf" | awk '/^\.data/ { found = 1; data = $2 } /^\.bss/ { bss = $2 } END { if (!found) { exit 1 }; print data + bss }'
 }
 
 # With logging, without the log lines: the SRAM baseline.
@@ -32,8 +32,9 @@ avr-gcc "${common[@]}" -DR2S_WITH_LOG -o "$build/base.elf" "${sources[@]}" "$fir
 # With logging and the log lines: the strings must not add RAM.
 avr-gcc "${common[@]}" -DR2S_WITH_LOG -DR2S_AVR_CHECK_LOGS -o "$build/logs.elf" "${sources[@]}" "$firmware" \
   || { echo "avr-flash: log firmware did not build"; exit 1; }
-# Without logging: the calls compile out for tiers without logging.
-avr-gcc "${common[@]}" -o "$build/nolog.elf" "${sources[@]}" "$firmware" \
+# Without logging: the calls compile out for tiers without logging. The log
+# lines stay on, so the no-op macros must accept them without warnings.
+avr-gcc "${common[@]}" -DR2S_AVR_CHECK_LOGS -o "$build/nolog.elf" "${sources[@]}" "$firmware" \
   || { echo "avr-flash: firmware without R2S_WITH_LOG did not build"; exit 1; }
 
 base_ram=$(sram base)

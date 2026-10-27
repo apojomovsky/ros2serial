@@ -174,9 +174,14 @@ void test_log_flash_macros_read_placed_tables(void)
     TEST_ASSERT_EQUAL_UINT8(5u, R2S_FLASH_READ_BYTE(table));
 }
 
+/* covers: LOG-1, LOG-2, LOG-3 */
 void test_log_every_level_covers_every_value_type(void)
 {
     static const uint8_t one_u16[] = {0x01u, 0x00u};
+    static const uint8_t neg_i16[] = {0xFFu, 0xFFu};
+    static const uint8_t half_f32[] = {0x00u, 0x00u, 0x00u, 0x3Fu};
+    static const uint8_t one_u32[] = {0x01u, 0x00u, 0x00u, 0x00u};
+    static const uint8_t neg_i32[] = {0xFFu, 0xFFu, 0xFFu, 0xFFu};
 
     r2s_log_debug_u16(R2S_FSTR("u"), 1u);
     r2s_log_debug_i16(R2S_FSTR("i"), -1);
@@ -204,6 +209,29 @@ void test_log_every_level_covers_every_value_type(void)
     r2s_log_fatal_ram("f");
     TEST_ASSERT_EQUAL_UINT16(24, fake_port_tx_frame_count());
     assert_log(0, 0, 10u, "u", 1u, one_u16, sizeof one_u16);
+    assert_log(1, 1, 10u, "i", 2u, neg_i16, sizeof neg_i16);
+    assert_log(2, 2, 10u, "f", 5u, half_f32, sizeof half_f32);
+    assert_log(3, 3, 10u, "d", 0u, NULL, 0u);
+    assert_log(4, 4, 20u, "u", 3u, one_u32, sizeof one_u32);
+    assert_log(5, 5, 20u, "i", 4u, neg_i32, sizeof neg_i32);
+    assert_log(6, 6, 20u, "f", 5u, half_f32, sizeof half_f32);
+    assert_log(7, 7, 20u, "i", 0u, NULL, 0u);
+    assert_log(8, 8, 30u, "i", 2u, neg_i16, sizeof neg_i16);
+    assert_log(9, 9, 30u, "u", 3u, one_u32, sizeof one_u32);
+    assert_log(10, 10, 30u, "i", 4u, neg_i32, sizeof neg_i32);
+    assert_log(11, 11, 30u, "f", 5u, half_f32, sizeof half_f32);
+    assert_log(12, 12, 30u, "w", 0u, NULL, 0u);
+    assert_log(13, 13, 40u, "u", 1u, one_u16, sizeof one_u16);
+    assert_log(14, 14, 40u, "i", 2u, neg_i16, sizeof neg_i16);
+    assert_log(15, 15, 40u, "u", 3u, one_u32, sizeof one_u32);
+    assert_log(16, 16, 40u, "i", 4u, neg_i32, sizeof neg_i32);
+    assert_log(17, 17, 40u, "f", 5u, half_f32, sizeof half_f32);
+    assert_log(18, 18, 50u, "u", 1u, one_u16, sizeof one_u16);
+    assert_log(19, 19, 50u, "i", 2u, neg_i16, sizeof neg_i16);
+    assert_log(20, 20, 50u, "u", 3u, one_u32, sizeof one_u32);
+    assert_log(21, 21, 50u, "i", 4u, neg_i32, sizeof neg_i32);
+    assert_log(22, 22, 50u, "f", 5u, half_f32, sizeof half_f32);
+    assert_log(23, 23, 50u, "f", 0u, NULL, 0u);
 }
 
 void test_log_null_text_sends_nothing(void)
