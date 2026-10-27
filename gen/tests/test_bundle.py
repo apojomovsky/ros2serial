@@ -137,6 +137,8 @@ def compile_sketch(root, sources, extra=()):
             "-I",
             str(root),
             "-I",
+            str(root / "src"),
+            "-I",
             str(CORE_INCLUDE),
             *extra,
             *sources,
@@ -469,7 +471,18 @@ def compile_case(root, body):
     (root / "case.c").write_text(body, encoding="utf-8")
 
     return subprocess.run(
-        ["cc", "-std=c99", "-fsyntax-only", "-I", str(root), "-I", str(CORE_INCLUDE), str(root / "case.c")],
+        [
+            "cc",
+            "-std=c99",
+            "-fsyntax-only",
+            "-I",
+            str(root),
+            "-I",
+            str(root / "src"),
+            "-I",
+            str(CORE_INCLUDE),
+            str(root / "case.c"),
+        ],
         capture_output=True,
         text=True,
     )
