@@ -7,8 +7,7 @@ this module is the shell every one of them hangs off.
 import argparse
 import sys
 
-from r2s_gen import config
-from r2s_gen import vectors
+from r2s_gen import config, vectors
 from r2s_gen.version import PROTOCOL_VERSION, __version__
 
 

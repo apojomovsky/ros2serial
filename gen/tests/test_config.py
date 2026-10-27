@@ -292,7 +292,8 @@ def test_an_unknown_direction_is_an_error(tmp_path):
 def test_an_unknown_qos_is_an_error(tmp_path):
     path = write(
         tmp_path / "r2s.yaml",
-        "node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n    direction: pub\n    qos: fast\n",
+        "node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n"
+        "    direction: pub\n    qos: fast\n",
     )
 
     with pytest.raises(MessageError) as caught:
@@ -306,7 +307,8 @@ def test_an_unknown_qos_is_an_error(tmp_path):
 def test_a_string_narrow_flag_is_an_error(tmp_path):
     path = write(
         tmp_path / "r2s.yaml",
-        "node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n    direction: pub\n    narrow_float64: sometimes\n",
+        "node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n"
+        "    direction: pub\n    narrow_float64: sometimes\n",
     )
 
     with pytest.raises(MessageError) as caught:
@@ -347,7 +349,8 @@ def test_an_unknown_root_key_is_an_error(tmp_path):
 def test_an_unknown_topic_key_is_an_error(tmp_path):
     path = write(
         tmp_path / "r2s.yaml",
-        "node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n    direction: pub\n    rate: 10\n",
+        "node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n"
+        "    direction: pub\n    rate: 10\n",
     )
 
     with pytest.raises(MessageError) as caught:
