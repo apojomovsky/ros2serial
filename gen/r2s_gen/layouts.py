@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import re
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -54,6 +55,16 @@ def config_hash(loaded: Config) -> str:
     lines += [f"{key} {loaded.bounds[key]}" for key in sorted(loaded.bounds)]
     lines += [str(loaded.default_string_bound), str(loaded.max_frame)]
     return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()[:16]
+
+
+def build_defines(header: str) -> list[str]:
+    """The -D flags a non-CMake build needs: the codec flag plus the header's limits."""
+    defines = ["R2S_WITH_CODEC"]
+    for name in ("R2S_MAX_FRAME", "R2S_MAX_NEST", "R2S_TOPIC_MAX_COUNT"):
+        match = re.search(rf"^#define {name} ([0-9]+)u$", header, re.MULTILINE)
+        if match is not None:
+            defines.append(f"{name}={match.group(1)}")
+    return defines
 
 
 def generate(

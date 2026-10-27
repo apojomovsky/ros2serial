@@ -256,6 +256,7 @@ def test_build_defines_carries_the_raised_topic_limit(tmp_path):
 ENCODE_MAIN = """\
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include "r2s_generated.h"
 
 uint16_t r2s_port_read(uint8_t *buf, uint16_t max)
@@ -293,12 +294,13 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
 
 int main(void)
 {
-    geometry_msgs__msg__Twist msg = {{{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}}};
+    geometry_msgs__msg__Twist msg;
     static uint8_t buf[128];
     r2s_codec_out_t out = {buf, sizeof buf, 0u, 0u};
     uint8_t field = 0xFFu;
     int8_t rc;
 
+    memset(&msg, 0, sizeof msg);
     msg.linear.x = 1.0;
     rc = r2s_codec_encode(&r2s_generated_table, R2S_TOPIC_CMD_VEL_TYPE, &msg, 0u, &out, &field);
     printf("rc=%d len=%u field=%u\\n", rc, out.len, field);
