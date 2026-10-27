@@ -1,5 +1,5 @@
 name: pub_sub_handshake
-covers: [SES-9, SES-11, SES-16, SES-17, SES-18, CTL-4, ENC-10, HB-2, HB-4]
+covers: [SES-9, SES-16, SES-17, SES-18, CTL-4, ENC-10, HB-2, HB-4]
 steps:
   - from: mcu
     frame: "00 00 02 01 00 21 43 65 87 00 02 03 02 40 42 0f 00 00 02 04 64 65 6d 6f 9d 7f"
@@ -29,19 +29,19 @@ steps:
     frame: "00 04 06 65 3b"
     at_ms: 350
     note: "every topic resolved, so READY"
-  - from: host
-    frame: "04 00 d8 97"
-    at_ms: 850
-    note: "host heartbeat in CONNECTED, 500 ms after READY"
   - from: mcu
     frame: "04 00 05 00 00 00 00 00 00 00 7a bb"
     at_ms: 850
     note: "heartbeat in CONNECTED: five frames accepted, none dropped"
   - from: host
-    frame: "04 01 51 86"
-    at_ms: 1350
-    note: "500 ms after the previous heartbeat"
+    frame: "04 00 d8 97"
+    at_ms: 850
+    note: "host heartbeat in CONNECTED, 500 ms after READY"
   - from: mcu
     frame: "04 01 06 00 00 00 00 00 00 00 57 7c"
     at_ms: 1350
     note: "six accepted with the 850 ms host heartbeat"
+  - from: host
+    frame: "04 01 51 86"
+    at_ms: 1350
+    note: "500 ms after the previous heartbeat"
