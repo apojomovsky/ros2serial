@@ -210,11 +210,13 @@ class Host:
 
     def __init__(self, master):
         self.master = master
-        self.seq = 0
+        self.seq = {}
 
     def send(self, topic, payload):
-        os.write(self.master, wire.encode_wire(topic, self.seq, payload))
-        self.seq = (self.seq + 1) % 256
+        """One frame on topic, with that topic's own seq counter ([FRM-4])."""
+        seq = self.seq.get(topic, 0)
+        os.write(self.master, wire.encode_wire(topic, seq, payload))
+        self.seq[topic] = (seq + 1) % 256
 
     def hello_req(self):
         self.send(0, b"\x01\x01")
@@ -374,6 +376,14 @@ def test_missing_boot_file_env_fails(tmp_path):
 def test_corrupt_boot_file_fails(tmp_path):
     boot = tmp_path / "boot"
     boot.write_text("not-a-number\n")
+    code, error = run_once([], boot=str(boot))
+    assert code == 2
+    assert str(boot) in error
+
+
+def test_long_boot_file_fails(tmp_path):
+    boot = tmp_path / "boot"
+    boot.write_text("0" * 36 + "1\n")
     code, error = run_once([], boot=str(boot))
     assert code == 2
     assert str(boot) in error

@@ -17,6 +17,16 @@ static void sleep_ms(long ms)
     (void)nanosleep(&req, NULL);
 }
 
+/* Wall time from the same clock the port uses, so scheduling slips move both
+ * measures together and only a wrong rate changes their ratio. */
+static uint64_t wall_ms(void)
+{
+    struct timespec now;
+
+    (void)clock_gettime(CLOCK_MONOTONIC, &now);
+    return (uint64_t)now.tv_sec * 1000u + (uint64_t)(now.tv_nsec / 1000000L);
+}
+
 static int check_monotonic(void)
 {
     uint32_t prev = r2s_port_tick();
@@ -38,7 +48,10 @@ int main(void)
 {
     uint32_t before;
     uint32_t after;
-    uint32_t span;
+    uint64_t wall_before;
+    uint64_t wall_after;
+    uint64_t elapsed;
+    uint64_t span;
 
     if (check_monotonic() != 0) {
         return 1;
@@ -50,10 +63,20 @@ int main(void)
         fprintf(stderr, "tick did not advance in 5 ms\n");
         return 1;
     }
-    sleep_ms(100L);
-    span = r2s_port_tick() - after;
-    if (span < 50u || span > 500u) {
-        fprintf(stderr, "tick moved %lu in 100 ms, want 50..500\n", (unsigned long)span);
+    wall_before = wall_ms();
+    before = r2s_port_tick();
+    sleep_ms(200L);
+    wall_after = wall_ms();
+    after = r2s_port_tick();
+    elapsed = wall_after - wall_before;
+    span = (uint64_t)(after - before);
+    if (elapsed < 100u) {
+        fprintf(stderr, "wall clock did not advance\n");
+        return 1;
+    }
+    if (span * 5u < elapsed * 4u || span * 5u > elapsed * 6u) {
+        fprintf(stderr, "tick moved %lu in %lu ms, want a 1:1 ratio\n", (unsigned long)span,
+                (unsigned long)elapsed);
         return 1;
     }
     printf("tick ok: monotonic, live, 1000 Hz\n");

@@ -127,10 +127,12 @@ uint32_t r2s_port_tick(void)
 }
 
 /* Reads the file's decimal counter, adds one, writes it back and returns it.
- * A missing file starts at zero, so the first boot returns one. */
+ * A missing file starts at zero, so the first boot returns one. A file longer
+ * than 31 bytes cannot be a decimal u32 with its newline, so it fails instead
+ * of parsing a truncation of itself. */
 static uint32_t next_boot_id(const char *path)
 {
-    char text[32];
+    char text[33];
     char printed[32];
     char *end;
     unsigned long value;
@@ -144,6 +146,14 @@ static uint32_t next_boot_id(const char *path)
         _exit(1);
     }
     n = read(fd, text, sizeof text - 1u);
+    if (n < 0) {
+        fprintf(stderr, "r2s_posix: cannot read boot ID file '%s': %s\n", path, strerror(errno));
+        _exit(1);
+    }
+    if (n > 31) {
+        fprintf(stderr, "r2s_posix: boot ID file '%s' is not a decimal u32\n", path);
+        _exit(2);
+    }
     if (n < 0) {
         fprintf(stderr, "r2s_posix: cannot read boot ID file '%s': %s\n", path, strerror(errno));
         _exit(1);
