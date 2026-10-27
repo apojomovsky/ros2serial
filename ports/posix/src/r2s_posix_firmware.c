@@ -169,6 +169,38 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
     fprintf(stderr, "r2s_posix: cmd_vel n=%lu\n", (unsigned long)s_cmd_vel_count);
 }
 
+/* One log_text line: the tag, a space, and the value in decimal, cut to the
+ * handwritten String bound of 8 characters. */
+static void publish_log_text(const char *tag, uint32_t value)
+{
+    std_msgs__msg__String msg;
+    char digits[10];
+    uint8_t ndigits = 0u;
+    uint8_t len = 0u;
+
+    memset(&msg, 0, sizeof msg);
+    while (tag[len] != '\0' && len < sizeof msg.data - 1u) {
+        msg.data[len] = tag[len];
+        len++;
+    }
+    if (len < sizeof msg.data - 1u) {
+        msg.data[len] = ' ';
+        len++;
+    }
+    do {
+        digits[ndigits] = (char)('0' + (value % 10u));
+        ndigits++;
+        value /= 10u;
+    } while (value != 0u && ndigits < sizeof digits);
+    while (ndigits != 0u && len < sizeof msg.data - 1u) {
+        ndigits--;
+        msg.data[len] = digits[ndigits];
+        len++;
+    }
+    msg.data[len] = '\0';
+    (void)r2s_publish_log_text(&msg);
+}
+
 static void sleep_1ms(void)
 {
     const struct timespec req = {0, 1000000L};
@@ -183,7 +215,9 @@ int main(int argc, char **argv)
     uint8_t count;
     uint32_t interval;
     uint32_t last_pub;
+    uint32_t boot_id;
     uint32_t sent = 0u;
+    uint8_t log_booted = 0u;
 
     setvbuf(stderr, NULL, _IONBF, 0);
     if (argc < 2) {
@@ -197,7 +231,7 @@ int main(int argc, char **argv)
     parse_options(argc, argv, &opts);
     /* Prime the counter before opening the port, so a bad boot file fails
      * before any byte reaches the line. */
-    (void)r2s_port_boot_id();
+    boot_id = r2s_port_boot_id();
     if (r2s_posix_open(opts.port) < 0) {
         fprintf(stderr, "r2s_posix: cannot open '%s': %s\n", opts.port, strerror(errno));
         return 1;
@@ -216,13 +250,24 @@ int main(int argc, char **argv)
 
         r2s_spin_some();
         now = r2s_port_tick();
-        if (opts.pub != NULL && r2s_connected() != 0u && (uint32_t)(now - last_pub) >= interval) {
+        if (r2s_connected() == 0u) {
+            sleep_1ms();
+            continue;
+        }
+        if (opts.log_text != NULL && log_booted == 0u) {
+            publish_log_text("boot", boot_id);
+            log_booted = 1u;
+        }
+        if (opts.pub != NULL && (uint32_t)(now - last_pub) >= interval) {
             std_msgs__msg__Float32 msg;
 
             msg.data = (float)sent;
             if (r2s_publish_battery(&msg) == R2S_OK) {
                 sent++;
                 last_pub = now;
+                if (opts.log_text != NULL && sent % 10u == 0u) {
+                    publish_log_text("n", sent);
+                }
             }
         }
         sleep_1ms();
