@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -39,9 +40,12 @@ TEST(TypeSupport, AcceptsTheInstalledHash)
 
 TEST(TypeSupport, RejectsAModifiedHash)
 {
-    auto hash = kFloat32Hash;
-    hash.back() ^= 0x01u;
-    EXPECT_EQ(resolve_topic_type(announced("std_msgs/msg/Float32", hash)), kTopicStatusHashMismatch);
+    for (std::size_t i = 0; i < kFloat32Hash.size(); ++i) {
+        auto hash = kFloat32Hash;
+        hash[i] ^= 0x01u;
+        EXPECT_EQ(resolve_topic_type(announced("std_msgs/msg/Float32", hash)), kTopicStatusHashMismatch)
+            << "flipping wire byte " << i << " must reject the topic";
+    }
 }
 
 TEST(TypeSupport, RejectsAnUnknownPackage)

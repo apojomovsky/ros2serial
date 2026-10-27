@@ -1,8 +1,8 @@
 // The host session: the transcript vectors replayed step by step, plus the
 // deadlines, retries and reset rules that a transcript cannot pin to a
 // millisecond. Time is the manual clock's alone.
-// covers: SES-12, SES-13, SES-14, SES-15, SES-16, SES-17, SES-18, SES-19, SES-20, SES-21, CTL-3, CTL-9,
-// CTL-13
+// covers: SES-12, SES-13, SES-14, SES-15, SES-16, SES-17, SES-18, SES-19, SES-20, SES-21, CTL-3, CTL-9
+// covers: CTL-13
 #include <gtest/gtest.h>
 
 #include <algorithm>
