@@ -7,6 +7,7 @@
 #include "r2s/r2s_port.h"
 #include "r2s/r2s_rcobs.h"
 #include "r2s/r2s_session.h"
+#include "r2s/r2s_topics.h"
 #include "r2s/r2s_tx.h"
 #include "r2s/r2s_varint.h"
 

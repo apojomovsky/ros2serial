@@ -31,7 +31,7 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
 
 /* The same announced topics with the narrow flag set, so the tests can use
  * the announced flags rather than the build's own ([CTL-5]). */
-static const r2s_session_topic_t narrow_topics[] = {
+static const r2s_topic_t narrow_topics[] = {
     {R2S_HANDWRITTEN_BATTERY_ID,
      0x02u,
      {0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u},
@@ -170,7 +170,7 @@ void test_codec_publish_rejected_topic_sends_nothing(void)
 
 void test_codec_publish_unconfigured_topic_sends_nothing(void)
 {
-    static const r2s_session_topic_t sub_only[] = {
+    static const r2s_topic_t sub_only[] = {
         {R2S_HANDWRITTEN_CMD_VEL_ID, 0x01u, {0x10u}, "geometry_msgs/msg/Twist", "cmd_vel"},
     };
     std_msgs__msg__Float32 battery = {1.5f};

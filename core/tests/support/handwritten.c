@@ -29,7 +29,7 @@ const r2s_codec_table_t R2S_HANDWRITTEN_TABLE = {r2s_handwritten_types, 4u, r2s_
 /* The announced topics: battery publishes Float32, cmd_vel subscribes Twist
  * and log_text publishes the bounded String. The hashes stand in for the
  * RIHS01 bytes G8 will emit. */
-static const r2s_session_topic_t r2s_handwritten_topics[] = {
+static const r2s_topic_t R2S_FLASH r2s_handwritten_topics[] = {
     {R2S_HANDWRITTEN_BATTERY_ID,
      R2S_HANDWRITTEN_NARROW,
      {0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u},
