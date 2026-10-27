@@ -169,33 +169,46 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
     fprintf(stderr, "r2s_posix: cmd_vel n=%lu\n", (unsigned long)s_cmd_vel_count);
 }
 
-/* One log_text line: the tag, a space, and the value in decimal, cut to the
- * handwritten String bound of 8 characters. */
+/* One log_text line: the tag, a space, and the value in decimal. The line
+ * keeps the whole value while it fits the handwritten String bound of 8
+ * characters, and falls back to the value alone otherwise, so the boot id
+ * in the line is always the id in the HELLO. */
 static void publish_log_text(const char *tag, uint32_t value)
 {
     std_msgs__msg__String msg;
     char digits[10];
     uint8_t ndigits = 0u;
+    uint8_t tag_len = 0u;
     uint8_t len = 0u;
+    uint8_t i;
 
     memset(&msg, 0, sizeof msg);
-    while (tag[len] != '\0' && len < sizeof msg.data - 1u) {
-        msg.data[len] = tag[len];
-        len++;
-    }
-    if (len < sizeof msg.data - 1u) {
-        msg.data[len] = ' ';
-        len++;
+    while (tag[tag_len] != '\0') {
+        tag_len++;
     }
     do {
         digits[ndigits] = (char)('0' + (value % 10u));
         ndigits++;
         value /= 10u;
     } while (value != 0u && ndigits < sizeof digits);
-    while (ndigits != 0u && len < sizeof msg.data - 1u) {
-        ndigits--;
-        msg.data[len] = digits[ndigits];
+    if ((unsigned)tag_len + 1u + (unsigned)ndigits <= sizeof msg.data - 1u) {
+        memcpy(msg.data, tag, tag_len);
+        len = tag_len;
+        msg.data[len] = ' ';
         len++;
+        for (i = 0u; i < ndigits; i++) {
+            msg.data[len] = digits[ndigits - 1u - i];
+            len++;
+        }
+    } else {
+        uint8_t keep = ndigits < sizeof msg.data - 1u ? ndigits : (uint8_t)(sizeof msg.data - 1u);
+        uint8_t k = keep;
+
+        while (k != 0u) {
+            k--;
+            msg.data[len] = digits[k];
+            len++;
+        }
     }
     msg.data[len] = '\0';
     (void)r2s_publish_log_text(&msg);

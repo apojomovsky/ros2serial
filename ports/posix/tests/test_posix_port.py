@@ -333,9 +333,10 @@ def test_connected_publishes_battery(tmp_path):
             seqs.append(seq)
 
     assert values == [0.0, 1.0, 2.0]
+    assert seqs == [0, 1, 2]
 
 
-# covers: SES-4
+# covers: SES-9
 def test_connected_publishes_log_text(tmp_path):
     with Firmware("--rate", "20", boot=str(tmp_path / "boot")) as fw:
         hello, _topics, _host = do_handshake(fw)
@@ -354,6 +355,19 @@ def test_connected_publishes_log_text(tmp_path):
             if topic == 16:
                 batteries += 1
             assert batteries <= 10, "no periodic log_text within 10 battery publishes"
+
+
+# covers: SES-9
+def test_log_text_keeps_large_boot_id(tmp_path):
+    boot = tmp_path / "boot"
+    boot.write_text("999\n")
+    with Firmware("--rate", "20", boot=str(boot)) as fw:
+        hello, _topics, _host = do_handshake(fw)
+        assert hello["boot"] == 1000
+        _topic, _seq, payload = read_frame(fw.master, want=18)
+        text, end = take_string(payload, 0)
+        assert end == len(payload), "bytes after the log string"
+        assert text == "1000"
 
 
 def test_subscribes_twist(tmp_path):
