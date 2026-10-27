@@ -53,7 +53,7 @@ static const char *rename_for(const struct options *opts, const char *name, uint
 }
 
 /* Copies the generated topic table, swapping in the command-line names. */
-static uint8_t fill_topics(const struct options *opts, r2s_session_topic_t *topics)
+static uint8_t fill_topics(const struct options *opts, r2s_topic_t *topics)
 {
     uint8_t count = 0u;
     uint8_t i;
@@ -184,7 +184,7 @@ static void sleep_1ms(void)
 int main(int argc, char **argv)
 {
     struct options opts;
-    r2s_session_topic_t topics[R2S_TOPIC_COUNT];
+    r2s_topic_t topics[R2S_TOPIC_COUNT];
     uint8_t count;
     uint32_t interval;
     uint32_t last_pub;

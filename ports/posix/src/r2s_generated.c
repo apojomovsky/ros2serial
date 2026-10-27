@@ -135,7 +135,7 @@ R2S_FIELD_CHECK(std_msgs__msg__String, data, data);
 
 /* The announced topics (CTL-4, CTL-12): the hashes are the first 8 bytes
  * of each type's RIHS01 hash, and R2S_NARROW_FLAG carries ENC-12. */
-const r2s_session_topic_t R2S_FLASH r2s_topics[R2S_TOPIC_COUNT] = {
+const r2s_topic_t R2S_FLASH r2s_topics[R2S_TOPIC_COUNT] = {
     {R2S_TOPIC_BATTERY_ID,
      (uint8_t)(0x00u | R2S_NARROW_FLAG),
      {0x71u, 0x70u, 0xd3u, 0xd8u, 0xf8u, 0x41u, 0xf7u, 0xbeu},
