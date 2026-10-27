@@ -35,11 +35,10 @@ MARKER = re.compile(r"^ {0,3}<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#([0-9
 MARKER_LIKE = re.compile(r"^ {0,3}<!--[ \t]*snippet:.*-->\s*$")
 # A fence opens at column 0 to 3 of its container: deeper is an indented code
 # block, literal text, so a literal fence can never swallow a real snippet.
-# The closer may sit up to three columns past the container, as in CommonMark.
-# Indentation is relative to list items, which the scan tracks; two blank
-# lines close every container. A marker past column 3 of its container is
-# literal text too, so it gets its own diagnostic instead of silently doing
-# nothing.
+# The closer may sit up to three columns past the opener. Indentation is
+# relative to list items, which the scan tracks; a dedented line pops back
+# out. A marker past column 3 of its container is literal text too, so it
+# gets its own diagnostic instead of silently doing nothing.
 FENCE = re.compile(r"^ *```")
 MARKER_ANY = re.compile(r"^\s*<!--[ \t]*snippet:.*-->\s*$")
 
@@ -122,16 +121,11 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
     used: set[int] = set()
     i = 0
     stack: list[int] = []
-    blanks = 0
     while i < len(lines):
         line = lines[i]
         if not line.strip():
-            blanks += 1
-            if blanks >= 2:
-                stack.clear()
             i += 1
             continue
-        blanks = 0
         raw = _indent_of(line)
         while stack and raw < stack[-1]:
             stack.pop()
@@ -149,7 +143,7 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
             body: list[str] = []
             while i < len(lines):
                 closer = FENCE.match(lines[i])
-                if closer and _indent_of(lines[i]) - base <= 3:
+                if closer and _indent_of(lines[i]) <= indent + 3:
                     break
                 body.append(lines[i])
                 i += 1

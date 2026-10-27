@@ -220,3 +220,18 @@ def test_nested_marker_skips_nested_snippet(tmp_path, capsys):
     root = write_tree(tmp_path, {"README.md": text})
     assert snippets_check.check_tree(root) == []
     assert "#94" in capsys.readouterr().out
+
+
+@needs_gcc
+def test_fence_after_two_blanks_is_still_checked(tmp_path):
+    text = "# T\n\n1. Step:\n\n\n    ```c\n    int broken = ;\n    ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "README.md:6" in problems[0]
+
+
+def test_closer_up_to_three_past_opener_closes(tmp_path):
+    text = "# T\n\n```c\nint v = 1;\n  ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
