@@ -87,9 +87,10 @@ class RouterFixture
     // topic "log_text" in either direction.
     static constexpr std::uint8_t kLogText = 18u;
     void handshake(std::uint8_t cmd_vel_flags = 0x01u, std::uint32_t boot_id = 7u, bool with_log_text = false,
-                   std::uint8_t log_text_flags = 0x00u)
+                   std::uint8_t log_text_flags = 0x00u, std::uint16_t frame_cap = 0u)
     {
-        deliver_frame(kHelperControl, 0u, helper_hello(boot_id, with_log_text ? 3u : 2u, max_frame_));
+        const std::uint16_t cap = frame_cap == 0u ? max_frame_ : frame_cap;
+        deliver_frame(kHelperControl, 0u, helper_hello(boot_id, with_log_text ? 3u : 2u, cap));
         expect_topic_req(0u);
         const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
         deliver_frame(
@@ -512,6 +513,39 @@ TEST_F(RouterNode, RateOverrideKeysOnTheAnnouncedName)
     EXPECT_EQ(paced[0], kCmdVel) << "the second frame follows its second";
 }
 
+TEST_F(RouterNode, RehandshakeRefreshesTheBurst)
+{
+    RouterParams params;
+    params.tx_budget_pct = 10;
+    RouterFixture fixture("burst", remapped(), params);
+    fixture.handshake(0x01u, 7u, true, 0x01u, 512u);
+    auto pub = fixture.node()->create_publisher<std_msgs::msg::String>("log_text", 10);
+    std_msgs::msg::String text;
+    text.data = std::string(1500, 'z');
+    const auto log_frames = [&fixture]() {
+        std::size_t count = 0;
+        for (const auto &unit : fixture.drain()) {
+            const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
+            if (!decoded.empty() && decoded[0] == RouterFixture::kLogText) {
+                ++count;
+            }
+        }
+        return count;
+    };
+    pub->publish(text);
+    rclcpp::spin_some(fixture.node());
+    fixture.advance(1u);
+    EXPECT_EQ(log_frames(), 0u) << "a 1506 byte frame never fits a 512 byte max_frame";
+    fixture.handshake(0x01u, 8u, true, 0x01u, 2048u);
+    EXPECT_EQ(fixture.router().subscription_count(), 2u) << "the identical table keeps its routes";
+    pub->publish(text);
+    rclcpp::spin_some(fixture.node());
+    fixture.advance(1u);
+    EXPECT_EQ(log_frames(), 0u) << "the 1152 byte budget cannot carry 1513 bytes yet";
+    fixture.advance(1000u);
+    EXPECT_EQ(log_frames(), 1u) << "the refreshed burst carries the frame";
+}
+
 TEST_F(RouterNode, RejectsNonsenseParams)
 {
     RouterParams no_depth;
@@ -529,6 +563,18 @@ TEST_F(RouterNode, RejectsNonsenseParams)
     RouterParams no_override;
     no_override.rate_limits["cmd_vel"] = -2.0;
     EXPECT_THROW(RouterFixture("p5", remapped(), no_override), std::invalid_argument);
+}
+
+TEST_F(RouterNode, RejectsAnEmptySink)
+{
+    ManualClock clock;
+    FakeTransport transport;
+    auto node = std::make_shared<rclcpp::Node>("sink", "robot1");
+    EXPECT_THROW(Router(
+                     node->get_node_topics_interface(),
+                     [&transport]() { return std::unique_ptr<Transport>(new HelperLink(transport)); }, clock,
+                     RouterParams{}, LogSink{}),
+                 std::invalid_argument);
 }
 
 TEST(RouterOverrides, ParsesTopicRates)

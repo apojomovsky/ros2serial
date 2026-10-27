@@ -135,6 +135,26 @@ TEST(SchedulerBudget, BurstCarriesOneLargeFrame)
     EXPECT_EQ(refilled.sent[0].first, 16u);
 }
 
+TEST(SchedulerBudget, RefreshesTheBurst)
+{
+    Scheduler scheduler;
+    scheduler.configure({queued_topic(16)}, 10.0, 30.0);
+    EXPECT_THROW(scheduler.set_max_burst(-1.0), std::invalid_argument);
+    scheduler.submit(16, {0x01, 0x02, 0x03, 0x04});
+    Capture sent;
+    scheduler.poll(ns(0), std::ref(sent));
+    ASSERT_EQ(sent.sent.size(), 1u) << "the burst carries the frame";
+    scheduler.set_max_burst(5.0);
+    scheduler.submit(16, {0x05, 0x06, 0x07, 0x08});
+    Capture shrunk;
+    scheduler.poll(ns(0), std::ref(shrunk));
+    ASSERT_EQ(shrunk.sent.size(), 1u) << "ten bytes still fit ten bytes";
+    scheduler.submit(16, {0x09, 0x0A, 0x0B, 0x0C});
+    Capture blocked;
+    scheduler.poll(ns(0), std::ref(blocked));
+    EXPECT_TRUE(blocked.sent.empty()) << "the shrunk bucket holds no second frame";
+}
+
 TEST(SchedulerBackpressure, StopsThePassOnRefusal)
 {
     Scheduler scheduler;

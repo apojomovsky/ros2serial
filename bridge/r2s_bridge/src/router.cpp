@@ -87,6 +87,9 @@ struct Router::Impl {
           session_(session_config, in_clock, std::move(in_open), resolve_topic_type,
                    SessionEvents{log_event(), handshake_event(), user_event()})
     {
+        if (!sink) {
+            throw std::invalid_argument("r2s_bridge::Router: a log sink is required");
+        }
         if (params.qos_depth < 1u) {
             throw std::invalid_argument("r2s_bridge::Router: qos_depth must be at least 1");
         }
@@ -143,6 +146,10 @@ struct Router::Impl {
     {
         std::lock_guard<std::mutex> guard(mutex);
         if (identical && !routes.empty()) {
+            // The endpoints stay, but the MCU's new limits may exceed the old
+            // bucket: refresh the burst without touching the queues.
+            scheduler_.set_max_burst(
+                static_cast<double>(Scheduler::encoded_frame_bound(session_.mcu_max_frame())));
             return;
         }
         routes.clear();

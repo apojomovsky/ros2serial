@@ -30,9 +30,18 @@ void Scheduler::configure(std::vector<SchedulerTopic> topics, double budget_byte
     // The burst carries at least one frame of the caller's maximum, so a
     // large frame goes out instead of stalling; the refill rate still caps
     // the average ([SES-28]).
-    budget_capacity_ = budget_bytes_per_sec > 0.0 ? std::max(budget_bytes_per_sec, max_burst_bytes) : 0.0;
+    set_max_burst(max_burst_bytes);
     budget_tokens_ = budget_capacity_;
     budget_started_ = false;
+}
+
+void Scheduler::set_max_burst(double max_burst_bytes)
+{
+    if (max_burst_bytes < 0.0) {
+        throw std::invalid_argument("r2s_bridge::Scheduler: the burst must not be negative");
+    }
+    budget_capacity_ = budget_bytes_per_sec_ > 0.0 ? std::max(budget_bytes_per_sec_, max_burst_bytes) : 0.0;
+    budget_tokens_ = std::min(budget_tokens_, budget_capacity_);
 }
 
 void Scheduler::submit(std::uint8_t topic_id, std::vector<std::uint8_t> payload)

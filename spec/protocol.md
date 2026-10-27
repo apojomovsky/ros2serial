@@ -267,12 +267,12 @@ The rules below shape traffic inside the host. They never appear on the wire,
 so unit and integration tests cover them and no vector does.
 
 - [SES-26] For a host-to-MCU topic announced with the keep-latest flag, the host keeps only the newest message instead of queueing. The message it replaces is dropped and counted.
-- [SES-27] The host limits each host-to-MCU topic to its configured rate: `rate_limit.overrides` names a per-topic rate in hertz, and `rate_limit.default_hz` covers the topics without one. A rate of 0 sets no limit. An override names the topic the MCU announced, before any launch-file remapping.
-- [SES-28] The host caps its total host-to-MCU bandwidth at `tx_budget_pct` percent of the link, counting encoded frame bytes against `baud` bits per second with ten bits per byte. The bucket holds a burst of at least one maximum frame, so a large frame goes out instead of stalling; the average stays capped.
+- [SES-27] The host limits each host-to-MCU topic to its configured rate: `rate_limit.overrides` names a per-topic rate in hertz, and `rate_limit.default_hz` covers the topics without one. A rate of 0 sets no limit. An override names the topic the MCU announced, before any launch-file remapping. A name announced in both directions paces the host-to-MCU side.
+- [SES-28] The host caps its total host-to-MCU bandwidth at `tx_budget_pct` percent of the link, counting encoded frame bytes against `baud` bits per second with ten bits per byte. With a nonzero budget the bucket holds a burst of at least one maximum frame, so a large frame goes out instead of stalling; the average stays capped. A zero budget sends nothing.
 - [SES-29] Host-to-MCU topics are serviced round-robin: each pass sends at most one frame per topic, in handshake order, resuming after the topic that sent last.
 - [SES-30] Each host-to-MCU queue holds `qos_depth` messages, or one when the topic is keep-latest. Past that the oldest message is dropped and counted.
 - [SES-31] A generic publisher or subscription created for an MCU topic keeps the last `qos_depth` messages, with reliable delivery when the announced flags name the reliable channel and best effort otherwise.
-- [SES-32] The host holds at most the MCU's announced receive capacity in unsent host-to-MCU bytes, plus the frame in flight. A further frame waits for the link instead of growing the host heap.
+- [SES-32] The host holds at most the MCU's announced receive capacity in unsent user-topic bytes, plus the frame in flight. A further user frame waits for the link instead of growing the host heap. Control frames keep their own retry rules.
 
 ## 9. Codec descriptors (local)
 

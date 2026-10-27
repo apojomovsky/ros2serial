@@ -32,6 +32,11 @@ class Scheduler
     void configure(std::vector<SchedulerTopic> topics, double budget_bytes_per_sec,
                    double max_burst_bytes = 0.0);
 
+    // Refreshes the burst capacity after a re-handshake that kept the routes:
+    // the MCU's new maximum frame may exceed the old bucket ([SES-28]).
+    // Queues and counters are untouched.
+    void set_max_burst(double max_burst_bytes);
+
     // Queues one packed payload. A keep-latest topic keeps only the newest
     // ([SES-26]); a queued topic past its bound drops the oldest and counts
     // it ([SES-30]). An unknown topic id is ignored. A keep-latest
