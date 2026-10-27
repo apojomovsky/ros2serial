@@ -324,12 +324,10 @@ struct Session::Impl {
     }
 
     // A fresh nonzero token for the handshake: 0 means no token yet, so the
-    // counter skips it on the wrap ([SES-10], [SES-17]).
+    // counter wraps from 2^32 - 1 to 1 without a branch ([SES-10], [SES-17]).
     std::uint32_t assign_token()
     {
-        do {
-            ++next_token;
-        } while (next_token == 0u);
+        next_token = next_token % 0xFFFFFFFFu + 1u;
         return next_token;
     }
 

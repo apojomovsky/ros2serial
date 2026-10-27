@@ -326,24 +326,24 @@ void test_session_hello_carries_no_token_until_ready_assigns_one(void)
     uint16_t len;
 
     configure(one_topic, 1);
+    TEST_ASSERT_EQUAL_HEX32(0u, r2s_session_token());
     len = hello_payload(expected, 0u, 1);
     assert_tx(0, 0, 0, expected, len);
-
     /* A zero token is refused: the link stays down and the HELLO keeps
      * carrying no token. */
     feed_host(0, 0, zero_ready, sizeof zero_ready);
     TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
+    TEST_ASSERT_EQUAL_HEX32(0u, r2s_session_token());
     feed_host(0, 1, hello_req, sizeof hello_req);
     assert_tx(1, 0, 1, expected, len);
-
     /* The assigned token is stored in RAM and echoed from then on, across a
      * re-announce that is not a boot. */
     feed_host(0, 2, ready, sizeof ready);
     TEST_ASSERT_EQUAL_UINT8(1, r2s_connected());
+    TEST_ASSERT_EQUAL_HEX32(0xA5A5A5A5u, r2s_session_token());
     len = hello_payload(expected, 0xA5A5A5A5u, 1);
     feed_host(0, 3, hello_req, sizeof hello_req);
     assert_tx(2, 0, 0, expected, len);
-
     /* A boot clears the RAM again: the next HELLO carries no token. */
     r2s_init();
     len = hello_payload(expected, 0u, 1);
@@ -479,6 +479,7 @@ void test_session_sequence_numbers_increment_and_restart_after_each_handshake(vo
     TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
     len = hello_payload(expected, 1u, 1);
     feed_host(0, 4, hello_req, sizeof hello_req);
+    assert_tx(5, 0, 0, expected, len);
     feed_host(0, 5, ready, sizeof ready);
     TEST_ASSERT_EQUAL_UINT8(1, r2s_connected());
     fake_port_advance(500);
