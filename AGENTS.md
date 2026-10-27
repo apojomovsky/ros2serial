@@ -39,7 +39,7 @@ tracked files.
 | `compile EXAMPLE=<name> BOARD=<uno\|mega\|...>` | Build an example firmware and print flash, RAM and stack |
 | `fuzz TARGET=<name>` | Run one libFuzzer target for 60 s |
 | `size-report` | Regenerate the flash, RAM and stack report |
-| `vectors` | Validate every vector file and regenerate reference-produced vectors |
+| `vectors` | Validate every vector file |
 | `docs-gen` | Regenerate reference docs (CLI, vectors, bridge parameters) |
 | `fmt` / `lint` / `check-warnings` | Formatting, linters (advisory), warnings (hard gate) |
 | `setup-hooks` / `pre-pr-check` | Install hooks / run the takeoff ritual |
