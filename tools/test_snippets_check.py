@@ -93,12 +93,21 @@ def test_yaml_snippet_parses(tmp_path):
     assert snippets_check.check_tree(root) == []
 
 
-def test_broken_yaml_snippet_fails(tmp_path):
-    text = "# T\n\n```yaml\nnode: [unclosed\n```\n"
+@pytest.mark.parametrize("tag", ["sh", "console", "text", "json", "yaml"])
+def test_tolerated_non_code_tag_is_skipped_by_tag(tmp_path, capsys, tag):
+    text = f"# T\n\n```{tag}\n$ ros2 topic list\nnot: [valid yaml\n```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
+    out = capsys.readouterr().out
+    assert f"({tag})" in out and "skipped by tag" in out
+
+
+def test_html_tag_stays_a_hard_error(tmp_path):
+    text = "# T\n\n```html\n<b>hi</b>\n```\n"
     root = write_tree(tmp_path, {"README.md": text})
     problems = snippets_check.check_tree(root)
     assert len(problems) == 1
-    assert "README.md:3" in problems[0]
+    assert "html" in problems[0]
 
 
 def test_python_snippet_compiles(tmp_path):
