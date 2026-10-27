@@ -54,3 +54,8 @@ void r2s_vec_check_frames(const r2s_vec_frames_t *v)
     check_blob(v->where, v->covers, "frame", v->frame, v->frame_len, v->frame_hex);
     check_blob(v->where, v->covers, "wire", v->wire, v->wire_len, v->wire_hex);
 }
+
+void r2s_vec_check_messages(const r2s_vec_messages_t *v)
+{
+    check_blob(v->where, v->covers, "payload", v->payload, v->payload_len, v->payload_hex);
+}
