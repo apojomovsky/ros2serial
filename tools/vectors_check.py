@@ -252,6 +252,10 @@ def check_channel(name: str, vector_name: str, topic_id: int, payload: bytes) ->
         return []
     if topic_id not in SYSTEM_CHANNELS:
         return []
+    if not isinstance(vector_name, str):
+        # A cyclic alias can leave a list or mapping here. The channel
+        # range above still applies; only the name lookup needs a string.
+        return []
     frame_name = vector_name.removesuffix("_compact")
     if frame_name not in SPEC_NAMES:
         return [f"{name}/name: {vector_name} is not a frame the spec gives"]
@@ -379,7 +383,9 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
             # The topic name is a string in a full handshake and a hash in
             # a compact one. A TOPIC carries no mode byte, so the vector's
             # name says which it is.
-            if frame_name.endswith("_compact"):
+            # A cyclic alias can leave a non-string name; read it as a full
+            # handshake then, since only a string can ask for the compact form.
+            if isinstance(frame_name, str) and frame_name.endswith("_compact"):
                 r.u32()  # topic name hash
             elif not r.string():
                 problems.append(f"{name}/payload: the topic name is empty")
@@ -458,10 +464,10 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
         return []
     problems = []
 
-    def visit(message, values) -> None:
+    def visit(message, values, trail="", seen=frozenset()) -> None:
         for field in message.fields:
             expected = values[field.name]
-            where = f"{message.type_name}.{field.name}"
+            where = f"{trail}{message.type_name}.{field.name}"
             if field.type_name == "float32":
                 elements = expected if field.is_array else [expected]
                 for index, element in enumerate(elements):
@@ -471,15 +477,25 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
                     problems.append(f"{name}/message: {where}{position} must be exactly representable in binary32")
             elif field.type_name not in msgs.PRIMITIVES:
                 nested = _MESSAGES.load(field.type_name)
+                if id(expected) in seen:
+                    continue
+                entering = seen | {id(expected)}
                 if field.is_array:
-                    for item in expected:
-                        visit(nested, item)
+                    for index, item in enumerate(expected):
+                        if id(item) in entering:
+                            continue
+                        visit(nested, item, f"{where}[{index}].", entering | {id(item)})
                 else:
-                    visit(nested, expected)
+                    visit(nested, expected, trail, entering)
 
-    # A cyclic YAML alias walks nested messages until the stack runs out.
+    # A cyclic YAML alias would revisit one mapping per recursion level until
+    # the stack runs out. Containers already on the path are skipped instead,
+    # so a directly self-referential message cannot flood the output; finite
+    # data with repeated types is still walked in full. Findings made before
+    # any other abort are still worth reporting, next to the encode error
+    # check_message adds for the same vector.
     try:
-        visit(message, values)
+        visit(message, values, seen=frozenset({id(values)}))
     except (
         msgs.MessageError,
         Rejected,
@@ -490,7 +506,7 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
         OverflowError,
         RecursionError,
     ):
-        return []
+        return problems
     return problems
 
 
