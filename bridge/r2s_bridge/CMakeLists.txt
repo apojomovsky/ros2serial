@@ -16,6 +16,7 @@ add_library(r2s_bridge_component SHARED
   src/bridge.cpp
   src/core_port.cpp
   src/framing.cpp
+  src/session.cpp
   src/termios_transport.cpp)
 target_include_directories(r2s_bridge_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
