@@ -34,7 +34,8 @@ class Scheduler
 
     // Refreshes the burst capacity after a re-handshake that kept the routes:
     // the MCU's new maximum frame may exceed the old bucket ([SES-28]).
-    // Queues and counters are untouched.
+    // Queues and counters are untouched. Throws std::invalid_argument on a
+    // negative burst.
     void set_max_burst(double max_burst_bytes);
 
     // Queues one packed payload. A keep-latest topic keeps only the newest

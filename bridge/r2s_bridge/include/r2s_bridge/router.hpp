@@ -48,7 +48,8 @@ class Router
 {
   public:
     // Throws std::invalid_argument on a nonsense param (no QoS depth, a
-    // budget outside 0 to 100, no baud, a negative default rate).
+    // budget outside 0 to 100, no baud, a negative default rate) or a missing
+    // log sink.
     // session_config carries the H4 link timing; the pacing params above are
     // the H7 ones.
     Router(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,

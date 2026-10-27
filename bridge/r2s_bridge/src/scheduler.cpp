@@ -12,7 +12,7 @@ void Scheduler::configure(std::vector<SchedulerTopic> topics, double budget_byte
                           double max_burst_bytes)
 {
     if (budget_bytes_per_sec < 0.0 || max_burst_bytes < 0.0) {
-        throw std::invalid_argument("r2s_bridge::Scheduler: the budget must not be negative");
+        throw std::invalid_argument("r2s_bridge::Scheduler: the budget and burst must not be negative");
     }
     entries_.clear();
     for (const SchedulerTopic &topic : topics) {
