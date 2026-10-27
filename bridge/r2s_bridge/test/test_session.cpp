@@ -489,6 +489,22 @@ TEST(SessionHandshake, RejectsOneTopicAndKeepsTheOthers)
     EXPECT_EQ(fixture.session().topics()[1].status, kTopicStatusOk);
 }
 
+TEST(SessionHandshake, AnswersUnknownTypeWithStatus1)
+{
+    Fixture fixture([](const TopicInfo &) { return kTopicStatusUnknownType; });
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    fixture.drain_units();
+    fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 2u) << "TOPIC_STATUS, then READY";
+    EXPECT_EQ(hex_of(units[0]), hex_of(wire_of(with_check({kControl, 1u, 0x05u, 0x10u, 0x01u}))))
+        << "the unknown type answers 1";
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+    ASSERT_EQ(fixture.session().topics().size(), 1u);
+    EXPECT_EQ(fixture.session().topics()[0].status, kTopicStatusUnknownType);
+}
+
 TEST(SessionHandshake, ReportsWhetherTheNewTableMatchesTheOldOne)
 {
     std::vector<bool> identical;
