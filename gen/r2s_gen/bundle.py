@@ -116,6 +116,8 @@ def _library_properties(distro: str, digest: str) -> str:
 
 def _max_frame(resolved: Mapping[str, ResolvedMessage]) -> int:
     """The largest decoded frame a bundled sketch sends or receives, overhead included."""
+    # The generator's own wire-size formula, so the bundle limit matches a
+    # generated firmware's for the same payloads.
     memo: dict = {}
     payload = max(topics._payload(resolved, name, narrow, memo) for name in BUNDLED_TYPES for narrow in (False, True))
     largest_type = max(topics._string_wire(name) for name in BUNDLED_TYPES)
@@ -139,6 +141,7 @@ def _bundled_h(
     digest: str,
     max_nest: int,
 ) -> str:
+    """The bundled header: structs, the limits, and the per-type index, table and hash."""
     structs = emit.emit_types(resolved, max_nest)
     guard = "R2S_GENERATED_H"
     assert structs.count(guard) == 2
