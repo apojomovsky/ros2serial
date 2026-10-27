@@ -1,0 +1,25 @@
+name: topic_retry_exhausted
+covers: [SES-14, SES-16]
+steps:
+  - from: mcu
+    frame: "00 00 02 01 00 78 56 34 12 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 30 e8"
+    at_ms: 100
+  - from: host
+    frame: "00 00 03 00 49 29"
+    at_ms: 100
+  - from: host
+    frame: "00 01 03 00 95 73"
+    at_ms: 300
+    note: "first retry"
+  - from: host
+    frame: "00 02 03 00 f1 9c"
+    at_ms: 500
+    note: "second retry"
+  - from: host
+    frame: "00 03 03 00 2d c6"
+    at_ms: 700
+    note: "third retry"
+  - from: host
+    frame: "00 04 01 01 11 68"
+    at_ms: 900
+    note: "retries spent; the handshake starts over"

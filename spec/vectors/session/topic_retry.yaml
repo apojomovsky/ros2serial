@@ -1,0 +1,31 @@
+name: topic_retry
+covers: [SES-14, SES-16, SES-17]
+steps:
+  - from: mcu
+    frame: "00 00 02 01 00 78 56 34 12 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 30 e8"
+    at_ms: 100
+  - from: host
+    frame: "00 00 03 00 49 29"
+    at_ms: 100
+  - from: host
+    frame: "00 01 03 00 95 73"
+    at_ms: 300
+    note: "no TOPIC for 200 ms; first retry"
+  - from: mcu
+    frame: "00 01 04 00 10 00 00 01 02 03 04 05 06 07 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 07 62 61 74 74 65 72 79 a4 f0"
+    at_ms: 350
+  - from: host
+    frame: "00 02 05 10 00 d2 a5"
+    at_ms: 350
+  - from: host
+    frame: "00 03 03 01 a4 d7"
+    at_ms: 350
+  - from: mcu
+    frame: "00 02 04 01 11 05 10 11 12 13 14 15 16 17 17 67 65 6f 6d 65 74 72 79 5f 6d 73 67 73 2f 6d 73 67 2f 54 77 69 73 74 07 63 6d 64 5f 76 65 6c dc dd"
+    at_ms: 400
+  - from: host
+    frame: "00 04 05 11 00 90 f7"
+    at_ms: 400
+  - from: host
+    frame: "00 05 06 bd 22"
+    at_ms: 400
