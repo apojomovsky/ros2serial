@@ -18,13 +18,16 @@ GCOVR_STUB = """#!/usr/bin/env bash
 set -uo pipefail
 root=""
 out=""
+gotfilter=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --root) root="$2"; shift 2 ;;
     -o) out="$2"; shift 2 ;;
+    --filter) gotfilter=1; shift 2 ;;
     *) shift ;;
   esac
 done
+[ "$gotfilter" = 1 ] || exit 3
 if [[ "$root" == */base ]]; then figs=$R2S_FIG_BASE; else figs=$R2S_FIG_HEAD; fi
 set -- $figs
 python3 -c "import json; json.dump({'line_covered': $1, 'line_total': 100, \
@@ -78,6 +81,7 @@ def run_gate(repo: Path, run_env: dict[str, str], head: str, base: str) -> subpr
         **os.environ,
         "PATH": f"{run_env['PATH']}{os.pathsep}{os.environ.get('PATH', '/usr/bin:/bin')}",
         "HOME": run_env["HOME"],
+        "ROS_DISTRO": "jazzy",
         "AMENT_PREFIX_PATH": "/stub",
         "COMMIT_RANGE": "master..HEAD",
         "R2S_FIG_HEAD": head,
@@ -96,9 +100,9 @@ def commit_on_head(repo: Path, run_env: dict[str, str], name: str, text: str) ->
 
 def test_the_gate_fails_when_head_lowers_coverage(tmp_path):
     repo, run_env = fixture(tmp_path)
-    result = run_gate(repo, run_env, "70 51", "71 51")
+    result = run_gate(repo, run_env, "96 91", "97 92")
     assert result.returncode != 0, result.stdout + result.stderr
-    assert "below base" in result.stdout
+    assert "coverage: core line 96.00% is below base 97.00%" in result.stdout
 
 
 def test_the_gate_passes_when_head_matches_base(tmp_path):
