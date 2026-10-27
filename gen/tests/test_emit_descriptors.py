@@ -656,9 +656,6 @@ def test_core_codec_round_trips_generated_tables(narrow, tmp_path):
     for bound_map in ROUND_TRIP_BOUNDS.values():
         merged.update(bound_map)
     roots = sorted(ROUND_TRIP_BOUNDS)
-    # JointState carries a bounded string sequence, which the core interpreter
-    # does not read yet (issue #182); the walker round trip above pins its bytes.
-    roots = [name for name in roots if name != "sensor_msgs/msg/JointState"]
     resolved = resolve(repository, roots, merged)
     table = descriptors.build(resolved, roots)
     (tmp_path / "r2s_generated.h").write_text(emit.emit_types(resolved, max_nest=table.max_nest), encoding="utf-8")
