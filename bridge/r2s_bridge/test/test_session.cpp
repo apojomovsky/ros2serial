@@ -398,8 +398,10 @@ TEST(SessionHandshake, RefusesAHelloOfAnotherProtocolVersion)
     session.poll();
     EXPECT_EQ(session.state(), SessionState::kBootWait) << "a refused HELLO changes nothing";
     ASSERT_EQ(logged.size(), 1u);
-    EXPECT_NE(logged[0].find("2"), std::string::npos) << "the error names the MCU version";
-    EXPECT_NE(logged[0].find("1"), std::string::npos) << "the error names the host version";
+    EXPECT_NE(logged[0].find("MCU protocol version is 2"), std::string::npos)
+        << "the error names the MCU version";
+    EXPECT_NE(logged[0].find("host protocol version is 1"), std::string::npos)
+        << "the error names the host version";
 }
 
 TEST(SessionHandshake, RefusesAFeaturesByteWithAReservedBit)
