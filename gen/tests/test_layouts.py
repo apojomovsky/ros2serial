@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from r2s_gen import bounds, cli, config, layouts, msgs
+from r2s_gen.config import Config, Topic
 from r2s_gen.msgs import MessageError
 from r2s_gen.version import __version__
 
@@ -227,3 +228,117 @@ def test_the_arduino_example_matches_the_generator(tmp_path):
 
     for name, text in files.items():
         assert text == (EXAMPLES / "arduino_minimal" / "lib" / name).read_text(encoding="utf-8"), name
+
+
+def test_build_defines_names_the_codec_flag_and_limits(tmp_path):
+    _, files = generated("cmake", tmp_path)
+
+    assert layouts.build_defines(files["r2s_generated.h"]) == [
+        "R2S_WITH_CODEC",
+        "R2S_MAX_FRAME=52",
+        "R2S_MAX_NEST=2",
+    ]
+
+
+def test_build_defines_carries_the_raised_topic_limit(tmp_path):
+    loaded = Config(
+        node="wide",
+        topics=tuple(Topic(name=f"t{i}", type_name="std_msgs/msg/Float32", direction="pub") for i in range(17)),
+        bounds={},
+    )
+    repository = msgs.MessageRepository()
+    resolved = bounds.resolve(repository, ["std_msgs/msg/Float32"])
+    files = layouts.generate(loaded, resolved, repository, "cmake")
+
+    assert layouts.build_defines(files["r2s_generated.h"])[-1] == "R2S_TOPIC_MAX_COUNT=17"
+
+
+ENCODE_MAIN = """\
+#include <stdint.h>
+#include <stdio.h>
+#include "r2s_generated.h"
+
+uint16_t r2s_port_read(uint8_t *buf, uint16_t max)
+{
+    (void)buf;
+    (void)max;
+    return 0u;
+}
+
+void r2s_port_write(const uint8_t *buf, uint16_t len)
+{
+    (void)buf;
+    (void)len;
+}
+
+uint16_t r2s_port_tx_free(void)
+{
+    return 0xFFFFu;
+}
+
+uint32_t r2s_port_tick(void)
+{
+    return 0u;
+}
+
+uint32_t r2s_port_boot_id(void)
+{
+    return 1u;
+}
+
+void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
+{
+    (void)msg;
+}
+
+int main(void)
+{
+    geometry_msgs__msg__Twist msg = {{{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}}};
+    static uint8_t buf[128];
+    r2s_codec_out_t out = {buf, sizeof buf, 0u, 0u};
+    uint8_t field = 0xFFu;
+    int8_t rc;
+
+    msg.linear.x = 1.0;
+    rc = r2s_codec_encode(&r2s_generated_table, R2S_TOPIC_CMD_VEL_TYPE, &msg, 0u, &out, &field);
+    printf("rc=%d len=%u field=%u\\n", rc, out.len, field);
+    return rc == 0 ? 0 : 1;
+}
+"""
+
+
+def run_encode(tmp_path, header, source, defines):
+    """Compile the pair with the core and run the nested Twist encode."""
+    (tmp_path / "r2s_generated.h").write_text(header, encoding="utf-8")
+    (tmp_path / "r2s_generated.c").write_text(source, encoding="utf-8")
+    (tmp_path / "encode_main.c").write_text(ENCODE_MAIN, encoding="utf-8")
+    core_sources = [str(path) for path in sorted((CORE / "src").glob("*.c")) if path.name != "test_reset.c"]
+    compiled = subprocess.run(
+        ["cc", "-std=c99", "-pedantic", "-Werror", "-Wall", "-Wextra", "-I", str(tmp_path), "-I", str(CORE / "include")]
+        + [f"-D{define}" for define in defines]
+        + core_sources
+        + [str(tmp_path / "r2s_generated.c"), str(tmp_path / "encode_main.c"), "-o", str(tmp_path / "encode_main")],
+        capture_output=True,
+        text=True,
+    )
+    assert compiled.returncode == 0, compiled.stderr
+    return subprocess.run([str(tmp_path / "encode_main")], capture_output=True, text=True)
+
+
+def test_the_defines_make_the_nested_twist_encode_succeed(tmp_path):
+    _, files = generated("cmake", tmp_path)
+    defines = layouts.build_defines(files["r2s_generated.h"])
+
+    completed = run_encode(tmp_path, files["r2s_generated.h"], files["r2s_generated.c"], defines)
+
+    assert completed.returncode == 0, completed.stdout
+    assert "len=48" in completed.stdout
+
+
+def test_the_encode_fails_without_the_defines(tmp_path):
+    _, files = generated("cmake", tmp_path)
+
+    completed = run_encode(tmp_path, files["r2s_generated.h"], files["r2s_generated.c"], [])
+
+    assert completed.returncode != 0
+    assert "rc=-2" in completed.stdout
