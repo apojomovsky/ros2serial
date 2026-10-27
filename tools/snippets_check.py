@@ -8,14 +8,15 @@ prose or a diagram and is ignored. An unknown tag is an error, so a new
 language either extends this tool or loses its tag.
 
 A snippet that cannot compile yet carries the ticket that will make it do so
-on the line above the fence:
+alone on the line above the fence:
 
     <!-- snippet: skip until #94 -->
 
 A marker without a ticket number is an error, and so is a marker above no
-fence. The run prints every skipped snippet with its ticket, so none is
-forgotten. C and C++ snippets compile with -I core/include, so snippets
-using today's real headers compile instead of being skipped.
+fence. A line that only mentions a marker in passing is not one. The run
+prints every skipped snippet with its ticket, so none is forgotten. C and C++
+snippets compile with -I core/include, so snippets using today's real
+headers compile instead of being skipped.
 """
 
 import py_compile
@@ -31,8 +32,9 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 
-MARKER = re.compile(r"<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#([0-9]+)[ \t]*-->")
-MARKER_LIKE = re.compile(r"<!--[ \t]*snippet:")
+MARKER = re.compile(r"^\s*<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#([0-9]+)[ \t]*-->\s*$")
+MARKER_LIKE = re.compile(r"^\s*<!--[ \t]*snippet:.*-->\s*$")
+FENCE = re.compile(r"^ {0,3}```")
 
 LANGUAGES = ("c", "cpp", "python", "yaml")
 EXTENSION = {"c": ".c", "cpp": ".cpp", "python": ".py", "yaml": ".yaml"}
@@ -53,27 +55,26 @@ def _ticket(marker_line: str) -> int:
 
 
 def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
-    """Split one markdown file into its tagged snippets and any problems."""
-    lines = path.read_text().splitlines()
+    lines = path.read_text(encoding="utf-8").splitlines()
     snippets: list[Snippet] = []
     problems: list[str] = []
     markers: dict[int, str] = {}
     used: set[int] = set()
     i = 0
     while i < len(lines):
-        info = lines[i].split("```", 1)
-        if MARKER_LIKE.search(lines[i]):
+        if MARKER_LIKE.match(lines[i]):
             markers[i + 1] = lines[i]
             i += 1
             continue
-        if not lines[i].startswith("```"):
+        fence = FENCE.match(lines[i])
+        if not fence:
             i += 1
             continue
-        words = info[1].split()
+        words = lines[i][fence.end() :].split()
         open_line = i + 1
         i += 1
         body: list[str] = []
-        while i < len(lines) and not lines[i].startswith("```"):
+        while i < len(lines) and not FENCE.match(lines[i]):
             body.append(lines[i])
             i += 1
         if i == len(lines):
@@ -86,14 +87,14 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
         j = open_line - 2
         while j >= 0 and not lines[j].strip():
             j -= 1
-        if j >= 0 and MARKER.search(lines[j]):
+        if j >= 0 and MARKER.match(lines[j]):
             ticket = _ticket(lines[j])
             used.add(j + 1)
-        elif j >= 0 and MARKER_LIKE.search(lines[j]):
+        elif j >= 0 and MARKER_LIKE.match(lines[j]):
             problems.append(f"{rel}:{j + 1}: snippet marker without a ticket number")
             used.add(j + 1)
         if len(words) > 1:
-            problems.append(f"{rel}:{open_line}: unexpected info string {info[1]!r}")
+            problems.append(f"{rel}:{open_line}: unexpected info string after {words[0]!r}")
             continue
         language = words[0]
         if language not in LANGUAGES:
@@ -115,9 +116,13 @@ def _compile_c(snippet: Snippet, root: Path, workdir: Path) -> str | None:
     if compiler is None:
         return f"{snippet.path}:{snippet.line}: no compiler for {snippet.language}"
     standard = "c99" if snippet.language == "c" else "c++11"
+    # Almost the core's warning set (core/CMakeLists.txt), so a snippet that
+    # passes here also passes the firmware build. The prototype flags stay
+    # out: snippets define example functions without prior declarations.
+    warnings = ["-pedantic", "-Wall", "-Wextra", "-Werror", "-Wconversion", "-Wshadow", "-Wundef"]
     src = workdir / f"snippet{EXTENSION[snippet.language]}"
     src.write_text(snippet.code)
-    cmd = [compiler, f"-std={standard}", "-Werror", "-fsyntax-only", str(src)]
+    cmd = [compiler, f"-std={standard}", *warnings, "-fsyntax-only", str(src)]
     include = root / "core" / "include"
     if include.is_dir():
         cmd += ["-I", str(include)]
@@ -154,7 +159,7 @@ def check_tree(root: Path) -> list[str]:
     if not readme.is_file():
         return ["README.md: not found"]
     files.append(readme)
-    files += sorted((root / "docs").glob("*.md")) if (root / "docs").is_dir() else []
+    files += sorted((root / "docs").rglob("*.md")) if (root / "docs").is_dir() else []
     compiled = skipped = 0
     with tempfile.TemporaryDirectory() as work:
         workdir = Path(work)

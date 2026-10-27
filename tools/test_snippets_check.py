@@ -139,3 +139,29 @@ def test_c_implicit_declaration_fails(tmp_path):
 def test_valid_cpp_snippet_passes(tmp_path):
     root = write_tree(tmp_path, {"README.md": "# T\n\n" + CPP_OK})
     assert snippets_check.check_tree(root) == []
+
+
+@needs_gcc
+def test_indented_fence_inside_list_is_checked(tmp_path):
+    text = "# T\n\n1. Step:\n\n   ```c\n   int broken = ;\n   ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "README.md:5" in problems[0]
+
+
+@needs_gcc
+def test_marker_mentioned_in_prose_skips_nothing(tmp_path):
+    text = "# T\n\nCarries <!-- snippet: skip until #94 --> in passing.\n\n" + C_BROKEN
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "README.md:5" in problems[0]
+
+
+@needs_gcc
+def test_nested_docs_dir_is_checked(tmp_path):
+    root = write_tree(tmp_path, {"README.md": "# T\n", "docs/sub/a.md": "# A\n\n" + C_BROKEN})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "docs/sub/a.md:3" in problems[0]

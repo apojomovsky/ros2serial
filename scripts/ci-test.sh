@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The single suite script: CI runs exactly this, and so does `make test`.
 # Scope with one or more of LINT=1 SCRIPTS=1 COMMITS=1 CORE=1 GEN=1 BRIDGE=1
-# E2E=<backend> COVERAGE=1; no scope runs everything. COMMITS checks COMMIT_RANGE
+# E2E=<backend> COVERAGE=1 DOCS=1; no scope runs everything. COMMITS checks COMMIT_RANGE
 # (default origin/master..HEAD) and PR_TITLE when set, then runs the prose gate
 # on the same range. Exits non-zero if any section fails.
 set -uo pipefail
