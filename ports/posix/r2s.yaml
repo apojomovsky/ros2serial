@@ -1,7 +1,7 @@
 # Test firmware configuration: the topics the posix virtual MCU announces
 # (docs/00-design.md, C10). The names are the launch-time defaults; the
 # firmware renames them from its command line. bounds gives the String field
-# the capacity the handwritten table used.
+# its 8-byte capacity.
 node: r2s_posix
 topics:
   - name: battery

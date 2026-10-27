@@ -157,6 +157,8 @@ From the topic list the static paths emit:
 - receive dispatch as a `switch (topic_id)` that calls a user-implemented handler for each subscription, for example `r2s_on_cmd_vel(const geometry_msgs__msg__Twist *)`;
 - a shared receive buffer (a union of the subscribed types) and frame sizes computed from the largest message in each direction.
 
+User topic IDs run from 16 in configuration order. The flags carry direction, narrow, keep-latest and reliable, with the narrow bit forced on builds whose C `double` is 32 bits. The frame limit covers the largest user payload plus the HELLO and TOPIC announcements, and a smaller `limits.max_frame` override is a generator error. A topic name maps onto C by replacing `/` with `_`, and two names with the same mapping are a generator error.
+
 Topic names still live in the firmware, in flash, and the launch file can still remap them (see User API).
 
 ## Wire encoding: packed, converted on the host
