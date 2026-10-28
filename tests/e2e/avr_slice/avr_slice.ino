@@ -25,7 +25,7 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
 
 /* One log_text line: the value as 8 hex digits. Fixed width fits the
  * bundled String bound of 16 characters for every id. */
-static void publish_log_text(uint32_t value)
+static r2s_status_t publish_log_text(uint32_t value)
 {
     std_msgs__msg__String msg;
     uint8_t i;
@@ -37,7 +37,7 @@ static void publish_log_text(uint32_t value)
         value <<= 4u;
     }
     msg.data[8] = '\0';
-    (void)r2s_publish_log_text(&msg);
+    return r2s_publish_log_text(&msg);
 }
 
 void setup(void)
@@ -63,8 +63,9 @@ void loop(void)
         /* A boot line that fails to publish is retried until it sends. It
          * carries the assigned session token, so the host sees what the
          * firmware stored. */
-        publish_log_text(r2s_session_token());
-        s_log_booted = 1u;
+        if (publish_log_text(r2s_session_token()) == R2S_OK) {
+            s_log_booted = 1u;
+        }
     }
     if ((uint32_t)(now - last_pub) >= 20u) {
         std_msgs__msg__Float32 msg;
@@ -74,7 +75,7 @@ void loop(void)
             s_sent++;
             last_pub = now;
             if (s_sent % 10u == 0u) {
-                publish_log_text(s_sent);
+                (void)publish_log_text(s_sent);
             }
         }
     }

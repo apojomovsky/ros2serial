@@ -2,8 +2,10 @@
 
 The bridge is up before the firmware boots, so the 3 s budget measures the
 handshake from the MCU's HELLO, not node startup. The harness boots when the
-description is generated, so the test re-stamps the HELLO time once the
-bridge has opened the port; the buffered HELLO is what the bridge reads.
+description is generated, so the boot HELLO predates the bridge; the test
+measures from bridge-up instead, when the parameter service answers, which
+excludes node startup as the posix spawn does. The buffered HELLO is what
+the bridge reads.
 """
 
 import os
@@ -59,6 +61,8 @@ class TestScenario1(unittest.TestCase):
         node = rclpy.create_node("e2e_s1_avr_probe")
         try:
             bridge_support.wait_for_bridge(node)
+            # The boot HELLO predates the bridge, so the budget runs from
+            # bridge-up, when the parameter service answers.
             _SPAWNED.ready_at = time.monotonic()
             took = bridge_support.wait_for_topics(node, ANNOUNCED, _SPAWNED.ready_at, TOPIC_BUDGET, "announced topics")
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")

@@ -57,6 +57,17 @@ def firmware_image(board):
     return path
 
 
+def parse_stop_summary(line):
+    """The harness stop fields, with the simulated time scenario 2 gates on."""
+    assert line.startswith("r2s_simavr: stop "), "no stop summary in harness line: " + line.strip()
+    summary = {}
+    for field in line.split()[2:]:
+        key, _, value = field.partition("=")
+        summary[key] = int(value)
+    assert "simulated_ms" in summary, "no simulated_ms in harness line: " + line.strip()
+    return summary
+
+
 class Spawned:
     """A running harness, with the pty path and the time it was announced."""
 
@@ -65,20 +76,24 @@ class Spawned:
         self.pty = pty
         self.ready_at = ready_at
         self.returncode = None
+        self.summary = {}
 
     def stop(self):
-        """Terminate the harness, killing it when it ignores the signal."""
+        """Terminate the harness, keeping its stop summary for the rate gate."""
         if self.returncode is not None:
             return self.returncode
         if self.proc.poll() is None:
             self.proc.terminate()
         try:
-            self.proc.communicate(timeout=10.0)
+            tail, _ = self.proc.communicate(timeout=10.0)
         except subprocess.TimeoutExpired as expired:
             self.proc.kill()
-            self.proc.communicate()
+            tail, _ = self.proc.communicate()
             raise AssertionError("the harness ignored SIGTERM") from expired
         self.returncode = self.proc.returncode
+        for line in tail.decode().splitlines():
+            if line.startswith("r2s_simavr: stop "):
+                self.summary = parse_stop_summary(line + "\n")
         return self.returncode
 
 

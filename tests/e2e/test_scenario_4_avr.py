@@ -61,6 +61,8 @@ class TestScenario4(unittest.TestCase):
         node = rclpy.create_node("e2e_s4_avr_probe")
         try:
             bridge_support.wait_for_bridge(node, service=SERVICE)
+            # The boot HELLO predates the bridge, so the budget runs from
+            # bridge-up, when the parameter service answers.
             _SPAWNED.ready_at = time.monotonic()
             bridge_support.wait_for_topics(node, WANTED, _SPAWNED.ready_at, 3.0, "remapped topics")
             names = {name for name, _ in node.get_topic_names_and_types()}

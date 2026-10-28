@@ -68,9 +68,9 @@ case "$extras" in
         exit 1
         ;;
 esac
-# Burst-sized rings (R10): the RX ring covers the framer capacity for a
-# maximum frame, the TX ring a whole wire frame, so neither direction drops
-# or stalls on a burst the slice can send.
+# Burst-sized rings (R10): 256 bytes is the practical choice, holding
+# several slice frames in each direction, so a burst the slice can send
+# neither overruns the RX ring nor stalls the loop on a full TX ring.
 serial_flags="-DSERIAL_RX_BUFFER_SIZE=256 -DSERIAL_TX_BUFFER_SIZE=256"
 mkdir -p "$build/fw" || exit 1
 for board in uno mega; do

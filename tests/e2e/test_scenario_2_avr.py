@@ -70,6 +70,11 @@ class TestScenario2(unittest.TestCase):
             while not received:
                 rclpy.spin_once(node, timeout_sec=0.5)
                 self.assertLess(time.monotonic(), deadline, "no Float32 flow on battery")
+            # The wall clock cannot gate the rate: simavr runs unpaced, so the
+            # same 500 publishes take a wall time the host load decides. The
+            # simulated clock is cycle counted, so 500 publishes at the
+            # firmware's 20 ms tick take 10 s of it; the stop summary carries
+            # that span, including the handshake that precedes the flow.
             checks.collect_until(
                 received,
                 RECEIVE_COUNT,
@@ -78,5 +83,10 @@ class TestScenario2(unittest.TestCase):
                 lambda: rclpy.spin_once(node, timeout_sec=0.5),
             )
             checks.check_float_sequence(list(received), RECEIVE_COUNT, LOSS_BUDGET, "battery at 50 Hz")
+            self.assertEqual(_SPAWNED.stop(), 0, "the harness stopped dirty")
+            self.assertIn("simulated_ms", _SPAWNED.summary, "no stop summary from the harness")
+            sim_ms = _SPAWNED.summary["simulated_ms"]
+            self.assertGreaterEqual(sim_ms, 9_000, f"500 publishes in {sim_ms} ms simulated, faster than 50 Hz")
+            self.assertLessEqual(sim_ms, 45_000, f"500 publishes in {sim_ms} ms simulated, slower than 50 Hz")
         finally:
             node.destroy_node()

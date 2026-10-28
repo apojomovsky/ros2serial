@@ -30,5 +30,21 @@ class TestPtyLine(unittest.TestCase):
             avr.parse_pty_line("r2s_simavr: stop cycles=1 simulated_ms=2 wall_ms=3 frequency=16000000\n")
 
 
+class TestStopSummary(unittest.TestCase):
+    def test_parses_simulated_ms_from_the_stop_line(self):
+        summary = avr.parse_stop_summary(
+            "r2s_simavr: stop cycles=160000000 simulated_ms=10042 wall_ms=4214 frequency=16000000\n"
+        )
+        self.assertEqual(summary["simulated_ms"], 10042)
+
+    def test_rejects_lines_without_the_stop_prefix(self):
+        with self.assertRaises(AssertionError):
+            avr.parse_stop_summary("r2s_simavr: pty=/dev/pts/3\n")
+
+    def test_rejects_a_stop_line_without_simulated_ms(self):
+        with self.assertRaises(AssertionError):
+            avr.parse_stop_summary("r2s_simavr: stop cycles=1 wall_ms=2 frequency=16000000\n")
+
+
 if __name__ == "__main__":
     unittest.main()
