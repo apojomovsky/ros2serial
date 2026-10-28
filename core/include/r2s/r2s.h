@@ -25,8 +25,9 @@ extern "C" {
 #endif
 
 /* Starts the session: reads the boot ID once, sends HELLO and enters
- * ANNOUNCING (SES-1). The table set by r2s_session_configure() stays; without
- * one the node announces itself nameless with no topics. */
+ * ANNOUNCING (SES-1). The table set by r2s_session_configure() or
+ * r2s_session_configure_ram() stays; without one the node announces itself
+ * nameless with no topics. */
 void r2s_init(void);
 
 /* Pulls bytes, answers the host, sends heartbeats and watches the link: up to

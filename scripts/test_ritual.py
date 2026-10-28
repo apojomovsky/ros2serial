@@ -665,6 +665,20 @@ def test_a_docs_title_survives_a_merged_in_master(tmp_path):
     assert stale_ref.returncode == 0, stale_ref.stdout + stale_ref.stderr
 
 
+def test_the_ci_workflow_resolves_its_ranges_from_the_merge_base():
+    """The lint and coverage ranges go stale when the base moves on.
+
+    Both jobs built COMMIT_RANGE from the payload base.sha, which freezes
+    the base tip at PR creation; a base that moves on and is merged in then
+    lands inside the range. They resolve the range from the merge base with
+    the current base branch instead, as the pr-title job does.
+    """
+    text = (ROOT / ".github/workflows/ci.yml").read_text()
+    assert "pull_request.base.sha" not in text
+    assert text.count('range="$(bash scripts/pr-title-range.sh)" || exit 1') == 2
+    assert text.count("BASE_REF: ${{ github.event.pull_request.base.ref }}") == 2
+
+
 def test_the_pr_title_workflow_uses_the_range_script():
     """The range expression is a script so that its test cannot drift from it."""
     text = (ROOT / ".github/workflows/pr-title.yml").read_text()

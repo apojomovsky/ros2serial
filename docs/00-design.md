@@ -148,7 +148,7 @@ The header expands the list into the topic table, the typed publish functions an
 
 **3. Runtime registration, rosserial style** (gcc-class targets only, see User API). Topics are registered while `setup()` runs and live in a RAM table. Registration closes at the first spin; a later registration is an error, never a silent re-handshake.
 
-Whatever the source, the core reads topics through two accessors (`r2s_topic_count()`, `r2s_topic_get()`), backed either by a constant table in flash (ways 1 and 2) or by the RAM table (way 3), selected at link time. No function pointers are involved in the core.
+Whatever the source, the core reads topics through three accessors (`r2s_topic_count()`, `r2s_topic_get()`, `r2s_topic_copy()`), backed either by a constant table in flash (ways 1 and 2) or by the RAM table (way 3). The firmware binds one or the other at configure time, through `r2s_session_configure()` or `r2s_session_configure_ram()`: flash and RAM addresses overlap on AVR, so the readers cannot tell a flash table from a RAM table and the caller names its home. The copy reads each flash entry byte through `R2S_FLASH_READ_BYTE`, where a direct dereference would fetch the wrong bytes; the table's name strings stay in RAM. No function pointers are involved in the core.
 
 From the topic list the static paths emit:
 

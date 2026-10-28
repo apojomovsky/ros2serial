@@ -54,4 +54,7 @@ target_include_directories(r2s_posix_port_test PRIVATE "${R2S_REPO_ROOT}/core/in
 target_compile_options(r2s_posix_port_test PRIVATE
     -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow
     -Wstrict-prototypes -Wmissing-prototypes -Wundef)
+# The pin on the tick's clock source lives in the test's wrap of
+# clock_gettime, so only this target carries it; the firmware is untouched.
+target_link_options(r2s_posix_port_test PRIVATE "LINKER:--wrap=clock_gettime")
 add_test(NAME posix_port_tick COMMAND r2s_posix_port_test)

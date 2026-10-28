@@ -129,7 +129,7 @@ static r2s_topic_t s_probe;
 static char s_probe_name[R2S_MAX_FRAME];
 
 /* Whether the core gate binds this entry with a topic name of len x's: the
- * probe asks r2s_topics_configure() itself instead of copying its sum. */
+ * probe asks r2s_topics_configure_ram() itself instead of copying its sum. */
 static uint8_t probe_fits(const r2s_topic_t *entry, uint32_t len)
 {
     uint32_t i;
@@ -143,7 +143,7 @@ static uint8_t probe_fits(const r2s_topic_t *entry, uint32_t len)
     }
     s_probe_name[len] = '\0';
     s_probe.topic_name = s_probe_name;
-    return (uint8_t)(r2s_topics_configure(&s_probe, 1u) == R2S_OK);
+    return (uint8_t)(r2s_topics_configure_ram(&s_probe, 1u) == R2S_OK);
 }
 
 /* Longest launch name for this entry the core gate still binds: a binary
@@ -202,6 +202,68 @@ static void check_renamed_name(const char *flag, const char *name, const char *d
     exit(2);
 }
 
+/* Scratch name the node probe below configures: overlong candidates are
+ * refused, and the real r2s_session_configure() sets the launch name before
+ * use. Static storage, so the pointer the core keeps stays valid until then. */
+static char s_node_probe[R2S_MAX_FRAME];
+
+/* Whether the core gate binds a node name of len x's with no topics: the
+ * probe asks r2s_session_configure() itself instead of copying its sum. */
+static uint8_t node_probe_fits(uint32_t len)
+{
+    uint32_t i;
+
+    if (len >= (uint32_t)R2S_MAX_FRAME) {
+        return 0u;
+    }
+    for (i = 0u; i < len; i++) {
+        s_node_probe[i] = 'x';
+    }
+    s_node_probe[len] = '\0';
+    return (uint8_t)(r2s_session_configure(s_node_probe, NULL, 0u) == R2S_OK);
+}
+
+/* Longest node name the core gate still binds: a binary search finds the
+ * exact edge, so the configured name stays the length bound with no hidden
+ * headroom. */
+static size_t node_name_limit(void)
+{
+    uint32_t lo = 0u;
+    uint32_t hi = (uint32_t)R2S_MAX_FRAME;
+
+    if (node_probe_fits(0u) == 0u) {
+        return 0u;
+    }
+    while (lo + 1u < hi) {
+        uint32_t mid = lo + (hi - lo) / 2u;
+
+        if (node_probe_fits(mid) != 0u) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    return (size_t)lo;
+}
+
+/* A node name that would not fit the hello entry is rejected here, with its
+ * length and the limit, instead of failing configure with no detail. */
+static void check_node_name(const char *flag, const char *name)
+{
+    size_t len;
+    size_t limit;
+
+    check_name(flag, name);
+    len = strlen(name);
+    limit = node_name_limit();
+    if (len > limit) {
+        fprintf(stderr, "r2s_posix: %s node name '%s' too long: %lu chars, limit %lu\n", flag, name,
+                (unsigned long)len, (unsigned long)limit);
+        usage(stderr);
+        exit(2);
+    }
+}
+
 static void parse_options(int argc, char **argv, struct options *opts)
 {
     int i;
@@ -240,7 +302,7 @@ static void parse_options(int argc, char **argv, struct options *opts)
             exit(2);
         }
     }
-    check_name("--node", opts->node);
+    check_node_name("--node", opts->node);
     if (opts->pub != NULL) {
         check_renamed_name("--pub", opts->pub, kDefaultPub);
     }
@@ -315,7 +377,8 @@ int main(int argc, char **argv)
         return 1;
     }
     count = fill_topics(&opts, topics);
-    if (r2s_session_configure(opts.node, topics, count) != R2S_OK) {
+    /* A stack table renamed at launch: RAM, so the runtime entry point. */
+    if (r2s_session_configure_ram(opts.node, topics, count) != R2S_OK) {
         fprintf(stderr, "r2s_posix: cannot configure node '%s'\n", opts.node);
         return 2;
     }
