@@ -189,7 +189,7 @@ cases:
 """
     }
     problems = vectors_check.check_tree(make_tree(tmp_path, files))
-    assert problems == ["time/off_by_one.yaml: cases/0/expect: the reference makes sec=1 nanosec=0"], problems
+    assert problems == ["time/off_by_one.yaml/cases/0/expect: the reference makes sec=1 nanosec=0"], problems
 
 
 def test_a_time_vector_with_a_tick_hz_the_spec_refuses_is_reported(tmp_path):
@@ -204,7 +204,7 @@ cases:
     }
     problems = vectors_check.check_tree(make_tree(tmp_path, files))
     assert len(problems) == 1, problems
-    assert problems[0].startswith("time/bad_hz.yaml: cases/0: CTL-9"), problems
+    assert problems[0].startswith("time/bad_hz.yaml/cases/0: CTL-9"), problems
 
 
 def test_a_frame_vector_must_carry_a_payload_the_layout_fits(tmp_path):

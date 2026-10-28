@@ -21,7 +21,7 @@ SCHEMAS = ROOT / "spec" / "schema" / "vectors"
 sys.path.insert(0, str(ROOT / "gen"))
 
 from r2s_gen import msgs  # noqa: E402
-from r2s_gen.reference import crc, messages, rcobs  # noqa: E402
+from r2s_gen.reference import crc, messages, rcobs, time  # noqa: E402
 from r2s_gen.reference.errors import Rejected  # noqa: E402
 
 _MESSAGES = msgs.MessageRepository()
@@ -549,13 +549,43 @@ def check_message(name: str, data: dict) -> list[str]:
     return problems
 
 
+def check_time(name: str, data: dict) -> list[str]:
+    """Check every time vector case against the reference time arithmetic.
+
+    The expected result must be the one the reference makes from the case,
+    so a vector cannot drift from the implementation that checks them.
+    """
+    problems = []
+    cases = data.get("cases") if isinstance(data, dict) else None
+    if not isinstance(cases, list):
+        return []
+    try:
+        tick_hz = data["tick_hz"]
+    except (KeyError, TypeError):
+        return []
+    for i, case in enumerate(cases):
+        if not isinstance(case, dict):
+            continue
+        try:
+            got = time.compute(tick_hz, case)
+        except (Rejected, ValueError, KeyError, TypeError) as e:
+            problems.append(f"{name}/cases/{i}: {e}")
+            continue
+        expect = case.get("expect")
+        want = None if expect == "unsynced" else (expect.get("sec"), expect.get("nanosec"))
+        if not isinstance(expect, (str, dict)) or got != want:
+            made = "unsynced" if got is None else f"sec={got[0]} nanosec={got[1]}"
+            problems.append(f"{name}/cases/{i}/expect: the reference makes {made}")
+    return problems
+
+
 def check_tree(vectors: Path) -> list[str]:
     validators = _schemas()
     problems = []
     for path in sorted(p for p in vectors.rglob("*") if p.is_file() and p.name != ".gitkeep"):
         name = path.relative_to(vectors).as_posix()
         problems += check_file(path, name, validators)
-        if name.startswith(("frames/", "messages/", "session/")) and path.suffix == ".yaml":
+        if name.startswith(("frames/", "messages/", "session/", "time/")) and path.suffix == ".yaml":
             try:
                 data = yaml.safe_load(path.read_text())
             except yaml.YAMLError:
@@ -565,6 +595,8 @@ def check_tree(vectors: Path) -> list[str]:
                     problems += check_frame(name, data)
                 elif name.startswith("session/"):
                     problems += check_session(name, data)
+                elif name.startswith("time/"):
+                    problems += check_time(name, data)
                 else:
                     problems += check_message(name, data)
     return problems
