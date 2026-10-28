@@ -213,6 +213,39 @@ def test_a_spec_change_with_a_base_spec_that_is_not_utf8_fails(tmp_path):
     ]
 
 
+def test_a_spec_and_vectors_change_with_a_head_spec_that_is_not_utf8_fails(tmp_path):
+    root = repo_with(tmp_path, LOCAL)
+    (root / "spec/protocol.md").write_bytes(LOCAL.encode("utf-8") + b"\xff")
+    (root / "spec/vectors/frames/a.yaml").parent.mkdir(parents=True, exist_ok=True)
+    (root / "spec/vectors/frames/a.yaml").write_text("covers: [FRM-1]\ncases: []\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "change")
+    assert problems(root) == ["spec/protocol.md changed with spec/vectors changes: spec/protocol.md is unreadable"]
+
+
+def test_a_spec_and_vectors_change_with_a_base_spec_that_is_not_utf8_fails(tmp_path):
+    root = repo_with(tmp_path, LOCAL)
+    (root / "spec/protocol.md").write_bytes(LOCAL.encode("utf-8") + b"\xff")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "bad")
+    (root / "spec/protocol.md").write_text(with_wire_rule(LOCAL))
+    (root / "spec/vectors/frames/a.yaml").parent.mkdir(parents=True, exist_ok=True)
+    (root / "spec/vectors/frames/a.yaml").write_text("covers: [FRM-2]\ncases: []\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "change")
+    assert problems(root) == ["spec/protocol.md changed with spec/vectors changes: spec/protocol.md is unreadable"]
+
+
+def test_a_wire_rule_with_a_vector_change_in_one_commit_passes(tmp_path):
+    root = repo_with(tmp_path, LOCAL)
+    (root / "spec/protocol.md").write_text(with_wire_rule(LOCAL))
+    (root / "spec/vectors/frames/a.yaml").parent.mkdir(parents=True, exist_ok=True)
+    (root / "spec/vectors/frames/a.yaml").write_text("covers: [FRM-2]\ncases: []\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "change")
+    assert problems(root) == []
+
+
 def test_a_branch_that_changes_neither_passes(tmp_path):
     root = repo_with(tmp_path, LOCAL)
     write(root, "core.c", "int x;\n")
