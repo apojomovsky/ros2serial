@@ -23,20 +23,12 @@ namespace
 {
 constexpr std::uint8_t kReliableFlag = 0x08u;
 
-// The link state the H8 snapshot reports, one word per state.
+// The link state the H8 snapshot reports, one word per state. The table order
+// follows the SessionState enumerators, so no branch can go untaken.
 std::string link_state_name(SessionState state)
 {
-    switch (state) {
-    case SessionState::kDisconnected:
-        return "disconnected";
-    case SessionState::kBootWait:
-        return "boot_wait";
-    case SessionState::kHandshaking:
-        return "handshaking";
-    case SessionState::kConnected:
-        return "connected";
-    }
-    return "unknown";
+    static constexpr const char *names[] = {"disconnected", "boot_wait", "handshaking", "connected"};
+    return names[static_cast<std::size_t>(state)];
 }
 const char *fail_name(ConvertFail fail)
 {

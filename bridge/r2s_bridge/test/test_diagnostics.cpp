@@ -1,7 +1,7 @@
 // The bridge diagnostics: link state, session token, resets, protocol
 // version, MCU counters, per-topic gaps and drops, and the time sync slot,
 // through a real node with a scripted link and real type support.
-// covers: FRM-15, HB-2, SES-19, SES-21, SES-26, SES-30
+// covers: FRM-15, HB-2, SES-15, SES-16, SES-19, SES-21, SES-26, SES-30
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -90,6 +90,16 @@ class DiagnosticsFixture
         while (!ready() && std::chrono::steady_clock::now() < deadline) {
             rclcpp::spin_some(node_);
         }
+    }
+
+    void script_closed()
+    {
+        transport_.script_read(IoStatus::kClosed);
+    }
+
+    void poll_once()
+    {
+        router_->poll();
     }
 
     void deliver_frame(std::uint8_t topic_id, std::uint8_t seq, const std::vector<std::uint8_t> &payload)
@@ -282,6 +292,65 @@ TEST_F(DiagnosticsNode, CountsHelloWhileConnectedAsReset)
     EXPECT_EQ(diagnostics.link_state, "connected");
     EXPECT_EQ(diagnostics.resets, 1u);
     EXPECT_EQ(diagnostics.session_token, 2u) << "the new handshake assigns a fresh token";
+}
+TEST_F(DiagnosticsNode, RefusedHelloKeepsBootWait)
+{
+    DiagnosticsFixture fixture("badhello", RouterParams{});
+    EXPECT_EQ(fixture.snapshot().link_state, "boot_wait");
+    std::vector<std::uint8_t> bad_version = helper_hello(7u, 2u);
+    bad_version[1] = 0xFFu;
+    fixture.deliver_frame(kHelperControl, 0u, bad_version);
+    const Diagnostics diagnostics = fixture.snapshot();
+    EXPECT_EQ(diagnostics.link_state, "boot_wait") << "a refused HELLO changes nothing";
+    EXPECT_EQ(diagnostics.session_token, 0u);
+    EXPECT_EQ(diagnostics.resets, 0u);
+}
+TEST_F(DiagnosticsNode, LinkTimeoutRehandshakesWithoutReset)
+{
+    DiagnosticsFixture fixture("timeout", RouterParams{});
+    fixture.handshake();
+    fixture.advance(1999u);
+    EXPECT_EQ(fixture.snapshot().link_state, "connected");
+    fixture.advance(1u);
+    const Diagnostics diagnostics = fixture.snapshot();
+    EXPECT_EQ(diagnostics.link_state, "handshaking") << "silence past the timeout restarts the handshake";
+    EXPECT_EQ(diagnostics.resets, 0u) << "a timeout is not an MCU reset";
+    EXPECT_EQ(diagnostics.session_token, 1u) << "the token survives until the next READY";
+}
+TEST_F(DiagnosticsNode, ClosedTransportReportsDisconnected)
+{
+    DiagnosticsFixture fixture("dead", RouterParams{});
+    fixture.handshake();
+    EXPECT_EQ(fixture.snapshot().session_token, 1u);
+    fixture.script_closed();
+    fixture.poll_once();
+    const Diagnostics diagnostics = fixture.snapshot();
+    EXPECT_EQ(diagnostics.link_state, "disconnected");
+    EXPECT_EQ(diagnostics.session_token, 1u) << "the token survives the drop";
+    EXPECT_EQ(diagnostics.resets, 0u) << "a dead port is not an MCU reset";
+}
+
+TEST_F(DiagnosticsNode, StumbledHandshakeStillConnects)
+{
+    DiagnosticsFixture fixture("stumble", RouterParams{});
+    fixture.deliver_frame(kHelperControl, 0u, helper_hello(7u, 2u));
+    EXPECT_EQ(fixture.snapshot().link_state, "handshaking");
+    const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
+    fixture.deliver_frame(
+        kHelperControl, 1u,
+        helper_topic(5u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
+    EXPECT_EQ(fixture.snapshot().link_state, "handshaking") << "a refused TOPIC restarts the wait";
+    fixture.deliver_frame(
+        kHelperControl, 2u,
+        helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
+    const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
+    fixture.deliver_frame(
+        kHelperControl, 3u,
+        helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "cmd_vel"));
+    const Diagnostics diagnostics = fixture.snapshot();
+    EXPECT_EQ(diagnostics.link_state, "connected");
+    EXPECT_EQ(diagnostics.session_token, 1u);
+    EXPECT_EQ(diagnostics.resets, 0u);
 }
 
 TEST_F(DiagnosticsNode, ReportsKeepLatestReplacementAsDrop)
