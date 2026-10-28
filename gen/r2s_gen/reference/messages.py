@@ -96,8 +96,8 @@ def _encode_message(
                 raise ValueError(f"{where}: a fixed array holds {field.array_length} elements, not {len(items)}")
         else:
             out += varint.encode(len(items))
-        for item in items:
-            _encode_element(repository, where, field, item, narrow, out)
+        for index, item in enumerate(items):
+            _encode_element(repository, f"{where}[{index}]", field, item, narrow, out)
 
 
 def _encode_element(
