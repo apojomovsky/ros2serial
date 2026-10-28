@@ -277,7 +277,7 @@ def test_hello_announces_firmware(tmp_path):
     assert hello["max_frame"] <= 65277
     # covers: CTL-2
     assert hello["features"] & 0xC0 == 0
-    assert hello["count"] == 3
+    assert hello["count"] == 4
     assert hello["node"] == "r2s_posix"
 
 
@@ -285,17 +285,18 @@ def test_hello_announces_firmware(tmp_path):
 def test_handshake_reaches_connected(tmp_path):
     with Firmware("--rate", "10") as fw:
         hello, topics, _host = do_handshake(fw)
-        assert [t["topic"] for t in topics] == ["battery", "cmd_vel", "log_text"]
+        assert [t["topic"] for t in topics] == ["battery", "cmd_vel", "echo_vel", "log_text"]
         assert [(t["type"], t["id"]) for t in topics] == [
             ("std_msgs/msg/Float32", 16),
             ("geometry_msgs/msg/Twist", 17),
-            ("std_msgs/msg/String", 18),
+            ("geometry_msgs/msg/Twist", 18),
+            ("std_msgs/msg/String", 19),
         ]
         # covers: FRM-3
         assert all(16 <= t["id"] <= 255 for t in topics)
         # covers: CTL-4
         assert all(t["flags"] & 0xF0 == 0 for t in topics)
-        assert [t["flags"] & 0x01 for t in topics] == [0, 1, 0]
+        assert [t["flags"] & 0x01 for t in topics] == [0, 1, 0, 0]
         _, _, payload = read_frame(fw.master, want=4, timeout=2.0)
         assert len(payload) == 8, "the heartbeat carries four u16 counters"
     assert hello["node"] == "r2s_posix"
@@ -326,8 +327,8 @@ def test_configured_topics(tmp_path):
     with Firmware(*args) as fw:
         hello, topics, _host = do_handshake(fw)
         assert hello["node"] == "custom"
-        assert hello["count"] == 2
-        assert [(t["id"], t["topic"]) for t in topics] == [(16, "volt"), (17, "drive")]
+        assert hello["count"] == 3
+        assert [(t["id"], t["topic"]) for t in topics] == [(16, "volt"), (17, "drive"), (18, "echo_vel")]
 
 
 # covers: FRM-4, FRM-5
@@ -351,14 +352,14 @@ def test_connected_publishes_log_text(tmp_path):
     with Firmware("--rate", "20") as fw:
         _hello, _topics, host = do_handshake(fw)
         assigned = host.next_token - 1
-        _topic, _seq, payload = read_frame(fw.master, want=18)
+        _topic, _seq, payload = read_frame(fw.master, want=19)
         text, end = take_string(payload, 0)
         assert end == len(payload), "bytes after the log string"
         assert text == format(assigned, "08x"), "the boot line carries the assigned token"
         batteries = 0
         while True:
             topic, _seq, payload = read_frame(fw.master)
-            if topic == 18:
+            if topic == 19:
                 repeat, end = take_string(payload, 0)
                 assert end == len(payload), "bytes after the log string"
                 assert repeat, "the periodic log line is empty"
@@ -383,7 +384,7 @@ def test_log_text_boot_line_retried_after_reject(tmp_path):
                     break
             parsed = parse_topic(payload)
             assert parsed["index"] == index
-            host.topic_status(parsed["id"], 1 if parsed["id"] == 18 else 0)
+            host.topic_status(parsed["id"], 1 if parsed["id"] == 19 else 0)
         host.ready()
         quiet_until = time.monotonic() + 1.2
         while True:
@@ -395,9 +396,9 @@ def test_log_text_boot_line_retried_after_reject(tmp_path):
             except AssertionError as error:
                 assert "timed out" in str(error), f"lost the firmware: {error}"
                 break
-            assert topic != 18, "log_text published while the host rejects it"
-        host.topic_status(18, 0)
-        _topic, _seq, payload = read_frame(fw.master, want=18)
+            assert topic != 19, "log_text published while the host rejects it"
+        host.topic_status(19, 0)
+        _topic, _seq, payload = read_frame(fw.master, want=19)
         text, end = take_string(payload, 0)
         assert end == len(payload), "bytes after the log string"
         assert text == format(host.next_token - 1, "08x")
@@ -433,6 +434,7 @@ def test_bad_rate_fails(tmp_path):
 LAUNCH_NAME_TYPES = [
     ("--pub", "std_msgs/msg/Float32"),
     ("--sub", "geometry_msgs/msg/Twist"),
+    ("--echo", "geometry_msgs/msg/Twist"),
     ("--log-text", "std_msgs/msg/String"),
 ]
 
@@ -538,8 +540,9 @@ def test_launch_node_name_at_limit_is_announced(tmp_path):
 
 # The Twist structs the dropped subscription's handler is declared with: the
 # firmware defines r2s_on_cmd_vel unconditionally, so a build without cmd_vel
-# pre-includes its message type, which the narrowed configuration no longer
-# emits. The layout is the standard Twist, never instantiated here.
+# pre-includes its message type. A narrowed configuration with no remaining
+# Twist topic no longer emits the structs, and the shim supplies them for
+# the build. The layout is the standard Twist, never instantiated here.
 TWIST_SHIM = """\
 typedef struct geometry_msgs__msg__Vector3 {
     double x;
@@ -574,7 +577,12 @@ def build_firmware_without_cmd_vel(tmp_path):
     gen_dir.mkdir()
     (gen_dir / "r2s_generated.h").write_text(header, encoding="utf-8")
     (gen_dir / "r2s_generated.c").write_text(source, encoding="utf-8")
-    (gen_dir / "twist_shim.h").write_text(TWIST_SHIM, encoding="utf-8")
+    # The handler for a dropped subscription still names its message type.
+    # The echo topic keeps Twist in the narrowed header; without a topic of
+    # that type the shim below supplies the structs instead.
+    needs_shim = "geometry_msgs__msg__Twist" not in header
+    if needs_shim:
+        (gen_dir / "twist_shim.h").write_text(TWIST_SHIM, encoding="utf-8")
     # A quoted include resolves beside the including file first, so the port
     # sources build as copies next to the narrowed pair: otherwise they pick
     # up the checked-in generated headers from ports/posix/src/.
@@ -594,8 +602,7 @@ def build_firmware_without_cmd_vel(tmp_path):
         "-I",
         str(root / "ports" / "posix" / "src"),
         "-DR2S_WITH_CODEC",
-        "-include",
-        str(gen_dir / "twist_shim.h"),
+        *(["-include", str(gen_dir / "twist_shim.h")] if needs_shim else []),
         *[str(p) for p in sources],
         "-o",
         str(tmp_path / "r2s_posix_narrowed"),
@@ -663,3 +670,4 @@ def test_help_names_options():
     )
     assert proc.returncode == 0
     assert "--node" in proc.stdout.decode()
+    assert "--echo" in proc.stdout.decode()
