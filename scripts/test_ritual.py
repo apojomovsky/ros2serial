@@ -784,8 +784,10 @@ def test_full_env_runs_the_suite_unscoped(tmp_path):
     text = seen.read_text()
     scopes = ("FULL", "LINT", "SCRIPTS", "COMMITS", "CORE", "GEN")
     scopes += ("BRIDGE", "E2E", "COVERAGE", "DOCS", "EXAMPLES", "FUZZ")
-    scope_lines = [line for line in text.splitlines() if line.split("=")[0] in scopes]
-    assert scope_lines == [], f"scoped run in a full suite: {scope_lines}"
+    # The outer suite may export scopes of its own; the hook must add none.
+    present = {name for name in scopes if name in os.environ}
+    added = {line.split("=")[0] for line in text.splitlines() if line.split("=")[0] in scopes} - present
+    assert added == set(), f"the hook scoped a full run: {sorted(added)}"
 
 
 def test_ci_runs_every_scope_on_pull_requests():
