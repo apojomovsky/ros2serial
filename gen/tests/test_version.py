@@ -34,6 +34,11 @@ def test_the_bundled_library_version_is_the_repository_version():
     assert _capture(r"\nversion=([^\n]+)", properties) == __version__
 
 
+def test_the_example_library_version_is_the_repository_version():
+    properties = (ROOT / "examples" / "arduino_minimal" / "lib" / "library.properties").read_text(encoding="utf-8")
+    assert _capture(r"\nversion=([^\n]+)", properties) == __version__
+
+
 def test_the_protocol_version_is_the_one_the_core_announces():
     header = (ROOT / "core" / "include" / "r2s" / "r2s.h").read_text(encoding="utf-8")
     assert str(PROTOCOL_VERSION) == _capture(r"#define R2S_PROTOCOL_VERSION (\d+)", header)

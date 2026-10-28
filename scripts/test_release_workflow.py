@@ -50,10 +50,25 @@ def test_the_release_uses_the_built_in_token_and_publishes_nowhere_else():
     assert "twine" not in lowered
 
 
-def test_the_tag_builds_the_shared_artifact_script_and_creates_a_pre_release():
+def test_the_tag_builds_the_shared_artifact_script_and_reads_the_changelog():
     job = steps_of(workflow())
     runs = "\n".join(str(step.get("run", "")) for step in job["steps"])
     assert "scripts/build-release-artifacts.sh" in runs
-    assert "gh release create" in runs and "--prerelease" in runs
-    assert "VERSION" in runs
     assert "CHANGELOG.md" in runs
+
+
+def test_only_a_release_tag_without_dry_run_creates_the_pre_release():
+    job = steps_of(workflow())
+    publishers = [step for step in job["steps"] if "gh release create" in str(step.get("run", ""))]
+    assert len(publishers) == 1 and "--prerelease" in str(publishers[0]["run"])
+    guard = str(publishers[0].get("if", ""))
+    assert "refs/tags/v" in guard and "dry_run" in guard, guard
+
+
+def test_a_tag_the_repository_version_does_not_name_refuses_to_publish():
+    job = steps_of(workflow())
+    gates = [step for step in job["steps"] if "GITHUB_REF_NAME" in str(step.get("run", ""))]
+    assert gates, "no step refuses a tag VERSION does not name"
+    assert any("refs/tags/v" in str(step.get("if", "")) for step in gates)
+    runs = "\n".join(str(step.get("run", "")) for step in gates)
+    assert "VERSION" in runs

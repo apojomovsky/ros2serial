@@ -17,19 +17,18 @@ while [ $# -gt 0 ]; do
   esac
 done
 version=$(tr -d '[:space:]' <"$root/VERSION")
-case $version in
-  *.*.*) ;;
-  *) echo "build-release-artifacts: VERSION '$version' is not major.minor.patch" >&2; exit 1 ;;
-esac
+printf '%s' "$version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || {
+  echo "build-release-artifacts: VERSION '$version' is not major.minor.patch" >&2
+  exit 1
+}
 rm -rf "$out"
 mkdir -p "$out"
 case $out in /*) ;; *) out=$PWD/$out ;; esac
-PYTHONPATH="$root/gen" python3 - "$root" "$distro" "$out" "$version" <<'EOF'
+PYTHONPATH="$root/gen" python3 - "$root" "$distro" "$out" <<'EOF'
 import sys
-import zipfile
 from pathlib import Path
 
-root, distro, out, version = (sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
+root, distro, out = (sys.argv[1], sys.argv[2], sys.argv[3])
 sys.path.insert(0, str(Path(root) / "gen"))
 from r2s_gen import bundle
 
@@ -38,8 +37,22 @@ staged = Path(out) / "ros2serial"
 (staged / "src").mkdir(parents=True)
 for name, text in files.items():
     (staged / name).write_text(text, encoding="utf-8")
+EOF
+# The bundle carries only the descriptors and the sketch header: the core
+# sources join it here, the same staging the example build uses, so the
+# library compiles on its own.
+mkdir -p "$out/ros2serial/src/r2s"
+cp "$root"/core/include/r2s/*.h "$out/ros2serial/src/r2s/"
+cp "$root"/core/src/*.c "$out/ros2serial/src/"
+rm -f "$out/ros2serial/src/test_reset.c"
+python3 - "$out" "$version" <<'EOF'
+import sys
+import zipfile
+from pathlib import Path
+
+out, version = (sys.argv[1], sys.argv[2])
 zip_path = Path(out) / f"ros2serial-arduino-{version}.zip"
-names = sorted(str(path.relative_to(out)) for path in sorted(staged.rglob("*")) if path.is_file())
+names = sorted(str(path.relative_to(out)) for path in sorted((Path(out) / "ros2serial").rglob("*")) if path.is_file())
 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
     for name in names:
         info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
