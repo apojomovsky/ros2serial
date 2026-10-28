@@ -334,6 +334,17 @@ def test_duplicate_topic_names_are_an_error(tmp_path):
     assert str(caught.value) == f"{path}: topics[1].name: duplicate topic name 'battery'; give each topic its own name"
 
 
+def test_an_empty_topic_list_is_an_error(tmp_path):
+    path = write(tmp_path / "r2s.yaml", "node: base_controller\ntopics: []\n")
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: topics: a node with no topics has nothing to announce; add at least one topic"
+    )
+
+
 def test_an_unknown_root_key_is_an_error(tmp_path):
     path = write(tmp_path / "r2s.yaml", "node: base_controller\nnodes: 2\ntopics: []\n")
 
