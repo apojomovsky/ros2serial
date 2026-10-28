@@ -221,9 +221,8 @@ add_test(NAME vectors_session COMMAND vectors_session)
 # Every session transcript is either replayed above or owned by the host
 # runner, so a new transcript stops the configure step instead of landing
 # silently unrun. The two host-owned transcripts open with HELLOs no
-# conforming firmware sends, so the bridge transcript runner delivers their
-# MCU steps and compares their host steps
-# (bridge/r2s_bridge/test/test_session.cpp, SessionTranscripts).
+# conforming firmware sends; bridge/r2s_bridge/test/test_session.cpp
+# replays them through the host session instead.
 set(R2S_SESSION_HOST_NAMES
   refused_hello
   version_mismatch)
