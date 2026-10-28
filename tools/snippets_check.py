@@ -50,12 +50,13 @@ GENERATED_FIXTURES = (
 # A fence opens at column 0 to 3 of its container: deeper is an indented code
 # block, literal text. The closer sits no deeper than three past the container;
 # anything deeper is body text. A tagged fence the scan never opens, inside a
-# body or a quote, is reported instead of silently passing. Indentation is
-# relative to list items, which the scan tracks; a dedented line pops back
-# out. A marker past column 3 of its container gets its own diagnostic.
+# body, a quote, or after a list marker, is reported instead of silently
+# passing. Indentation is relative to list items, which the scan tracks; a
+# dedented line pops back out. A marker past column 3 of its container gets
+# its own diagnostic.
 FENCE = re.compile(r"^ *```")
 MARKER_ANY = re.compile(r"^\s*<!--[ \t]*snippet:.*-->\s*$")
-SWEEP = re.compile(r"^\s*(?:>\s*)*```([A-Za-z0-9+#-]+)")
+SWEEP = re.compile(r"^\s*(?:>\s*|[*+-]\s+|\d{1,9}[.)]\s+)*```([A-Za-z0-9+#-]+)")
 
 LANGUAGES = ("c", "cpp", "python")
 EXTENSION = {"c": ".c", "cpp": ".cpp", "python": ".py"}
