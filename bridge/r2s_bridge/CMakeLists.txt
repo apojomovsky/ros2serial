@@ -113,6 +113,10 @@ if(BUILD_TESTING)
   # ROS context.
   ament_add_gtest(test_scheduler test/test_scheduler.cpp)
   target_link_libraries(test_scheduler r2s_bridge_test_support)
+  # The time-sync estimator is plain C++ over nanosecond counts, so its tests
+  # need no ROS context.
+  ament_add_gtest(test_time_sync test/test_time_sync.cpp)
+  target_link_libraries(test_time_sync r2s_bridge_test_support)
 
   ament_add_gtest(test_session_without_executor test/test_session_without_executor.cpp)
   target_link_libraries(test_session_without_executor r2s_bridge_test_support)
