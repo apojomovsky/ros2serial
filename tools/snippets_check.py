@@ -40,12 +40,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MARKER = re.compile(r"^ {0,3}<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#([0-9]+)(?::[ \t]*(\S.*?))?[ \t]*-->\s*$")
+MARKER_LIKE = re.compile(r"^ {0,3}<!--[ \t]*snippet:.*-->\s*$")
+MARKER_EMPTY = re.compile(r"^ {0,3}<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#[0-9]+[ \t]*:[ \t]*-->\s*$")
 GENERATED_FIXTURES = (
     ("gen/tests/golden/topics/posix.h", "r2s_generated.h"),
     ("gen/tests/golden/bundle/ros2serial.h", "ros2serial.h"),
     ("gen/tests/golden/bundle/r2s_bundled.h", "r2s_bundled.h"),
 )
-MARKER_LIKE = re.compile(r"^ {0,3}<!--[ \t]*snippet:.*-->\s*$")
 # A fence opens at column 0 to 3 of its container: deeper is an indented code
 # block, literal text. The closer sits no deeper than three past the container;
 # anything deeper is body text. A tagged fence the scan never opens, inside a
@@ -119,10 +120,12 @@ def _list_content(line: str, base: int) -> int | None:
 
 def _marker_kind(line: str, base: int) -> str:
     # What the marker-shaped comment on `line` is worth at container `base`:
-    # usable, ticketless, or literal text past column 3.
+    # usable, ticketless, empty of its reason, or literal text past column 3.
     rel = line[base:]
     if MARKER.match(rel):
         return "ok"
+    if MARKER_EMPTY.match(rel):
+        return "empty"
     if MARKER_LIKE.match(rel):
         return "ticketless"
     return "deep"
@@ -133,6 +136,8 @@ def _marker_problem(kind: str) -> str:
         return "snippet marker above no fence"
     if kind == "ticketless":
         return "snippet marker without a ticket number"
+    if kind == "empty":
+        return "snippet marker reason is empty after the colon"
     return "snippet marker starts past column 3, so it is literal text"
 
 
@@ -201,7 +206,7 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
                 continue
             language = words[0]
             if language in SKIPPED_TAGS:
-                snippets.append(Snippet(rel, open_line, language, "", ticket, skipped_tag=language))
+                snippets.append(Snippet(rel, open_line, language, "", ticket, reason=reason, skipped_tag=language))
                 continue
             if language not in LANGUAGES:
                 problems.append(f"{rel}:{open_line}: unknown snippet language {language!r}")
@@ -294,7 +299,12 @@ def check_tree(root: Path) -> list[str]:
             problems += found
             for snippet in snippets:
                 if snippet.skipped_tag is not None:
-                    print(f"skip {rel}:{snippet.line} ({snippet.skipped_tag}): skipped by tag, not compiled")
+                    extra = ""
+                    if snippet.ticket is not None:
+                        extra = f" (until #{snippet.ticket}"
+                        extra += f": {snippet.reason}" if snippet.reason else ""
+                        extra += ")"
+                    print(f"skip {rel}:{snippet.line} ({snippet.skipped_tag}): skipped by tag, not compiled{extra}")
                     by_tag += 1
                     continue
                 if snippet.ticket is not None:

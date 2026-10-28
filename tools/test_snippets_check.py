@@ -354,3 +354,19 @@ def test_skip_marker_with_reason_skips_and_prints_reason(tmp_path, capsys):
     assert snippets_check.check_tree(root) == []
     out = capsys.readouterr().out
     assert "#75" in out and "template placeholders" in out
+
+
+def test_skip_marker_reason_printed_for_tag_skipped_fence(tmp_path, capsys):
+    text = "# T\n\n<!-- snippet: skip until #75: template placeholders, never literal C -->\n```text\nhello\n```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
+    out = capsys.readouterr().out
+    assert "skipped by tag" in out and "#75" in out and "template placeholders" in out
+
+
+def test_skip_marker_with_empty_reason_is_an_error(tmp_path):
+    text = "# T\n\n<!-- snippet: skip until #75: -->\n" + C_OK
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "reason is empty" in problems[0]
