@@ -84,6 +84,8 @@ template <> struct msg_traits<Twist> {
 static uint8_t s_wire[R2S_FRAMER_RX_CAPACITY + 1u];
 static Twist s_got_twist;
 static uint8_t s_got_calls;
+static Twist s_lambda_twist;
+static uint8_t s_lambda_calls;
 
 static void on_twist(const Twist &msg)
 {
@@ -363,17 +365,21 @@ void test_runtime_the_sketch_spelling_works(void)
 void test_runtime_a_capture_less_lambda_is_a_valid_handler(void)
 {
     r2s::Node node("base_controller");
-    r2s::Subscription<Twist> cmd_vel_sub(node, "cmd_vel", [](const Twist &msg) { (void)msg; });
+    r2s::Subscription<Twist> cmd_vel_sub(node, "cmd_vel", [](const Twist &msg) {
+        s_lambda_twist = msg;
+        s_lambda_calls++;
+    });
     const Twist sent = {{1.5, -2.0, 0.5}, {1.0, -0.0, 3.0}};
     static uint8_t payload[R2S_MAX_FRAME];
     uint16_t len;
 
-    s_got_calls = 0u;
+    s_lambda_calls = 0u;
     node.spin_some();
     handshake(1u);
     len = twist_payload(payload, sent, 0u);
     feed_host(FIRST_TOPIC_ID, 0u, payload, len);
-    TEST_ASSERT_EQUAL_UINT8(1, r2s_topic_count());
+    TEST_ASSERT_EQUAL_UINT8(1, s_lambda_calls);
+    TEST_ASSERT_EQUAL_MEMORY(&sent, &s_lambda_twist, sizeof sent);
 }
 
 /* The port a node begins: the stub stands in for the Arduino stream, so
@@ -400,14 +406,26 @@ void test_runtime_begin_starts_the_port_at_the_given_baud(void)
     TEST_ASSERT_EQUAL_UINT32(115200UL, (uint32_t)port.m_baud);
 }
 
-void test_runtime_the_registry_starts_empty_after_a_reset(void)
+void test_runtime_a_reset_empties_the_registry(void)
 {
-    r2s::Node node("base_controller");
-    r2s::Publisher<Float32> battery_pub(node, "battery");
+    {
+        r2s::Node node("base_controller");
+        r2s::Publisher<Float32> battery_pub(node, "battery");
 
-    node.spin_some();
-    TEST_ASSERT_EQUAL_UINT8(1, r2s_topic_count());
-    TEST_ASSERT_FALSE(node.registration_error());
+        node.spin_some();
+        TEST_ASSERT_EQUAL_UINT8(1, r2s_topic_count());
+    }
+    r2s_runtime_test_reset();
+    r2s_test_reset();
+    {
+        r2s::Node node("base_controller");
+        r2s::Publisher<Float32> battery_pub(node, "battery");
+
+        node.spin_some();
+        TEST_ASSERT_FALSE(node.registration_error());
+        TEST_ASSERT_EQUAL_UINT8(1, r2s_topic_count());
+        TEST_ASSERT_EQUAL_UINT8(FIRST_TOPIC_ID, r2s_topic_get(0)->topic_id);
+    }
 }
 
 void test_runtime_second_node_sets_the_error(void)

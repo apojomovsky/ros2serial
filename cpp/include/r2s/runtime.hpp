@@ -166,7 +166,9 @@ template <typename T> class Publisher
 };
 
 /* Receives messages of one type on one topic, and calls the handler with
- * the message it decoded. */
+ * the message it decoded. Declare it at file scope: the registry keeps the
+ * address of its storage and handler, so an object with a shorter life
+ * leaves a dangling record behind. */
 template <typename T> class Subscription
 {
   public:

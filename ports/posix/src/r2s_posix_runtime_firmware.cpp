@@ -2,8 +2,9 @@
  * generated C firmware, registered as r2s::Node objects while the firmware
  * runs, so the end-to-end suite drives the runtime registration path as a
  * process on a pty. The command line mirrors the C firmware's, and the
- * topics register in the same order, so a dropped topic compacts the IDs
- * exactly the way the generated table does. */
+ * topics register in the same order with IDs from 16, so a dropped topic
+ * is never registered and later topics shift up. The IDs are session-local,
+ * so the announce stays consistent either way. */
 
 #include <cerrno>
 #include <cstdio>
@@ -201,8 +202,7 @@ int main(int argc, char **argv)
         return 1;
     }
     /* Function-local objects, so the command line is parsed before anything
-     * registers: a dropped topic is never constructed, and the IDs compact
-     * in configuration order like the generated table. */
+     * registers: a dropped topic is never constructed. */
     static r2s::Node node(opts.node);
     r2s::Publisher<std_msgs::msg::Float32> *battery_pub = NULL;
     r2s::Publisher<std_msgs::msg::String> *log_pub = NULL;
