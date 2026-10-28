@@ -62,8 +62,8 @@ def test_bridge_maps_to_bridge_coverage_and_posix_e2e():
     }
 
 
-def test_cpp_maps_to_cpp():
-    assert scopes("cpp/src/runtime.cpp") == {**CHEAP, "CPP": "1"}
+def test_cpp_maps_to_cpp_and_its_consumers():
+    assert scopes("cpp/src/runtime.cpp") == {**CHEAP, "CPP": "1", "EXAMPLES": "1", "E2E": "avr", "DOCS": "1"}
 
 
 def test_spec_maps_to_vectors_fuzz_scripts_and_bridge():

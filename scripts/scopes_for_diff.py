@@ -80,8 +80,10 @@ PREFIX_RULES = (
     ("gen/", {"GEN": "1", "EXAMPLES": "1", "DOCS": "1", "BRIDGE": "1"}),
     # The bridge is built by BRIDGE, measured by COVERAGE, launched by E2E.
     ("bridge/", {"BRIDGE": "1", "COVERAGE": "1", "E2E": "posix"}),
-    # The C++ layer is built and tested by CPP over core sources.
-    ("cpp/", {"CPP": "1"}),
+    # The C++ layer is built and tested by CPP over core sources, staged into
+    # the arduino_minimal example, into the simavr runtime firmware, and into
+    # the DOCS snippets.
+    ("cpp/", {"CPP": "1", "EXAMPLES": "1", "E2E": "avr", "DOCS": "1"}),
     # Vectors are replayed by the core, generator and bridge contract tests,
     # checked against the fuzz seeds by FUZZ, and read by the SCRIPTS tests.
     ("spec/", {"CORE": "1", "GEN": "1", "FUZZ": "1", "SCRIPTS": "1", "BRIDGE": "1"}),
