@@ -145,7 +145,7 @@ set_tests_properties(selftest_mismatch.test_must_fail_selftest_rejects_mistransc
 # The self-test runs the fixtures and every published vector of each kind
 # through support/vector_selftest.c, so the transcription is checked before
 # the modules (C2 to C4) register their own checks for the same files.
-set(R2S_VECTOR_KINDS crc frames messages rcobs varint)
+set(R2S_VECTOR_KINDS crc frames messages rcobs session varint)
 foreach(kind ${R2S_VECTOR_KINDS})
   file(GLOB fixtures CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/vectors/${kind}/*.yaml")
   file(GLOB published CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/${kind}/*.yaml")
@@ -169,10 +169,13 @@ r2s_vector_test(vectors_frames frames vectors/frames_check.c ${frames_vectors})
 file(GLOB messages_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/messages/*.yaml")
 r2s_vector_test(vectors_messages messages vectors/messages_check.c ${messages_vectors})
 
+file(GLOB session_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/session/*.yaml")
+r2s_vector_test(vectors_session session vectors/session_check.c ${session_vectors})
+
 # Vector kinds the C runner does not read yet, each with the ticket that adds
 # it. A kind with files that is in neither list would be silently skipped, so
 # it stops the configure step instead.
-set(R2S_VECTOR_KINDS_PENDING session:C8 time:S7)
+set(R2S_VECTOR_KINDS_PENDING time:S7)
 file(GLOB kind_dirs LIST_DIRECTORIES true "${R2S_REPO_ROOT}/spec/vectors/*")
 foreach(dir ${kind_dirs})
   get_filename_component(kind "${dir}" NAME)
