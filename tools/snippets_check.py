@@ -19,6 +19,10 @@ its marker with the reason after a colon:
 
     <!-- snippet: skip until #75: template placeholders, never literal C -->
 
+A tagged fence shown only as literal text, inside an indented block, an
+outer fence, or a block scalar, carries the same marker alone on the line
+directly above it. The check skips the example without compiling it.
+
 A marker without a ticket number is an error, and so is a marker above no
 fence. A line that only mentions a marker in passing is not one. The run
 prints every skipped snippet, with its ticket and reason when it has them,
@@ -222,14 +226,24 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
             stack.append(content)
         i += 1
         continue
+    for number, text in enumerate(lines, start=1):
+        tag = SWEEP.match(text)
+        if tag and tag.group(1) in LANGUAGES + SKIPPED_TAGS and number not in opened:
+            # A skip marker alone on the line above the literal fence opts the
+            # example out: docs showing fence syntax as text are never compiled.
+            above = number - 2
+            while above >= 0 and not lines[above].strip():
+                above -= 1
+            if above >= 0 and MARKER.match(lines[above]):
+                used.add(above + 1)
+                language = tag.group(1)
+                snippets.append(Snippet(rel, number, language, "", _ticket(lines[above]), _reason(lines[above])))
+                continue
+            problems.append(f"{rel}:{number}: tagged fence never opened a snippet")
     for lineno, kind in markers.items():
         if lineno in used:
             continue
         problems.append(f"{rel}:{lineno}: {_marker_problem(kind)}")
-    for number, text in enumerate(lines, start=1):
-        tag = SWEEP.match(text)
-        if tag and tag.group(1) in LANGUAGES + SKIPPED_TAGS and number not in opened:
-            problems.append(f"{rel}:{number}: tagged fence never opened a snippet")
     return snippets, problems
 
 
