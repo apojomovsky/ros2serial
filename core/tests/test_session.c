@@ -40,9 +40,9 @@ static const r2s_topic_t two_topics[] = {
 };
 
 #if DBL_MANT_DIG == FLT_MANT_DIG
-#define EXPECTED_FEATURES 0x12u
+#define EXPECTED_FEATURES 0x13u
 #else
-#define EXPECTED_FEATURES 0x02u
+#define EXPECTED_FEATURES 0x03u
 #endif
 
 /* The TOPIC payload the one-topic table announces, byte for byte the payload
