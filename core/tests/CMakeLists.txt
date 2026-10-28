@@ -23,17 +23,34 @@ endfunction()
 r2s_ring_library(r2s_rx_ring)
 r2s_ring_library(r2s_rx_ring_min 2)
 
-add_library(r2s_test_support STATIC support/bytes.c support/fake_port.c support/fake_port_unity.c
-                                       support/frames.c support/handwritten.c support/rcobs.c)
-target_include_directories(r2s_test_support PUBLIC support)
-target_compile_options(r2s_test_support PRIVATE ${R2S_WARNINGS})
-target_link_libraries(r2s_test_support PUBLIC unity r2s_core)
-# Unity calls setUp and tearDown, so they are linked as an object, not from an archive.
-target_sources(r2s_test_support INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/support/hooks.c")
-# The default dispatch is linked the same way, as an object in every test
-# binary: an archive member would not be extracted for a symbol the core only
-# names later. The link tests override it with their strong definition.
-target_sources(r2s_test_support INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/support/dispatch_default.c")
+function(r2s_support_lib name core_lib)
+  add_library(${name} STATIC support/bytes.c support/fake_port.c support/fake_port_unity.c
+                             support/frames.c support/handwritten.c support/rcobs.c)
+  target_include_directories(${name} PUBLIC support)
+  target_compile_options(${name} PRIVATE ${R2S_WARNINGS})
+  target_link_libraries(${name} PUBLIC unity ${core_lib})
+  # Unity calls setUp and tearDown, so they are linked as an object, not from an archive.
+  target_sources(${name} INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/support/hooks.c")
+  # The default dispatch is linked the same way, as an object in every test
+  # binary: an archive member would not be extracted for a symbol the core only
+  # names later. The link tests override it with their strong definition.
+  target_sources(${name} INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/support/dispatch_default.c")
+endfunction()
+
+r2s_support_lib(r2s_test_support r2s_core)
+
+# The transcript firmware announces a 1 MHz tick without logging, while the
+# host test build runs at 1 kHz with logging. The replay compiles the core
+# again with the transcript's values, so its HELLO matches byte for byte. The
+# -U drops the directory-wide R2S_WITH_LOG after its -D, which CMake emits
+# first; both spellings are POSIX compiler options.
+file(GLOB_RECURSE R2S_SESSION_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../src/*.c")
+add_library(r2s_core_session STATIC ${R2S_SESSION_SOURCES})
+target_include_directories(r2s_core_session PUBLIC ../include)
+target_compile_options(r2s_core_session PRIVATE ${R2S_WARNINGS})
+target_compile_definitions(r2s_core_session PRIVATE R2S_TICK_HZ=1000000)
+target_compile_options(r2s_core_session PRIVATE -U R2S_WITH_LOG)
+r2s_support_lib(r2s_session_support r2s_core_session)
 
 # The handwritten publish wrappers and dispatch, with the handler their tests
 # provide: only the link tests need them, so they stay out of the shared
@@ -169,8 +186,34 @@ r2s_vector_test(vectors_frames frames vectors/frames_check.c ${frames_vectors})
 file(GLOB messages_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/messages/*.yaml")
 r2s_vector_test(vectors_messages messages vectors/messages_check.c ${messages_vectors})
 
-file(GLOB session_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/session/*.yaml")
-r2s_vector_test(vectors_session session vectors/session_check.c ${session_vectors})
+# The replay runs the transcripts the conforming session passes byte for
+# byte. The rest wait for their follow-ups: loss and reset need harness
+# reenactment, and the disputed steps need a vector decision. The replay
+# links the session build above, whose tick the transcripts pin, so it cannot
+# use the shared support library and registers by hand.
+set(R2S_SESSION_REPLAY_NAMES boot_wait_expiry empty_topics pub_sub_handshake)
+set(R2S_SESSION_REPLAY_FILES)
+set(R2S_SESSION_REPLAY_PATHS)
+foreach(name ${R2S_SESSION_REPLAY_NAMES})
+  set(path "${R2S_REPO_ROOT}/spec/vectors/session/${name}.yaml")
+  file(RELATIVE_PATH rel "${R2S_REPO_ROOT}" "${path}")
+  list(APPEND R2S_SESSION_REPLAY_FILES "${rel}")
+  list(APPEND R2S_SESSION_REPLAY_PATHS "${path}")
+endforeach()
+set(session_runner "${CMAKE_CURRENT_BINARY_DIR}/vectors_session_runner.c")
+add_custom_command(
+  OUTPUT "${session_runner}"
+  COMMAND Python3::Interpreter "${R2S_RUNNER_TOOL}" vectors session
+          "${CMAKE_CURRENT_SOURCE_DIR}/vectors/session_check.c" "${session_runner}"
+          ${R2S_SESSION_REPLAY_FILES}
+  WORKING_DIRECTORY "${R2S_REPO_ROOT}"
+  DEPENDS ${R2S_SESSION_REPLAY_PATHS} "${R2S_RUNNER_TOOL}"
+  VERBATIM)
+add_executable(vectors_session vectors/session_check.c "${session_runner}")
+target_compile_options(vectors_session PRIVATE ${R2S_TEST_WARNINGS})
+target_compile_definitions(vectors_session PRIVATE R2S_TICK_HZ=1000000)
+target_link_libraries(vectors_session PRIVATE r2s_session_support)
+add_test(NAME vectors_session COMMAND vectors_session)
 
 # Vector kinds the C runner does not read yet, each with the ticket that adds
 # it. A kind with files that is in neither list would be silently skipped, so
