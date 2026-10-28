@@ -83,6 +83,27 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(values.at("time sync drift"), "not available");
     EXPECT_EQ(values.at("time sync round trip"), "not available");
 }
+TEST(DiagnosticsMessage, ReportsPerTopicStatus)
+{
+    Router::Diagnostics snapshot;
+    snapshot.link_state = "connected";
+    Router::TopicDiagnostics served;
+    served.topic_id = 16u;
+    served.topic_name = "battery";
+    served.device_to_host = true;
+    served.status = 0u;
+    snapshot.topics.push_back(served);
+    Router::TopicDiagnostics refused;
+    refused.topic_id = 17u;
+    refused.topic_name = "dup";
+    refused.device_to_host = false;
+    refused.status = 3u;
+    snapshot.topics.push_back(refused);
+    const std::map<std::string, std::string> values =
+        values_of(diagnostics_message(snapshot, "test_node", "").status[0]);
+    EXPECT_EQ(values.at("topic battery status"), "ok");
+    EXPECT_EQ(values.at("topic dup status"), "name conflict");
+}
 
 TEST(DiagnosticsMessage, MapsLinkStateToLevel)
 {

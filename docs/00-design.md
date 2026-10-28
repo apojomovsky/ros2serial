@@ -950,7 +950,7 @@ by `launch/r2s_bridge.launch.py` with `port` and `params_file` arguments.
 
 ### Published by the bridge
 
-- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, sequence gaps per topic, time sync offset, drift and round trip.
+- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, sequence gaps and the host's verdict per topic, time sync offset, drift and round trip.
 - The MCU's topics, under the names it announced, after remapping and namespacing.
 - MCU log messages through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`.
 
