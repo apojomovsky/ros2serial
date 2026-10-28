@@ -25,9 +25,9 @@ def test_the_arduino_zip_stages_the_bundle_and_the_core(tmp_path):
         "ros2serial/src/r2s_bundled.h",
         "ros2serial/src/r2s_bundled.c",
         "ros2serial/src/r2s/r2s_codec.h",
+        "ros2serial/src/session.c",
     ):
         assert name in names, name
-    assert [name for name in names if name.startswith("ros2serial/src/") and name.endswith(".c")]
     assert not [name for name in names if name.endswith("test_reset.c")]
     assert sorted(out.glob("r2s_gen-*.tar.gz")) and sorted(out.glob("r2s_gen-*.whl"))
 
