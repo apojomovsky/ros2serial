@@ -21,7 +21,12 @@ its marker with the reason after a colon:
 
 A marker without a ticket number is an error, and so is a marker above no
 fence. A line that only mentions a marker in passing is not one. The run
-prints every skipped snippet, with its ticket and reason when it has them, so none is forgotten. C and C++ snippets compile with -I core/include, -I cpp/include and the staged generated-header fixtures (the golden generator output as r2s_generated.h, the bundle sketch header as ros2serial.h), so snippets using today's real headers compile instead of being skipped.
+prints every skipped snippet, with its ticket and reason when it has them,
+so none is forgotten. C and C++ snippets compile with -I core/include,
+-I cpp/include, and the staged generated-header fixtures (the golden
+generator output as r2s_generated.h, the bundle sketch header as
+ros2serial.h), so snippets using today's real headers compile instead of
+being skipped.
 """
 
 import argparse
