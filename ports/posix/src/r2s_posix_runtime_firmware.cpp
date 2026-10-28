@@ -3,8 +3,8 @@
  * runs, so the end-to-end suite drives the runtime registration path as a
  * process on a pty. The command line mirrors the C firmware's, and the
  * topics register in the same order with IDs from 16, so a dropped topic
- * is never registered and later topics shift up. The IDs are session-local,
- * so the announce stays consistent either way. */
+ * is never registered and later topics shift up. The IDs live only in one
+ * announce, so either numbering is consistent on the wire. */
 
 #include <cerrno>
 #include <cstdio>
