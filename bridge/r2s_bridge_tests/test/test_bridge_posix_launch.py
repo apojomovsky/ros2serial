@@ -2,10 +2,11 @@
 
 Builds the posix firmware, joins it to the bridge with two ptys tied by a
 relay thread, then drives the bridge through its own launch file: the
-handshake must announce the firmware topics, and Float32 traffic must flow
-from the MCU to the host.
+handshake must announce the firmware topics, the params file must set the
+publisher depth, and Float32 traffic must flow from the MCU to the host.
 """
 
+import importlib.util
 import math
 import os
 import pty
@@ -21,11 +22,34 @@ import launch
 import launch_testing.actions
 import launch_testing.markers
 import rclpy
+import yaml
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchContext
 from launch.actions import ExecuteProcess, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.substitutions import FindPackageShare
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32
+
+DOCUMENTED_PARAMETERS = frozenset(
+    [
+        "port",
+        "baud",
+        "low_latency",
+        "hupcl",
+        "boot_wait_ms",
+        "node_map",
+        "reconnect_period_ms",
+        "heartbeat_period_ms",
+        "link_timeout_ms",
+        "time_sync.enabled",
+        "time_sync.period_ms",
+        "rate_limit.default_hz",
+        "rate_limit.overrides",
+        "tx_budget_pct",
+        "qos_depth",
+    ]
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 HANDSHAKE_TIMEOUT = 20.0
@@ -33,6 +57,7 @@ FLOW_TIMEOUT = 20.0
 
 _SCRATCH = None
 _FIRMWARE = None
+_PARAMS = None
 _RELAY = None
 
 
@@ -112,11 +137,48 @@ def build_posix_firmware(scratch):
 _BOOT_ENV = "R2S_POSIX_BOOT_ID_FILE"
 
 
+def _example_params():
+    path = Path(get_package_share_directory("r2s_bridge")) / "config" / "r2s_bridge.params.yaml"
+    with open(path) as handle:
+        return yaml.safe_load(handle)["r2s_bridge"]["ros__parameters"]
+
+
+def _flatten(mapping, prefix=""):
+    names = []
+    for key, value in mapping.items():
+        name = prefix + key
+        if isinstance(value, dict):
+            names.extend(_flatten(value, name + "."))
+        else:
+            names.append(name)
+    return names
+
+
+def _scratch_params(scratch):
+    """Copy the installed example file to scratch with a non-default QoS
+    depth, so the launch proves the params file reaches the bridge."""
+    source = Path(get_package_share_directory("r2s_bridge")) / "config" / "r2s_bridge.params.yaml"
+    text = source.read_text()
+    assert text.count("qos_depth: 10") == 1
+    target = scratch / "r2s_bridge.params.yaml"
+    target.write_text(text.replace("qos_depth: 10", "qos_depth: 7"))
+    return target
+
+
+def _load_launch_module():
+    path = Path(get_package_share_directory("r2s_bridge")) / "launch" / "r2s_bridge.launch.py"
+    spec = importlib.util.spec_from_file_location("r2s_bridge_launch", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _prepare():
-    global _SCRATCH, _FIRMWARE, _RELAY
+    global _SCRATCH, _FIRMWARE, _RELAY, _PARAMS
     _SCRATCH = tempfile.TemporaryDirectory(prefix="r2s-h9-")
     scratch = Path(_SCRATCH.name)
     _FIRMWARE = build_posix_firmware(scratch)
+    _PARAMS = _scratch_params(scratch)
     _RELAY = PtyRelay()
     _RELAY.start()
 
@@ -126,7 +188,7 @@ def generate_test_description():
     _prepare()
     bridge = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([FindPackageShare("r2s_bridge"), "/launch/r2s_bridge.launch.py"]),
-        launch_arguments={"port": _RELAY.host_port}.items(),
+        launch_arguments={"port": _RELAY.host_port, "params_file": str(_PARAMS)}.items(),
     )
     firmware = ExecuteProcess(
         cmd=[str(_FIRMWARE), _RELAY.mcu_port, "--rate", "20"],
@@ -165,6 +227,21 @@ class TestBridgePosixLaunch(unittest.TestCase):
         finally:
             node.destroy_node()
 
+    def test_params_file_sets_qos_depth(self):
+        # The scratch params file copies the example with qos_depth 7, so a
+        # depth of 7 on the announced publisher proves the file was applied.
+        node = rclpy.create_node("h9_qos_probe")
+        try:
+            deadline = time.monotonic() + HANDSHAKE_TIMEOUT
+            while True:
+                infos = node.get_publishers_info_by_topic("/battery")
+                if infos and infos[0].qos_profile.depth == 7:
+                    return
+                self.assertLess(time.monotonic(), deadline, "bridge ignored qos_depth from the params file")
+                time.sleep(0.2)
+        finally:
+            node.destroy_node()
+
     def test_mcu_to_host_float_flow(self):
         node = rclpy.create_node("h9_flow_probe")
         received = []
@@ -182,3 +259,34 @@ class TestBridgePosixLaunch(unittest.TestCase):
             self.assertTrue(ordered, "battery values arrived out of order")
         finally:
             node.destroy_node()
+
+
+class TestLaunchFileChecks(unittest.TestCase):
+    def test_default_params_file_is_installed(self):
+        prefix = FindPackageShare("r2s_bridge").perform(LaunchContext())
+        params = Path(prefix) / "config" / "r2s_bridge.params.yaml"
+        self.assertTrue(params.is_file(), "example params file missing from the install: " + str(params))
+
+    def test_example_names_the_documented_parameters(self):
+        # An empty list carries no YAML type the parameter parser accepts, so
+        # the example keeps rate_limit.overrides commented out.
+        found = set(_flatten(_example_params()))
+        self.assertEqual(found - DOCUMENTED_PARAMETERS, set())
+        self.assertEqual(DOCUMENTED_PARAMETERS - found, {"rate_limit.overrides"})
+
+    def test_overrides_example_uncomments_cleanly(self):
+        path = Path(get_package_share_directory("r2s_bridge")) / "config" / "r2s_bridge.params.yaml"
+        lines = path.read_text().splitlines()
+        commented = [line for line in lines if line.strip() == '# overrides: ["cmd_vel=20"]']
+        self.assertEqual(len(commented), 1, "overrides example line missing or duplicated")
+        idx = lines.index(commented[0])
+        fixed = lines[:idx] + [commented[0].replace("# ", "", 1)] + lines[idx + 1 :]
+        doc = yaml.safe_load("\n".join(fixed))
+        self.assertEqual(doc["r2s_bridge"]["ros__parameters"]["rate_limit"]["overrides"], ["cmd_vel=20"])
+
+    def test_missing_params_file_fails_fast(self):
+        module = _load_launch_module()
+        context = LaunchContext()
+        context.launch_configurations["params_file"] = "/nonexistent/r2s.params.yaml"
+        with self.assertRaisesRegex(RuntimeError, "not a file"):
+            module.check_params_file(context)

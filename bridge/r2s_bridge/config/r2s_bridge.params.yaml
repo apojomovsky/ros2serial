@@ -18,6 +18,8 @@ r2s_bridge:
       period_ms: 5000
     rate_limit:
       default_hz: 0.0
-      # Per-topic caps naming the announced topic: overrides: ["cmd_vel=20"]
+      # Per-topic caps naming the announced topic. To pace one topic, delete
+      # the leading "# " below.
+      # overrides: ["cmd_vel=20"]
     tx_budget_pct: 50
     qos_depth: 10
