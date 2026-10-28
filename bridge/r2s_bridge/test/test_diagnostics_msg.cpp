@@ -31,6 +31,7 @@ Router::Diagnostics connected_snapshot()
     snapshot.link_state = "connected";
     snapshot.session_token = 1u;
     snapshot.resets = 2u;
+    snapshot.control_coalesced = 6u;
     snapshot.protocol_version = 2u;
     snapshot.mcu_counters.rx_frames = 10u;
     snapshot.mcu_counters.crc_errors = 2u;
@@ -77,6 +78,7 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(values.at("topic cmd_vel direction"), "host to device");
     EXPECT_EQ(values.at("topic cmd_vel seq gaps"), "0");
     EXPECT_EQ(values.at("topic cmd_vel dropped"), "5");
+    EXPECT_EQ(values.at("control coalesced"), "6");
     EXPECT_EQ(values.at("time sync offset"), "not available");
     EXPECT_EQ(values.at("time sync drift"), "not available");
     EXPECT_EQ(values.at("time sync round trip"), "not available");

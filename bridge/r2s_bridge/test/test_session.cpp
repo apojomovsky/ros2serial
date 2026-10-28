@@ -2,7 +2,7 @@
 // deadlines, retries and reset rules that a transcript cannot pin to a
 // millisecond. Time is the manual clock's alone.
 // covers: SES-12, SES-13, SES-14, SES-15, SES-16, SES-17, SES-18, SES-19, SES-20, SES-21, CTL-3, CTL-9
-// covers: CTL-13, SES-32
+// covers: CTL-13, SES-32, SES-33
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -230,6 +230,18 @@ class Fixture
         }
         transport_.discard_writes();
         return units_of(all);
+    }
+
+    // Caps the link so every write blocks, or opens it again. Pending frames
+    // stay queued while blocked, which is how the tests wedge the link.
+    void block_writes()
+    {
+        transport_.limit_write(0u);
+    }
+
+    void allow_writes()
+    {
+        transport_.limit_write(1000000u);
     }
 
     Session &session()
@@ -992,6 +1004,182 @@ TEST(SessionSend, RefusesFramesPastTheMcuCapacity)
     transport.limit_write(1000000u);
     session.poll();
     EXPECT_TRUE(session.send_user(16u, {0x01})) << "the link takes frames again once it drains";
+}
+
+// A wedged link must not grow the host heap through the control path: while
+// writes block, each control kind keeps one pending frame ([SES-33]).
+TEST(SessionControl, CoalescesHelloReqWhenWritesBlock)
+{
+    Fixture fixture;
+    fixture.block_writes();
+    fixture.advance_to(10000);
+    ASSERT_EQ(fixture.session().state(), SessionState::kHandshaking);
+    fixture.allow_writes();
+    fixture.session().poll();
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 1u) << "sixteen HELLO_REQs collapse into one";
+    EXPECT_EQ(decoded_unit(units[0])[2], 0x01u);
+}
+
+TEST(SessionControl, CoalescesHeartbeatsWhenWritesBlock)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    fixture.drain_units();
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 16u, "x"));
+    fixture.drain_units();
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    fixture.block_writes();
+    // The MCU heartbeats below only keep the link alive; the host answers
+    // with ten of its own, one every 500 ms, all wedged.
+    const std::vector<std::uint8_t> counters(8u, 0u);
+    for (std::uint32_t at = 1000; at <= 5000; at += 1000) {
+        fixture.advance_to(at);
+        fixture.deliver_frame(kHeartbeat, 0u, counters);
+    }
+    fixture.advance_to(5110);
+    fixture.allow_writes();
+    fixture.session().poll();
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 1u) << "ten heartbeats collapse into one";
+    EXPECT_EQ(decoded_unit(units[0])[0], kHeartbeat);
+}
+
+TEST(SessionControl, CoalescesTopicStatusPerTopicWhenWritesBlock)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.block_writes();
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 2u));
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 16u, "a"));
+    // The walk answers every index, even one reusing a topic id: the second
+    // verdict for the id replaces the first instead of queueing behind it.
+    fixture.deliver_frame(kControl, 2u, topic_payload(1u, 16u, "b"));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    fixture.allow_writes();
+    fixture.session().poll();
+    std::size_t ready = 0;
+    std::size_t status16 = 0;
+    for (const auto &unit : fixture.drain_units()) {
+        const std::vector<std::uint8_t> decoded = decoded_unit(unit);
+        if (decoded[0] == kControl && decoded[2] == 0x06u) {
+            ++ready;
+        }
+        if (decoded[0] == kControl && decoded[2] == 0x05u && decoded[3] == 16u) {
+            ++status16;
+        }
+    }
+    EXPECT_EQ(status16, 1u) << "one TOPIC_STATUS per topic id";
+    EXPECT_EQ(ready, 1u) << "READY is one pending frame, not one per verdict";
+}
+
+TEST(SessionControl, CoalescesTopicReqRetriesWhenWritesBlock)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.block_writes();
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    // The first TOPIC_REQ plus three retries, all wedged, all for index 0.
+    fixture.advance_to(710);
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 16u, "x"));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    fixture.allow_writes();
+    fixture.session().poll();
+    std::size_t requests = 0;
+    std::size_t frames = 0;
+    for (const auto &unit : fixture.drain_units()) {
+        ++frames;
+        const std::vector<std::uint8_t> decoded = decoded_unit(unit);
+        if (decoded[0] == kControl && decoded[2] == 0x03u) {
+            ++requests;
+        }
+    }
+    EXPECT_EQ(requests, 1u) << "the retries replace one TOPIC_REQ slot";
+    EXPECT_EQ(frames, 3u) << "the TOPIC_REQ, the TOPIC_STATUS and READY";
+}
+
+TEST(SessionControl, DropsPendingControlOnRehandshake)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    fixture.drain_units();
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 16u, "x"));
+    fixture.drain_units();
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    fixture.block_writes();
+    fixture.advance_to(1010);
+    // A reset while two heartbeats are wedged: the walk that follows must not
+    // carry the old session's heartbeat with it.
+    fixture.deliver_frame(kControl, 2u, hello_payload(0x2000u, 1u));
+    fixture.allow_writes();
+    fixture.session().poll();
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 1u) << "the TOPIC_REQ alone, no stale heartbeat";
+    const std::vector<std::uint8_t> decoded = decoded_unit(units[0]);
+    EXPECT_EQ(decoded[0], kControl);
+    EXPECT_EQ(decoded[2], 0x03u);
+}
+
+// The ticket's acceptance: 300 s of wedged session time with heartbeats and
+// re-handshakes stays within a constant bound instead of growing steadily.
+TEST(SessionControl, BoundsPendingControlOverALongBlockedStretch)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.block_writes();
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 2u));
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 16u, "a"));
+    fixture.deliver_frame(kControl, 2u, topic_payload(1u, 17u, "b"));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    const std::vector<std::uint8_t> counters(8u, 0u);
+    std::uint8_t seq = 0;
+    for (std::uint32_t at = 1010; at <= 311010; at += 1000) {
+        fixture.advance_to(at);
+        fixture.deliver_frame(kHeartbeat, seq++, counters);
+        if ((at - 1010u) % 30000u == 0u) {
+            fixture.deliver_frame(kControl, seq++, hello_payload(0x2000u, 2u));
+            fixture.deliver_frame(kControl, seq++, topic_payload(0u, 16u, "a"));
+            fixture.deliver_frame(kControl, seq++, topic_payload(1u, 17u, "b"));
+        }
+    }
+    EXPECT_LE(fixture.session().pending_bytes(), 128u);
+    fixture.allow_writes();
+    fixture.session().poll();
+    std::size_t bytes = 0;
+    for (const auto &unit : fixture.drain_units()) {
+        bytes += unit.size();
+    }
+    // One slot per singleton plus one TOPIC_STATUS per topic id is below 64
+    // bytes for two topics; 128 leaves margin without hiding growth.
+    EXPECT_LE(bytes, 128u) << "pending control stays bounded on a wedged link";
+}
+
+TEST(SessionControl, CountsReplacedControlFrames)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    fixture.drain_units();
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 16u, "x"));
+    fixture.drain_units();
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    EXPECT_EQ(fixture.session().control_coalesced(), 0u);
+    fixture.block_writes();
+    const std::vector<std::uint8_t> counters(8u, 0u);
+    for (std::uint32_t at = 1000; at <= 5000; at += 1000) {
+        fixture.advance_to(at);
+        fixture.deliver_frame(kHeartbeat, 0u, counters);
+    }
+    fixture.advance_to(5110);
+    EXPECT_EQ(fixture.session().control_coalesced(), 9u) << "nine of ten heartbeats replaced one slot";
+    EXPECT_LE(fixture.session().pending_bytes(), 16u) << "one heartbeat frame stays queued";
+    fixture.allow_writes();
+    fixture.session().poll();
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 1u);
+    EXPECT_EQ(decoded_unit(units[0])[1], 0u) << "the replacement keeps the slot seq for [FRM-5]";
 }
 
 } // namespace
