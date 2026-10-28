@@ -227,7 +227,7 @@ set(R2S_SESSION_DIVERGENT_NAMES
   topic_retry
   topic_retry_exhausted
   version_mismatch)
-file(GLOB R2S_SESSION_ALL_PATHS "${R2S_REPO_ROOT}/spec/vectors/session/*.yaml")
+file(GLOB R2S_SESSION_ALL_PATHS CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/session/*.yaml")
 foreach(path ${R2S_SESSION_ALL_PATHS})
   get_filename_component(stem "${path}" NAME_WE)
   if(NOT stem IN_LIST R2S_SESSION_REPLAY_NAMES AND NOT stem IN_LIST R2S_SESSION_DIVERGENT_NAMES)
