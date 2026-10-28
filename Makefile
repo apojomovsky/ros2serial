@@ -52,10 +52,10 @@ exec: guard-main-clone cache-dir ## One-off command inside the image: make exec 
 	@$(call in_image,bash -c '$(CMD)')
 
 test: guard-main-clone cache-dir ## Run scripts/ci-test.sh, the exact suite CI runs (scope: LINT=1 SCRIPTS=1 COMMITS=1 ...)
-	@bash scripts/e2e-lease.sh $(call in_image,bash scripts/ci-test.sh)
+	@$(call in_image,bash scripts/ci-test.sh)
 
 ci-local: guard-main-clone cache-dir image ## The exact CI run, unscoped, in the ci image
-	@bash scripts/e2e-lease.sh $(DOCKER_BASE) $(IMAGE) bash scripts/ci-test.sh
+	@$(DOCKER_BASE) $(IMAGE) bash scripts/ci-test.sh
 
 compile: ## Build an example firmware and print flash, RAM and stack
 	@$(call pending,compile,G10 and V4 in docs/00-design.md)

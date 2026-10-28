@@ -2,7 +2,7 @@
 # Lease one e2e isolation slot for the wrapped command: a DDS domain and a
 # Zenoh router port no other local suite holds. The slot lock is held on an
 # open file descriptor, so the lease dies with the command however it exits.
-# It sits on fd 8: the build lock and the suite lock both use fd 9.
+# It sits on fd 8: with-build-lock.sh and ci-test.sh both use fd 9.
 # An explicit R2S_E2E_DOMAIN_ID skips allocation; without one, slot 0 maps
 # to the domain and port a lone run always used, so CI behaves as before.
 # Usage: e2e-lease.sh <command> [args...]

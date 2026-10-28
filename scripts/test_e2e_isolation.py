@@ -2,8 +2,8 @@
 
 Each run.sh leases its own DDS domain and zenoh port, so the two suites
 never see each other's topics even though they share the tree and the
-Narrowed to Fast DDS and Zenoh, one leg per mechanism; the RMW matrix
-covers each leg alone, and this test covers the overlap.
+build directory. Narrowed to Fast DDS and Zenoh, one leg per mechanism;
+the RMW matrix covers each leg alone, and this test covers the overlap.
 """
 
 import os
