@@ -1,8 +1,8 @@
 """Bundled hashes equal the installed type support's, on this distro.
 
 The bridge job runs this file in every supported distro container, so a
-snapshot that drifts from a released distro fails there. Skips without a ROS
-install, so the plain generator scope stays ROS-free.
+snapshot that drifts from a released distro fails there. Skips only when no
+supported distro can be told; a named distro with missing descriptions fails.
 """
 
 from __future__ import annotations
