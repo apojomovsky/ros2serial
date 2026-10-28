@@ -135,33 +135,58 @@ def _checks(message: ResolvedMessage) -> list[str]:
 
 
 def _field(field: ResolvedField) -> list[str]:
+    if not field.is_sequence:
+        return field_members(field, _c_name)
+    lines = [f"{INDENT}struct {{"]
+    lines.extend(sequence_members(field, _c_name))
+    lines.append(f"{INDENT}}} {field.name};")
+    return lines
+
+
+def field_members(field: ResolvedField, spell) -> list[str]:
+    """The member declarations of a scalar or a fixed array, indented.
+
+    The C and the C++ emission share it, so both hold the same members in the
+    same order with the same storage, and the codec's offsets hold for both.
+    `spell` names a message type in the target language.
+    """
     string = field.type_name == "string"
-    elements = _element(field)
+    elements = element_type(field, spell)
     if not field.is_array:
         if string:
             return [f"{INDENT}char {field.name}[{field.string_bound + 1}];"]
         return [f"{INDENT}{elements} {field.name};"]
     count = field.array_bound
-    if not field.is_sequence:
-        if string:
-            return [f"{INDENT}char {field.name}[{count}][{field.string_bound + 1}];"]
-        return [f"{INDENT}{elements} {field.name}[{count}];"]
-    lines = [f"{INDENT}struct {{"]
     if string:
-        lines.append(f"{INDENT * 2}char data[{count}][{field.string_bound + 1}];")
+        return [f"{INDENT}char {field.name}[{count}][{field.string_bound + 1}];"]
+    return [f"{INDENT}{elements} {field.name}[{count}];"]
+
+
+def sequence_members(field: ResolvedField, spell) -> list[str]:
+    """The members of a bounded array's struct: the elements and the count."""
+    if field.type_name == "string":
+        data = f"char data[{field.array_bound}][{field.string_bound + 1}];"
     else:
-        lines.append(f"{INDENT * 2}{elements} data[{count}];")
-    lines.append(f"{INDENT * 2}{'uint8_t' if count <= 255 else 'uint16_t'} size;")
-    lines.append(f"{INDENT}}} {field.name};")
-    return lines
+        data = f"{element_type(field, spell)} data[{field.array_bound}];"
+    return [f"{INDENT * 2}{data}", f"{INDENT * 2}{count_type(field.array_bound)} size;"]
 
 
-def _element(field: ResolvedField) -> str:
+def count_type(count: int) -> str:
+    """The type of a bounded array's count member: one byte up to 255, two above."""
+    return "uint8_t" if count <= 255 else "uint16_t"
+
+
+def element_type(field: ResolvedField, spell) -> str:
+    """The type of a field's element, a message type spelled by `spell`."""
     if field.type_name == "string":
         return f"char[{field.string_bound + 1}]"
     if field.type_name in _SCALARS:
         return _SCALARS[field.type_name]
-    return _c_name(field.type_name)
+    return spell(field.type_name)
+
+
+def _element(field: ResolvedField) -> str:
+    return element_type(field, _c_name)
 
 
 def _c_name(type_name: str) -> str:

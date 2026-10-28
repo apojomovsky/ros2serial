@@ -58,6 +58,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 | Sync loss detection, reconnection, MCU reset detection | P0 | rCOBS resync, heartbeat, host-assigned session token |
 | Logging to the host (`/rosout`) | P0 | Non-variadic, per-type API; flash strings |
 | Time synchronization (`now()` on the MCU) | P0 | Host-side estimation; see Time |
+| C++ API, runtime registration with ROS 2 names | P0 | Objects declared at file scope; gcc-class targets; see User API |
 | C++ API, static topics | P0 | Topics from the X-macro list or `r2s.yaml`; see User API |
 | C++ API, rosserial-compatible runtime registration | P0 (Phase 2) | gcc-class targets; see User API |
 | Parameters | P1 | Declared by the MCU, exposed as ROS 2 parameters of the bridge node |
@@ -92,7 +93,7 @@ The PIC16 constraints are real but should only cost something where PIC actually
 
 | | Portable core | Comfortable layer |
 | --- | --- | --- |
-| What | Framing, CRC, session, time, log, codec interpreter, C API, static topic table | C++ API, rosserial-compatible runtime registration |
+| What | Framing, CRC, session, time, log, codec interpreter, C API, static topic table | C++ API, runtime registration with ROS 2 names, rosserial-compatible runtime registration |
 | Language | C99 | The epic-cc C++ subset (see User API) |
 | Rules | No function pointers, no recursion, no malloc, no VLAs, no 64-bit C types, no float arithmetic, bounded loops and nesting, buffers that fit one RAM bank on PIC | Templates, namespaces, classes; stored callbacks allowed on gcc-class targets only; no exceptions, RTTI, heap, multiple inheritance or virtuals |
 | Compiled by | Every target | AVR, 32-bit gcc targets; static C++ path also on epic-cc |
@@ -111,7 +112,34 @@ PIC-enabling rules that apply from day one, even though PIC work comes last:
 
 There are three ways to declare topics. All three produce the same wire behavior and run the same conformance and end-to-end tests.
 
-**1. `r2s.yaml` and the generator** (custom messages, bare metal, CMake, PlatformIO, PIC):
+**1. Runtime registration, ROS 2 names** (every gcc-class target, which covers every Arduino board). The sketch declares its topics as objects, and the firmware registers them while it runs:
+
+```cpp
+#include <ros2serial.h>
+#include <std_msgs/msg/float32.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+
+void on_cmd_vel(const geometry_msgs::msg::Twist &msg) { (void)msg; }
+
+r2s::Node node("base_controller");
+r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
+r2s::Subscription<geometry_msgs::msg::Twist> cmd_vel_sub(node, "cmd_vel", on_cmd_vel);
+```
+
+The topics live in a RAM table the runtime layer fills, and registration closes at the first spin: a later registration is an error the node reports, never a silent re-handshake. The core calls one C hook for the dispatch, which the C++ layer implements with a stored callback, so the core itself keeps no function pointer (see User API).
+
+**2. An X-macro list in the sketch** (Arduino, no Python involved). The Arduino library ships descriptors for a bundle of common types (`std_msgs`, `geometry_msgs`, `sensor_msgs`) with documented default bounds:
+
+```c
+#define R2S_NODE_NAME "base_controller"
+#define R2S_TOPICS(X) \
+  X(PUB, battery, std_msgs, Float32) \
+  X(SUB, cmd_vel, geometry_msgs, Twist)
+#include <ros2serial.h>
+```
+
+The header expands the list into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator. The header counts the rows itself, so an empty list fails the build with the generator's message instead of emitting an empty table.
+**3. `r2s.yaml` and the generator** (custom messages, bare metal, CMake, PlatformIO, PIC):
 
 ```yaml
 # r2s.yaml
@@ -133,21 +161,7 @@ bounds:
   sensor_msgs/msg/JointState.position: 4
 ```
 
-**2. An X-macro list in the sketch** (Arduino, no Python involved). The Arduino library ships descriptors for a bundle of common types (`std_msgs`, `geometry_msgs`, `sensor_msgs`) with documented default bounds:
-
-```c
-#define R2S_NODE_NAME "base_controller"
-#define R2S_TOPICS(X) \
-  X(PUB, battery, std_msgs, Float32) \
-  X(SUB, cmd_vel, geometry_msgs, Twist)
-#include <ros2serial.h>
-```
-
-The header expands the list into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator. The header counts the rows itself, so an empty list fails the build with the generator's message instead of emitting an empty table.
-
-**3. Runtime registration, rosserial style** (gcc-class targets only, see User API). Topics are registered while `setup()` runs and live in a RAM table. Registration closes at the first spin; a later registration is an error, never a silent re-handshake.
-
-Whatever the source, the core reads topics through three accessors (`r2s_topic_count()`, `r2s_topic_get()`, `r2s_topic_copy()`), backed either by a constant table in flash (ways 1 and 2) or by the RAM table (way 3). The firmware binds one or the other at configure time, through `r2s_session_configure()` or `r2s_session_configure_ram()`: flash and RAM addresses overlap on AVR, so the readers cannot tell a flash table from a RAM table and the caller names its home. The copy reads each flash entry byte through `R2S_FLASH_READ_BYTE`, where a direct dereference would fetch the wrong bytes; the table's name strings stay in RAM. No function pointers are involved in the core.
+Whatever the source, the core reads topics through three accessors (`r2s_topic_count()`, `r2s_topic_get()`, `r2s_topic_copy()`), backed either by a constant table in flash (ways 2 and 3) or by the RAM table (way 1). The firmware binds one or the other at configure time, through `r2s_session_configure()` or `r2s_session_configure_ram()`: flash and RAM addresses overlap on AVR, so the readers cannot tell a flash table from a RAM table and the caller names its home. The copy reads each flash entry byte through `R2S_FLASH_READ_BYTE`, where a direct dereference would fetch the wrong bytes; the table's name strings stay in RAM. No function pointers are involved in the core.
 
 From the topic list the static paths emit:
 
@@ -159,7 +173,7 @@ From the topic list the static paths emit:
 
 User topic IDs run from 16 in configuration order. The flags carry direction, narrow, keep-latest and reliable, with the narrow bit forced on builds whose C `double` is 32 bits. The frame limit covers the largest user payload plus the HELLO and TOPIC announcements, and a smaller `limits.max_frame` override is a generator error. A topic name maps onto C by replacing `/` with `_`, and two names with the same mapping are a generator error.
 
-Topic names still live in the firmware, in flash, and the launch file can still remap them (see User API).
+Topic names still live in the firmware, and the launch file can still remap them (see User API).
 
 ## Wire encoding: packed, converted on the host
 
@@ -319,7 +333,38 @@ Logging is non-variadic, one function per value type, and takes flash strings: `
 
 **Compatibility bar: the epic-cc C++ subset.** Classes, constructors and destructors (including for globals), templates, namespaces and operator overloading are allowed. Exceptions, RTTI, the heap, multiple inheritance, virtual functions, the standard library and placement `new` are not. C++11 is the language level (Arduino's default is `gnu++11`). This builds with avr-g++, arm-none-eabi-g++, RISC-V g++, the ESP32 toolchain and epic-cc.
 
-**Static topics (every C++ target, including PIC).** The topic list comes from the X-macro or `r2s.yaml`, and the dispatch `switch` is generated, so every handler call is direct:
+**1. Runtime registration, ROS 2 names** (every gcc-class target, which covers every Arduino board). The sketch declares its topics as objects, at file scope, and the firmware registers them while it runs:
+
+```cpp
+#include <ros2serial.h>
+#include <std_msgs/msg/float32.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+
+/* The board hooks the sketch calls; a real firmware drives the hardware. */
+static void set_motors(double linear, double angular) { (void)linear; (void)angular; }
+static float read_battery(void) { return 0.0f; }
+
+/* The port the node serves; on a board this is Serial. */
+class StubStream
+{
+  public:
+    void begin(unsigned long baud) { (void)baud; }
+};
+StubStream Serial;
+
+r2s::Node node("base_controller");
+r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
+
+void on_cmd_vel(const geometry_msgs::msg::Twist &msg) { set_motors(msg.linear.x, msg.angular.z); }
+r2s::Subscription<geometry_msgs::msg::Twist> cmd_vel_sub(node, "cmd_vel", on_cmd_vel);
+
+std_msgs::msg::Float32 battery;
+
+void setup() { node.begin(Serial, 115200); }
+void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node.spin_some(); }
+```
+
+**2. Static topics** (every C++ target, including PIC). The topic list comes from the X-macro or `r2s.yaml`, and the dispatch `switch` is generated, so every handler call is direct:
 
 <!-- snippet: skip until #94 -->
 ```cpp
@@ -337,7 +382,7 @@ void setup() { r2s::init(); }
 void loop()  { battery.data = read_battery(); r2s::pub::battery.publish(battery); r2s::spin_some(); }
 ```
 
-**rosserial-compatible runtime registration (gcc-class targets, Phase 2).** Existing rosserial sketches port by changing the include:
+**3. rosserial-compatible runtime registration** (gcc-class targets, Phase 2). Existing rosserial sketches port by changing the include:
 
 <!-- snippet: skip until #145 -->
 ```cpp
@@ -356,7 +401,37 @@ void setup() { nh.initNode(); nh.advertise(battery_pub); nh.subscribe(cmd_vel_su
 void loop()  { battery.data = read_battery(); battery_pub.publish(&battery); nh.spinOnce(); }
 ```
 
-The objects fill the RAM topic table (about 8 to 10 bytes per topic). The core calls one C hook for runtime dispatch, which the C++ layer implements with a stored callback, so the core itself stays free of function pointers. Each subscriber holds its own message storage, as in rosserial. `nh.loginfo()` accepts both RAM strings and Arduino `F()` strings. `R2S_WITH_RUNTIME_TOPICS` is on by default for gcc toolchains and off for epic-cc and XC8; using the runtime API there is a compile error that points to the static form. It can be re-enabled on PIC18 by anyone who accepts the cost.
+**The 1-to-1 map.** The runtime API and the static API map line for line. Each runtime declaration has a twin X-macro line with the same words, type, object name, topic string and callback; everything after the declarations is identical. The block below shows both forms side by side, so it is an illustration and not a program:
+
+```text
+// runtime
+r2s::Node node("base_controller");
+r2s::Publisher<std_msgs::msg::Float32>       battery_pub(node, "battery");
+r2s::Subscription<geometry_msgs::msg::Twist> cmd_vel_sub(node, "cmd_vel", on_cmd_vel);
+
+// static
+#define R2S_TOPICS(X) \
+  X(Publisher,    std_msgs::msg::Float32,    battery_pub, "battery") \
+  X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)
+#include <ros2serial.h>
+r2s::Node node("base_controller");
+
+// identical in both
+std_msgs::msg::Float32 battery;
+void on_cmd_vel(const geometry_msgs::msg::Twist &msg) { set_motors(msg.linear.x, msg.angular.z); }
+void setup() { node.begin(Serial, 115200); }
+void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node.spin_some(); }
+```
+
+**Naming rules.** The namespace is `r2s`; the classes are CamelCase (`Node`, `Publisher`, `Subscription`); the methods are snake_case as in rclcpp (`begin`, `publish`, `spin_some`, `connected`, `now`); the messages are `pkg::msg::Type` from `<pkg/msg/type.hpp>`; the objects and the callbacks are named by the user, never by convention.
+
+**What the runtime path costs in RAM.** Every topic the sketch registers takes one entry in the RAM topic table the core announces, so the marginal cost of a topic is the size of that entry: 14 bytes on an ATmega328P, where the entry holds the topic id, the flags, the first eight bytes of the type hash and the two name pointers. Beside the table, the runtime keeps one record per publisher and one per subscriber, 5 bytes each, and each subscriber also holds its own copy of the message, which lives in the sketch's `Subscription` object rather than in a runtime symbol. The table itself is sized for the worst case the build allows, so the total grows with the topic limit while the marginal cost per topic does not.
+
+**What the runtime path announces.** A runtime topic carries direction and narrow only, which the bridge serves best effort: the same announce a static topic without a `qos` line makes. Picking reliable or keep-latest stays with the static paths until the runtime API grows the option.
+
+The figures come from the linked firmware, not from a note: `scripts/build-examples.sh` prints the topic table's size, the per-topic cost, the publisher and subscriber records and the sketch's own objects for every board it builds, and `make test EXAMPLES=1` runs it.
+
+The core calls one C hook for the dispatch, which the C++ layer implements with a stored callback, so the core itself stays free of function pointers. Each subscriber holds its own message storage, as in rosserial. `nh.loginfo()` accepts both RAM strings and Arduino `F()` strings. `R2S_WITH_RUNTIME_TOPICS` is on by default for gcc toolchains and off for epic-cc and XC8; using the runtime API there is a compile error that points to the static form. It can be re-enabled on PIC18 by anyone who accepts the cost.
 
 **Evidence for the split** (probe on Oct 20, 2026, epic-cc master `0a8828e` with a clang 18 front end, compile only, not simulated): a two-subscriber dispatch compiled to the same flash size in plain C and in C++ with template-instantiated direct calls (599 words on PIC18F4550, 594 on PIC16F1938). The same dispatch with stored callbacks cost 72 more words on PIC18F4550 and 159 more on PIC16F1938, growing with every subscriber. Non-virtual C++, including global constructors, already compiled for the PIC16F1938.
 
@@ -558,7 +633,7 @@ ros2serial/
 │   ├── src/                  crc.c, rcobs.c, varint.c, framer.c, tx.c, session.c, time.c, log.c, ring.c, codec.c, topics.c
 │   ├── tests/                Unity unit tests, vector runner, CMakeLists.txt
 │   └── fuzz/                 libFuzzer targets and seed corpora
-├── cpp/                      C++ layer: static API (ros2serial.hpp) and rosserial-compatible API (ros.h)
+├── cpp/                      C++ layer: runtime API (r2s/runtime.hpp) with the per-message headers, the static API (ros2serial.hpp) and the rosserial-compatible API (ros.h)
 ├── gen/                      r2s-gen: Python package (pip) and ament_python package (ROS)
 │   ├── r2s_gen/              cli.py, config.py, msgs.py, hashing.py, descriptors.py, reference/ (Python reference codec), snapshots/, templates/
 │   └── tests/                pytest: unit, golden-file, property-based
@@ -1107,6 +1182,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | V4 | Uno + Mega firmware for the slice; e2e-avr runs scenarios 1 to 4 on both | V1, V3, G10 | Green |
 | V5 | Static C++ API (`ros2serial.hpp`) over the X-macro list and the generator | G11, C13 | Uno and Mega sketches build; scenarios 1 to 4 pass with a C++ firmware |
 | V6 | Arduino example sketches and a manual real-Uno + real-Mega checklist | V4, V5 | Maintainer runs both on hardware, built from the Arduino IDE |
+| V7 | Runtime API with ROS 2 names (`r2s::Node`, `r2s::Publisher<T>`, `r2s::Subscription<T>`) over the RAM topic table | V5, G11 | The target sketch builds for Uno and Mega; scenarios 1 to 4 pass on the runtime path; the runtime firmware announces its topics and answers a Twist in simavr |
 
 ### E6: P0 completion, hardening and rosserial compatibility (Phase 2)
 

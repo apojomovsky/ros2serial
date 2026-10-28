@@ -239,6 +239,34 @@ _FIELD_CHECK_DEFINE = [
 ]
 
 
+def record_lines(table: DescriptorTable) -> list[str]:
+    """One record's five bytes per type, in the layout `r2s_codec_table_t` walks."""
+    lines = []
+    for record in table.records:
+        c_name = _c_name(record.type_name)
+        lines.append(f"    R2S_U16_LO(sizeof({c_name})),")
+        lines.append(f"    R2S_U16_HI(sizeof({c_name})),")
+        lines.append(f"    0x{record.first_field & 0xFF:02x},")
+        lines.append(f"    0x{(record.first_field >> 8) & 0xFF:02x},")
+        lines.append(f"    0x{record.field_count:02x}, /* {record.type_name} */")
+    return lines
+
+
+def entry_lines(table: DescriptorTable) -> list[str]:
+    """One entry's eight bytes per field, in the layout `r2s_codec_table_t` walks."""
+    lines = []
+    for entry in table.entries:
+        lines.append(f"    0x{entry.kind:02x},")
+        lines.append(f"    0x{entry.mode:02x},")
+        lines.append(f"    R2S_U16_LO({entry.offset}),")
+        lines.append(f"    R2S_U16_HI({entry.offset}),")
+        lines.append(f"    0x{entry.count & 0xFF:02x},")
+        lines.append(f"    0x{(entry.count >> 8) & 0xFF:02x},")
+        lines.append(f"    0x{entry.aux & 0xFF:02x},")
+        lines.append(f"    0x{(entry.aux >> 8) & 0xFF:02x}, /* {entry.owner}.{entry.field} */")
+    return lines
+
+
 def emit_c(table: DescriptorTable) -> str:
     """The C file holding the tables: records, entries, counts, the nesting bound and storage checks."""
     lines = [
