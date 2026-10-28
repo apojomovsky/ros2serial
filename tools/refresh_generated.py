@@ -21,6 +21,7 @@ from r2s_gen.bounds import ResolvedMessage  # noqa: E402
 GOLDEN = ROOT / "gen" / "tests" / "golden"
 EXAMPLES = ROOT / "examples"
 POSIX = ROOT / "ports" / "posix"
+CPP = ROOT / "cpp"
 
 HEADER_BOUNDS = {"std_msgs/msg/Header.frame_id": 24}
 TYPES_CASES = [
@@ -94,7 +95,22 @@ def _refresh_topics() -> None:
 
 def _refresh_bundle() -> None:
     for name, text in bundle.bundle().items():
-        (GOLDEN / "bundle" / Path(name).name).write_text(text, encoding="utf-8")
+        if name == "library.properties":
+            (GOLDEN / "bundle" / name).write_text(text, encoding="utf-8")
+        elif name in ("src/ros2serial.h", "src/r2s_bundled.h", "src/r2s_bundled.c"):
+            (GOLDEN / "bundle" / Path(name).name).write_text(text, encoding="utf-8")
+            if name != "src/r2s_bundled.c":
+                (CPP / "include" / Path(name).name).write_text(text, encoding="utf-8")
+        else:
+            (CPP / "include" / Path(name).relative_to("src")).write_text(text, encoding="utf-8")
+
+
+def _refresh_layouts() -> None:
+    config_path = EXAMPLES / "cmake_minimal" / "r2s.yaml"
+    loaded = config.load(config_path)
+    repository, resolved = _resolve(loaded)
+    files = layouts.generate(loaded, resolved, repository, "arduino", source=config_path.name)
+    (GOLDEN / "layouts" / "library.properties").write_text(files["library.properties"], encoding="utf-8")
 
 
 def _refresh_example(name: str, layout: str) -> None:
@@ -117,8 +133,8 @@ def main() -> int:
     _refresh_descriptors()
     _refresh_topics()
     _refresh_bundle()
+    _refresh_layouts()
     _refresh_example("cmake_minimal", "cmake")
-    _refresh_example("arduino_minimal", "arduino")
     _refresh_posix()
     return 0
 

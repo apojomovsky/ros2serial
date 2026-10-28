@@ -70,7 +70,7 @@ vectors: guard-main-clone cache-dir ## Validate every vector file and regenerate
 	@$(call in_image,python3 tools/vectors_check.py)
 	@$(call in_image,python3 tools/fuzz_corpus.py)
 
-regen: cache-dir ## Regenerate every version-stamped generated file (goldens, example libraries, posix sources)
+regen: cache-dir ## Regenerate every version-stamped generated file (goldens, example and cpp libraries, posix sources)
 	@$(call in_image,python3 tools/refresh_generated.py)
 
 docs-gen: ## Regenerate reference docs (CLI, vectors, bridge parameters)

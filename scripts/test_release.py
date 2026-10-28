@@ -14,20 +14,29 @@ STAMPED = [
     "gen/tests/golden/bundle/r2s_bundled.h",
     "gen/tests/golden/bundle/ros2serial.h",
     "gen/tests/golden/descriptors/float32_twist.c",
+    "gen/tests/golden/layouts/library.properties",
     "gen/tests/golden/topics/posix.c",
     "gen/tests/golden/topics/posix.h",
     "gen/tests/golden/types/float32.h",
     "gen/tests/golden/types/header.h",
     "gen/tests/golden/types/joint_state.h",
     "gen/tests/golden/types/twist.h",
-    "examples/arduino_minimal/lib/library.properties",
-    "examples/arduino_minimal/lib/src/r2s_generated.c",
-    "examples/arduino_minimal/lib/src/r2s_generated.h",
     "examples/cmake_minimal/lib/CMakeLists.txt",
     "examples/cmake_minimal/lib/r2s_generated.c",
     "examples/cmake_minimal/lib/r2s_generated.h",
     "ports/posix/src/r2s_generated.c",
     "ports/posix/src/r2s_generated.h",
+    "cpp/include/builtin_interfaces/msg/time.hpp",
+    "cpp/include/geometry_msgs/msg/quaternion.hpp",
+    "cpp/include/geometry_msgs/msg/twist.hpp",
+    "cpp/include/geometry_msgs/msg/vector3.hpp",
+    "cpp/include/r2s_bundled.h",
+    "cpp/include/ros2serial.h",
+    "cpp/include/sensor_msgs/msg/imu.hpp",
+    "cpp/include/sensor_msgs/msg/joint_state.hpp",
+    "cpp/include/std_msgs/msg/float32.hpp",
+    "cpp/include/std_msgs/msg/header.hpp",
+    "cpp/include/std_msgs/msg/string.hpp",
 ]
 
 
@@ -57,12 +66,12 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
     )
     for directory in (
         "gen/tests/golden",
-        "examples/arduino_minimal/lib",
         "examples/cmake_minimal/lib",
         "ports/posix/src",
+        "cpp/include",
     ):
         shutil.copytree(ROOT / directory, repo / directory)
-    for config in ("ports/posix/r2s.yaml", "examples/arduino_minimal/r2s.yaml", "examples/cmake_minimal/r2s.yaml"):
+    for config in ("ports/posix/r2s.yaml", "examples/cmake_minimal/r2s.yaml"):
         target = repo / config
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(ROOT / config, target)
@@ -239,6 +248,7 @@ VERSIONED_TESTS = [
     "gen/tests/test_bundle.py",
     "gen/tests/test_layouts.py",
     "gen/tests/test_posix_generated.py",
+    "gen/tests/test_cpp.py",
 ]
 
 
