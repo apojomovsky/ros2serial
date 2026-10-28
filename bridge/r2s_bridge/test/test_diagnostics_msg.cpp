@@ -77,6 +77,7 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(values.at("topic cmd_vel direction"), "host to device");
     EXPECT_EQ(values.at("topic cmd_vel seq gaps"), "0");
     EXPECT_EQ(values.at("topic cmd_vel dropped"), "5");
+    EXPECT_EQ(values.at("control coalesced"), "0") << "replaced control frames are counted";
     EXPECT_EQ(values.at("time sync offset"), "not available");
     EXPECT_EQ(values.at("time sync drift"), "not available");
     EXPECT_EQ(values.at("time sync round trip"), "not available");
