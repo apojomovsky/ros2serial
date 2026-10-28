@@ -1178,7 +1178,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | V4 | Uno + Mega firmware for the slice; e2e-avr runs scenarios 1 to 4 on both | V1, V3, G10 | Green |
 | V5 | Static C++ API (`ros2serial.hpp`) over the X-macro list and the generator | G11, C13 | Uno and Mega sketches build; scenarios 1 to 4 pass with a C++ firmware |
 | V6 | Arduino example sketches and a manual real-Uno + real-Mega checklist | V4, V5 | Maintainer runs both on hardware, built from the Arduino IDE |
-| V7 | Runtime API with ROS 2 names (`r2s::Node`, `r2s::Publisher<T>`, `r2s::Subscription<T>`) over the RAM topic table | V5, G11 | The target sketch builds for Uno and Mega; the runtime firmware announces its topics and answers a Twist in simavr |
+| V7 | Runtime API with ROS 2 names (`r2s::Node`, `r2s::Publisher<T>`, `r2s::Subscription<T>`) over the RAM topic table | V5, G11 | The target sketch builds for Uno and Mega; scenarios 1 to 4 pass on the runtime path; the runtime firmware announces its topics and answers a Twist in simavr |
 
 ### E6: P0 completion, hardening and rosserial compatibility (Phase 2)
 
