@@ -13,6 +13,10 @@ if [ -z "${AMENT_PREFIX_PATH:-}" ] && [ -f "/opt/ros/$ROS_DISTRO/setup.bash" ]; 
   source "/opt/ros/$ROS_DISTRO/setup.bash"
   set -u
 fi
+build_only=0
+if [ "${1:-}" = --build-only ]; then build_only=1; shift; fi
+[ "$#" -eq 0 ] || { echo "usage: scripts/bridge-test.sh [--build-only]"; exit 2; }
+
 workspace=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/bridge
 mkdir -p "$workspace" || exit 1
 echo "== bridge: $ROS_DISTRO"
@@ -22,6 +26,7 @@ colcon --log-base "$workspace/log" build \
   --build-base "$workspace/build" \
   --install-base "$workspace/install" \
   --event-handlers console_direct+ || exit 1
+[ "$build_only" = 1 ] && exit 0
 
 # shellcheck source=/dev/null
 set +u
