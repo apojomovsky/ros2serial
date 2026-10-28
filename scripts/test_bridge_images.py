@@ -90,6 +90,13 @@ def test_a_distro_pinned_twice_is_refused(tmp_path):
     assert "more than once" in result.stderr
 
 
+def test_a_duplicate_pin_without_a_trailing_newline_is_refused(tmp_path):
+    result = run(tree(tmp_path, PINS + f"ROS_JAZZY_IMAGE={JAZZY}"))
+    assert result.returncode == 1
+    assert "ROS_JAZZY_IMAGE" in result.stderr
+    assert "more than once" in result.stderr
+
+
 def test_a_file_without_pins_is_refused(tmp_path):
     result = run(tree(tmp_path, "PYTHON_VERSION=3.12\n"))
     assert result.returncode == 1
