@@ -9,6 +9,7 @@ from sharing the port's boot counter.
 import os
 import select
 import subprocess
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
