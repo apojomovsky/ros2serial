@@ -290,3 +290,83 @@ def test_marker_above_tolerated_fence_skips_by_tag(tmp_path, capsys):
     assert snippets_check.check_tree(root) == []
     out = capsys.readouterr().out
     assert "skip README.md:4 (text): skipped by tag" in out
+
+
+@needs_gcc
+def test_snippet_sees_generated_header_fixture(tmp_path):
+    root = write_tree(
+        tmp_path,
+        {
+            "gen/tests/golden/topics/posix.h": (
+                "#ifndef R2S_GENERATED_H\n"
+                "#define R2S_GENERATED_H\n"
+                "typedef struct std_msgs__msg__Float32 { float data; } std_msgs__msg__Float32;\n"
+                "int r2s_generated_magic(void);\n"
+                "#endif\n"
+            ),
+            "README.md": (
+                '# T\n\n```c\n#include "r2s_generated.h"\n'
+                "static std_msgs__msg__Float32 battery;\n"
+                "int snippet_main(void) { battery.data = 1.0f; return r2s_generated_magic(); }\n```\n"
+            ),
+        },
+    )
+    assert snippets_check.check_tree(root) == []
+
+
+@needs_gcc
+def test_snippet_sees_bundle_fixture(tmp_path):
+    root = write_tree(
+        tmp_path,
+        {
+            "gen/tests/golden/bundle/ros2serial.h": (
+                "#ifndef ROS2SERIAL_H\n"
+                "#define ROS2SERIAL_H\n"
+                "#ifndef R2S_TOPICS\n"
+                '#error "Define R2S_TOPICS(X) rows before including <ros2serial.h>."\n'
+                "#endif\n"
+                "#define R2S_X_PUB_COUNT(DIR, NAME, PKG, TYPE) + 1\n"
+                "#define R2S_PUB_COUNT (0 R2S_TOPICS(R2S_X_PUB_COUNT))\n"
+                "#endif\n"
+            ),
+            "README.md": (
+                "# T\n\n```c\n#define R2S_TOPICS(X) X(PUB, battery, std_msgs, Float32)\n"
+                "#include <ros2serial.h>\n"
+                "int snippet_main(void) { return R2S_PUB_COUNT - 1; }\n```\n"
+            ),
+        },
+    )
+    assert snippets_check.check_tree(root) == []
+
+
+@needs_gcc
+def test_generated_header_missing_fails(tmp_path):
+    text = '# T\n\n```c\n#include "r2s_generated.h"\nint snippet_main(void) { return 0; }\n```\n'
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "r2s_generated.h" in problems[0]
+
+
+def test_skip_marker_with_reason_skips_and_prints_reason(tmp_path, capsys):
+    text = "# T\n\n<!-- snippet: skip until #75: template placeholders, never literal C -->\n" + C_BROKEN
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
+    out = capsys.readouterr().out
+    assert "#75" in out and "template placeholders" in out
+
+
+def test_skip_marker_reason_printed_for_tag_skipped_fence(tmp_path, capsys):
+    text = "# T\n\n<!-- snippet: skip until #75: template placeholders, never literal C -->\n```text\nhello\n```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
+    out = capsys.readouterr().out
+    assert "skipped by tag" in out and "#75" in out and "template placeholders" in out
+
+
+def test_skip_marker_with_empty_reason_is_an_error(tmp_path):
+    text = "# T\n\n<!-- snippet: skip until #75: -->\n" + C_OK
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "reason is empty" in problems[0]
