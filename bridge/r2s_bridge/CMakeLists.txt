@@ -22,10 +22,12 @@ add_library(r2s_bridge_component SHARED
   src/core_port.cpp
   src/diagnostics.cpp
   src/framing.cpp
+  src/ros_clock.cpp
   src/router.cpp
   src/scheduler.cpp
   src/session.cpp
   src/termios_transport.cpp
+  src/time_sync.cpp
   src/type_support.cpp)
 target_include_directories(r2s_bridge_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
