@@ -24,9 +24,44 @@ uint16_t r2s_port_tx_free(void)
 
 static uint8_t file_bytes[65535];
 
+/* The table's own shape: records chained first to last with no gaps, nested
+ * entries naming an earlier record ([DSC-12]). A shifted record fails here
+ * with the table named, instead of decoding to nothing later. */
+static int check_table(void)
+{
+    uint16_t first = 0u;
+    uint16_t i;
+
+    for (i = 0u; i < FUZZ_CODEC_TYPE_COUNT; i++) {
+        const uint8_t *record = fuzz_types + (uint16_t)(5u * i);
+        uint16_t rec_first = (uint16_t)((uint16_t)record[2] | ((uint16_t)record[3] << 8u));
+        uint8_t count = record[4];
+        uint16_t e;
+
+        if (rec_first != first) {
+            fprintf(stderr, "seed_probe: record %u starts at %u, not %u\n", i, rec_first, first);
+            return 1;
+        }
+        for (e = 0u; e < count; e++) {
+            const uint8_t *entry = fuzz_fields + (uint16_t)(8u * (first + e));
+            uint16_t aux = (uint16_t)((uint16_t)entry[6] | ((uint16_t)entry[7] << 8u));
+
+            if (entry[0] == R2S_CODEC_NEST && aux >= i) {
+                fprintf(stderr, "seed_probe: record %u names later record %u\n", i, aux);
+                return 1;
+            }
+        }
+        first += count;
+    }
+    if (first != 29u) {
+        fprintf(stderr, "seed_probe: %u entries, not 29\n", first);
+        return 1;
+    }
+    return 0;
+}
 int main(int argc, char **argv)
 {
-    int failures = 0;
+    int failures = check_table();
     int i;
 
     if (argc < 2) {
