@@ -465,12 +465,17 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
     except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError):
         return []
     problems = []
+    walked: set[int] = set()
 
     def visit(message, values, trail="", seen=frozenset()) -> None:
         for field in message.fields:
             expected = values[field.name]
             where = f"{trail}{message.type_name}.{field.name}"
             if field.type_name == "float32":
+                if field.is_array:
+                    if id(expected) in walked:
+                        continue
+                    walked.add(id(expected))
                 elements = expected if field.is_array else [expected]
                 for index, element in enumerate(elements):
                     if isinstance(element, dict) or _exact_float32(element):
@@ -479,20 +484,24 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
                     problems.append(f"{name}/message: {where}{position} must be exactly representable in binary32")
             elif field.type_name not in msgs.PRIMITIVES:
                 nested = _MESSAGES.load(field.type_name)
-                if id(expected) in seen:
+                if id(expected) in seen or id(expected) in walked:
                     continue
+                walked.add(id(expected))
                 entering = seen | {id(expected)}
                 if field.is_array:
                     for index, item in enumerate(expected):
-                        if id(item) in entering:
+                        if id(item) in entering or id(item) in walked:
                             continue
+                        walked.add(id(item))
                         visit(nested, item, f"{where}[{index}].", entering | {id(item)})
                 else:
                     visit(nested, expected, f"{where}.", entering)
 
-    # A cyclic YAML alias would revisit one mapping per recursion level until
-    # the stack runs out. Containers already on the path are skipped instead,
-    # so a directly self-referential message cannot flood the output; finite
+    # A branching alias graph would visit one node per simple path through
+    # it, which grows exponentially. Containers already walked anywhere in
+    # this vector are skipped instead, so each alias node reports once at
+    # its first path; containers on the current path are still skipped, so
+    # a directly self-referential message cannot flood the output. Finite
     # data with repeated types is still walked in full. Findings made before
     # any other abort are still worth reporting, next to the encode error
     # check_message adds for the same vector.
