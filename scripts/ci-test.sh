@@ -137,9 +137,9 @@ if wants FUZZ; then scope_now=FUZZ; section fuzz bash scripts/fuzz.sh; fi
 if wants E2E; then scope_now=E2E
   case "${E2E:-}" in
     "") section e2e-avr bash tests/harness/simavr/run.sh
-        section e2e-posix pending "V1" ;;
+        section e2e-posix bash tests/e2e/run.sh ;;
     avr) section e2e-avr bash tests/harness/simavr/run.sh ;;
-    posix) section e2e-posix pending "V1" ;;
+    posix) section e2e-posix bash tests/e2e/run.sh ;;
     *)
       echo "unknown E2E backend '${E2E}': known are posix and avr" >&2
       failed+=("e2e")

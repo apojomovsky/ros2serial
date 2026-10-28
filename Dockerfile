@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential clang clang-format clang-tidy cppcheck cmake ninja-build ccache \
         libclang-rt-18-dev $([ "$(dpkg --print-architecture)" = amd64 ] && echo gcc-multilib g++-multilib) \
         python3-venv python3-pip git curl ca-certificates make \
+        ros-$ROS_DISTRO-rmw-cyclonedds-cpp ros-$ROS_DISTRO-rmw-zenoh-cpp \
     && rm -rf /var/lib/apt/lists/* \
     && test "$(avr-gcc -dumpversion)" = "${AVR_GCC_VERSION}" \
     || { echo "avr-gcc is $(avr-gcc -dumpversion), ci/versions.env pins ${AVR_GCC_VERSION}" >&2; exit 1; }
