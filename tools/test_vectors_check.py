@@ -473,7 +473,7 @@ payload: "00 00 c0 3f cd cc 8c 3f"
     monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
     vectors = make_tree(tmp_path / "vectors", files)
     assert vectors_check.check_tree(vectors) == [
-        "messages/nested.yaml/message: demo_msgs/msg/Inner.pair[1] must be exactly representable in binary32"
+        "messages/nested.yaml/message: demo_msgs/msg/Outer.inner.demo_msgs/msg/Inner.pair[1] must be exactly representable in binary32"
     ]
 
 
@@ -599,7 +599,7 @@ payload: ""
         "messages/flood_list.yaml: cyclic YAML alias",
         "messages/flood_list.yaml/message: demo_msgs/msg/A.data must be exactly representable in binary32",
         "messages/flood_list.yaml/message: the reference does not make it: "
-        "demo_msgs/msg/A.kids: expected a mapping of demo_msgs/msg/A's fields",
+        "demo_msgs/msg/A.kids[0]: expected a mapping of demo_msgs/msg/A's fields",
     ]
 
 
@@ -622,8 +622,8 @@ payload: ""
     monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
     vectors = make_tree(tmp_path / "vectors", files)
     assert vectors_check.check_tree(vectors) == [
-        "messages/twins.yaml/message: demo_msgs/msg/Inner.data must be exactly representable in binary32",
-        "messages/twins.yaml/message: demo_msgs/msg/Inner.data must be exactly representable in binary32",
+        "messages/twins.yaml/message: demo_msgs/msg/Outer.a.demo_msgs/msg/Inner.data must be exactly representable in binary32",
+        "messages/twins.yaml/message: demo_msgs/msg/Outer.b.demo_msgs/msg/Inner.data must be exactly representable in binary32",
         "messages/twins.yaml/message: the reference does not make it: demo_msgs/msg/Outer.c: no value",
     ]
 
@@ -676,9 +676,9 @@ payload: ""
     vectors = make_tree(tmp_path / "vectors", files)
     assert vectors_check.check_tree(vectors) == [
         "messages/repeated.yaml/message: demo_msgs/msg/A.d must be exactly representable in binary32",
-        "messages/repeated.yaml/message: demo_msgs/msg/B.e must be exactly representable in binary32",
-        "messages/repeated.yaml/message: demo_msgs/msg/A.d must be exactly representable in binary32",
-        "messages/repeated.yaml/message: demo_msgs/msg/B.e must be exactly representable in binary32",
+        "messages/repeated.yaml/message: demo_msgs/msg/A.b.demo_msgs/msg/B.e must be exactly representable in binary32",
+        "messages/repeated.yaml/message: demo_msgs/msg/A.b.demo_msgs/msg/B.a.demo_msgs/msg/A.d must be exactly representable in binary32",
+        "messages/repeated.yaml/message: demo_msgs/msg/A.b.demo_msgs/msg/B.a.demo_msgs/msg/A.b.demo_msgs/msg/B.e must be exactly representable in binary32",
         "messages/repeated.yaml/message: the reference does not make it: demo_msgs/msg/B.a: no value",
     ]
 
@@ -706,9 +706,38 @@ payload: "{payload}"
     vectors = make_tree(tmp_path / "vectors", files)
     assert vectors_check.check_tree(vectors) == [
         "messages/nested_plain.yaml/message: "
-        "demo_msgs/msg/Inner.singles[0].demo_msgs/msg/Single.data must be exactly representable in binary32",
+        "demo_msgs/msg/Outer.mid.demo_msgs/msg/Inner.singles[0].demo_msgs/msg/Single.data must be exactly representable in binary32",
         "messages/nested_plain.yaml/message: "
-        "demo_msgs/msg/Inner.singles[1].demo_msgs/msg/Single.data must be exactly representable in binary32",
+        "demo_msgs/msg/Outer.mid.demo_msgs/msg/Inner.singles[1].demo_msgs/msg/Single.data must be exactly representable in binary32",
+    ]
+
+
+def test_plain_nested_twins_name_their_parents(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "S.msg").write_text("float32 d\n", encoding="utf-8")
+    (definitions / "A.msg").write_text("S[] s\n", encoding="utf-8")
+    (definitions / "O.msg").write_text("A x\nA y\n", encoding="utf-8")
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    message = {"x": {"s": [{"d": 1.1}]}, "y": {"s": [{"d": 1.2}]}}
+    payload = messages.encode(repository, "demo_msgs/msg/O", message, narrow=False).hex(" ")
+    files = {
+        "messages/plain_twins.yaml": f"""
+name: plain_twins
+covers: [ENC-3]
+type: demo_msgs/msg/O
+profile: {{narrow_float64: false}}
+message: {{x: {{s: [{{d: 1.1}}]}}, y: {{s: [{{d: 1.2}}]}}}}
+payload: "{payload}"
+"""
+    }
+    vectors = make_tree(tmp_path / "vectors", files)
+    assert vectors_check.check_tree(vectors) == [
+        "messages/plain_twins.yaml/message: "
+        "demo_msgs/msg/O.x.demo_msgs/msg/A.s[0].demo_msgs/msg/S.d must be exactly representable in binary32",
+        "messages/plain_twins.yaml/message: "
+        "demo_msgs/msg/O.y.demo_msgs/msg/A.s[0].demo_msgs/msg/S.d must be exactly representable in binary32",
     ]
 
 
