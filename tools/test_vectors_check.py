@@ -176,6 +176,7 @@ wire: "10 02 01 01 c0 3f 1e 48 05 00"
     }
     problems = vectors_check.check_tree(make_tree(tmp_path, files))
     assert any("not the frame the reference makes" in p for p in problems), problems
+    assert any("not the bytes the reference makes" in p for p in problems), problems
 
 
 def test_a_time_vector_must_carry_what_the_reference_makes(tmp_path):
@@ -205,6 +206,25 @@ cases:
     problems = vectors_check.check_tree(make_tree(tmp_path, files))
     assert len(problems) == 1, problems
     assert problems[0].startswith("time/bad_hz.yaml/cases/0: CTL-9"), problems
+
+
+def test_a_time_vector_with_a_malformed_expect_is_reported_not_raised(tmp_path):
+    files = {
+        "time/bad_expect.yaml": """
+name: bad_expect
+covers: [TIM-6]
+tick_hz: 1000
+cases:
+  - {tick0: 0, sec0: 0, nanosec0: 0, drift_ppm: 0, tick: 0}
+  - {tick0: 0, sec0: 0, nanosec0: 0, drift_ppm: 0, tick: 0, expect: soon}
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    made = "the reference makes sec=0 nanosec=0"
+    assert [p for p in problems if made in p] == [
+        "time/bad_expect.yaml/cases/0/expect: the reference makes sec=0 nanosec=0",
+        "time/bad_expect.yaml/cases/1/expect: the reference makes sec=0 nanosec=0",
+    ], problems
 
 
 def test_a_frame_vector_must_carry_a_payload_the_layout_fits(tmp_path):

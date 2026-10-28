@@ -46,6 +46,11 @@ def test_a_negative_drift_that_crosses_a_second_borrows():
     assert run(sec0=0, tick=1000, drift_ppm=-20000) == (0, 980000000)
 
 
+def test_the_largest_drift_normalizes_before_and_after_it_applies():
+    case = {"tick0": 0, "sec0": 0, "nanosec0": 999999999, "drift_ppm": 20000, "tick": 1999000}
+    assert time.compute(1000000, case) == (3, 38979999)
+
+
 def test_rejections_name_the_rule_that_rejects_them():
     with pytest.raises(Rejected) as tick_hz:
         time.compute(1500, {"tick0": 0, "sec0": 0, "nanosec0": 0, "drift_ppm": 0, "tick": 0})

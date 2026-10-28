@@ -572,9 +572,14 @@ def check_time(name: str, data: dict) -> list[str]:
             problems.append(f"{name}/cases/{i}: {e}")
             continue
         expect = case.get("expect")
-        want = None if expect == "unsynced" else (expect.get("sec"), expect.get("nanosec"))
-        if not isinstance(expect, (str, dict)) or got != want:
-            made = "unsynced" if got is None else f"sec={got[0]} nanosec={got[1]}"
+        made = "unsynced" if got is None else f"sec={got[0]} nanosec={got[1]}"
+        if expect == "unsynced":
+            ok = got is None
+        elif isinstance(expect, dict):
+            ok = got == (expect.get("sec"), expect.get("nanosec"))
+        else:
+            ok = False
+        if not ok:
             problems.append(f"{name}/cases/{i}/expect: the reference makes {made}")
     return problems
 
