@@ -558,6 +558,16 @@ def test_ordered_marker_fence_reports_one_diagnostic(tmp_path):
     assert "never opened a snippet" in problems[0]
 
 
+def test_two_list_marker_fences_report_one_each(tmp_path):
+    # Two broken fences in one file yield one diagnostic per fence.
+    text = "# T\n\n- ```c\n  broken\n  ```\n\n- ```c\n  broken\n  ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 2
+    assert "README.md:3" in problems[0] and "README.md:7" in problems[1]
+    assert all("never opened a snippet" in p for p in problems)
+
+
 def test_plain_literal_block_after_marker_passes(tmp_path):
     # A plain fence is prose, so a closed literal block after a list marker
     # yields no diagnostic at all.

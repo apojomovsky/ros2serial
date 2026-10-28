@@ -302,7 +302,8 @@ def _compile_c(snippet: Snippet, root: Path, workdir: Path) -> str | None:
     src.write_text(snippet.code)
     cmd = [compiler, f"-std={standard}", *warnings, "-fsyntax-only", str(src)]
     # The staged generated-header fixtures live in the workdir, so a snippet
-    # including r2s_generated.h or ros2serial.h finds them there. The core's
+    # including r2s_generated.h, r2s_bundled.h or ros2serial.h finds them
+    # there. The core's
     # headers and the C++ layer's own headers ride on -I, so the runtime
     # API and the message headers resolve too.
     cmd += ["-I", str(workdir)]
