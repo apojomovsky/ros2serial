@@ -5,7 +5,7 @@
 # Builds go under R2S_BUILD_DIR, so the tree stays clean; the suite runs this
 # script for E2E=posix. R2S_RMWS overrides the RMW list for a quicker loop.
 set -uo pipefail
-root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$root" || exit 2
 build=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/e2e/posix
 # One lock for the e2e build directory, held for the entire run: a direct run
