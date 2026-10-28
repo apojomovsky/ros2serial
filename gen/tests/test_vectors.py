@@ -176,6 +176,22 @@ def test_a_cyclic_alias_reports_the_error_without_a_traceback(capsys, tmp_path):
     assert err == "r2s-gen: error: maximum recursion depth exceeded\n"
 
 
+def test_a_cyclic_alias_in_an_array_reports_the_error_without_a_traceback(capsys, tmp_path):
+    write_message(tmp_path / "messages", "demo_msgs/msg/A", "demo_msgs/msg/A[] kids")
+    code, out, err = run(
+        capsys,
+        "--type",
+        "demo_msgs/msg/A",
+        "--message",
+        "&x {kids: [*x]}",
+        "--msg-path",
+        str(tmp_path / "messages"),
+    )
+    assert code == 1
+    assert out == ""
+    assert err == "r2s-gen: error: maximum recursion depth exceeded\n"
+
+
 def test_a_scalar_for_an_array_field_is_an_error(capsys, tmp_path):
     write_message(tmp_path / "messages", "demo_msgs/msg/Items", "uint8[] values")
     code, out, err = run(
