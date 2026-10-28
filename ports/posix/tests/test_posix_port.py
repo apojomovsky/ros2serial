@@ -505,11 +505,11 @@ def node_name_limit(max_frame):
 
 
 def test_launch_node_name_over_limit_fails(tmp_path):
-    with Firmware(boot=str(tmp_path / "boot")) as fw:
+    with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
         limit = node_name_limit(parse_hello(payload)["max_frame"])
     name = "n" * (limit + 1)
-    code, error = run_once(["--node", name], boot=str(tmp_path / "boot"))
+    code, error = run_once(["--node", name])
     assert code == 2
     assert "--node" in error
     assert name in error
@@ -518,20 +518,20 @@ def test_launch_node_name_over_limit_fails(tmp_path):
 
 
 def test_launch_node_name_at_limit_passes_name_check(tmp_path):
-    with Firmware(boot=str(tmp_path / "boot")) as fw:
+    with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
         limit = node_name_limit(parse_hello(payload)["max_frame"])
-    code, error = run_once(["--node", "n" * limit], boot=str(tmp_path / "boot"))
+    code, error = run_once(["--node", "n" * limit])
     assert code == 1
     assert "does-not-exist" in error
 
 
 def test_launch_node_name_at_limit_is_announced(tmp_path):
-    with Firmware(boot=str(tmp_path / "boot")) as fw:
+    with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
         limit = node_name_limit(parse_hello(payload)["max_frame"])
     name = "n" * limit
-    with Firmware("--node", name, boot=str(tmp_path / "boot")) as fw:
+    with Firmware("--node", name) as fw:
         hello, _, _ = do_handshake(fw)
         assert hello["node"] == name
 
