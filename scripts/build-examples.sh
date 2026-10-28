@@ -21,7 +21,9 @@ status=0
 for sketch in examples/arduino_minimal/arduino_minimal.ino examples/arduino_xmacro/arduino_xmacro.ino; do
   # The port glue lives in the library now: a sketch defining a port function
   # or opening its own linkage block would shadow or split it, so it fails.
-  if grep -n "r2s_port_\|extern \"C\"" "$sketch"; then
+  # Calls and comments still name the port API, so only a definition at the
+  # start of a line counts.
+  if grep -n -e '^\(uint16_t \|void \|uint32_t \)r2s_port_' -e 'extern "C" {' "$sketch"; then
     echo "$sketch: the sketch must not define port functions or linkage blocks" >&2
     status=1
   fi
@@ -34,7 +36,7 @@ if [ "$status" -eq 0 ]; then
 fi
 
 # The Arduino library is staged at build time: the checked-in lib holds only
-# what the generator emits, and the core sources join it here, so no core
+# what the generator emits, and the core and Arduino glue join it here, so no
 # bytes live twice in the repository and nothing can drift.
 stage="$build/arduino_minimal"
 rm -rf "$stage"
@@ -45,6 +47,7 @@ cp examples/arduino_minimal/lib/src/r2s_generated.h examples/arduino_minimal/lib
 cp core/include/r2s/*.h "$stage/src/r2s/" || status=1
 cp core/src/*.c "$stage/src/" || status=1
 rm -f "$stage/src/test_reset.c"
+cp ports/arduino/r2s_arduino_port.cpp ports/arduino/r2s_arduino_port.h "$stage/src/" || status=1
 # The core never includes the generated header, so the limits travel as -D
 # flags read from it: the same set the cmake layout passes as definitions.
 # A library cannot set its own flags on this toolchain, hence --build-property.
@@ -98,6 +101,7 @@ PYTHONPATH="$root/gen" python3 -m r2s_gen.cli bundle --distro jazzy --out "$xsta
 cp core/include/r2s/*.h "$xstage/src/r2s/" || status=1
 cp core/src/*.c "$xstage/src/" || status=1
 rm -f "$xstage/src/test_reset.c"
+cp ports/arduino/r2s_arduino_port.cpp ports/arduino/r2s_arduino_port.h "$xstage/src/" || status=1
 xextras=$(PYTHONPATH="$root/gen" python3 - "$xstage/src/r2s_bundled.h" <<'EOF'
 import sys
 
