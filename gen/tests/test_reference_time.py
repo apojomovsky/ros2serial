@@ -1,10 +1,8 @@
 """The Python reference for the MCU time arithmetic: hand vectors, boundaries, rejections."""
 
 import pytest
-
 from r2s_gen.reference import time
 from r2s_gen.reference.errors import Rejected
-
 from support import vector_files
 
 
