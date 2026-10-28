@@ -1053,36 +1053,50 @@ TEST(SessionControl, CoalescesTopicStatusPerTopicWhenWritesBlock)
     fixture.block_writes();
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 2u));
     fixture.deliver_frame(kControl, 1u, topic_payload(0u, 16u, "a"));
-    fixture.deliver_frame(kControl, 2u, topic_payload(1u, 17u, "b"));
+    // The walk answers every index, even one reusing a topic id: the second
+    // verdict for the id replaces the first instead of queueing behind it.
+    fixture.deliver_frame(kControl, 2u, topic_payload(1u, 16u, "b"));
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
-    // Two resets, each answered with a full walk: the newer verdict for an
-    // index replaces the older instead of queueing behind it.
-    for (int round = 0; round < 2; ++round) {
-        fixture.deliver_frame(kControl, 3u, hello_payload(0x2000u, 2u));
-        fixture.deliver_frame(kControl, 4u, topic_payload(0u, 16u, "a"));
-        fixture.deliver_frame(kControl, 5u, topic_payload(1u, 17u, "b"));
-    }
     fixture.allow_writes();
     fixture.session().poll();
     std::size_t ready = 0;
     std::size_t status16 = 0;
-    std::size_t status17 = 0;
     for (const auto &unit : fixture.drain_units()) {
         const std::vector<std::uint8_t> decoded = decoded_unit(unit);
         if (decoded[0] == kControl && decoded[2] == 0x06u) {
             ++ready;
-            EXPECT_EQ(decoded[3], 3u) << "only the newest READY goes out";
         }
         if (decoded[0] == kControl && decoded[2] == 0x05u && decoded[3] == 16u) {
             ++status16;
         }
-        if (decoded[0] == kControl && decoded[2] == 0x05u && decoded[3] == 17u) {
-            ++status17;
+    }
+    EXPECT_EQ(status16, 1u) << "one TOPIC_STATUS per topic id";
+    EXPECT_EQ(ready, 1u) << "READY is one pending frame, not one per verdict";
+}
+
+TEST(SessionControl, CoalescesTopicReqRetriesWhenWritesBlock)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.block_writes();
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    // The first TOPIC_REQ plus three retries, all wedged, all for index 0.
+    fixture.advance_to(710);
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 16u, "x"));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    fixture.allow_writes();
+    fixture.session().poll();
+    std::size_t requests = 0;
+    std::size_t frames = 0;
+    for (const auto &unit : fixture.drain_units()) {
+        ++frames;
+        const std::vector<std::uint8_t> decoded = decoded_unit(unit);
+        if (decoded[0] == kControl && decoded[2] == 0x03u) {
+            ++requests;
         }
     }
-    EXPECT_EQ(status16, 1u) << "one TOPIC_STATUS per topic index";
-    EXPECT_EQ(status17, 1u) << "one TOPIC_STATUS per topic index";
-    EXPECT_EQ(ready, 1u) << "READY is one pending frame, not one per handshake";
+    EXPECT_EQ(requests, 1u) << "the retries replace one TOPIC_REQ slot";
+    EXPECT_EQ(frames, 3u) << "the TOPIC_REQ, the TOPIC_STATUS and READY";
 }
 
 TEST(SessionControl, DropsPendingControlOnRehandshake)
@@ -1137,7 +1151,7 @@ TEST(SessionControl, BoundsPendingControlOverALongBlockedStretch)
     for (const auto &unit : fixture.drain_units()) {
         bytes += unit.size();
     }
-    // One slot per singleton plus one TOPIC_STATUS per index is below 64
+    // One slot per singleton plus one TOPIC_STATUS per topic id is below 64
     // bytes for two topics; 128 leaves margin without hiding growth.
     EXPECT_LE(bytes, 128u) << "pending control stays bounded on a wedged link";
 }
@@ -1161,6 +1175,11 @@ TEST(SessionControl, CountsReplacedControlFrames)
     fixture.advance_to(5110);
     EXPECT_EQ(fixture.session().control_coalesced(), 9u) << "nine of ten heartbeats replaced one slot";
     EXPECT_LE(fixture.session().pending_bytes(), 16u) << "one heartbeat frame stays queued";
+    fixture.allow_writes();
+    fixture.session().poll();
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 1u);
+    EXPECT_EQ(decoded_unit(units[0])[1], 0u) << "the replacement keeps the slot seq for [FRM-5]";
 }
 
 } // namespace

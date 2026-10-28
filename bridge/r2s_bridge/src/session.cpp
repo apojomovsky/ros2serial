@@ -58,11 +58,13 @@ struct QueuedFrame {
     std::uint8_t topic_id = 0;
     std::uint8_t opcode = 0;
     std::uint8_t sub = 0;
+    std::uint8_t seq = 0;
 };
 
 // The slot a control payload competes for: one per control kind, and one
-// TOPIC_STATUS per topic index. The time channel has no sender yet, but the
-// same shape covers its PING retries when the time sync lands.
+// TOPIC_STATUS per topic id, the field the verdict carries on the wire. The
+// time channel has no sender yet, but the same shape covers its PING retries
+// when the time sync lands.
 QueuedFrame control_slot(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload)
 {
     QueuedFrame slot;
@@ -281,10 +283,27 @@ struct Session::Impl {
 
     // Queues one frame: the payload through the check, then rCOBS and the
     // delimiter, so the bytes are the ones [FRM-1] and [CHK-3] give. A
-    // control frame whose slot is already queued is replaced in place, so
+    // control frame whose slot is already queued replaces it in place, so
     // the wire order never changes and the queue stays bounded ([SES-33]).
+    // The replaced frame never reached the wire, so the new one keeps its
+    // seq and [FRM-5] continuity holds.
     void queue_frame(std::uint8_t topic_id, std::uint8_t seq, const std::vector<std::uint8_t> &payload)
     {
+        QueuedFrame frame;
+        std::size_t match = queue_.size();
+        if (topic_id < 16u) {
+            frame = control_slot(topic_id, payload);
+            const std::size_t first = front_offset_ > 0u ? 1u : 0u;
+            for (std::size_t i = first; i < queue_.size(); ++i) {
+                const QueuedFrame &slot = queue_[i];
+                if (slot.control && slot.topic_id == frame.topic_id && slot.opcode == frame.opcode &&
+                    slot.sub == frame.sub) {
+                    match = i;
+                    seq = slot.seq;
+                    break;
+                }
+            }
+        }
         std::vector<std::uint8_t> decoded;
         decoded.reserve(payload.size() + 4u);
         decoded.push_back(topic_id);
@@ -295,10 +314,7 @@ struct Session::Impl {
         decoded.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
         decoded.push_back(static_cast<std::uint8_t>(crc >> 8u));
 
-        QueuedFrame frame;
-        if (topic_id < 16u) {
-            frame = control_slot(topic_id, payload);
-        }
+        frame.seq = seq;
         r2s_rcobs_encoder_t encoder{};
         r2s_rcobs_encoder_init(&encoder);
         std::uint8_t chunk[R2S_RCOBS_MAX_EMIT]{};
@@ -309,19 +325,13 @@ struct Session::Impl {
         const std::uint8_t produced = r2s_rcobs_encode_end(&encoder, chunk);
         frame.bytes.insert(frame.bytes.end(), chunk, chunk + produced);
         frame.bytes.push_back(0x00u);
-        if (frame.control) {
-            const std::size_t first = front_offset_ > 0u ? 1u : 0u;
-            for (std::size_t i = first; i < queue_.size(); ++i) {
-                QueuedFrame &slot = queue_[i];
-                if (slot.control && slot.topic_id == frame.topic_id && slot.opcode == frame.opcode &&
-                    slot.sub == frame.sub) {
-                    pending_bytes_ -= slot.bytes.size();
-                    pending_bytes_ += frame.bytes.size();
-                    slot.bytes = std::move(frame.bytes);
-                    ++control_coalesced_;
-                    return;
-                }
-            }
+        if (match < queue_.size()) {
+            QueuedFrame &slot = queue_[match];
+            pending_bytes_ -= slot.bytes.size();
+            pending_bytes_ += frame.bytes.size();
+            slot.bytes = std::move(frame.bytes);
+            ++control_coalesced_;
+            return;
         }
         pending_bytes_ += frame.bytes.size();
         queue_.push_back(std::move(frame));

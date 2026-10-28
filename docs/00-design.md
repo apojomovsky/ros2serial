@@ -231,7 +231,7 @@ The bridge loads the type support for each type name and compares the hash with 
 
 **Losses and errors.** User topics are best effort. A gap in `seq` increments a counter that the bridge publishes as diagnostics. Parameters, services and the handshake use a small reliable channel (stop-and-wait with ack on ID 6, one outstanding message per direction).
 
-**Flow control.** The MCU announces its RX capacity (the size of its frame buffer). The bridge rate-limits host-to-MCU traffic per topic, caps its total host-to-MCU bandwidth to a fraction of the link, and, for keep-latest topics such as `cmd_vel`, keeps only the most recent message instead of queueing. Topics are serviced round-robin, so one busy topic cannot starve the others. Pending control frames coalesce while the link is wedged ([SES-33]): one per control kind and one TOPIC_STATUS per topic index, dropped on re-handshake, with the replaced count in `/diagnostics`.
+**Flow control.** The MCU announces its RX capacity (the size of its frame buffer). The bridge rate-limits host-to-MCU traffic per topic, caps its total host-to-MCU bandwidth to a fraction of the link, and, for keep-latest topics such as `cmd_vel`, keeps only the most recent message instead of queueing. Topics are serviced round-robin, so one busy topic cannot starve the others. Pending control frames coalesce while the link is wedged ([SES-33]): one per control kind and one TOPIC_STATUS per topic id, dropped on re-handshake, with the replaced count in `/diagnostics`.
 
 ## Receiving and sending bytes
 
