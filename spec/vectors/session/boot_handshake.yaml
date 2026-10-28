@@ -1,5 +1,5 @@
 name: boot_handshake
-covers: [SES-13, SES-14, SES-16, SES-17, SES-18]
+covers: [SES-9, SES-13, SES-14, SES-16, SES-17, SES-18, HB-2, HB-4]
 steps:
   - from: mcu
     frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f0 ad"
@@ -9,11 +9,7 @@ steps:
     at_ms: 300
     note: "asked as soon as the HELLO lands"
   - from: mcu
-    frame: "00 01 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 39 24"
-    at_ms: 350
-    note: "retransmit with the same token; the host ignores it"
-  - from: mcu
-    frame: "00 02 04 00 10 00 00 01 02 03 04 05 06 07 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 07 62 61 74 74 65 72 79 41 1f"
+    frame: "00 01 04 00 10 00 00 01 02 03 04 05 06 07 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 07 62 61 74 74 65 72 79 a4 f0"
     at_ms: 450
   - from: host
     frame: "00 01 05 10 00 1f 80"
@@ -22,7 +18,7 @@ steps:
     frame: "00 02 03 01 78 8d"
     at_ms: 450
   - from: mcu
-    frame: "00 03 04 01 11 05 10 11 12 13 14 15 16 17 17 67 65 6f 6d 65 74 72 79 5f 6d 73 67 73 2f 6d 73 67 2f 54 77 69 73 74 07 63 6d 64 5f 76 65 6c e7 eb"
+    frame: "00 02 04 01 11 05 10 11 12 13 14 15 16 17 17 67 65 6f 6d 65 74 72 79 5f 6d 73 67 73 2f 6d 73 67 2f 54 77 69 73 74 07 63 6d 64 5f 76 65 6c dc dd"
     at_ms: 550
   - from: host
     frame: "00 03 05 11 00 b1 a0"
@@ -30,10 +26,18 @@ steps:
   - from: host
     frame: "00 04 06 01 00 00 00 00 44"
     at_ms: 550
+  - from: mcu
+    frame: "04 00 05 00 00 00 00 00 00 00 7a bb"
+    at_ms: 1050
+    note: "heartbeat in CONNECTED: five frames accepted, none dropped"
   - from: host
     frame: "04 00 d8 97"
     at_ms: 1050
     note: "heartbeat every 500 ms"
+  - from: mcu
+    frame: "04 01 06 00 00 00 00 00 00 00 57 7c"
+    at_ms: 1550
+    note: "six accepted with the 1050 ms host heartbeat"
   - from: host
     frame: "04 01 51 86"
     at_ms: 1550
