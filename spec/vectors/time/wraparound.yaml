@@ -1,0 +1,8 @@
+name: wraparound
+covers: [TIM-6]
+tick_hz: 1000000
+cases:
+  - {tick0: 4294967295, sec0: 10, nanosec0: 0, drift_ppm: 0, tick: 1000, expect: {sec: 10, nanosec: 1000}}
+  - {tick0: 4294967000, sec0: 10, nanosec0: 0, drift_ppm: 0, tick: 704, expect: {sec: 10, nanosec: 1000000}}
+  - {tick0: 4294900000, sec0: 0, nanosec0: 0, drift_ppm: 0, tick: 67712, expect: {sec: 0, nanosec: 135008000}}
+  - {tick0: 4294966796, sec0: 5, nanosec0: 500000000, drift_ppm: -3, tick: 500, expect: {sec: 5, nanosec: 500999997}}
