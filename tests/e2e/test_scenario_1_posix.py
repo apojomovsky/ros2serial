@@ -1,23 +1,29 @@
 """Scenario 1: the handshake announces the firmware topics in time.
 
 The bridge is up before the firmware boots, so the 3 s budget measures the
-handshake from the MCU's HELLO, not node startup.
+handshake from the MCU's HELLO, not node startup. Graph discovery of the new
+topics waits on its own generous timeout, so a slow runner cannot fail a
+correct handshake.
 """
 
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 import launch_testing.markers
 import rclpy
+from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
-from e2e_support import firmware
+from e2e_support import checks, firmware
 from e2e_support.relay import PtyRelay
 
 # covers: SES-1, SES-2, SES-5, SES-6, SES-13, SES-16, SES-17
 
 ANNOUNCED = ["/battery", "/cmd_vel", "/echo_vel", "/log_text"]
+# The bridge reports announced names without the graph's leading slash.
+HANDSHAKE_TOPICS = [name.removeprefix("/") for name in ANNOUNCED]
 TOPIC_BUDGET = 3.0
 
 _SCRATCH = None
@@ -66,8 +72,26 @@ class TestScenario1(unittest.TestCase):
         node = rclpy.create_node("e2e_s1_probe")
         try:
             bridge_support.wait_for_bridge(node)
+            # Matched before the firmware boots, so the handshake wait below
+            # observes bridge state, not DDS discovery of the new topics.
+            received = []
+            node.create_subscription(DiagnosticArray, "/diagnostics", received.append, 10)
+            deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
+            while not received:
+                rclpy.spin_once(node, timeout_sec=0.5)
+                self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
+            received.clear()
             _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
-            took = bridge_support.wait_for_topics(node, ANNOUNCED, _SPAWNED.ready_at, TOPIC_BUDGET, "announced topics")
+            while True:
+                rclpy.spin_once(node, timeout_sec=0.5)
+                missing = checks.handshake_missing(received[-1], HANDSHAKE_TOPICS) if received else ["link silent"]
+                took = time.monotonic() - _SPAWNED.ready_at
+                if not missing:
+                    break
+                self.assertLess(took, TOPIC_BUDGET, f"handshake still missing {missing} after {took:.1f} s")
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
+            bridge_support.wait_for_topics(
+                node, ANNOUNCED, _SPAWNED.ready_at, bridge_support.DISCOVERY_TIMEOUT, "announced topics"
+            )
         finally:
             node.destroy_node()

@@ -53,3 +53,16 @@ def collect_until(values, count, deadline, what, spin):
     while len(values) < count:
         assert time.monotonic() < deadline, f"{what}: only {len(values)} of {count} arrived"
         spin()
+
+
+def handshake_missing(message, wanted):
+    """What the bridge has not finished handshaking, from one /diagnostics message.
+
+    wanted holds announced names without the graph's leading slash. Empty
+    means the link is connected and every wanted topic reads ok.
+    """
+    status = message.status[0]
+    if status.message != "connected":
+        return ["link " + status.message]
+    values = {value.key: value.value for value in status.values}
+    return ["topic " + name for name in wanted if values.get("topic " + name + " status") != "ok"]
