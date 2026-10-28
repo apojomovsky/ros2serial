@@ -187,13 +187,15 @@ file(GLOB messages_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/mess
 r2s_vector_test(vectors_messages messages vectors/messages_check.c ${messages_vectors})
 
 # The replay runs the transcripts the conforming session passes byte for
+# The replay runs the transcripts the conforming session passes byte for
 # byte. Loss and reset need harness reenactment: a lost frame is not fed, an
 # expired link is fired early, a reboot reconfigures with the announced table.
 # The reenactment lives in vectors/session_check.c, next to each transcript.
 # The replay links the session build above, whose tick the transcripts pin, so
 # it cannot use the shared support library and registers by hand.
-set(R2S_SESSION_REPLAY_NAMES boot_handshake boot_wait_expiry empty_topics link_timeout pub_sub_handshake
-                             reset_same_token reset_zero_token topic_retry topic_retry_exhausted)
+set(R2S_SESSION_REPLAY_NAMES boot_handshake boot_wait_expiry duplicate_name_both_directions empty_topics
+                             link_timeout pub_sub_handshake reset_same_token reset_zero_token topic_retry
+                             topic_retry_exhausted)
 set(R2S_SESSION_REPLAY_PATHS)
 foreach(name ${R2S_SESSION_REPLAY_NAMES})
   set(path "${R2S_REPO_ROOT}/spec/vectors/session/${name}.yaml")
@@ -234,7 +236,7 @@ endforeach()
 # Vector kinds the C runner does not read yet, each with the ticket that adds
 # it. A kind with files that is in neither list would be silently skipped, so
 # it stops the configure step instead.
-set(R2S_VECTOR_KINDS_PENDING time:S7)
+set(R2S_VECTOR_KINDS_PENDING time:P2)
 file(GLOB kind_dirs LIST_DIRECTORIES true "${R2S_REPO_ROOT}/spec/vectors/*")
 foreach(dir ${kind_dirs})
   get_filename_component(kind "${dir}" NAME)

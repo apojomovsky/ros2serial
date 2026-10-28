@@ -83,6 +83,27 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(values.at("time sync drift"), "not available");
     EXPECT_EQ(values.at("time sync round trip"), "not available");
 }
+TEST(DiagnosticsMessage, ReportsPerTopicStatus)
+{
+    Router::Diagnostics snapshot;
+    snapshot.link_state = "connected";
+    const char *names[] = {"ok_topic", "unknown_topic", "mismatch_topic", "dup"};
+    const std::uint8_t verdicts[] = {0u, 1u, 2u, 3u};
+    for (int i = 0; i < 4; ++i) {
+        Router::TopicDiagnostics topic;
+        topic.topic_id = static_cast<std::uint8_t>(16u + i);
+        topic.topic_name = names[i];
+        topic.device_to_host = true;
+        topic.status = verdicts[i];
+        snapshot.topics.push_back(topic);
+    }
+    const std::map<std::string, std::string> values =
+        values_of(diagnostics_message(snapshot, "test_node", "").status[0]);
+    EXPECT_EQ(values.at("topic ok_topic status"), "ok");
+    EXPECT_EQ(values.at("topic unknown_topic status"), "unknown type");
+    EXPECT_EQ(values.at("topic mismatch_topic status"), "hash mismatch");
+    EXPECT_EQ(values.at("topic dup status"), "name conflict");
+}
 
 TEST(DiagnosticsMessage, MapsLinkStateToLevel)
 {

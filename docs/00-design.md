@@ -143,7 +143,7 @@ bounds:
 #include <ros2serial.h>
 ```
 
-The header expands the list into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator.
+The header expands the list into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator. The header counts the rows itself, so an empty list fails the build with the generator's message instead of emitting an empty table.
 
 **3. Runtime registration, rosserial style** (gcc-class targets only, see User API). Topics are registered while `setup()` runs and live in a RAM table. Registration closes at the first spin; a later registration is an error, never a silent re-handshake.
 
@@ -950,7 +950,7 @@ by `launch/r2s_bridge.launch.py` with `port` and `params_file` arguments.
 
 ### Published by the bridge
 
-- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, sequence gaps per topic, time sync offset, drift and round trip.
+- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, sequence gaps per topic and the host's verdict per topic (`topic <name> status`), time sync offset, drift and round trip.
 - The MCU's topics, under the names it announced, after remapping and namespacing.
 - MCU log messages through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`.
 

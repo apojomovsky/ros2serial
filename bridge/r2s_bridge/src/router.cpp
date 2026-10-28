@@ -365,13 +365,14 @@ Router::Diagnostics Router::diagnostics() const
     out.control_coalesced = impl_->session_.control_coalesced();
     out.protocol_version = R2S_PROTOCOL_VERSION;
     out.mcu_counters = impl_->session_.mcu_counters();
-    for (const auto &[id, route] : impl_->routes) {
+    for (const TopicInfo &info : impl_->session_.topics()) {
         TopicDiagnostics topic;
-        topic.topic_id = id;
-        topic.topic_name = route.info.topic_name;
-        topic.device_to_host = route.info.device_to_host();
-        topic.seq_gaps = impl_->session_.seq_gaps(id);
-        topic.dropped = impl_->scheduler_.dropped(id);
+        topic.topic_id = info.topic_id;
+        topic.topic_name = info.topic_name;
+        topic.device_to_host = info.device_to_host();
+        topic.status = info.status;
+        topic.seq_gaps = impl_->session_.seq_gaps(info.topic_id);
+        topic.dropped = impl_->scheduler_.dropped(info.topic_id);
         out.topics.push_back(topic);
     }
     return out;

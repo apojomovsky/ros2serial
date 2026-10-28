@@ -21,6 +21,15 @@ void add_topic(diagnostic_msgs::msg::DiagnosticStatus &status, const Router::Top
 {
     const std::string head = "topic " + topic.topic_name;
     add_value(status, head + " direction", topic.device_to_host ? "device to host" : "host to device");
+    const char *verdict = "ok";
+    if (topic.status == 1u) {
+        verdict = "unknown type";
+    } else if (topic.status == 2u) {
+        verdict = "hash mismatch";
+    } else if (topic.status == 3u) {
+        verdict = "name conflict";
+    }
+    add_value(status, head + " status", verdict);
     add_value(status, head + " seq gaps", std::to_string(topic.seq_gaps));
     add_value(status, head + " dropped", std::to_string(topic.dropped));
 }

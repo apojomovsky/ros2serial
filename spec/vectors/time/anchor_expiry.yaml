@@ -1,0 +1,8 @@
+name: anchor_expiry
+covers: [TIM-6, TIM-7]
+tick_hz: 1000
+cases:
+  - {tick0: 100, sec0: 0, nanosec0: 0, drift_ppm: 0, tick: 10100, expect: {sec: 10, nanosec: 0}}
+  - {tick0: 100, sec0: 0, nanosec0: 0, drift_ppm: 0, tick: 10101, expect: unsynced}
+  - {tick0: 4294967295, sec0: 3, nanosec0: 0, drift_ppm: 0, tick: 9999, expect: {sec: 13, nanosec: 0}}
+  - {tick0: 4294967295, sec0: 3, nanosec0: 0, drift_ppm: 0, tick: 10000, expect: unsynced}
