@@ -405,6 +405,9 @@ int main(int argc, char **argv)
         r2s_spin_some();
         now = r2s_port_tick();
         if (r2s_connected() == 0u) {
+            /* Offline there are no samples, so the clock resyncs instead of
+             * queueing a burst for the reconnect. */
+            last_pub = now;
             sleep_1ms();
             continue;
         }
@@ -416,13 +419,18 @@ int main(int argc, char **argv)
                 log_booted = 1u;
             }
         }
-        if (opts.pub != NULL && (uint32_t)(now - last_pub) >= interval) {
-            std_msgs__msg__Float32 msg;
+        if (opts.pub != NULL) {
+            /* Every missed tick is still owed: one frame per missed interval
+             * keeps the count whole when the host steals the firmware tick. */
+            while ((uint32_t)(now - last_pub) >= interval) {
+                std_msgs__msg__Float32 msg;
 
-            msg.data = (float)sent;
-            if (r2s_publish_battery(&msg) == R2S_OK) {
+                msg.data = (float)sent;
+                if (r2s_publish_battery(&msg) != R2S_OK) {
+                    break;
+                }
                 sent++;
-                last_pub = now;
+                last_pub += interval;
                 if (opts.log_text != NULL && sent % 10u == 0u) {
                     (void)publish_log_text(sent);
                 }

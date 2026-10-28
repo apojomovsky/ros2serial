@@ -188,6 +188,31 @@ def test_a_spec_that_is_not_utf8_without_a_spec_change_fails(tmp_path):
     assert problems(root) == ["spec/vectors changed without spec/protocol.md changes: spec/protocol.md names no rule"]
 
 
+def test_a_spec_change_with_a_head_spec_that_is_not_utf8_fails(tmp_path):
+    root = repo_with(tmp_path, LOCAL)
+    target = root / "spec/protocol.md"
+    target.write_bytes(LOCAL.encode("utf-8") + b"\xff")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "change")
+    assert problems(root) == [
+        "spec/protocol.md changed without spec/vectors changes: spec/protocol.md crosses the wire"
+    ]
+
+
+def test_a_spec_change_with_a_base_spec_that_is_not_utf8_fails(tmp_path):
+    root = repo_with(tmp_path, LOCAL)
+    target = root / "spec/protocol.md"
+    target.write_bytes(LOCAL.encode("utf-8") + b"\xff")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "bad")
+    target.write_text(with_wire_rule(LOCAL))
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "change")
+    assert problems(root) == [
+        "spec/protocol.md changed without spec/vectors changes: spec/protocol.md crosses the wire"
+    ]
+
+
 def test_a_branch_that_changes_neither_passes(tmp_path):
     root = repo_with(tmp_path, LOCAL)
     write(root, "core.c", "int x;\n")

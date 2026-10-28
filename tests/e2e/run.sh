@@ -69,8 +69,8 @@ for leg in static runtime; do
       router=$!
       sleep 2
     fi
-    for scenario in 1 2 3 4; do
-      timeout 300 launch_test "tests/e2e/test_scenario_${scenario}_posix.py" || status=1
+    for test_file in test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_publish_catchup_posix; do
+      timeout 300 launch_test "tests/e2e/${test_file}.py" || status=1
     done
     if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
   done

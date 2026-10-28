@@ -128,7 +128,11 @@ if wants SCRIPTS; then scope_now=SCRIPTS
   section scripts-tests python3 -m pytest scripts tools
 fi
 if wants CORE; then scope_now=CORE; section core bash scripts/core-test.sh; fi
-if wants GEN; then scope_now=GEN; section gen python3 -m pytest gen; fi
+gen_tests() {
+  local host_dir="${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/host"
+  bash scripts/build-host-lib.sh "$host_dir" && R2S_HOST_LIB_DIR="$host_dir" python3 -m pytest gen
+}
+if wants GEN; then scope_now=GEN; section gen gen_tests; fi
 if wants BRIDGE; then scope_now=BRIDGE; section bridge bash scripts/bridge-test.sh; fi
 if wants CPP; then scope_now=CPP; section cpp bash scripts/cpp-test.sh; fi
 if wants COVERAGE; then scope_now=COVERAGE; section coverage bash scripts/coverage-gate.sh; fi

@@ -1,0 +1,32 @@
+name: duplicate_name_both_directions
+covers: [CTL-13, SES-16, SES-17]
+steps:
+  - from: mcu
+    frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f0 ad"
+    at_ms: 300
+    note: "unsolicited HELLO after boot: full mode, two topics"
+  - from: host
+    frame: "00 00 03 00 49 29"
+    at_ms: 300
+  - from: mcu
+    frame: "00 01 04 00 10 00 00 01 02 03 04 05 06 07 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 03 64 75 70 a0 f6"
+    at_ms: 300
+    note: "Float32 publisher on topic 16 announcing dup"
+  - from: host
+    frame: "00 01 05 10 00 1f 80"
+    at_ms: 300
+  - from: host
+    frame: "00 02 03 01 78 8d"
+    at_ms: 350
+  - from: mcu
+    frame: "00 02 04 01 11 01 10 11 12 13 14 15 16 17 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 03 64 75 70 25 66"
+    at_ms: 350
+    note: "Float32 subscriber on topic 17 announcing dup in the other direction"
+  - from: host
+    frame: "00 03 05 11 03 2a 92"
+    at_ms: 350
+    note: "the repeated name is a conflict whatever the direction, so verdict 3"
+  - from: host
+    frame: "00 04 06 01 00 00 00 00 44"
+    at_ms: 350
+    note: "every topic resolved, so READY"

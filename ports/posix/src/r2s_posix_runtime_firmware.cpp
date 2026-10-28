@@ -238,6 +238,9 @@ int main(int argc, char **argv)
         node.spin_some();
         now = node.now();
         if (node.connected() == 0) {
+            /* Offline there are no samples, so the clock resyncs instead of
+             * queueing a burst for the reconnect. */
+            last_pub = now;
             sleep_1ms();
             continue;
         }
@@ -249,13 +252,21 @@ int main(int argc, char **argv)
                 log_booted = 1u;
             }
         }
-        if (opts.pub != NULL && (uint32_t)(now - last_pub) >= interval) {
-            std_msgs::msg::Float32 msg;
+        if (opts.pub != NULL) {
+            /* Every missed tick is still owed: one frame per missed interval
+             * keeps the count whole when the host steals the firmware tick. */
+            while ((uint32_t)(now - last_pub) >= interval) {
+                std_msgs::msg::Float32 msg;
 
-            msg.data = (float)sent;
-            if (battery_pub->publish(msg) == R2S_OK) {
+                msg.data = (float)sent;
+                if (battery_pub->publish(msg) != R2S_OK) {
+                    break;
+                }
                 sent++;
-                last_pub = now;
+                last_pub += interval;
+                if (opts.log_text != NULL && sent % 10u == 0u) {
+                    (void)publish_log_text(log_pub, sent);
+                }
             }
         } else {
             sleep_1ms();

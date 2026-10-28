@@ -1,0 +1,8 @@
+name: maximum_drift
+covers: [TIM-4, TIM-6, TIM-8, TIM-9]
+tick_hz: 1000000
+cases:
+  - {tick0: 0, sec0: 100, nanosec0: 0, drift_ppm: 20000, tick: 10000000, expect: {sec: 110, nanosec: 200000000}}
+  - {tick0: 0, sec0: 100, nanosec0: 0, drift_ppm: -20000, tick: 10000000, expect: {sec: 109, nanosec: 800000000}}
+  - {tick0: 0, sec0: 0, nanosec0: 999999999, drift_ppm: 20000, tick: 1999000, expect: {sec: 3, nanosec: 38979999}}
+  - {tick0: 0, sec0: 7, nanosec0: 123456789, drift_ppm: -20000, tick: 1500500, expect: {sec: 8, nanosec: 593956789}}
