@@ -126,6 +126,15 @@ def check(root: Path, base: str) -> list[str]:
         unknown = _unknown_covers(root, changed)
         if unknown:
             problems.append(f"spec/vectors changed without {SPEC} changes: {', '.join(unknown)} names no rule")
+    if spec_changed and vectors_changed:
+        try:
+            head_text: str | None = (root / SPEC).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            head_text = None
+        if head_text is None or _show(root, base) is None:
+            # A paired change proves nothing when either side cannot be read.
+            problems.append(f"{SPEC} changed with spec/vectors changes: {SPEC} is unreadable")
+
     return problems
 
 
