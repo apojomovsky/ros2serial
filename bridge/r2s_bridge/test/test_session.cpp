@@ -964,6 +964,30 @@ TEST(SessionTopics, DuplicateNameInOneDirectionIsAConflict)
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
 }
 
+TEST(SessionTopics, DuplicateNameAcrossDirectionsIsAConflict)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 2u));
+    fixture.drain_units();
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 16u, "dup"));
+    fixture.drain_units();
+    fixture.deliver_frame(kControl, 2u, topic_payload(1u, 17u, "dup", 0x01u));
+    bool refused = false;
+    for (const auto &unit : fixture.drain_units()) {
+        const std::vector<std::uint8_t> decoded = decoded_unit(unit);
+        if (decoded.size() >= 5u && decoded[0] == kControl && decoded[2] == 0x05u && decoded[3] == 17u &&
+            decoded[4] == kTopicStatusNameConflict) {
+            refused = true;
+        }
+    }
+    EXPECT_TRUE(refused) << "the second TOPIC_STATUS carries the conflict verdict";
+    ASSERT_EQ(fixture.session().topics().size(), 2u);
+    EXPECT_EQ(fixture.session().topics()[0].status, kTopicStatusOk);
+    EXPECT_EQ(fixture.session().topics()[1].status, kTopicStatusNameConflict);
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
 TEST(SessionSend, RefusesFramesPastTheMcuCapacity)
 {
     ManualClock clock;
