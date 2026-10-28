@@ -4,6 +4,7 @@
 
 #include "fake_port.h"
 #include "handwritten.h"
+#include "host_shim.h"
 #include "r2s/r2s_codec.h"
 
 static char host_error[160];
@@ -19,8 +20,6 @@ void fake_port_fail(const char *message)
     host_error[taken] = '\0';
 }
 
-/* The last fake port misuse, or an empty string when none happened. The
- * driver asserts it stays empty after every step. */
 const char *r2s_host_error(void)
 {
     return host_error;

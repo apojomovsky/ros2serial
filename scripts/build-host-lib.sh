@@ -13,7 +13,8 @@ cd "$root" || exit 2
 out=${1:-${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/host}
 mkdir -p "$out" || exit 1
 
-flags=(-std=c99 -shared -fPIC -O2 -Wall -Wextra -Werror)
+flags=(-std=c99 -shared -fPIC -O2 -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow)
+flags+=(-Wstrict-prototypes -Wmissing-prototypes -Wundef)
 defines=(-DR2S_TESTING -DR2S_MAX_FRAME=512 -DR2S_WITH_CODEC -DR2S_MAX_NEST=2 -DR2S_WITH_LOG)
 includes=(-I core/include -I core/tests/support -I core/host)
 sources=(core/src/*.c core/tests/support/fake_port.c core/tests/support/bytes.c

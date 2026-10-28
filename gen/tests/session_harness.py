@@ -27,6 +27,8 @@ DIRECTIONS = ("pub", "sub", "pub")
 
 def model_topics(flags: list[int]) -> list[model.Topic]:
     """The handwritten table with the C build's own flags and widths."""
+    # The IDs, names and hashes repeat core/tests/support/handwritten.c, and
+    # the Twist width is its six float64 fields, halved when narrow.
     topics = []
     for topic_id, flag, type_hash, type_name, topic_name, direction in zip(
         TOPIC_IDS, flags, TYPE_HASHES, TYPE_NAMES, TOPIC_NAMES, DIRECTIONS, strict=True
@@ -57,12 +59,16 @@ class Pair:
         self.model = model.McuSession(topics=model_topics(flags))
         self.model.reset(0)
         self.tick = 0
+        self.last_host_tx: list[bytes] = []
+        self.last_model_tx: list[bytes] = []
         self.check("boot")
 
     def check(self, label: str) -> None:
         """Fail when the C core and the model disagree after `label`."""
         host_tx = self.host.take_tx()
         model_tx = self.model.take_tx()
+        self.last_host_tx = host_tx
+        self.last_model_tx = model_tx
         assert host_tx == model_tx, (
             f"{label}: TX differs\nC:\n{format_frames(host_tx)}\nmodel:\n{format_frames(model_tx)}"
         )

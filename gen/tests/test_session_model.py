@@ -115,10 +115,9 @@ class SessionMachine(RuleBasedStateMachine):
 
     @invariant()
     def encoded_tx_holds_no_zero(self) -> None:
-        """The rCOBS output the pair drains carries no delimiter (COB-2)."""
-        for frame in self.pair.host.take_tx():
+        """The rCOBS output of the last step carries no delimiter (COB-2)."""
+        for frame in self.pair.last_host_tx + self.pair.last_model_tx:
             assert all(byte != 0 for byte in frame)
-        assert self.pair.model.take_tx() == []
 
     def _seq(self, topic: int) -> int:
         seq = self.host_seq[topic]
@@ -191,3 +190,22 @@ def test_spin_limit_holds_backlog_frames():
     pair.model.spin()
     pair.check("the last two units processed")
     assert pair.host.snapshot()["counters"][0] == 18
+
+
+# covers: FRM-4, FRM-5
+def test_tx_seq_wraps_at_256():
+    pair = Pair()
+    handshake(pair)
+    for _ in range(256):
+        pair.publish(1.5)
+    assert pair.host.snapshot()["tx_seq"] == [0, 0, 0]
+    pair.publish(1.5)
+    pair.check("publish after the seq wraps reuses seq 0")
+
+
+# covers: SES-1, FRM-14
+def test_spin_budget_skips_dropped_units():
+    pair = Pair()
+    handshake(pair)
+    pair.feed_raw(b"\x00" * 8 + wire(4, 0, b""))
+    assert pair.host.snapshot()["counters"] == (9, 0, 0, 0)

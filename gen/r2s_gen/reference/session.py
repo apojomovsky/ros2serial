@@ -142,10 +142,12 @@ class McuSession:
                 self.rx_buf.append(byte)
 
     def spin(self) -> None:
-        """Up to SPIN_MAX_FRAMES units, then the timers, as spin_some does."""
-        for _ in range(min(SPIN_MAX_FRAMES, len(self.pending))):
+        """Up to SPIN_MAX_FRAMES delivered frames, then the timers."""
+        delivered = 0
+        while delivered < SPIN_MAX_FRAMES and self.pending:
             encoded, at = self.pending.pop(0)
-            self._accept(encoded, at)
+            if self._accept(encoded, at):
+                delivered += 1
         self._timers()
 
     def advance_to(self, tick: int) -> None:
@@ -161,7 +163,7 @@ class McuSession:
         if index < 0 or self.status[index] != STATUS_OK:
             return ERR_TOPIC_REJECTED
         self.tx.append(encode_frame(topic_id, self.tx_seq[index], payload))
-        self.tx_seq[index] = (self.tx_seq[index] + 1) & MASK_16
+        self.tx_seq[index] = (self.tx_seq[index] + 1) & MASK_8
         return 0
 
     def snapshot(self) -> dict[str, object]:
@@ -180,27 +182,29 @@ class McuSession:
             "rx_lost": list(self.rx_lost),
         }
 
-    def _accept(self, encoded: bytes, at: int) -> None:
+    def _accept(self, encoded: bytes, at: int) -> bool:
+        """One unit through the framer rules; True when a frame is delivered."""
         if not encoded:
-            return
+            return False
         if len(encoded) > self.rx_capacity:
             self.counters["rx_overflows"] += 1
             self.counters["dropped"] += 1
-            return
+            return False
         try:
             decoded = rcobs_mod.decode(encoded)
         except Rejected:
             self.counters["dropped"] += 1
-            return
+            return False
         if len(decoded) < 4 or len(decoded) > self.max_frame:
             self.counters["dropped"] += 1
-            return
+            return False
         if crc_mod.crc16(decoded) != 0:
             self.counters["crc_errors"] += 1
             self.counters["dropped"] += 1
-            return
+            return False
         self.counters["rx_frames"] += 1
         self._on_frame(decoded[0], decoded[1], decoded[2:-2], at)
+        return True
 
     def _on_frame(self, topic: int, seq: int, payload: bytes, at: int) -> None:
         self.last_host = at & MASK_32
