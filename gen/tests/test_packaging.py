@@ -11,6 +11,7 @@ from r2s_gen.version import PROTOCOL_VERSION, __version__
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = ROOT / "gen"
+CPP_TREE = ROOT / "cpp"
 
 
 def run(command, **kwargs):
@@ -21,6 +22,10 @@ def copied_package(tmp_path: Path) -> Path:
     """A copy of the package, so a build leaves its artifacts out of the repository."""
     package = tmp_path / "gen"
     shutil.copytree(PACKAGE, package, ignore=shutil.ignore_patterns("__pycache__", "*.egg-info", "build"))
+    # The wheel ships the C++ layer's tree as package data, so the copy
+    # carries it beside the package, where setup.py looks for it.
+    if CPP_TREE.is_dir():
+        shutil.copytree(CPP_TREE, tmp_path / "cpp", ignore=shutil.ignore_patterns("__pycache__"))
     return package
 
 
@@ -54,6 +59,32 @@ def test_pip_installs_the_generator_into_a_fresh_venv(tmp_path):
     site_packages = next((venv / "lib").glob("python*/site-packages"))
     assert (site_packages / "r2s_gen" / "snapshots" / "jazzy" / "sensor_msgs" / "msg" / "Imu.msg").is_file()
     assert (site_packages / "r2s_gen" / "schema" / "r2s.schema.json").is_file()
+
+
+def test_the_wheel_ships_the_cpp_tree(tmp_path):
+    # The C++ layer travels with the wheel, so an installed generator can
+    # hand the message headers to a build without a checkout.
+    venv = tmp_path / "venv"
+    created = run([sys.executable, "-m", "venv", "--system-site-packages", str(venv)])
+    assert created.returncode == 0, created.stderr
+    installed = run(
+        [
+            str(venv / "bin" / "pip"),
+            "install",
+            "--no-index",
+            "--no-build-isolation",
+            "--disable-pip-version-check",
+            str(copied_package(tmp_path)),
+        ],
+        env=clean_env(),
+    )
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+    site_packages = next((venv / "lib").glob("python*/site-packages"))
+    cpp_tree = site_packages / "r2s_gen" / "cpp"
+    assert (cpp_tree / "include" / "std_msgs" / "msg" / "float32.hpp").is_file()
+    assert (cpp_tree / "include" / "r2s" / "runtime.hpp").is_file()
+    assert (cpp_tree / "include" / "r2s_bundled.h").is_file()
+    assert (cpp_tree / "include" / "ros2serial.h").is_file()
 
 
 @pytest.mark.skipif(shutil.which("colcon") is None, reason="colcon is not installed")

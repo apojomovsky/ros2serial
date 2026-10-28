@@ -98,14 +98,24 @@ def _test_sources(root: Path):
                 yield path.relative_to(root).as_posix(), path
 
 
-def _git_show(root: Path, ref: str, path: str) -> str:
-    result = subprocess.run(["git", "show", f"{ref}:{path}"], cwd=root, capture_output=True, text=True)
-    return result.stdout if result.returncode == 0 else ""
+def _git_show(root: Path, ref: str, path: str) -> str | None:
+    result = subprocess.run(["git", "show", f"{ref}:{path}"], cwd=root, capture_output=True)
+    if result.returncode != 0:
+        return ""
+    try:
+        return result.stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
 
 
 def check(root: Path, base: str | None = None) -> Report:
     report = Report()
-    spec_text = (root / "spec/protocol.md").read_text(encoding="utf-8")
+    try:
+        spec_text = (root / "spec/protocol.md").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        # Without readable rules there is nothing to cover; name the spec.
+        report.problems.append(f"spec/protocol.md: unreadable ({str(e).splitlines()[0]})")
+        return report
     counts: dict[str, int] = defaultdict(int)
     retired = set()
     for rule, text in DEFINITION.findall(spec_text):
@@ -157,9 +167,15 @@ def check(root: Path, base: str | None = None) -> Report:
 
     design = root / "docs/00-design.md"
     tickets = set(DESIGN_TICKET.findall(design.read_text(encoding="utf-8"))) if design.is_file() else None
-    base_rules = set(DEFINITION.findall(_git_show(root, base, "spec/protocol.md"))) if base else set()
+    base_text = _git_show(root, base, "spec/protocol.md") if base else ""
+    if base_text is None:
+        # The shrink check below compares against the base rules; name the unreadable base.
+        report.problems.append(f"spec/protocol.md at {base}: unreadable (not UTF-8)")
+        base_text = ""
+    base_rules = set(DEFINITION.findall(base_text))
     base_rules = {r for r, _ in base_rules}
     base_pending_text = _git_show(root, base, PENDING) if base else ""
+    base_pending_text = base_pending_text or ""
     base_pending = {f[0] for f in (ln.split("#", 1)[0].split() for ln in base_pending_text.splitlines()) if f}
     if not base_pending_text:
         base = None  # the PR that introduces the list fills it; from then on it only shrinks

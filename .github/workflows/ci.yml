@@ -51,6 +51,12 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test GEN=1
+  cpp:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test CPP=1
   docs:
     runs-on: ubuntu-24.04
     steps:

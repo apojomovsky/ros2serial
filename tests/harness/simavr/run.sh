@@ -37,6 +37,36 @@ for mcu in atmega328p atmega2560; do
     -I "$root/core/include" -o "$build/announce-ram-$mcu.elf" tests/harness/simavr/announce_firmware.c \
     "${core_sources[@]}" || status=1
 done
+# The runtime firmware uses the C++ runtime API, so it needs the bundle's
+# message headers, the runtime layer and the core. The bundle is staged
+# here, the way a board's library is staged, so the firmware compiles
+# against the same headers the Arduino library ships. The C sources are
+# compiled with the C compiler and linked with the C++ ones, as the
+# Arduino build does.
+rstage="$build/runtime"
+rm -rf "$rstage"
+mkdir -p "$rstage/src/r2s" "$rstage/obj" || status=1
+PYTHONPATH="$root/gen" python3 -m r2s_gen.cli bundle --distro jazzy --out "$rstage" || status=1
+cp "$root"/cpp/include/r2s/runtime.hpp "$rstage/src/r2s/" || status=1
+cp "$root"/core/include/r2s/*.h "$rstage/src/r2s/" || status=1
+cp "$root"/cpp/src/runtime.cpp "$rstage/" || status=1
+mapfile -t core_sources < <(ls "$root"/core/src/*.c | grep -v test_reset.c)
+runtime_flags=(-DF_CPU=16000000UL -Os -Wall -Wextra -Werror
+  -DR2S_WITH_CODEC -DR2S_MAX_FRAME=325 -DR2S_MAX_NEST=3
+  -I "$rstage/src" -I "$root/core/include")
+# The objects are built per MCU: the two chips have different architectures,
+# so one set cannot serve both links.
+for mcu in atmega328p atmega2560; do
+  objdir="$rstage/obj-$mcu"
+  mkdir -p "$objdir" || status=1
+  for source in "${core_sources[@]}" "$rstage/src/r2s_bundled.c"; do
+    avr-gcc -mmcu="$mcu" "${runtime_flags[@]}" -c "$source" -o "$objdir/$(basename "$source" .c).o" || status=1
+  done
+  avr-g++ -mmcu="$mcu" "${runtime_flags[@]}" -std=gnu++11 -c "$rstage/runtime.cpp" -o "$objdir/runtime.o" || status=1
+  avr-g++ -mmcu="$mcu" "${runtime_flags[@]}" -std=gnu++11 \
+    -o "$build/runtime-$mcu.elf" tests/harness/simavr/runtime_firmware.cpp \
+    "$objdir/"*.o || status=1
+done
 if [ "$status" -ne 0 ]; then
   echo "the simavr harness or its firmware did not build" >&2
   exit 1

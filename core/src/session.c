@@ -534,4 +534,9 @@ void r2s_session_test_reset(void)
     session.last_nack_tick = 0u;
     session.heard = 0u;
 }
+
+void r2s_session_test_link_timeout(void)
+{
+    enter_announcing(r2s_port_tick());
+}
 #endif

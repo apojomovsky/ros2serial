@@ -1,5 +1,5 @@
 name: reset_zero_token
-covers: [SES-10, SES-16, SES-17, SES-19, SES-20, SES-21]
+covers: [SES-1, SES-2, SES-10, SES-11, SES-16, SES-17, SES-19, SES-20, SES-21, HB-2, HB-4, FRM-4]
 steps:
   - from: mcu
     frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f0 ad"
@@ -35,14 +35,14 @@ steps:
     frame: "04 02 ca b4"
     at_ms: 1820
   - from: mcu
-    frame: "00 03 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 01 04 6e 6f 64 65 c7 33"
+    frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 01 04 6e 6f 64 65 8d a1"
     at_ms: 2000
     note: "reset: a zero token; the MCU rebooted"
   - from: host
     frame: "00 00 03 00 49 29"
     at_ms: 2000
   - from: mcu
-    frame: "00 04 04 00 10 00 00 01 02 03 04 05 06 07 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 07 62 61 74 74 65 72 79 9a c8"
+    frame: "00 01 04 00 10 00 00 01 02 03 04 05 06 07 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 07 62 61 74 74 65 72 79 a4 f0"
     at_ms: 2050
   - from: host
     frame: "00 01 05 10 00 1f 80"
@@ -50,6 +50,10 @@ steps:
   - from: host
     frame: "00 02 06 02 00 00 00 37 79"
     at_ms: 2050
+  - from: mcu
+    frame: "04 00 03 00 00 00 00 00 00 00 cb a6"
+    at_ms: 2550
+    note: "three frames accepted since the reboot, none dropped"
   - from: host
     frame: "04 00 d8 97"
     at_ms: 2550

@@ -1,5 +1,5 @@
 name: link_timeout
-covers: [SES-16, SES-17, SES-18, SES-21]
+covers: [SES-2, SES-5, SES-7, SES-8, SES-11, SES-16, SES-17, SES-18, SES-21, HB-2, HB-4, HB-7, FRM-4]
 steps:
   - from: mcu
     frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f0 ad"
@@ -29,8 +29,9 @@ steps:
     frame: "04 00 d8 97"
     at_ms: 820
   - from: mcu
-    frame: "04 00 10 00 00 00 00 00 10 00 f2 e2"
+    frame: "04 00 05 00 00 00 00 00 00 00 7a bb"
     at_ms: 1000
+    note: "heartbeat in CONNECTED: five frames accepted, none dropped"
   - from: host
     frame: "04 01 51 86"
     at_ms: 1320
@@ -48,13 +49,13 @@ steps:
     at_ms: 3000
     note: "2000 ms with no frame; back to HANDSHAKING"
   - from: mcu
-    frame: "00 03 02 02 00 01 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f3 ac"
+    frame: "00 02 02 02 00 01 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 3a 25"
     at_ms: 3100
   - from: host
     frame: "00 01 03 00 95 73"
     at_ms: 3100
   - from: mcu
-    frame: "00 04 04 00 10 00 00 01 02 03 04 05 06 07 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 07 62 61 74 74 65 72 79 9a c8"
+    frame: "00 03 04 00 10 00 00 01 02 03 04 05 06 07 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 07 62 61 74 74 65 72 79 ed bd"
     at_ms: 3150
   - from: host
     frame: "00 02 05 10 00 d2 a5"
@@ -63,7 +64,7 @@ steps:
     frame: "00 03 03 01 a4 d7"
     at_ms: 3150
   - from: mcu
-    frame: "00 05 04 01 11 05 10 11 12 13 14 15 16 17 17 67 65 6f 6d 65 74 72 79 5f 6d 73 67 73 2f 6d 73 67 2f 54 77 69 73 74 07 63 6d 64 5f 76 65 6c 7d 5f"
+    frame: "00 04 04 01 11 05 10 11 12 13 14 15 16 17 17 67 65 6f 6d 65 74 72 79 5f 6d 73 67 73 2f 6d 73 67 2f 54 77 69 73 74 07 63 6d 64 5f 76 65 6c 46 69"
     at_ms: 3200
   - from: host
     frame: "00 04 05 11 00 90 f7"
@@ -71,6 +72,10 @@ steps:
   - from: host
     frame: "00 05 06 02 00 00 00 e6 65"
     at_ms: 3200
+  - from: mcu
+    frame: "04 00 0c 00 00 00 00 00 00 00 79 17"
+    at_ms: 3700
+    note: "twelve frames accepted since boot, none dropped"
   - from: host
     frame: "04 00 d8 97"
     at_ms: 3700
