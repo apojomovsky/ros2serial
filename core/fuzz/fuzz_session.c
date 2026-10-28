@@ -56,11 +56,6 @@ uint32_t r2s_port_tick(void)
     return tick;
 }
 
-uint32_t r2s_port_boot_id(void)
-{
-    return 0x12345678u;
-}
-
 void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, uint16_t len)
 {
     static fuzz_msg_union_t msg;
