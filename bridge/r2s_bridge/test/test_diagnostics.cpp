@@ -231,6 +231,16 @@ TEST_F(DiagnosticsNode, ReportsMcuCountersFromHeartbeat)
     EXPECT_EQ(diagnostics.mcu_counters.rx_overflows, 1u);
     EXPECT_EQ(diagnostics.mcu_counters.dropped_frames, 4u);
 }
+TEST_F(DiagnosticsNode, CountsFirstFrameSeqAsGaps)
+{
+    DiagnosticsFixture fixture("firstgap", RouterParams{});
+    fixture.handshake();
+    const std::vector<std::uint8_t> one{0x00, 0x00, 0x80, 0x3F};
+    fixture.deliver_frame(kBattery, 3u, one);
+    const TopicDiagnostics *battery = find_topic(fixture.snapshot(), kBattery);
+    ASSERT_NE(battery, nullptr);
+    EXPECT_EQ(battery->seq_gaps, 3u) << "the first frame after a handshake expects seq 0";
+}
 
 TEST_F(DiagnosticsNode, CountsSkippedMcuFramesAsGaps)
 {

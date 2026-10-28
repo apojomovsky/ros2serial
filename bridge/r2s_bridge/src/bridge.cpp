@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "r2s_bridge/diagnostics.hpp"
 #include "r2s_bridge/termios_transport.hpp"
 
 namespace r2s_bridge
@@ -18,9 +19,12 @@ namespace
 {
 
 constexpr std::chrono::milliseconds kPollPeriod{1};
+// Diagnostics ride the poll timer instead of their own: the snapshot must
+// read on the thread that polls the router, whose session keeps no lock.
+// One message per thousand polls is 1 Hz, the updater default.
+constexpr int kDiagnosticsEveryNPolls = 1000;
 
 } // namespace
-
 Bridge::Bridge(const rclcpp::NodeOptions &options) : rclcpp::Node("r2s_bridge", options)
 {
     declare_parameter<std::string>("port", "/dev/ttyACM0");
@@ -80,7 +84,18 @@ Bridge::Bridge(const rclcpp::NodeOptions &options) : rclcpp::Node("r2s_bridge", 
         get_node_topics_interface(),
         [serial]() { return std::unique_ptr<Transport>(new TermiosTransport(serial)); }, clock_,
         std::move(pacing), forward_log, std::move(link));
-    timer_ = create_wall_timer(kPollPeriod, [this]() { router_->poll(); });
+    diagnostics_hardware_id_ = serial.port;
+    diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10);
+    timer_ = create_wall_timer(kPollPeriod, [this]() {
+        router_->poll();
+        if (++diagnostics_countdown_ >= kDiagnosticsEveryNPolls) {
+            diagnostics_countdown_ = 0;
+            diagnostic_msgs::msg::DiagnosticArray message =
+                diagnostics_message(router_->diagnostics(), diagnostics_hardware_id_);
+            message.header.stamp = now();
+            diagnostics_pub_->publish(message);
+        }
+    });
 }
 
 Bridge::~Bridge() = default;

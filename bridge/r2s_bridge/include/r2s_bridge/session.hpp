@@ -151,8 +151,8 @@ class Session
     McuCounters mcu_counters() const;
     // Lost MCU-to-host frames per user topic ([FRM-15]): the sum of
     // (seq - expected) mod 256 over every user frame received while
-    // connected. Gaps accumulate across handshakes, while the expectation
-    // restarts at 0 after each one ([FRM-4]). 0 for an unseen topic.
+    // connected. The first frame after each handshake expects seq 0, so a
+    // first seq of N counts N; gaps accumulate across handshakes.
     std::uint32_t seq_gaps(std::uint8_t topic_id) const;
     // HELLOs accepted while connected: the MCU rebooted and announced a new
     // handshake ([SES-19], [SES-21]). Link timeouts re-handshake without a

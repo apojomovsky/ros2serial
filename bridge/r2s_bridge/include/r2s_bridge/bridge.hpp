@@ -5,8 +5,11 @@
 #define R2S_BRIDGE__BRIDGE_HPP_
 
 #include <memory>
+#include <string>
 
 #include <rclcpp/rclcpp.hpp>
+
+#include <diagnostic_msgs/msg/diagnostic_array.hpp>
 
 #include "r2s_bridge/router.hpp"
 #include "r2s_bridge/steady_clock.hpp"
@@ -24,6 +27,9 @@ class Bridge : public rclcpp::Node
     SteadyClock clock_;
     std::unique_ptr<Router> router_;
     rclcpp::TimerBase::SharedPtr timer_;
+    rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_pub_;
+    std::string diagnostics_hardware_id_;
+    int diagnostics_countdown_ = 0;
 };
 
 } // namespace r2s_bridge

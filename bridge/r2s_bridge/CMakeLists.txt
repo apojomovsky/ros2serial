@@ -20,6 +20,7 @@ add_library(r2s_bridge_component SHARED
   src/bridge.cpp
   src/converter.cpp
   src/core_port.cpp
+  src/diagnostics.cpp
   src/framing.cpp
   src/router.cpp
   src/scheduler.cpp
@@ -32,6 +33,7 @@ target_include_directories(r2s_bridge_component PUBLIC
 target_link_libraries(r2s_bridge_component PUBLIC
   rclcpp::rclcpp
   rclcpp_components::component
+  diagnostic_msgs::diagnostic_msgs__rosidl_typesupport_cpp
   rmw::rmw
   rosidl_runtime_cpp::rosidl_runtime_cpp
   rosidl_typesupport_introspection_cpp::rosidl_typesupport_introspection_cpp)
@@ -198,5 +200,5 @@ if(BUILD_TESTING)
 endif()
 
 ament_export_targets(export_r2s_bridge HAS_LIBRARY_TARGET)
-ament_export_dependencies(rclcpp rclcpp_components)
+ament_export_dependencies(rclcpp rclcpp_components diagnostic_msgs)
 ament_package()

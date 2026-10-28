@@ -530,15 +530,13 @@ struct Session::Impl {
             return;
         }
         // [FRM-15] A gap is not an error and does not drop the frame; it only
-        // counts here, per topic, for the H8 diagnostics.
+        // counts here, per topic, for the H8 diagnostics. The first frame
+        // after a handshake expects seq 0.
         const std::uint8_t seq = frame.data[1];
         const auto expected = expected_seq.find(topic_id);
-        if (expected == expected_seq.end()) {
-            expected_seq[topic_id] = static_cast<std::uint8_t>(seq + 1u);
-        } else {
-            gaps[topic_id] += static_cast<std::uint32_t>((seq - expected->second) & 0xFFu);
-            expected->second = static_cast<std::uint8_t>(seq + 1u);
-        }
+        const std::uint8_t want = expected == expected_seq.end() ? 0u : expected->second;
+        gaps[topic_id] += static_cast<std::uint32_t>((seq - want) & 0xFFu);
+        expected_seq[topic_id] = static_cast<std::uint8_t>(seq + 1u);
         for (const TopicInfo &topic : topics) {
             if (topic.topic_id == topic_id && topic.status == kTopicStatusOk && events.user_frame) {
                 events.user_frame(topic_id, std::vector<std::uint8_t>(payload, payload + len));
