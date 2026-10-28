@@ -65,6 +65,8 @@ uint32_t r2s_port_tick(void)
     return (uint32_t)(micros() / 1000UL);
 }
 
+/* A counter in the first EEPROM cell, so every boot announces a new ID.
+ * S8 removes the boot ID; until it lands the glue keeps this internally. */
 uint32_t r2s_port_boot_id(void)
 {
     if (!s_boot_done) {
