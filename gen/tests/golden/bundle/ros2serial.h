@@ -17,17 +17,27 @@
 #include "r2s/r2s_topics.h"
 #include "r2s/r2s_tx.h"
 
-/* A sketch declares its topics as X-macro rows before including this header;
- * the header expands them into the topic table, the typed publish functions
- * and dispatch in the sketch's own translation unit, while the descriptors
- * stay in the library, which compiles without the list. */
-#ifndef R2S_TOPICS
+/* A C++ sketch without a topic list uses the runtime API: it declares
+ * its publishers and subscriptions as objects, and the header brings in
+ * the runtime layer that serves them. The static X-macro path below
+ * stays for the builds that want it, so a C++ sketch with a list keeps
+ * the expansion. */
+#if defined(__cplusplus) && !defined(R2S_TOPICS)
+#include "r2s/runtime.hpp"
+#endif
+
+/* A C sketch declares its topics as X-macro rows before including this
+ * header; the header expands them into the topic table, the typed publish
+ * functions and dispatch in the sketch's own translation unit, while the
+ * descriptors stay in the library, which compiles without the list. */
+#if !defined(R2S_TOPICS) && !defined(__cplusplus)
 #error "Define R2S_TOPICS(X) as X(DIR, name, package, Type) rows before including <ros2serial.h>."
 #endif
 
 /* A C++ sketch includes this header plainly: the expansion below carries
  * C linkage, so handler definitions keep it with no extern "C" block
  * of their own, and the port glue lives in the library. */
+#ifdef R2S_TOPICS
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -197,6 +207,8 @@ void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, u
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif
 
 #endif
