@@ -386,3 +386,31 @@ def test_quoted_ordered_item_fence_is_reported(tmp_path):
     problems = snippets_check.check_tree(root)
     assert len(problems) == 1
     assert "never opened a snippet" in problems[0]
+
+
+def test_literal_fence_in_indented_block_with_marker_passes(tmp_path, capsys):
+    text = "# T\n\n<!-- snippet: skip until #193: literal fence syntax example -->\n    ```c\n    int x = 1;\n    ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
+    assert "until #193" in capsys.readouterr().out
+
+
+def test_literal_fence_in_outer_fence_with_marker_passes(tmp_path, capsys):
+    text = "# T\n\n```\n<!-- snippet: skip until #193: shows fence syntax literally -->\n```c\nint x = 1;\n```\n```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
+    assert "until #193" in capsys.readouterr().out
+
+
+def test_literal_fence_in_yaml_scalar_with_marker_passes(tmp_path, capsys):
+    text = "# T\n\n```yaml\nexample: |\n  <!-- snippet: skip until #193: literal -->\n    ```c\n    ...\n```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
+    assert "until #193" in capsys.readouterr().out
+
+
+def test_marker_above_outer_fence_does_not_silence_inner_fence(tmp_path):
+    text = "# T\n\n<!-- snippet: skip until #94 -->\n```\nx = 1\n```c\nint broken = ;\n```\n```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert any("never opened a snippet" in p for p in problems)
