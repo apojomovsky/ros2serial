@@ -168,6 +168,16 @@ if(BUILD_TESTING)
     geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
     sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
     std_msgs::std_msgs__rosidl_typesupport_cpp)
+
+  # The diagnostics snapshot reports the same scripted link through the
+  # router's public interface, covering the H8 values after losses and errors.
+  ament_add_gtest(test_diagnostics test/test_diagnostics.cpp)
+  target_include_directories(test_diagnostics PRIVATE ${R2S_CORE_DIR}/include)
+  target_link_libraries(test_diagnostics
+    r2s_bridge_component
+    r2s_bridge_test_support
+    geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
+    std_msgs::std_msgs__rosidl_typesupport_cpp)
 endif()
 
 ament_export_targets(export_r2s_bridge HAS_LIBRARY_TARGET)
