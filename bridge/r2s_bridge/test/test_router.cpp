@@ -86,11 +86,11 @@ class RouterFixture
     // "battery" and a Twist subscription "cmd_vel", with an optional String
     // topic "log_text" in either direction.
     static constexpr std::uint8_t kLogText = 18u;
-    void handshake(std::uint8_t cmd_vel_flags = 0x01u, std::uint32_t boot_id = 7u, bool with_log_text = false,
+    void handshake(std::uint8_t cmd_vel_flags = 0x01u, std::uint32_t token = 7u, bool with_log_text = false,
                    std::uint8_t log_text_flags = 0x00u, std::uint16_t frame_cap = 0u)
     {
         const std::uint16_t cap = frame_cap == 0u ? max_frame_ : frame_cap;
-        deliver_frame(kHelperControl, 0u, helper_hello(boot_id, with_log_text ? 3u : 2u, cap));
+        deliver_frame(kHelperControl, 0u, helper_hello(token, with_log_text ? 3u : 2u, cap));
         expect_topic_req(0u);
         const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
         deliver_frame(

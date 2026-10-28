@@ -1,8 +1,8 @@
-name: reset_same_boot_id
-covers: [SES-16, SES-17, SES-18, SES-19, SES-20, SES-21]
+name: reset_same_token
+covers: [SES-10, SES-16, SES-17, SES-18, SES-19, SES-20, SES-21]
 steps:
   - from: mcu
-    frame: "00 00 02 01 00 78 56 34 12 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 30 e8"
+    frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f0 ad"
     at_ms: 100
   - from: host
     frame: "00 00 03 00 49 29"
@@ -23,7 +23,7 @@ steps:
     frame: "00 03 05 11 00 b1 a0"
     at_ms: 320
   - from: host
-    frame: "00 04 06 65 3b"
+    frame: "00 04 06 01 00 00 00 00 44"
     at_ms: 320
   - from: host
     frame: "04 00 d8 97"
@@ -38,29 +38,33 @@ steps:
     frame: "04 02 ca b4"
     at_ms: 1820
   - from: mcu
-    frame: "00 03 02 01 00 78 56 34 12 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 7a 7a"
+    frame: "00 03 02 02 00 01 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f3 ac"
     at_ms: 2000
   - from: host
     frame: "00 00 03 00 49 29"
     at_ms: 2000
   - from: mcu
-    frame: "00 04 04 00 10 00 00 01 02 03 04 05 06 07 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 07 62 61 74 74 65 72 79 9a c8"
+    frame: "00 04 02 02 00 01 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 bf 09"
     at_ms: 2050
+    note: "repeat with the same token; the walk answering the first HELLO continues"
+  - from: mcu
+    frame: "00 05 04 00 10 00 00 01 02 03 04 05 06 07 14 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 07 62 61 74 74 65 72 79 36 6a"
+    at_ms: 2100
   - from: host
     frame: "00 01 05 10 00 1f 80"
-    at_ms: 2050
+    at_ms: 2100
   - from: host
     frame: "00 02 03 01 78 8d"
-    at_ms: 2050
+    at_ms: 2100
   - from: mcu
-    frame: "00 05 04 01 11 05 10 11 12 13 14 15 16 17 17 67 65 6f 6d 65 74 72 79 5f 6d 73 67 73 2f 6d 73 67 2f 54 77 69 73 74 07 63 6d 64 5f 76 65 6c 7d 5f"
-    at_ms: 2120
+    frame: "00 06 04 01 11 05 10 11 12 13 14 15 16 17 17 67 65 6f 6d 65 74 72 79 5f 6d 73 67 73 2f 6d 73 67 2f 54 77 69 73 74 07 63 6d 64 5f 76 65 6c 30 05"
+    at_ms: 2170
   - from: host
     frame: "00 03 05 11 00 b1 a0"
-    at_ms: 2120
+    at_ms: 2170
   - from: host
-    frame: "00 04 06 65 3b"
-    at_ms: 2120
+    frame: "00 04 06 02 00 00 00 cd 61"
+    at_ms: 2170
   - from: host
     frame: "04 00 d8 97"
     at_ms: 2620

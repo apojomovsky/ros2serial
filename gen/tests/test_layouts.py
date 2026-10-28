@@ -376,11 +376,6 @@ uint32_t r2s_port_tick(void)
     return 0u;
 }
 
-uint32_t r2s_port_boot_id(void)
-{
-    return 1u;
-}
-
 void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
 {
     (void)msg;

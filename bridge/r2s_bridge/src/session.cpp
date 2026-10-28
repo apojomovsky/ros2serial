@@ -55,7 +55,7 @@ constexpr std::uint32_t kMaxFrameLimit = 65277u;
 struct HelloFacts {
     std::uint8_t version = 0;
     std::uint8_t mode = 0;
-    std::uint32_t boot_id = 0;
+    std::uint32_t token = 0;
     std::uint16_t max_frame = 0;
     std::uint16_t rx_capacity = 0;
     std::uint32_t tick_hz = 0;
@@ -324,6 +324,14 @@ struct Session::Impl {
         }
     }
 
+    // A fresh nonzero token for the handshake: 0 means no token yet, so the
+    // counter wraps from 2^32 - 1 to 1 without a branch ([SES-10], [SES-17]).
+    std::uint32_t assign_token()
+    {
+        next_token = next_token % 0xFFFFFFFFu + 1u;
+        return next_token;
+    }
+
     void finish_handshake()
     {
         awaiting_topic = false;
@@ -332,7 +340,11 @@ struct Session::Impl {
         topics = collected;
         had_handshake = true;
         state = SessionState::kConnected;
-        send_control({kReady});
+        hello.token = assign_token();
+        send_control({kReady, static_cast<std::uint8_t>(hello.token & 0xFFu),
+                      static_cast<std::uint8_t>((hello.token >> 8u) & 0xFFu),
+                      static_cast<std::uint8_t>((hello.token >> 16u) & 0xFFu),
+                      static_cast<std::uint8_t>((hello.token >> 24u) & 0xFFu)});
         // The handshake is over, so every counter restarts at 0 ([FRM-4]).
         seq_control = 0;
         seq_heartbeat = 0;
@@ -352,7 +364,7 @@ struct Session::Impl {
         }
         Reader reader(payload + 1u, static_cast<std::uint16_t>(len - 1u));
         HelloFacts facts;
-        if (!reader.u8(facts.version) || !reader.u8(facts.mode) || !reader.u32(facts.boot_id) ||
+        if (!reader.u8(facts.version) || !reader.u8(facts.mode) || !reader.u32(facts.token) ||
             !reader.u16(facts.max_frame) || !reader.u16(facts.rx_capacity) || !reader.u32(facts.tick_hz) ||
             !reader.u8(facts.features) || !reader.u8(facts.topic_count)) {
             log(SessionLog::kError, "HELLO refused: the payload is shorter than its fields");
@@ -387,14 +399,14 @@ struct Session::Impl {
             return false;
         }
 
-        const bool same_boot = seen_boot_id && facts.boot_id == hello.boot_id;
-        if (state == SessionState::kHandshaking && awaiting_topic && same_boot) {
+        const bool same_token = seen_hello && facts.token == hello.token;
+        if (state == SessionState::kHandshaking && awaiting_topic && same_token) {
             // The MCU repeats HELLO while it hears nothing; the walk under way
             // is the answer to the first one, so a repeat changes nothing.
             return true;
         }
         hello = facts;
-        seen_boot_id = true;
+        seen_hello = true;
         // A HELLO that lands while connected is a reset, and the same HELLO
         // announces the new handshake, so no extra HELLO_REQ is needed
         // ([SES-19], [SES-21]).
@@ -607,7 +619,7 @@ struct Session::Impl {
     std::int64_t last_rx_ms = 0;
 
     HelloFacts hello;
-    bool seen_boot_id = false;
+    bool seen_hello = false;
     bool awaiting_topic = false;
     std::uint8_t requested_index = 0;
     int retries = 0;
@@ -615,6 +627,7 @@ struct Session::Impl {
     std::vector<TopicInfo> collected;
     std::vector<TopicInfo> topics;
     bool had_handshake = false;
+    std::uint32_t next_token = 0u;
     McuCounters mcu;
 
     std::uint8_t seq_control = 0;
@@ -637,14 +650,14 @@ SessionState Session::state() const
     return impl_->state;
 }
 
-bool Session::has_boot_id() const
+bool Session::seen_hello() const
 {
-    return impl_->seen_boot_id;
+    return impl_->seen_hello;
 }
 
-std::uint32_t Session::boot_id() const
+std::uint32_t Session::token() const
 {
-    return impl_->hello.boot_id;
+    return impl_->hello.token;
 }
 
 const std::vector<TopicInfo> &Session::topics() const
@@ -676,12 +689,12 @@ bool Session::send_user(std::uint8_t topic_id, const std::vector<std::uint8_t> &
 
 std::uint16_t Session::mcu_max_frame() const
 {
-    return impl_->seen_boot_id ? impl_->hello.max_frame : 0u;
+    return impl_->seen_hello ? impl_->hello.max_frame : 0u;
 }
 
 std::uint16_t Session::mcu_rx_capacity() const
 {
-    return impl_->seen_boot_id ? impl_->hello.rx_capacity : 0u;
+    return impl_->seen_hello ? impl_->hello.rx_capacity : 0u;
 }
 
 void Session::poll()

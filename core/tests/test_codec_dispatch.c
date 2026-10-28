@@ -49,12 +49,11 @@ static const r2s_topic_t narrow_topics[] = {
      "log_text"},
 };
 
-static void configure(uint32_t boot_id)
+static void configure(void)
 {
     got_calls = 0u;
     memset(&got_cmd_vel, 0, sizeof got_cmd_vel);
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_handwritten_configure());
-    fake_port_set_boot_id(boot_id);
     r2s_init();
 }
 
@@ -82,7 +81,7 @@ static void handshake(void)
     const uint8_t topic_req1[] = {0x03u, 0x01u};
     const uint8_t status_battery[] = {0x05u, R2S_HANDWRITTEN_BATTERY_ID, 0x00u};
     const uint8_t status_cmd_vel[] = {0x05u, R2S_HANDWRITTEN_CMD_VEL_ID, 0x00u};
-    const uint8_t ready[] = {0x06u};
+    const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
 
     feed_host(0, 0, hello_req, sizeof hello_req);
     feed_host(0, 1, topic_req0, sizeof topic_req0);
@@ -126,7 +125,7 @@ void test_codec_publish_while_announcing_fails_and_sends_nothing(void)
 {
     std_msgs__msg__Float32 battery = {1.5f};
 
-    configure(0x44332211u);
+    configure();
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_NOT_CONNECTED, r2s_publish_battery(&battery));
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
 }
@@ -138,7 +137,7 @@ void test_codec_publish_sends_frames_with_per_topic_sequence(void)
     static uint8_t payload[R2S_MAX_FRAME];
     uint16_t len;
 
-    configure(0x44332211u);
+    configure();
     handshake();
     fake_port_tx_clear();
     {
@@ -160,7 +159,7 @@ void test_codec_publish_rejected_topic_sends_nothing(void)
     const uint8_t status_rejected[] = {0x05u, R2S_HANDWRITTEN_BATTERY_ID, 0x02u};
     std_msgs__msg__Float32 battery = {1.5f};
 
-    configure(0x44332211u);
+    configure();
     handshake();
     feed_host(0, 6, status_rejected, sizeof status_rejected);
     fake_port_tx_clear();
@@ -177,7 +176,6 @@ void test_codec_publish_unconfigured_topic_sends_nothing(void)
 
     got_calls = 0u;
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", sub_only, 1u));
-    fake_port_set_boot_id(0x44332211u);
     r2s_init();
     handshake();
     fake_port_tx_clear();
@@ -193,7 +191,7 @@ void test_codec_publish_bound_violation_sends_nothing(void)
     static uint8_t payload[R2S_MAX_FRAME];
     uint16_t len;
 
-    configure(0x44332211u);
+    configure();
     handshake();
     feed_host(0, 6, status_log_text, sizeof status_log_text);
     memset(&text, 0, sizeof text);
@@ -220,7 +218,7 @@ void test_codec_publish_without_space_sends_nothing(void)
     static uint8_t payload[R2S_MAX_FRAME];
     uint16_t len;
 
-    configure(0x44332211u);
+    configure();
     handshake();
     {
         r2s_codec_out_t sink = {payload, (uint16_t)sizeof payload, 0u, 0u};
@@ -245,7 +243,7 @@ void test_codec_announced_flags_carry_narrow_on_32_bit_doubles(void)
 {
     uint8_t index;
 
-    configure(0x44332211u);
+    configure();
     TEST_ASSERT_EQUAL_UINT8((uint8_t)(DBL_MANT_DIG == FLT_MANT_DIG), R2S_HANDWRITTEN_NARROW != 0u);
     index = r2s_session_find_topic(R2S_HANDWRITTEN_BATTERY_ID);
     TEST_ASSERT_NOT_EQUAL_UINT8(0xFFu, index);
@@ -261,7 +259,7 @@ void test_codec_subscribe_dispatches_to_the_handler(void)
     static uint8_t payload[R2S_MAX_FRAME];
     uint16_t len;
 
-    configure(0x44332211u);
+    configure();
     handshake();
     len = twist_payload(payload, &sent, 0u);
     TEST_ASSERT_EQUAL_UINT16(48, len);
@@ -278,7 +276,7 @@ void test_codec_gap_counts_lost_frames_without_dropping(void)
     uint16_t len;
     uint8_t index;
 
-    configure(0x44332211u);
+    configure();
     handshake();
     len = twist_payload(payload, &sent, 0u);
     index = r2s_session_find_topic(R2S_HANDWRITTEN_CMD_VEL_ID);
@@ -300,11 +298,11 @@ void test_codec_sequence_restarts_after_each_handshake(void)
     const uint8_t hello_req[] = {0x01u, R2S_PROTOCOL_VERSION};
     const uint8_t status_battery[] = {0x05u, R2S_HANDWRITTEN_BATTERY_ID, 0x00u};
     const uint8_t status_cmd_vel[] = {0x05u, R2S_HANDWRITTEN_CMD_VEL_ID, 0x00u};
-    const uint8_t ready[] = {0x06u};
+    const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
     uint16_t len;
     uint8_t index;
 
-    configure(0x44332211u);
+    configure();
     handshake();
     len = twist_payload(payload, &sent, 0u);
     index = r2s_session_find_topic(R2S_HANDWRITTEN_CMD_VEL_ID);
@@ -333,7 +331,7 @@ void test_codec_narrow_uses_the_announced_flags(void)
     const uint16_t drops_before = r2s_framer_counters()->dropped_frames;
 
     TEST_ASSERT_EQUAL_UINT16(24, len);
-    configure(0x44332211u);
+    configure();
     handshake();
     feed_host(R2S_HANDWRITTEN_CMD_VEL_ID, 0, payload, len);
     TEST_ASSERT_EQUAL_UINT8(0, got_calls);
@@ -355,7 +353,7 @@ void test_codec_decode_failure_drops_without_calling_the_handler(void)
     const uint16_t drops_before = r2s_framer_counters()->dropped_frames;
 
     payload[len] = 0xFFu;
-    configure(0x44332211u);
+    configure();
     handshake();
     feed_host(R2S_HANDWRITTEN_CMD_VEL_ID, 0, payload, (uint16_t)(len + 1u));
     TEST_ASSERT_EQUAL_UINT8(0, got_calls);
@@ -369,7 +367,7 @@ void test_codec_frame_on_unknown_or_publish_topic_is_refused(void)
     uint16_t len = twist_payload(payload, &sent, 0u);
     const uint16_t drops_before = r2s_framer_counters()->dropped_frames;
 
-    configure(0x44332211u);
+    configure();
     handshake();
     feed_host(19, 0, payload, len);
     feed_host(R2S_HANDWRITTEN_BATTERY_ID, 0, payload, len);

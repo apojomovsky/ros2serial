@@ -19,7 +19,11 @@ build_only=0
 if [ "${1:-}" = --build-only ]; then build_only=1; shift; fi
 [ "$#" -eq 0 ] || { echo "usage: ports/posix/run.sh [--build-only]" >&2; exit 2; }
 
-cmake -S ports/posix -B "$build" -G Ninja >"$build.configure.log" 2>&1 \
+generator_args=()
+# The dev image carries ninja; images without it (lyrical CI) fall back to
+# the default generator, so the firmware builds in both.
+command -v ninja >/dev/null 2>&1 && generator_args=(-G Ninja)
+cmake -S ports/posix -B "$build" "${generator_args[@]}" >"$build.configure.log" 2>&1 \
   || { cat "$build.configure.log"; exit 1; }
 cmake --build "$build" || exit 1
 [ "$build_only" = 1 ] && exit 0

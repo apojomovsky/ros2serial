@@ -29,10 +29,6 @@ uint16_t r2s_port_tx_free(void);
 /* Returns a free-running tick counter that wraps at 2^32, at R2S_TICK_HZ. */
 uint32_t r2s_port_tick(void);
 
-/* Returns a value that differs on every boot (an EEPROM counter, or random),
- * so the host can tell a reset from a reconnect. */
-uint32_t r2s_port_boot_id(void);
-
 #ifdef __cplusplus
 }
 #endif

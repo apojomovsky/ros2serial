@@ -2,9 +2,8 @@
 
 `ports/posix/run.sh` builds the firmware and points `R2S_POSIX_FW` at it,
 then runs this file; a bare pytest run fails on the missing build. Every
-test launches the firmware on a fresh pty pair with the boot ID file in a
-temporary directory, and speaks the wire protocol through the reference
-framing (`r2s_gen.reference.frames`), so a failure bisects to the firmware's
+test launches the firmware on a fresh pty pair, and speaks the wire protocol
+through the reference framing (`r2s_gen.reference.frames`), so a failure
 bytes before anyone reads its source.
 """
 
@@ -23,7 +22,6 @@ from r2s_gen import bounds, config, msgs, topics
 from r2s_gen.reference import frames as wire
 
 FIRMWARE = os.environ.get("R2S_POSIX_FW", "")
-BOOT_ENV = "R2S_POSIX_BOOT_ID_FILE"
 START_TIMEOUT = 10.0
 FRAME_TIMEOUT = 5.0
 STOP_TIMEOUT = 10.0
@@ -92,7 +90,7 @@ def take_string(payload, pos):
 def parse_hello(payload):
     """The HELLO fields in [CTL-16] order, after the opcode."""
     assert payload[0] == HELLO_OP, f"expected HELLO, got opcode {payload[0]:#04x}"
-    boot = int.from_bytes(payload[3:7], "little")
+    token = int.from_bytes(payload[3:7], "little")
     max_frame = int.from_bytes(payload[7:9], "little")
     rx_capacity = int.from_bytes(payload[9:11], "little")
     tick_hz = int.from_bytes(payload[11:15], "little")
@@ -101,7 +99,7 @@ def parse_hello(payload):
     return {
         "version": payload[1],
         "mode": payload[2],
-        "boot": boot,
+        "token": token,
         "max_frame": max_frame,
         "rx_capacity": rx_capacity,
         "tick_hz": tick_hz,
@@ -130,14 +128,12 @@ def parse_topic(payload):
 class Firmware:
     """A firmware process on a pty pair, with its stderr captured."""
 
-    def __init__(self, *args, boot=None, keep_env=True):
+    def __init__(self, *args):
         _PENDING.clear()
         self._master, slave = pty.openpty()
         try:
             cmd = [firmware_binary(), os.ttyname(slave), *args]
-            env = dict(os.environ) if keep_env else {}
-            if boot is not None:
-                env[BOOT_ENV] = boot
+            env = dict(os.environ)
             self._proc = subprocess.Popen(
                 cmd,
                 stdin=subprocess.DEVNULL,
@@ -215,6 +211,7 @@ class Host:
     def __init__(self, master):
         self.master = master
         self.seq = {}
+        self.next_token = 1
 
     def send(self, topic, payload):
         """One frame on topic, with that topic's own seq counter ([FRM-4])."""
@@ -223,7 +220,7 @@ class Host:
         self.seq[topic] = (seq + 1) % 256
 
     def hello_req(self):
-        self.send(0, b"\x01\x01")
+        self.send(0, b"\x01\x02")
 
     def topic_req(self, index):
         self.send(0, b"\x03" + bytes((index,)))
@@ -232,13 +229,20 @@ class Host:
         self.send(0, b"\x05" + bytes((topic_id, status)))
 
     def ready(self):
-        self.send(0, b"\x06")
+        """READY with the next nonzero session token ([SES-10], [SES-17])."""
+        token = self.next_token
+        self.next_token = self.next_token % 0xFFFFFFFF + 1
+        self.send(0, b"\x06" + struct.pack("<I", token))
+        return token
 
 
-def do_handshake(fw):
+def do_handshake(fw, host=None):
     """HELLO_REQ, one TOPIC_REQ per announced topic with an ok status each,
-    then READY: returns the parsed HELLO and the TOPICs in index order."""
-    host = Host(fw.master)
+    then READY: returns the parsed HELLO and the TOPICs in index order. The
+    host models the bridge side, so a rebooted firmware reuses the same one
+    and its token counter keeps counting."""
+    host = host or Host(fw.master)
+    host.master = fw.master
     _, _, payload = read_frame(fw.master, want=0)
     hello = parse_hello(payload)
     host.hello_req()
@@ -257,13 +261,14 @@ def do_handshake(fw):
     return hello, topics, host
 
 
-# covers: SES-1
+# covers: SES-1, SES-10
 def test_hello_announces_firmware(tmp_path):
-    with Firmware(boot=str(tmp_path / "boot")) as fw:
+    with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
         hello = parse_hello(payload)
-    assert hello["version"] == 1
+    assert hello["version"] == 2
     assert hello["mode"] == 0
+    assert hello["token"] == 0, "no token before the first READY"
     assert hello["max_frame"] == 52
     assert hello["rx_capacity"] == 52 + 52 // 254 + 1
     # covers: CTL-8
@@ -278,7 +283,7 @@ def test_hello_announces_firmware(tmp_path):
 
 # covers: SES-2, SES-6
 def test_handshake_reaches_connected(tmp_path):
-    with Firmware("--rate", "10", boot=str(tmp_path / "boot")) as fw:
+    with Firmware("--rate", "10") as fw:
         hello, topics, _host = do_handshake(fw)
         assert [t["topic"] for t in topics] == ["battery", "cmd_vel", "log_text"]
         assert [(t["type"], t["id"]) for t in topics] == [
@@ -296,28 +301,29 @@ def test_handshake_reaches_connected(tmp_path):
     assert hello["node"] == "r2s_posix"
 
 
-# covers: SES-10
-def test_boot_id_increments_across_restarts(tmp_path):
-    boot = str(tmp_path / "boot")
-    first = boot_of(boot)
-    second = boot_of(boot)
-    assert second == (first + 1) % 2**32
-    assert second != first
-
-
-def boot_of(boot):
-    fw = Firmware(boot=boot)
-    try:
+# covers: SES-10, SES-19, SES-21
+def test_restarted_firmware_is_detected_as_a_reset(tmp_path):
+    fw = Firmware("--rate", "20")
+    hello, _topics, host = do_handshake(fw)
+    assigned = host.next_token - 1
+    assert hello["token"] == 0, "no token before the first READY"
+    assert assigned != 0
+    assert fw.stop() == -signal.SIGTERM
+    with Firmware("--rate", "20") as fw:
         _, _, payload = read_frame(fw.master, want=0)
-        return parse_hello(payload)["boot"]
-    finally:
-        assert fw.stop() == -signal.SIGTERM
+        rebooted = parse_hello(payload)
+        assert rebooted["token"] == 0, "a reboot wipes the RAM token"
+        assert rebooted["token"] != assigned, "the host tells the reboot from a reconnect"
+        _hello, _topics, host = do_handshake(fw, host)
+        assert host.next_token - 1 != assigned, "the re-handshake assigns a fresh token"
+        _topic, _seq, payload = read_frame(fw.master, want=16)
+        assert len(payload) == 4, "the re-handshake connects again"
 
 
 # covers: CTL-16
 def test_configured_topics(tmp_path):
     args = ["--node", "custom", "--pub", "volt", "--sub", "drive", "--no-log-text"]
-    with Firmware(*args, boot=str(tmp_path / "boot")) as fw:
+    with Firmware(*args) as fw:
         hello, topics, _host = do_handshake(fw)
         assert hello["node"] == "custom"
         assert hello["count"] == 2
@@ -326,7 +332,7 @@ def test_configured_topics(tmp_path):
 
 # covers: FRM-4, FRM-5
 def test_connected_publishes_battery(tmp_path):
-    with Firmware("--rate", "20", boot=str(tmp_path / "boot")) as fw:
+    with Firmware("--rate", "20") as fw:
         _hello, _topics, _host = do_handshake(fw)
         values = []
         seqs = []
@@ -340,14 +346,15 @@ def test_connected_publishes_battery(tmp_path):
     assert seqs == [0, 1, 2]
 
 
-# covers: SES-9
+# covers: SES-9, SES-10
 def test_connected_publishes_log_text(tmp_path):
-    with Firmware("--rate", "20", boot=str(tmp_path / "boot")) as fw:
-        hello, _topics, _host = do_handshake(fw)
+    with Firmware("--rate", "20") as fw:
+        _hello, _topics, host = do_handshake(fw)
+        assigned = host.next_token - 1
         _topic, _seq, payload = read_frame(fw.master, want=18)
         text, end = take_string(payload, 0)
         assert end == len(payload), "bytes after the log string"
-        assert text == format(hello["boot"], "08x")
+        assert text == format(assigned, "08x"), "the boot line carries the assigned token"
         batteries = 0
         while True:
             topic, _seq, payload = read_frame(fw.master)
@@ -361,22 +368,9 @@ def test_connected_publishes_log_text(tmp_path):
             assert batteries <= 10, "no periodic log_text within 10 battery publishes"
 
 
-# covers: SES-9, SES-10
-def test_log_text_keeps_large_boot_id(tmp_path):
-    boot = tmp_path / "boot"
-    boot.write_text("70000\n")
-    with Firmware("--rate", "20", boot=str(boot)) as fw:
-        hello, _topics, _host = do_handshake(fw)
-        assert hello["boot"] == 70001
-        _topic, _seq, payload = read_frame(fw.master, want=18)
-        text, end = take_string(payload, 0)
-        assert end == len(payload), "bytes after the log string"
-        assert text == "00011171"
-
-
 # covers: SES-9
 def test_log_text_boot_line_retried_after_reject(tmp_path):
-    with Firmware("--rate", "20", boot=str(tmp_path / "boot")) as fw:
+    with Firmware("--rate", "20") as fw:
         host = Host(fw.master)
         _topic, _seq, payload = read_frame(fw.master, want=0)
         hello = parse_hello(payload)
@@ -406,37 +400,32 @@ def test_log_text_boot_line_retried_after_reject(tmp_path):
         _topic, _seq, payload = read_frame(fw.master, want=18)
         text, end = take_string(payload, 0)
         assert end == len(payload), "bytes after the log string"
-        assert text == format(hello["boot"], "08x")
+        assert text == format(host.next_token - 1, "08x")
 
 
 def test_subscribes_twist(tmp_path):
-    with Firmware("--rate", "1", boot=str(tmp_path / "boot")) as fw:
+    with Firmware("--rate", "1") as fw:
         _hello, _topics, host = do_handshake(fw)
         host.send(17, struct.pack("<6d", 1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
         assert fw.next_line() == "r2s_posix: cmd_vel n=1"
 
 
-def run_once(args, boot=None, keep_env=True):
-    """One firmware run that must fail before it opens any port: returns
-    (returncode, stderr) with no pty involved."""
+def run_once(args):
+    """One firmware run that must fail: returns (returncode, stderr) with no
+    pty involved."""
     cmd = [firmware_binary(), "/dev/pts/does-not-exist", *args]
-    env = dict(os.environ) if keep_env else {}
-    if boot is not None:
-        env[BOOT_ENV] = boot
-    elif BOOT_ENV in env:
-        del env[BOOT_ENV]
-    proc = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=START_TIMEOUT, env=env)
+    proc = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=START_TIMEOUT)
     return proc.returncode, proc.stderr.decode()
 
 
 def test_unknown_option_fails(tmp_path):
-    code, error = run_once(["--bogus"], boot=str(tmp_path / "boot"))
+    code, error = run_once(["--bogus"])
     assert code == 2
     assert "--bogus" in error
 
 
 def test_bad_rate_fails(tmp_path):
-    code, error = run_once(["--rate", "0"], boot=str(tmp_path / "boot"))
+    code, error = run_once(["--rate", "0"])
     assert code == 2
     assert "--rate" in error
 
@@ -470,7 +459,7 @@ def topic_name_limit(type_name, max_frame):
 def launch_name_cases(tmp_path):
     """Per-flag (flag, type, limit) from the frame limit this firmware build
     announces, so the boundary tests track the generated limits (G8)."""
-    with Firmware(boot=str(tmp_path / "boot")) as fw:
+    with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
         max_frame = parse_hello(payload)["max_frame"]
     return [(flag, type_name, topic_name_limit(type_name, max_frame)) for flag, type_name in LAUNCH_NAME_TYPES]
@@ -479,7 +468,7 @@ def launch_name_cases(tmp_path):
 def test_launch_topic_name_over_limit_fails(tmp_path):
     for flag, type_name, limit in launch_name_cases(tmp_path):
         name = "n" * (limit + 1)
-        code, error = run_once([flag, name], boot=str(tmp_path / "boot"))
+        code, error = run_once([flag, name])
         assert code == 2
         assert flag in error
         assert name in error
@@ -490,7 +479,7 @@ def test_launch_topic_name_over_limit_fails(tmp_path):
 
 def test_launch_topic_name_at_limit_passes_name_check(tmp_path):
     for flag, _, limit in launch_name_cases(tmp_path):
-        code, error = run_once([flag, "n" * limit], boot=str(tmp_path / "boot"))
+        code, error = run_once([flag, "n" * limit])
         assert code == 1
         assert "does-not-exist" in error
 
@@ -500,7 +489,7 @@ def test_launch_topic_name_at_limit_is_announced(tmp_path):
     args = []
     for flag, _, limit in cases:
         args += [flag, "n" * limit]
-    with Firmware(*args, boot=str(tmp_path / "boot")) as fw:
+    with Firmware(*args) as fw:
         _, topics, _ = do_handshake(fw)
         assert [t["topic"] for t in topics] == ["n" * limit for _, _, limit in cases]
 
@@ -516,11 +505,11 @@ def node_name_limit(max_frame):
 
 
 def test_launch_node_name_over_limit_fails(tmp_path):
-    with Firmware(boot=str(tmp_path / "boot")) as fw:
+    with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
         limit = node_name_limit(parse_hello(payload)["max_frame"])
     name = "n" * (limit + 1)
-    code, error = run_once(["--node", name], boot=str(tmp_path / "boot"))
+    code, error = run_once(["--node", name])
     assert code == 2
     assert "--node" in error
     assert name in error
@@ -529,20 +518,20 @@ def test_launch_node_name_over_limit_fails(tmp_path):
 
 
 def test_launch_node_name_at_limit_passes_name_check(tmp_path):
-    with Firmware(boot=str(tmp_path / "boot")) as fw:
+    with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
         limit = node_name_limit(parse_hello(payload)["max_frame"])
-    code, error = run_once(["--node", "n" * limit], boot=str(tmp_path / "boot"))
+    code, error = run_once(["--node", "n" * limit])
     assert code == 1
     assert "does-not-exist" in error
 
 
 def test_launch_node_name_at_limit_is_announced(tmp_path):
-    with Firmware(boot=str(tmp_path / "boot")) as fw:
+    with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
         limit = node_name_limit(parse_hello(payload)["max_frame"])
     name = "n" * limit
-    with Firmware("--node", name, boot=str(tmp_path / "boot")) as fw:
+    with Firmware("--node", name) as fw:
         hello, _, _ = do_handshake(fw)
         assert hello["node"] == name
 
@@ -623,40 +612,14 @@ def build_firmware_without_cmd_vel(tmp_path):
 def test_missing_default_topic_flag_fails(tmp_path):
     binary = build_firmware_without_cmd_vel(tmp_path)
     command = [str(binary), "/dev/pts/does-not-exist"]
-    env = dict(os.environ)
-    env[BOOT_ENV] = str(tmp_path / "boot")
-    proc = subprocess.run(
-        command, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=START_TIMEOUT, env=env
-    )
+    proc = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=START_TIMEOUT)
     assert proc.returncode == 2
     assert "r2s_posix: --sub names a topic" in proc.stderr
     assert "cmd_vel" in proc.stderr
 
 
-def test_missing_boot_file_env_fails(tmp_path):
-    code, error = run_once([], keep_env=False)
-    assert code == 2
-    assert BOOT_ENV in error
-
-
-def test_corrupt_boot_file_fails(tmp_path):
-    boot = tmp_path / "boot"
-    boot.write_text("not-a-number\n")
-    code, error = run_once([], boot=str(boot))
-    assert code == 2
-    assert str(boot) in error
-
-
-def test_long_boot_file_fails(tmp_path):
-    boot = tmp_path / "boot"
-    boot.write_text("0" * 36 + "1\n")
-    code, error = run_once([], boot=str(boot))
-    assert code == 2
-    assert str(boot) in error
-
-
 def test_unopenable_port_fails(tmp_path):
-    code, error = run_once([], boot=str(tmp_path / "boot"))
+    code, error = run_once([])
     assert code == 1
     assert "does-not-exist" in error
 
