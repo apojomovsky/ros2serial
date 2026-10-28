@@ -135,7 +135,6 @@ bounds:
 
 **2. An X-macro list in the sketch** (Arduino, no Python involved). The Arduino library ships descriptors for a bundle of common types (`std_msgs`, `geometry_msgs`, `sensor_msgs`) with documented default bounds:
 
-<!-- snippet: skip until #77 -->
 ```c
 #define R2S_NODE_NAME "base_controller"
 #define R2S_TOPICS(X) \
@@ -144,7 +143,7 @@ bounds:
 #include <ros2serial.h>
 ```
 
-The header expands the list into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator.
+The header expands the list into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator. The header counts the rows itself, so an empty list fails the build with the generator's message instead of emitting an empty table.
 
 **3. Runtime registration, rosserial style** (gcc-class targets only, see User API). Topics are registered while `setup()` runs and live in a RAM table. Registration closes at the first spin; a later registration is an error, never a silent re-handshake.
 
@@ -231,7 +230,7 @@ The bridge loads the type support for each type name and compares the hash with 
 
 **Losses and errors.** User topics are best effort. A gap in `seq` increments a counter that the bridge publishes as diagnostics. Parameters, services and the handshake use a small reliable channel (stop-and-wait with ack on ID 6, one outstanding message per direction).
 
-**Flow control.** The MCU announces its RX capacity (the size of its frame buffer). The bridge rate-limits host-to-MCU traffic per topic, caps its total host-to-MCU bandwidth to a fraction of the link, and, for keep-latest topics such as `cmd_vel`, keeps only the most recent message instead of queueing. Topics are serviced round-robin, so one busy topic cannot starve the others.
+**Flow control.** The MCU announces its RX capacity (the size of its frame buffer). The bridge rate-limits host-to-MCU traffic per topic, caps its total host-to-MCU bandwidth to a fraction of the link, and, for keep-latest topics such as `cmd_vel`, keeps only the most recent message instead of queueing. Topics are serviced round-robin, so one busy topic cannot starve the others. Pending control frames coalesce while the link is wedged ([SES-33]): one per control kind and one TOPIC_STATUS per topic id, dropped on re-handshake, with the replaced count in `/diagnostics`.
 
 ## Receiving and sending bytes
 
@@ -287,9 +286,13 @@ The tick comes from the port: `micros()` on Arduino (1 MHz nominal, 4 µs resolu
 
 One node per firmware, so the API needs no node handle. Names follow rosserial where possible and ROS 2 conventions where they differ (`spin_some`, `msg` in type names). Generated message types reuse the rosidl C naming (`geometry_msgs__msg__Twist`), so ROS 2 users recognize them. They are not ABI-compatible with `rosidl_generator_c`, but the two never get linked together.
 
-<!-- snippet: skip until #75 -->
 ```c
 #include "r2s_generated.h"        /* from r2s-gen, or the X-macro list */
+
+#include "r2s/r2s.h"
+
+void set_motors(double x, double z);
+float read_battery(void);
 
 static std_msgs__msg__Float32 battery;
 
@@ -841,13 +844,13 @@ The core calls `r2s_port_read` with `max = 1` while it assembles a frame, so it 
 
 For each topic in the list (generator or X-macro):
 
-<!-- snippet: skip until #75 -->
+<!-- snippet: skip until #75: template with <name> and <Type> placeholders, never literal C -->
 ```c
 r2s_status_t r2s_publish_<name>(const <Type> *msg);   /* published topics */
 void r2s_on_<name>(const <Type> *msg);               /* subscribed topics: prototype generated, user implements */
 ```
 
-`<name>` is the topic name with `/` replaced by `_`. A topic name that cannot be mapped to a valid C identifier, or two names that map to the same identifier, is a generator error.
+`<name>` is the topic name with `/` replaced by `_`. A topic name that cannot be mapped to a valid C identifier, or two names that map to the same identifier, is a generator error. An empty topic list is a generator error: a node with no topics has nothing to announce.
 
 ### C type mapping
 
@@ -947,7 +950,7 @@ by `launch/r2s_bridge.launch.py` with `port` and `params_file` arguments.
 
 ### Published by the bridge
 
-- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, protocol version, MCU counters from heartbeats, sequence gaps per topic, time sync offset, drift and round trip.
+- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, sequence gaps per topic and the host's verdict per topic (`topic <name> status`), time sync offset, drift and round trip.
 - The MCU's topics, under the names it announced, after remapping and namespacing.
 - MCU log messages through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`.
 

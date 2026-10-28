@@ -183,3 +183,30 @@ def test_the_names_command_lists_the_tests_for_cmake(tmp_path, capsys):
     src = write(tmp_path, "test_n.c", "void test_a(void)\n{\n}\nvoid test_b(void)\n{\n}\n")
     assert unity_runner.main(["names", str(src)]) == 0
     assert capsys.readouterr().out.split() == ["test_a", "test_b"]
+
+
+SESSION = """name: handshake
+covers: [SES-1]
+steps:
+  - {from: host, frame: "00 00 01 01 70 0b"}
+  - {from: mcu, frame: "00 00 02 01 18 21", at_ms: 3}
+"""
+
+
+def test_a_session_file_is_one_case_with_its_steps(tmp_path):
+    f = write(tmp_path, "handshake.yaml", SESSION)
+    out = unity_runner.vector_runner("session", [f])
+    assert "r2s_run_test(test_session_handshake, " in out
+    assert re.search(r"r2s_vec_check_session\(&v_handshake\)", out)
+    assert "{1u, 0u, v_handshake_s0_frame, 6u," in out
+    assert "{0u, 3u, v_handshake_s1_frame, 6u," in out
+    assert '"handshake", v_handshake_steps, 2u' in out
+
+
+def test_a_session_step_with_a_bad_side_or_time_is_rejected(tmp_path):
+    f = write(tmp_path, "bad.yaml", SESSION.replace("from: host", "from: bridge"))
+    with pytest.raises(unity_runner.VectorError, match="bad.yaml step 0: from"):
+        unity_runner.vector_runner("session", [f])
+    f = write(tmp_path, "bad.yaml", SESSION.replace("at_ms: 3", "at_ms: -1"))
+    with pytest.raises(unity_runner.VectorError, match="bad.yaml step 1: at_ms"):
+        unity_runner.vector_runner("session", [f])

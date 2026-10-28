@@ -274,13 +274,28 @@ Docs snippets follow `tools/snippets_check.py --help`. A fence tagged `c`,
 `cpp` or `python` is code and must compile. A fence tagged `sh`, `console`,
 `text`, `json` or `yaml` shows usage or data and is skipped, listed as
 skipped by tag; any other tag is an error. A snippet that cannot compile
-yet carries its ticket alone on the line above the fence:
+yet carries its ticket alone on the line above the fence. C and C++
+snippets compile against the core headers plus the staged
+generated-header fixtures, so snippets using `r2s_generated.h` or
+`ros2serial.h` compile instead of being skipped. A snippet that never
+compiles keeps its ticket with the reason after a colon:
 
 ```text
 The marker lives inside a fenced block, so the check reads it as text:
 
     <!-- snippet: skip until #94 -->
+
+    <!-- snippet: skip until #75: template placeholders, never literal C -->
 ```
+
+A tagged fence shown only as literal text, for example inside an indented
+block, carries the same marker alone on its own line at columns 0 to 3
+directly above it. The check skips the example without compiling it:
+
+<!-- snippet: skip until #193: literal fence syntax example, never compiled -->
+    ```c
+    int x = 1;
+    ```
 
 ## 10. Key end-to-end scenarios
 

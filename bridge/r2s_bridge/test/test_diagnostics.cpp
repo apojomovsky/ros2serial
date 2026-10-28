@@ -1,7 +1,7 @@
 // The bridge diagnostics: link state, session token, resets, protocol
 // version, MCU counters, per-topic gaps and drops, and the time sync slot,
 // through a real node with a scripted link and real type support.
-// covers: FRM-15, HB-2, SES-15, SES-16, SES-19, SES-21, SES-26, SES-30
+// covers: CTL-13, FRM-15, HB-2, SES-15, SES-16, SES-19, SES-21, SES-26, SES-30, SES-33
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -103,6 +103,12 @@ class DiagnosticsFixture
         router_->poll();
     }
 
+    // Caps the link so every write blocks, or opens it again. Pending frames
+    // stay queued while blocked, which is how the test wedges the link.
+    void block_writes()
+    {
+        transport_.limit_write(0u);
+    }
     void deliver_frame(std::uint8_t topic_id, std::uint8_t seq, const std::vector<std::uint8_t> &payload)
     {
         std::vector<std::uint8_t> decoded{topic_id, seq};
@@ -218,6 +224,31 @@ TEST_F(DiagnosticsNode, ReportsConnectedWithSessionTokenAfterHandshake)
     ASSERT_NE(cmd_vel, nullptr);
     EXPECT_EQ(cmd_vel->topic_name, "cmd_vel");
     EXPECT_FALSE(cmd_vel->device_to_host);
+}
+
+TEST_F(DiagnosticsNode, ReportsANameAnnouncedInBothDirectionsAsAConflict)
+{
+    DiagnosticsFixture fixture("clash", RouterParams{});
+    fixture.deliver_frame(kHelperControl, 0u, helper_hello(0u, 2u));
+    fixture.poll_once();
+    const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
+    fixture.deliver_frame(
+        kHelperControl, 1u,
+        helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "dup"));
+    fixture.poll_once();
+    const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
+    fixture.deliver_frame(
+        kHelperControl, 2u,
+        helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "dup"));
+    fixture.poll_once();
+    const Diagnostics diagnostics = fixture.snapshot();
+    ASSERT_EQ(diagnostics.topics.size(), 2u);
+    const TopicDiagnostics *pub = find_topic(diagnostics, kBattery);
+    const TopicDiagnostics *sub = find_topic(diagnostics, kCmdVel);
+    ASSERT_NE(pub, nullptr);
+    ASSERT_NE(sub, nullptr);
+    EXPECT_EQ(pub->status, 0u);
+    EXPECT_EQ(sub->status, 3u) << "the second announcement of one name is a conflict";
 }
 
 TEST_F(DiagnosticsNode, ReportsMcuCountersFromHeartbeat)
@@ -562,6 +593,24 @@ TEST_F(DiagnosticsNode, ReportsTimeSyncAsUnavailable)
     DiagnosticsFixture fixture("nosync", RouterParams{});
     fixture.handshake();
     EXPECT_FALSE(fixture.snapshot().time_sync_available) << "the estimator lands with P3";
+}
+
+TEST_F(DiagnosticsNode, CountsCoalescedControlFrames)
+{
+    DiagnosticsFixture fixture("coalesced", RouterParams{});
+    fixture.handshake();
+    EXPECT_EQ(fixture.snapshot().control_coalesced, 0u);
+    // Wedged writes with MCU heartbeats keeping the link alive: six host
+    // heartbeats collapse into one slot, and the H8 snapshot counts the five
+    // the newer replaced.
+    fixture.block_writes();
+    for (std::uint8_t seq = 0; seq < 6; ++seq) {
+        fixture.advance(500u);
+        fixture.deliver_frame(kHeartbeat, seq, heartbeat_payload(0u, 0u, 0u, 0u));
+    }
+    const Diagnostics diagnostics = fixture.snapshot();
+    EXPECT_EQ(diagnostics.link_state, "connected");
+    EXPECT_EQ(diagnostics.control_coalesced, 5u);
 }
 
 } // namespace

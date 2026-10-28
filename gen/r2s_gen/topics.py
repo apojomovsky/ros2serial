@@ -141,6 +141,16 @@ def check_collisions(names: Sequence[str], source: str) -> None:
             )
 
 
+def check_non_empty(names: Sequence[str], source: str) -> None:
+    """Reject an empty topic list: a node with no topics has nothing to announce."""
+    if not names:
+        raise MessageError(
+            f"{source}: topics",
+            "a node with no topics has nothing to announce",
+            "add at least one topic",
+        )
+
+
 def build(
     config: Config,
     resolved: Mapping[str, ResolvedMessage],
@@ -150,6 +160,7 @@ def build(
 ) -> TopicTable:
     """The topic table for `config`: IDs, flags, hashes and the frame limit."""
     names = [topic.name for topic in config.topics]
+    check_non_empty(names, source)
     check_collisions(names, source)
     if len(names) > MAX_USER_TOPICS:
         raise MessageError(
@@ -262,27 +273,211 @@ def _max_frame(config: Config, resolved: Mapping[str, ResolvedMessage], entries:
     return override
 
 
-def _call_lines(first: str, args: list, last: str, limit: int = 110) -> list:
-    """A call wrapped the way clang-format wraps one: fill every line, continue at the paren."""
-    cont = " " * len(first)
+def _indent_of(line: str) -> str:
+    """The leading spaces of a line."""
+    return line[: len(line) - len(line.lstrip(" "))]
+
+
+def _block_cont(first: str) -> str:
+    """The continuation indent after an open paren: one level per open scope."""
+    depth = max(1, first.count("(") - first.count(")"))
+    return _indent_of(first) + "    " * depth
+
+
+def _arg_text(arg) -> str:
+    """The source of an argument: plain text, or head(inner)tail for a call."""
+    if isinstance(arg, str):
+        return arg
+    head, sub, tail = arg
+    return f"{head}({', '.join(sub)}){tail}"
+
+
+def _flush(lines: list, line: str) -> None:
+    """Append a built line, unless it holds nothing but its indent."""
+    if line.strip():
+        lines.append(line)
+
+
+def _split_member(arg: str) -> tuple | None:
+    """An address-of-member argument as (receiver, member), else None."""
+    head, dot, member = arg.partition(".")
+    if not dot or not head.startswith("&") or not member:
+        return None
+    if "(" in arg or ")" in arg:
+        return None
+    return head, member
+
+
+def _fill(start: str, cont: str, args: list, last: str, limit: int) -> list:
+    """Greedy bin-pack of args; a call or member access splits when it fits nowhere whole."""
     lines: list = []
-    line = first
+    line = start
+    fresh = True
     for position, arg in enumerate(args):
         comma = "," if position < len(args) - 1 else ""
-        gap = "" if line in (first, cont) else " "
-        piece = f"{gap}{arg}{comma}"
-        rest = "" if comma else last
-        if len(line) + len(piece) + len(rest) <= limit:
-            line += piece
-            if not comma:
-                line += rest
-        else:
-            lines.append(line)
-            line = f"{cont}{arg}{comma}"
-            if not comma:
-                line += rest
+        rest = last if position == len(args) - 1 else ""
+        text = _arg_text(arg) + comma
+        gap = "" if fresh else " "
+        if len(line) + len(gap) + len(text) + len(rest) <= limit:
+            line += gap + text + rest
+            fresh = False
+            continue
+        if len(cont) + len(text) + len(rest) <= limit:
+            _flush(lines, line)
+            line = cont + text + rest
+            fresh = False
+            continue
+        member = _split_member(arg) if isinstance(arg, str) else None
+        if member is not None:
+            _flush(lines, line)
+            lines.append(cont + member[0])
+            line = cont + "     ." + member[1] + comma + rest
+            fresh = False
+            continue
+        if not isinstance(arg, str):
+            head, sub, tail = arg
+            opener = head + "("
+            if not fresh and len(line) + 1 + len(opener) <= limit:
+                head_start = line + " " + opener
+            else:
+                _flush(lines, line)
+                head_start = cont + opener
+            inner = _call_lines(head_start, sub, tail + comma + rest, limit)
+            lines.extend(inner[:-1])
+            line = inner[-1]
+            fresh = False
+            continue
+        _flush(lines, line)
+        line = cont + text + rest
+        fresh = False
     lines.append(line)
     return lines
+
+
+def _call_lines(first: str, args: list, last: str, limit: int = 110) -> list:
+    """A call wrapped the way clang-format wraps one.
+
+    A single line when it fits, else the fewest lines of the two shapes
+    clang-format chooses between: arguments kept on the first line and
+    continued at the paren, or broken after the paren at one level per
+    open scope. Ties keep the arguments on the first line, which matches
+    the short names already in the tree.
+    """
+    single = first + ", ".join(_arg_text(arg) for arg in args) + last
+    if len(single) <= limit:
+        return [single]
+    aligned = _fill(first, " " * len(first), args, last, limit)
+    cont = _block_cont(first)
+    block = [first] + _fill(cont, cont, args, last, limit)
+    fitting = [shape for shape in (aligned, block) if all(len(line) <= limit for line in shape)]
+    if fitting:
+        return min(fitting, key=len)
+    return block
+
+
+def _decl_lines(ret: str, name: str, params: str, last: str, limit: int = 110) -> list:
+    """A declaration wrapped the way clang-format wraps one.
+
+    A single line when it fits, else after the return type when the rest
+    fits and the type is longer than five characters, else after the open
+    paren. Short types stay on the first line; the split sits between the
+    five and six character types probed.
+    """
+    if len(f"{ret} {name}({params}){last}") <= limit:
+        return [f"{ret} {name}({params}){last}"]
+    if len(ret) > 5 and len(f"{name}({params}){last}") <= limit:
+        return [ret, f"{name}({params}){last}"]
+    head = f"{ret} {name}("
+    if len(ret) <= 5 or len(head) <= limit:
+        return [head, f"    {params}{last}"]
+    return [ret, f"{name}(", f"    {params}{last}"]
+
+
+def _assign_lines(indent: str, lhs: str, head: str, arg: str, last: str, limit: int = 110) -> list:
+    """An assignment wrapped the way clang-format wraps one: unbroken, then
+    after the equals sign, then after the call paren."""
+    if len(f"{indent}{lhs} = {head}{arg}{last}") <= limit:
+        return [f"{indent}{lhs} = {head}{arg}{last}"]
+    if len(f"{indent}    {head}{arg}{last}") <= limit:
+        return [f"{indent}{lhs} =", f"{indent}    {head}{arg}{last}"]
+    return _call_lines(f"{indent}{lhs} = {head}", [arg], last, limit)
+
+
+def _member_lines(indent: str, kind: str, name: str, last: str = ";", limit: int = 110) -> list:
+    """A struct member wrapped the way clang-format wraps one: after the type."""
+    if len(f"{indent}{kind} {name}{last}") <= limit:
+        return [f"{indent}{kind} {name}{last}"]
+    return [f"{indent}{kind}", f"{indent}    {name}{last}"]
+
+
+def _string_chunks(content: str, cap: int) -> list:
+    """Split content into clang-format string pieces: longest prefix ending after a non-alphanumeric."""
+    piece = content[:cap]
+    cut = len(piece)
+    for at in range(len(piece), 0, -1):
+        if not piece[at - 1].isalnum():
+            cut = at
+            break
+    if cut >= len(content):
+        cut = min(len(content) - 1, cap)
+    return [content[:cut], content[cut:]]
+
+
+def _string_row(indent: str, content: str, last: str, limit: int = 110) -> list:
+    """A table string row wrapped the way clang-format wraps one: split the literal."""
+    if len(f'{indent}"{content}"{last}') <= limit:
+        return [f'{indent}"{content}"{last}']
+    cap = limit - len(indent) - 2
+    final = cap - len(last)
+    chunks: list = []
+    rest = content
+    while len(rest) > final:
+        head, rest = _string_chunks(rest, cap)
+        chunks.append(head)
+    chunks.append(rest)
+    rows = [f'{indent}"{chunks[0]}"']
+    rows.extend(f'{indent}"{chunk}"' for chunk in chunks[1:-1])
+    rows.append(f'{indent}"{chunks[-1]}"{last}')
+    return rows
+
+
+def _define_lines(name: str, value: str, limit: int = 110) -> list:
+    """A define wrapped the way clang-format wraps one: backslash in column 110."""
+    if len(f"#define {name} {value}") <= limit:
+        return [f"#define {name} {value}"]
+    gap = max(1, limit - len(f"#define {name}") - 1)
+    return [f"#define {name}{' ' * gap}\\", f"    {value}"]
+
+
+def _comment_lines(first: str, cont: str, last: str, text: str, limit: int = 110) -> list:
+    """Greedy word fill of a comment paragraph, first word always placed."""
+    words = text.split(" ")
+    rows: list = []
+    line = first
+    fresh = True
+    for position, word in enumerate(words):
+        ending = last if position == len(words) - 1 else ""
+        if fresh:
+            line += word
+            fresh = False
+        elif len(line) + 1 + len(word) + len(ending) <= limit:
+            line += " " + word
+        else:
+            rows.append(line)
+            line = cont + word
+    rows.append(line + last)
+    return rows
+
+
+def _doc_lines(template: list, text: str, limit: int = 110) -> list:
+    """A doc comment wrapped the way clang-format wraps one.
+
+    Kept when it fits, else refilled greedily. The refill is clang-format's
+    own reflow shape, so it is stable wherever the comment lands.
+    """
+    if all(len(row) <= limit for row in template):
+        return template
+    return _comment_lines("/* ", " * ", " */", text, limit)
 
 
 def emit_h(table: TopicTable) -> str:
@@ -317,19 +512,32 @@ def emit_h(table: TopicTable) -> str:
         ]
     )
     for entry in table.entries:
-        lines.append(f"#define R2S_TOPIC_{entry.c_name.upper()}_ID {entry.topic_id}u")
+        lines.extend(_define_lines(f"R2S_TOPIC_{entry.c_name.upper()}_ID", f"{entry.topic_id}u"))
     for entry in table.entries:
-        lines.append(f"#define R2S_TOPIC_{entry.c_name.upper()}_TYPE {entry.type_index}u")
+        lines.extend(_define_lines(f"R2S_TOPIC_{entry.c_name.upper()}_TYPE", f"{entry.type_index}u"))
     for entry in table.entries:
         if entry.direction == "pub":
             lines.extend(
                 [
                     "",
-                    f"/* Publishes on {entry.name}. Fails with the not-connected error while",
-                    " * announcing, with the rejected error when the host did not accept",
-                    " * the topic, and with the bounds error when the message does not",
-                    " * fit, sending nothing in each case. */",
-                    f"r2s_status_t r2s_publish_{entry.c_name}(const {emit._c_name(entry.type_name)} *msg);",
+                    *_doc_lines(
+                        [
+                            f"/* Publishes on {entry.name}. Fails with the not-connected error while",
+                            " * announcing, with the rejected error when the host did not accept",
+                            " * the topic, and with the bounds error when the message does not",
+                            " * fit, sending nothing in each case. */",
+                        ],
+                        f"Publishes on {entry.name}. Fails with the not-connected error while "
+                        "announcing, with the rejected error when the host did not accept "
+                        "the topic, and with the bounds error when the message does not "
+                        "fit, sending nothing in each case.",
+                    ),
+                    *_decl_lines(
+                        "r2s_status_t",
+                        f"r2s_publish_{entry.c_name}",
+                        f"const {emit._c_name(entry.type_name)} *msg",
+                        ";",
+                    ),
                 ]
             )
     for entry in table.entries:
@@ -337,9 +545,20 @@ def emit_h(table: TopicTable) -> str:
             lines.extend(
                 [
                     "",
-                    f"/* Handles {entry.name}; the application implements it. Dispatch calls",
-                    " * it from r2s_spin_some(), never from inside a publish. */",
-                    f"void r2s_on_{entry.c_name}(const {emit._c_name(entry.type_name)} *msg);",
+                    *_doc_lines(
+                        [
+                            f"/* Handles {entry.name}; the application implements it. Dispatch calls",
+                            " * it from r2s_spin_some(), never from inside a publish. */",
+                        ],
+                        f"Handles {entry.name}; the application implements it. Dispatch calls "
+                        "it from r2s_spin_some(), never from inside a publish.",
+                    ),
+                    *_decl_lines(
+                        "void",
+                        f"r2s_on_{entry.c_name}",
+                        f"const {emit._c_name(entry.type_name)} *msg",
+                        ";",
+                    ),
                 ]
             )
     lines.extend(
@@ -382,8 +601,8 @@ def emit_c(table: TopicTable) -> str:
                 f"    {{R2S_TOPIC_{entry.c_name.upper()}_ID,",
                 f"     (uint8_t)(0x{entry.flags:02x}u | R2S_NARROW_FLAG),",
                 f"     {{{digest}}},",
-                f'     "{entry.type_name}",',
-                f'     "{entry.name}"}},',
+                *_string_row("     ", entry.type_name, ","),
+                *_string_row("     ", entry.name, "},"),
             ]
         )
     lines.extend(
@@ -442,13 +661,22 @@ def emit_c(table: TopicTable) -> str:
             lines.extend(
                 [
                     "",
-                    f"r2s_status_t r2s_publish_{entry.c_name}(const {emit._c_name(entry.type_name)} *msg)",
+                    *_decl_lines(
+                        "r2s_status_t",
+                        f"r2s_publish_{entry.c_name}",
+                        f"const {emit._c_name(entry.type_name)} *msg",
+                        "",
+                    ),
                     "{",
                     *_call_lines(
                         "    return r2s_publish_one(",
                         [
                             f"R2S_TOPIC_{entry.c_name.upper()}_ID",
-                            f"r2s_session_find_topic(R2S_TOPIC_{entry.c_name.upper()}_ID)",
+                            (
+                                "r2s_session_find_topic",
+                                [f"R2S_TOPIC_{entry.c_name.upper()}_ID"],
+                                "",
+                            ),
                             f"R2S_TOPIC_{entry.c_name.upper()}_TYPE",
                             "msg",
                         ],
@@ -468,7 +696,7 @@ def emit_c(table: TopicTable) -> str:
             ]
         )
         for entry in subs:
-            lines.append(f"    {emit._c_name(entry.type_name)} {entry.c_name};")
+            lines.extend(_member_lines("    ", emit._c_name(entry.type_name), entry.c_name))
         lines.extend(
             [
                 "} r2s_rx_buf_t;",
@@ -491,7 +719,13 @@ def emit_c(table: TopicTable) -> str:
             lines.extend(
                 [
                     f"    case R2S_TOPIC_{macro}_ID: {{",
-                    f"        index = r2s_session_find_topic(R2S_TOPIC_{macro}_ID);",
+                    *_assign_lines(
+                        "        ",
+                        "index",
+                        "r2s_session_find_topic(",
+                        f"R2S_TOPIC_{macro}_ID",
+                        ");",
+                    ),
                     "        if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {",
                     "            r2s_framer_count_refused();",
                     "            return;",
@@ -514,7 +748,11 @@ def emit_c(table: TopicTable) -> str:
                     "            r2s_framer_count_refused();",
                     "            return;",
                     "        }",
-                    f"        r2s_on_{entry.c_name}(&r2s_rx_buf.{entry.c_name});",
+                    *_call_lines(
+                        f"        r2s_on_{entry.c_name}(",
+                        [f"&r2s_rx_buf.{entry.c_name}"],
+                        ");",
+                    ),
                     "        return;",
                     "    }",
                 ]

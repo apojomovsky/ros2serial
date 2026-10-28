@@ -142,7 +142,7 @@ A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3
 - [CTL-10] `max_frame` is the largest decoded frame the MCU accepts, and MUST NOT be larger than the limit of section 2 ([FRM-9]).
 - [CTL-11] A name hash in compact mode is FNV-1a 32-bit over the UTF-8 bytes of the name.
 - [CTL-12] The `type_hash` field is the first 8 bytes of the type's RIHS01 hash. A receiver MUST compare only the 8 bytes on the wire, and a mismatch of any of them rejects the topic.
-- [CTL-13] A `TOPIC_STATUS` status is 0 for ok, 1 for unknown type, 2 for hash mismatch and 3 for name conflict. Every other value is reserved and MUST be 0.
+- [CTL-13] A `TOPIC_STATUS` status is 0 for ok, 1 for unknown type, 2 for hash mismatch and 3 for name conflict. A name announced twice is a name conflict, in one direction or in both: the host answers the second announcement of a type it resolves with 3. An announcement whose type is unknown or whose hash does not match keeps 1 or 2. Every other value is reserved and MUST be 0.
 - [CTL-14] A receiver MUST refuse ([SYS-5]) a `TOPIC_STATUS` whose status is not one of those four.
 - [CTL-15] The topics of a handshake are requested and sent one at a time, so the MCU never needs a buffer larger than one TOPIC frame.
 - [CTL-16] The payload of each control opcode is the one the table above gives, in that order and with nothing between: the opcode byte, then the fields it lists, and a string as its varint length and bytes (section 5).
@@ -273,6 +273,7 @@ so unit and integration tests cover them and no vector does.
 - [SES-30] Each host-to-MCU queue holds `qos_depth` messages, or one when the topic is keep-latest. Past that the oldest message is dropped and counted.
 - [SES-31] A generic publisher or subscription created for an MCU topic keeps the last `qos_depth` messages, with reliable delivery when the announced flags name the reliable channel and best effort otherwise.
 - [SES-32] The host holds at most the MCU's announced receive capacity in unsent user-topic bytes, plus the frame in flight. A further user frame waits for the link instead of growing the host heap. Control frames keep their own retry rules.
+- [SES-33] While the link cannot take bytes, the host keeps at most one queued frame per control kind (HELLO_REQ, TOPIC_REQ, READY, heartbeat, PING), with the newer replacing the older in place and keeping its seq, and at most one TOPIC_STATUS per topic id. A frame already reaching the port is left to finish. Each replaced frame is counted. On a return to HANDSHAKING the host drops its pending control frames.
 
 ## 9. Codec descriptors (local)
 

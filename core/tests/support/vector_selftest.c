@@ -59,3 +59,17 @@ void r2s_vec_check_messages(const r2s_vec_messages_t *v)
 {
     check_blob(v->where, v->covers, "payload", v->payload, v->payload_len, v->payload_hex);
 }
+
+void r2s_vec_check_session(const r2s_vec_session_t *v)
+{
+    char label[512];
+
+    snprintf(label, sizeof label, "%s [%s] %s", v->where, v->covers, v->name);
+    TEST_ASSERT_TRUE_MESSAGE(v->nsteps > 0u, label);
+    for (uint16_t i = 0u; i < v->nsteps; i++) {
+        snprintf(label, sizeof label, "%s [%s] %s step %u", v->where, v->covers, v->name, i);
+        TEST_ASSERT_TRUE_MESSAGE(v->steps[i].from_host <= 1u, label);
+        check_blob(v->where, v->covers, "frame", v->steps[i].frame, v->steps[i].frame_len,
+                   v->steps[i].frame_hex);
+    }
+}

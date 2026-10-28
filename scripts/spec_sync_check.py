@@ -45,9 +45,14 @@ def _rules(text: str) -> dict[str, tuple[bool, str]]:
     return rules
 
 
-def _show(root: Path, ref: str) -> str:
-    result = subprocess.run(["git", "show", f"{ref}:{SPEC}"], cwd=root, capture_output=True, text=True)
-    return result.stdout if result.returncode == 0 else ""
+def _show(root: Path, ref: str) -> str | None:
+    result = subprocess.run(["git", "show", f"{ref}:{SPEC}"], cwd=root, capture_output=True)
+    if result.returncode != 0:
+        return ""
+    try:
+        return result.stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
 
 
 def _changed(root: Path, base: str) -> list[str]:
@@ -99,14 +104,24 @@ def check(root: Path, base: str) -> list[str]:
     vectors_changed = any(path.startswith(VECTORS) and not path.endswith("/.gitkeep") for path in changed)
     problems = []
     if spec_changed and not vectors_changed:
-        old = _rules(_show(root, base))
-        new = _rules((root / SPEC).read_text(encoding="utf-8"))
-        # A rule that is added, removed, reworded or moved between sections is
-        # a change; only the wire ones need a vector to show them.
-        wire = [rule for rule, entry in new.items() if not entry[0] and old.get(rule) != entry]
-        wire += [rule for rule, entry in old.items() if not entry[0] and (rule not in new or new[rule][0])]
-        if wire:
-            problems.append(f"{SPEC} changed without spec/vectors changes: {', '.join(wire)} crosses the wire")
+        try:
+            new_text: str | None = (root / SPEC).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            new_text = None
+        old_text = _show(root, base)
+        if new_text is None or old_text is None:
+            # An unreadable spec names itself, as unreadable vectors do.
+            problems.append(f"{SPEC} changed without spec/vectors changes: {SPEC} crosses the wire")
+        else:
+            old = _rules(old_text)
+            new = _rules(new_text)
+            # A rule that is added, removed, reworded or moved between sections is
+            # a change; only the wire ones need a vector to show them.
+            wire = [rule for rule, entry in new.items() if not entry[0] and old.get(rule) != entry]
+            wire += [rule for rule, entry in old.items() if not entry[0] and (rule not in new or new[rule][0])]
+            if wire:
+                problems.append(f"{SPEC} changed without spec/vectors changes: {', '.join(wire)} crosses the wire")
+
     if vectors_changed and not spec_changed:
         unknown = _unknown_covers(root, changed)
         if unknown:
