@@ -689,12 +689,12 @@ bool Session::send_user(std::uint8_t topic_id, const std::vector<std::uint8_t> &
 
 std::uint16_t Session::mcu_max_frame() const
 {
-    return impl_->seen_boot_id ? impl_->hello.max_frame : 0u;
+    return impl_->seen_hello ? impl_->hello.max_frame : 0u;
 }
 
 std::uint16_t Session::mcu_rx_capacity() const
 {
-    return impl_->seen_boot_id ? impl_->hello.rx_capacity : 0u;
+    return impl_->seen_hello ? impl_->hello.rx_capacity : 0u;
 }
 
 void Session::poll()
