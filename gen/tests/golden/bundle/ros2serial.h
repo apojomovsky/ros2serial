@@ -80,6 +80,14 @@ typedef char r2s_slot_fit_check[(unsigned)R2S_SLOT_COUNT <= R2S_TOPIC_MAX_COUNT 
      {R2S_BUNDLED_HASH_##PKG##_##TYPE},                                                                      \
      R2S_STR(PKG) "/msg/" R2S_STR(TYPE),                                                                     \
      R2S_STR(NAME)},
+/* The sketch list never reaches the generator, so the header counts
+ * the rows itself: an empty list stops here with the generator's message. */
+#define R2S_X_COUNT(DIR, NAME, PKG, TYPE) +1
+#define R2S_TOPIC_LIST_COUNT (0 R2S_TOPICS(R2S_X_COUNT))
+#if R2S_TOPIC_LIST_COUNT == 0
+#error "a node with no topics has nothing to announce; add at least one topic"
+#endif
+
 const r2s_topic_t R2S_FLASH r2s_topics[] = {R2S_TOPICS(R2S_X_TABLE)};
 
 /* One publish path for every wrapper: measures the payload, reserves
