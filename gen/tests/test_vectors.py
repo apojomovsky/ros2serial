@@ -117,6 +117,13 @@ def test_a_missing_field_names_the_field(capsys):
     assert err == "r2s-gen: error: std_msgs/msg/Float32.data: no value\n"
 
 
+def test_an_unknown_field_names_the_key(capsys):
+    code, out, err = run(capsys, "--type", "std_msgs/msg/Float32", "--message", "{data: 1.5, dat: 9}")
+    assert code == 1
+    assert out == ""
+    assert err == "r2s-gen: error: std_msgs/msg/Float32.dat: unknown field\n"
+
+
 def test_a_value_the_field_cannot_hold_names_the_field(capsys, tmp_path):
     write_message(tmp_path / "messages", "demo_msgs/msg/Small", "uint8 value")
     code, out, err = run(
