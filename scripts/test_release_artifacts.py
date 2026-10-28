@@ -45,3 +45,11 @@ def test_an_unknown_distro_fails_loudly(tmp_path):
 def test_a_missing_option_value_is_usage(tmp_path):
     result = subprocess.run(["bash", str(SCRIPT), "--out"], capture_output=True, text=True)
     assert result.returncode == 2 and "usage" in result.stdout
+
+
+def test_the_python_build_leaves_the_tree_alone(tmp_path):
+    """The sdist and wheel build from a throwaway copy, so no staging lands in gen/."""
+    out, result = build(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert sorted(out.glob("r2s_gen-*.tar.gz")) and sorted(out.glob("r2s_gen-*.whl"))
+    assert not (ROOT / "gen" / "cpp").exists()
