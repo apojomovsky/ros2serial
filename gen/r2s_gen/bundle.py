@@ -176,7 +176,7 @@ def _bundled_h(
         index = tables[name].index_of[name]
         section += [
             f"/* Bundle index, table and hash of {name}: the sketch header maps each",
-            " * row to the index and the table, so an unknown type in the list fails naming the row. */",
+            " * row to these facts through its package scope maps, so an unknown type fails naming the row. */",
             f"#define R2S_BUNDLED_INDEX_{cname} {index}u",
             f"#define R2S_BUNDLED_TABLE_{cname} r2s_bundled_table_{cname}",
             f"#define R2S_BUNDLED_HASH_{cname} {_hash_bytes(repository, name)}",
