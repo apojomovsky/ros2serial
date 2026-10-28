@@ -113,6 +113,7 @@ def test_a_non_mapping_message_names_the_expected_shape(capsys):
 def test_a_missing_field_names_the_field(capsys):
     code, out, err = run(capsys, "--type", "std_msgs/msg/Float32", "--message", "{}")
     assert code == 1
+    assert out == ""
     assert err == "r2s-gen: error: std_msgs/msg/Float32.data: no value\n"
 
 

@@ -707,7 +707,7 @@ payload: ""
         "messages/cycle.yaml: cyclic YAML alias",
         "messages/cycle.yaml/message: the reference does not make it: maximum recursion depth exceeded",
         "messages/cycle_array.yaml: cyclic YAML alias",
-        "messages/cycle_array.yaml/message: the reference does not make it: demo_msgs/msg/Single.data: no value",
+        "messages/cycle_array.yaml/message: the reference does not make it: demo_msgs/msg/Single.items: unknown field",
         "messages/cycle_covers.yaml: cyclic YAML alias",
     ], problems
     shared = {"data": 1.5}

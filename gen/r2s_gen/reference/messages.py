@@ -38,9 +38,9 @@ def encode(
 
     A string field takes `str` (encoded as UTF-8) or `bytes`; a bool takes a
     `bool` or 0 and 1. A number is converted with binary32 rounding, so a vector
-    must only write a number which is already exactly representable. A value the
-    field cannot hold is a `ValueError`, while input a rule of the spec refuses
-    is a `Rejected` naming that rule.
+    must only write a number which is already exactly representable. A missing or
+    unknown field is a `ValueError` naming it, as is a value the field cannot
+    hold, while input a rule of the spec refuses is a `Rejected` naming that rule.
     """
     out = bytearray()
     _encode_message(repository, repository.load(type_name), message, narrow, out)
