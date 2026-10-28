@@ -278,3 +278,14 @@ def test_a_number_too_large_for_binary_floating_point_is_a_value_error(tmp_path)
 
     with pytest.raises(ValueError, match="demo_msgs/msg/Floats.wide"):
         messages.encode(repo, "demo_msgs/msg/Floats", {"single": 0.0, "wide": 10**400})
+
+
+def test_an_array_element_error_names_its_position(tmp_path):
+    write_message(tmp_path / "messages", "demo_msgs/msg/Small", "uint8 value")
+    repo = demo(tmp_path, "demo_msgs/msg/Holding", "demo_msgs/msg/Small[] items\nfloat32[] readings")
+
+    with pytest.raises(ValueError, match=r"demo_msgs/msg/Holding\.items\[1\].*expected a mapping"):
+        messages.encode(repo, "demo_msgs/msg/Holding", {"items": [{"value": 1}, "oops"], "readings": []})
+
+    with pytest.raises(ValueError, match=r"demo_msgs/msg/Holding\.readings\[0\].*does not fit binary32"):
+        messages.encode(repo, "demo_msgs/msg/Holding", {"items": [], "readings": [1e300]})
