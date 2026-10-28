@@ -536,3 +536,31 @@ def test_marker_above_outer_fence_does_not_silence_inner_fence(tmp_path):
     root = write_tree(tmp_path, {"README.md": text})
     problems = snippets_check.check_tree(root)
     assert any("never opened a snippet" in p for p in problems)
+
+
+def test_list_marker_fence_reports_one_diagnostic(tmp_path):
+    # A tagged fence right after a list marker names the opener once; the
+    # closer is literal text, not a second unclosed fence.
+    text = "# T\n\n- ```c\n  broken\n  ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "README.md:3" in problems[0]
+    assert "never opened a snippet" in problems[0]
+
+
+def test_ordered_marker_fence_reports_one_diagnostic(tmp_path):
+    text = "# T\n\n1. ```c\n   broken\n   ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "README.md:3" in problems[0]
+    assert "never opened a snippet" in problems[0]
+
+
+def test_plain_literal_block_after_marker_passes(tmp_path):
+    # A plain fence is prose, so a closed literal block after a list marker
+    # yields no diagnostic at all.
+    text = "# T\n\n- ```\n  text\n  ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
