@@ -105,15 +105,14 @@ def test_generate_is_byte_identical_run_to_run(tmp_path):
     assert first == second
 
 
-def test_every_file_names_the_version_and_wrappers_the_config_hash(tmp_path):
+def test_every_file_names_the_version_and_the_config_hash(tmp_path):
     loaded, files = generated("cmake", tmp_path)
     digest = layouts.config_hash(loaded)
 
     assert len(digest) == 16
     for name, text in files.items():
         assert f"r2s-gen {__version__}" in text, name
-        if "r2s_generated" not in name:
-            assert digest in text, name
+        assert digest in text, name
 
 
 def test_the_config_hash_moves_with_the_config(tmp_path):
