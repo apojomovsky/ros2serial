@@ -71,6 +71,34 @@ def test_a_released_slot_is_reused(tmp_path):
         stop_holder(again)
 
 
+def test_a_lease_survives_the_build_lock_chain(tmp_path):
+    """run.sh execs with-build-lock.sh (fd 9) inside the lease: the slot stays held."""
+    build_lock = tmp_path / "build.lock"
+    first = subprocess.Popen(
+        [
+            "bash",
+            str(LEASE),
+            "bash",
+            str(ROOT / "scripts" / "with-build-lock.sh"),
+            str(build_lock),
+            "bash",
+            "-c",
+            "echo $R2S_E2E_DOMAIN_ID $R2S_ZENOH_ROUTER_PORT; exec sleep 60",
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+        env=lease_env(tmp_path),
+    )
+    second = start_holder(tmp_path)
+    try:
+        domain1, port1 = read_slot(first)
+        domain2, port2 = read_slot(second)
+        assert (domain1, port1) != (domain2, port2), "the build lock released the lease"
+    finally:
+        stop_holder(first)
+        stop_holder(second)
+
+
 def test_an_explicit_domain_skips_allocation(tmp_path):
     result = subprocess.run(
         ["bash", str(LEASE), "bash", "-c", "echo $R2S_E2E_DOMAIN_ID $R2S_ZENOH_ROUTER_PORT"],

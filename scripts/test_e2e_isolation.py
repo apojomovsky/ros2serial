@@ -2,8 +2,8 @@
 
 Each run.sh leases its own DDS domain and zenoh port, so the two suites
 never see each other's topics even though they share the tree and the
-build directory. Narrowed to one RMW; the RMW matrix already covers each
-leg alone, and this test covers the overlap.
+Narrowed to Fast DDS and Zenoh, one leg per mechanism; the RMW matrix
+covers each leg alone, and this test covers the overlap.
 """
 
 import os
@@ -26,7 +26,7 @@ def domain_of(output):
 
 @pytest.mark.skipif(shutil.which("colcon") is None, reason="colcon is not installed")
 def test_two_concurrent_e2e_sections_pass_without_crosstalk():
-    env = dict(os.environ, R2S_RMWS="rmw_fastrtps_cpp")
+    env = dict(os.environ, R2S_RMWS="rmw_fastrtps_cpp rmw_zenoh_cpp")
     first = subprocess.Popen(
         ["bash", "tests/e2e/run.sh"], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
     )
