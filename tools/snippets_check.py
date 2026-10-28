@@ -17,8 +17,8 @@ alone on the line above the fence:
 A marker without a ticket number is an error, and so is a marker above no
 fence. A line that only mentions a marker in passing is not one. The run
 prints every skipped snippet, with its ticket when it has one, so none is
-forgotten. C and C++ snippets compile with -I core/include, so snippets using today's real
-headers compile instead of being skipped.
+forgotten. C and C++ snippets compile with -I core/include and -I cpp/include, so
+snippets using today's real headers compile instead of being skipped.
 """
 
 import argparse
@@ -217,9 +217,13 @@ def _compile_c(snippet: Snippet, root: Path, workdir: Path) -> str | None:
     src = workdir / f"snippet{EXTENSION[snippet.language]}"
     src.write_text(snippet.code)
     cmd = [compiler, f"-std={standard}", *warnings, "-fsyntax-only", str(src)]
-    include = root / "core" / "include"
-    if include.is_dir():
-        cmd += ["-I", str(include)]
+    # The core's headers, and the C++ layer's, so a snippet using today's
+    # real headers compiles instead of being skipped. The C++ layer's
+    # include path holds the library's umbrella header, so a snippet that
+    # includes <ros2serial.h> finds it.
+    for include in (root / "core" / "include", root / "cpp" / "include"):
+        if include.is_dir():
+            cmd += ["-I", str(include)]
     done = subprocess.run(cmd, capture_output=True, text=True)
     if done.returncode != 0:
         return f"{snippet.path}:{snippet.line}: {snippet.language} snippet does not compile:\n{done.stderr.strip()}"

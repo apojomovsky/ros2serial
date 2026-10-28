@@ -18,7 +18,7 @@ BUILD_DIR := $(CACHE)/build$(subst /,-,$(CURDIR))
 # container and must not key a shared lock.
 export R2S_HOST_MOUNT := $(REPO_ROOT)
 TTY := $(shell [ -t 0 ] && echo -it)
-PASS_VARS := LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E COVERAGE DOCS EXAMPLES PR_TITLE COMMIT_RANGE BASE PR_BODY TEST
+PASS_VARS := LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES PR_TITLE COMMIT_RANGE BASE PR_BODY TEST
 
 DOCKER_BASE = docker run --rm $(TTY) --user $$(id -u):$$(id -g) \
 	-v $(REPO_ROOT):$(REPO_ROOT) -w $(CURDIR) -v $(CACHE):$(CACHE) -e R2S_BUILD_DIR=$(BUILD_DIR) -e R2S_CACHE_DIR=$(CACHE) -e R2S_HOST_MOUNT=$(REPO_ROOT)
@@ -51,7 +51,7 @@ exec: guard-main-clone cache-dir ## One-off command inside the image: make exec 
 	@test -n "$(CMD)" || { echo "usage: make exec CMD='...'"; exit 2; }
 	@$(call in_image,bash -c '$(CMD)')
 
-test: guard-main-clone cache-dir ## Run scripts/ci-test.sh, the exact suite CI runs (scope: LINT=1 SCRIPTS=1 COMMITS=1 ...)
+test: guard-main-clone cache-dir ## Run scripts/ci-test.sh, the exact suite CI runs (scope: LINT=1 SCRIPTS=1 COMMITS=1 CORE=1 CPP=1 ...)
 	@$(call in_image,bash scripts/ci-test.sh)
 
 ci-local: guard-main-clone cache-dir image ## The exact CI run, unscoped, in the ci image
