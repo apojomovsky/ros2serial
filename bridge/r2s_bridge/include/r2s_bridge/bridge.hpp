@@ -4,8 +4,8 @@
 #ifndef R2S_BRIDGE__BRIDGE_HPP_
 #define R2S_BRIDGE__BRIDGE_HPP_
 
+#include <chrono>
 #include <memory>
-#include <string>
 
 #include <rclcpp/rclcpp.hpp>
 
@@ -29,7 +29,7 @@ class Bridge : public rclcpp::Node
     rclcpp::TimerBase::SharedPtr timer_;
     rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_pub_;
     std::string diagnostics_hardware_id_;
-    int diagnostics_countdown_ = 0;
+    std::chrono::nanoseconds last_diagnostics_{0};
 };
 
 } // namespace r2s_bridge

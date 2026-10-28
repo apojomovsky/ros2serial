@@ -104,7 +104,8 @@ TEST_F(BridgeDiagnostics, PublishesBootWaitThenHandshaking)
 {
     Pty pty;
     rclcpp::NodeOptions options;
-    options.parameter_overrides({rclcpp::Parameter("port", pty.path())});
+    options.parameter_overrides(
+        {rclcpp::Parameter("port", pty.path()), rclcpp::Parameter("boot_wait_ms", 60000)});
     auto bridge = std::make_shared<r2s_bridge::Bridge>(options);
     auto probe = std::make_shared<rclcpp::Node>("diag_probe");
     std::vector<diagnostic_msgs::msg::DiagnosticArray> received;
@@ -120,8 +121,12 @@ TEST_F(BridgeDiagnostics, PublishesBootWaitThenHandshaking)
         both();
     }
     ASSERT_FALSE(received.empty()) << "the bridge publishes /diagnostics on its poll timer";
+    // boot_wait_ms outlasts any loaded poll loop, so the first message still
+    // reports the wait even when polling slows down.
     EXPECT_EQ(received.back().status[0].message, "boot_wait");
     EXPECT_EQ(values_of(received.back()).at("session token"), "0");
+    EXPECT_NE(received.back().header.stamp, builtin_interfaces::msg::Time())
+        << "the bridge stamps what the builder leaves zero";
 
     std::vector<std::uint8_t> decoded{kHelperControl, 0u};
     const std::vector<std::uint8_t> hello = helper_hello(7u, 2u);

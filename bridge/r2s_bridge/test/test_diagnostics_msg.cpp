@@ -56,10 +56,10 @@ Router::Diagnostics connected_snapshot()
 TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
 {
     const diagnostic_msgs::msg::DiagnosticArray message =
-        diagnostics_message(connected_snapshot(), "/dev/ttyACM0");
+        diagnostics_message(connected_snapshot(), "test_node", "/dev/ttyACM0");
     ASSERT_EQ(message.status.size(), 1u);
     const diagnostic_msgs::msg::DiagnosticStatus &status = message.status[0];
-    EXPECT_EQ(status.name, "r2s_bridge: link");
+    EXPECT_EQ(status.name, "test_node: link");
     EXPECT_EQ(status.hardware_id, "/dev/ttyACM0");
     EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
     EXPECT_EQ(status.message, "connected");
@@ -77,21 +77,27 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(values.at("topic cmd_vel direction"), "host to device");
     EXPECT_EQ(values.at("topic cmd_vel seq gaps"), "0");
     EXPECT_EQ(values.at("topic cmd_vel dropped"), "5");
-    EXPECT_EQ(values.at("time sync"), "not available");
+    EXPECT_EQ(values.at("time sync offset"), "not available");
+    EXPECT_EQ(values.at("time sync drift"), "not available");
+    EXPECT_EQ(values.at("time sync round trip"), "not available");
 }
 
 TEST(DiagnosticsMessage, MapsLinkStateToLevel)
 {
     Router::Diagnostics down;
     down.link_state = "disconnected";
-    EXPECT_EQ(diagnostics_message(down, "").status[0].level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+    const auto named = [](const Router::Diagnostics &snapshot) {
+        return diagnostics_message(snapshot, "test_node", "").status[0];
+    };
+    EXPECT_EQ(named(down).level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+    EXPECT_EQ(named(down).name, "test_node: link") << "a remapped bridge stays recognizable";
     Router::Diagnostics waiting;
     waiting.link_state = "boot_wait";
-    EXPECT_EQ(diagnostics_message(waiting, "").status[0].level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+    EXPECT_EQ(named(waiting).level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
     Router::Diagnostics shaking;
     shaking.link_state = "handshaking";
-    EXPECT_EQ(diagnostics_message(shaking, "").status[0].message, "handshaking");
-    EXPECT_EQ(diagnostics_message(shaking, "").status[0].level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+    EXPECT_EQ(named(shaking).message, "handshaking");
+    EXPECT_EQ(named(shaking).level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
 }
 
 } // namespace

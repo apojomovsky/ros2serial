@@ -21,8 +21,9 @@ namespace
 constexpr std::chrono::milliseconds kPollPeriod{1};
 // Diagnostics ride the poll timer instead of their own: the snapshot must
 // read on the thread that polls the router, whose session keeps no lock.
-// One message per thousand polls is 1 Hz, the updater default.
-constexpr int kDiagnosticsEveryNPolls = 1000;
+// The deadline is wall-clock, so a slow poll loop skips a beat instead of
+// shifting the 1 Hz the design promises.
+constexpr std::chrono::seconds kDiagnosticsPeriod{1};
 
 } // namespace
 Bridge::Bridge(const rclcpp::NodeOptions &options) : rclcpp::Node("r2s_bridge", options)
@@ -88,10 +89,11 @@ Bridge::Bridge(const rclcpp::NodeOptions &options) : rclcpp::Node("r2s_bridge", 
     diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10);
     timer_ = create_wall_timer(kPollPeriod, [this]() {
         router_->poll();
-        if (++diagnostics_countdown_ >= kDiagnosticsEveryNPolls) {
-            diagnostics_countdown_ = 0;
+        const std::chrono::nanoseconds tick = clock_.now();
+        if (tick - last_diagnostics_ >= kDiagnosticsPeriod) {
+            last_diagnostics_ = tick;
             diagnostic_msgs::msg::DiagnosticArray message =
-                diagnostics_message(router_->diagnostics(), diagnostics_hardware_id_);
+                diagnostics_message(router_->diagnostics(), get_name(), diagnostics_hardware_id_);
             message.header.stamp = now();
             diagnostics_pub_->publish(message);
         }

@@ -24,15 +24,15 @@ void add_topic(diagnostic_msgs::msg::DiagnosticStatus &status, const Router::Top
     add_value(status, head + " seq gaps", std::to_string(topic.seq_gaps));
     add_value(status, head + " dropped", std::to_string(topic.dropped));
 }
-
 } // namespace
 
 diagnostic_msgs::msg::DiagnosticArray diagnostics_message(const Router::Diagnostics &snapshot,
+                                                          const std::string &node_name,
                                                           const std::string &hardware_id)
 {
     diagnostic_msgs::msg::DiagnosticArray out;
     diagnostic_msgs::msg::DiagnosticStatus status;
-    status.name = kDiagnosticsStatusName;
+    status.name = node_name + ": " + kDiagnosticsTaskName;
     status.hardware_id = hardware_id;
     // A silent link is an error; a link mid-handshake is transient.
     if (snapshot.link_state == "connected") {
@@ -53,9 +53,12 @@ diagnostic_msgs::msg::DiagnosticArray diagnostics_message(const Router::Diagnost
     for (const Router::TopicDiagnostics &topic : snapshot.topics) {
         add_topic(status, topic);
     }
-    add_value(status, kDiagnosticsTimeSyncKey, "not available");
+    // The P3 estimator fills these in; until then the keys stay put with no
+    // value, so a consumer can rely on their names.
+    add_value(status, "time sync offset", "not available");
+    add_value(status, "time sync drift", "not available");
+    add_value(status, "time sync round trip", "not available");
     out.status.push_back(status);
     return out;
 }
-
 } // namespace r2s_bridge

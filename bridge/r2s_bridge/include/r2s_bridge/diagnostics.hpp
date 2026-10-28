@@ -15,16 +15,15 @@
 namespace r2s_bridge
 {
 
-// The status name the bridge publishes under, in the "<node>: <task>" shape
-// diagnostic_updater uses.
-inline const char *kDiagnosticsStatusName = "r2s_bridge: link";
-
-// The key for the time sync values until the P3 estimator lands.
-inline const char *kDiagnosticsTimeSyncKey = "time sync";
+// The task part of the status name, in the "<node>: <task>" shape
+// diagnostic_updater uses. The bridge passes its own node name, so a
+// remapped bridge stays recognizable.
+inline const char *kDiagnosticsTaskName = "link";
 
 // Builds the array for one snapshot. hardware_id names the link, usually the
 // port. The header stamp is left zero for the bridge to fill in.
 diagnostic_msgs::msg::DiagnosticArray diagnostics_message(const Router::Diagnostics &snapshot,
+                                                          const std::string &node_name,
                                                           const std::string &hardware_id);
 
 } // namespace r2s_bridge
