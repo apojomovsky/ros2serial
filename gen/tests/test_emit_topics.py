@@ -6,6 +6,7 @@ name collision checks. The golden pair pins the exact bytes; the compile test
 proves they are C99.
 """
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -457,3 +458,63 @@ def test_an_empty_topic_list_is_an_error_at_pair_generation():
     assert str(caught.value) == (
         "r2s.yaml: topics: a node with no topics has nothing to announce; add at least one topic"
     )
+
+
+def _clang_format_clean(paths):
+    """The gate the emitted C must pass: clang-format changes none of it."""
+    binary = shutil.which("clang-format")
+    if binary is None:
+        pytest.skip("clang-format is not installed")
+    completed = subprocess.run(
+        [binary, "--dry-run", "--Werror", *(str(path) for path in paths)],
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_the_golden_pair_is_clang_format_clean():
+    _clang_format_clean([GOLDEN / "posix.h", GOLDEN / "posix.c"])
+
+
+def test_long_topic_names_emit_clang_format_clean_code(tmp_path):
+    """Long names wrap the way clang-format wraps them, at every length."""
+    entries = [
+        Topic(
+            name="a_very_long_topic_name_for_the_dispatch_call",
+            type_name="std_msgs/msg/Float32",
+            direction="sub",
+        ),
+        Topic(
+            name="another_very_long_topic_name_for_the_publish_call",
+            type_name="std_msgs/msg/Float32",
+            direction="pub",
+        ),
+    ]
+    entries.extend(
+        Topic(name=f"s_{'a' * length}", type_name="std_msgs/msg/Float32", direction="sub") for length in range(1, 101)
+    )
+    entries.extend(
+        Topic(name=f"p_{'a' * length}", type_name="std_msgs/msg/Float32", direction="pub") for length in range(1, 101)
+    )
+    entries.append(Topic(name=f"e_sub_{'a' * 190}", type_name="geometry_msgs/msg/Twist", direction="sub"))
+    entries.append(Topic(name=f"e_pub_{'a' * 190}", type_name="geometry_msgs/msg/Twist", direction="pub"))
+    loaded = Config(
+        node="r2s_long",
+        topics=tuple(entries),
+        distro="jazzy",
+        handshake="full",
+        tier="M",
+        features=("time", "log"),
+        bounds={},
+        default_string_bound=None,
+        max_frame=None,
+    )
+    repository = msgs.MessageRepository()
+    resolved = bounds.resolve(repository, [topic.type_name for topic in loaded.topics], bounds=dict(loaded.bounds))
+    header, source = topics.generate(loaded, resolved, repository)
+    pair_h = tmp_path / "r2s_generated.h"
+    pair_c = tmp_path / "r2s_generated.c"
+    pair_h.write_text(header, encoding="utf-8")
+    pair_c.write_text(source, encoding="utf-8")
+    _clang_format_clean([pair_h, pair_c])
