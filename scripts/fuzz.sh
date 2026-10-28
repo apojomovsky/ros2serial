@@ -15,6 +15,17 @@ python3 tools/fuzz_corpus.py --check || exit 1
 
 mkdir -p "$build" || exit 1
 failed=()
+# The probe first: the fuzzer accepts a refusal, so a table or seed header
+# that decodes to nothing would pass every target silently.
+probe="$build/seed_probe"
+# shellcheck disable=SC2086 # sources holds several files.
+codec_sources="core/src/codec.c core/src/tx.c core/src/rcobs.c core/src/crc.c core/src/varint.c"
+clang -std=c99 -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow \
+  -Wstrict-prototypes -Wmissing-prototypes -Wundef \
+  -DR2S_TESTING -DR2S_MAX_FRAME=512 -DR2S_WITH_CODEC -DR2S_MAX_NEST=2 -DR2S_WITH_LOG \
+  -I core/include -fsanitize=address,undefined -fno-sanitize-recover=all \
+  -fno-omit-frame-pointer -g -O1 core/fuzz/seed_probe.c $codec_sources -o "$probe" || exit 1
+"$probe" core/fuzz/corpus/codec/* || exit 1
 for target in "${targets[@]}"; do
   # Each target links the core files it exercises: the port stubs each
   # target file defines are exactly the ones its set needs.
@@ -22,7 +33,7 @@ for target in "${targets[@]}"; do
     framer) sources="core/src/framer.c core/src/rcobs.c core/src/crc.c" ;;
     rcobs_decode) sources="core/src/rcobs.c" ;;
     session) sources="core/src/*.c" ;;
-    codec) sources="core/src/codec.c core/src/tx.c core/src/rcobs.c core/src/crc.c core/src/varint.c" ;;
+    codec) sources="$codec_sources" ;;
     *)
       echo "unknown fuzz target '$target'"
       failed+=("$target")
