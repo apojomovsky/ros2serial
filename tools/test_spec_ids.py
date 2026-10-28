@@ -14,23 +14,30 @@ ANY_ID = re.compile(r"\[([A-Z]{2,4}-\d+)\]")
 BARE_ID = re.compile(r"(?<![\w-])([A-Z]{2,4})-(\d+)\b")
 
 
+def _spec_text() -> str:
+    try:
+        return SPEC.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        pytest.fail(f"spec/protocol.md: unreadable ({str(e).splitlines()[0]})")
+
+
 def test_the_spec_defines_ids():
-    assert DEFINITION.findall(SPEC.read_text())
+    assert DEFINITION.findall(_spec_text())
 
 
 def test_ids_are_unique():
-    counts = Counter(DEFINITION.findall(SPEC.read_text()))
+    counts = Counter(DEFINITION.findall(_spec_text()))
     assert [i for i, n in counts.items() if n > 1] == []
 
 
 def test_every_referenced_id_is_defined():
-    text = SPEC.read_text()
+    text = _spec_text()
     defined = set(DEFINITION.findall(text))
     assert sorted(set(ANY_ID.findall(text)) - defined) == []
 
 
 def test_every_bare_mention_of_a_known_prefix_is_defined():
-    text = SPEC.read_text()
+    text = _spec_text()
     defined = set(DEFINITION.findall(text))
     prefixes = {i.split("-")[0] for i in defined}
     mentioned = {f"{p}-{n}" for p, n in BARE_ID.findall(text) if p in prefixes}
@@ -38,7 +45,7 @@ def test_every_bare_mention_of_a_known_prefix_is_defined():
 
 
 def test_ids_are_numbered_without_gaps_per_prefix():
-    ids = DEFINITION.findall(SPEC.read_text())
+    ids = DEFINITION.findall(_spec_text())
     by_prefix: dict[str, list[int]] = {}
     for i in ids:
         prefix, n = i.split("-")
