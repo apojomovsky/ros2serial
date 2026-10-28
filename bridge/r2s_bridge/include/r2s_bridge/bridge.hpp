@@ -1,10 +1,15 @@
 // The host bridge node, one instance per serial port. Parameters are declared
 // on construction so `ros2 param` can list and set them before a link exists;
-// the transport and session that consume them are not part of this skeleton.
+// a Router owned here moves the traffic, polled on a short wall timer.
 #ifndef R2S_BRIDGE__BRIDGE_HPP_
 #define R2S_BRIDGE__BRIDGE_HPP_
 
+#include <memory>
+
 #include <rclcpp/rclcpp.hpp>
+
+#include "r2s_bridge/router.hpp"
+#include "r2s_bridge/steady_clock.hpp"
 
 namespace r2s_bridge
 {
@@ -13,6 +18,12 @@ class Bridge : public rclcpp::Node
 {
   public:
     explicit Bridge(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
+    ~Bridge() override;
+
+  private:
+    SteadyClock clock_;
+    std::unique_ptr<Router> router_;
+    rclcpp::TimerBase::SharedPtr timer_;
 };
 
 } // namespace r2s_bridge
