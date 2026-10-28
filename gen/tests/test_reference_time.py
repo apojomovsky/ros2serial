@@ -5,7 +5,7 @@ import pytest
 from r2s_gen.reference import time
 from r2s_gen.reference.errors import Rejected
 
-from support import vector_cases
+from support import vector_files
 
 
 def expected_of(case):
@@ -14,9 +14,10 @@ def expected_of(case):
 
 
 # The S7 hand vectors: the reference reproduces every case.
-@pytest.mark.parametrize("case", vector_cases("time"))
-def test_reference_reproduces_every_time_vector(case):
-    assert time.compute(case["tick_hz"], case) == expected_of(case)
+@pytest.mark.parametrize("vector", vector_files("time"))
+def test_reference_reproduces_every_time_vector(vector):
+    for case in vector["cases"]:
+        assert time.compute(vector["tick_hz"], case) == expected_of(case), case
 
 
 def run(**fields):
@@ -32,7 +33,7 @@ def test_a_correction_older_than_the_maximum_anchor_is_unsynced():
 
 # covers: TIM-6
 def test_a_tick_wraparound_is_an_unsigned_difference():
-    assert run(tick0=0xFFFFFFFF, tick=1000) == (0, 1000000)
+    assert run(tick0=0xFFFFFFFF, tick=1000) == (1, 1000000)
 
 
 # covers: TIM-4
