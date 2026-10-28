@@ -151,8 +151,6 @@ def _bundled_h(
     lines[0] = _banner("/*", distro, digest) + " */"
     header = "\n".join(lines)
     section = [
-        '#include "r2s/r2s_codec.h"',
-        "",
         "/* The bundle's frame limit: the largest payload any bundled type encodes,",
         " * in either float64 width, plus headroom for the hello and announce frames",
         " * of node and topic names to 31 characters. A longer name fails configure",
@@ -171,7 +169,6 @@ def _bundled_h(
             f"#define R2S_BUNDLED_INDEX_{cname} {index}u",
             f"#define R2S_BUNDLED_TABLE_{cname} r2s_bundled_table_{cname}",
             f"#define R2S_BUNDLED_HASH_{cname} {_hash_bytes(repository, name)}",
-            f"extern const r2s_codec_table_t r2s_bundled_table_{cname};",
             "",
         ]
     closing = "#endif"
@@ -319,6 +316,9 @@ def _sketch_h(distro: str, digest: str) -> str:
         "#ifdef __cplusplus",
         'extern "C" {',
         "#endif",
+        "",
+        "/* The bundled tables the passes below encode and decode with. */",
+        *[f"extern const r2s_codec_table_t r2s_bundled_table_{_cname(name)};" for name in BUNDLED_TYPES],
         "",
         "/* One slot per row, in configuration order: user topic IDs run from 16. */",
         "#define R2S_X_SLOT(DIR, NAME, PKG, TYPE) R2S_SLOT_##NAME,",

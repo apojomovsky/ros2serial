@@ -580,7 +580,8 @@ def compile_strict(root, body):
     )
 
 
-def test_a_cxx_sketch_includes_the_header_plainly(tmp_path):
+def test_a_cxx_sketch_links_against_the_c_library(tmp_path):
+    """A C++ sketch resolves the tables and dispatch with C linkage, as the Arduino build does."""
     root = sketch_dir(tmp_path, files())
     (root / "case.cpp").write_text(
         '#define R2S_NODE_NAME "test_cpp"\n'
@@ -622,3 +623,17 @@ def test_a_cxx_sketch_includes_the_header_plainly(tmp_path):
     )
 
     assert compiled.returncode == 0, compiled.stderr
+
+    (root / "stubs.c").write_text(STUBS, encoding="utf-8")
+    objects = [root / "case.o"]
+    objects += [
+        compile_unit(root, str(root / name))
+        for name in ("stubs.c", "src/r2s_bundled.c", str(CORE_SRC / "codec.c"), str(CORE_SRC / "varint.c"))
+    ]
+    linked = subprocess.run(
+        ["g++", *[str(obj) for obj in objects], "-o", str(root / "case")],
+        capture_output=True,
+        text=True,
+    )
+
+    assert linked.returncode == 0, linked.stderr

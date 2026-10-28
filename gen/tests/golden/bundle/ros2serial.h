@@ -31,6 +31,17 @@
 extern "C" {
 #endif
 
+/* The bundled tables the passes below encode and decode with. */
+extern const r2s_codec_table_t r2s_bundled_table_builtin_interfaces_Time;
+extern const r2s_codec_table_t r2s_bundled_table_geometry_msgs_Quaternion;
+extern const r2s_codec_table_t r2s_bundled_table_geometry_msgs_Twist;
+extern const r2s_codec_table_t r2s_bundled_table_geometry_msgs_Vector3;
+extern const r2s_codec_table_t r2s_bundled_table_sensor_msgs_Imu;
+extern const r2s_codec_table_t r2s_bundled_table_sensor_msgs_JointState;
+extern const r2s_codec_table_t r2s_bundled_table_std_msgs_Float32;
+extern const r2s_codec_table_t r2s_bundled_table_std_msgs_Header;
+extern const r2s_codec_table_t r2s_bundled_table_std_msgs_String;
+
 /* One slot per row, in configuration order: user topic IDs run from 16. */
 #define R2S_X_SLOT(DIR, NAME, PKG, TYPE) R2S_SLOT_##NAME,
 enum r2s_topic_slot { R2S_TOPICS(R2S_X_SLOT) R2S_SLOT_COUNT };
