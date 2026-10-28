@@ -18,6 +18,14 @@ fi
 mkdir -p "$build" || exit 1
 
 status=0
+for sketch in examples/arduino_minimal/arduino_minimal.ino examples/arduino_xmacro/arduino_xmacro.ino; do
+  # The port glue lives in the library now: a sketch defining a port function
+  # or opening its own linkage block would shadow or split it, so it fails.
+  if grep -n "r2s_port_\|extern \"C\"" "$sketch"; then
+    echo "$sketch: the sketch must not define port functions or linkage blocks" >&2
+    status=1
+  fi
+done
 cmake -S examples/cmake_minimal -B "$build/cmake_minimal" \
   --toolchain "$root/examples/cmake_minimal/avr-toolchain.cmake" || status=1
 cmake --build "$build/cmake_minimal" || status=1
