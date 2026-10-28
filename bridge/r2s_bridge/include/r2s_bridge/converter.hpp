@@ -73,7 +73,9 @@ class Converter
                            std::size_t size, std::vector<std::uint8_t> &packed);
 
     // The dotted path of a depth-first field index ("linear.y"), or empty
-    // when the type does not load or the index names no field.
+    // when the type does not load, the index names no field, or the index
+    // lies inside or after a nested-message sequence, whose offset depends
+    // on the runtime count. Callers fall back to the numeric index then.
     std::string field_path(const std::string &type_name, std::uint8_t index);
 
     // Registers a plan from caller-owned members, for tests of types no

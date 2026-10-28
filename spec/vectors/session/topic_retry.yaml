@@ -1,5 +1,5 @@
 name: topic_retry
-covers: [SES-14, SES-16, SES-17]
+covers: [SES-2, SES-14, SES-16, SES-17]
 steps:
   - from: mcu
     frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f0 ad"

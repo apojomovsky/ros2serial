@@ -27,10 +27,11 @@ without compiling it.
 A marker without a ticket number is an error, and so is a marker above no
 fence. A line that only mentions a marker in passing is not one. The run
 prints every skipped snippet, with its ticket and reason when it has them,
-so none is forgotten. C and C++ snippets compile with -I core/include plus
-the staged generated-header fixtures (the golden generator output as
-r2s_generated.h, the bundle sketch header as ros2serial.h), so snippets
-using today's real headers compile instead of being skipped.
+so none is forgotten. C and C++ snippets compile with -I core/include,
+-I cpp/include, and the staged generated-header fixtures (the golden
+generator output as r2s_generated.h, the bundle sketch header as
+ros2serial.h), so snippets using today's real headers compile instead of
+being skipped.
 """
 
 import argparse
@@ -272,11 +273,13 @@ def _compile_c(snippet: Snippet, root: Path, workdir: Path) -> str | None:
     src.write_text(snippet.code)
     cmd = [compiler, f"-std={standard}", *warnings, "-fsyntax-only", str(src)]
     # The staged generated-header fixtures live in the workdir, so a snippet
-    # including r2s_generated.h or ros2serial.h finds them there.
+    # including r2s_generated.h or ros2serial.h finds them there. The core's
+    # headers and the C++ layer's own headers ride on -I, so the runtime
+    # API and the message headers resolve too.
     cmd += ["-I", str(workdir)]
-    include = root / "core" / "include"
-    if include.is_dir():
-        cmd += ["-I", str(include)]
+    for include in (root / "core" / "include", root / "cpp" / "include"):
+        if include.is_dir():
+            cmd += ["-I", str(include)]
     done = subprocess.run(cmd, capture_output=True, text=True)
     if done.returncode != 0:
         return f"{snippet.path}:{snippet.line}: {snippet.language} snippet does not compile:\n{done.stderr.strip()}"

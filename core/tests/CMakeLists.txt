@@ -187,12 +187,15 @@ file(GLOB messages_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/mess
 r2s_vector_test(vectors_messages messages vectors/messages_check.c ${messages_vectors})
 
 # The replay runs the transcripts the conforming session passes byte for
-# byte. The rest wait for their follow-ups: loss and reset need harness
-# reenactment, and the disputed steps need a vector decision. The replay
-# links the session build above, whose tick the transcripts pin, so it cannot
-# use the shared support library and registers by hand.
+# The replay runs the transcripts the conforming session passes byte for
+# byte. Loss and reset need harness reenactment: a lost frame is not fed, an
+# expired link is fired early, a reboot reconfigures with the announced table.
+# The reenactment lives in vectors/session_check.c, next to each transcript.
+# The replay links the session build above, whose tick the transcripts pin, so
+# it cannot use the shared support library and registers by hand.
 set(R2S_SESSION_REPLAY_NAMES boot_handshake boot_wait_expiry duplicate_name_both_directions empty_topics
-                             pub_sub_handshake)
+                             link_timeout pub_sub_handshake reset_same_token reset_zero_token topic_retry
+                             topic_retry_exhausted)
 set(R2S_SESSION_REPLAY_PATHS)
 foreach(name ${R2S_SESSION_REPLAY_NAMES})
   set(path "${R2S_REPO_ROOT}/spec/vectors/session/${name}.yaml")
@@ -219,12 +222,7 @@ add_test(NAME vectors_session COMMAND vectors_session)
 # that still keeps it out, so a new transcript stops the configure step
 # instead of landing silently unrun.
 set(R2S_SESSION_DIVERGENT_NAMES
-  link_timeout
   refused_hello
-  reset_same_token
-  reset_zero_token
-  topic_retry
-  topic_retry_exhausted
   version_mismatch)
 file(GLOB R2S_SESSION_ALL_PATHS CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/session/*.yaml")
 foreach(path ${R2S_SESSION_ALL_PATHS})
