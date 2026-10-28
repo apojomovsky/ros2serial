@@ -175,20 +175,14 @@ void test_topics_entry_not_fitting_a_frame_is_refused(void)
 void test_topics_copy_matches_the_bound_entry(void)
 {
     r2s_topic_t copy;
-    const r2s_topic_t *entry;
 
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_handwritten_configure());
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_topic_copy(2u, &copy));
-    entry = r2s_topic_get(2u);
-    if (entry == NULL) {
-        TEST_FAIL_MESSAGE("bound table entry missing");
-        return;
-    }
-    TEST_ASSERT_EQUAL_UINT8(entry->topic_id, copy.topic_id);
-    TEST_ASSERT_EQUAL_UINT8(entry->flags, copy.flags);
-    TEST_ASSERT_EQUAL_UINT8_ARRAY(entry->type_hash, copy.type_hash, 8u);
-    TEST_ASSERT_EQUAL_STRING(entry->type_name, copy.type_name);
-    TEST_ASSERT_EQUAL_STRING(entry->topic_name, copy.topic_name);
+    TEST_ASSERT_EQUAL_UINT8(R2S_HANDWRITTEN_LOG_TEXT_ID, copy.topic_id);
+    TEST_ASSERT_EQUAL_UINT8(R2S_HANDWRITTEN_NARROW, copy.flags);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(log_text_hash, copy.type_hash, 8u);
+    TEST_ASSERT_EQUAL_STRING("std_msgs/msg/String", copy.type_name);
+    TEST_ASSERT_EQUAL_STRING("log_text", copy.topic_name);
 }
 
 void test_topics_copy_past_count_fails_leaving_output_untouched(void)

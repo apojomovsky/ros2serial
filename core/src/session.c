@@ -94,6 +94,7 @@ static r2s_status_t bind(const char *node_name, const r2s_topic_t *topics, uint8
                          uint8_t table_in_flash)
 {
     size_t name_len;
+    r2s_status_t rc;
 
     if (node_name == NULL) {
         return R2S_ERR_BOUNDS;
@@ -115,10 +116,11 @@ static r2s_status_t bind(const char *node_name, const r2s_topic_t *topics, uint8
      * nothing announced. Flash and RAM tables bind through their own entry
      * point, because their addresses overlap on AVR. */
     if (table_in_flash != 0u) {
-        if (r2s_topics_configure(topics, topic_count) != R2S_OK) {
-            return R2S_ERR_BOUNDS;
-        }
-    } else if (r2s_topics_configure_ram(topics, topic_count) != R2S_OK) {
+        rc = r2s_topics_configure(topics, topic_count);
+    } else {
+        rc = r2s_topics_configure_ram(topics, topic_count);
+    }
+    if (rc != R2S_OK) {
         return R2S_ERR_BOUNDS;
     }
     session.node_name = node_name;

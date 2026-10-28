@@ -315,7 +315,8 @@ int main(int argc, char **argv)
         return 1;
     }
     count = fill_topics(&opts, topics);
-    if (r2s_session_configure(opts.node, topics, count) != R2S_OK) {
+    /* A stack table renamed at launch: RAM, so the runtime entry point. */
+    if (r2s_session_configure_ram(opts.node, topics, count) != R2S_OK) {
         fprintf(stderr, "r2s_posix: cannot configure node '%s'\n", opts.node);
         return 2;
     }
