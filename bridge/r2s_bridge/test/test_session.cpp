@@ -282,10 +282,11 @@ class SessionTranscript : public ::testing::TestWithParam<std::string>
 {
 };
 
-// Every step arrives at its own time, and the session answers with exactly
-// the transcript's host frames, in order.
+// Replays one transcript through the host session: every MCU step arrives at
+// its own time, and the host answers with exactly the transcript's frames.
 void replay_transcript(const std::string &path)
 {
+    ASSERT_TRUE(std::filesystem::exists(path)) << path << ": the transcript is missing";
     const YAML::Node root = YAML::LoadFile(path);
     const std::string name = root["name"].as<std::string>();
     std::vector<Step> steps;
@@ -345,9 +346,9 @@ TEST_P(SessionTranscript, ReplaysTheTranscriptInOrder)
 }
 
 // The transcripts no conforming firmware produces: their refused HELLOs come
-// from the transcript, never from the MCU. The glob above replays every
-// vector; this pins the two the host owns by name, so deleting one fails
-// here instead of silently shrinking the glob.
+// from the transcript, never from the MCU. The glob below replays them again;
+// this repeats the two by name, so deleting one fails here instead of
+// silently shrinking the glob.
 TEST(SessionTranscripts, ReplaysTheRefusedHelloVectors)
 {
     replay_transcript(std::string(R2S_SESSION_VECTOR_DIR) + "/refused_hello.yaml");
