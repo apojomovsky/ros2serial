@@ -130,7 +130,6 @@ The topics live in a RAM table the runtime layer fills, and registration closes 
 
 **2. An X-macro list in the sketch** (Arduino, no Python involved). The Arduino library ships descriptors for a bundle of common types (`std_msgs`, `geometry_msgs`, `sensor_msgs`) with documented default bounds:
 
-<!-- snippet: skip until #77 -->
 ```c
 #define R2S_NODE_NAME "base_controller"
 #define R2S_TOPICS(X) \
@@ -302,9 +301,13 @@ The tick comes from the port: `micros()` on Arduino (1 MHz nominal, 4 µs resolu
 
 One node per firmware, so the API needs no node handle. Names follow rosserial where possible and ROS 2 conventions where they differ (`spin_some`, `msg` in type names). Generated message types reuse the rosidl C naming (`geometry_msgs__msg__Twist`), so ROS 2 users recognize them. They are not ABI-compatible with `rosidl_generator_c`, but the two never get linked together.
 
-<!-- snippet: skip until #75 -->
 ```c
 #include "r2s_generated.h"        /* from r2s-gen, or the X-macro list */
+
+#include "r2s/r2s.h"
+
+void set_motors(double x, double z);
+float read_battery(void);
 
 static std_msgs__msg__Float32 battery;
 
@@ -917,7 +920,7 @@ The core calls `r2s_port_read` with `max = 1` while it assembles a frame, so it 
 
 For each topic in the list (generator or X-macro):
 
-<!-- snippet: skip until #75 -->
+<!-- snippet: skip until #75: template with <name> and <Type> placeholders, never literal C -->
 ```c
 r2s_status_t r2s_publish_<name>(const <Type> *msg);   /* published topics */
 void r2s_on_<name>(const <Type> *msg);               /* subscribed topics: prototype generated, user implements */
@@ -1023,7 +1026,7 @@ by `launch/r2s_bridge.launch.py` with `port` and `params_file` arguments.
 
 ### Published by the bridge
 
-- `/diagnostics` (via `diagnostic_updater`): link state, session token, protocol version, MCU counters from heartbeats, sequence gaps per topic, time sync offset, drift and round trip.
+- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, protocol version, MCU counters from heartbeats, sequence gaps per topic, time sync offset, drift and round trip.
 - The MCU's topics, under the names it announced, after remapping and namespacing.
 - MCU log messages through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`.
 

@@ -13,14 +13,23 @@
 
 #include "r2s_bridge/converter.hpp"
 #include "r2s_bridge/type_support.hpp"
+extern "C" {
+#include "r2s/r2s.h"
+}
 
 namespace r2s_bridge
 {
 namespace
 {
-
 constexpr std::uint8_t kReliableFlag = 0x08u;
 
+// The link state the H8 snapshot reports, one word per state. The table order
+// follows the SessionState enumerators, so no branch can go untaken.
+std::string link_state_name(SessionState state)
+{
+    static constexpr const char *names[] = {"disconnected", "boot_wait", "handshaking", "connected"};
+    return names[static_cast<std::size_t>(state)];
+}
 const char *fail_name(ConvertFail fail)
 {
     switch (fail) {
@@ -338,6 +347,33 @@ std::size_t Router::dropped(std::uint8_t topic_id) const
 {
     std::lock_guard<std::mutex> guard(impl_->mutex);
     return impl_->scheduler_.dropped(topic_id);
+}
+
+std::size_t Router::queued(std::uint8_t topic_id) const
+{
+    std::lock_guard<std::mutex> guard(impl_->mutex);
+    return impl_->scheduler_.queued(topic_id);
+}
+
+Router::Diagnostics Router::diagnostics() const
+{
+    std::lock_guard<std::mutex> guard(impl_->mutex);
+    Diagnostics out;
+    out.link_state = link_state_name(impl_->session_.state());
+    out.session_token = impl_->session_.token();
+    out.resets = impl_->session_.resets();
+    out.protocol_version = R2S_PROTOCOL_VERSION;
+    out.mcu_counters = impl_->session_.mcu_counters();
+    for (const auto &[id, route] : impl_->routes) {
+        TopicDiagnostics topic;
+        topic.topic_id = id;
+        topic.topic_name = route.info.topic_name;
+        topic.device_to_host = route.info.device_to_host();
+        topic.seq_gaps = impl_->session_.seq_gaps(id);
+        topic.dropped = impl_->scheduler_.dropped(id);
+        out.topics.push_back(topic);
+    }
+    return out;
 }
 
 } // namespace r2s_bridge
