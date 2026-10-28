@@ -35,6 +35,7 @@ def test_core_maps_to_its_sections_and_its_consumers():
         "E2E": "both",
         "DOCS": "1",
         "BRIDGE": "1",
+        "CPP": "1",
     }
 
 
@@ -59,6 +60,10 @@ def test_bridge_maps_to_bridge_coverage_and_posix_e2e():
         "COVERAGE": "1",
         "E2E": "posix",
     }
+
+
+def test_cpp_maps_to_cpp():
+    assert scopes("cpp/src/runtime.cpp") == {**CHEAP, "CPP": "1"}
 
 
 def test_spec_maps_to_vectors_fuzz_scripts_and_bridge():
@@ -116,6 +121,7 @@ def test_section_scripts_map_to_their_section():
     assert scopes("scripts/bridge-test.sh") == {**CHEAP, "BRIDGE": "1"}
     assert scopes("scripts/coverage-gate.sh") == {**CHEAP, "COVERAGE": "1"}
     assert scopes("scripts/build-examples.sh") == {**CHEAP, "EXAMPLES": "1"}
+    assert scopes("scripts/cpp-test.sh") == {**CHEAP, "CPP": "1"}
     assert scopes("scripts/fuzz.sh") == {**CHEAP, "FUZZ": "1"}
     assert scopes("scripts/build-host-lib.sh") == {**CHEAP, "CORE": "1", "GEN": "1"}
     assert scopes("scripts/test_ritual.py") == {**CHEAP, "SCRIPTS": "1"}
@@ -142,7 +148,6 @@ def test_suite_machinery_maps_to_full():
 
 def test_unknown_paths_fail_safe_to_full():
     assert scopes("VERSION") == {"FULL": "1"}
-    assert scopes("cpp/r2s/node.hpp") == {"FULL": "1"}
     assert scopes("brand-new-dir/file.c") == {"FULL": "1"}
 
 
@@ -161,6 +166,7 @@ def test_scopes_merge_across_paths():
         "E2E": "both",
         "DOCS": "1",
         "BRIDGE": "1",
+        "CPP": "1",
     }
 
 

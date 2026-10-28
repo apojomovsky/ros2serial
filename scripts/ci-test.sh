@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The single suite script: CI runs exactly this, and so does `make test`.
 # Scope with one or more of LINT=1 SCRIPTS=1 COMMITS=1 CORE=1 GEN=1 BRIDGE=1
-# E2E=<backend> COVERAGE=1 DOCS=1 EXAMPLES=1 FUZZ=1; no scope runs everything.
+# CPP=1 E2E=<backend> COVERAGE=1 DOCS=1 EXAMPLES=1 FUZZ=1; no scope runs everything.
 # E2E takes posix, avr, or both; both runs each backend once in one scope.
 # COMMITS checks COMMIT_RANGE (default origin/master..HEAD) and PR_TITLE when set,
 # then runs the prose gate on the same range. Exits non-zero if any section fails.
@@ -56,7 +56,7 @@ else
 fi
 
 scoped=0
-for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E COVERAGE DOCS EXAMPLES FUZZ; do [ -n "${!v:-}" ] && scoped=1; done
+for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES FUZZ; do [ -n "${!v:-}" ] && scoped=1; done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }
 
 failed=()
@@ -135,6 +135,7 @@ gen_tests() {
 }
 if wants GEN; then scope_now=GEN; section gen gen_tests; fi
 if wants BRIDGE; then scope_now=BRIDGE; section bridge bash scripts/bridge-test.sh; fi
+if wants CPP; then scope_now=CPP; section cpp bash scripts/cpp-test.sh; fi
 if wants COVERAGE; then scope_now=COVERAGE; section coverage bash scripts/coverage-gate.sh; fi
 if wants DOCS; then scope_now=DOCS; section docs python3 tools/snippets_check.py; fi
 if wants EXAMPLES; then scope_now=EXAMPLES; section examples bash scripts/build-examples.sh; fi
@@ -156,7 +157,7 @@ fi
 
 empty=""
 if [ "$scoped" = 1 ]; then
-  for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE E2E COVERAGE DOCS EXAMPLES FUZZ; do
+  for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES FUZZ; do
     if [ -n "${!v:-}" ]; then
       case " $ran_scopes " in *" $v "*) ;; *) empty="$empty $v" ;; esac
     fi

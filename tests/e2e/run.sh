@@ -34,7 +34,9 @@ set +u
 source "$build/bridge/install/setup.bash"
 set -u
 
-export R2S_E2E_FW=$build/ports/posix/r2s_posix_firmware
+# Both registration paths run the same scenarios: the generated C firmware
+# and the runtime C++ firmware announce the same topics, so one scenario
+# file covers both legs through R2S_E2E_FW.
 bash ports/posix/run.sh --build-only || exit 1
 
 # The scenario files import the framework as a package; direct launch_test
@@ -51,20 +53,26 @@ python3 tests/e2e/checks_test.py || exit 1
 export ROS_DOMAIN_ID=${R2S_E2E_DOMAIN_ID:-89}
 
 status=0
-for rmw in $rmws; do
-  echo "== e2e-posix: $rmw"
-  export RMW_IMPLEMENTATION=$rmw
-  router=""
-  if [ "$rmw" = rmw_zenoh_cpp ]; then
-    router=$(find "/opt/ros/$ROS_DISTRO" -name rmw_zenohd -type f 2>/dev/null | head -n 1)
-    [ -n "$router" ] || { echo "rmw_zenohd not found for $ROS_DISTRO"; status=1; break; }
-    "$router" >/dev/null 2>&1 &
-    router=$!
-    sleep 2
-  fi
-  for test_file in test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_publish_catchup_posix; do
-    timeout 300 launch_test "tests/e2e/${test_file}.py" || status=1
+for leg in static runtime; do
+  case $leg in
+    static) export R2S_E2E_FW=$build/ports/posix/r2s_posix_firmware ;;
+    runtime) export R2S_E2E_FW=$build/ports/posix/r2s_posix_runtime_firmware ;;
+  esac
+  for rmw in $rmws; do
+    echo "== e2e-posix ($leg): $rmw"
+    export RMW_IMPLEMENTATION=$rmw
+    router=""
+    if [ "$rmw" = rmw_zenoh_cpp ]; then
+      router=$(find "/opt/ros/$ROS_DISTRO" -name rmw_zenohd -type f 2>/dev/null | head -n 1)
+      [ -n "$router" ] || { echo "rmw_zenohd not found for $ROS_DISTRO"; status=1; break; }
+      "$router" >/dev/null 2>&1 &
+      router=$!
+      sleep 2
+    fi
+    for test_file in test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_publish_catchup_posix; do
+      timeout 300 launch_test "tests/e2e/${test_file}.py" || status=1
+    done
+    if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
   done
-  if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
 done
 exit $status

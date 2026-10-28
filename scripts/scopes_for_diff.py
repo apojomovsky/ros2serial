@@ -36,6 +36,8 @@ PREFIX_RULES = (
     ("scripts/coverage-gate.sh", {"COVERAGE": "1"}),
     ("scripts/coverage-filters.sh", {"COVERAGE": "1"}),
     ("scripts/build-examples.sh", {"EXAMPLES": "1"}),
+    # The C++ layer builds core sources into its host tests.
+    ("scripts/cpp-test.sh", {"CPP": "1"}),
     ("scripts/fuzz.sh", {"FUZZ": "1"}),
     # The host library builds core sources for the generator model tests.
     ("scripts/build-host-lib.sh", {"CORE": "1", "GEN": "1"}),
@@ -57,8 +59,8 @@ PREFIX_RULES = (
     ("tools/fuzz_corpus.py", {"SCRIPTS": "1", "FUZZ": "1"}),
     ("tools/", {"SCRIPTS": "1"}),
     # Core is built by CORE, measured by COVERAGE, linked by FUZZ and the
-    # examples, compiled into the GEN host library, the DOCS snippets and
-    # the BRIDGE framing library, and launched by E2E on both backends.
+    # examples, compiled into the GEN host library, the DOCS snippets, the
+    # BRIDGE framing library and the CPP host tests, and launched by E2E.
     (
         "core/",
         {
@@ -70,6 +72,7 @@ PREFIX_RULES = (
             "E2E": "both",
             "DOCS": "1",
             "BRIDGE": "1",
+            "CPP": "1",
         },
     ),
     # The generator is tested by GEN, runs during the example builds and the
@@ -77,6 +80,8 @@ PREFIX_RULES = (
     ("gen/", {"GEN": "1", "EXAMPLES": "1", "DOCS": "1", "BRIDGE": "1"}),
     # The bridge is built by BRIDGE, measured by COVERAGE, launched by E2E.
     ("bridge/", {"BRIDGE": "1", "COVERAGE": "1", "E2E": "posix"}),
+    # The C++ layer is built and tested by CPP over core sources.
+    ("cpp/", {"CPP": "1"}),
     # Vectors are replayed by the core, generator and bridge contract tests,
     # checked against the fuzz seeds by FUZZ, and read by the SCRIPTS tests.
     ("spec/", {"CORE": "1", "GEN": "1", "FUZZ": "1", "SCRIPTS": "1", "BRIDGE": "1"}),

@@ -803,7 +803,19 @@ def test_ci_runs_every_scope_on_pull_requests():
     assert not any("R2S_FULL" in line for line in runs), "CI must not narrow the suite"
     mentioned = set()
     for line in runs:
-        for scope in ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN", "BRIDGE", "COVERAGE", "DOCS", "EXAMPLES", "FUZZ"):
+        for scope in (
+            "LINT",
+            "SCRIPTS",
+            "COMMITS",
+            "CORE",
+            "GEN",
+            "BRIDGE",
+            "CPP",
+            "COVERAGE",
+            "DOCS",
+            "EXAMPLES",
+            "FUZZ",
+        ):
             if scope in line:
                 mentioned.add(scope)
         if "E2E=avr" in line:
@@ -817,6 +829,7 @@ def test_ci_runs_every_scope_on_pull_requests():
         "CORE",
         "GEN",
         "BRIDGE",
+        "CPP",
         "COVERAGE",
         "DOCS",
         "EXAMPLES",

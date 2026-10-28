@@ -14,7 +14,7 @@ import hashlib
 import sys
 from collections.abc import Mapping
 
-from r2s_gen import bounds, descriptors, emit, layouts, msgs, topics, typehash
+from r2s_gen import bounds, cpp, descriptors, emit, layouts, msgs, topics, typehash
 from r2s_gen.bounds import ResolvedMessage
 from r2s_gen.msgs import MessageError
 from r2s_gen.version import __version__
@@ -52,10 +52,15 @@ _FILES = (
     "src/r2s_bundled.c",
 )
 
+# The C++ message headers the library ships: one per bundled type, at the
+# rclcpp include path. The C++ runtime layer's own files are not here: they
+# live in the repository's cpp/ tree and the build stages them.
+_CPP_HEADERS = tuple(f"src/{cpp.message_path(name)}" for name in BUNDLED_TYPES)
+
 
 def files_for() -> tuple[str, ...]:
     """The exact relative paths `bundle` writes, in build order."""
-    return _FILES
+    return _FILES + _CPP_HEADERS
 
 
 def _cname(type_name: str) -> str:
@@ -83,12 +88,17 @@ def bundle(distro: str = "jazzy") -> dict[str, str]:
     tables = {name: descriptors.build(resolved, [name]) for name in BUNDLED_TYPES}
     digest = _digest(distro)
     max_nest = max(table.max_nest for table in tables.values())
-    return {
+    files = {
         "library.properties": _library_properties(distro, digest),
         "src/ros2serial.h": _sketch_h(distro, digest),
         "src/r2s_bundled.h": _bundled_h(resolved, tables, repository, distro, digest, max_nest),
         "src/r2s_bundled.c": _bundled_c(resolved, tables, distro, digest),
     }
+    for name in BUNDLED_TYPES:
+        files[f"src/{cpp.message_path(name)}"] = cpp.emit_message_hpp(
+            resolved, name, repository=repository, distro=distro, digest=digest
+        )
+    return files
 
 
 def _banner(prefix: str, distro: str, digest: str) -> str:
@@ -176,34 +186,6 @@ def _bundled_h(
     return header[: -len(closing)] + "\n".join(section) + "\n" + closing + "\n"
 
 
-def _record_lines(table: descriptors.DescriptorTable) -> list[str]:
-    """One record's five bytes, in the layout `r2s_codec_table_t` walks."""
-    lines = []
-    for record in table.records:
-        c_name = emit._c_name(record.type_name)
-        lines.append(f"    R2S_U16_LO(sizeof({c_name})),")
-        lines.append(f"    R2S_U16_HI(sizeof({c_name})),")
-        lines.append(f"    0x{record.first_field & 0xFF:02x},")
-        lines.append(f"    0x{(record.first_field >> 8) & 0xFF:02x},")
-        lines.append(f"    0x{record.field_count:02x}, /* {record.type_name} */")
-    return lines
-
-
-def _entry_lines(table: descriptors.DescriptorTable) -> list[str]:
-    """One entry's eight bytes, in the layout `r2s_codec_table_t` walks."""
-    lines = []
-    for entry in table.entries:
-        lines.append(f"    0x{entry.kind:02x},")
-        lines.append(f"    0x{entry.mode:02x},")
-        lines.append(f"    R2S_U16_LO({entry.offset}),")
-        lines.append(f"    R2S_U16_HI({entry.offset}),")
-        lines.append(f"    0x{entry.count & 0xFF:02x},")
-        lines.append(f"    0x{(entry.count >> 8) & 0xFF:02x},")
-        lines.append(f"    0x{entry.aux & 0xFF:02x},")
-        lines.append(f"    0x{(entry.aux >> 8) & 0xFF:02x}, /* {entry.owner}.{entry.field} */")
-    return lines
-
-
 def _bundled_c(
     resolved: Mapping[str, ResolvedMessage],
     tables: Mapping[str, descriptors.DescriptorTable],
@@ -243,12 +225,12 @@ def _bundled_c(
         table = tables[name]
         cname = _cname(name)
         lines.append(f"const uint8_t R2S_FLASH r2s_bundled_records_{cname}[] = {{")
-        lines.extend(_record_lines(table))
+        lines.extend(descriptors.record_lines(table))
         lines.append("};")
         lines.append("")
         if table.entries:
             lines.append(f"const uint8_t R2S_FLASH r2s_bundled_entries_{cname}[] = {{")
-            lines.extend(_entry_lines(table))
+            lines.extend(descriptors.entry_lines(table))
             lines.append("};")
         else:
             lines.append("/* No entries: one unread byte keeps the table symbol defined. */")
@@ -303,17 +285,27 @@ def _sketch_h(distro: str, digest: str) -> str:
         '#include "r2s/r2s_topics.h"',
         '#include "r2s/r2s_tx.h"',
         "",
-        "/* A sketch declares its topics as X-macro rows before including this header;",
-        " * the header expands them into the topic table, the typed publish functions",
-        " * and dispatch in the sketch's own translation unit, while the descriptors",
-        " * stay in the library, which compiles without the list. */",
-        "#ifndef R2S_TOPICS",
+        "/* A C++ sketch without a topic list uses the runtime API: it declares",
+        " * its publishers and subscriptions as objects, and the header brings in",
+        " * the runtime layer that serves them. The static X-macro path below",
+        " * stays for the builds that want it, so a C++ sketch with a list keeps",
+        " * the expansion. */",
+        "#if defined(__cplusplus) && !defined(R2S_TOPICS)",
+        '#include "r2s/runtime.hpp"',
+        "#endif",
+        "",
+        "/* A C sketch declares its topics as X-macro rows before including this",
+        " * header; the header expands them into the topic table, the typed publish",
+        " * functions and dispatch in the sketch's own translation unit, while the",
+        " * descriptors stay in the library, which compiles without the list. */",
+        "#if !defined(R2S_TOPICS) && !defined(__cplusplus)",
         '#error "Define R2S_TOPICS(X) as X(DIR, name, package, Type) rows before including <ros2serial.h>."',
         "#endif",
         "",
         "/* A C++ sketch includes this header plainly: the expansion below carries",
         ' * C linkage, so handler definitions keep it with no extern "C" block',
         " * of their own, and the port glue lives in the library. */",
+        "#ifdef R2S_TOPICS",
         "#ifdef __cplusplus",
         'extern "C" {',
         "#endif",
@@ -486,6 +478,8 @@ def _sketch_h(distro: str, digest: str) -> str:
         "",
         "#ifdef __cplusplus",
         "}",
+        "#endif",
+        "",
         "#endif",
         "",
         "#endif",

@@ -137,6 +137,30 @@ def test_snippet_sees_core_headers(tmp_path):
     assert snippets_check.check_tree(root) == []
 
 
+@needs_gxx
+def test_snippet_sees_the_cpp_layer_headers(tmp_path):
+    root = write_tree(
+        tmp_path,
+        {
+            "cpp/include/r2s/mini.hpp": "#ifndef MINI_HPP\n#define MINI_HPP\n#define MINI_OK 0\n#endif\n",
+            "README.md": "# T\n\n```cpp\n#include <r2s/mini.hpp>\nint v = MINI_OK;\n```\n",
+        },
+    )
+    assert snippets_check.check_tree(root) == []
+
+
+@needs_gxx
+def test_snippet_sees_the_library_umbrella_header(tmp_path):
+    root = write_tree(
+        tmp_path,
+        {
+            "cpp/include/ros2serial.h": "#ifndef ROS2SERIAL_H\n#define ROS2SERIAL_H\n#endif\n",
+            "README.md": "# T\n\n```cpp\n#include <ros2serial.h>\nint v = 1;\n```\n",
+        },
+    )
+    assert snippets_check.check_tree(root) == []
+
+
 @needs_gcc
 def test_c_implicit_declaration_fails(tmp_path):
     text = "# T\n\n```c\nint f(void) { return undeclared(); }\n```\n"

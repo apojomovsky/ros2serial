@@ -1024,15 +1024,18 @@ struct FakeBools {
     std::vector<bool> values;
 };
 
-// The values the boolean assign callback receives, in order. The message
-// storage itself lives inside the converter, so the test observes the
-// callback instead.
+// The values the boolean assign callback receives, in order, and the sizes
+// the resize callback receives, in order. The message storage itself lives
+// inside the converter, so the test observes the callbacks instead. Sizes
+// pin the runtime count: resizing to the bound would record 5 below.
 std::vector<std::pair<std::size_t, bool>> assigned_bools;
+std::vector<std::size_t> resized_bool_counts;
 
 void fake_bools_init(void *memory, MessageInitialization)
 {
     new (&static_cast<FakeBools *>(memory)->values) std::vector<bool>();
     assigned_bools.clear();
+    resized_bool_counts.clear();
 }
 
 void fake_bools_fini(void *memory)
@@ -1049,6 +1052,7 @@ void fake_bools_assign(void *memory, std::size_t index, const void *value)
 void fake_bools_resize(void *memory, std::size_t size)
 {
     static_cast<FakeBools *>(memory)->values.resize(size);
+    resized_bool_counts.push_back(size);
 }
 
 TEST(ConverterSequences, ConvertsBooleanSequencesThroughAssign)
@@ -1080,14 +1084,17 @@ TEST(ConverterSequences, ConvertsBooleanSequencesThroughAssign)
     EXPECT_EQ(result.field, 0xFFu);
     const std::vector<std::pair<std::size_t, bool>> want_assigned{{0, true}};
     EXPECT_EQ(assigned_bools, want_assigned);
+    EXPECT_EQ(resized_bool_counts, std::vector<std::size_t>{1});
 
     result = converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x02}.data(), 1, cdr);
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
     EXPECT_EQ(result.field, 0u);
+    EXPECT_EQ(resized_bool_counts, std::vector<std::size_t>{2});
 
     result = converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x01, 0x02}.data(), 2, cdr);
     EXPECT_EQ(result.fail, ConvertFail::kBadBool);
     EXPECT_EQ(result.field, 0u);
+    EXPECT_EQ(resized_bool_counts, std::vector<std::size_t>{1});
 }
 
 void *fake_empty_get(void * /*memory*/, std::size_t /*index*/)
