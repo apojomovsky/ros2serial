@@ -141,6 +141,16 @@ def check_collisions(names: Sequence[str], source: str) -> None:
             )
 
 
+def check_non_empty(names: Sequence[str], source: str) -> None:
+    """Reject an empty topic list: a node with no topics has nothing to announce."""
+    if not names:
+        raise MessageError(
+            f"{source}: topics",
+            "a node with no topics has nothing to announce",
+            "add at least one topic",
+        )
+
+
 def build(
     config: Config,
     resolved: Mapping[str, ResolvedMessage],
@@ -150,6 +160,7 @@ def build(
 ) -> TopicTable:
     """The topic table for `config`: IDs, flags, hashes and the frame limit."""
     names = [topic.name for topic in config.topics]
+    check_non_empty(names, source)
     check_collisions(names, source)
     if len(names) > MAX_USER_TOPICS:
         raise MessageError(
