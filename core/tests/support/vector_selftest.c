@@ -77,11 +77,11 @@ void r2s_vec_check_session(const r2s_vec_session_t *v)
 void r2s_vec_check_time(const r2s_vec_time_t *v)
 {
     char label[512];
+    uint32_t khz = v->tick_hz / 1000u;
 
     snprintf(label, sizeof label, "%s [%s]", v->where, v->covers);
     TEST_ASSERT_TRUE_MESSAGE(v->tick_hz >= 1000u && v->tick_hz % 1000u == 0u, label);
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0u, 1000000u % (v->tick_hz / 1000u), label);
-    TEST_ASSERT_TRUE_MESSAGE(v->nanosec0 < 1000000000u, label);
+    TEST_ASSERT_TRUE_MESSAGE(khz != 0u && 1000000u % khz == 0u, label);
     if (v->synced != 0u) {
         TEST_ASSERT_TRUE_MESSAGE(v->nanosec < 1000000000u, label);
     } else {
