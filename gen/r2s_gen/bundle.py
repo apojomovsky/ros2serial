@@ -175,8 +175,8 @@ def _bundled_h(
         cname = _cname(name)
         index = tables[name].index_of[name]
         section += [
-            f"/* Bundle index, table and hash of {name}: the sketch rows name these,",
-            " * so an unknown type in the list fails naming the row. */",
+            f"/* Bundle index, table and hash of {name}: the sketch header maps each",
+            " * row to the index and the table, so an unknown type in the list fails naming the row. */",
             f"#define R2S_BUNDLED_INDEX_{cname} {index}u",
             f"#define R2S_BUNDLED_TABLE_{cname} r2s_bundled_table_{cname}",
             f"#define R2S_BUNDLED_HASH_{cname} {_hash_bytes(repository, name)}",
@@ -265,7 +265,7 @@ def _cont(line: str) -> str:
 
 def _scope_maps(
     tables: Mapping[str, descriptors.DescriptorTable],
-    repository: MessageRepository,
+    repository: msgs.MessageRepository,
 ) -> list[str]:
     """One scope map per package: the facts a sketch row needs about its type.
 
@@ -300,7 +300,7 @@ def _scope_maps(
 
 def _sketch_h(
     tables: Mapping[str, descriptors.DescriptorTable],
-    repository: MessageRepository,
+    repository: msgs.MessageRepository,
     distro: str,
     digest: str,
 ) -> str:
