@@ -18,17 +18,13 @@ def check_float_sequence(values, expected_count, loss_budget, what):
     non-integer or a step back, and lost frames as a step forward. The
     budget counts lost frames only, so corruption always fails.
     """
-    assert len(values) >= expected_count, "%s: only %d of %d messages arrived" % (
-        what,
-        len(values),
-        expected_count,
-    )
+    assert len(values) >= expected_count, f"{what}: only {len(values)} of {expected_count} messages arrived"
     for value in values:
-        assert float(value).is_integer(), "%s: corrupt value %r" % (what, value)
-    for earlier, later in zip(values, values[1:]):
-        assert later > earlier, "%s: values out of order: %r after %r" % (what, later, earlier)
+        assert float(value).is_integer(), f"{what}: corrupt value {value!r}"
+    for earlier, later in zip(values, values[1:], strict=False):
+        assert later > earlier, f"{what}: values out of order: {later!r} after {earlier!r}"
     span = int(values[-1]) - int(values[0]) + 1
-    assert span - len(values) <= loss_budget, "%s: lost %d of %d" % (what, span - len(values), span)
+    assert span - len(values) <= loss_budget, f"{what}: lost {span - len(values)} of {span}"
 
 
 def check_twist_echo(sent, received, what):
@@ -38,20 +34,18 @@ def check_twist_echo(sent, received, what):
     exact. Narrow backends pass a tolerance instead; the comparison stays in
     one place for both.
     """
-    assert len(received) == len(sent), "%s: %d echoes for %d publishes" % (what, len(received), len(sent))
-    for want, got in zip(sent, received):
+    assert len(received) == len(sent), f"{what}: {len(received)} echoes for {len(sent)} publishes"
+    for want, got in zip(sent, received, strict=True):
         for axis in ("x", "y", "z"):
-            assert math.isclose(getattr(got.linear, axis), getattr(want.linear, axis), rel_tol=0.0, abs_tol=0.0), (
-                "%s: linear.%s differs: %r vs %r" % (what, axis, getattr(got.linear, axis), getattr(want.linear, axis))
-            )
+            assert math.isclose(getattr(got.linear, axis), getattr(want.linear, axis)), f"{what}: linear.{axis} differs"
         for axis in ("x", "y", "z"):
-            assert math.isclose(getattr(got.angular, axis), getattr(want.angular, axis), rel_tol=0.0, abs_tol=0.0), (
-                "%s: angular.%s differs" % (what, axis)
+            assert math.isclose(getattr(got.angular, axis), getattr(want.angular, axis)), (
+                f"{what}: angular.{axis} differs"
             )
 
 
 def collect_until(values, count, deadline, what):
     """Wait until values holds count entries, polling with a timeout."""
     while len(values) < count:
-        assert time.monotonic() < deadline, "%s: only %d of %d arrived" % (what, len(values), count)
+        assert time.monotonic() < deadline, f"{what}: only {len(values)} of {count} arrived"
         time.sleep(0.05)
