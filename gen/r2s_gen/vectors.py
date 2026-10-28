@@ -44,7 +44,7 @@ def run(args: argparse.Namespace) -> int:
     try:
         values = _read_message(args.message)
         payload = messages.encode(_repository(args), args.type, values, narrow=args.narrow)
-    except (msgs.MessageError, ValueError, TypeError) as error:
+    except (msgs.MessageError, ValueError, TypeError, RecursionError) as error:
         print(f"r2s-gen: error: {error}", file=sys.stderr)
         return 1
     print(payload.hex(" "))
