@@ -254,6 +254,22 @@ def test_a_value_the_field_cannot_hold_is_an_error_naming_the_field(tmp_path):
         messages.encode(repo, "demo_msgs/msg/Small", {})
 
 
+def test_an_unknown_field_is_an_error_naming_the_key(tmp_path):
+    repo = demo(tmp_path, "demo_msgs/msg/Small", "uint8 value")
+
+    with pytest.raises(ValueError, match=r"demo_msgs/msg/Small\.dat: unknown field"):
+        messages.encode(repo, "demo_msgs/msg/Small", {"value": 7, "dat": 9})
+
+
+def test_an_unknown_nested_field_is_an_error_naming_the_key(tmp_path):
+    repo = demo(tmp_path, "demo_msgs/msg/Outer", "demo_msgs/msg/Small small")
+    write_message(tmp_path / "messages", "demo_msgs/msg/Small", "uint8 value")
+    repo = msgs.MessageRepository(msg_paths=[tmp_path / "messages"])
+
+    with pytest.raises(ValueError, match=r"demo_msgs/msg/Small\.dat: unknown field"):
+        messages.encode(repo, "demo_msgs/msg/Outer", {"small": {"value": 7, "dat": 9}})
+
+
 def test_a_number_too_large_for_binary_floating_point_is_a_value_error(tmp_path):
     repo = demo(tmp_path, "demo_msgs/msg/Floats", "float32 single\nfloat64 wide")
 

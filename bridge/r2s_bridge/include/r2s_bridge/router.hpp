@@ -61,6 +61,30 @@ class Router
     // Advances the session and flushes due host-to-MCU frames.
     void poll();
 
+    // One routed topic's H8 values: the announced name and direction, the
+    // MCU-to-host frames it skipped ([FRM-15]), and the host-to-MCU payloads
+    // the pacer dropped ([SES-26], [SES-30]). The direction the topic never
+    // uses reads 0.
+    struct TopicDiagnostics {
+        std::uint8_t topic_id = 0;
+        std::string topic_name;
+        bool device_to_host = true;
+        std::uint32_t seq_gaps = 0;
+        std::size_t dropped = 0;
+    };
+    // The H8 snapshot: link state is one of disconnected, boot_wait,
+    // handshaking or connected; time_sync_available stays false until the P3
+    // estimator lands, and the bridge reports it as not available.
+    struct Diagnostics {
+        std::string link_state;
+        std::uint32_t session_token = 0;
+        std::uint32_t resets = 0;
+        std::uint8_t protocol_version = 0;
+        McuCounters mcu_counters;
+        std::vector<TopicDiagnostics> topics;
+        bool time_sync_available = false;
+    };
+
     std::size_t publisher_count() const;
     std::size_t subscription_count() const;
     // The negotiated QoS of one routed topic, for tests and the H8
@@ -68,6 +92,11 @@ class Router
     std::optional<rclcpp::QoS> endpoint_qos(std::uint8_t topic_id) const;
     // Pacer drops for one MCU topic id, for the H8 diagnostics.
     std::size_t dropped(std::uint8_t topic_id) const;
+    // Queued frames for one MCU topic id, so the H8 test can wait for every
+    // scripted message to arrive before it checks the drops.
+    std::size_t queued(std::uint8_t topic_id) const;
+    // The H8 values after scripted losses and errors, for /diagnostics.
+    Diagnostics diagnostics() const;
 
   private:
     struct Impl;
