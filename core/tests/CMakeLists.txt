@@ -215,6 +215,27 @@ target_compile_definitions(vectors_session PRIVATE R2S_TICK_HZ=1000000)
 target_link_libraries(vectors_session PRIVATE r2s_session_support)
 add_test(NAME vectors_session COMMAND vectors_session)
 
+# Every session transcript is either replayed above or names the follow-up
+# that still keeps it out, so a new transcript stops the configure step
+# instead of landing silently unrun.
+set(R2S_SESSION_DIVERGENT_NAMES
+  boot_handshake
+  link_timeout
+  refused_hello
+  reset_same_token
+  reset_zero_token
+  topic_retry
+  topic_retry_exhausted
+  version_mismatch)
+file(GLOB R2S_SESSION_ALL_PATHS "${R2S_REPO_ROOT}/spec/vectors/session/*.yaml")
+foreach(path ${R2S_SESSION_ALL_PATHS})
+  get_filename_component(stem "${path}" NAME_WE)
+  if(NOT stem IN_LIST R2S_SESSION_REPLAY_NAMES AND NOT stem IN_LIST R2S_SESSION_DIVERGENT_NAMES)
+    message(FATAL_ERROR "spec/vectors/session/${stem}.yaml is neither replayed nor divergent: "
+                        "add it to a list with the follow-up that takes it")
+  endif()
+endforeach()
+
 # Vector kinds the C runner does not read yet, each with the ticket that adds
 # it. A kind with files that is in neither list would be silently skipped, so
 # it stops the configure step instead.

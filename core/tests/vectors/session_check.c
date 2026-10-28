@@ -156,6 +156,7 @@ static void feed_wire(const uint8_t *decoded, uint16_t decoded_len, const char *
 
     snprintf(label, sizeof label, "%s: host frame", where);
     TEST_ASSERT_TRUE_MESSAGE(decoded_len >= 4u, label);
+    TEST_ASSERT_TRUE_MESSAGE(decoded_len <= (uint16_t)R2S_MAX_FRAME, label);
     wire_len = r2s_test_frame(wire, decoded[0], decoded[1], decoded + 2u, (uint16_t)(decoded_len - 4u));
     for (uint16_t i = 0u; i < wire_len; i++) {
         fake_port_queue_rx(wire + i, 1u);
@@ -166,10 +167,14 @@ static void feed_wire(const uint8_t *decoded, uint16_t decoded_len, const char *
 void r2s_vec_check_session(const r2s_vec_session_t *v)
 {
     static uint8_t want[WIRE_MAX];
+    static uint32_t prod_ms[1024];
     char label[256];
     char hex[R2S_HEX_TEXT_MAX];
     uint32_t now = 0u;
     uint16_t matched = 0u;
+    uint16_t produced = 0u;
+    uint16_t skipped = 0u;
+    uint16_t last_mcu = 0u;
 
     /* The MCU boots when its first frame goes out: host traffic before that
      * went nowhere, since the port was not open yet (SES-12, SES-13). */
@@ -179,19 +184,30 @@ void r2s_vec_check_session(const r2s_vec_session_t *v)
             break;
         }
     }
-    fake_port_set_tick(now);
+    fake_port_set_tick(now * (uint32_t)(R2S_TICK_HZ / 1000u));
     configure_from_transcript(v);
     for (uint16_t i = 0u; i < v->nsteps; i++) {
         if (v->steps[i].at_ms < now) {
+            skipped++;
             continue;
         }
         advance_to(&now, v->steps[i].at_ms);
         if (v->steps[i].from_host) {
             feed_wire(v->steps[i].frame, v->steps[i].frame_len, v->where);
         }
+        /* Every frame the step produced carries this step's time. */
+        TEST_ASSERT_TRUE_MESSAGE(fake_port_tx_frame_count() < 1024u, v->where);
+        while (produced < fake_port_tx_frame_count()) {
+            prod_ms[produced] = now;
+            produced++;
+        }
     }
-    /* Every MCU step must come out in order, and nothing else may: a missing
-     * frame and an extra one both fail with the step and the frame. */
+    if (skipped != 0u) {
+        printf("%s [%s]: %u pre-boot host steps went nowhere\n", v->where, v->covers, skipped);
+    }
+    /* Every MCU step must come out in order, no later than its time, and
+     * nothing else may: a missing frame and an extra one both fail with
+     * the step and the frame. */
     for (uint16_t i = 0u; i < v->nsteps; i++) {
         const uint8_t *frame = NULL;
         uint16_t frame_len = 0u;
@@ -200,6 +216,8 @@ void r2s_vec_check_session(const r2s_vec_session_t *v)
         if (v->steps[i].from_host) {
             continue;
         }
+        last_mcu = i;
+        TEST_ASSERT_TRUE_MESSAGE(v->steps[i].frame_len <= (uint16_t)R2S_MAX_FRAME, v->where);
         want_len = r2s_test_frame(want, v->steps[i].frame[0], v->steps[i].frame[1], v->steps[i].frame + 2u,
                                   (uint16_t)(v->steps[i].frame_len - 4u));
         want_len--;
@@ -221,8 +239,15 @@ void r2s_vec_check_session(const r2s_vec_session_t *v)
                      i, v->steps[i].at_ms);
             TEST_FAIL_MESSAGE(label);
         }
+        if (prod_ms[matched - 1u] > v->steps[i].at_ms) {
+            snprintf(label, sizeof label, "%s [%s] step %u at %ums: MCU frame came out at %ums", v->where,
+                     v->covers, i, v->steps[i].at_ms, prod_ms[matched - 1u]);
+            TEST_FAIL_MESSAGE(label);
+        }
     }
     if (matched != fake_port_tx_frame_count()) {
+        uint16_t extra = (uint16_t)(fake_port_tx_frame_count() - matched);
+
         for (; matched < fake_port_tx_frame_count(); matched++) {
             uint16_t frame_len = 0u;
             const uint8_t *frame = fake_port_tx_frame(matched, &frame_len);
@@ -230,8 +255,8 @@ void r2s_vec_check_session(const r2s_vec_session_t *v)
             r2s_hex_format(frame, frame_len > 64u ? 64u : frame_len, hex, sizeof hex);
             printf("%s [%s]: extra MCU frame %s\n", v->where, v->covers, hex);
         }
-        snprintf(label, sizeof label, "%s [%s]: the session sent %u frames past the transcript", v->where,
-                 v->covers, (unsigned)(fake_port_tx_frame_count() - matched));
+        snprintf(label, sizeof label, "%s [%s]: the session sent %u frames past step %u", v->where, v->covers,
+                 extra, last_mcu);
         TEST_FAIL_MESSAGE(label);
     }
 }
