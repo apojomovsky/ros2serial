@@ -261,6 +261,19 @@ DISCONNECTED --port open--> BOOT_WAIT --HELLO or boot_wait_ms--> HANDSHAKING --a
 - [SES-24] The estimator keeps the 16 most recent samples, uses the ones with the lowest round trip for the offset, and fits a line for the drift.
 - [SES-25] The host sends a CORRECTION after the initial burst, whenever the estimate moves by more than 100 µs, and at least every 5 s.
 
+### 8.4 Host traffic shaping (local)
+
+The rules below shape traffic inside the host. They never appear on the wire,
+so unit and integration tests cover them and no vector does.
+
+- [SES-26] For a host-to-MCU topic announced with the keep-latest flag, the host keeps only the newest message instead of queueing. The message it replaces is dropped and counted.
+- [SES-27] The host limits each host-to-MCU topic to its configured rate: `rate_limit.overrides` names a per-topic rate in hertz, and `rate_limit.default_hz` covers the topics without one. A rate of 0 sets no limit. An override names the topic the MCU announced, before any launch-file remapping.
+- [SES-28] The host caps its total host-to-MCU bandwidth at `tx_budget_pct` percent of the link, counting encoded frame bytes against `baud` bits per second with ten bits per byte. With a nonzero budget the bucket holds a burst of at least one maximum frame, so a large frame goes out instead of stalling; the average stays capped. A zero budget sends no user frames. Control frames keep their own retry rules and are outside the cap.
+- [SES-29] Host-to-MCU topics are serviced round-robin: each pass sends at most one frame per topic, in handshake order, resuming after the topic that sent last.
+- [SES-30] Each host-to-MCU queue holds `qos_depth` messages, or one when the topic is keep-latest. Past that the oldest message is dropped and counted.
+- [SES-31] A generic publisher or subscription created for an MCU topic keeps the last `qos_depth` messages, with reliable delivery when the announced flags name the reliable channel and best effort otherwise.
+- [SES-32] The host holds at most the MCU's announced receive capacity in unsent user-topic bytes, plus the frame in flight. A further user frame waits for the link instead of growing the host heap. Control frames keep their own retry rules.
+
 ## 9. Codec descriptors (local)
 
 One interpreter in the MCU encodes and decodes every message type from constant tables in flash: a type record for each message type, and a field entry for each field. The tables are built with the firmware and never cross the link, so this section fixes a build artifact rather than a frame. It is normative because the generator and a handwritten table must agree on it byte for byte, and because a table that breaks these rules makes the interpreter read outside a struct.

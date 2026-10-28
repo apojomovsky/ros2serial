@@ -118,11 +118,13 @@ using TransportFactory = std::function<std::unique_ptr<Transport>()>;
 using TopicResolver = std::function<std::uint8_t(const TopicInfo &)>;
 
 // The session's observable edge: log lines the bridge forwards to its
-// loggers, and one call per completed handshake saying whether the new topic
-// table matches the previous one ([SES-20]). Both default to ignoring.
+// loggers, one call per completed handshake saying whether the new topic
+// table matches the previous one ([SES-20]), and one call per decoded user
+// payload from a topic whose handshake verdict is ok. All default to ignoring.
 struct SessionEvents {
     std::function<void(SessionLog, const std::string &)> log;
     std::function<void(bool identical)> handshake_completed;
+    std::function<void(std::uint8_t, const std::vector<std::uint8_t> &)> user_frame;
 };
 
 // The section 8.2 state machine. poll() advances timers, drains the link and
@@ -147,6 +149,16 @@ class Session
     // The last completed handshake's topics, empty before the first one.
     const std::vector<TopicInfo> &topics() const;
     McuCounters mcu_counters() const;
+    // Queues one host-to-MCU payload on its topic, assigning the topic's next
+    // seq and flushing the link. The seq restarts at 0 after each handshake.
+    // False when the link already holds the MCU's receive capacity in unsent
+    // bytes: the frame waits for the link instead of growing the host heap
+    // ([SES-32]). True always goes out when nothing is pending.
+    bool send_user(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload);
+    // The MCU's announced receive limits, 0 before the first HELLO. A sender
+    // stays within both ([FRM-11]).
+    std::uint16_t mcu_max_frame() const;
+    std::uint16_t mcu_rx_capacity() const;
     void poll();
 
   private:

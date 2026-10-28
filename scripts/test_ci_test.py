@@ -5,6 +5,7 @@ suite never re-enters this test.
 """
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -149,3 +150,73 @@ def test_examples_scope_runs_its_section(tmp_path):
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "== examples" in result.stdout
+
+
+def _minimal_suite(copy: Path) -> Path:
+    """A tree with the suite and the scripts it sources, running no repo sections."""
+    (copy / "scripts").mkdir(parents=True)
+    (copy / "tools").mkdir()
+    for name in ("ci-test.sh", "clean-git-env.sh", "suite-lock.sh"):
+        shutil.copy2(ROOT / "scripts" / name, copy / "scripts" / name)
+    return copy
+
+
+def test_scoped_run_with_no_section_fails_naming_scope(tmp_path):
+    """A scope with no section must fail: an empty scoped run passes today."""
+    copy = _minimal_suite(tmp_path / "copy")
+    script = copy / "scripts" / "ci-test.sh"
+    text = script.read_text()
+    docs_line = [line for line in text.splitlines() if "wants DOCS" in line]
+    assert docs_line, "the probe needs a DOCS block to remove"
+    script.write_text(text.replace(docs_line[0] + "\n", ""))
+    env = {k: v for k, v in os.environ.items() if k not in SCOPES}
+    env["PATH"] = os.pathsep.join([str(Path(sys.executable).parent), env.get("PATH", "")])
+    env["DOCS"] = "1"
+    result = subprocess.run(
+        ["bash", "scripts/ci-test.sh"],
+        cwd=copy,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=600,
+    )
+    assert result.returncode != 0
+    assert "DOCS" in result.stdout + result.stderr
+
+
+def test_scoped_run_names_an_empty_scope_beside_a_running_one(tmp_path):
+    """A removed section must fail even when another scope in the same run passes."""
+    copy = _minimal_suite(tmp_path / "copy")
+    script = copy / "scripts" / "ci-test.sh"
+    text = script.read_text()
+    docs_line = [line for line in text.splitlines() if "wants DOCS" in line]
+    assert docs_line, "the probe needs a DOCS block to remove"
+    script.write_text(text.replace(docs_line[0] + "\n", ""))
+    (copy / "scripts" / "core-test.sh").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    env = {k: v for k, v in os.environ.items() if k not in SCOPES}
+    env["PATH"] = os.pathsep.join([str(Path(sys.executable).parent), env.get("PATH", "")])
+    env["DOCS"] = "1"
+    env["CORE"] = "1"
+    result = subprocess.run(
+        ["bash", "scripts/ci-test.sh"],
+        cwd=copy,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=600,
+    )
+    assert result.returncode != 0
+    assert "DOCS" in result.stdout + result.stderr
+
+
+def test_every_header_scope_runs_a_section():
+    """Each scope the header comment advertises must gate a section."""
+    text = (ROOT / "scripts" / "ci-test.sh").read_text()
+    header = "\n".join(
+        line for line in text.splitlines() if "Scope with" in line or re.match(r"^# (E2E|COVERAGE)", line)
+    )
+    scopes = re.findall(r"\b([A-Z][A-Z0-9]*)(?:=1|=<backend>)", header)
+    assert "E2E" in scopes, "the header pin must cover E2E"
+    assert scopes, "no scopes found in the header comment"
+    missing = [scope for scope in scopes if f"wants {scope}" not in text]
+    assert not missing, f"header scopes with no section: {missing}"

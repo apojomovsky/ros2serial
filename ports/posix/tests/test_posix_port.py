@@ -494,6 +494,48 @@ def test_launch_topic_name_at_limit_is_announced(tmp_path):
         assert [t["topic"] for t in topics] == ["n" * limit for _, _, limit in cases]
 
 
+def node_name_limit(max_frame):
+    """Longest --node name fitting the HELLO entry: the same sum the core
+    gate refuses, from the frame limit the firmware announces."""
+    budget = max_frame - 4
+    limit = budget - 17 - 1
+    while limit > 0 and 17 + varint_len(limit) + limit > budget:
+        limit -= 1
+    return limit
+
+
+def test_launch_node_name_over_limit_fails(tmp_path):
+    with Firmware(boot=str(tmp_path / "boot")) as fw:
+        _, _, payload = read_frame(fw.master, want=0)
+        limit = node_name_limit(parse_hello(payload)["max_frame"])
+    name = "n" * (limit + 1)
+    code, error = run_once(["--node", name], boot=str(tmp_path / "boot"))
+    assert code == 2
+    assert "--node" in error
+    assert name in error
+    assert str(limit + 1) in error
+    assert f"limit {limit}" in error
+
+
+def test_launch_node_name_at_limit_passes_name_check(tmp_path):
+    with Firmware(boot=str(tmp_path / "boot")) as fw:
+        _, _, payload = read_frame(fw.master, want=0)
+        limit = node_name_limit(parse_hello(payload)["max_frame"])
+    code, error = run_once(["--node", "n" * limit], boot=str(tmp_path / "boot"))
+    assert code == 1
+    assert "does-not-exist" in error
+
+
+def test_launch_node_name_at_limit_is_announced(tmp_path):
+    with Firmware(boot=str(tmp_path / "boot")) as fw:
+        _, _, payload = read_frame(fw.master, want=0)
+        limit = node_name_limit(parse_hello(payload)["max_frame"])
+    name = "n" * limit
+    with Firmware("--node", name, boot=str(tmp_path / "boot")) as fw:
+        hello, _, _ = do_handshake(fw)
+        assert hello["node"] == name
+
+
 # The Twist structs the dropped subscription's handler is declared with: the
 # firmware defines r2s_on_cmd_vel unconditionally, so a build without cmd_vel
 # pre-includes its message type, which the narrowed configuration no longer

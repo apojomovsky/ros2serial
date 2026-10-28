@@ -25,9 +25,11 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dev-image
-      - run: make test LINT=1
+      - run: |
+          range="$(bash scripts/pr-title-range.sh)" || exit 1
+          COMMIT_RANGE="$range" make test LINT=1
         env:
-          COMMIT_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
 
   scripts:
     runs-on: ubuntu-24.04
@@ -63,9 +65,11 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dev-image
-      - run: make test COVERAGE=1
+      - run: |
+          range="$(bash scripts/pr-title-range.sh)" || exit 1
+          COMMIT_RANGE="$range" make test COVERAGE=1
         env:
-          COMMIT_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
 
   e2e-avr:
     runs-on: ubuntu-24.04
