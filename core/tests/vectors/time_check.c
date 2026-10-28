@@ -17,8 +17,8 @@ void r2s_vec_check_time(const r2s_vec_time_t *v)
     snprintf(label, sizeof label, "%s [%s]", v->where, v->covers);
     synced = r2s_time_compute(v->tick_hz, v->tick0, v->sec0, v->nanosec0, v->drift_ppm, v->tick, &got);
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(v->synced, synced, label);
-    if (v->synced != 0u) {
-        TEST_ASSERT_EQUAL_INT32_MESSAGE(v->sec, got.sec, label);
-        TEST_ASSERT_EQUAL_UINT32_MESSAGE(v->nanosec, got.nanosec, label);
-    }
+    /* Unsynced reads {0, 0}: the check initializes got that way, so a
+     * regression that sets a time while unsynced fails here. */
+    TEST_ASSERT_EQUAL_INT32_MESSAGE(v->sec, got.sec, label);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(v->nanosec, got.nanosec, label);
 }

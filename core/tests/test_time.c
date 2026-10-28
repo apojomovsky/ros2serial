@@ -192,6 +192,22 @@ void test_time_drift_applies_per_elapsed_millisecond(void)
     TEST_ASSERT_EQUAL_UINT32(980000000u, got.nanosec);
 }
 
+/* covers: TIM-4, TIM-5, TIM-11 */
+void test_time_compute_refuses_inputs_the_wire_refuses(void)
+{
+    /* A sentinel: a refusal leaves *out untouched. */
+    r2s_time_t out = {7, 8};
+
+    TEST_ASSERT_EQUAL_UINT8(0, r2s_time_compute(999u, 0u, 0, 0u, 0, 0u, &out));
+    TEST_ASSERT_EQUAL_UINT8(0, r2s_time_compute(1500u, 0u, 0, 0u, 0, 0u, &out));
+    TEST_ASSERT_EQUAL_UINT8(0, r2s_time_compute(3000u, 0u, 0, 0u, 0, 0u, &out));
+    TEST_ASSERT_EQUAL_UINT8(0, r2s_time_compute(1000u, 0u, 0, 0u, 20001, 0u, &out));
+    TEST_ASSERT_EQUAL_UINT8(0, r2s_time_compute(1000u, 0u, 0, 0u, -20001, 0u, &out));
+    TEST_ASSERT_EQUAL_UINT8(0, r2s_time_compute(1000u, 0u, 0, 1000000000u, 0, 0u, &out));
+    TEST_ASSERT_EQUAL_INT32(7, out.sec);
+    TEST_ASSERT_EQUAL_UINT32(8u, out.nanosec);
+}
+
 /* covers: TIM-9 */
 void test_time_nanoseconds_normalize_before_and_after_the_drift(void)
 {

@@ -370,12 +370,10 @@ static int16_t read_i16(const uint8_t *at)
     return (int16_t)((uint16_t)at[0] | ((uint16_t)at[1] << 8u));
 }
 
-/* A CORRECTION carries its five fields in this many payload bytes (TIM-10),
- * with the drift and the nanosec inside the limits a correction allows
- * (TIM-4, TIM-11). Anything else is refused before it can anchor r2s_now. */
+/* A CORRECTION carries its five fields in this many payload bytes (TIM-10);
+ * the drift and the nanosec stay inside the header's limits (TIM-4, TIM-11).
+ * Anything else is refused before it can anchor r2s_now. */
 #define TIME_CORRECTION_LEN 15u
-#define TIME_MAX_DRIFT_PPM 20000
-#define TIME_MAX_NANOSEC 1000000000u
 
 static void send_pong(uint8_t ping_id, uint32_t tick)
 {
@@ -414,7 +412,8 @@ static void on_time(uint32_t delimiter_tick, const uint8_t *payload, uint16_t le
         }
         drift = read_i16(payload + 13u);
         nanosec = read_u32(payload + 9u);
-        if (drift > TIME_MAX_DRIFT_PPM || drift < -TIME_MAX_DRIFT_PPM || nanosec >= TIME_MAX_NANOSEC) {
+        if (drift > R2S_TIME_MAX_DRIFT_PPM || drift < -R2S_TIME_MAX_DRIFT_PPM ||
+            nanosec >= R2S_TIME_MAX_NANOSEC) {
             refuse();
             return;
         }

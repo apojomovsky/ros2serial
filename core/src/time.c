@@ -30,14 +30,26 @@ uint8_t r2s_time_compute(uint32_t tick_hz, uint32_t tick0, int32_t sec0, uint32_
     /* Ticks per millisecond and nanoseconds per tick: both divide evenly, so
      * the elapsed time splits into whole milliseconds and a remainder. */
     uint32_t k = tick_hz / 1000u;
-    uint32_t p = 1000000u / k;
-    uint32_t e = tick - tick0;
-    uint32_t ms = e / k;
-    uint32_t r = e % k;
+    uint32_t p;
+    uint32_t e;
+    uint32_t ms;
+    uint32_t r;
     uint32_t ns;
     int32_t drifted;
     int32_t sec;
 
+    /* Inputs the wire refuses read unsynced instead. */
+    if (tick_hz < 1000u || tick_hz % 1000u != 0u || k == 0u || 1000000u % k != 0u) {
+        return 0u;
+    }
+    if (drift_ppm > R2S_TIME_MAX_DRIFT_PPM || drift_ppm < -R2S_TIME_MAX_DRIFT_PPM ||
+        nanosec0 >= R2S_TIME_MAX_NANOSEC) {
+        return 0u;
+    }
+    p = 1000000u / k;
+    e = tick - tick0;
+    ms = e / k;
+    r = e % k;
     if (ms > R2S_TIME_MAX_ANCHOR_MS) {
         return 0u;
     }

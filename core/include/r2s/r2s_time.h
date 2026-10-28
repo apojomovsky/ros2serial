@@ -22,16 +22,23 @@ typedef struct {
 #define R2S_TIME_MAX_ANCHOR_MS 10000u
 #endif
 
+/* A correction carries its drift inside these bounds (TIM-4) and its nanosec
+ * below a second (TIM-11). The session refuses anything else, and the
+ * arithmetic below refuses it the same way. */
+#define R2S_TIME_MAX_DRIFT_PPM 20000
+#define R2S_TIME_MAX_NANOSEC 1000000000u
+
 /* Stores a correction the session validated: tick0 is the tick the host
  * measured ROS time at (TIM-3). Later corrections replace the anchor. */
 void r2s_time_note_correction(uint32_t tick0, int32_t sec0, uint32_t nanosec0, int16_t drift_ppm);
 
 /* The spec section 7.2 arithmetic for the tick under the correction it
- * carries, in 32-bit integers alone (TIM-6, TIM-8, TIM-9). The caller holds
- * the preconditions the wire enforces: tick_hz is 1000 times a divisor of
- * 10^6 (CTL-8), drift_ppm is within +-20000 (TIM-4) and nanosec0 is below
- * 10^9 (TIM-11). Returns nonzero with *out set, or 0 with *out untouched
- * once the anchor is older than R2S_TIME_MAX_ANCHOR_MS (TIM-7). */
+ * carries, in 32-bit integers alone (TIM-6, TIM-8, TIM-9). Inputs the wire
+ * refuses read unsynced instead: a tick_hz that is not 1000 times a divisor
+ * of 10^6 (CTL-8), a drift_ppm outside +-20000 (TIM-4, TIM-5) and a nanosec0
+ * of a second or more (TIM-11). Returns nonzero with *out set, or 0 with
+ * *out untouched once the anchor is older than R2S_TIME_MAX_ANCHOR_MS
+ * (TIM-7). */
 uint8_t r2s_time_compute(uint32_t tick_hz, uint32_t tick0, int32_t sec0, uint32_t nanosec0, int16_t drift_ppm,
                          uint32_t tick, r2s_time_t *out);
 
