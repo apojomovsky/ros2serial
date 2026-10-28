@@ -6,6 +6,7 @@ name collision checks. The golden pair pins the exact bytes; the compile test
 proves they are C99.
 """
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from r2s_gen.msgs import MessageError
 from r2s_gen.version import __version__
 
 GOLDEN = Path(__file__).parent / "golden" / "topics"
+ROOT = Path(__file__).resolve().parents[2]
 CORE_INCLUDE = Path(__file__).resolve().parents[2] / "core" / "include"
 
 POSIX_TEXT = """\
@@ -457,3 +459,123 @@ def test_an_empty_topic_list_is_an_error_at_pair_generation():
     assert str(caught.value) == (
         "r2s.yaml: topics: a node with no topics has nothing to announce; add at least one topic"
     )
+
+
+def _clang_format_clean(paths):
+    """The gate the emitted C must pass: clang-format changes none of it."""
+    binary = shutil.which("clang-format")
+    if binary is None:
+        pytest.skip("clang-format is not installed")
+    completed = subprocess.run(
+        [binary, "--dry-run", "--Werror", *(str(path) for path in paths)],
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+def _stage_style(directory):
+    """Copy the repository style next to generated files: clang-format reads it from there."""
+    style = directory / ".clang-format"
+    if not style.exists():
+        style.write_text((ROOT / ".clang-format").read_text(encoding="utf-8"), encoding="utf-8")
+
+
+def test_the_golden_pair_is_clang_format_clean():
+    _clang_format_clean([GOLDEN / "posix.h", GOLDEN / "posix.c"])
+
+
+def test_long_topic_names_emit_clang_format_clean_code(tmp_path):
+    """Long names wrap the way clang-format wraps them, at every length."""
+    entries = [
+        Topic(
+            name="a_very_long_topic_name_for_the_dispatch_call",
+            type_name="std_msgs/msg/Float32",
+            direction="sub",
+        ),
+        Topic(
+            name="another_very_long_topic_name_for_the_publish_call",
+            type_name="std_msgs/msg/Float32",
+            direction="pub",
+        ),
+    ]
+    entries.extend(
+        Topic(name=f"s_{'a' * length}", type_name="std_msgs/msg/Float32", direction="sub") for length in range(1, 101)
+    )
+    entries.extend(
+        Topic(name=f"p_{'a' * length}", type_name="std_msgs/msg/Float32", direction="pub") for length in range(1, 101)
+    )
+    entries.append(Topic(name=f"e_sub_{'a' * 190}", type_name="geometry_msgs/msg/Twist", direction="sub"))
+    entries.append(Topic(name=f"e_pub_{'a' * 190}", type_name="geometry_msgs/msg/Twist", direction="pub"))
+    entries.extend(
+        Topic(name=f"b_{'a' * length}", type_name="std_msgs/msg/Float32", direction="sub")
+        for length in (111, 112, 113, 114)
+    )
+    entries.extend(
+        Topic(name=f"q_{'a' * length}", type_name="std_msgs/msg/Float32", direction="pub")
+        for length in (111, 112, 113, 114)
+    )
+    entries.extend(
+        Topic(name=f"{prefix}{'a' * length}", type_name="std_msgs/msg/Float32", direction=direction)
+        for prefix, direction, length in (
+            ("t", "sub", 101),
+            ("t", "sub", 195),
+            ("u", "pub", 101),
+            ("u", "pub", 195),
+        )
+    )
+    entries.extend(
+        Topic(name=f"{prefix}_{'a' * 100}_tail_{'a' * 100}", type_name="std_msgs/msg/Float32", direction=direction)
+        for prefix, direction in (("w", "sub"), ("x", "pub"))
+    )
+    loaded = Config(
+        node="r2s_long",
+        topics=tuple(entries),
+        distro="jazzy",
+        handshake="full",
+        tier="M",
+        features=("time", "log"),
+        bounds={},
+        default_string_bound=None,
+        max_frame=None,
+    )
+    repository = msgs.MessageRepository()
+    resolved = bounds.resolve(repository, [topic.type_name for topic in loaded.topics], bounds=dict(loaded.bounds))
+    header, source = topics.generate(loaded, resolved, repository)
+    pair_h = tmp_path / "r2s_generated.h"
+    pair_c = tmp_path / "r2s_generated.c"
+    pair_h.write_text(header, encoding="utf-8")
+    pair_c.write_text(source, encoding="utf-8")
+    singles = []
+    for index, (name, direction) in enumerate(
+        [
+            ("a" * 113, "sub"),
+            ("a" * 114, "sub"),
+            ("a" * 113, "pub"),
+            ("a" * 114, "pub"),
+            (f"e_sub_{'a' * 190}", "sub"),
+            ("n1_x2_" + "a" * 100, "sub"),
+            ("n1_x2_" + "a" * 100, "pub"),
+        ]
+    ):
+        single = Config(
+            node="r2s_single",
+            topics=(Topic(name=name, type_name="std_msgs/msg/Float32", direction=direction),),
+            distro="jazzy",
+            handshake="full",
+            tier="M",
+            features=("time", "log"),
+            bounds={},
+            default_string_bound=None,
+            max_frame=None,
+        )
+        repository = msgs.MessageRepository()
+        resolved = bounds.resolve(repository, ["std_msgs/msg/Float32"])
+        header, source = topics.generate(single, resolved, repository)
+        single_h = tmp_path / f"r2s_single_{index}.h"
+        single_c = tmp_path / f"r2s_single_{index}.c"
+        single_h.write_text(header, encoding="utf-8")
+        single_c.write_text(source, encoding="utf-8")
+        singles.extend([single_h, single_c])
+    _stage_style(tmp_path)
+    _clang_format_clean([pair_h, pair_c] + singles)
