@@ -48,6 +48,6 @@ if [ "$dry" = 1 ]; then
 fi
 python3 "$root/scripts/set_version.py" "$next" "$PWD"
 "${cliff[@]}" --tag "v$next" -o CHANGELOG.md
-git add VERSION CHANGELOG.md gen/r2s_gen/version.py gen/package.xml
+git add VERSION CHANGELOG.md gen/r2s_gen/version.py gen/package.xml bridge/r2s_bridge/package.xml
 git commit -q -m "chore(release): v$next"
 echo "committed chore(release): v$next"

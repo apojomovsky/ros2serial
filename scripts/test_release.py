@@ -20,9 +20,13 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
     version = tag.removeprefix("v")
     (repo / "VERSION").write_text(version + "\n")
     (repo / "gen" / "r2s_gen").mkdir(parents=True)
+    (repo / "bridge" / "r2s_bridge").mkdir(parents=True)
     (repo / "gen" / "r2s_gen" / "version.py").write_text(f'__version__ = "{version}"\nPROTOCOL_VERSION = 1\n')
     (repo / "gen" / "package.xml").write_text(
         f'<package format="3">\n  <name>r2s_gen</name>\n  <version>{version}</version>\n</package>\n'
+    )
+    (repo / "bridge" / "r2s_bridge" / "package.xml").write_text(
+        f'<package format="3">\n  <name>r2s_bridge</name>\n  <version>{version}</version>\n</package>\n'
     )
     git(repo, "add", ".")
     git(repo, "commit", "-q", "-m", "chore: start")
@@ -140,6 +144,7 @@ def test_a_real_run_writes_the_version_into_the_generator_package(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert '__version__ = "0.4.0"' in (repo / "gen" / "r2s_gen" / "version.py").read_text()
     assert "<version>0.4.0</version>" in (repo / "gen" / "package.xml").read_text()
+    assert "<version>0.4.0</version>" in (repo / "bridge" / "r2s_bridge" / "package.xml").read_text()
 
 
 def test_release_commits_stay_out_of_the_changelog(tmp_path):

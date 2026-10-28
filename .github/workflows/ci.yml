@@ -139,9 +139,10 @@ jobs:
   # out of the required checks until then.
   fuzz-smoke:
     runs-on: ubuntu-24.04
-    continue-on-error: true
     steps:
-      - run: echo "pending C11, see docs/00-design.md"
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test FUZZ=1
   build-matrix:
     runs-on: ubuntu-24.04
     continue-on-error: true

@@ -7,8 +7,8 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 status=0
 bash "$root/scripts/core-test.sh" --build-only gcc clang || status=1
 
-# The fuzz targets are in no CMake target yet (C11 wires them into the
-# fuzz-smoke job), so they are compiled here with the core's own flags.
+# Scripts/fuzz.sh builds the targets with sanitizers; this gate keeps them
+# compiling under the core's own flags without a full libFuzzer build.
 for source in "$root"/core/fuzz/*.c; do
   [ -e "$source" ] || continue
   clang -std=c99 -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow \
