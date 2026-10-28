@@ -28,6 +28,10 @@ std::map<std::string, std::string> values_of(const diagnostic_msgs::msg::Diagnos
 Router::Diagnostics connected_snapshot()
 {
     Router::Diagnostics snapshot;
+    snapshot.time_sync_available = true;
+    snapshot.time_offset_ns = -1500;
+    snapshot.time_drift_ppm = 12;
+    snapshot.time_round_trip_ns = 2300000;
     snapshot.link_state = "connected";
     snapshot.session_token = 1u;
     snapshot.resets = 2u;
@@ -79,9 +83,9 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(values.at("topic cmd_vel seq gaps"), "0");
     EXPECT_EQ(values.at("topic cmd_vel dropped"), "5");
     EXPECT_EQ(values.at("control coalesced"), "6");
-    EXPECT_EQ(values.at("time sync offset"), "not available");
-    EXPECT_EQ(values.at("time sync drift"), "not available");
-    EXPECT_EQ(values.at("time sync round trip"), "not available");
+    EXPECT_EQ(values.at("time sync offset"), "-1500");
+    EXPECT_EQ(values.at("time sync drift"), "12");
+    EXPECT_EQ(values.at("time sync round trip"), "2300000");
 }
 TEST(DiagnosticsMessage, ReportsPerTopicStatus)
 {

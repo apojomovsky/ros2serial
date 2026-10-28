@@ -588,11 +588,29 @@ TEST_F(DiagnosticsNode, ReportsQueueOverflowAsDrop)
     EXPECT_EQ(cmd_vel->dropped, 5u) << "a queued topic past its bound drops the oldest";
 }
 
-TEST_F(DiagnosticsNode, ReportsTimeSyncAsUnavailable)
+TEST_F(DiagnosticsNode, ReportsTimeSyncOncePongsAnswerTheBurst)
 {
-    DiagnosticsFixture fixture("nosync", RouterParams{});
+    DiagnosticsFixture fixture("sync", RouterParams{});
     fixture.handshake();
-    EXPECT_FALSE(fixture.snapshot().time_sync_available) << "the estimator lands with P3";
+    // Eight PONGs, 2 ms after each burst PING, the 1 MHz tick stamped at the
+    // arrival, so the round trip is symmetric: PING k leaves at 50 k.
+    for (std::uint8_t k = 0; k < 8; ++k) {
+        fixture.advance(k == 0 ? 2u : 48u);
+        if (k != 0) {
+            fixture.advance(2u);
+        }
+        std::vector<std::uint8_t> pong{0x02u, k};
+        const std::uint32_t tick = (50u * k + 1u) * 1000u;
+        for (int shift = 0; shift < 32; shift += 8) {
+            pong.push_back(static_cast<std::uint8_t>((tick >> shift) & 0xFFu));
+        }
+        fixture.deliver_frame(0x01u, k, pong);
+    }
+    const Diagnostics diagnostics = fixture.snapshot();
+    EXPECT_TRUE(diagnostics.time_sync_available);
+    EXPECT_EQ(diagnostics.time_offset_ns, 0);
+    EXPECT_EQ(diagnostics.time_drift_ppm, 0);
+    EXPECT_EQ(diagnostics.time_round_trip_ns, 2000000);
 }
 
 TEST_F(DiagnosticsNode, CountsCoalescedControlFrames)
@@ -601,8 +619,9 @@ TEST_F(DiagnosticsNode, CountsCoalescedControlFrames)
     fixture.handshake();
     EXPECT_EQ(fixture.snapshot().control_coalesced, 0u);
     // Wedged writes with MCU heartbeats keeping the link alive: six host
-    // heartbeats collapse into one slot, and the H8 snapshot counts the five
-    // the newer replaced.
+    // heartbeats collapse into one slot, and six PINGs into theirs. Each
+    // first frame fills its slot, so the H8 snapshot counts the ten the
+    // newer replaced.
     fixture.block_writes();
     for (std::uint8_t seq = 0; seq < 6; ++seq) {
         fixture.advance(500u);
@@ -610,7 +629,7 @@ TEST_F(DiagnosticsNode, CountsCoalescedControlFrames)
     }
     const Diagnostics diagnostics = fixture.snapshot();
     EXPECT_EQ(diagnostics.link_state, "connected");
-    EXPECT_EQ(diagnostics.control_coalesced, 5u);
+    EXPECT_EQ(diagnostics.control_coalesced, 10u);
 }
 
 } // namespace

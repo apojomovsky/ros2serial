@@ -30,3 +30,27 @@ steps:
     frame: "00 04 06 01 00 00 00 00 44"
     at_ms: 350
     note: "every topic resolved, so READY"
+  - from: host
+    frame: "01 00 01 00 42 06"
+    at_ms: 350
+  - from: host
+    frame: "01 01 01 01 17 4d"
+    at_ms: 400
+  - from: host
+    frame: "01 02 01 02 e8 90"
+    at_ms: 450
+  - from: host
+    frame: "01 03 01 03 bd db"
+    at_ms: 500
+  - from: host
+    frame: "01 04 01 04 07 23"
+    at_ms: 550
+  - from: host
+    frame: "01 05 01 05 52 68"
+    at_ms: 600
+  - from: host
+    frame: "01 06 01 06 ad b5"
+    at_ms: 650
+  - from: host
+    frame: "01 07 01 07 f8 fe"
+    at_ms: 700

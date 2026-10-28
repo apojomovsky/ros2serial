@@ -41,13 +41,13 @@ struct SimMcu {
         return steady_ns + skew_ns;
     }
 
-    // One PONG answered at steady_ns, fed straight into the estimator.
+    // One PONG answered at steady_ns, fed straight into the estimator. The
+    // tick is stamped at the arrival, halfway through the round trip.
     void sample(TimeSync &sync, std::int64_t steady_ns) const
     {
-        sync.add_sample(steady_ns, steady_ns + rtt_ns, ros_at(steady_ns + rtt_ns), tick_at(steady_ns));
+        sync.add_sample(steady_ns, steady_ns + rtt_ns, ros_at(steady_ns + rtt_ns),
+                        tick_at(steady_ns + rtt_ns / 2));
     }
-
-    std::int64_t true_ros(std::uint32_t tick) const
     {
         return static_cast<std::int64_t>(std::llround(tick * kTickNs / (1.0 + drift))) + skew_ns;
     }
