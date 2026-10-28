@@ -35,7 +35,7 @@ def copy_tree(dest: Path) -> Path:
     return dest
 
 
-SCOPES = ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN", "BRIDGE", "CPP", "E2E", "COVERAGE", "DOCS", "EXAMPLES")
+SCOPES = ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN", "BRIDGE", "CPP", "E2E", "COVERAGE", "DOCS", "EXAMPLES", "FUZZ")
 
 
 def run_lint(root: Path) -> subprocess.CompletedProcess:
@@ -162,6 +162,14 @@ def test_examples_scope_runs_its_section(tmp_path):
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "== examples" in result.stdout
+
+
+def test_fuzz_scope_runs_its_section(tmp_path, monkeypatch):
+    # Seeds only: the run still builds every target and runs each corpus.
+    monkeypatch.setenv("R2S_FUZZ_SECONDS", "0")
+    result = run_scope(copy_tree(tmp_path), "FUZZ", build_dir=tmp_path / "build")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "== fuzz" in result.stdout
 
 
 def _minimal_suite(copy: Path) -> Path:

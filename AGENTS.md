@@ -167,7 +167,7 @@ Pass the title the PR will carry as `make pre-pr-check PR_TITLE="<title>"`, so t
 | `pr-body.yml` | PR opened or edited | Fails on literal `\n` or `\r` in the body |
 | `nightly.yml` | Schedule | Long fuzzing and fault injection, big-endian, Rolling |
 | `cut-release.yml` | Manual | Next version from commits (git-cliff), changelog, release PR, auto-merge, tag |
-| `release.yml` | Tag | Builds and publishes every artifact |
+| `release.yml` | Tag | Pre-release with the attached artifacts; publishes nowhere else |
 
 - The non-code classifier is a single script with an allowlist of non-code paths; anything else counts as code. Workflow files are never exempt.
 - Flash, RAM and stack budgets are measured on the PR head and the PR base in the same run and judged by the base commit's script, so a PR cannot relax its own judge.
