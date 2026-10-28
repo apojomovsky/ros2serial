@@ -13,7 +13,8 @@ fail() {
 
 distros=()
 images=()
-while IFS= read -r line; do
+# read fails on a last line without a trailing newline, so the guard keeps it.
+while IFS= read -r line || [ -n "$line" ]; do
   [[ $line =~ ^ROS_([A-Z0-9]+)_IMAGE=(.*)$ ]] || continue
   key=${BASH_REMATCH[1]}
   distro=$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')

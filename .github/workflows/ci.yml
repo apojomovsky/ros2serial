@@ -109,18 +109,40 @@ jobs:
           R2S_IN_IMAGE: 1
           R2S_BUILD_DIR: /tmp/r2s-build
 
+  # End-to-end on the posix virtual MCU: scenarios 1 to 4 under every RMW the
+  # design names, with the Zenoh router started first on its leg. The suite
+  # runs the same run.sh locally, so each leg matches `make test E2E=posix`.
+  e2e-posix:
+    needs: bridge-images
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: ${{ fromJSON(needs.bridge-images.outputs.matrix).distro }}
+        rmw: [rmw_fastrtps_cpp, rmw_cyclonedds_cpp, rmw_zenoh_cpp]
+    container:
+      image: ${{ fromJSON(needs.bridge-images.outputs.images)[matrix.distro] }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - run: |
+          apt-get update
+          apt-get install -y --no-install-recommends "ros-${DISTRO}-rmw-cyclonedds-cpp" "ros-${DISTRO}-rmw-zenoh-cpp"
+        env:
+          DISTRO: ${{ matrix.distro }}
+      - run: make test E2E=posix
+        env:
+          R2S_IN_IMAGE: 1
+          R2S_BUILD_DIR: /tmp/r2s-build
+          R2S_RMWS: ${{ matrix.rmw }}
+
   # Placeholders. Each becomes a real job in the ticket it names, and stays
   # out of the required checks until then.
-  e2e-posix:
-    runs-on: ubuntu-24.04
-    continue-on-error: true
-    steps:
-      - run: echo "pending V1, see docs/00-design.md"
   fuzz-smoke:
     runs-on: ubuntu-24.04
-    continue-on-error: true
     steps:
-      - run: echo "pending C11, see docs/00-design.md"
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test FUZZ=1
   build-matrix:
     runs-on: ubuntu-24.04
     continue-on-error: true

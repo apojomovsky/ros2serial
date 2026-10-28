@@ -308,6 +308,7 @@ def emit_h(table: TopicTable) -> str:
         [
             "",
             '#include "r2s/r2s_codec.h"',
+            '#include "r2s/r2s_port.h"',
             '#include "r2s/r2s_session.h"',
             '#include "r2s/r2s_topics.h"',
             "",
@@ -555,5 +556,12 @@ def generate(
     base = emit.emit_types(resolved, max_nest=table.max_nest)
     closing = "#endif\n"
     assert base.endswith(closing)
-    header = base[: -len(closing)] + emit_h(topic_table) + "\n\n" + closing
+    # A C++ sketch includes this header plainly: the guard below gives the
+    # declarations C linkage, so no sketch writes its own extern "C" block.
+    anchor = "#include <stdint.h>\n"
+    assert base.count(anchor) == 1
+    open = anchor + '\n#ifdef __cplusplus\nextern "C" {\n#endif\n'
+    close = "\n#ifdef __cplusplus\n}\n#endif\n"
+    body = base[: -len(closing)] + emit_h(topic_table) + "\n" + close + "\n" + closing
+    header = body.replace(anchor, open, 1)
     return header, descriptors.emit_c(table) + emit_c(topic_table)

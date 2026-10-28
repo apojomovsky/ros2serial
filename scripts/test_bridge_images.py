@@ -64,6 +64,19 @@ def test_a_pin_without_a_digest_is_refused(tmp_path):
     assert "digest" in result.stderr
 
 
+def test_a_last_pin_without_a_trailing_newline_is_kept(tmp_path):
+    out = outputs(tree(tmp_path, PINS[:-1]))
+    assert json.loads(out["matrix"]) == {"distro": ["jazzy", "lyrical"]}
+    assert json.loads(out["images"]) == {"jazzy": JAZZY, "lyrical": LYRICAL}
+
+
+def test_an_unpinned_last_line_without_a_newline_is_refused(tmp_path):
+    text = f"ROS_JAZZY_IMAGE={JAZZY}\nROS_HUMBLE_IMAGE=ros:humble-ros-base-jammy"
+    result = run(tree(tmp_path, text))
+    assert result.returncode == 1
+    assert "ROS_HUMBLE_IMAGE" in result.stderr
+
+
 def test_an_image_pinned_for_another_distro_is_refused(tmp_path):
     result = run(tree(tmp_path, PINS.replace(JAZZY, LYRICAL)))
     assert result.returncode == 1
@@ -72,6 +85,13 @@ def test_an_image_pinned_for_another_distro_is_refused(tmp_path):
 
 def test_a_distro_pinned_twice_is_refused(tmp_path):
     result = run(tree(tmp_path, PINS + f"ROS_JAZZY_IMAGE={JAZZY}\n"))
+    assert result.returncode == 1
+    assert "ROS_JAZZY_IMAGE" in result.stderr
+    assert "more than once" in result.stderr
+
+
+def test_a_duplicate_pin_without_a_trailing_newline_is_refused(tmp_path):
+    result = run(tree(tmp_path, PINS + f"ROS_JAZZY_IMAGE={JAZZY}"))
     assert result.returncode == 1
     assert "ROS_JAZZY_IMAGE" in result.stderr
     assert "more than once" in result.stderr

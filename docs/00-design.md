@@ -259,7 +259,7 @@ rCOBS decoding runs backwards in place in the frame buffer once the delimiter ar
 
 | Port | RX path | TX path |
 | --- | --- | --- |
-| Arduino (any core) | `r2s_port_read` reads `Serial` | `Serial.write`, `availableForWrite()` as free space |
+| Arduino (any core) | `r2s_port_read` reads `Serial` | `Serial.write`, which blocks, so `0xFFFF` |
 | AVR bare metal | `R2S_WITH_RX_RING`: `ISR(USART_RX_vect) { r2s_rx_push(UDR0); }` | Blocking write |
 | PIC with epic-hal (Phase 5) | `epic_serial_read` | `epic_serial_write`, ring free space |
 | STM32, RP2040 | DMA in circular mode plus an idle-line interrupt | DMA or ring |
@@ -977,7 +977,7 @@ Scenario numbers in the tickets below refer to the key end-to-end scenarios in `
 | --- | --- | --- |
 | `ci.yml` | Push and PR | `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component, fails on a drop); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `docs` (every code snippet in `README.md` and `docs/` extracted and compiled); `cpp`; `bridge` (colcon build and test in `ros:jazzy` and `ros:lyrical`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `pic-canary` (advisory, from Phase 2); `budgets` (size table as a PR comment, fails on budget breach) |
 | `nightly.yml` | Schedule | Long fuzzing, long fault injection, big-endian qemu, extended hypothesis runs, Rolling distro |
-| `release.yml` | Tag | Changelog (git-cliff), Python package to PyPI, Arduino library zip, PlatformIO package, epic-hal module bundle (Phase 5) |
+| `release.yml` | Tag | Pre-release with the Arduino library zip and the Python sdist and wheel attached; publishes nowhere else |
 
 Rules:
 - Every job runs in a pinned container image or pinned action versions. Toolchain versions (avr-gcc, arduino-cli core, ROS images, epic-cc bundle) are pinned in one file, `ci/versions.env`. A required check's image is pinned by digest as well as tag: the bridge job's per-distro images (`ROS_<distro>_IMAGE`) carry both, so an upstream rebuild cannot change that job's toolchain without a commit here.
