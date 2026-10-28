@@ -81,6 +81,13 @@ if [ "$build_only" = 0 ]; then
     echo "-- core: posix FAILED"
     failed+=("posix")
   fi
+  echo "-- core: arduino"
+  if bash "$root/ports/arduino/run.sh"; then
+    echo "-- core: arduino ok"
+  else
+    echo "-- core: arduino FAILED"
+    failed+=("arduino")
+  fi
   echo "-- core: avr-flash"
   if bash "$root/core/tests/avr/check.sh"; then
     echo "-- core: avr-flash ok"
