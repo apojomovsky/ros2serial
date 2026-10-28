@@ -2,7 +2,7 @@ name: topic_retry
 covers: [SES-14, SES-16, SES-17]
 steps:
   - from: mcu
-    frame: "00 00 02 01 00 78 56 34 12 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 30 e8"
+    frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f0 ad"
     at_ms: 100
   - from: host
     frame: "00 00 03 00 49 29"
@@ -27,5 +27,5 @@ steps:
     frame: "00 04 05 11 00 90 f7"
     at_ms: 400
   - from: host
-    frame: "00 05 06 bd 22"
+    frame: "00 05 06 01 00 00 00 2b 40"
     at_ms: 400

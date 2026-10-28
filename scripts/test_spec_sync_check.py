@@ -181,6 +181,13 @@ def test_a_vector_that_is_not_utf8_without_a_spec_change_fails(tmp_path):
     ]
 
 
+def test_a_spec_that_is_not_utf8_without_a_spec_change_fails(tmp_path):
+    root = repo_with(tmp_path, LOCAL)
+    write(root, "spec/vectors/frames/a.yaml", "covers: [FRM-9]\ncases: []\n")
+    (root / "spec/protocol.md").write_bytes(LOCAL.encode("utf-8") + b"\xff")
+    assert problems(root) == ["spec/vectors changed without spec/protocol.md changes: spec/protocol.md names no rule"]
+
+
 def test_a_branch_that_changes_neither_passes(tmp_path):
     root = repo_with(tmp_path, LOCAL)
     write(root, "core.c", "int x;\n")

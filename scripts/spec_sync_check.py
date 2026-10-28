@@ -67,7 +67,7 @@ def _unknown_covers(root: Path, changed: list[str]) -> list[str]:
 
     try:
         defined = set(_rules((root / SPEC).read_text(encoding="utf-8")))
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return [SPEC]
     unknown = []
     for path in changed:

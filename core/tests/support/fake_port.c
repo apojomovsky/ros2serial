@@ -1,5 +1,5 @@
 /* The scriptable fake port: r2s_port_* backed by in-memory RX and TX buffers,
- * a settable tick, tx_free and boot ID. */
+ * a settable tick and tx_free. */
 #include "fake_port.h"
 
 #include <string.h>
@@ -20,7 +20,6 @@ static struct {
     uint16_t tx_free;
     uint16_t tx_overruns;
     uint32_t tick;
-    uint32_t boot_id;
 } port;
 
 void fake_port_reset(void)
@@ -141,11 +140,6 @@ uint16_t fake_port_take_overruns(void)
     return n;
 }
 
-void fake_port_set_boot_id(uint32_t boot_id)
-{
-    port.boot_id = boot_id;
-}
-
 uint16_t r2s_port_read(uint8_t *buf, uint16_t max)
 {
     uint16_t n = fake_port_rx_pending();
@@ -193,9 +187,4 @@ uint16_t r2s_port_tx_free(void)
 uint32_t r2s_port_tick(void)
 {
     return port.tick;
-}
-
-uint32_t r2s_port_boot_id(void)
-{
-    return port.boot_id;
 }

@@ -141,8 +141,11 @@ class Session
     Session &operator=(const Session &) = delete;
 
     SessionState state() const;
-    bool has_boot_id() const;
-    std::uint32_t boot_id() const;
+    // Whether a HELLO has been accepted. The recorded token below is the one
+    // READY assigned after a completed handshake, and the MCU's echo
+    // otherwise: 0 before any READY and after every reboot ([SES-19]).
+    bool seen_hello() const;
+    std::uint32_t token() const;
     // The last completed handshake's topics, empty before the first one.
     const std::vector<TopicInfo> &topics() const;
     McuCounters mcu_counters() const;
