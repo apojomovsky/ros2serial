@@ -93,6 +93,10 @@ uint16_t r2s_session_rx_lost(uint8_t index);
 #ifdef R2S_TESTING
 /* Host test builds only: the same reset, as r2s_test_reset() calls it. */
 void r2s_session_test_reset(void);
+
+/* Host test builds only: runs the link-timeout transition now, as if no valid
+ * host frame arrived for R2S_LINK_TIMEOUT_MS (SES-7, SES-8). */
+void r2s_session_test_link_timeout(void);
 #endif
 
 #ifdef __cplusplus
