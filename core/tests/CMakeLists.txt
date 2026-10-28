@@ -39,17 +39,17 @@ endfunction()
 
 r2s_support_lib(r2s_test_support r2s_core)
 
-# The transcript firmware announces a 1 MHz tick without logging, while the
-# host test build runs at 1 kHz with logging. The replay compiles the core
-# again with the transcript's values, so its HELLO matches byte for byte. The
-# -U drops the directory-wide R2S_WITH_LOG after its -D, which CMake emits
-# first; both spellings are POSIX compiler options.
+# The transcript firmware announces a 1 MHz tick without logging or time sync,
+# while the host test build runs at 1 kHz with both. The replay compiles the
+# core again with the transcript's values, so its HELLO matches byte for
+# byte. Each -U drops the directory-wide define after its -D, which CMake
+# emits first; both spellings are POSIX compiler options.
 file(GLOB_RECURSE R2S_SESSION_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../src/*.c")
 add_library(r2s_core_session STATIC ${R2S_SESSION_SOURCES})
 target_include_directories(r2s_core_session PUBLIC ../include)
 target_compile_options(r2s_core_session PRIVATE ${R2S_WARNINGS})
 target_compile_definitions(r2s_core_session PRIVATE R2S_TICK_HZ=1000000)
-target_compile_options(r2s_core_session PRIVATE -U R2S_WITH_LOG)
+target_compile_options(r2s_core_session PRIVATE -UR2S_WITH_LOG -UR2S_WITH_TIME)
 r2s_support_lib(r2s_session_support r2s_core_session)
 
 # The handwritten publish wrappers and dispatch, with the handler their tests

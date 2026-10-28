@@ -785,11 +785,12 @@ void test_session_unknown_topic_requests_are_refused(void)
 }
 
 /* Once connected, a repeated ready, a heartbeat and a later channel's frame
- * are accepted and ignored: the link is already up. */
+ * are accepted and ignored: the link is already up. PINGs are answered on
+ * the time channel (see test_time), so the later channel here is the log one. */
 void test_session_connected_ignores_redundant_and_later_frames(void)
 {
     const uint8_t hello_req[] = {0x01u, R2S_PROTOCOL_VERSION};
-    const uint8_t ping[] = {0x01u, 0x2au};
+    const uint8_t log_line[] = {0x14u};
     const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
 
     configure(one_topic, 1);
@@ -799,7 +800,7 @@ void test_session_connected_ignores_redundant_and_later_frames(void)
     fake_port_tx_clear();
     feed_host(0, 2, ready, sizeof ready);
     feed_host(4, 0, NULL, 0);
-    feed_host(1, 0, ping, sizeof ping);
+    feed_host(2, 0, log_line, sizeof log_line);
     TEST_ASSERT_EQUAL_UINT8(1, r2s_connected());
     TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
 }
