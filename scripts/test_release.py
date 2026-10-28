@@ -1,10 +1,34 @@
 """The release cut: VERSION is the single source, and the next version follows the commits."""
 
 import re
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+STAMPED = [
+    "gen/tests/golden/bundle/library.properties",
+    "gen/tests/golden/bundle/r2s_bundled.c",
+    "gen/tests/golden/bundle/r2s_bundled.h",
+    "gen/tests/golden/bundle/ros2serial.h",
+    "gen/tests/golden/descriptors/float32_twist.c",
+    "gen/tests/golden/topics/posix.c",
+    "gen/tests/golden/topics/posix.h",
+    "gen/tests/golden/types/float32.h",
+    "gen/tests/golden/types/header.h",
+    "gen/tests/golden/types/joint_state.h",
+    "gen/tests/golden/types/twist.h",
+    "examples/arduino_minimal/lib/library.properties",
+    "examples/arduino_minimal/lib/src/r2s_generated.c",
+    "examples/arduino_minimal/lib/src/r2s_generated.h",
+    "examples/cmake_minimal/lib/CMakeLists.txt",
+    "examples/cmake_minimal/lib/r2s_generated.c",
+    "examples/cmake_minimal/lib/r2s_generated.h",
+    "ports/posix/src/r2s_generated.c",
+    "ports/posix/src/r2s_generated.h",
+]
 
 
 def git(repo: Path, *args: str) -> None:
@@ -21,6 +45,7 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
     (repo / "VERSION").write_text(version + "\n")
     (repo / "gen" / "r2s_gen").mkdir(parents=True)
     (repo / "bridge" / "r2s_bridge").mkdir(parents=True)
+    (repo / "bridge" / "r2s_bridge_tests").mkdir(parents=True)
     (repo / "gen" / "r2s_gen" / "version.py").write_text(f'__version__ = "{version}"\nPROTOCOL_VERSION = 1\n')
     (repo / "gen" / "package.xml").write_text(
         f'<package format="3">\n  <name>r2s_gen</name>\n  <version>{version}</version>\n</package>\n'
@@ -28,6 +53,20 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
     (repo / "bridge" / "r2s_bridge" / "package.xml").write_text(
         f'<package format="3">\n  <name>r2s_bridge</name>\n  <version>{version}</version>\n</package>\n'
     )
+    (repo / "bridge" / "r2s_bridge_tests" / "package.xml").write_text(
+        f'<package format="3">\n  <name>r2s_bridge_tests</name>\n  <version>{version}</version>\n</package>\n'
+    )
+    for directory in (
+        "gen/tests/golden",
+        "examples/arduino_minimal/lib",
+        "examples/cmake_minimal/lib",
+        "ports/posix/src",
+    ):
+        shutil.copytree(ROOT / directory, repo / directory)
+    for config in ("ports/posix/r2s.yaml", "examples/arduino_minimal/r2s.yaml", "examples/cmake_minimal/r2s.yaml"):
+        target = repo / config
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(ROOT / config, target)
     git(repo, "add", ".")
     git(repo, "commit", "-q", "-m", "chore: start")
     git(repo, "tag", tag)
@@ -145,6 +184,9 @@ def test_a_real_run_writes_the_version_into_the_generator_package(tmp_path):
     assert '__version__ = "0.4.0"' in (repo / "gen" / "r2s_gen" / "version.py").read_text()
     assert "<version>0.4.0</version>" in (repo / "gen" / "package.xml").read_text()
     assert "<version>0.4.0</version>" in (repo / "bridge" / "r2s_bridge" / "package.xml").read_text()
+    assert "<version>0.4.0</version>" in (repo / "bridge" / "r2s_bridge_tests" / "package.xml").read_text()
+    for rel in STAMPED:
+        assert "0.4.0" in (repo / rel).read_text(encoding="utf-8"), rel
 
 
 def test_release_commits_stay_out_of_the_changelog(tmp_path):
@@ -181,3 +223,39 @@ def test_a_subject_that_is_not_a_release_commit_is_refused(tmp_path):
     assert not subject_ok("0.4.0", "chore(release): v0.3.1 (#99)")
     assert not subject_ok("0.4.0", "ci: add the ticket selector")
     assert not subject_ok("0.4.0", "chore(release): v0.4.0x")
+
+
+VERSIONED_TESTS = [
+    "gen/tests/test_version.py",
+    "gen/tests/test_emit_types.py",
+    "gen/tests/test_emit_descriptors.py",
+    "gen/tests/test_emit_topics.py",
+    "gen/tests/test_bundle.py",
+    "gen/tests/test_layouts.py",
+    "gen/tests/test_posix_generated.py",
+]
+
+
+def test_a_simulated_cut_leaves_the_versioned_tests_green(tmp_path):
+    """A release.sh --bump patch on the real tree regenerates the stamped files.
+
+    The copy carries the checked-in banners, so without the cut-time
+    regeneration the versioned golden, layout and packaging tests fail.
+    """
+    cut = tmp_path / "cut"
+    shutil.copytree(ROOT, cut, ignore=shutil.ignore_patterns(".git"))
+    git(cut, "init", "-q", "-b", "master")
+    git(cut, "config", "user.email", "t@example.com")
+    git(cut, "config", "user.name", "t")
+    git(cut, "add", ".")
+    git(cut, "commit", "-q", "-m", "feat(core): cut fixture")
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/release.sh"), "--bump", "patch"], cwd=cut, capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    version = (cut / "VERSION").read_text(encoding="utf-8").strip()
+    assert version != "0.0.0", version
+    for rel in STAMPED:
+        assert version in (cut / rel).read_text(encoding="utf-8"), rel
+    passed = subprocess.run([sys.executable, "-m", "pytest", *VERSIONED_TESTS], cwd=cut, capture_output=True, text=True)
+    assert passed.returncode == 0, passed.stdout + passed.stderr
