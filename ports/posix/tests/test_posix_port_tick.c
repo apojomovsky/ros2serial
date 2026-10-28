@@ -1,5 +1,8 @@
-/* Port tick checks: monotonic, live and at 1000 Hz. It links only the port,
- * so it runs with no pty and no boot file. */
+/* Port tick checks: monotonic, live, at 1000 Hz and pinned to CLOCK_MONOTONIC.
+ * The rate check reads the same clock the port uses, so it cannot tell which
+ * clock that is. The link-time wrap below sees every clock_gettime call the
+ * port makes and fails the test unless each one names CLOCK_MONOTONIC, so a
+ * port moved to CLOCK_REALTIME fails even though its rate still matches. */
 #define _POSIX_C_SOURCE 200809L
 
 #include <stdint.h>
@@ -7,6 +10,25 @@
 #include <time.h>
 
 #include "r2s/r2s_port.h"
+
+/* Counts of the clock IDs the port requested, through the link-time wrap
+ * (LINKER:--wrap=clock_gettime in CMakeLists). The helpers below call the
+ * real function directly, so only the port's requests land here. */
+static unsigned long s_monotonic_calls;
+static unsigned long s_other_calls;
+
+int __real_clock_gettime(clockid_t clk_id, struct timespec *tp);
+int __wrap_clock_gettime(clockid_t clk_id, struct timespec *tp);
+
+int __wrap_clock_gettime(clockid_t clk_id, struct timespec *tp)
+{
+    if (clk_id == CLOCK_MONOTONIC) {
+        s_monotonic_calls++;
+    } else {
+        s_other_calls++;
+    }
+    return __real_clock_gettime(clk_id, tp);
+}
 
 #define SAMPLES 100000u
 
@@ -17,13 +39,13 @@ static void sleep_ms(long ms)
     (void)nanosleep(&req, NULL);
 }
 
-/* Wall time from the same clock the port uses, so scheduling slips move both
- * measures together and only a wrong rate changes their ratio. */
+/* Wall time from CLOCK_MONOTONIC through the real call, so these reads never
+ * touch the wrap counters: only the port's requests land there. */
 static uint64_t wall_ms(void)
 {
     struct timespec now;
 
-    (void)clock_gettime(CLOCK_MONOTONIC, &now);
+    (void)__real_clock_gettime(CLOCK_MONOTONIC, &now);
     return (uint64_t)now.tv_sec * 1000u + (uint64_t)(now.tv_nsec / 1000000L);
 }
 
@@ -44,6 +66,22 @@ static int check_monotonic(void)
     return 0;
 }
 
+/* Fails unless the port read CLOCK_MONOTONIC for every tick and nothing else.
+ * A port moved to another clock keeps the 1:1 rate above, so only this check
+ * pins the source. */
+static int check_clock_source(unsigned long mono_base, unsigned long other_base)
+{
+    if (s_monotonic_calls == mono_base) {
+        fprintf(stderr, "tick never read CLOCK_MONOTONIC\n");
+        return 1;
+    }
+    if (s_other_calls != other_base) {
+        fprintf(stderr, "tick read a clock other than CLOCK_MONOTONIC\n");
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     uint32_t before;
@@ -52,7 +90,8 @@ int main(void)
     uint64_t wall_after;
     uint64_t elapsed;
     uint64_t span;
-
+    unsigned long mono_base = s_monotonic_calls;
+    unsigned long other_base = s_other_calls;
     if (check_monotonic() != 0) {
         return 1;
     }
@@ -79,6 +118,9 @@ int main(void)
                 (unsigned long)elapsed);
         return 1;
     }
-    printf("tick ok: monotonic, live, 1000 Hz\n");
+    if (check_clock_source(mono_base, other_base) != 0) {
+        return 1;
+    }
+    printf("tick ok: monotonic, live, 1000 Hz, CLOCK_MONOTONIC\n");
     return 0;
 }
