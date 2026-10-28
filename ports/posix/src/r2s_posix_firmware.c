@@ -129,7 +129,7 @@ static r2s_topic_t s_probe;
 static char s_probe_name[R2S_MAX_FRAME];
 
 /* Whether the core gate binds this entry with a topic name of len x's: the
- * probe asks r2s_topics_configure() itself instead of copying its sum. */
+ * probe asks r2s_topics_configure_ram() itself instead of copying its sum. */
 static uint8_t probe_fits(const r2s_topic_t *entry, uint32_t len)
 {
     uint32_t i;
@@ -143,7 +143,7 @@ static uint8_t probe_fits(const r2s_topic_t *entry, uint32_t len)
     }
     s_probe_name[len] = '\0';
     s_probe.topic_name = s_probe_name;
-    return (uint8_t)(r2s_topics_configure(&s_probe, 1u) == R2S_OK);
+    return (uint8_t)(r2s_topics_configure_ram(&s_probe, 1u) == R2S_OK);
 }
 
 /* Longest launch name for this entry the core gate still binds: a binary
@@ -373,7 +373,8 @@ int main(int argc, char **argv)
         return 1;
     }
     count = fill_topics(&opts, topics);
-    if (r2s_session_configure(opts.node, topics, count) != R2S_OK) {
+    /* A stack table renamed at launch: RAM, so the runtime entry point. */
+    if (r2s_session_configure_ram(opts.node, topics, count) != R2S_OK) {
         fprintf(stderr, "r2s_posix: cannot configure node '%s'\n", opts.node);
         return 2;
     }

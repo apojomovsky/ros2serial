@@ -47,11 +47,16 @@ extern "C" {
 typedef r2s_topic_t r2s_session_topic_t;
 
 /* Hands the session its node name and topic table. Call once before
- * r2s_init(); a call afterwards changes what later frames announce. Returns
- * R2S_OK, or R2S_ERR_BOUNDS when the node name is missing or does not fit
- * the hello frame, or when the bind refuses the table, leaving the previous
- * configuration unchanged. */
+ * r2s_init(); a call afterwards changes what later frames announce. The
+ * table carries R2S_FLASH; a RAM table configures through
+ * r2s_session_configure_ram instead. Returns R2S_OK, or R2S_ERR_BOUNDS when
+ * the node name is missing or does not fit the hello frame, or when the bind
+ * refuses the table, leaving the previous configuration unchanged. */
 r2s_status_t r2s_session_configure(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count);
+
+/* Hands the session a RAM topic table, as the runtime registration path fills
+ * one. The same gate as above, with plain table reads. */
+r2s_status_t r2s_session_configure_ram(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count);
 
 /* The index of the configured topic with this user topic_id, or 0xFF when the
  * table names no such topic. The codec's dispatch and publish wrappers use it
@@ -60,7 +65,7 @@ uint8_t r2s_session_find_topic(uint8_t topic_id);
 
 /* The announced CTL-4 flags and the last TOPIC_STATUS of the topic at index:
  * the flags are the truth for the wire ([CTL-5]), and 0xFF status means the
- * host has not resolved the topic yet. */
+ * host has not resolved the topic yet. Flags past the count read as 0. */
 uint8_t r2s_session_topic_flags(uint8_t index);
 uint8_t r2s_session_topic_status(uint8_t index);
 

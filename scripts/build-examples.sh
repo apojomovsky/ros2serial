@@ -78,4 +78,53 @@ for board in uno mega; do
   fi
 done
 
+# The X-macro sketch builds against the bundled library: r2s-gen emits the
+# library at build time, the core joins it like above, and no r2s.yaml is
+# involved. The sketch uses two publishers and two subscribers, so the
+# Imu and Quaternion tables must be absent from the firmware: the linker
+# drops the bundled tables no topic names.
+xstage="$build/arduino_xmacro"
+rm -rf "$xstage"
+mkdir -p "$xstage/src/r2s" || status=1
+PYTHONPATH="$root/gen" python3 -m r2s_gen.cli bundle --distro jazzy --out "$xstage" || exit 1
+cp core/include/r2s/*.h "$xstage/src/r2s/" || status=1
+cp core/src/*.c "$xstage/src/" || status=1
+rm -f "$xstage/src/test_reset.c"
+xextras=$(PYTHONPATH="$root/gen" python3 - "$xstage/src/r2s_bundled.h" <<'EOF'
+import sys
+
+from r2s_gen import layouts
+from r2s_gen.msgs import MessageError
+
+try:
+    defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
+except (MessageError, OSError) as error:
+    print(f"r2s-gen: error: {error}", file=sys.stderr)
+    raise SystemExit(1)
+print(" ".join("-D" + define for define in defines))
+EOF
+) || exit 1
+case "$xextras" in
+    *R2S_WITH_CODEC*R2S_MAX_FRAME=[0-9]*R2S_MAX_NEST=[0-9]*) ;;
+    *)
+        echo "build-examples: the extracted bundle flags name no limits ($xextras)" >&2
+        exit 1
+        ;;
+esac
+for board in uno mega; do
+  out="$build/arduino_xmacro/$board"
+  arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$xextras" \
+    --library "$xstage" --output-dir "$out" examples/arduino_xmacro || status=1
+  if ! avr-nm "$out/arduino_xmacro.ino.elf" 2>/dev/null | grep -q r2s_rx_buf; then
+    echo "arduino_xmacro ($board): the firmware links no receive buffer" >&2
+    status=1
+  fi
+  for unused in sensor_msgs_Imu geometry_msgs_Quaternion std_msgs_Header; do
+    if avr-nm "$out/arduino_xmacro.ino.elf" 2>/dev/null | grep -q "r2s_bundled_table_$unused"; then
+      echo "arduino_xmacro ($board): the linker kept the unused $unused table" >&2
+      status=1
+    fi
+  done
+done
+
 exit "$status"
