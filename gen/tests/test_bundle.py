@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from r2s_gen import bundle, cli, msgs, typehash
+from r2s_gen import bundle, cli, cpp, msgs, typehash
 from r2s_gen.reference import messages
 from r2s_gen.version import __version__
 
@@ -42,6 +42,15 @@ def test_files_for_names_the_exact_bundle_set():
         "src/ros2serial.h",
         "src/r2s_bundled.h",
         "src/r2s_bundled.c",
+        "src/builtin_interfaces/msg/time.hpp",
+        "src/geometry_msgs/msg/quaternion.hpp",
+        "src/geometry_msgs/msg/twist.hpp",
+        "src/geometry_msgs/msg/vector3.hpp",
+        "src/sensor_msgs/msg/imu.hpp",
+        "src/sensor_msgs/msg/joint_state.hpp",
+        "src/std_msgs/msg/float32.hpp",
+        "src/std_msgs/msg/header.hpp",
+        "src/std_msgs/msg/string.hpp",
     )
 
 
@@ -92,6 +101,37 @@ def test_the_golden_bundled_header_is_emitted():
 
 def test_the_golden_bundled_source_is_emitted():
     assert files()["src/r2s_bundled.c"] == (GOLDEN / "r2s_bundled.c").read_text(encoding="utf-8")
+
+
+def test_the_sketch_header_serves_the_runtime_api_without_a_topic_list():
+    header = files()["src/ros2serial.h"]
+
+    assert "#if defined(__cplusplus) && !defined(R2S_TOPICS)" in header
+    assert '#include "r2s/runtime.hpp"' in header
+
+
+def test_the_sketch_header_refuses_a_c_sketch_without_a_topic_list():
+    header = files()["src/ros2serial.h"]
+
+    assert "#if !defined(R2S_TOPICS) && !defined(__cplusplus)" in header
+    assert "#error" in header
+
+
+def test_the_sketch_header_keeps_the_x_macro_expansion_for_a_topic_list():
+    header = files()["src/ros2serial.h"]
+
+    assert "#ifdef R2S_TOPICS" in header
+    assert "enum r2s_topic_slot { R2S_TOPICS(R2S_X_SLOT) R2S_SLOT_COUNT };" in header
+    assert "void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, uint16_t len)" in header
+
+
+def test_the_bundle_ships_the_cpp_message_headers():
+    files = bundle.bundle("jazzy")
+
+    for type_name in bundle.BUNDLED_TYPES:
+        path = f"src/{cpp.message_path(type_name)}"
+        assert path in files
+        assert "namespace r2s" in files[path]
 
 
 def test_the_bundle_command_writes_the_library_files(tmp_path, capsys):

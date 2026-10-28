@@ -18,6 +18,7 @@ from r2s_gen.version import __version__
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "core"
 EXAMPLES = ROOT / "examples"
+GOLDEN = Path(__file__).parent / "golden" / "layouts"
 
 POSIX_TEXT = """\
 node: r2s_posix
@@ -259,15 +260,30 @@ def test_the_cmake_example_matches_the_generator(tmp_path):
 
 
 def test_the_arduino_example_matches_the_generator(tmp_path):
-    config_path = EXAMPLES / "arduino_minimal" / "r2s.yaml"
+    # The Arduino example declares its topics at runtime, so it has no
+    # r2s.yaml and no generated output to pin. The arduino layout's
+    # generated pair is the cmake layout's pair, so the cmake example
+    # covers both layouts' bytes.
+    config_path = EXAMPLES / "cmake_minimal" / "r2s.yaml"
     loaded = config.load(config_path)
     repository = msgs.MessageRepository()
     roots = [topic.type_name for topic in loaded.topics]
     resolved = bounds.resolve(repository, roots, bounds=dict(loaded.bounds))
     files = layouts.generate(loaded, resolved, repository, "arduino", source=config_path.name)
 
-    for name, text in files.items():
-        assert text == (EXAMPLES / "arduino_minimal" / "lib" / name).read_text(encoding="utf-8"), name
+    for name in ("src/r2s_generated.h", "src/r2s_generated.c"):
+        assert files[name] == (EXAMPLES / "cmake_minimal" / "lib" / Path(name).name).read_text(encoding="utf-8"), name
+
+
+def test_the_arduino_layout_names_the_node_and_the_config(tmp_path):
+    config_path = EXAMPLES / "cmake_minimal" / "r2s.yaml"
+    loaded = config.load(config_path)
+    repository = msgs.MessageRepository()
+    roots = [topic.type_name for topic in loaded.topics]
+    resolved = bounds.resolve(repository, roots, bounds=dict(loaded.bounds))
+    files = layouts.generate(loaded, resolved, repository, "arduino", source=config_path.name)
+
+    assert files["library.properties"] == (GOLDEN / "library.properties").read_text(encoding="utf-8")
 
 
 def test_build_defines_names_the_codec_flag_and_limits(tmp_path):
