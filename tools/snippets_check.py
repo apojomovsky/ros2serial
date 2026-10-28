@@ -20,8 +20,9 @@ its marker with the reason after a colon:
     <!-- snippet: skip until #75: template placeholders, never literal C -->
 
 A tagged fence shown only as literal text, inside an indented block, an
-outer fence, or a block scalar, carries the same marker alone on the line
-directly above it. The check skips the example without compiling it.
+outer fence, or a block scalar, carries the same marker alone on its own
+line at columns 0 to 3 directly above it. The check skips the example
+without compiling it.
 
 A marker without a ticket number is an error, and so is a marker above no
 fence. A line that only mentions a marker in passing is not one. The run
