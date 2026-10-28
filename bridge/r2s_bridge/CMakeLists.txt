@@ -14,6 +14,7 @@ find_package(rclcpp_components REQUIRED)
 find_package(rmw REQUIRED)
 find_package(rosidl_runtime_cpp REQUIRED)
 find_package(rosidl_typesupport_introspection_cpp REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
 
 add_library(r2s_bridge_component SHARED
   src/bridge.cpp
@@ -178,6 +179,22 @@ if(BUILD_TESTING)
     r2s_bridge_test_support
     geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
     std_msgs::std_msgs__rosidl_typesupport_cpp)
+
+  # The /diagnostics payload rendering, through the real builder and no node.
+  ament_add_gtest(test_diagnostics_msg test/test_diagnostics_msg.cpp)
+  target_link_libraries(test_diagnostics_msg
+    r2s_bridge_component
+    diagnostic_msgs::diagnostic_msgs__rosidl_typesupport_cpp)
+
+  # The bridge publishes /diagnostics from its poll timer, proven against a
+  # pty instead of hardware.
+  ament_add_gtest(test_bridge_diagnostics test/test_bridge_diagnostics.cpp)
+  target_include_directories(test_bridge_diagnostics PRIVATE
+    ${R2S_CORE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/test/support)
+  target_link_libraries(test_bridge_diagnostics
+    r2s_bridge_component
+    diagnostic_msgs::diagnostic_msgs__rosidl_typesupport_cpp)
 endif()
 
 ament_export_targets(export_r2s_bridge HAS_LIBRARY_TARGET)

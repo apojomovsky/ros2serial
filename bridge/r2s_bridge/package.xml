@@ -11,9 +11,8 @@
 
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
+  <depend>diagnostic_msgs</depend>
   <depend>rmw</depend>
-  <depend>rosidl_runtime_cpp</depend>
-  <depend>rosidl_typesupport_introspection_cpp</depend>
   <exec_depend>launch_ros</exec_depend>
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>class_loader</test_depend>
