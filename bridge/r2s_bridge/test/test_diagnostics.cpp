@@ -1,7 +1,7 @@
 // The bridge diagnostics: link state, session token, resets, protocol
 // version, MCU counters, per-topic gaps and drops, and the time sync slot,
 // through a real node with a scripted link and real type support.
-// covers: FRM-15, HB-2, SES-15, SES-16, SES-19, SES-21, SES-26, SES-30
+// covers: FRM-15, HB-2, SES-12, SES-15, SES-16, SES-19, SES-21, SES-26, SES-30
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -361,6 +362,147 @@ TEST_F(DiagnosticsNode, StumbledHandshakeStillConnects)
     EXPECT_EQ(diagnostics.link_state, "connected");
     EXPECT_EQ(diagnostics.session_token, 1u);
     EXPECT_EQ(diagnostics.resets, 0u);
+}
+
+TEST_F(DiagnosticsNode, TruncatedHelloKeepsBootWait)
+{
+    DiagnosticsFixture fixture("shorthello", RouterParams{});
+    const std::vector<std::uint8_t> full = helper_hello(7u, 2u);
+    for (const std::size_t kept : {1u, 3u, 9u}) {
+        ASSERT_LT(kept, full.size());
+        fixture.deliver_frame(kHelperControl, 0u,
+                              std::vector<std::uint8_t>(full.begin(), full.begin() + kept));
+        EXPECT_EQ(fixture.snapshot().link_state, "boot_wait") << "a short HELLO is refused";
+    }
+    EXPECT_EQ(fixture.snapshot().session_token, 0u);
+    fixture.deliver_frame(kHelperControl, 1u, full);
+    EXPECT_EQ(fixture.snapshot().link_state, "handshaking") << "the wait survives refusals";
+}
+
+TEST_F(DiagnosticsNode, MalformedTopicsDoNotStallTheWalk)
+{
+    DiagnosticsFixture fixture("badtopic", RouterParams{});
+    fixture.deliver_frame(kHelperControl, 0u, helper_hello(7u, 2u));
+    EXPECT_EQ(fixture.snapshot().link_state, "handshaking");
+    const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
+    const std::vector<std::uint8_t> head{0x04u, 0u, kBattery, 0x00u};
+    std::vector<std::uint8_t> short_hash = head;
+    short_hash.insert(short_hash.end(), float_hash.begin(), float_hash.begin() + 3);
+    std::vector<std::uint8_t> bad_varint = head;
+    bad_varint.insert(bad_varint.end(), float_hash.begin(), float_hash.end());
+    bad_varint.push_back(0x80u);
+    std::vector<std::uint8_t> trailing =
+        helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery");
+    trailing.push_back(0x00u);
+    const std::vector<std::vector<std::uint8_t>> malformed{
+        {{0x04u}},
+        {{0x04u, 0u}},
+        head,
+        short_hash,
+        helper_topic(0u, 5u, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"),
+        bad_varint,
+        trailing,
+    };
+    for (const std::vector<std::uint8_t> &payload : malformed) {
+        fixture.deliver_frame(kHelperControl, 2u, payload);
+        EXPECT_EQ(fixture.snapshot().link_state, "handshaking") << "a refused TOPIC restarts the wait";
+    }
+    fixture.deliver_frame(
+        kHelperControl, 3u,
+        helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
+    const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
+    fixture.deliver_frame(
+        kHelperControl, 4u,
+        helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "cmd_vel"));
+    const Diagnostics diagnostics = fixture.snapshot();
+    EXPECT_EQ(diagnostics.link_state, "connected");
+    EXPECT_EQ(diagnostics.session_token, 1u);
+}
+
+TEST_F(DiagnosticsNode, RepeatedHelloDuringWalkChangesNothing)
+{
+    DiagnosticsFixture fixture("repeat", RouterParams{});
+    const std::vector<std::uint8_t> hello = helper_hello(7u, 2u);
+    fixture.deliver_frame(kHelperControl, 0u, hello);
+    EXPECT_EQ(fixture.snapshot().link_state, "handshaking");
+    fixture.deliver_frame(kHelperControl, 1u, hello);
+    EXPECT_EQ(fixture.snapshot().link_state, "handshaking") << "the repeat answers nothing anew";
+    EXPECT_EQ(fixture.snapshot().resets, 0u);
+    fixture.handshake();
+    EXPECT_EQ(fixture.snapshot().session_token, 1u);
+}
+
+TEST_F(DiagnosticsNode, RefusedTopicCarriesNoTraffic)
+{
+    DiagnosticsFixture fixture("nort", RouterParams{});
+    fixture.deliver_frame(kHelperControl, 0u, helper_hello(7u, 2u));
+    const std::array<std::uint8_t, 8> zero_hash{};
+    fixture.deliver_frame(kHelperControl, 1u,
+                          helper_topic(0u, kBattery, 0x00u, zero_hash.data(), "nope/Missing", "battery"));
+    const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
+    fixture.deliver_frame(
+        kHelperControl, 2u,
+        helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "cmd_vel"));
+    EXPECT_EQ(fixture.router().publisher_count(), 0u) << "a refused topic gets no route";
+    EXPECT_EQ(fixture.router().subscription_count(), 1u);
+    std::vector<float> received;
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
+        "battery", rclcpp::QoS(10).best_effort(),
+        [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
+    fixture.wait_until([&sub]() { return sub->get_publisher_count() > 0u; });
+    const std::vector<std::uint8_t> one{0x00, 0x00, 0x80, 0x3F};
+    fixture.deliver_frame(kBattery, 3u, one);
+    rclcpp::spin_some(fixture.node());
+    rclcpp::spin_some(fixture.node());
+    EXPECT_TRUE(received.empty()) << "frames on a refused topic go nowhere";
+}
+
+TEST_F(DiagnosticsNode, FrameBeforeHelloLeavesNoTrace)
+{
+    DiagnosticsFixture fixture("early", RouterParams{});
+    const std::vector<std::uint8_t> one{0x00, 0x00, 0x80, 0x3F};
+    fixture.deliver_frame(kBattery, 3u, one);
+    EXPECT_EQ(fixture.snapshot().link_state, "boot_wait");
+    fixture.handshake();
+    fixture.deliver_frame(kBattery, 0u, one);
+    const TopicDiagnostics *battery = find_topic(fixture.snapshot(), kBattery);
+    ASSERT_NE(battery, nullptr);
+    EXPECT_EQ(battery->seq_gaps, 0u) << "traffic before the handshake sets no expectation";
+}
+
+TEST_F(DiagnosticsNode, ShortHeartbeatIsIgnored)
+{
+    DiagnosticsFixture fixture("shorthb", RouterParams{});
+    fixture.handshake();
+    fixture.deliver_frame(kHeartbeat, 7u, {0x00u, 0x01u});
+    const McuCounters counters = fixture.snapshot().mcu_counters;
+    EXPECT_EQ(counters.rx_frames, 0u);
+    EXPECT_EQ(counters.crc_errors, 0u);
+    EXPECT_EQ(counters.rx_overflows, 0u);
+    EXPECT_EQ(counters.dropped_frames, 0u);
+    EXPECT_EQ(fixture.snapshot().link_state, "connected");
+}
+
+TEST_F(DiagnosticsNode, ThrowingFactoryStaysDisconnected)
+{
+    DiagnosticsFixture fixture("noport", RouterParams{},
+                               []() -> std::unique_ptr<Transport> { throw std::runtime_error("no port"); });
+    const Diagnostics diagnostics = fixture.snapshot();
+    EXPECT_EQ(diagnostics.link_state, "disconnected") << "a throwing open counts as no port";
+    EXPECT_EQ(diagnostics.session_token, 0u);
+}
+
+TEST_F(DiagnosticsNode, SilentWalkRetriesTopicReq)
+{
+    DiagnosticsFixture fixture("retry", RouterParams{});
+    fixture.deliver_frame(kHelperControl, 0u, helper_hello(7u, 2u));
+    for (int i = 0; i < 4; ++i) {
+        fixture.advance(201u);
+    }
+    const Diagnostics diagnostics = fixture.snapshot();
+    EXPECT_EQ(diagnostics.link_state, "handshaking") << "an unanswered walk starts over";
+    EXPECT_EQ(diagnostics.resets, 0u);
+    EXPECT_EQ(diagnostics.session_token, 7u) << "the MCU echo is kept until READY assigns one";
 }
 
 TEST_F(DiagnosticsNode, ReportsKeepLatestReplacementAsDrop)
