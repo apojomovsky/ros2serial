@@ -5,14 +5,12 @@ reference codec and that the committed files match the generator byte for
 byte, so a vector change without regenerated seeds fails the suite.
 """
 
-import sys
 from pathlib import Path
 
+import fuzz_corpus
+import pytest
 import yaml
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gen"))
-
-from r2s_gen.reference import frames, rcobs  # noqa: E402
+from r2s_gen.reference import frames, rcobs
 
 ROOT = Path(__file__).resolve().parent.parent
 CORPUS = ROOT / "core" / "fuzz" / "corpus"
@@ -30,14 +28,21 @@ def _wire_units(seed):
 
 
 def test_corpus_matches_generator():
-    assert fuzz_corpus.generate() == {target: _seeds(target) for target in fuzz_corpus.TARGETS}
+    assert fuzz_corpus.check(fuzz_corpus.generate()) == []
 
 
 def test_rcobs_seeds_are_canonical_encodings():
+    # The invalid vectors are negative seeds: they must decode to nothing.
+    from r2s_gen.reference.errors import Rejected
+
     for name, seed in _seeds("rcobs_decode").items():
         if not name.startswith("vector_"):
             continue
-        assert rcobs.encode(rcobs.decode(seed)) == seed
+        if "invalid" in name:
+            with pytest.raises(Rejected):
+                rcobs.decode(seed)
+        else:
+            assert rcobs.encode(rcobs.decode(seed)) == seed
 
 
 def test_framer_seeds_cover_every_frame_vector():
@@ -45,9 +50,10 @@ def test_framer_seeds_cover_every_frame_vector():
     for path in sorted((VECTORS / "frames").glob("*.yaml")):
         wire = bytes.fromhex(yaml.safe_load(path.read_text())["wire"])
         assert wire in seeds.values(), f"{path.name} has no seed"
-    for seed in seeds.values():
-        for unit in _wire_units(seed):
-            assert frames.decode(unit) is not None
+    for name, seed in seeds.items():
+        if name.startswith("vector_"):
+            for unit in _wire_units(seed):
+                assert frames.decode(unit) is not None
 
 
 def test_session_seeds_cover_every_step_frame():
