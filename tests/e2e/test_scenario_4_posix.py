@@ -70,7 +70,7 @@ class TestScenario4(unittest.TestCase):
         node = rclpy.create_node("e2e_s4_probe")
         try:
             bridge_support.wait_for_bridge(node, service=SERVICE)
-            _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, Path(_SCRATCH.name), ("--rate", "10"))
+            _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
             bridge_support.wait_for_topics(node, WANTED, _SPAWNED.ready_at, 3.0, "remapped topics")
             names = {name for name, _ in node.get_topic_names_and_types()}
             for gone in GONE:

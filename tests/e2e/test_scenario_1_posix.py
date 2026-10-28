@@ -66,7 +66,7 @@ class TestScenario1(unittest.TestCase):
         node = rclpy.create_node("e2e_s1_probe")
         try:
             bridge_support.wait_for_bridge(node)
-            _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, Path(_SCRATCH.name), ("--rate", "10"))
+            _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
             took = bridge_support.wait_for_topics(node, ANNOUNCED, _SPAWNED.ready_at, TOPIC_BUDGET, "announced topics")
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
         finally:

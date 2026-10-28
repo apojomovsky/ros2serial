@@ -97,9 +97,6 @@ def build_posix_firmware(scratch):
     return firmware
 
 
-_BOOT_ENV = "R2S_POSIX_BOOT_ID_FILE"
-
-
 def _example_params():
     path = Path(get_package_share_directory("r2s_bridge")) / "config" / "r2s_bridge.params.yaml"
     with open(path) as handle:
@@ -156,7 +153,6 @@ def generate_test_description():
     firmware = ExecuteProcess(
         cmd=[str(_FIRMWARE), _RELAY.mcu_port, "--rate", "20"],
         output="screen",
-        additional_env={_BOOT_ENV: str(Path(_SCRATCH.name) / "boot")},
     )
     return launch.LaunchDescription([bridge, firmware, launch_testing.actions.ReadyToTest()])
 

@@ -71,9 +71,7 @@ class TestScenario2(unittest.TestCase):
         node = rclpy.create_node("e2e_s2_probe")
         try:
             bridge_support.wait_for_bridge(node)
-            _SPAWNED = firmware.spawn(
-                _FIRMWARE, _RELAY.mcu_port, Path(_SCRATCH.name), ("--rate", str(RATE_HZ), "--no-log-text")
-            )
+            _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", str(RATE_HZ), "--no-log-text"))
             # The bridge publishes MCU topics best effort, so the probe
             # subscribes best effort too; a reliable probe would never match.
             best_effort = QoSProfile(depth=100, reliability=ReliabilityPolicy.BEST_EFFORT)
