@@ -35,4 +35,7 @@ colcon --log-base "$workspace/log" test \
   --event-handlers console_direct+ \
   --return-code-on-test-failure || status=1
 colcon --log-base "$workspace/log" test-result --test-result-base "$workspace/build" --all --verbose || status=1
+# The generator's hashes equal the installed type support's for every bundled
+# type on this distro (docs/01-testing.md, section 9): pytest in this container.
+python3 -m pytest gen/tests/test_installed_hashes.py || status=1
 exit $status
