@@ -22,9 +22,6 @@ def scopes(*paths):
     return scopes_for_diff.scopes_for_paths(list(paths))
 
 
-CHEAP = {"LINT": "1", "COMMITS": "1"}
-
-
 def test_core_maps_to_its_sections_and_its_consumers():
     assert scopes("core/src/rcobs.c") == {
         **CHEAP,
@@ -34,6 +31,7 @@ def test_core_maps_to_its_sections_and_its_consumers():
         "GEN": "1",
         "EXAMPLES": "1",
         "E2E": "both",
+        "DOCS": "1",
     }
 
 
@@ -41,12 +39,13 @@ def test_core_fuzz_corpus_maps_to_fuzz():
     assert scopes("core/fuzz/corpus/framer/empty")["FUZZ"] == "1"
 
 
-def test_gen_maps_to_gen_examples_and_docs():
+def test_gen_maps_to_gen_examples_docs_and_bridge():
     assert scopes("gen/r2s_gen/cli.py") == {
         **CHEAP,
         "GEN": "1",
         "EXAMPLES": "1",
         "DOCS": "1",
+        "BRIDGE": "1",
     }
 
 
@@ -59,36 +58,39 @@ def test_bridge_maps_to_bridge_coverage_and_posix_e2e():
     }
 
 
-def test_spec_maps_to_the_vector_checks_in_core_and_gen():
-    assert scopes("spec/protocol.md") == {**CHEAP, "CORE": "1", "GEN": "1"}
-    assert scopes("spec/vectors/framer/empty.yaml") == {**CHEAP, "CORE": "1", "GEN": "1"}
+def test_spec_maps_to_vectors_fuzz_and_scripts():
+    assert scopes("spec/protocol.md") == {**CHEAP, "CORE": "1", "GEN": "1", "FUZZ": "1", "SCRIPTS": "1"}
+    assert scopes("spec/vectors/framer/empty.yaml") == {**CHEAP, "CORE": "1", "GEN": "1", "FUZZ": "1", "SCRIPTS": "1"}
 
 
-def test_examples_map_to_examples():
+def test_examples_map_to_examples_and_gen():
     assert scopes("examples/arduino_minimal/arduino_minimal.ino") == {
         **CHEAP,
         "EXAMPLES": "1",
+        "GEN": "1",
     }
 
 
-def test_posix_port_maps_to_core_and_posix_e2e():
+def test_posix_port_maps_to_core_posix_e2e_and_bridge():
     assert scopes("ports/posix/src/r2s_posix_firmware.c") == {
         **CHEAP,
         "CORE": "1",
         "E2E": "posix",
+        "BRIDGE": "1",
     }
 
 
-def test_arduino_port_maps_to_core():
-    assert scopes("ports/arduino/run.sh") == {**CHEAP, "CORE": "1"}
+def test_arduino_port_maps_to_core_and_examples():
+    assert scopes("ports/arduino/run.sh") == {**CHEAP, "CORE": "1", "EXAMPLES": "1"}
 
 
 def test_other_ports_fail_safe_to_full():
     assert scopes("ports/stm32/src/port.c") == {"FULL": "1"}
 
 
-def test_e2e_tests_map_to_their_backend_only():
-    assert scopes("tests/e2e/test_scenario_1_posix.py") == {**CHEAP, "E2E": "posix"}
+def test_e2e_tests_map_to_their_backend_and_bridge():
+    assert scopes("tests/e2e/test_scenario_1_posix.py") == {**CHEAP, "E2E": "posix", "BRIDGE": "1"}
+    assert scopes("tests/e2e/e2e_support/relay.py") == {**CHEAP, "E2E": "posix", "BRIDGE": "1"}
     assert scopes("tests/harness/simavr/run.sh") == {**CHEAP, "E2E": "avr"}
 
 
@@ -145,7 +147,7 @@ def test_empty_diff_runs_the_cheap_checks_only():
 
 
 def test_scopes_merge_across_paths():
-    assert scopes("core/src/rcobs.c", "docs/01-testing.md") == {
+    assert scopes("core/src/rcobs.c", "bridge/r2s_bridge/src/node.cpp") == {
         **CHEAP,
         "CORE": "1",
         "COVERAGE": "1",
@@ -154,6 +156,7 @@ def test_scopes_merge_across_paths():
         "EXAMPLES": "1",
         "E2E": "both",
         "DOCS": "1",
+        "BRIDGE": "1",
     }
 
 
@@ -164,6 +167,7 @@ def test_full_wins_over_scoped():
 def test_e2e_backends_merge_to_both():
     assert scopes("tests/e2e/run.sh", "tests/harness/simavr/run.sh") == {
         **CHEAP,
+        "BRIDGE": "1",
         "E2E": "both",
     }
 

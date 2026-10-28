@@ -22,10 +22,13 @@ elif ! git merge-base --is-ancestor "$base" HEAD; then
   behind=$(git rev-list --count HEAD.."$base")
   overlap=$(comm -12 <(git diff --name-only "$mb" HEAD | sort -u) <(git diff --name-only "$mb" "$base" | sort -u))
   # A trial merge names a conflict without moving the branch: MERGE_HEAD
-  # says whether a merge started, so only a started one is aborted.
+  # says whether a merge started, so only a started one is aborted, and a
+  # failed abort blocks the ritual before anything runs on the merged index.
   conflict=0
   git merge --no-commit --no-ff --no-edit "$base" >/dev/null 2>&1 || conflict=1
-  git rev-parse -q --verify MERGE_HEAD >/dev/null && git merge --abort >/dev/null 2>&1
+  if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+    git merge --abort >/dev/null 2>&1 || fix "the trial merge cannot be aborted: resolve it by hand (git merge --abort) and rerun"
+  fi
   if [ -n "$overlap" ] || [ "$conflict" = 1 ]; then
     # Merge the base in: the PR keeps its history and the squash drops the
     # merge commit, so catching up needs no force push.
@@ -184,10 +187,17 @@ if [ "${TEST:-}" = 1 ]; then
   else
     rm -f "$suite_log"
     # The pass is recorded under the same key the pre-push hook checks, so
-    # pushing the tree that just passed runs nothing twice.
-    stamp="$(git rev-parse --absolute-git-dir)/r2s-pre-push-stamp"
-    bash "$root/scripts/suite-stamp.sh" key "$scopes" >"$stamp" 2>/dev/null || \
-      note "the suite stamp was not recorded ($stamp)"
+    # pushing the tree that just passed runs nothing twice. The stamp keys
+    # the committed tree, while the suite runs over the working tree, so a
+    # dirty tree runs the suite but records nothing: uncommitted edits never
+    # land on the remote, and stamping them would skip testing the push.
+    if [ -z "$(git status --porcelain)" ]; then
+      stamp="$(git rev-parse --absolute-git-dir)/r2s-pre-push-stamp"
+      bash "$root/scripts/suite-stamp.sh" key "$scopes" >"$stamp" 2>/dev/null || \
+        note "the suite stamp was not recorded ($stamp)"
+    else
+      note "the suite passed on a dirty tree: commit it and rerun TEST=1 to record the stamp"
+    fi
   fi
 fi
 

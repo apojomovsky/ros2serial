@@ -17,8 +17,9 @@ while read -r local_ref local_oid remote_ref remote_oid; do
   fi
 done
 
-if git rev-parse --verify -q origin/master >/dev/null; then
-  python3 "$root/scripts/prose_check.py" --verify --base origin/master || exit 1
+base=${BASE:-origin/master}
+if git rev-parse --verify -q "$base" >/dev/null; then
+  python3 "$root/scripts/prose_check.py" --verify --base "$base" || exit 1
 fi
 
 # The stamp records the tree, the suite definition and the scope set that
@@ -26,11 +27,14 @@ fi
 # twice. A takeoff that passed records the same stamp, so the push that
 # follows it runs nothing again. R2S_FULL=1 runs the suite unscoped instead.
 if [ "${R2S_FULL:-}" = 1 ]; then scopes="FULL=1"; else
-  scopes=$(python3 "$root/scripts/scopes_for_diff.py" --base origin/master 2>/dev/null) || scopes="FULL=1"
+  scopes=$(python3 "$root/scripts/scopes_for_diff.py" --base "$base" 2>/dev/null) || scopes="FULL=1"
 fi
 stamp="$(git rev-parse --absolute-git-dir)/r2s-pre-push-stamp"
 key="$(bash "$root/scripts/suite-stamp.sh" key "$scopes")" || exit 1
-if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$key" ]; then
+# The stamp keys the committed tree, while the suite runs over the working
+# tree, so a dirty tree always runs: its uncommitted edits never land on the
+# remote, and skipping on the committed key would test nothing that pushes.
+if [ -z "$(git status --porcelain)" ] && [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$key" ]; then
   echo "pre-push: suite already passed on this tree"
   exit 0
 fi
@@ -44,6 +48,6 @@ else
     # shellcheck disable=SC2086 # the scopes are one assignment per word.
     env $scopes bash -c "$R2S_PRE_PUSH_SUITE" || exit 1
   # shellcheck disable=SC2086 # the scopes are make variables, one per word.
-  else make -s -C "$root" test $scopes || exit 1; fi
+  else make -s -C "$root" image test $scopes || exit 1; fi
 fi
-echo "$key" > "$stamp"
+[ -n "$(git status --porcelain)" ] || echo "$key" > "$stamp"

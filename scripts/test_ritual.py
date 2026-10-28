@@ -825,3 +825,39 @@ def test_ci_runs_every_scope_on_pull_requests():
         "E2E=posix",
     } - mentioned
     assert not missing, f"CI no longer runs every scope: {sorted(missing)}"
+
+
+def test_a_dirty_takeoff_runs_the_suite_but_records_no_stamp(tmp_path):
+    """The stamp keys the committed tree, so a dirty tree records nothing."""
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    git(main, "config", "core.hooksPath", ".githooks")
+    (wt / "dirty.txt").write_text("uncommitted\n")
+    suite_log = tmp_path / "suite.log"
+    recorder = tmp_path / "record-suite.sh"
+    recorder.write_text(f"#!/usr/bin/env bash\necho ran >> {suite_log}\n")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+    result = ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="feat(core): a", R2S_SUITE=str(recorder))
+    assert suite_log.read_text().split() == ["ran"]
+    assert "not clean" in result.stdout, result.stdout
+    stamp = Path(git(wt, "rev-parse", "--absolute-git-dir").stdout.strip()) / "r2s-pre-push-stamp"
+    assert not stamp.exists(), "a dirty tree recorded a stamp for uncommitted edits"
+
+
+def test_a_dirty_push_reruns_the_suite(tmp_path):
+    """Uncommitted edits never land on the remote, so the push tests them."""
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    git(main, "config", "core.hooksPath", ".githooks")
+    suite_log = tmp_path / "suite.log"
+    recorder = tmp_path / "record-suite.sh"
+    recorder.write_text(f"#!/usr/bin/env bash\necho ran >> {suite_log}\n")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+    assert ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="feat(core): a", R2S_SUITE=str(recorder)).returncode == 0
+    (wt / "dirty.txt").write_text("uncommitted\n")
+    head = git(wt, "rev-parse", "HEAD").stdout.strip()
+    line = f"refs/heads/feat/1-thing {head} refs/heads/feat/1-thing {'0' * 40}\n"
+    assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=f"bash {recorder}").returncode == 0
+    assert suite_log.read_text().split() == ["ran", "ran"], "a dirty push skipped the suite on a stale stamp"
