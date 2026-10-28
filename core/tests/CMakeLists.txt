@@ -218,18 +218,21 @@ target_compile_definitions(vectors_session PRIVATE R2S_TICK_HZ=1000000)
 target_link_libraries(vectors_session PRIVATE r2s_session_support)
 add_test(NAME vectors_session COMMAND vectors_session)
 
-# Every session transcript is either replayed above or names the follow-up
-# that still keeps it out, so a new transcript stops the configure step
-# instead of landing silently unrun.
-set(R2S_SESSION_DIVERGENT_NAMES
+# Every session transcript is either replayed above or owned by the host
+# runner, so a new transcript stops the configure step instead of landing
+# silently unrun. The two host-owned transcripts open with HELLOs no
+# conforming firmware sends, so the bridge transcript runner delivers their
+# MCU steps and compares their host steps
+# (bridge/r2s_bridge/test/test_session.cpp, SessionTranscripts).
+set(R2S_SESSION_HOST_NAMES
   refused_hello
   version_mismatch)
 file(GLOB R2S_SESSION_ALL_PATHS CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/session/*.yaml")
 foreach(path ${R2S_SESSION_ALL_PATHS})
   get_filename_component(stem "${path}" NAME_WE)
-  if(NOT stem IN_LIST R2S_SESSION_REPLAY_NAMES AND NOT stem IN_LIST R2S_SESSION_DIVERGENT_NAMES)
-    message(FATAL_ERROR "spec/vectors/session/${stem}.yaml is neither replayed nor divergent: "
-                        "add it to a list with the follow-up that takes it")
+  if(NOT stem IN_LIST R2S_SESSION_REPLAY_NAMES AND NOT stem IN_LIST R2S_SESSION_HOST_NAMES)
+    message(FATAL_ERROR "spec/vectors/session/${stem}.yaml is neither replayed nor host-owned: "
+                        "add it to a list with the test that runs it")
   endif()
 endforeach()
 
