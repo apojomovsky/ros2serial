@@ -31,13 +31,6 @@ SKETCH_TOPICS = """\
     X(Subscription, sensor_msgs::msg::JointState, joints_sub, "joints", on_joints)
 """
 
-SKETCH_INCLUDES = """\
-#include <geometry_msgs/msg/twist.hpp>
-#include <sensor_msgs/msg/joint_state.hpp>
-#include <std_msgs/msg/float32.hpp>
-#include <std_msgs/msg/string.hpp>
-"""
-
 
 def files(distro="jazzy"):
     return bundle.bundle(distro)
@@ -285,7 +278,6 @@ def host_sketch(frame, nest):
 #include <string.h>
 
 """
-        + SKETCH_INCLUDES
         + SKETCH_TOPICS
         + f'#define EXPECTED_FRAME {frame}u\n#define EXPECTED_NEST {nest}u\n#include "ros2serial.h"\n'
         + "static geometry_msgs::msg::Twist got_twist;\n"
@@ -586,6 +578,8 @@ def compile_case(root, body):
         text=True,
     )
 
+
+def compile_case_cxx(root, body):
     (root / "case.cpp").write_text(body, encoding="utf-8")
 
     return subprocess.run(
@@ -607,8 +601,8 @@ def compile_case(root, body):
 
 
 def case_with_rows(rows):
-    """One topic list with the message headers the rows name, as a sketch writes them."""
-    return SKETCH_INCLUDES + "#define R2S_TOPICS(X) " + rows + '\n#include "ros2serial.h"\n'
+    """One topic list, as a sketch writes it: the header brings the message types."""
+    return "#define R2S_TOPICS(X) " + rows + '\n#include "ros2serial.h"\n'
 
 
 def test_an_unknown_type_in_the_list_fails_naming_it(tmp_path):
@@ -747,7 +741,6 @@ def test_a_cxx_sketch_links_against_the_c_library(tmp_path):
     root = sketch_dir(tmp_path, files())
     (root / "case.cpp").write_text(
         '#define R2S_NODE_NAME "test_cpp"\n'
-        + SKETCH_INCLUDES
         + '#define R2S_TOPICS(X) X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)\n'
         + '#include "ros2serial.h"\n'
         + "void on_cmd_vel(const geometry_msgs::msg::Twist &msg)\n"
