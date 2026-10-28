@@ -60,3 +60,4 @@ git add VERSION CHANGELOG.md gen/r2s_gen/version.py gen/package.xml bridge/r2s_b
   examples/cmake_minimal/lib/CMakeLists.txt examples/cmake_minimal/lib/r2s_generated.c \
   examples/cmake_minimal/lib/r2s_generated.h ports/posix/src/r2s_generated.c ports/posix/src/r2s_generated.h
 git commit -q -m "chore(release): v$next"
+echo "committed chore(release): v$next"

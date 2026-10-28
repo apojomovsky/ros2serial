@@ -246,7 +246,9 @@ def test_a_simulated_cut_leaves_the_versioned_tests_green(tmp_path):
     """A release.sh --bump patch on the real tree regenerates the stamped files.
 
     The copy carries the checked-in banners, so without the cut-time
-    regeneration the versioned golden, layout and packaging tests fail.
+    regeneration the versioned golden, layout and packaging tests fail. The
+    commit itself must carry every carrier: a hand-kept git add list that
+    misses one would leave the tree green and the release red.
     """
     cut = tmp_path / "cut"
     shutil.copytree(ROOT, cut, ignore=shutil.ignore_patterns(".git"))
@@ -263,5 +265,20 @@ def test_a_simulated_cut_leaves_the_versioned_tests_green(tmp_path):
     assert version != "0.0.0", version
     for rel in STAMPED:
         assert version in (cut / rel).read_text(encoding="utf-8"), rel
+    committed = subprocess.run(
+        ["git", "show", "--name-only", "--format=", "HEAD"], cwd=cut, capture_output=True, text=True
+    ).stdout.split()
+    for rel in (
+        "VERSION",
+        "CHANGELOG.md",
+        "gen/r2s_gen/version.py",
+        "gen/package.xml",
+        "bridge/r2s_bridge/package.xml",
+        "bridge/r2s_bridge_tests/package.xml",
+        *STAMPED,
+    ):
+        assert rel in committed, rel
+    status = subprocess.run(["git", "status", "--porcelain"], cwd=cut, capture_output=True, text=True)
+    assert status.stdout == "", status.stdout
     passed = subprocess.run([sys.executable, "-m", "pytest", *VERSIONED_TESTS], cwd=cut, capture_output=True, text=True)
     assert passed.returncode == 0, passed.stdout + passed.stderr
