@@ -43,10 +43,9 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
     git(repo, "config", "user.name", "t")
     version = tag.removeprefix("v")
     (repo / "VERSION").write_text(version + "\n")
-    (repo / "gen" / "r2s_gen").mkdir(parents=True)
+    (repo / "gen").mkdir(parents=True)
     (repo / "bridge" / "r2s_bridge").mkdir(parents=True)
     (repo / "bridge" / "r2s_bridge_tests").mkdir(parents=True)
-    (repo / "gen" / "r2s_gen" / "version.py").write_text(f'__version__ = "{version}"\nPROTOCOL_VERSION = 1\n')
     (repo / "gen" / "package.xml").write_text(
         f'<package format="3">\n  <name>r2s_gen</name>\n  <version>{version}</version>\n</package>\n'
     )
@@ -67,6 +66,13 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
         target = repo / config
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(ROOT / config, target)
+    shutil.copy(ROOT / "Makefile", repo / "Makefile")
+    shutil.copytree(ROOT / "gen" / "r2s_gen", repo / "gen" / "r2s_gen")
+    (repo / "gen" / "r2s_gen" / "version.py").write_text(f'__version__ = "{version}"\nPROTOCOL_VERSION = 1\n')
+    (repo / "tools").mkdir()
+    shutil.copy(ROOT / "tools" / "refresh_generated.py", repo / "tools" / "refresh_generated.py")
+    (repo / "scripts").mkdir()
+    shutil.copy(ROOT / "scripts" / "check-main-clone-build.sh", repo / "scripts" / "check-main-clone-build.sh")
     git(repo, "add", ".")
     git(repo, "commit", "-q", "-m", "chore: start")
     git(repo, "tag", tag)
