@@ -55,7 +55,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 | --- | --- | --- |
 | Publish and subscribe | P0 | Float32 and Twist first, then Range, Imu and JointState |
 | Handshake and topic announcement | P0 | Full mode; compact mode for tier S (Phase 5) |
-| Sync loss detection, reconnection, MCU reset detection | P0 | rCOBS resync, heartbeat, boot ID |
+| Sync loss detection, reconnection, MCU reset detection | P0 | rCOBS resync, heartbeat, host-assigned session token |
 | Logging to the host (`/rosout`) | P0 | Non-variadic, per-type API; flash strings |
 | Time synchronization (`now()` on the MCU) | P0 | Host-side estimation; see Time |
 | C++ API, static topics | P0 | Topics from the X-macro list or `r2s.yaml`; see User API |
@@ -221,13 +221,13 @@ frame = rCOBS( topic_id[1] | seq[1] | payload[N] | crc16[2] ) + 0x00
 
 **Handshake.** Either side can start it. The MCU sends `HELLO` on boot, and the host sends `HELLO_REQ` when it connects or detects a problem. The MCU's reply contains a header and one entry per topic.
 
-- Header: protocol version, handshake mode, maximum frame size, RX capacity, tick rate, feature bits, node name, and a boot ID that changes on every boot.
+- Header: protocol version, handshake mode, maximum frame size, RX capacity, tick rate, feature bits, node name, and a session token the host assigns (0 before the first READY).
 - Topic entry, full mode: ID, direction (pub or sub), type name (for example `geometry_msgs/msg/Twist`), the first 8 bytes of the REP-2011 RIHS01 type hash, profile flags (narrow), topic name, and a QoS hint (best effort or reliable, keep-latest).
 - Topic entry, compact mode (tier S): ID, direction, type hash, a hash of the topic name, and flags. The generator writes a matching YAML next to the firmware, and the bridge loads it (`node_map:=...`) to recover names and types. The names still come from the firmware's config; they just do not occupy its flash.
 
 The bridge loads the type support for each type name and compares the hash with the one from the installed package. If they differ, it refuses that topic with a clear error, without dropping the session.
 
-**Session, reset and reconnection.** Heartbeats run in both directions. The host treats any of these as an MCU reset and redoes the handshake and the time sync: a different boot ID, an unsolicited `HELLO` while connected, or a `HELLO` sent in reply to a heartbeat. An MCU that is not connected answers any non-handshake host frame with a rate-limited `HELLO`, so a reset is detected within one heartbeat period, without entropy. If the MCU stops seeing host traffic, it stops publishing and returns to announcing.
+**Session, reset and reconnection.** Heartbeats run in both directions. The host treats any of these as an MCU reset and redoes the handshake and the time sync: a `HELLO` carrying no token or a different token than the one recorded, an unsolicited `HELLO` while connected, or a `HELLO` sent in reply to a heartbeat. An MCU that is not connected answers any non-handshake host frame with a rate-limited `HELLO`, so a reset is detected within one heartbeat period, without entropy. If the MCU stops seeing host traffic, it stops publishing and returns to announcing.
 
 **Losses and errors.** User topics are best effort. A gap in `seq` increments a counter that the bridge publishes as diagnostics. Parameters, services and the handshake use a small reliable channel (stop-and-wait with ack on ID 6, one outstanding message per direction).
 
@@ -382,7 +382,7 @@ Node(
 - an Arduino library (Library Manager), the default path;
 - a PlatformIO library;
 - a CMake or Makefile include for bare-metal and vendor toolchains;
-- an epic-hal module (serial, tick and EEPROM dependency) for PIC (Phase 5).
+- an epic-hal module (serial and tick) for PIC (Phase 5).
 
 The generator targets a ROS distro explicitly (`distro:` in the config, default `jazzy`), because type hashes can differ between distros. It bundles a `common_interfaces` snapshot per supported distro. A thin rosidl plugin wraps it later for users who want generation inside `colcon build`. The bridge, the generator and a bundle of the standard messages are released as ROS packages through the buildfarm.
 
@@ -443,7 +443,7 @@ The tier M budget is 2 KB of RAM (ATmega328P; Mega gives headroom at 8 KB).
 - **The Uno resets when the port opens** (DTR), then runs its bootloader. The bridge waits for the MCU's `HELLO`.
 - **The Uno's 328P clock is a ceramic resonator**, off by up to thousands of ppm. Time sync corrects drift.
 - **USB-serial latency:** the FTDI latency timer, the 16U2's USB CDC firmware and CH340 clones affect time sync, not only throughput.
-- **No entropy source on small parts.** The boot ID comes from an EEPROM boot counter (one write per boot, far below the endurance limit).
+- **No entropy source on small parts.** The host assigns the session token at the handshake, so the MCU needs no random source and no EEPROM counter.
 
 ## Plan
 
@@ -564,11 +564,11 @@ ros2serial/
 │   └── r2s_bridge_tests/     launch_testing integration tests (ROS package, test-only)
 ├── ports/
 │   ├── posix/                host "virtual MCU" over a pty: used by integration tests and fuzzing
-│   ├── arduino/              Arduino library glue (Serial, micros, EEPROM boot ID)
-│   ├── avr/                  bare-metal AVR glue (USART ISR, timer tick, EEPROM boot ID)
+│   ├── arduino/              Arduino library glue (Serial, micros)
+│   ├── avr/                  bare-metal AVR glue (USART ISR, timer tick)
 │   ├── ch32v/                Phase 3
 │   ├── stm32/                Phase 3: one small STM32 + RP2040; ESP32 build-only via the Arduino layout
-│   └── epic-hal/             Phase 5: epic-hal serial, tick and EEPROM glue for PIC
+│   └── epic-hal/             Phase 5: epic-hal serial and tick glue for PIC
 ├── examples/                 one directory per example, each built in CI
 ├── tests/
 │   ├── e2e/                  shared end-to-end scenarios, run against posix and simavr (MPLAB SIM in Phase 5)
@@ -641,11 +641,11 @@ The first payload byte of IDs 0 and 1 is an opcode.
 | Opcode | Name | Direction | Payload after the opcode |
 | --- | --- | --- | --- |
 | 0x01 | HELLO_REQ | host → MCU | `protocol_version u8` |
-| 0x02 | HELLO | MCU → host | `protocol_version u8, handshake_mode u8 (0 full, 1 compact), boot_id u32, max_frame u16, rx_capacity u16, tick_hz u32, features u8, topic_count u8`, then `node_name string` (full) or `node_name_hash u32` (compact) |
+| 0x02 | HELLO | MCU → host | `protocol_version u8, handshake_mode u8 (0 full, 1 compact), session_token u32, max_frame u16, rx_capacity u16, tick_hz u32, features u8, topic_count u8`, then `node_name string` (full) or `node_name_hash u32` (compact) |
 | 0x03 | TOPIC_REQ | host → MCU | `index u8` (0 to topic_count − 1) |
 | 0x04 | TOPIC | MCU → host | `index u8, topic_id u8, flags u8, type_hash[8]`, then `type_name string, topic_name string` (full) or `topic_name_hash u32` (compact) |
 | 0x05 | TOPIC_STATUS | host → MCU | `topic_id u8, status u8 (0 ok, 1 unknown type, 2 hash mismatch, 3 name conflict)` |
-| 0x06 | READY | host → MCU | none |
+| 0x06 | READY | host → MCU | `token u32` (nonzero, assigned for the handshake) |
 
 - `features` bits: 0 time, 1 log, 2 params, 3 reliable channel, 4 `double` is 32 bits (informational), 5 runtime topic registration (informational). The other bits are reserved and must be 0.
 - `flags` bits: 0 direction (0 = the MCU publishes, 1 = the MCU subscribes), 1 narrow_float64, 2 keep_latest, 3 reliable. The other bits are reserved. The flags are the truth for the wire; bit 1 is always set on a build whose `double` is 32 bits.
@@ -701,7 +701,7 @@ BOOT ──init, send HELLO──► ANNOUNCING ──READY──► CONNECTED
 - ANNOUNCING: replies to HELLO_REQ with HELLO and to TOPIC_REQ with TOPIC; stores TOPIC_STATUS per topic; answers any other host frame (heartbeat, user topic) with HELLO, at most once per 100 ms; ignores user topic frames otherwise; `r2s_publish_*` returns `R2S_ERR_NOT_CONNECTED` and sends nothing.
 - CONNECTED: sends a heartbeat every `R2S_HEARTBEAT_MS` (default 500); publishing works for topics with status ok.
 - Link timeout: no valid frame from the host for `R2S_LINK_TIMEOUT_MS` (default 2000).
-- `boot_id` comes from `r2s_port_boot_id()` once per boot.
+- `session_token` lives in MCU RAM: 0 after every boot, the last READY token afterwards. The HELLO echoes it.
 
 **Host**
 
@@ -713,9 +713,9 @@ DISCONNECTED ──port open──► BOOT_WAIT ──HELLO or boot_wait_ms─�
 
 - DISCONNECTED: tries to open the port every `reconnect_period_ms` (default 1000).
 - BOOT_WAIT: after opening the port, waits for an unsolicited HELLO for up to `boot_wait_ms` (default 2500) before sending anything, so a board reset by DTR is not talking to its bootloader.
-- HANDSHAKING: sends HELLO_REQ every 500 ms until HELLO arrives. Rejects a protocol version it does not support, and logs an error naming both versions. Then, for each index, sends TOPIC_REQ with a 200 ms timeout and 3 retries. Resolves the type support, checks the hash, sends TOPIC_STATUS, creates or reuses the publisher or subscription, and finally sends READY.
+- HANDSHAKING: sends HELLO_REQ every 500 ms until HELLO arrives. Rejects a protocol version it does not support, and logs an error naming both versions. Then, for each index, sends TOPIC_REQ with a 200 ms timeout and 3 retries. Resolves the type support, checks the hash, sends TOPIC_STATUS, creates or reuses the publisher or subscription, and finally sends READY with a nonzero token assigned for the handshake.
 - CONNECTED: heartbeat every 500 ms, time sync (see below), forwarding.
-- Reset detected: a HELLO arrives while connected, or a HELLO with a different `boot_id`.
+- Reset detected: a HELLO arrives while connected, or a HELLO carries no token or a different token than the one recorded.
 - On re-handshake, publishers and subscriptions are kept if the new topic table is identical to the previous one. Otherwise they are destroyed and recreated.
 
 **Time sync on the host.** Right after READY, 8 PINGs 50 ms apart. Then one PING every `time_sync.period_ms` (1000 for the first 10 s, then the parameter's value, default 5000). The estimator keeps a sliding window of the 16 most recent samples, uses the lowest round trip ones for the offset, and a linear fit for drift. It sends a CORRECTION after the initial burst, whenever the estimate moves by more than 100 µs, and at least every 5 s.
@@ -833,7 +833,6 @@ uint16_t r2s_port_read(uint8_t *buf, uint16_t max);       /* non-blocking; retur
 void     r2s_port_write(const uint8_t *buf, uint16_t len); /* must accept len bytes when tx_free said so */
 uint16_t r2s_port_tx_free(void);                          /* bytes writable without blocking; 0xFFFF if blocking is acceptable */
 uint32_t r2s_port_tick(void);                             /* monotonic, wraps; rate = R2S_TICK_HZ */
-uint32_t r2s_port_boot_id(void);                          /* differs on every boot: EEPROM counter on AVR/PIC, random on tier L */
 ```
 
 The core calls `r2s_port_read` with `max = 1` while it assembles a frame, so it never consumes bytes beyond the current delimiter.
@@ -948,7 +947,7 @@ by `launch/r2s_bridge.launch.py` with `port` and `params_file` arguments.
 
 ### Published by the bridge
 
-- `/diagnostics` (via `diagnostic_updater`): link state, boot ID, protocol version, MCU counters from heartbeats, sequence gaps per topic, time sync offset, drift and round trip.
+- `/diagnostics` (via `diagnostic_updater`): link state, session token, protocol version, MCU counters from heartbeats, sequence gaps per topic, time sync offset, drift and round trip.
 - The MCU's topics, under the names it announced, after remapping and namespacing.
 - MCU log messages through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`.
 
@@ -1058,9 +1057,9 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | C5 | Framer: pull through `r2s_port_read`, resync on 0x00, CRC check, limits, counters, delimiter tick | C2, C3 | Garbage and truncated input tests; a waiting frame is never overwritten; fuzz target |
 | C6 | Frame transmit: `r2s_port_tx_free` check, streaming serialize, CRC and rCOBS, chunked `r2s_port_write` | C2, C3 | Frame vectors pass; TX_BUSY writes nothing |
 | C7 | Optional RX ring (`R2S_WITH_RX_RING`) providing `r2s_port_read` | C1 | Single-producer, single-consumer tests including wraparound |
-| C8 | MCU session: ANNOUNCING, CONNECTED, HELLO rules, TOPIC, TOPIC_STATUS, READY, heartbeat, link timeout, boot ID | C5, C6, S2 | Handshake transcript vectors pass |
+| C8 | MCU session: ANNOUNCING, CONNECTED, HELLO rules, TOPIC, TOPIC_STATUS, READY, heartbeat, link timeout, session token | C5, C6, S2 | Handshake transcript vectors pass |
 | C9 | Codec interpreter plus handwritten descriptors and topic table for Float32 and Twist | C6, S4, S6 | Message vectors pass; nesting stack bounded |
-| C10 | Posix port: pty, tick from `clock_gettime`, boot ID from a file counter, a test firmware with configurable topics | C8, C9 | Runs as a process the e2e tests can launch |
+| C10 | Posix port: pty, tick from `clock_gettime`, a test firmware with configurable topics | C8, C9 | Runs as a process the e2e tests can launch |
 | C11 | Fuzz targets and seed corpora wired into `fuzz-smoke` and nightly | C5, C8, C9 | Jobs green |
 | C12 | `r2s_arch.h` flash macros, flash-string logging API and `R2S_LOG_*` macros | C1 | AVR build keeps strings out of RAM (checked with avr-size) |
 | C13 | Topic accessors with the flash-table backend | C8 | Unit tests; the runtime backend arrives with P11 |
@@ -1155,7 +1154,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 
 | ID | Ticket | Deps | Acceptance |
 | --- | --- | --- | --- |
-| Y1 | epic-hal port glue: serial, tick, EEPROM boot ID | P14 | Builds with epic-cc for PIC16F1938 and PIC18F4550 |
+| Y1 | epic-hal port glue: serial, tick | P14 | Builds with epic-cc for PIC16F1938 and PIC18F4550 |
 | Y2 | PIC end-to-end backend under MPLAB SIM | R6, Y1 | Scenarios 1 to 4 on the PIC backend |
 | Y3 | Compact handshake (MCU, generator node map, bridge loader) | P16 | Scenarios 1 to 4 in compact mode |
 | Y4 | Tier S budget proof on PIC16F1938 | Y1, Y3 | Fits tier S budgets |

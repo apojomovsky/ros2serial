@@ -341,20 +341,22 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
         if layout == "hello_req":
             if r.u8() != 0x01:
                 problems.append(f"{name}/payload: the opcode is not HELLO_REQ")
-            if r.u8() != 0x01:
-                problems.append(f"{name}/payload: the protocol version is not 1")
+            if r.u8() != 0x02:
+                problems.append(f"{name}/payload: the protocol version is not 2")
         elif layout == "ready":
             if r.u8() != 0x06:
                 problems.append(f"{name}/payload: the opcode is not READY")
+            if r.u32() == 0:
+                problems.append(f"{name}/payload: the READY token is zero")
         elif layout == "hello":
             if r.u8() != 0x02:
                 problems.append(f"{name}/payload: the opcode is not HELLO")
-            if r.u8() != 0x01:
-                problems.append(f"{name}/payload: the protocol version is not 1")
+            if r.u8() != 0x02:
+                problems.append(f"{name}/payload: the protocol version is not 2")
             mode = r.u8()
             if mode not in (0, 1):
                 problems.append(f"{name}/payload: the handshake mode is neither full nor compact")
-            r.u32()  # boot id
+            r.u32()  # session token
             if r.u16() > 65277:
                 problems.append(f"{name}/payload: max_frame is above the limit")
             r.u16()  # rx capacity

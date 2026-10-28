@@ -116,8 +116,9 @@ std::vector<std::vector<std::uint8_t>> units_of(const std::vector<std::uint8_t> 
 }
 
 // One HELLO payload: the fields of [CTL-16], with the defaults a compliant
-// MCU announces.
-std::vector<std::uint8_t> hello_payload(std::uint32_t boot_id, std::uint8_t topics, std::uint8_t version = 1u,
+// MCU announces. The token is what the MCU echoes from RAM: 0 before the
+// host assigns one.
+std::vector<std::uint8_t> hello_payload(std::uint32_t token, std::uint8_t topics, std::uint8_t version = 2u,
                                         std::uint8_t features = 0u, std::uint32_t tick_hz = 1000000u)
 {
     std::vector<std::uint8_t> p{0x02u, version, 0x00u};
@@ -126,7 +127,7 @@ std::vector<std::uint8_t> hello_payload(std::uint32_t boot_id, std::uint8_t topi
             p.push_back(static_cast<std::uint8_t>((value >> (8 * i)) & 0xFFu));
         }
     };
-    put_le(boot_id, 4);
+    put_le(token, 4);
     put_le(512, 2); // max_frame
     put_le(515, 2); // rx_capacity
     put_le(tick_hz, 4);
@@ -349,9 +350,9 @@ TEST(SessionBootWait, LeavesBootWaitOnAnUnsolicitedHello)
 {
     Fixture fixture;
     fixture.advance_to(100);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
-    EXPECT_EQ(fixture.session().boot_id(), 0x1000u);
+    EXPECT_EQ(fixture.session().token(), 1u) << "the completed handshake assigns token 1";
 }
 
 TEST(SessionHandshake, RepeatsHelloReqEvery500msUntilAHelloArrives)
@@ -393,16 +394,16 @@ TEST(SessionHandshake, RefusesAHelloOfAnotherProtocolVersion)
     Session session(
         SessionConfig{}, clock, [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
         [](const TopicInfo &) { return std::uint8_t{0}; }, events);
-    const std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u, 2u);
+    const std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u, 1u);
     std::vector<std::uint8_t> frame{kControl, 0u};
     frame.insert(frame.end(), hello.begin(), hello.end());
     transport.script_read(wire_of(with_check(frame)));
     session.poll();
     EXPECT_EQ(session.state(), SessionState::kBootWait) << "a refused HELLO changes nothing";
     ASSERT_EQ(logged.size(), 1u);
-    EXPECT_NE(logged[0].find("MCU protocol version is 2"), std::string::npos)
+    EXPECT_NE(logged[0].find("MCU protocol version is 1"), std::string::npos)
         << "the error names the MCU version";
-    EXPECT_NE(logged[0].find("host protocol version is 1"), std::string::npos)
+    EXPECT_NE(logged[0].find("host protocol version is 2"), std::string::npos)
         << "the error names the host version";
 }
 
@@ -410,9 +411,9 @@ TEST(SessionHandshake, RefusesAFeaturesByteWithAReservedBit)
 {
     Fixture fixture;
     fixture.advance_to(10);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u, 0x40u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 2u, 0x40u));
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
-    EXPECT_FALSE(fixture.session().has_boot_id());
+    EXPECT_FALSE(fixture.session().seen_hello());
 }
 
 TEST(SessionHandshake, AcceptsAnMcuWhoseDoubleIs32Bits)
@@ -420,7 +421,7 @@ TEST(SessionHandshake, AcceptsAnMcuWhoseDoubleIs32Bits)
     Fixture fixture;
     fixture.advance_to(10);
     // Bit 4 is informational, and every AVR build sets it ([CTL-2]).
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u, 0x10u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 2u, 0x10u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
 }
 
@@ -438,16 +439,16 @@ TEST(SessionHandshake, AcceptsTheHelloOfTheMcusOwnVector)
     fixture.deliver_frame(kControl, 0u, payload);
     EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking)
         << "one topic to collect, so the walk has just begun";
-    EXPECT_EQ(fixture.session().boot_id(), 0x44332211u);
+    EXPECT_EQ(fixture.session().token(), 1u);
 }
 
 TEST(SessionHandshake, RefusesATickRateThatIsNotThousandTimesADivisor)
 {
     Fixture fixture;
     fixture.advance_to(10);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u, 0u, 1500u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 2u, 0u, 1500u));
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u, 0u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 2u, 0u, 1000u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected) << "1 kHz is a valid form";
 }
 
@@ -455,15 +456,28 @@ TEST(SessionHandshake, SendsReadyAfterTheLastTopic)
 {
     Fixture fixture;
     fixture.advance_to(10);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u));
     fixture.drain_units();
     fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
     const auto units = fixture.drain_units();
     ASSERT_EQ(units.size(), 2u) << "the TOPIC_STATUS and then READY";
-    EXPECT_EQ(units[1][2], 0x06u);
+    EXPECT_EQ(hex_of(units[1]),
+              hex_of(wire_of(with_check({kControl, 2u, 0x06u, 0x01u, 0x00u, 0x00u, 0x00u}))))
+        << "READY assigns token 1";
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+    EXPECT_EQ(fixture.session().token(), 1u);
     ASSERT_EQ(fixture.session().topics().size(), 1u);
     EXPECT_EQ(fixture.session().topics()[0].topic_name, "battery");
+}
+
+TEST(SessionHandshake, IgnoresARepeatHelloWithTheRecordedToken)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u));
+    EXPECT_EQ(fixture.drain_units().size(), 1u) << "the TOPIC_REQ of the walk";
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u));
+    EXPECT_TRUE(fixture.drain_units().empty()) << "the repeat changes nothing";
 }
 
 TEST(SessionHandshake, RejectsOneTopicAndKeepsTheOthers)
@@ -603,28 +617,36 @@ TEST(SessionConnected, ATopicFrameKeepsTheLinkAlive)
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected) << "user traffic is host traffic too";
 }
 
-TEST(SessionConnected, ResetsOnAHelloWithTheSameBootId)
+TEST(SessionConnected, ResetsOnAHelloWithTheSameToken)
 {
     Fixture fixture;
     fixture.advance_to(100);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u));
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
-    fixture.drain_units();
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u));
+    const auto first = fixture.drain_units();
+    ASSERT_EQ(first.size(), 1u);
+    EXPECT_EQ(hex_of(first[0]),
+              hex_of(wire_of(with_check({kControl, 0u, 0x06u, 0x01u, 0x00u, 0x00u, 0x00u}))));
+    fixture.deliver_frame(kControl, 0u, hello_payload(1u, 0u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected)
         << "an empty table resolves at once, so the re-handshake is already done";
-    EXPECT_EQ(fixture.drain_units().size(), 1u) << "READY for the new handshake";
+    const auto second = fixture.drain_units();
+    ASSERT_EQ(second.size(), 1u) << "READY for the new handshake";
+    EXPECT_EQ(hex_of(second[0]),
+              hex_of(wire_of(with_check({kControl, 0u, 0x06u, 0x02u, 0x00u, 0x00u, 0x00u}))))
+        << "the new handshake assigns a fresh token";
+    EXPECT_EQ(fixture.session().token(), 2u);
 }
 
-TEST(SessionConnected, ResetsOnAHelloWithANewBootId)
+TEST(SessionConnected, ResetsOnAHelloWithNoToken)
 {
     Fixture fixture;
     fixture.advance_to(100);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u));
     fixture.drain_units();
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x2000u, 1u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u));
     EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
-    EXPECT_EQ(fixture.session().boot_id(), 0x2000u);
+    EXPECT_EQ(fixture.session().token(), 0u);
     EXPECT_EQ(fixture.drain_units().size(), 1u) << "the TOPIC_REQ of the new table";
 }
 
@@ -749,7 +771,7 @@ TEST(SessionHandshake, RefusesAMaxFrameAboveTheProtocolLimit)
     hello[8] = 0xFEu;
     fixture.deliver_frame(kControl, 0u, hello);
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
-    EXPECT_FALSE(fixture.session().has_boot_id());
+    EXPECT_FALSE(fixture.session().seen_hello());
 }
 
 TEST(SessionHandshake, RefusesACompactHandshake)
@@ -770,7 +792,7 @@ TEST(SessionHandshake, RefusesATruncatedHello)
     hello.resize(10u);
     fixture.deliver_frame(kControl, 0u, hello);
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
-    EXPECT_FALSE(fixture.session().has_boot_id());
+    EXPECT_FALSE(fixture.session().seen_hello());
 }
 
 TEST(SessionHandshake, RefusesANodeNameWithBytesLeftOver)
