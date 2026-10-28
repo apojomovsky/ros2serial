@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <deque>
 #include <map>
 #include <stdexcept>
 #include <utility>
@@ -47,6 +48,36 @@ constexpr std::uint8_t kModeFull = 0u;
 // `double` is 32 bits and bit 5 runtime registration, both informational
 // ([CTL-2], [CTL-3]).
 constexpr std::uint8_t kFeaturesReserved = 0xC0u;
+
+// One frame waiting for the link, encoded exactly as [FRM-1] and [CHK-3] lay
+// it out. User frames never coalesce ([SES-32]); a control frame carries the
+// slot it competes for while the link cannot take bytes ([SES-33]).
+struct QueuedFrame {
+    std::vector<std::uint8_t> bytes;
+    bool control = false;
+    std::uint8_t topic_id = 0;
+    std::uint8_t opcode = 0;
+    std::uint8_t sub = 0;
+    std::uint8_t seq = 0;
+};
+
+// The slot a control payload competes for: one per control kind, and one
+// TOPIC_STATUS per topic id, the field the verdict carries on the wire. The
+// time channel has no sender yet, but the same shape covers its PING retries
+// when the time sync lands.
+QueuedFrame control_slot(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload)
+{
+    QueuedFrame slot;
+    slot.control = true;
+    slot.topic_id = topic_id;
+    if (!payload.empty()) {
+        slot.opcode = payload[0];
+        if (topic_id == kControlTopic && payload[0] == kTopicStatus && payload.size() > 1u) {
+            slot.sub = payload[1];
+        }
+    }
+    return slot;
+}
 
 // The protocol's own frame limit ([FRM-9]).
 constexpr std::uint32_t kMaxFrameLimit = 65277u;
@@ -206,7 +237,7 @@ struct Session::Impl {
         transport = std::move(opened);
         clear_link_fault();
         reader = std::make_unique<FrameReader>(*transport, clock);
-        pending.clear();
+        clear_queue();
         state = SessionState::kBootWait;
         boot_wait_deadline_ms = now_ms() + config.boot_wait_ms;
     }
@@ -218,16 +249,61 @@ struct Session::Impl {
             transport->close();
         }
         transport.reset();
-        pending.clear();
+        clear_queue();
         awaiting_topic = false;
         state = SessionState::kDisconnected;
         next_open_ms = now_ms() + config.reconnect_period_ms;
     }
 
+    void clear_queue()
+    {
+        queue_.clear();
+        pending_bytes_ = 0;
+        front_offset_ = 0;
+    }
+
+    // Drops the fully unsent control frames. The MCU never saw them, so the
+    // new handshake answers instead of the old session's retries ([SES-33]).
+    void clear_pending_control()
+    {
+        std::deque<QueuedFrame> kept;
+        std::size_t kept_bytes = 0;
+        for (std::size_t i = 0; i < queue_.size(); ++i) {
+            if (i > 0 || front_offset_ == 0) {
+                if (queue_[i].control) {
+                    continue;
+                }
+            }
+            kept_bytes += queue_[i].bytes.size();
+            kept.push_back(std::move(queue_[i]));
+        }
+        queue_ = std::move(kept);
+        pending_bytes_ = kept_bytes;
+    }
+
     // Queues one frame: the payload through the check, then rCOBS and the
-    // delimiter, so the bytes are the ones [FRM-1] and [CHK-3] give.
+    // delimiter, so the bytes are the ones [FRM-1] and [CHK-3] give. A
+    // control frame whose slot is already queued replaces it in place, so
+    // the wire order never changes and the queue stays bounded ([SES-33]).
+    // The replaced frame never reached the wire, so the new one keeps its
+    // seq and [FRM-5] continuity holds.
     void queue_frame(std::uint8_t topic_id, std::uint8_t seq, const std::vector<std::uint8_t> &payload)
     {
+        QueuedFrame frame;
+        std::size_t match = queue_.size();
+        if (topic_id < 16u) {
+            frame = control_slot(topic_id, payload);
+            const std::size_t first = front_offset_ > 0u ? 1u : 0u;
+            for (std::size_t i = first; i < queue_.size(); ++i) {
+                const QueuedFrame &slot = queue_[i];
+                if (slot.control && slot.topic_id == frame.topic_id && slot.opcode == frame.opcode &&
+                    slot.sub == frame.sub) {
+                    match = i;
+                    seq = slot.seq;
+                    break;
+                }
+            }
+        }
         std::vector<std::uint8_t> decoded;
         decoded.reserve(payload.size() + 4u);
         decoded.push_back(topic_id);
@@ -238,37 +314,53 @@ struct Session::Impl {
         decoded.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
         decoded.push_back(static_cast<std::uint8_t>(crc >> 8u));
 
+        frame.seq = seq;
         r2s_rcobs_encoder_t encoder{};
         r2s_rcobs_encoder_init(&encoder);
         std::uint8_t chunk[R2S_RCOBS_MAX_EMIT]{};
         for (const std::uint8_t byte : decoded) {
             const std::uint8_t produced = r2s_rcobs_encode_byte(&encoder, byte, chunk);
-            pending.insert(pending.end(), chunk, chunk + produced);
+            frame.bytes.insert(frame.bytes.end(), chunk, chunk + produced);
         }
         const std::uint8_t produced = r2s_rcobs_encode_end(&encoder, chunk);
-        pending.insert(pending.end(), chunk, chunk + produced);
-        pending.push_back(0x00u);
+        frame.bytes.insert(frame.bytes.end(), chunk, chunk + produced);
+        frame.bytes.push_back(0x00u);
+        if (match < queue_.size()) {
+            QueuedFrame &slot = queue_[match];
+            pending_bytes_ -= slot.bytes.size();
+            pending_bytes_ += frame.bytes.size();
+            slot.bytes = std::move(frame.bytes);
+            ++control_coalesced_;
+            return;
+        }
+        pending_bytes_ += frame.bytes.size();
+        queue_.push_back(std::move(frame));
     }
 
     void flush()
     {
-        if (!transport || pending.empty()) {
+        if (!transport) {
             return;
         }
-        std::size_t offset = 0;
-        while (offset < pending.size()) {
-            const IoResult wrote = transport->write(pending.data() + offset, pending.size() - offset);
-            if (wrote.status == IoStatus::kWouldBlock) {
-                break;
+        while (!queue_.empty()) {
+            QueuedFrame &front = queue_.front();
+            while (front_offset_ < front.bytes.size()) {
+                const IoResult wrote =
+                    transport->write(front.bytes.data() + front_offset_, front.bytes.size() - front_offset_);
+                if (wrote.status == IoStatus::kWouldBlock) {
+                    return;
+                }
+                if (wrote.status != IoStatus::kOk) {
+                    clear_queue();
+                    close_link();
+                    return;
+                }
+                front_offset_ += wrote.bytes;
             }
-            if (wrote.status != IoStatus::kOk) {
-                pending.clear();
-                close_link();
-                return;
-            }
-            offset += wrote.bytes;
+            pending_bytes_ -= front.bytes.size();
+            queue_.pop_front();
+            front_offset_ = 0;
         }
-        pending.erase(pending.begin(), pending.begin() + static_cast<std::ptrdiff_t>(offset));
     }
 
     void send_control(const std::vector<std::uint8_t> &payload)
@@ -308,6 +400,7 @@ struct Session::Impl {
         requested_index = 0;
         retries = 0;
         collected.clear();
+        clear_pending_control();
         begin_handshake_wait();
     }
 
@@ -317,6 +410,7 @@ struct Session::Impl {
         retries = 0;
         collected.clear();
         awaiting_topic = true;
+        clear_pending_control();
         if (requested_index < hello.topic_count) {
             send_topic_req();
         } else {
@@ -620,7 +714,13 @@ struct Session::Impl {
 
     std::unique_ptr<Transport> transport;
     std::unique_ptr<FrameReader> reader;
-    std::vector<std::uint8_t> pending;
+    // The frames the link has not taken yet, oldest first, with their total
+    // encoded size. The front frame may be partially written.
+    std::deque<QueuedFrame> queue_;
+    std::size_t pending_bytes_ = 0;
+    std::size_t front_offset_ = 0;
+    // Control frames a newer frame of the same slot replaced ([SES-33]).
+    std::uint32_t control_coalesced_ = 0;
 
     SessionState state = SessionState::kDisconnected;
     std::int64_t next_open_ms = 0;
@@ -699,10 +799,20 @@ std::uint32_t Session::resets() const
     return impl_->resets;
 }
 
+std::size_t Session::pending_bytes() const
+{
+    return impl_->pending_bytes_;
+}
+
+std::uint32_t Session::control_coalesced() const
+{
+    return impl_->control_coalesced_;
+}
+
 bool Session::send_user(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload)
 {
     const std::size_t cap = std::max<std::uint16_t>(impl_->hello.rx_capacity, impl_->hello.max_frame);
-    if (!impl_->pending.empty() && impl_->pending.size() >= cap) {
+    if (impl_->pending_bytes_ > 0u && impl_->pending_bytes_ >= cap) {
         return false;
     }
     std::uint8_t seq = 0;

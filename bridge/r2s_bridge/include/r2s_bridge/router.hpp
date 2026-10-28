@@ -79,6 +79,9 @@ class Router
         std::string link_state;
         std::uint32_t session_token = 0;
         std::uint32_t resets = 0;
+        // Control frames a newer frame of the same slot replaced while the link
+        // could not take bytes ([SES-33]).
+        std::uint32_t control_coalesced = 0;
         std::uint8_t protocol_version = 0;
         McuCounters mcu_counters;
         std::vector<TopicDiagnostics> topics;

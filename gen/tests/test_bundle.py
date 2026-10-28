@@ -528,6 +528,44 @@ def test_a_missing_list_fails_naming_it(tmp_path):
     assert "R2S_TOPICS" in compiled.stderr
 
 
+def test_an_empty_list_fails_naming_it(tmp_path):
+    root = sketch_dir(tmp_path, files())
+    body = '#define R2S_TOPICS(X)\n#include "ros2serial.h"\n'
+
+    compiled = compile_case(root, body)
+
+    assert compiled.returncode != 0
+    assert "a node with no topics has nothing to announce" in compiled.stderr
+
+
+def test_an_empty_list_fails_in_cxx(tmp_path):
+    root = sketch_dir(tmp_path, files())
+    (root / "case.cpp").write_text(
+        '#define R2S_TOPICS(X)\n#include "ros2serial.h"\nint main()\n{\n    return 0;\n}\n',
+        encoding="utf-8",
+    )
+
+    compiled = subprocess.run(
+        [
+            "g++",
+            "-std=c++11",
+            "-fsyntax-only",
+            "-I",
+            str(root),
+            "-I",
+            str(root / "src"),
+            "-I",
+            str(CORE_INCLUDE),
+            str(root / "case.cpp"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert compiled.returncode != 0
+    assert "a node with no topics has nothing to announce" in compiled.stderr
+
+
 def test_an_unknown_direction_in_the_list_fails(tmp_path):
     root = sketch_dir(tmp_path, files())
     body = '#define R2S_TOPICS(X) X(FOO, x, std_msgs, Float32)\n#include "ros2serial.h"\n'

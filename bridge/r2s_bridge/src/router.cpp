@@ -362,6 +362,7 @@ Router::Diagnostics Router::diagnostics() const
     out.link_state = link_state_name(impl_->session_.state());
     out.session_token = impl_->session_.token();
     out.resets = impl_->session_.resets();
+    out.control_coalesced = impl_->session_.control_coalesced();
     out.protocol_version = R2S_PROTOCOL_VERSION;
     out.mcu_counters = impl_->session_.mcu_counters();
     for (const auto &[id, route] : impl_->routes) {
