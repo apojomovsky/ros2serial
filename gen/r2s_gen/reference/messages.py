@@ -78,6 +78,10 @@ def _encode_message(
     narrow: bool,
     out: bytearray,
 ) -> None:
+    known = {field.name for field in message.fields}
+    for key in values:
+        if key not in known:
+            raise ValueError(f"{message.type_name}.{key}: unknown field")
     for field in message.fields:
         where = f"{message.type_name}.{field.name}"
         if field.name not in values:
