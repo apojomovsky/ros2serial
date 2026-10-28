@@ -259,7 +259,7 @@ rCOBS decoding runs backwards in place in the frame buffer once the delimiter ar
 
 | Port | RX path | TX path |
 | --- | --- | --- |
-| Arduino (any core) | `r2s_port_read` reads `Serial` | `Serial.write`, `availableForWrite()` as free space |
+| Arduino (any core) | `r2s_port_read` reads `Serial` | `Serial.write`, which blocks, so `0xFFFF` |
 | AVR bare metal | `R2S_WITH_RX_RING`: `ISR(USART_RX_vect) { r2s_rx_push(UDR0); }` | Blocking write |
 | PIC with epic-hal (Phase 5) | `epic_serial_read` | `epic_serial_write`, ring free space |
 | STM32, RP2040 | DMA in circular mode plus an idle-line interrupt | DMA or ring |

@@ -52,9 +52,11 @@ void r2s_port_write(const uint8_t *buf, uint16_t len)
     (void)selected().write(buf, (size_t)len);
 }
 
+/* Serial.write blocks for space, so the port never refuses a byte: it reports
+ * 0xFFFF, and the Uno ring (16 bytes) never has to hold a whole frame. */
 uint16_t r2s_port_tx_free(void)
 {
-    return (uint16_t)selected().availableForWrite();
+    return 0xFFFFu;
 }
 
 /* micros() resolves 4 us, fine for the 1 ms tick the core announces. */
@@ -63,8 +65,6 @@ uint32_t r2s_port_tick(void)
     return (uint32_t)(micros() / 1000UL);
 }
 
-/* A counter in the first EEPROM cell, so every boot announces a new ID.
- * S8 removes the boot ID; until it lands the glue keeps this internally. */
 uint32_t r2s_port_boot_id(void)
 {
     if (!s_boot_done) {

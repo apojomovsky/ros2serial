@@ -70,13 +70,15 @@ static int check_write_goes_to_serial(void)
     return 0;
 }
 
-static int check_tx_free_mirrors_available_for_write(void)
+/* Serial.write blocks for space, so the glue reports 0xFFFF even when the
+ * ring is nearly full: a whole-frame reservation must never refuse. */
+static int check_tx_free_reports_blocking(void)
 {
     reset_all();
-    Serial.tx_space = 17;
-    CHECK(r2s_port_tx_free() == 17u);
+    Serial.tx_space = 3;
+    CHECK(r2s_port_tx_free() == 0xFFFFu);
     Serial.tx_space = 0;
-    CHECK(r2s_port_tx_free() == 0u);
+    CHECK(r2s_port_tx_free() == 0xFFFFu);
     return 0;
 }
 
@@ -132,7 +134,7 @@ int main(void)
     CHECK(check_default_port_is_serial() == 0);
     CHECK(check_read_stops_at_empty() == 0);
     CHECK(check_write_goes_to_serial() == 0);
-    CHECK(check_tx_free_mirrors_available_for_write() == 0);
+    CHECK(check_tx_free_reports_blocking() == 0);
     CHECK(check_tick_is_micros_in_milliseconds() == 0);
     CHECK(check_boot_id_counts_every_boot() == 0);
     CHECK(check_another_port_is_selectable_without_port_code() == 0);

@@ -23,7 +23,7 @@ for sketch in examples/arduino_minimal/arduino_minimal.ino examples/arduino_xmac
   # or opening its own linkage block would shadow or split it, so it fails.
   # Calls and comments still name the port API, so only a definition at the
   # start of a line counts.
-  if grep -n -e '^\(uint16_t \|void \|uint32_t \)r2s_port_' -e 'extern "C" {' "$sketch"; then
+  if grep -n -e '^\(uint16_t \|void \|uint32_t \)r2s_port_' -e '^r2s_port_' -e 'extern "C" {' "$sketch"; then
     echo "$sketch: the sketch must not define port functions or linkage blocks" >&2
     status=1
   fi
