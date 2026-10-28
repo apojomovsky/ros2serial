@@ -18,6 +18,7 @@ from r2s_gen.msgs import MessageError
 from r2s_gen.version import __version__
 
 GOLDEN = Path(__file__).parent / "golden" / "topics"
+ROOT = Path(__file__).resolve().parents[2]
 CORE_INCLUDE = Path(__file__).resolve().parents[2] / "core" / "include"
 
 POSIX_TEXT = """\
@@ -473,6 +474,13 @@ def _clang_format_clean(paths):
     assert completed.returncode == 0, completed.stderr
 
 
+def _stage_style(directory):
+    """Copy the repository style next to generated files: clang-format reads it from there."""
+    style = directory / ".clang-format"
+    if not style.exists():
+        style.write_text((ROOT / ".clang-format").read_text(encoding="utf-8"), encoding="utf-8")
+
+
 def test_the_golden_pair_is_clang_format_clean():
     _clang_format_clean([GOLDEN / "posix.h", GOLDEN / "posix.c"])
 
@@ -499,6 +507,27 @@ def test_long_topic_names_emit_clang_format_clean_code(tmp_path):
     )
     entries.append(Topic(name=f"e_sub_{'a' * 190}", type_name="geometry_msgs/msg/Twist", direction="sub"))
     entries.append(Topic(name=f"e_pub_{'a' * 190}", type_name="geometry_msgs/msg/Twist", direction="pub"))
+    entries.extend(
+        Topic(name=f"b_{'a' * length}", type_name="std_msgs/msg/Float32", direction="sub")
+        for length in (111, 112, 113, 114)
+    )
+    entries.extend(
+        Topic(name=f"q_{'a' * length}", type_name="std_msgs/msg/Float32", direction="pub")
+        for length in (111, 112, 113, 114)
+    )
+    entries.extend(
+        Topic(name=f"{prefix}{'a' * length}", type_name="std_msgs/msg/Float32", direction=direction)
+        for prefix, direction, length in (
+            ("t", "sub", 101),
+            ("t", "sub", 195),
+            ("u", "pub", 101),
+            ("u", "pub", 195),
+        )
+    )
+    entries.extend(
+        Topic(name=f"{prefix}_{'a' * 100}_tail_{'a' * 100}", type_name="std_msgs/msg/Float32", direction=direction)
+        for prefix, direction in (("w", "sub"), ("x", "pub"))
+    )
     loaded = Config(
         node="r2s_long",
         topics=tuple(entries),
@@ -517,4 +546,5 @@ def test_long_topic_names_emit_clang_format_clean_code(tmp_path):
     pair_c = tmp_path / "r2s_generated.c"
     pair_h.write_text(header, encoding="utf-8")
     pair_c.write_text(source, encoding="utf-8")
+    _stage_style(tmp_path)
     _clang_format_clean([pair_h, pair_c])
