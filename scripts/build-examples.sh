@@ -123,6 +123,20 @@ case "$extras" in
         exit 1
         ;;
 esac
+# Whether the ELF's symbol table names a symbol: reads the whole table
+# first, since grep -q quits on its first match and the closed pipe fails
+# the producer under pipefail.
+elf_has_symbol() {
+    local elf=$1
+    local want=$2
+    local symbols
+
+    symbols=$(avr-nm "$elf" 2>/dev/null || true)
+    case $symbols in
+        *"$want"*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 for board in uno mega; do
   out="$build/arduino_minimal/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" \
@@ -133,7 +147,7 @@ for board in uno mega; do
   # runtime path has no generated receive buffer like the static one, but
   # the records are only reachable through the dispatch hook, and the
   # linker drops them when the core never dispatches a user frame.
-  if ! avr-nm "$out/arduino_minimal.ino.elf" 2>/dev/null | grep -q r2s_runtime_subscribers; then
+  if ! elf_has_symbol "$out/arduino_minimal.ino.elf" r2s_runtime_subscribers; then
     echo "arduino_minimal ($board): the firmware links no subscriber records" >&2
     status=1
   fi
@@ -178,12 +192,12 @@ for board in uno mega; do
   out="$build/arduino_xmacro/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$xextras" \
     --library "$xstage" --output-dir "$out" examples/arduino_xmacro || status=1
-  if ! avr-nm "$out/arduino_xmacro.ino.elf" 2>/dev/null | grep -q r2s_rx_buf; then
+  if ! elf_has_symbol "$out/arduino_xmacro.ino.elf" r2s_rx_buf; then
     echo "arduino_xmacro ($board): the firmware links no receive buffer" >&2
     status=1
   fi
   for unused in sensor_msgs_Imu geometry_msgs_Quaternion std_msgs_Header; do
-    if avr-nm "$out/arduino_xmacro.ino.elf" 2>/dev/null | grep -q "r2s_bundled_table_$unused"; then
+    if elf_has_symbol "$out/arduino_xmacro.ino.elf" "r2s_bundled_table_$unused"; then
       echo "arduino_xmacro ($board): the linker kept the unused $unused table" >&2
       status=1
     fi
