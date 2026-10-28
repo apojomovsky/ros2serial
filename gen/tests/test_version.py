@@ -32,7 +32,7 @@ def test_the_bundled_library_version_is_the_repository_version():
 
 
 def test_the_example_library_version_is_the_repository_version():
-    properties = (ROOT / "examples" / "arduino_minimal" / "lib" / "library.properties").read_text(encoding="utf-8")
+    properties = (ROOT / "gen" / "tests" / "golden" / "layouts" / "library.properties").read_text(encoding="utf-8")
     assert _capture(r"\nversion=([^\n]+)", properties) == __version__
 
 

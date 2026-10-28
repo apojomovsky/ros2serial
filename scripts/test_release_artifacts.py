@@ -26,6 +26,10 @@ def test_the_arduino_zip_stages_the_bundle_and_the_core(tmp_path):
         "ros2serial/src/r2s_bundled.c",
         "ros2serial/src/r2s/r2s_codec.h",
         "ros2serial/src/session.c",
+        "ros2serial/src/r2s/runtime.hpp",
+        "ros2serial/src/runtime.cpp",
+        "ros2serial/src/r2s_arduino_port.cpp",
+        "ros2serial/src/std_msgs/msg/float32.hpp",
     ):
         assert name in names, name
     assert not [name for name in names if name.endswith("test_reset.c")]

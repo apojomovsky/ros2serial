@@ -36,15 +36,20 @@ files = bundle.bundle(distro)
 staged = Path(out) / "ros2serial"
 (staged / "src").mkdir(parents=True)
 for name, text in files.items():
+    (staged / name).parent.mkdir(parents=True, exist_ok=True)
     (staged / name).write_text(text, encoding="utf-8")
 EOF
-# The bundle carries only the descriptors and the sketch header: the core
-# sources join it here, the same staging the example build uses, so the
-# library compiles on its own.
+# The bundle carries only the descriptors, the sketch header and the message
+# headers: the core sources, the C++ runtime layer and the Arduino port glue
+# join it here, the same staging the example build uses, so the library
+# compiles on its own.
 mkdir -p "$out/ros2serial/src/r2s"
 cp "$root"/core/include/r2s/*.h "$out/ros2serial/src/r2s/"
 cp "$root"/core/src/*.c "$out/ros2serial/src/"
 rm -f "$out/ros2serial/src/test_reset.c"
+cp "$root/cpp/include/r2s/runtime.hpp" "$out/ros2serial/src/r2s/"
+cp "$root/cpp/src/runtime.cpp" "$out/ros2serial/src/"
+cp "$root"/ports/arduino/r2s_arduino_port.cpp "$root"/ports/arduino/r2s_arduino_port.h "$out/ros2serial/src/"
 python3 - "$out" "$version" <<'EOF'
 import sys
 import zipfile
