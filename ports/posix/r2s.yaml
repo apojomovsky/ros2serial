@@ -10,6 +10,9 @@ topics:
   - name: cmd_vel
     type: geometry_msgs/msg/Twist
     direction: sub
+  - name: echo_vel
+    type: geometry_msgs/msg/Twist
+    direction: pub
   - name: log_text
     type: std_msgs/msg/String
     direction: pub
