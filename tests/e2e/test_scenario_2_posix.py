@@ -78,7 +78,7 @@ class TestScenario2(unittest.TestCase):
             # subscribes best effort too; a reliable probe would never match.
             best_effort = QoSProfile(depth=100, reliability=ReliabilityPolicy.BEST_EFFORT)
             received = []
-            node.create_subscription(Float32, "battery", received.append, best_effort)
+            node.create_subscription(Float32, "battery", lambda msg: received.append(msg.data), best_effort)
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
             while not received:
                 rclpy.spin_once(node, timeout_sec=0.5)
