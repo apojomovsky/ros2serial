@@ -1,0 +1,6 @@
+# A fixture for the vector runner's self-test, not a conformance vector.
+name: fixture_handshake
+covers: [SES-1]
+steps:
+  - {from: host, frame: "00 00 01 01 70 0b"}
+  - {from: mcu, frame: "00 00 02 01 18 21", at_ms: 3}

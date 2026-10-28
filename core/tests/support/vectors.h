@@ -70,12 +70,32 @@ typedef struct {
     uint16_t decode_len;
 } r2s_vec_messages_t;
 
+/* One step of a handshake transcript: which side sent it, at which
+ * millisecond, and the wire bytes with the delimiter. */
+typedef struct {
+    uint8_t from_host;
+    uint32_t at_ms;
+    const uint8_t *frame;
+    uint16_t frame_len;
+    const char *frame_hex; /* NULL when the step gives no hex text */
+} r2s_vec_session_step_t;
+
+/* A whole transcript: the file's name and its ordered steps. */
+typedef struct {
+    const char *where;
+    const char *covers;
+    const char *name;
+    const r2s_vec_session_step_t *steps;
+    uint16_t nsteps;
+} r2s_vec_session_t;
+
 /* One check per kind, linked in by the test executable: the runner
  * self-test, or the conformance test of the module that implements the kind. */
 void r2s_vec_check_crc(const r2s_vec_crc_t *v);
 void r2s_vec_check_frames(const r2s_vec_frames_t *v);
 void r2s_vec_check_messages(const r2s_vec_messages_t *v);
 void r2s_vec_check_rcobs(const r2s_vec_rcobs_t *v);
+void r2s_vec_check_session(const r2s_vec_session_t *v);
 void r2s_vec_check_varint(const r2s_vec_varint_t *v);
 
 #endif
