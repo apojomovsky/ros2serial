@@ -546,5 +546,36 @@ def test_long_topic_names_emit_clang_format_clean_code(tmp_path):
     pair_c = tmp_path / "r2s_generated.c"
     pair_h.write_text(header, encoding="utf-8")
     pair_c.write_text(source, encoding="utf-8")
+    singles = []
+    for index, (name, direction) in enumerate(
+        [
+            ("a" * 113, "sub"),
+            ("a" * 114, "sub"),
+            ("a" * 113, "pub"),
+            ("a" * 114, "pub"),
+            (f"e_sub_{'a' * 190}", "sub"),
+            ("n1_x2_" + "a" * 100, "sub"),
+            ("n1_x2_" + "a" * 100, "pub"),
+        ]
+    ):
+        single = Config(
+            node="r2s_single",
+            topics=(Topic(name=name, type_name="std_msgs/msg/Float32", direction=direction),),
+            distro="jazzy",
+            handshake="full",
+            tier="M",
+            features=("time", "log"),
+            bounds={},
+            default_string_bound=None,
+            max_frame=None,
+        )
+        repository = msgs.MessageRepository()
+        resolved = bounds.resolve(repository, ["std_msgs/msg/Float32"])
+        header, source = topics.generate(single, resolved, repository)
+        single_h = tmp_path / f"r2s_single_{index}.h"
+        single_c = tmp_path / f"r2s_single_{index}.c"
+        single_h.write_text(header, encoding="utf-8")
+        single_c.write_text(source, encoding="utf-8")
+        singles.extend([single_h, single_c])
     _stage_style(tmp_path)
-    _clang_format_clean([pair_h, pair_c])
+    _clang_format_clean([pair_h, pair_c] + singles)
