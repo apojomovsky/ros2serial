@@ -472,16 +472,12 @@ def _comment_lines(first: str, cont: str, last: str, text: str, limit: int = 110
 def _doc_lines(template: list, text: str, limit: int = 110) -> list:
     """A doc comment wrapped the way clang-format wraps one.
 
-    Kept when it fits, else refilled greedily. The refill stays only when
-    no line protrudes past the limit by more than seven characters, the
-    observed split between a refill clang-format keeps and one it drops.
+    Kept when it fits, else refilled greedily. The refill is clang-format's
+    own reflow shape, so it is stable wherever the comment lands.
     """
     if all(len(row) <= limit for row in template):
         return template
-    filled = _comment_lines("/* ", " * ", " */", text, limit)
-    if any(len(row) > limit + 7 for row in filled):
-        return template
-    return filled
+    return _comment_lines("/* ", " * ", " */", text, limit)
 
 
 def emit_h(table: TopicTable) -> str:
