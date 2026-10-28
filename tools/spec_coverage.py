@@ -168,7 +168,11 @@ def check(root: Path, base: str | None = None) -> Report:
     design = root / "docs/00-design.md"
     tickets = set(DESIGN_TICKET.findall(design.read_text(encoding="utf-8"))) if design.is_file() else None
     base_text = _git_show(root, base, "spec/protocol.md") if base else ""
-    base_rules = set(DEFINITION.findall(base_text or ""))
+    if base_text is None:
+        # The shrink check below compares against the base rules; name the unreadable base.
+        report.problems.append(f"spec/protocol.md at {base}: unreadable (not UTF-8)")
+        base_text = ""
+    base_rules = set(DEFINITION.findall(base_text))
     base_rules = {r for r, _ in base_rules}
     base_pending_text = _git_show(root, base, PENDING) if base else ""
     base_pending_text = base_pending_text or ""

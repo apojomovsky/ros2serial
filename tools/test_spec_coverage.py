@@ -274,11 +274,11 @@ def test_a_spec_that_is_not_utf8_is_one_problem_line(tmp_path):
     assert found[0].startswith("spec/protocol.md: unreadable ("), found
 
 
-def test_a_base_spec_that_is_not_utf8_does_not_crash(tmp_path):
+def test_a_base_spec_that_is_not_utf8_is_named(tmp_path):
     root = tree(tmp_path, {"spec/vectors/rcobs/a.yaml": "covers: [AAA-1, AAA-2]\ncases: []\n"})
     (root / "spec/protocol.md").write_bytes(SPEC.encode("utf-8") + b"\xff")
     _git(root, "init", "-q")
     _git(root, "add", ".")
     _git(root, "commit", "-q", "-m", "base")
     (root / "spec/protocol.md").write_text(SPEC)
-    assert spec_coverage.check(root, base="HEAD").problems == []
+    assert spec_coverage.check(root, base="HEAD").problems == ["spec/protocol.md at HEAD: unreadable (not UTF-8)"]
