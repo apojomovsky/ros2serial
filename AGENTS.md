@@ -40,6 +40,7 @@ tracked files.
 | `fuzz TARGET=<name>` | Run one libFuzzer target for 60 s |
 | `size-report` | Regenerate the flash, RAM and stack report |
 | `vectors` | Validate every vector file |
+| `regen` | Regenerate every version-stamped generated file (goldens, example and cpp libraries, posix sources) |
 | `docs-gen` | Regenerate reference docs (CLI, vectors, bridge parameters) |
 | `fmt` / `lint` / `check-warnings` | Formatting, linters (advisory), warnings (hard gate) |
 | `setup-hooks` / `pre-pr-check` | Install hooks / run the takeoff ritual |

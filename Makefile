@@ -26,7 +26,7 @@ DOCKER_RUN = $(DOCKER_BASE) $(foreach v,$(PASS_VARS),-e $(v)) $(IMAGE)
 in_image = $(if $(R2S_IN_IMAGE),$(1),$(DOCKER_RUN) $(1))
 pending = echo "make $(1): not available until $(2)"; exit 1
 
-.PHONY: help bootstrap doctor image shell exec test ci-local compile fuzz size-report vectors docs-gen \
+.PHONY: help bootstrap doctor image shell exec test ci-local compile fuzz size-report vectors regen docs-gen \
 	fmt lint check-warnings setup-hooks pre-pr-check guard-main-clone cache-dir
 
 help: ## List all targets
@@ -69,6 +69,9 @@ size-report: ## Regenerate the flash, RAM and stack report
 vectors: guard-main-clone cache-dir ## Validate every vector file and regenerate the fuzz seeds
 	@$(call in_image,python3 tools/vectors_check.py)
 	@$(call in_image,python3 tools/fuzz_corpus.py)
+
+regen: cache-dir ## Regenerate every version-stamped generated file (goldens, example and cpp libraries, posix sources)
+	@$(call in_image,python3 tools/refresh_generated.py)
 
 docs-gen: ## Regenerate reference docs (CLI, vectors, bridge parameters)
 	@$(call pending,docs-gen,G1 and H1 in docs/00-design.md)
