@@ -943,6 +943,9 @@ The generator computes the REP-2011 RIHS01 hash for each type in `gen/r2s_gen/ty
 | `tx_budget_pct` | int | 50 | Cap on host-to-MCU bandwidth, as a percentage of the link |
 | `qos_depth` | int | 10 | Depth for publishers and subscriptions created for the MCU |
 
+The package ships these defaults as `config/r2s_bridge.params.yaml`, started
+by `launch/r2s_bridge.launch.py` with `port` and `params_file` arguments.
+
 ### Published by the bridge
 
 - `/diagnostics` (via `diagnostic_updater`): link state, boot ID, protocol version, MCU counters from heartbeats, sequence gaps per topic, time sync offset, drift and round trip.
