@@ -288,6 +288,15 @@ The marker lives inside a fenced block, so the check reads it as text:
     <!-- snippet: skip until #75: template placeholders, never literal C -->
 ```
 
+A tagged fence shown only as literal text, for example inside an indented
+block, carries the same marker alone on its own line at columns 0 to 3
+directly above it. The check skips the example without compiling it:
+
+<!-- snippet: skip until #193: literal fence syntax example, never compiled -->
+    ```c
+    int x = 1;
+    ```
+
 ## 10. Key end-to-end scenarios
 
 In `tests/e2e/`, each a launch_testing test parameterized by MCU backend (posix, simavr, hardware) and registration path:
