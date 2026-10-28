@@ -3,6 +3,7 @@
 import re
 from pathlib import Path
 
+from r2s_gen import bundle
 from r2s_gen.version import PROTOCOL_VERSION, __version__
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +22,16 @@ def test_the_generator_version_is_the_repository_version():
 def test_the_ros_package_version_is_the_repository_version():
     manifest = (ROOT / "gen" / "package.xml").read_text(encoding="utf-8")
     assert _capture(r"<version>([^<]+)</version>", manifest) == __version__
+
+
+def test_the_bridge_package_version_is_the_repository_version():
+    manifest = (ROOT / "bridge" / "r2s_bridge" / "package.xml").read_text(encoding="utf-8")
+    assert _capture(r"<version>([^<]+)</version>", manifest) == __version__
+
+
+def test_the_bundled_library_version_is_the_repository_version():
+    properties = bundle.bundle()["library.properties"]
+    assert _capture(r"\nversion=([^\n]+)", properties) == __version__
 
 
 def test_the_protocol_version_is_the_one_the_core_announces():
