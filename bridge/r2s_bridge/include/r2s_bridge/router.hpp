@@ -61,12 +61,12 @@ class Router
     // Advances the session and flushes due host-to-MCU frames.
     void poll();
 
-    // One routed topic's H8 values: the announced name and direction, the
+    // One announced topic's H8 values: the announced name and direction, the
     // host's TOPIC_STATUS verdict for it ([CTL-13]), the MCU-to-host frames
     // it skipped ([FRM-15]), and the host-to-MCU payloads the pacer dropped
     // ([SES-26], [SES-30]). The direction the topic never uses reads 0.
-    // Every announced topic is listed, including one the host refused: its
-    // verdict says why it carries no traffic.
+    // Every announced topic is listed in announcement order, including one
+    // the host refused: its verdict says why it carries no traffic.
     struct TopicDiagnostics {
         std::uint8_t topic_id = 0;
         std::string topic_name;
