@@ -158,6 +158,11 @@ class Session
     // handshake ([SES-19], [SES-21]). Link timeouts re-handshake without a
     // HELLO and do not count.
     std::uint32_t resets() const;
+    // Unsent bytes held for the link, user and control frames together.
+    std::size_t pending_bytes() const;
+    // Control frames a newer frame of the same slot replaced while the link
+    // could not take bytes, for the H8 diagnostics ([SES-33]).
+    std::uint32_t control_coalesced() const;
     // Queues one host-to-MCU payload on its topic, assigning the topic's next
     // seq and flushing the link. The seq restarts at 0 after each handshake.
     // False when the link already holds the MCU's receive capacity in unsent

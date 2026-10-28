@@ -273,6 +273,7 @@ so unit and integration tests cover them and no vector does.
 - [SES-30] Each host-to-MCU queue holds `qos_depth` messages, or one when the topic is keep-latest. Past that the oldest message is dropped and counted.
 - [SES-31] A generic publisher or subscription created for an MCU topic keeps the last `qos_depth` messages, with reliable delivery when the announced flags name the reliable channel and best effort otherwise.
 - [SES-32] The host holds at most the MCU's announced receive capacity in unsent user-topic bytes, plus the frame in flight. A further user frame waits for the link instead of growing the host heap. Control frames keep their own retry rules.
+- [SES-33] While the link cannot take bytes, the host keeps at most one queued frame per control kind (HELLO_REQ, TOPIC_REQ, READY, heartbeat, PING), with the newer replacing the older in place and keeping its seq, and at most one TOPIC_STATUS per topic id. A frame already reaching the port is left to finish. Each replaced frame is counted. On a return to HANDSHAKING the host drops its pending control frames.
 
 ## 9. Codec descriptors (local)
 
