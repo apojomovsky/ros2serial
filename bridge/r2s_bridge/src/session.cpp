@@ -552,11 +552,14 @@ struct Session::Impl {
             log(SessionLog::kError, "TOPIC refused: the hash of '" + info.type_name +
                                         "' is not the installed one, for topic '" + info.topic_name + "'");
         } else {
+            // A name announced twice is one conflict, whatever the
+            // directions ([CTL-13]): with one type the MCU would get its
+            // own publications back through the bridge.
             for (const TopicInfo &seen : collected) {
-                if (seen.topic_name == info.topic_name && seen.device_to_host() == info.device_to_host()) {
+                if (seen.topic_name == info.topic_name) {
                     verdict = kTopicStatusNameConflict;
-                    log(SessionLog::kError, "TOPIC refused: the name '" + info.topic_name +
-                                                "' is announced twice in one direction");
+                    log(SessionLog::kError,
+                        "TOPIC refused: the name '" + info.topic_name + "' is announced twice");
                     break;
                 }
             }
