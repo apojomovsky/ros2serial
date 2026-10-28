@@ -10,9 +10,9 @@ into the firmware's header and source pair.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-import hashlib
 from typing import TYPE_CHECKING
 
 from r2s_gen import descriptors, emit, typehash
