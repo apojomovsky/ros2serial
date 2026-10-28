@@ -246,6 +246,40 @@ def test_the_arduino_properties_name_the_node_and_the_toolchain(tmp_path):
     assert "architectures=avr" in properties.splitlines()
 
 
+@pytest.mark.parametrize("layout", ["cmake", "arduino"])
+def test_an_empty_topic_list_is_an_error_in_every_layout(tmp_path, layout):
+    loaded = Config(node="r2s_posix", topics=(), bounds={})
+    repository = msgs.MessageRepository()
+    resolved = bounds.resolve(repository, [])
+
+    with pytest.raises(MessageError) as caught:
+        layouts.generate(loaded, resolved, repository, layout)
+
+    assert str(caught.value) == (
+        "r2s.yaml: topics: a node with no topics has nothing to announce; add at least one topic"
+    )
+
+
+def test_the_generate_command_rejects_an_empty_topic_list(tmp_path, capsys):
+    out = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "generate",
+                "--config",
+                str(write_config("node: r2s_posix\ntopics: []\n", tmp_path)),
+                "--out",
+                str(out),
+                "--layout",
+                "cmake",
+            ]
+        )
+        == 1
+    )
+    assert "a node with no topics has nothing to announce" in capsys.readouterr().err
+
+
 def test_the_cmake_example_matches_the_generator(tmp_path):
     config_path = EXAMPLES / "cmake_minimal" / "r2s.yaml"
     loaded = config.load(config_path)

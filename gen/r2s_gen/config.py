@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from r2s_gen.msgs import MessageError
-from r2s_gen.topics import check_collisions
+from r2s_gen.topics import check_collisions, check_non_empty
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema" / "r2s.schema.json"
 
@@ -330,6 +330,7 @@ def _model(path: str | Path, data: dict) -> Config:
             )
         )
     bounds = {key: value for key, value in data.get("bounds", {}).items() if key != "default_string_bound"}
+    check_non_empty([topic.name for topic in topics], str(path))
     check_collisions([topic.name for topic in topics], str(path))
     return Config(
         node=data["node"],

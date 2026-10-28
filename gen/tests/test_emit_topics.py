@@ -435,3 +435,25 @@ def test_a_topic_table_above_16_raises_the_topic_limit():
     header, _source = topics.generate(loaded, resolved, repository)
 
     assert "#define R2S_TOPIC_MAX_COUNT 17u" in header
+
+
+def test_an_empty_topic_list_is_an_error():
+    loaded = Config(node="base_controller", topics=(), bounds={})
+
+    with pytest.raises(MessageError) as caught:
+        topics.build(loaded, {}, msgs.MessageRepository())
+
+    assert str(caught.value) == (
+        "r2s.yaml: topics: a node with no topics has nothing to announce; add at least one topic"
+    )
+
+
+def test_an_empty_topic_list_is_an_error_at_pair_generation():
+    loaded = Config(node="base_controller", topics=(), bounds={})
+
+    with pytest.raises(MessageError) as caught:
+        topics.generate(loaded, {}, msgs.MessageRepository())
+
+    assert str(caught.value) == (
+        "r2s.yaml: topics: a node with no topics has nothing to announce; add at least one topic"
+    )

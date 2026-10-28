@@ -926,7 +926,7 @@ r2s_status_t r2s_publish_<name>(const <Type> *msg);   /* published topics */
 void r2s_on_<name>(const <Type> *msg);               /* subscribed topics: prototype generated, user implements */
 ```
 
-`<name>` is the topic name with `/` replaced by `_`. A topic name that cannot be mapped to a valid C identifier, or two names that map to the same identifier, is a generator error.
+`<name>` is the topic name with `/` replaced by `_`. A topic name that cannot be mapped to a valid C identifier, or two names that map to the same identifier, is a generator error. An empty topic list is a generator error: a node with no topics has nothing to announce.
 
 ### C type mapping
 
