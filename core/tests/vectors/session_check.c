@@ -65,6 +65,20 @@ static const r2s_replay_event_t replay_reboot[] = {
     {"reset_zero_token", 2000u},
 };
 
+/* One reenactment of each kind per transcript: a second row for the same name
+ * would fire the transition twice. */
+static void check_single_event(const r2s_replay_event_t *events, uint16_t n, const char *where)
+{
+    uint16_t i;
+    uint16_t j;
+
+    for (i = 0u; i < n; i++) {
+        for (j = (uint16_t)(i + 1u); j < n; j++) {
+            TEST_ASSERT_NOT_EQUAL_MESSAGE(0, strcmp(events[i].name, events[j].name), where);
+        }
+    }
+}
+
 /* The rule of the reenacted loss the step models, or NULL when the step runs
  * as written. */
 static const char *loss_rule(const r2s_replay_loss_t *losses, uint16_t n, const r2s_vec_session_t *v,
@@ -309,7 +323,8 @@ static uint16_t exhausted_topic(uint8_t *out)
 }
 
 /* A HELLO payload: the fixed fields of the handshake, with the caller's token
- * and topic count, then the node name. */
+ * and topic count, then the node name. The sizes come from the build, so a
+ * firmware with other limits fails the replay instead of encoding past them. */
 static uint16_t hello_payload(uint8_t *out, uint32_t token, uint8_t topic_count)
 {
     static const char node[] = "node";
@@ -322,14 +337,14 @@ static uint16_t hello_payload(uint8_t *out, uint32_t token, uint8_t topic_count)
     out[len++] = (uint8_t)((token >> 8u) & 0xFFu);
     out[len++] = (uint8_t)((token >> 16u) & 0xFFu);
     out[len++] = (uint8_t)((token >> 24u) & 0xFFu);
-    out[len++] = 0x00u;
-    out[len++] = 0x02u;
-    out[len++] = 0x03u;
-    out[len++] = 0x02u;
-    out[len++] = 0x40u;
-    out[len++] = 0x42u;
-    out[len++] = 0x0Fu;
-    out[len++] = 0x00u;
+    out[len++] = (uint8_t)(R2S_MAX_FRAME & 0xFFu);
+    out[len++] = (uint8_t)((R2S_MAX_FRAME >> 8u) & 0xFFu);
+    out[len++] = (uint8_t)(R2S_FRAMER_RX_CAPACITY & 0xFFu);
+    out[len++] = (uint8_t)((R2S_FRAMER_RX_CAPACITY >> 8u) & 0xFFu);
+    out[len++] = (uint8_t)(R2S_TICK_HZ & 0xFFu);
+    out[len++] = (uint8_t)((R2S_TICK_HZ >> 8u) & 0xFFu);
+    out[len++] = (uint8_t)((R2S_TICK_HZ >> 16u) & 0xFFu);
+    out[len++] = (uint8_t)((R2S_TICK_HZ >> 24u) & 0xFFu);
     out[len++] = 0x00u;
     out[len++] = topic_count;
     out[len++] = (uint8_t)(sizeof node - 1u);
@@ -443,6 +458,8 @@ void r2s_vec_check_session(const r2s_vec_session_t *v)
     uint16_t skipped = 0u;
     uint16_t last_mcu = 0u;
 
+    check_single_event(replay_expire, sizeof replay_expire / sizeof replay_expire[0], v->where);
+    check_single_event(replay_reboot, sizeof replay_reboot / sizeof replay_reboot[0], v->where);
     /* The MCU boots when its first frame goes out: host traffic before that
      * went nowhere, since the port was not open yet (SES-12, SES-13). */
     for (uint16_t i = 0u; i < v->nsteps; i++) {
