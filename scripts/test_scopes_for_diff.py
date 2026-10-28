@@ -34,6 +34,7 @@ def test_core_maps_to_its_sections_and_its_consumers():
         "EXAMPLES": "1",
         "E2E": "both",
         "DOCS": "1",
+        "BRIDGE": "1",
     }
 
 
@@ -60,9 +61,10 @@ def test_bridge_maps_to_bridge_coverage_and_posix_e2e():
     }
 
 
-def test_spec_maps_to_vectors_fuzz_and_scripts():
-    assert scopes("spec/protocol.md") == {**CHEAP, "CORE": "1", "GEN": "1", "FUZZ": "1", "SCRIPTS": "1"}
-    assert scopes("spec/vectors/framer/empty.yaml") == {**CHEAP, "CORE": "1", "GEN": "1", "FUZZ": "1", "SCRIPTS": "1"}
+def test_spec_maps_to_vectors_fuzz_scripts_and_bridge():
+    expected = {**CHEAP, "CORE": "1", "GEN": "1", "FUZZ": "1", "SCRIPTS": "1", "BRIDGE": "1"}
+    assert scopes("spec/protocol.md") == expected
+    assert scopes("spec/vectors/framer/empty.yaml") == expected
 
 
 def test_examples_map_to_examples_and_gen():
