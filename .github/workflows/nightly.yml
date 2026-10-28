@@ -1,0 +1,21 @@
+name: nightly
+
+# Long runs the PR suite cannot afford. Each ticket fills in its own job;
+# C11 brings the long fuzzing.
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz-long:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test FUZZ=1
+        env:
+          R2S_FUZZ_SECONDS: 1800

@@ -152,7 +152,9 @@ def test_examples_scope_runs_its_section(tmp_path):
     assert "== examples" in result.stdout
 
 
-def test_fuzz_scope_runs_its_section(tmp_path):
+def test_fuzz_scope_runs_its_section(tmp_path, monkeypatch):
+    # Seeds only: the run still builds every target and runs each corpus.
+    monkeypatch.setenv("R2S_FUZZ_SECONDS", "0")
     result = run_scope(copy_tree(tmp_path), "FUZZ", build_dir=tmp_path / "build")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "== fuzz" in result.stdout
