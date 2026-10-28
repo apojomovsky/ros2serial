@@ -19,10 +19,5 @@ SES-25  P3
 SYS-3   S5
 TIM-1   P2
 TIM-3   P2
-TIM-4   P2
 TIM-5   P2
-TIM-6   P2
-TIM-7   P2
-TIM-8   P2
-TIM-9   P2
 TIM-11  P2

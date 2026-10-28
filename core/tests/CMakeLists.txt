@@ -238,7 +238,7 @@ endforeach()
 # Vector kinds the C runner does not read yet, each with the ticket that adds
 # it. A kind with files that is in neither list would be silently skipped, so
 # it stops the configure step instead.
-set(R2S_VECTOR_KINDS_PENDING time:S7)
+set(R2S_VECTOR_KINDS_PENDING time:P2)
 file(GLOB kind_dirs LIST_DIRECTORIES true "${R2S_REPO_ROOT}/spec/vectors/*")
 foreach(dir ${kind_dirs})
   get_filename_component(kind "${dir}" NAME)

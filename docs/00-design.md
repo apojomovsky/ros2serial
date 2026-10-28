@@ -143,7 +143,7 @@ bounds:
 #include <ros2serial.h>
 ```
 
-The header expands the list into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator.
+The header expands the list into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator. The header counts the rows itself, so an empty list fails the build with the generator's message instead of emitting an empty table.
 
 **3. Runtime registration, rosserial style** (gcc-class targets only, see User API). Topics are registered while `setup()` runs and live in a RAM table. Registration closes at the first spin; a later registration is an error, never a silent re-handshake.
 
