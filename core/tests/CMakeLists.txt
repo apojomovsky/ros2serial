@@ -191,7 +191,8 @@ r2s_vector_test(vectors_messages messages vectors/messages_check.c ${messages_ve
 # reenactment, and the disputed steps need a vector decision. The replay
 # links the session build above, whose tick the transcripts pin, so it cannot
 # use the shared support library and registers by hand.
-set(R2S_SESSION_REPLAY_NAMES boot_handshake boot_wait_expiry empty_topics pub_sub_handshake)
+set(R2S_SESSION_REPLAY_NAMES boot_handshake boot_wait_expiry duplicate_name_both_directions empty_topics
+                             pub_sub_handshake)
 set(R2S_SESSION_REPLAY_PATHS)
 foreach(name ${R2S_SESSION_REPLAY_NAMES})
   set(path "${R2S_REPO_ROOT}/spec/vectors/session/${name}.yaml")
