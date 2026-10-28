@@ -17,6 +17,8 @@ import scopes_for_diff
 
 ROOT = Path(__file__).resolve().parent.parent
 
+CHEAP = scopes_for_diff.CHEAP
+
 
 def scopes(*paths):
     return scopes_for_diff.scopes_for_paths(list(paths))
