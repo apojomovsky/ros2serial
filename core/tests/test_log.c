@@ -147,7 +147,7 @@ void test_log_seq_increments_per_frame(void)
 /* covers: FRM-4, FRM-5 */
 void test_log_seq_restarts_after_a_handshake(void)
 {
-    const uint8_t ready[] = {0x06u};
+    const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
     uint16_t wire_len;
 
     R2S_LOG_INFO("before");

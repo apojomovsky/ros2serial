@@ -4,8 +4,6 @@
  * generator step; the bundled descriptors compile in the library, which
  * never sees the list. The header is C99, while the sketch compiles as C++,
  * so the include and every function the core calls carry C linkage. */
-#include <EEPROM.h>
-
 #define R2S_NODE_NAME "hello_xmacro"
 #define R2S_TOPICS(X) \
     X(PUB, battery, std_msgs, Float32) \
@@ -20,7 +18,6 @@
  * through compiler.c.extra_flags, since a library sets none of its own. */
 #include <ros2serial.h>
 
-static uint32_t s_boot_id;
 static uint32_t s_cmd_vel_count;
 static uint32_t s_joints_count;
 static uint32_t s_sent;
@@ -55,12 +52,6 @@ uint32_t r2s_port_tick(void)
     return (uint32_t)(micros() / 1000UL);
 }
 
-/* A counter in the first EEPROM cell, so every boot announces a new ID. */
-uint32_t r2s_port_boot_id(void)
-{
-    return s_boot_id;
-}
-
 /* Handle cmd_vel and joints; dispatch calls them from r2s_spin_some(). */
 void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
 {
@@ -78,9 +69,6 @@ void r2s_on_joints(const sensor_msgs__msg__JointState *msg)
 void setup(void)
 {
     Serial.begin(115200);
-    EEPROM.get(0, s_boot_id);
-    s_boot_id += 1u;
-    EEPROM.put(0, s_boot_id);
     if (r2s_session_configure(R2S_NODE_NAME, r2s_topics, R2S_TOPIC_COUNT) != R2S_OK) {
         return;
     }

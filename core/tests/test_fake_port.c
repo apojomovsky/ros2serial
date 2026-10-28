@@ -90,13 +90,6 @@ void test_fake_port_a_write_beyond_tx_free_is_recorded(void)
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_take_overruns());
 }
 
-void test_fake_port_boot_id_is_the_chosen_one(void)
-{
-    fake_port_set_boot_id(0xC0FFEE01u);
-
-    TEST_ASSERT_EQUAL_HEX32(0xC0FFEE01u, r2s_port_boot_id());
-}
-
 void test_fake_port_reset_restores_every_control(void)
 {
     uint8_t b;
@@ -105,7 +98,6 @@ void test_fake_port_reset_restores_every_control(void)
     r2s_port_write(&b, 1);
     fake_port_set_tick(9);
     fake_port_set_tx_free(3);
-    fake_port_set_boot_id(7);
 
     fake_port_reset();
 
@@ -113,7 +105,6 @@ void test_fake_port_reset_restores_every_control(void)
     TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_len());
     TEST_ASSERT_EQUAL_HEX32(0, r2s_port_tick());
     TEST_ASSERT_EQUAL_UINT16(0xFFFF, r2s_port_tx_free());
-    TEST_ASSERT_EQUAL_HEX32(0, r2s_port_boot_id());
     TEST_ASSERT_EQUAL_UINT16(0, fake_port_take_overruns());
     TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_write_calls());
     TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_write_max());

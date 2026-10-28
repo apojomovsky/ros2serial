@@ -1,6 +1,5 @@
 /* Minimal CMake example firmware: the generated pair on an ATmega328P at
  * 16 MHz, publishing battery and counting cmd_vel frames. */
-#include <avr/eeprom.h>
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <stdint.h>
@@ -78,17 +77,6 @@ uint32_t r2s_port_tick(void)
     now = s_ms;
     SREG = flags;
     return now;
-}
-
-/* A counter in the first EEPROM cell, so every boot announces a new ID. The
- * first boot reads erased 0xFFFFFFFF and announces 0. */
-uint32_t r2s_port_boot_id(void)
-{
-    uint32_t boot_id = eeprom_read_dword((const uint32_t *)0);
-
-    boot_id += 1u;
-    eeprom_update_dword((uint32_t *)0, boot_id);
-    return boot_id;
 }
 
 static uint32_t s_cmd_vel_count;

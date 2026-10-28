@@ -10,8 +10,8 @@
 #define FAKE_PORT_CAPACITY 4096u
 #endif
 
-/* Empties RX and TX, sets the tick and boot ID to 0 and tx_free to 0xFFFF
- * (blocking allowed). Called before every test. */
+/* Empties RX and TX, sets the tick to 0 and tx_free to 0xFFFF (blocking
+ * allowed). Called before every test. */
 void fake_port_reset(void);
 
 /* Queues bytes for r2s_port_read(); queuing past the capacity fails the test. */
@@ -43,8 +43,6 @@ void fake_port_advance(uint32_t ticks);
  * tearDown fails the test unless the test took the count itself. */
 void fake_port_set_tx_free(uint16_t free_bytes);
 uint16_t fake_port_take_overruns(void);
-
-void fake_port_set_boot_id(uint32_t boot_id);
 
 /* Reports a misuse of the fake (a full queue, bad hex). The Unity build fails
  * the current test; a build without Unity (libr2s_host, T3) provides its own. */

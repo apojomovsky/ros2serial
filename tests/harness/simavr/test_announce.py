@@ -19,8 +19,7 @@ from r2s_gen.reference import frames
 from test_echo import Harness
 
 NODE_NAME = "announce"
-BOOT_ID = 0xA53C5A3C
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 TOPICS = (
     (16, 0x00, bytes(range(0x00, 0x08)), "std_msgs/msg/Float32", "battery"),
     (17, 0x01, bytes(range(0x10, 0x18)), "geometry_msgs/msg/Twist", "cmd_vel"),
@@ -78,7 +77,7 @@ def solicit_hello(port, seq):
     assert payload[0] == 0x02  # OP_HELLO
     assert payload[1] == PROTOCOL_VERSION
     assert payload[2] == 0x00  # full handshake mode
-    assert int.from_bytes(payload[3:7], "little") == BOOT_ID
+    assert int.from_bytes(payload[3:7], "little") == 0, "no token before the first READY"
     assert payload[16] == len(TOPICS)
     name, _ = read_string(payload, 17)
     assert name == NODE_NAME

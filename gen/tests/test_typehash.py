@@ -11,6 +11,10 @@ from support import write_message
 DISTROS = ["jazzy", "lyrical", "rolling"]
 
 CASES = [
+    (
+        "geometry_msgs/msg/Quaternion",
+        "RIHS01_8a765f66778c8ff7c8ab94afcc590a2ed5325a1d9a076ffff38fbce36f458684",
+    ),
     ("std_msgs/msg/Float32", "RIHS01_7170d3d8f841f7be3172ce5f4f59f3a4d7f63b0447e8b33327601ad64d83d6e2"),
     (
         "builtin_interfaces/msg/Time",
@@ -35,6 +39,10 @@ CASES = [
     (
         "sensor_msgs/msg/JointState",
         "RIHS01_a13ee3a330e346c9d87b5aa18d24e11690752bd33a0350f11c5882bc9179260e",
+    ),
+    (
+        "std_msgs/msg/String",
+        "RIHS01_df668c740482bbd48fb39d76a70dfd4bd59db1288021743503259e948f6b1a18",
     ),
 ]
 
