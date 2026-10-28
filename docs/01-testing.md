@@ -35,7 +35,7 @@ These rules shape how the code is written. They are part of the code review, not
 ### 2.2 C++ layer
 
 - Header-only templates are instantiated in test translation units for every message type the tests use, on the host and with avr-g++.
-- The runtime registration path keeps its RAM table behind the same two accessors as the static path, so the core's tests cover both backends with the same scenarios.
+- The runtime registration path keeps its RAM table behind the same three accessors as the static path, so the core's tests cover both backends with the same scenarios.
 
 ### 2.3 Generator (Python)
 
