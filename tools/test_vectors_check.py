@@ -741,6 +741,25 @@ payload: "{payload}"
     ]
 
 
+def test_a_branching_alias_graph_reports_each_node_once(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "N.msg").write_text("float32 d\nN[] kids\n", encoding="utf-8")
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    depth = 12
+    level = {"d": 1.1, "kids": []}
+    for _ in range(depth):
+        level = {"d": 1.1, "kids": [level, level]}
+    problems = vectors_check.check_float32_exact("messages/fanout.yaml", {"type": "demo_msgs/msg/N", "message": level})
+    trail = "demo_msgs/msg/N"
+    expected = [f"messages/fanout.yaml/message: {trail}.d must be exactly representable in binary32"]
+    for _ in range(depth):
+        trail += ".kids[0].demo_msgs/msg/N"
+        expected.append(f"messages/fanout.yaml/message: {trail}.d must be exactly representable in binary32")
+    assert problems == expected
+
+
 def test_a_cyclic_alias_in_a_message_is_reported_not_a_crash(tmp_path, monkeypatch):
     definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
     definitions.mkdir(parents=True)
