@@ -63,6 +63,7 @@ GENERATED_FIXTURES = (
 # dedented line pops back out. A marker past column 3 of its container gets
 # its own diagnostic.
 FENCE = re.compile(r"^ *```")
+QUOTED_FENCE = re.compile(r"^\s*(?:>\s*|[*+-]\s+|\d{1,9}[.)]\s+)+```")
 MARKER_ANY = re.compile(r"^\s*<!--[ \t]*snippet:.*-->\s*$")
 SWEEP = re.compile(r"^\s*(?:>\s*|[*+-]\s+|\d{1,9}[.)]\s+)*```([A-Za-z0-9+#-]+)")
 STAGED_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]\s*(r2s_generated\.h|r2s_bundled\.h)\s*[">]')
@@ -223,6 +224,18 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
                 continue
             code = "\n".join(_dedent(body_line, indent) for body_line in body) + "\n"
             snippets.append(Snippet(rel, open_line, language, code, ticket, reason=reason))
+            continue
+        if QUOTED_FENCE.match(line):
+            # A fence after a quote or list marker is literal text the scan
+            # never compiles; the sweep reports it when tagged. Skip to its
+            # closer so the closer is not misread as a new fence.
+            i += 1
+            while i < len(lines):
+                if (FENCE.match(lines[i]) and _indent_of(lines[i]) - base <= 3) or QUOTED_FENCE.match(lines[i]):
+                    break
+                i += 1
+            if i < len(lines):
+                i += 1
             continue
         content = _list_content(line, base)
         if content is not None:
