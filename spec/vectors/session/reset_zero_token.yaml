@@ -1,5 +1,5 @@
 name: reset_zero_token
-covers: [SES-16, SES-17, SES-19, SES-20, SES-21]
+covers: [SES-10, SES-16, SES-17, SES-19, SES-20, SES-21]
 steps:
   - from: mcu
     frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f0 ad"

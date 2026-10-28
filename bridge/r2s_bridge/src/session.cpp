@@ -397,14 +397,14 @@ struct Session::Impl {
             return false;
         }
 
-        const bool same_token = seen_token && facts.token == hello.token;
+        const bool same_token = seen_hello && facts.token == hello.token;
         if (state == SessionState::kHandshaking && awaiting_topic && same_token) {
             // The MCU repeats HELLO while it hears nothing; the walk under way
             // is the answer to the first one, so a repeat changes nothing.
             return true;
         }
         hello = facts;
-        seen_token = true;
+        seen_hello = true;
         // A HELLO that lands while connected is a reset, and the same HELLO
         // announces the new handshake, so no extra HELLO_REQ is needed
         // ([SES-19], [SES-21]).
@@ -599,7 +599,7 @@ struct Session::Impl {
     std::int64_t last_rx_ms = 0;
 
     HelloFacts hello;
-    bool seen_token = false;
+    bool seen_hello = false;
     bool awaiting_topic = false;
     std::uint8_t requested_index = 0;
     int retries = 0;
@@ -627,9 +627,9 @@ SessionState Session::state() const
     return impl_->state;
 }
 
-bool Session::has_token() const
+bool Session::seen_hello() const
 {
-    return impl_->seen_token;
+    return impl_->seen_hello;
 }
 
 std::uint32_t Session::token() const

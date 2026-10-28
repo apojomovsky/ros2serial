@@ -412,7 +412,7 @@ TEST(SessionHandshake, RefusesAFeaturesByteWithAReservedBit)
     fixture.advance_to(10);
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 2u, 0x40u));
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
-    EXPECT_FALSE(fixture.session().has_token());
+    EXPECT_FALSE(fixture.session().seen_hello());
 }
 
 TEST(SessionHandshake, AcceptsAnMcuWhoseDoubleIs32Bits)
@@ -438,7 +438,7 @@ TEST(SessionHandshake, AcceptsTheHelloOfTheMcusOwnVector)
     fixture.deliver_frame(kControl, 0u, payload);
     EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking)
         << "one topic to collect, so the walk has just begun";
-    EXPECT_EQ(fixture.session().token(), 0x44332211u);
+    EXPECT_EQ(fixture.session().token(), 1u);
 }
 
 TEST(SessionHandshake, RefusesATickRateThatIsNotThousandTimesADivisor)
@@ -770,7 +770,7 @@ TEST(SessionHandshake, RefusesAMaxFrameAboveTheProtocolLimit)
     hello[8] = 0xFEu;
     fixture.deliver_frame(kControl, 0u, hello);
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
-    EXPECT_FALSE(fixture.session().has_token());
+    EXPECT_FALSE(fixture.session().seen_hello());
 }
 
 TEST(SessionHandshake, RefusesACompactHandshake)
@@ -791,7 +791,7 @@ TEST(SessionHandshake, RefusesATruncatedHello)
     hello.resize(10u);
     fixture.deliver_frame(kControl, 0u, hello);
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
-    EXPECT_FALSE(fixture.session().has_token());
+    EXPECT_FALSE(fixture.session().seen_hello());
 }
 
 TEST(SessionHandshake, RefusesANodeNameWithBytesLeftOver)
