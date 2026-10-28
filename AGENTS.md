@@ -78,7 +78,7 @@ Work is plain GitHub issues.
 
 **Takeoff ritual (`make pre-pr-check`).** It exits 1 with the exact fix list while anything blocking is outstanding:
 
-1. Working tree clean, branch not behind `origin/master`.
+1. Working tree clean. A branch behind `origin/master` merges it in only when the two diffs overlap or conflict; otherwise the ritual notes how far behind it is and passes, because CI tests the merge result.
 2. Work is in a `.worktrees/` worktree, not on `master`.
 3. No plan files in the final diff, wherever they are written; load-bearing decisions explained where they apply, in the same commit.
 4. Commit hygiene: Conventional Commit subjects, at most 3 lines, no trailers, no em-dashes, no whitespace errors. The title the PR will carry is checked against the commits, so it carries their strongest type and any `!`.
@@ -90,7 +90,7 @@ Work is plain GitHub issues.
 10. PR body: real newlines, `Closes #N`, a `## Review` section.
 11. Hooks installed.
 12. README and docs freshness: user-visible changes update `README.md` or `docs/` in the same PR, or the PR body says `README: n/a` (advisory).
-13. `make pre-pr-check TEST=1` also runs the full suite.
+13. `make pre-pr-check TEST=1` runs the suite scopes the diff touches (`scripts/scopes_for_diff.py`), plus the cheap checks, and records the pass under the same stamp the pre-push hook checks, so pushing that tree runs nothing twice. `R2S_FULL=1` runs the full suite. CI still runs everything on the merge with master, and a PR merges only on green CI.
 
 Write PR bodies to a unique file under the cache, which the dev image can see (`mktemp "$HOME/.cache/ros2serial/pr-<issue>-XXXXXX.md"`), and pass it as `make pre-pr-check PR_BODY=<file>`. Never use an inline `\n` string, and never a shared fixed path such as `/tmp/pr_body.md`, which another agent can overwrite.
 

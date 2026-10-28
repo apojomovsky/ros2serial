@@ -4,9 +4,7 @@
 #   BASE     ref the PR targets (default origin/master; a PR is never stacked)
 #   PR_BODY  file holding the PR body, to check it too
 #   PR_TITLE the title the PR will carry, to check it against the commits
-#   TEST=1   also run the full suite
-#   R2S_SUITE  script to run instead of the suite, so a test can see what the
-#              suite was given
+#   TEST=1   also run the suite scopes the diff touches (R2S_FULL=1 runs all)
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 base=${BASE:-origin/master}
@@ -15,14 +13,26 @@ notes=()
 fix() { fixes+=("$1"); }
 note() { notes+=("$1"); }
 
-# 1. Clean tree, not behind the base.
+# 1. Clean tree; behind the base only matters when the diffs overlap.
 [ -z "$(git status --porcelain)" ] || fix "working tree is not clean: commit or stash first"
 if ! git rev-parse --verify -q "$base" >/dev/null; then
   fix "base $base not found: fetch it, or set BASE"
 elif ! git merge-base --is-ancestor "$base" HEAD; then
-  # Merge the base in: the PR keeps its history and the squash drops the merge
-  # commit, so catching up needs no force push.
-  fix "branch is behind $base: merge $base into it (git merge $base) and push"
+  mb=$(git merge-base "$base" HEAD)
+  behind=$(git rev-list --count HEAD.."$base")
+  overlap=$(comm -12 <(git diff --name-only "$mb" HEAD | sort -u) <(git diff --name-only "$mb" "$base" | sort -u))
+  # A trial merge names a conflict without moving the branch: MERGE_HEAD
+  # says whether a merge started, so only a started one is aborted.
+  conflict=0
+  git merge --no-commit --no-ff --no-edit "$base" >/dev/null 2>&1 || conflict=1
+  git rev-parse -q --verify MERGE_HEAD >/dev/null && git merge --abort >/dev/null 2>&1
+  if [ -n "$overlap" ] || [ "$conflict" = 1 ]; then
+    # Merge the base in: the PR keeps its history and the squash drops the
+    # merge commit, so catching up needs no force push.
+    fix "branch is behind $base: merge $base into it (git merge $base) and push"
+  else
+    note "branch is $behind commits behind $base (no overlapping files; CI tests the merge result)"
+  fi
 fi
 
 # 2. In a worktree, on a ticket branch.
@@ -123,7 +133,7 @@ if grep -qE '^(core/include/|cpp/|gen/r2s_gen/cli.py|bridge/r2s_bridge/config/)'
   note "user-visible files changed without README.md or docs/: update them or write README: n/a in the PR body"
 fi
 
-# 14. The full suite.
+# 14. The suite scopes the diff touches, then the stamp the push checks.
 if [ "${TEST:-}" = 1 ]; then
   # The suite's own tests call this ritual, and a ritual that sees TEST=1
   # runs the suite again, so TEST does not go down with it. The scopes do:
@@ -132,12 +142,32 @@ if [ "${TEST:-}" = 1 ]; then
   # rather than the outer ones. The title goes with them: the suite's own
   # tests call the ritual, and a title meant for this branch would be
   # checked against their fixture commits. R2S_SUITE names the script to
-  # run, so a test can see what the suite was given.
+  # run, so a test can see what the suite was given. R2S_FULL=1 runs the
+  # suite unscoped instead.
   suite=${R2S_SUITE:-$root/scripts/ci-test.sh}
+  if [ "${R2S_FULL:-}" = 1 ]; then scopes="FULL=1"; else
+    scopes=$(python3 "$root/scripts/scopes_for_diff.py" --base "$base" 2>/dev/null) || scopes="FULL=1"
+  fi
+  # Caller scopes stay, so the child does what this run was asked to do; the
+  # computed scopes add. A caller E2E and a computed E2E merge to both, so
+  # neither backend is dropped.
+  computed_e2e=""
+  computed_rest=""
+  for s in $scopes; do
+    case $s in E2E=*) computed_e2e=$s ;; *) computed_rest="$computed_rest $s" ;; esac
+  done
+  if [ -n "$computed_e2e" ]; then
+    if [ -z "${E2E:-}" ] || [ "E2E=$E2E" = "$computed_e2e" ]; then
+      computed_rest="$computed_rest $computed_e2e"
+    else
+      computed_rest="$computed_rest E2E=both"
+    fi
+  fi
   # The output is kept, so a failure can be shown without running the suite
   # again: a second run would be refused by the lock the first one holds.
   suite_log=$(mktemp "${TMPDIR:-/tmp}/r2s-suite.XXXXXX")
-  if ! env -u TEST -u BASE -u PR_BODY -u PR_TITLE bash "$suite" >"$suite_log" 2>&1; then
+  # shellcheck disable=SC2086 # the scopes are one assignment per word.
+  if ! env -u TEST -u BASE -u PR_BODY -u PR_TITLE $computed_rest bash "$suite" >"$suite_log" 2>&1; then
     # The failed sections are the point, so they are shown. The suite names
     # them on its last line; a section that is not named falls back to the
     # last lines of the log.
@@ -153,6 +183,11 @@ if [ "${TEST:-}" = 1 ]; then
     fix "the suite fails: bash scripts/ci-test.sh"
   else
     rm -f "$suite_log"
+    # The pass is recorded under the same key the pre-push hook checks, so
+    # pushing the tree that just passed runs nothing twice.
+    stamp="$(git rev-parse --absolute-git-dir)/r2s-pre-push-stamp"
+    bash "$root/scripts/suite-stamp.sh" key "$scopes" >"$stamp" 2>/dev/null || \
+      note "the suite stamp was not recorded ($stamp)"
   fi
 fi
 

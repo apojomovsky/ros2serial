@@ -2,6 +2,7 @@
 # The single suite script: CI runs exactly this, and so does `make test`.
 # Scope with one or more of LINT=1 SCRIPTS=1 COMMITS=1 CORE=1 GEN=1 BRIDGE=1
 # E2E=<backend> COVERAGE=1 DOCS=1 EXAMPLES=1 FUZZ=1; no scope runs everything.
+# E2E takes posix, avr, or both; both runs each backend once in one scope.
 # COMMITS checks COMMIT_RANGE (default origin/master..HEAD) and PR_TITLE when set,
 # then runs the prose gate on the same range. Exits non-zero if any section fails.
 set -uo pipefail
@@ -144,8 +145,10 @@ if wants E2E; then scope_now=E2E
         section e2e-posix bash tests/e2e/run.sh ;;
     avr) section e2e-avr bash tests/harness/simavr/run.sh ;;
     posix) section e2e-posix bash tests/e2e/run.sh ;;
+    both) section e2e-avr bash tests/harness/simavr/run.sh
+        section e2e-posix bash tests/e2e/run.sh ;;
     *)
-      echo "unknown E2E backend '${E2E}': known are posix and avr" >&2
+      echo "unknown E2E backend '${E2E}': known are posix, avr and both" >&2
       failed+=("e2e")
       ;;
   esac
