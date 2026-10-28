@@ -28,6 +28,7 @@ from launch import LaunchContext
 from launch.actions import ExecuteProcess, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.substitutions import FindPackageShare
+from rcl_interfaces.srv import GetParameters
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32
 
@@ -227,18 +228,27 @@ class TestBridgePosixLaunch(unittest.TestCase):
         finally:
             node.destroy_node()
 
-    def test_params_file_sets_qos_depth(self):
-        # The scratch params file copies the example with qos_depth 7, so a
-        # depth of 7 on the announced publisher proves the file was applied.
-        node = rclpy.create_node("h9_qos_probe")
+    def test_params_file_reaches_the_bridge(self):
+        # The scratch params file copies the example with qos_depth 7, while
+        # port arrives through the launch argument: reading both back from
+        # the bridge proves the file and the argument were applied.
+        node = rclpy.create_node("h9_param_probe")
         try:
-            deadline = time.monotonic() + HANDSHAKE_TIMEOUT
-            while True:
-                infos = node.get_publishers_info_by_topic("/battery")
-                if infos and infos[0].qos_profile.depth == 7:
-                    return
-                self.assertLess(time.monotonic(), deadline, "bridge ignored qos_depth from the params file")
-                time.sleep(0.2)
+            client = node.create_client(GetParameters, "/r2s_bridge/get_parameters")
+            self.assertTrue(
+                client.wait_for_service(timeout_sec=HANDSHAKE_TIMEOUT),
+                "bridge parameter service never appeared",
+            )
+            request = GetParameters.Request()
+            request.names = ["qos_depth", "port", "baud"]
+            future = client.call_async(request)
+            rclpy.spin_until_future_complete(node, future, timeout_sec=FLOW_TIMEOUT)
+            self.assertTrue(future.done(), "bridge never answered the parameter query")
+            pairs = zip(request.names, future.result().values, strict=True)
+            values = {name: value for name, value in pairs}
+            self.assertEqual(values["qos_depth"].integer_value, 7)
+            self.assertEqual(values["port"].string_value, _RELAY.host_port)
+            self.assertEqual(values["baud"].integer_value, 115200)
         finally:
             node.destroy_node()
 
