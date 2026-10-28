@@ -370,3 +370,19 @@ def test_skip_marker_with_empty_reason_is_an_error(tmp_path):
     problems = snippets_check.check_tree(root)
     assert len(problems) == 1
     assert "reason is empty" in problems[0]
+
+
+def test_quoted_list_item_fence_is_reported(tmp_path):
+    text = "# T\n\n> - ```c\n>   int broken = ;\n>   ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "never opened a snippet" in problems[0]
+
+
+def test_quoted_ordered_item_fence_is_reported(tmp_path):
+    text = "# T\n\n> 1. ```c\n>    int broken = ;\n>    ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "never opened a snippet" in problems[0]
