@@ -4,6 +4,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* The deepest nesting the firmware's tables use; the codec sizes its
  * stack from it, and a build that sets it first keeps its value. */
 #ifndef R2S_MAX_NEST
@@ -40,6 +44,7 @@ typedef struct std_msgs__msg__String {
 #endif
 
 #include "r2s/r2s_codec.h"
+#include "r2s/r2s_port.h"
 #include "r2s/r2s_session.h"
 #include "r2s/r2s_topics.h"
 
@@ -70,5 +75,9 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg);
  * with; a board that renames topics at launch copies this table. */
 extern const r2s_topic_t R2S_FLASH r2s_topics[R2S_TOPIC_COUNT];
 extern const r2s_codec_table_t r2s_generated_table;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

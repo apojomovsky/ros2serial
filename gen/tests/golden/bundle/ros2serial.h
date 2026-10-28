@@ -12,6 +12,7 @@
 
 #include "r2s/r2s_codec.h"
 #include "r2s/r2s_framer.h"
+#include "r2s/r2s_port.h"
 #include "r2s/r2s_session.h"
 #include "r2s/r2s_topics.h"
 #include "r2s/r2s_tx.h"
@@ -25,8 +26,8 @@
 #endif
 
 /* A C++ sketch includes this header plainly: the expansion below carries
- * C linkage, so only the port functions and handlers still need an
- * extern "C" block of their own. */
+ * C linkage, so handler definitions keep it with no extern "C" block
+ * of their own, and the port glue lives in the library. */
 #ifdef __cplusplus
 extern "C" {
 #endif
