@@ -25,10 +25,17 @@ CORE_SRC = CORE / "src"
 SKETCH_TOPICS = """\
 #define R2S_NODE_NAME "test_bundle"
 #define R2S_TOPICS(X) \\
-    X(PUB, battery, std_msgs, Float32) \\
-    X(PUB, greeting, std_msgs, String) \\
-    X(SUB, cmd_vel, geometry_msgs, Twist) \\
-    X(SUB, joints, sensor_msgs, JointState)
+    X(Publisher, std_msgs::msg::Float32, battery_pub, "battery") \\
+    X(Publisher, std_msgs::msg::String, greeting_pub, "greeting") \\
+    X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel) \\
+    X(Subscription, sensor_msgs::msg::JointState, joints_sub, "joints", on_joints)
+"""
+
+SKETCH_INCLUDES = """\
+#include <geometry_msgs/msg/twist.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/float32.hpp>
+#include <std_msgs/msg/string.hpp>
 """
 
 
@@ -194,13 +201,44 @@ def compile_unit(root, source, extra=()):
     return obj
 
 
+def compile_cxx_unit(root, source):
+    """Compile one sketch translation unit: rows name C++ types, so the proof builds as C++."""
+    obj = root / (Path(source).stem + ".o")
+    compiled = subprocess.run(
+        [
+            "g++",
+            "-std=c++11",
+            "-pedantic",
+            "-Werror",
+            "-Wall",
+            "-Wextra",
+            "-I",
+            str(root),
+            "-I",
+            str(root / "src"),
+            "-I",
+            str(CORE_INCLUDE),
+            "-c",
+            str(source),
+            "-o",
+            str(obj),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert compiled.returncode == 0, compiled.stderr
+    return obj
+
+
 def compile_sketch(root, sources, core_sources, extra=()):
     """Link the sketch: its translation units read the limits from the header,
     while the core ones take them as defines, as the Arduino build does."""
-    objects = [compile_unit(root, source) for source in sources]
+    objects = [
+        compile_cxx_unit(root, source) if source.endswith(".cpp") else compile_unit(root, source) for source in sources
+    ]
     objects += [compile_unit(root, source, extra) for source in core_sources]
     linked = subprocess.run(
-        ["cc", *[str(obj) for obj in objects], "-o", str(root / "sketch")],
+        ["g++", *[str(obj) for obj in objects], "-o", str(root / "sketch")],
         capture_output=True,
         text=True,
     )
@@ -247,11 +285,12 @@ def host_sketch(frame, nest):
 #include <string.h>
 
 """
+        + SKETCH_INCLUDES
         + SKETCH_TOPICS
         + f'#define EXPECTED_FRAME {frame}u\n#define EXPECTED_NEST {nest}u\n#include "ros2serial.h"\n'
-        + "static geometry_msgs__msg__Twist got_twist;\n"
+        + "static geometry_msgs::msg::Twist got_twist;\n"
         + """\
-static sensor_msgs__msg__JointState got_joints;
+static sensor_msgs::msg::JointState got_joints;
 static uint8_t got_twist_calls;
 static uint8_t got_joints_calls;
 
@@ -259,15 +298,15 @@ extern uint8_t stub_tx_payload[2048];
 extern uint16_t stub_tx_len;
 extern uint8_t stub_refused;
 
-void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
+void on_cmd_vel(const geometry_msgs::msg::Twist &msg)
 {
-    got_twist = *msg;
+    got_twist = msg;
     got_twist_calls++;
 }
 
-void r2s_on_joints(const sensor_msgs__msg__JointState *msg)
+void on_joints(const sensor_msgs::msg::JointState &msg)
 {
-    got_joints = *msg;
+    got_joints = msg;
     got_joints_calls++;
 }
 
@@ -299,9 +338,9 @@ int main(void)
     static const uint8_t float_hash[] = {"""
         + hashes["std_msgs/msg/Float32"]
         + """};
-    std_msgs__msg__Float32 battery;
-    std_msgs__msg__String greeting;
-    sensor_msgs__msg__JointState joints;
+    std_msgs::msg::Float32 battery;
+    std_msgs::msg::String greeting;
+    sensor_msgs::msg::JointState joints;
     r2s_codec_out_t out = {NULL, 0u, 0u, 0u};
     uint8_t field = 0xFFu;
     uint8_t narrow = 0u;
@@ -319,13 +358,13 @@ int main(void)
 
     memset(&battery, 0, sizeof battery);
     battery.data = 1.5f;
-    CHECK(r2s_publish_battery(&battery) == R2S_OK);
+    CHECK(r2s_publish_battery_pub(&battery) == R2S_OK);
     CHECK(stub_tx_len == sizeof battery_payload);
     CHECK(memcmp(stub_tx_payload, battery_payload, sizeof battery_payload) == 0);
 
     memset(&greeting, 0, sizeof greeting);
     strcpy(greeting.data, "hi");
-    CHECK(r2s_publish_greeting(&greeting) == R2S_OK);
+    CHECK(r2s_publish_greeting_pub(&greeting) == R2S_OK);
     CHECK(stub_tx_len == sizeof greeting_payload);
     CHECK(memcmp(stub_tx_payload, greeting_payload, sizeof greeting_payload) == 0);
 
@@ -376,7 +415,7 @@ int main(void)
     out.len = 0u;
     field = 0xFFu;
     {
-        geometry_msgs__msg__Twist narrow_twist;
+        geometry_msgs::msg::Twist narrow_twist;
         uint8_t narrow_buf[64];
         out.buf = narrow_buf;
         out.cap = (uint16_t)sizeof narrow_buf;
@@ -489,13 +528,13 @@ def test_the_expansion_matches_the_reference_on_the_host(tmp_path):
     root = sketch_dir(tmp_path, out_files)
     frame = frame_limit(out_files)
     nest = nest_limit(out_files)
-    (root / "sketch.c").write_text(host_sketch(frame, nest), encoding="utf-8")
+    (root / "sketch.cpp").write_text(host_sketch(frame, nest), encoding="utf-8")
     (root / "stubs.c").write_text(STUBS, encoding="utf-8")
 
     compile_sketch(
         root,
         [
-            str(root / "sketch.c"),
+            str(root / "sketch.cpp"),
             str(root / "stubs.c"),
             str(root / "src" / "r2s_bundled.c"),
         ],
@@ -547,12 +586,36 @@ def compile_case(root, body):
         text=True,
     )
 
+    (root / "case.cpp").write_text(body, encoding="utf-8")
+
+    return subprocess.run(
+        [
+            "g++",
+            "-std=c++11",
+            "-fsyntax-only",
+            "-I",
+            str(root),
+            "-I",
+            str(root / "src"),
+            "-I",
+            str(CORE_INCLUDE),
+            str(root / "case.cpp"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+
+def case_with_rows(rows):
+    """One topic list with the message headers the rows name, as a sketch writes them."""
+    return SKETCH_INCLUDES + "#define R2S_TOPICS(X) " + rows + '\n#include "ros2serial.h"\n'
+
 
 def test_an_unknown_type_in_the_list_fails_naming_it(tmp_path):
     root = sketch_dir(tmp_path, files())
-    body = '#define R2S_TOPICS(X) X(SUB, x, foo_msgs, Bar)\n#include "ros2serial.h"\n'
+    body = case_with_rows('X(Subscription, foo_msgs::msg::Bar, x, "x")')
 
-    compiled = compile_case(root, body)
+    compiled = compile_case_cxx(root, body)
 
     assert compiled.returncode != 0
     assert "foo_msgs" in compiled.stderr
@@ -568,14 +631,14 @@ def test_a_missing_list_fails_naming_it(tmp_path):
     assert "R2S_TOPICS" in compiled.stderr
 
 
-def test_an_empty_list_fails_naming_it(tmp_path):
+def test_a_c_list_fails_pointing_at_a_cxx_translation_unit(tmp_path):
     root = sketch_dir(tmp_path, files())
-    body = '#define R2S_TOPICS(X)\n#include "ros2serial.h"\n'
+    body = case_with_rows('X(Publisher, std_msgs::msg::Float32, battery_pub, "battery")')
 
     compiled = compile_case(root, body)
 
     assert compiled.returncode != 0
-    assert "a node with no topics has nothing to announce" in compiled.stderr
+    assert "C++ translation unit" in compiled.stderr
 
 
 def test_an_empty_list_fails_in_cxx(tmp_path):
@@ -608,36 +671,57 @@ def test_an_empty_list_fails_in_cxx(tmp_path):
 
 def test_an_unknown_direction_in_the_list_fails(tmp_path):
     root = sketch_dir(tmp_path, files())
-    body = '#define R2S_TOPICS(X) X(FOO, x, std_msgs, Float32)\n#include "ros2serial.h"\n'
+    body = case_with_rows('X(FOO, std_msgs::msg::Float32, x, "x")')
 
-    compiled = compile_case(root, body)
+    compiled = compile_case_cxx(root, body)
 
     assert compiled.returncode != 0
     assert "FOO" in compiled.stderr
 
 
-def test_a_publish_only_list_compiles_cleanly(tmp_path):
+def test_an_old_pub_row_fails_naming_the_new_shape(tmp_path):
     root = sketch_dir(tmp_path, files())
     body = '#define R2S_TOPICS(X) X(PUB, battery, std_msgs, Float32)\n#include "ros2serial.h"\n'
 
-    assert compile_strict(root, body).returncode == 0
+    compiled = compile_case_cxx(root, body)
+
+    assert compiled.returncode != 0
+    assert "R2S_error_rows_must_read_X_Publisher_or_X_Subscription" in compiled.stderr
+
+
+def test_an_old_sub_row_fails_naming_the_new_shape(tmp_path):
+    root = sketch_dir(tmp_path, files())
+    body = '#define R2S_TOPICS(X) X(SUB, cmd_vel, geometry_msgs, Twist)\n#include "ros2serial.h"\n'
+
+    compiled = compile_case_cxx(root, body)
+
+    assert compiled.returncode != 0
+    assert "R2S_error_rows_must_read_X_Publisher_or_X_Subscription" in compiled.stderr
+
+
+def test_a_publish_only_list_compiles_cleanly(tmp_path):
+    root = sketch_dir(tmp_path, files())
+    body = case_with_rows('X(Publisher, std_msgs::msg::Float32, battery_pub, "battery")')
+
+    assert compile_strict_cxx(root, body).returncode == 0
 
 
 def test_a_subscribe_only_list_compiles_cleanly(tmp_path):
     root = sketch_dir(tmp_path, files())
-    body = '#define R2S_TOPICS(X) X(SUB, cmd_vel, geometry_msgs, Twist)\n#include "ros2serial.h"\n'
+    body = case_with_rows('X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)')
+    body += "void on_cmd_vel(const geometry_msgs::msg::Twist &msg)\n{\n    (void)msg;\n}\n"
 
-    assert compile_strict(root, body).returncode == 0
+    assert compile_strict_cxx(root, body).returncode == 0
 
 
-def compile_strict(root, body):
+def compile_strict_cxx(root, body):
     """A list that compiles warning-free: what a `-Werror` sketch build needs."""
-    (root / "case.c").write_text(body, encoding="utf-8")
+    (root / "case.cpp").write_text(body, encoding="utf-8")
 
     return subprocess.run(
         [
-            "cc",
-            "-std=c99",
+            "g++",
+            "-std=c++11",
             "-pedantic",
             "-Werror",
             "-Wall",
@@ -649,7 +733,7 @@ def compile_strict(root, body):
             "-I",
             str(CORE_INCLUDE),
             "-c",
-            str(root / "case.c"),
+            str(root / "case.cpp"),
             "-o",
             str(root / "case.o"),
         ],
@@ -663,18 +747,17 @@ def test_a_cxx_sketch_links_against_the_c_library(tmp_path):
     root = sketch_dir(tmp_path, files())
     (root / "case.cpp").write_text(
         '#define R2S_NODE_NAME "test_cpp"\n'
-        "#define R2S_TOPICS(X) X(SUB, cmd_vel, geometry_msgs, Twist)\n"
-        '#include "ros2serial.h"\n'
-        'extern "C" {\n'
-        "void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)\n"
-        "{\n"
-        "    (void)msg;\n"
-        "}\n"
-        "}\n"
-        "int main()\n"
-        "{\n"
-        "    return 0;\n"
-        "}\n",
+        + SKETCH_INCLUDES
+        + '#define R2S_TOPICS(X) X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)\n'
+        + '#include "ros2serial.h"\n'
+        + "void on_cmd_vel(const geometry_msgs::msg::Twist &msg)\n"
+        + "{\n"
+        + "    (void)msg;\n"
+        + "}\n"
+        + "int main()\n"
+        + "{\n"
+        + "    return 0;\n"
+        + "}\n",
         encoding="utf-8",
     )
 
