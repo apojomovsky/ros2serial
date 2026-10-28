@@ -15,7 +15,6 @@ import time
 
 import pytest
 import serial
-
 from r2s_gen.reference import frames
 from test_echo import Harness
 
