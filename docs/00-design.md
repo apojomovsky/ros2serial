@@ -1014,7 +1014,7 @@ The generator computes the REP-2011 RIHS01 hash for each type in `gen/r2s_gen/ty
 | `heartbeat_period_ms` | int | 500 | |
 | `link_timeout_ms` | int | 2000 | |
 | `time_sync.enabled` | bool | true | |
-| `time_sync.period_ms` | int | 5000 | Steady-state period, at most 5000 |
+| `time_sync.period_ms` | int | 5000 | Steady-state period, 1 to 5000; refused outside |
 | `rate_limit.default_hz` | double | 0 (none) | Default host-to-MCU rate limit per topic |
 | `rate_limit.overrides` | string array | empty | Per-topic limits as `"<topic>=<hz>"`, naming the announced topic, for example `"cmd_vel=20"` |
 | `tx_budget_pct` | int | 50 | Cap on host-to-MCU bandwidth, as a percentage of the link |

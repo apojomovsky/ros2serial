@@ -105,6 +105,17 @@ std::vector<std::uint8_t> time_wire(std::uint8_t seq, const std::vector<std::uin
     return wire_of(with_check(decoded));
 }
 
+// Whether the unit is one of the burst PINGs: short tests meet no others.
+bool is_ping_wire(const std::vector<std::uint8_t> &unit)
+{
+    for (std::uint8_t k = 0; k < 8; ++k) {
+        if (unit == time_wire(k, {0x01u, k})) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::vector<std::vector<std::uint8_t>> units_of(const std::vector<std::uint8_t> &bytes)
 {
     std::vector<std::vector<std::uint8_t>> units;
@@ -185,7 +196,9 @@ class Link final : public Transport
     FakeTransport &inner_;
 };
 
-// A session over the test's own fake link, driven by the test's clock only.
+// A session over the test's own fake link, driven by the test's clocks only.
+// Steady and ROS time advance together: the mapping test that separates them
+// is the estimator's own, in test_time_sync.cpp.
 class Fixture
 {
   public:
@@ -194,7 +207,7 @@ class Fixture
         SessionConfig config = SessionConfig())
     {
         session_ = std::make_unique<Session>(
-            config, clock_, [this]() { return std::unique_ptr<Transport>(new Link(transport_)); },
+            config, clock_, ros_clock_, [this]() { return std::unique_ptr<Transport>(new Link(transport_)); },
             std::move(resolve));
     }
 
@@ -204,6 +217,7 @@ class Fixture
     {
         while (now_ms_ < ms) {
             clock_.advance(kTick);
+            ros_clock_.advance(kTick);
             ++now_ms_;
             session_->poll();
         }
@@ -262,6 +276,7 @@ class Fixture
 
   private:
     ManualClock clock_;
+    ManualClock ros_clock_;
     FakeTransport transport_;
     std::uint32_t now_ms_ = 0;
     std::unique_ptr<Session> session_;
@@ -427,7 +442,8 @@ TEST(SessionHandshake, RefusesAHelloOfAnotherProtocolVersion)
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
+        SessionConfig{}, clock, clock,
+        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
         [](const TopicInfo &) { return std::uint8_t{0}; }, events);
     const std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u, 1u);
     std::vector<std::uint8_t> frame{kControl, 0u};
@@ -567,7 +583,8 @@ TEST(SessionHandshake, ReportsWhetherTheNewTableMatchesTheOldOne)
     FakeTransport transport;
     std::uint32_t now = 0;
     Session session(
-        SessionConfig{}, clock, [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
+        SessionConfig{}, clock, clock,
+        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
         [](const TopicInfo &) { return std::uint8_t{0}; }, events);
 
     const auto advance = [&clock, &session, &now](std::uint32_t ms) {
@@ -769,7 +786,7 @@ TEST(SessionLink, DoesNotResumeAWalkOnAReopenedLink)
     FakeTransport second;
     std::unique_ptr<Session> session;
     session = std::make_unique<Session>(
-        SessionConfig{}, clock,
+        SessionConfig{}, clock, clock,
         [&opens, &first, &second]() -> std::unique_ptr<Transport> {
             ++opens;
             return std::unique_ptr<Transport>(new Link(opens == 1 ? first : second));
@@ -811,10 +828,22 @@ TEST(SessionConnected, UsesTheConfiguredHeartbeatPeriod)
     fixture.advance_to(10);
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u));
     fixture.drain_units();
+    // The PING burst shares the link; only heartbeats count here.
+    const auto not_ping = [&fixture]() {
+        std::vector<std::vector<std::uint8_t>> out;
+        for (auto &unit : fixture.drain_units()) {
+            if (!is_ping_wire(unit)) {
+                out.push_back(unit);
+            }
+        }
+        return out;
+    };
     fixture.advance_to(109);
-    EXPECT_TRUE(fixture.drain_units().empty());
+    EXPECT_TRUE(not_ping().empty());
     fixture.advance_to(110);
-    EXPECT_EQ(fixture.drain_units().size(), 1u) << "the period comes from the config";
+    const auto units = not_ping();
+    ASSERT_EQ(units.size(), 1u) << "the period comes from the config";
+    EXPECT_EQ(units[0][0], kHeartbeat);
 }
 
 TEST(SessionHandshake, RefusesAMaxFrameAboveTheProtocolLimit)
@@ -879,7 +908,7 @@ TEST(SessionLink, ReopensThePortWhenItIsNotThereYet)
     int opens = 0;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock,
+        SessionConfig{}, clock, clock,
         [&opens, &transport]() -> std::unique_ptr<Transport> {
             ++opens;
             if (opens == 1) {
@@ -930,7 +959,7 @@ TEST(SessionLink, ReturnsToDisconnectedOnAWriteError)
         FakeTransport &inner_;
     };
     Session session(
-        SessionConfig{}, clock,
+        SessionConfig{}, clock, clock,
         [&incoming]() { return std::unique_ptr<Transport>(new FailingWrites(incoming)); },
         [](const TopicInfo &) { return std::uint8_t{0}; });
     while (now < 100) {
@@ -952,7 +981,8 @@ TEST(SessionLink, ReturnsToDisconnectedOnAPortError)
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
+        SessionConfig{}, clock, clock,
+        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
         [](const TopicInfo &) { return std::uint8_t{0}; });
     clock.advance(std::chrono::milliseconds(100));
     session.poll();
@@ -967,7 +997,7 @@ TEST(SessionLink, RefusesANonPositivePeriod)
     SessionConfig config;
     config.link_timeout_ms = 0;
     EXPECT_THROW(Session(
-                     config, clock, []() { return std::unique_ptr<Transport>(); },
+                     config, clock, clock, []() { return std::unique_ptr<Transport>(); },
                      [](const TopicInfo &) { return std::uint8_t{0}; }),
                  std::invalid_argument);
 }
@@ -1061,7 +1091,8 @@ TEST(SessionSend, RefusesFramesPastTheMcuCapacity)
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
+        SessionConfig{}, clock, clock,
+        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
         [](const TopicInfo &) { return std::uint8_t{0}; });
     clock.advance(std::chrono::milliseconds(10));
     session.poll();
@@ -1134,8 +1165,10 @@ TEST(SessionControl, CoalescesHeartbeatsWhenWritesBlock)
     fixture.allow_writes();
     fixture.session().poll();
     const auto units = fixture.drain_units();
-    ASSERT_EQ(units.size(), 1u) << "ten heartbeats collapse into one";
-    EXPECT_EQ(decoded_unit(units[0])[0], kHeartbeat);
+    ASSERT_EQ(units.size(), 2u) << "the heartbeat and the PING keep one slot each";
+    EXPECT_EQ(decoded_unit(units[0])[0], 0x01u) << "the PING slot queued first";
+    EXPECT_EQ(decoded_unit(units[1])[0], kHeartbeat);
+    EXPECT_EQ(decoded_unit(units[1])[1], 0u) << "the replacement keeps the slot seq for [FRM-5]";
 }
 
 TEST(SessionControl, CoalescesTopicStatusPerTopicWhenWritesBlock)
@@ -1188,7 +1221,7 @@ TEST(SessionControl, CoalescesTopicReqRetriesWhenWritesBlock)
         }
     }
     EXPECT_EQ(requests, 1u) << "the retries replace one TOPIC_REQ slot";
-    EXPECT_EQ(frames, 3u) << "the TOPIC_REQ, the TOPIC_STATUS and READY";
+    EXPECT_EQ(frames, 4u) << "the TOPIC_REQ, the TOPIC_STATUS, READY and the first PING";
 }
 
 TEST(SessionControl, DropsPendingControlOnRehandshake)
@@ -1357,6 +1390,9 @@ TEST(SessionTimeSync, PacesSteadyPingsThenTheConfiguredPeriod)
 {
     SessionConfig config;
     config.time_sync_period_ms = 2000;
+    // The cadence is what this pins down; a generous timeout keeps the
+    // session connected while no MCU frame arrives.
+    config.link_timeout_ms = 3600000;
     Fixture fixture([](const TopicInfo &) { return std::uint8_t{0}; }, config);
     fixture.advance_to(100);
     connect_empty(fixture);
@@ -1447,15 +1483,19 @@ TEST(SessionTimeSync, ResendsTheCorrectionOnAMoveAndEvery5s)
     EXPECT_GE(moved.size(), 1u) << "the jump corrects again";
     ASSERT_FALSE(moved.empty());
     EXPECT_EQ(le32(moved.front().payload, 1u), 1451300u) << "the first jump corrects at once";
-    EXPECT_EQ(le32(moved.back().payload, 1u), 16451300u);
-    EXPECT_EQ(le32(moved.back().payload, 5u), 16u);
-    EXPECT_EQ(le32(moved.back().payload, 9u), 451000000u);
-    // The 5 s floor: with no new PONGs the estimator stands still, so the
-    // next correction repeats the last one within 5 s of it.
+    EXPECT_EQ(le32(moved.front().payload, 5u), 1u);
+    // The 5 s floor: with no new PONGs the estimator stands still, and MCU
+    // heartbeats keep the link from timing out, so the next correction
+    // repeats the last one within 5 s of it.
     TimeFrame floor_correction;
     bool resent = false;
+    std::uint8_t hb_seq = 0;
+    const std::vector<std::uint8_t> counters(8u, 0u);
     for (std::uint32_t t = 16453; t <= 26453 && !resent; ++t) {
         fixture.advance_to(t);
+        if (t % 1000u == 0u) {
+            fixture.deliver_frame(kHeartbeat, hb_seq++, counters);
+        }
         auto more = drain_time(fixture, 0x03u);
         if (!more.empty()) {
             floor_correction = more.back();

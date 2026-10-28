@@ -63,11 +63,14 @@ diagnostic_msgs::msg::DiagnosticArray diagnostics_message(const Router::Diagnost
     for (const Router::TopicDiagnostics &topic : snapshot.topics) {
         add_topic(status, topic);
     }
-    // The P3 estimator fills these in; until then the keys stay put with no
-    // value, so a consumer can rely on their names.
-    add_value(status, "time sync offset", "not available");
-    add_value(status, "time sync drift", "not available");
-    add_value(status, "time sync round trip", "not available");
+    // The P3 estimator fills these in; until the first CORRECTION the keys
+    // stay put with no value, so a consumer can rely on their names.
+    add_value(status, "time sync offset",
+              snapshot.time_sync_available ? std::to_string(snapshot.time_offset_ns) : "not available");
+    add_value(status, "time sync drift",
+              snapshot.time_sync_available ? std::to_string(snapshot.time_drift_ppm) : "not available");
+    add_value(status, "time sync round trip",
+              snapshot.time_sync_available ? std::to_string(snapshot.time_round_trip_ns) : "not available");
     out.status.push_back(status);
     return out;
 }

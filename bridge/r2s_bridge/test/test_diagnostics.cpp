@@ -73,7 +73,7 @@ class DiagnosticsFixture
             open = [this]() { return std::unique_ptr<Transport>(new HelperLink(transport_)); };
         }
         router_ = std::make_unique<Router>(
-            node_->get_node_topics_interface(), std::move(open), clock_, std::move(params),
+            node_->get_node_topics_interface(), std::move(open), clock_, clock_, std::move(params),
             [this](SessionLog, const std::string &text) { logged_.push_back(text); });
     }
 

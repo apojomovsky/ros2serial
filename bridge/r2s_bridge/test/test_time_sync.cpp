@@ -48,6 +48,8 @@ struct SimMcu {
         sync.add_sample(steady_ns, steady_ns + rtt_ns, ros_at(steady_ns + rtt_ns),
                         tick_at(steady_ns + rtt_ns / 2));
     }
+
+    std::int64_t true_ros(std::uint32_t tick) const
     {
         return static_cast<std::int64_t>(std::llround(tick * kTickNs / (1.0 + drift))) + skew_ns;
     }
@@ -55,6 +57,12 @@ struct SimMcu {
 
 // The section 7.2 arithmetic, mirroring r2s_gen.reference.time.compute: the
 // ROS time the MCU reads under a correction, or false past the anchor.
+// The correction as one nanosecond count, for the estimate checks.
+std::int64_t ros_ns_of(const TimeCorrection &correction)
+{
+    return static_cast<std::int64_t>(correction.sec) * 1000000000 + correction.nanosec;
+}
+
 bool mcu_time(const TimeCorrection &c, std::uint32_t tick, std::int64_t &sec, std::int64_t &nsec)
 {
     const std::uint32_t k = kTickHz / 1000u;
@@ -89,7 +97,7 @@ TEST(TimeSyncConfig, RejectsATickHzOutsideCtl8)
     EXPECT_THROW(TimeSync(1500u), std::invalid_argument);
     EXPECT_THROW(TimeSync(3000u), std::invalid_argument) << "k=3 does not divide 10^6";
     EXPECT_NO_THROW(TimeSync(1000u));
-    EXPECT_NO_THROW(TimeSync(kTickHz));
+    EXPECT_NO_THROW((void)TimeSync(kTickHz));
 }
 
 TEST(TimeSyncEstimate, HasNoEstimateBeforeTheFirstSample)
@@ -108,14 +116,13 @@ TEST(TimeSyncEstimate, CorrectsExactlyOnASymmetricLinkWithoutDrift)
     for (int i = 0; i < 8; ++i) {
         mcu.sample(sync, static_cast<std::int64_t>(i) * 50000000);
     }
-    ASSERT_TRUE(sync.has_estimate());
+    // Symmetric delay puts the arrival midpoint exactly on the PONG tick,
+    // which the MCU stamps halfway through the round trip.
     TimeCorrection out;
     ASSERT_TRUE(sync.correction(out));
-    EXPECT_EQ(out.drift_ppm, 0);
-    const std::uint32_t tick0 = mcu.tick_at(7 * 50000000);
+    const std::uint32_t tick0 = mcu.tick_at(7 * 50000000 + mcu.rtt_ns / 2);
     EXPECT_EQ(out.tick0, tick0);
-    // Symmetric delay puts the arrival midpoint exactly on the PONG tick.
-    EXPECT_EQ(out.sec * 1000000000 + out.nanosec, mcu.true_ros(tick0));
+    EXPECT_EQ(ros_ns_of(out), mcu.true_ros(tick0));
     EXPECT_EQ(sync.offset_ns(), 0);
     EXPECT_EQ(sync.drift_ppm(), 0);
     EXPECT_EQ(sync.round_trip_ns(), mcu.rtt_ns);
@@ -131,7 +138,7 @@ TEST(TimeSyncEstimate, FollowsAFixedRosSkew)
     }
     TimeCorrection out;
     ASSERT_TRUE(sync.correction(out));
-    EXPECT_EQ(out.sec * 1000000000 + out.nanosec, mcu.true_ros(out.tick0));
+    EXPECT_EQ(ros_ns_of(out), mcu.true_ros(out.tick0));
     EXPECT_EQ(sync.offset_ns(), mcu.skew_ns);
 }
 
@@ -147,9 +154,12 @@ TEST(TimeSyncEstimate, Tracks5000ppmOfDriftInsideTheScenarioBound)
     }
     TimeCorrection out;
     ASSERT_TRUE(sync.correction(out));
+    // The fit measures ROS nanoseconds per nominal MCU millisecond, so a
+    // clock 1.005 times too fast reads (1 / 1.005 - 1) of that, not -5000.
     // Tick quantization is half a microsecond per sample, far below one ppm
     // over the 75 s the fit spans.
-    EXPECT_NEAR(sync.drift_ppm(), 5000, 2);
+    const int want = static_cast<int>(std::llround((1.0 / (1.0 + mcu.drift) - 1.0) * 1000000.0));
+    EXPECT_NEAR(sync.drift_ppm(), want, 2);
     // The MCU reads within the scenario bound five seconds past the anchor.
     const std::uint32_t later = out.tick0 + 5000000u;
     std::int64_t sec = 0;
@@ -175,7 +185,8 @@ TEST(TimeSyncEstimate, ForgetsSamplesPastTheWindow)
     }
     TimeCorrection out;
     ASSERT_TRUE(sync.correction(out));
-    EXPECT_NEAR(sync.drift_ppm(), 8000, 2) << "only the 16 most recent samples fit";
+    const int want = static_cast<int>(std::llround((1.0 / (1.0 + fast.drift) - 1.0) * 1000000.0));
+    EXPECT_NEAR(sync.drift_ppm(), want, 2) << "only the 16 most recent samples fit";
 }
 
 TEST(TimeSyncEstimate, TheLowestRoundTripSamplesSetTheOffset)
@@ -196,7 +207,7 @@ TEST(TimeSyncEstimate, TheLowestRoundTripSamplesSetTheOffset)
     TimeCorrection out;
     ASSERT_TRUE(sync.correction(out));
     // Averaging all sixteen would sit 1.25 ms high; the quartile stays near.
-    EXPECT_NEAR(out.sec * 1000000000 + out.nanosec, mcu.true_ros(out.tick0), 500000);
+    EXPECT_NEAR(ros_ns_of(out), mcu.true_ros(out.tick0), 500000);
 }
 
 TEST(TimeSyncEstimate, SurvivesATickWraparound)
@@ -214,11 +225,13 @@ TEST(TimeSyncEstimate, SurvivesATickWraparound)
     TimeCorrection out;
     ASSERT_TRUE(sync.correction(out));
     EXPECT_EQ(out.drift_ppm, 0);
-    EXPECT_EQ(out.sec * 1000000000 + out.nanosec, 7 * 1000000 + mcu.rtt_ns / 2);
+    EXPECT_EQ(ros_ns_of(out), 7 * 1000000 + mcu.rtt_ns / 2);
 }
 
 TEST(TimeSyncEstimate, ClampsTheDriftTo20000ppm)
 {
+    // A fast clock packs more ticks into each real millisecond, so the ROS
+    // nanoseconds to add per nominal millisecond come out negative.
     TimeSync fast(kTickHz);
     SimMcu mcu;
     mcu.drift = 50000.0 / 1000000.0;
@@ -227,14 +240,14 @@ TEST(TimeSyncEstimate, ClampsTheDriftTo20000ppm)
     }
     TimeCorrection out;
     ASSERT_TRUE(fast.correction(out));
-    EXPECT_EQ(out.drift_ppm, 20000);
+    EXPECT_EQ(out.drift_ppm, -20000);
     TimeSync slow(kTickHz);
     mcu.drift = -50000.0 / 1000000.0;
     for (int i = 0; i < 16; ++i) {
         mcu.sample(slow, static_cast<std::int64_t>(i) * 5000000000);
     }
     ASSERT_TRUE(slow.correction(out));
-    EXPECT_EQ(out.drift_ppm, -20000);
+    EXPECT_EQ(out.drift_ppm, 20000);
 }
 
 TEST(TimeSyncEstimate, ReportsMovedPast100us)
