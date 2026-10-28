@@ -63,6 +63,15 @@ class Converter
     ConvertResult to_cdr(const std::string &type_name, bool narrow, const std::uint8_t *data,
                          std::size_t size, std::vector<std::uint8_t> &cdr);
 
+    // Converts one serialized CDR message of type_name to a packed payload in
+    // packed, clearing packed first. narrow packs float64s as binary32. The
+    // cached plan is shared with to_cdr. A CDR the middleware cannot read
+    // back, and a string or sequence longer than the wire varint holds, fail
+    // as kUnsupportedField and kOverBound; field names the same depth-first
+    // index to_cdr reports.
+    ConvertResult from_cdr(const std::string &type_name, bool narrow, const std::uint8_t *data,
+                           std::size_t size, std::vector<std::uint8_t> &packed);
+
     // The dotted path of a depth-first field index ("linear.y"), or empty
     // when the type does not load or the index names no field.
     std::string field_path(const std::string &type_name, std::uint8_t index);
