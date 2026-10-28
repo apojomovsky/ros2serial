@@ -1,5 +1,6 @@
 """The release artifacts: an Arduino library that compiles, and the Python sdist and wheel."""
 
+import shutil
 import subprocess
 import zipfile
 from pathlib import Path
@@ -10,8 +11,14 @@ SCRIPT = ROOT / "scripts" / "build-release-artifacts.sh"
 
 def build(tmp_path: Path, *args: str) -> tuple[Path, subprocess.CompletedProcess]:
     out = tmp_path / "dist"
-    result = subprocess.run(["bash", str(SCRIPT), "--out", str(out), *args], capture_output=True, text=True)
-    return out, result
+    try:
+        result = subprocess.run(["bash", str(SCRIPT), "--out", str(out), *args], capture_output=True, text=True)
+        return out, result
+    finally:
+        # setup.py sdist materializes the out-of-tree cpp package dir as
+        # gen/cpp, so a suite run would leave the tree dirty and the takeoff
+        # stamp disengaged. The build outputs already went to the tmp out.
+        shutil.rmtree(ROOT / "gen" / "cpp", ignore_errors=True)
 
 
 def test_the_arduino_zip_stages_the_bundle_and_the_core(tmp_path):
