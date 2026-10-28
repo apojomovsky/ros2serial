@@ -731,9 +731,8 @@ def test_a_branch_behind_without_overlap_or_conflict_passes(tmp_path):
     main, wt = fixture(tmp_path)
     _behind(main, wt, {"branch.txt": "b\n"}, {"master.txt": "m\n"})
     result = ritual(wt)
-    assert "behind origin/master" not in result.stdout, result.stdout
     assert "merge origin/master" not in result.stdout, result.stdout
-    assert "behind" in result.stdout, result.stdout
+    assert "no overlapping files" in result.stdout, result.stdout
 
 
 def test_a_branch_behind_with_overlap_merges_first(tmp_path):
@@ -756,19 +755,20 @@ def test_a_branch_behind_with_conflict_merges_first(tmp_path):
 
 def test_a_takeoff_pass_makes_the_push_skip_the_suite(tmp_path):
     """The takeoff records the pre-push stamp, so the push runs nothing twice."""
-    _, wt = fixture(tmp_path)
+    main, wt = fixture(tmp_path)
     commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    git(main, "config", "core.hooksPath", ".githooks")
     head = git(wt, "rev-parse", "HEAD").stdout.strip()
     line = f"refs/heads/feat/1-thing {head} refs/heads/feat/1-thing {'0' * 40}\n"
     suite_log = tmp_path / "suite.log"
-    suite = f"echo ran >> {suite_log}"
+    recorder = tmp_path / "record-suite.sh"
+    recorder.write_text(f"#!/usr/bin/env bash\necho ran >> {suite_log}\n")
     body = tmp_path / "body.md"
     body.write_text(GOOD_BODY)
-    git(wt, "config", "user.email", "t@example.com")
-    result = ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="feat(core): a", R2S_SUITE=suite)
+    result = ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="feat(core): a", R2S_SUITE=str(recorder))
     assert result.returncode == 0, result.stdout + result.stderr
     assert suite_log.read_text().split() == ["ran"]
-    assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=suite).returncode == 0
+    assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=f"bash {recorder}").returncode == 0
     assert suite_log.read_text().split() == ["ran"], "the push reran the suite"
 
 
@@ -782,18 +782,23 @@ def test_full_env_runs_the_suite_unscoped(tmp_path):
     suite = f"env > {seen}"
     assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=suite, R2S_FULL="1").returncode == 0
     text = seen.read_text()
-    assert "FULL=1" not in text
-    for var in ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN", "BRIDGE", "E2E", "COVERAGE", "DOCS", "EXAMPLES", "FUZZ"):
-        assert f"{var}=1" not in text, f"scoped {var} in a full run"
+    scopes = ("FULL", "LINT", "SCRIPTS", "COMMITS", "CORE", "GEN")
+    scopes += ("BRIDGE", "E2E", "COVERAGE", "DOCS", "EXAMPLES", "FUZZ")
+    scope_lines = [line for line in text.splitlines() if line.split("=")[0] in scopes]
+    assert scope_lines == [], f"scoped run in a full suite: {scope_lines}"
 
 
 def test_ci_runs_every_scope_on_pull_requests():
     """The local gate is scoped; CI still runs the full suite on the merge."""
-    text = (ROOT / ".github/workflows/ci.yml").read_text()
-    assert "pull_request" in text
-    runs = [line.strip() for line in text.splitlines() if "make test" in line]
+    workflows = ROOT / ".github/workflows"
+    assert (workflows / "ci.yml").read_text().count("pull_request") >= 1
+    runs = []
+    for workflow in sorted(workflows.glob("*.yml")):
+        runs += [
+            line.strip() for line in workflow.read_text().splitlines() if "make test" in line or "ci-test.sh" in line
+        ]
     assert runs, "CI runs no suite at all"
-    assert not any("R2S_FULL" in line for line in runs), "CI must not force a full local run"
+    assert not any("R2S_FULL" in line for line in runs), "CI must not narrow the suite"
     mentioned = set()
     for line in runs:
         for scope in ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN", "BRIDGE", "COVERAGE", "DOCS", "EXAMPLES", "FUZZ"):
