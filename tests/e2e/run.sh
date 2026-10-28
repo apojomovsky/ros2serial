@@ -40,6 +40,10 @@ bash ports/posix/run.sh --build-only || exit 1
 # The scenario files import the framework as a package; direct launch_test
 # runs need the same directory on the import path.
 export PYTHONPATH=$root/tests/e2e${PYTHONPATH:+:$PYTHONPATH}
+# The helper assertions run before any scenario, so a broken helper fails
+# fast instead of mid-handshake; the script directory is already on the
+# import path when Python runs the file directly.
+python3 tests/e2e/checks_test.py || exit 1
 
 
 # One DDS domain per suite run, so parallel runs on the shared host never see
