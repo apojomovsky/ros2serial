@@ -35,7 +35,7 @@ def copy_tree(dest: Path) -> Path:
     return dest
 
 
-SCOPES = ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN", "BRIDGE", "E2E", "COVERAGE", "DOCS", "EXAMPLES")
+SCOPES = ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN", "BRIDGE", "CPP", "E2E", "COVERAGE", "DOCS", "EXAMPLES")
 
 
 def run_lint(root: Path) -> subprocess.CompletedProcess:
@@ -125,12 +125,24 @@ def run_scope(
 
 
 def stub_toolbox(path: Path) -> Path:
-    """Fake the example toolchain: every build step succeeds and the ELF carries the buffer."""
+    """Fake the example toolchain: every build step succeeds and the ELF carries the runtime symbols.
+
+    The runtime sketch's firmware is checked for the runtime topic table and
+    the subscriber records, and the static one for the generated receive
+    buffer, so the stub's nm prints all three.
+    """
     path.mkdir(parents=True, exist_ok=True)
     (path / "cmake").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     (path / "arduino-cli").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     (path / "avr-size").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-    (path / "avr-nm").write_text("#!/usr/bin/env bash\necho '008001eb b r2s_rx_buf'\n", encoding="utf-8")
+    (path / "avr-nm").write_text(
+        "#!/usr/bin/env bash\n"
+        "echo '008001eb b r2s_rx_buf'\n"
+        "echo '00800460 000000e0 b r2s_runtime_topics'\n"
+        "echo '00800410 00000050 b r2s_runtime_subscribers'\n"
+        "echo '00800540 00000050 b r2s_runtime_publishers'\n",
+        encoding="utf-8",
+    )
     for tool in ("cmake", "arduino-cli", "avr-size", "avr-nm"):
         (path / tool).chmod(0o755)
     return path
@@ -212,9 +224,10 @@ def test_scoped_run_names_an_empty_scope_beside_a_running_one(tmp_path):
 def test_every_header_scope_runs_a_section():
     """Each scope the header comment advertises must gate a section."""
     text = (ROOT / "scripts" / "ci-test.sh").read_text()
-    header = "\n".join(
-        line for line in text.splitlines() if "Scope with" in line or re.match(r"^# (E2E|COVERAGE)", line)
-    )
+    # The header names the scopes over two lines, and the second one starts
+    # with whichever scope comes first, so every line that opens with a
+    # scope name is part of the pin.
+    header = "\n".join(line for line in text.splitlines() if "Scope with" in line or re.match(r"^# [A-Z]{2,}", line))
     scopes = re.findall(r"\b([A-Z][A-Z0-9]*)(?:=1|=<backend>)", header)
     assert "E2E" in scopes, "the header pin must cover E2E"
     assert scopes, "no scopes found in the header comment"
