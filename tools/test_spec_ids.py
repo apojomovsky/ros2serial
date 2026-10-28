@@ -1,8 +1,11 @@
 """spec/protocol.md: every normative statement carries a well-formed, unique ID."""
 
 import re
+import sys
 from collections import Counter
 from pathlib import Path
+
+import pytest
 
 SPEC = Path(__file__).resolve().parent.parent / "spec" / "protocol.md"
 DEFINITION = re.compile(r"^\s*- \[([A-Z]{2,4}-\d+)\] ", re.MULTILINE)
@@ -42,3 +45,11 @@ def test_ids_are_numbered_without_gaps_per_prefix():
         by_prefix.setdefault(prefix, []).append(int(n))
     for prefix, numbers in by_prefix.items():
         assert numbers == list(range(1, len(numbers) + 1)), (prefix, numbers)
+
+
+def test_a_spec_that_is_not_utf8_fails(tmp_path, monkeypatch):
+    bad = tmp_path / "protocol.md"
+    bad.write_bytes(b"- [AAA-1] One rule.\n\xff")
+    monkeypatch.setattr(sys.modules[__name__], "SPEC", bad)
+    with pytest.raises(pytest.fail.Exception, match="spec/protocol\\.md"):
+        test_the_spec_defines_ids()
