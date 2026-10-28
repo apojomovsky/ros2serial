@@ -331,9 +331,10 @@ def test_a_non_conventional_subject_outside_a_merge_still_fails(tmp_path):
 
 
 def test_a_branch_behind_its_base_is_told_to_merge_it_in(tmp_path):
+    """A branch whose files overlap master's must merge it in first."""
     main, wt = fixture(tmp_path)
-    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
-    commit(main, {"b.txt": "b\n"}, "chore: master moves on")
+    commit(wt, {"shared.txt": "branch\n"}, "feat(core): a")
+    commit(main, {"shared.txt": "master\n"}, "chore: master moves on")
     git(main, "push", "-q", "origin", "master")
     git(wt, "fetch", "-q", "origin")
     out = ritual(wt).stdout
@@ -715,3 +716,105 @@ def test_the_pr_range_script_reports_an_unresolvable_base(tmp_path):
     out = run(["bash", str(ROOT / "scripts/pr-title-range.sh")], wt, {"BASE_REF": "no-such-branch"})
     assert out.returncode != 0
     assert "no merge base" in out.stderr
+
+
+def _behind(main: Path, wt: Path, branch_files: dict, master_files: dict) -> None:
+    commit(wt, branch_files, "feat(core): a branch thing")
+    for name, text in master_files.items():
+        commit(main, {name: text}, f"docs(core): master adds {name}")
+    git(main, "push", "-q", "origin", "master")
+    git(wt, "fetch", "-q", "origin")
+
+
+def test_a_branch_behind_without_overlap_or_conflict_passes(tmp_path):
+    """Only an overlap or a conflict needs a merge first; CI tests the rest."""
+    main, wt = fixture(tmp_path)
+    _behind(main, wt, {"branch.txt": "b\n"}, {"master.txt": "m\n"})
+    result = ritual(wt)
+    assert "behind origin/master" not in result.stdout, result.stdout
+    assert "merge origin/master" not in result.stdout, result.stdout
+    assert "behind" in result.stdout, result.stdout
+
+
+def test_a_branch_behind_with_overlap_merges_first(tmp_path):
+    main, wt = fixture(tmp_path)
+    _behind(main, wt, {"shared.txt": "branch\n"}, {"shared.txt": "master\n"})
+    out = ritual(wt).stdout
+    assert "merge origin/master" in out, out
+
+
+def test_a_branch_behind_with_conflict_merges_first(tmp_path):
+    """A file on one side colliding with a directory on the other conflicts."""
+    main, wt = fixture(tmp_path)
+    commit(wt, {"clash": "a file\n"}, "feat(core): a branch thing")
+    commit(main, {"clash/inner.txt": "a dir\n"}, "docs(core): master adds a directory")
+    git(main, "push", "-q", "origin", "master")
+    git(wt, "fetch", "-q", "origin")
+    out = ritual(wt).stdout
+    assert "merge origin/master" in out, out
+
+
+def test_a_takeoff_pass_makes_the_push_skip_the_suite(tmp_path):
+    """The takeoff records the pre-push stamp, so the push runs nothing twice."""
+    _, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    head = git(wt, "rev-parse", "HEAD").stdout.strip()
+    line = f"refs/heads/feat/1-thing {head} refs/heads/feat/1-thing {'0' * 40}\n"
+    suite_log = tmp_path / "suite.log"
+    suite = f"echo ran >> {suite_log}"
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+    git(wt, "config", "user.email", "t@example.com")
+    result = ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="feat(core): a", R2S_SUITE=suite)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert suite_log.read_text().split() == ["ran"]
+    assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=suite).returncode == 0
+    assert suite_log.read_text().split() == ["ran"], "the push reran the suite"
+
+
+def test_full_env_runs_the_suite_unscoped(tmp_path):
+    """R2S_FULL=1 forces the full suite: the hook passes no scope at all."""
+    _, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    head = git(wt, "rev-parse", "HEAD").stdout.strip()
+    line = f"refs/heads/feat/1-thing {head} refs/heads/feat/1-thing {'0' * 40}\n"
+    seen = tmp_path / "env.txt"
+    suite = f"env > {seen}"
+    assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=suite, R2S_FULL="1").returncode == 0
+    text = seen.read_text()
+    assert "FULL=1" not in text
+    for var in ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN", "BRIDGE", "E2E", "COVERAGE", "DOCS", "EXAMPLES", "FUZZ"):
+        assert f"{var}=1" not in text, f"scoped {var} in a full run"
+
+
+def test_ci_runs_every_scope_on_pull_requests():
+    """The local gate is scoped; CI still runs the full suite on the merge."""
+    text = (ROOT / ".github/workflows/ci.yml").read_text()
+    assert "pull_request" in text
+    runs = [line.strip() for line in text.splitlines() if "make test" in line]
+    assert runs, "CI runs no suite at all"
+    assert not any("R2S_FULL" in line for line in runs), "CI must not force a full local run"
+    mentioned = set()
+    for line in runs:
+        for scope in ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN", "BRIDGE", "COVERAGE", "DOCS", "EXAMPLES", "FUZZ"):
+            if scope in line:
+                mentioned.add(scope)
+        if "E2E=avr" in line:
+            mentioned.add("E2E=avr")
+        if "E2E=posix" in line:
+            mentioned.add("E2E=posix")
+    missing = {
+        "LINT",
+        "SCRIPTS",
+        "COMMITS",
+        "CORE",
+        "GEN",
+        "BRIDGE",
+        "COVERAGE",
+        "DOCS",
+        "EXAMPLES",
+        "FUZZ",
+        "E2E=avr",
+        "E2E=posix",
+    } - mentioned
+    assert not missing, f"CI no longer runs every scope: {sorted(missing)}"
