@@ -159,6 +159,23 @@ def test_without_pyyaml_names_the_missing_dependency(capsys, monkeypatch):
     assert err == "r2s-gen: error: vectors needs PyYAML; install it with pip install pyyaml\n"
 
 
+def test_a_cyclic_alias_reports_the_error_without_a_traceback(capsys, tmp_path):
+    write_message(tmp_path / "messages", "demo_msgs/msg/A", "demo_msgs/msg/B b")
+    write_message(tmp_path / "messages", "demo_msgs/msg/B", "demo_msgs/msg/A a")
+    code, out, err = run(
+        capsys,
+        "--type",
+        "demo_msgs/msg/A",
+        "--message",
+        "&x {b: {a: *x}}",
+        "--msg-path",
+        str(tmp_path / "messages"),
+    )
+    assert code == 1
+    assert out == ""
+    assert err == "r2s-gen: error: maximum recursion depth exceeded\n"
+
+
 def test_a_scalar_for_an_array_field_is_an_error(capsys, tmp_path):
     write_message(tmp_path / "messages", "demo_msgs/msg/Items", "uint8[] values")
     code, out, err = run(
