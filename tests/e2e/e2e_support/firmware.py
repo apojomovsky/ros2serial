@@ -9,10 +9,9 @@ from sharing the port's boot counter.
 import os
 import select
 import subprocess
-import time
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 BOOT_ENV = "R2S_POSIX_BOOT_ID_FILE"
 READY_MARK = "r2s_posix: ready"
 READY_TIMEOUT = 20.0
@@ -76,7 +75,7 @@ def _drain_until_ready(proc, deadline):
             return time.monotonic()
         if proc.poll() is not None:
             raise AssertionError("firmware exited before its ready line")
-    raise AssertionError("firmware printed no ready line within %.0f s" % READY_TIMEOUT)
+    raise AssertionError(f"firmware printed no ready line within {READY_TIMEOUT:.0f} s")
 
 
 def spawn(firmware, port, scratch, args=()):
