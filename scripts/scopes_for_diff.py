@@ -14,6 +14,8 @@ CHEAP = {"LINT": "1", "COMMITS": "1"}
 
 FULL = {"FULL": "1"}
 
+DOC_NAMES = ("README.md", "CONTRIBUTING.md", "AGENTS.md")
+
 # Prefix rules in first-match order. The comment on each rule names what the
 # mapped section reads, so a section that starts reading a new tree updates
 # the rule next to the reason.
