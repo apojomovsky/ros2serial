@@ -301,7 +301,7 @@ directly above it. The check skips the example without compiling it:
 
 In `tests/e2e/`, each a launch_testing test parameterized by MCU backend (posix, simavr, hardware) and registration path:
 
-1. Handshake completes; `ros2 topic list` shows the announced topics within 3 s of the MCU's HELLO.
+1. Handshake completes within 3 s of the MCU's HELLO, as the bridge reports it; `ros2 topic list` shows the announced topics within a further generous timeout.
 2. MCU publishes Float32 at 50 Hz for 10 s; the host receives at least 99% with correct values.
 3. Host publishes Twist; the MCU echoes it on a test topic; values match after the narrow round trip.
 4. Launch remapping and namespace apply to the MCU's topics.

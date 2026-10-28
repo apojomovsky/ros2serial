@@ -82,6 +82,9 @@ class TestScenario1(unittest.TestCase):
                 self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
             received.clear()
             _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
+            # /diagnostics publishes at 1 Hz, so the observed time can lag the
+            # real handshake by one period; the bound still holds because the
+            # handshake traffic itself is tens of milliseconds.
             while True:
                 rclpy.spin_once(node, timeout_sec=0.5)
                 missing = checks.handshake_missing(received[-1], HANDSHAKE_TOPICS) if received else ["link silent"]
@@ -91,7 +94,7 @@ class TestScenario1(unittest.TestCase):
                 self.assertLess(took, TOPIC_BUDGET, f"handshake still missing {missing} after {took:.1f} s")
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
             bridge_support.wait_for_topics(
-                node, ANNOUNCED, _SPAWNED.ready_at, bridge_support.DISCOVERY_TIMEOUT, "announced topics"
+                node, ANNOUNCED, _SPAWNED.ready_at, checks.DISCOVERY_TIMEOUT, "announced topics"
             )
         finally:
             node.destroy_node()

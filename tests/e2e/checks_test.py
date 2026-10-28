@@ -108,5 +108,10 @@ class TestHandshakeReady(unittest.TestCase):
         self.assertEqual(checks.handshake_missing(message, self.WANTED), ["topic cmd_vel"])
 
 
+class TestDiscoveryTimeout(unittest.TestCase):
+    def test_stays_generous_against_the_handshake_bound(self):
+        self.assertGreaterEqual(checks.DISCOVERY_TIMEOUT, 10.0)
+
+
 if __name__ == "__main__":
     unittest.main()

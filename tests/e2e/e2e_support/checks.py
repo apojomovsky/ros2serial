@@ -10,6 +10,10 @@ import time
 
 # covers: SES-9, SES-18, SES-31, FRM-4, FRM-5
 
+# Graph discovery of new topics rides DDS, which a loaded runner stretches
+# past the handshake: scenarios wait it out here, not against their bounds.
+DISCOVERY_TIMEOUT = 20.0
+
 
 def check_float_sequence(values, expected_count, loss_budget, what):
     """A 50 Hz counter stream arrives nearly whole, ordered and integral.

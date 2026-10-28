@@ -18,9 +18,6 @@ from launch_ros.substitutions import FindPackageShare
 from rcl_interfaces.srv import GetParameters
 
 HANDSHAKE_TIMEOUT = 20.0
-# Graph discovery of new topics rides DDS, which a loaded runner stretches
-# past the handshake: scenarios wait it out here, not against their bounds.
-DISCOVERY_TIMEOUT = 20.0
 
 
 def example_params_file():
