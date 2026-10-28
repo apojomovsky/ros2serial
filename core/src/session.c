@@ -389,7 +389,9 @@ static void on_control(uint32_t now, const uint8_t *payload, uint16_t len)
         return;
     case OP_READY: {
         /* The token lives in RAM from here (SES-10); a zero token or a
-         * short frame is refused and changes nothing. */
+         * short frame is refused and changes nothing. T3 builds one host
+         * test library with R2S_TEST_INJECT_READY_ZERO_TOKEN, which keeps
+         * a zero token, so the model test can show it catches the breach. */
         uint32_t token;
 
         if (len != 5u) {
@@ -398,10 +400,12 @@ static void on_control(uint32_t now, const uint8_t *payload, uint16_t len)
         }
         token = (uint32_t)payload[1] | ((uint32_t)payload[2] << 8u) | ((uint32_t)payload[3] << 16u) |
                 ((uint32_t)payload[4] << 24u);
+#ifndef R2S_TEST_INJECT_READY_ZERO_TOKEN
         if (token == 0u) {
             refuse();
             return;
         }
+#endif
         if (session.state == ANNOUNCING) {
             session.token = token;
             enter_connected(now);
