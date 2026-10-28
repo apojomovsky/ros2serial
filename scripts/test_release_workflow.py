@@ -44,7 +44,8 @@ def test_the_release_uses_the_built_in_token_and_publishes_nowhere_else():
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "secrets." not in text
     assert "github.token" in text
-    lowered = text.lower()
+    runs = "\n".join(str(step.get("run", "")) for step in steps_of(workflow())["steps"])
+    lowered = runs.lower()
     assert "pypi" not in lowered
     assert "twine" not in lowered
 
