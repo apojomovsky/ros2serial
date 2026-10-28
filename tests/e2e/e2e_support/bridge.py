@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 import launch
+import launch_testing.actions
 from ament_index_python.packages import get_package_share_directory
 from launch.actions import GroupAction, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -59,7 +60,7 @@ def launch_bridge_only(port, params_file, namespace=None, remappings=()):
     return launch.LaunchDescription(
         [
             scoped_include_bridge(port, params_file, namespace, remappings),
-            launch_testing_actions_ready(),
+            launch_testing.actions.ReadyToTest(),
         ]
     )
 
@@ -81,8 +82,6 @@ def wait_for_topics(node, wanted, since, budget, what):
         missing = set(wanted) - names
         if not missing:
             return time.monotonic() - since
-        assert time.monotonic() - since < budget, what + " missing after %.1f s: %s" % (
-            budget,
-            sorted(missing),
-        )
+        elapsed = time.monotonic() - since
+        assert elapsed < budget, f"{what} missing after {budget:.1f} s: {sorted(missing)}"
         time.sleep(0.1)

@@ -44,8 +44,12 @@ def check_twist_echo(sent, received, what):
             )
 
 
-def collect_until(values, count, deadline, what):
-    """Wait until values holds count entries, polling with a timeout."""
+def collect_until(values, count, deadline, what, spin):
+    """Wait until values holds count entries, pumping the node to do it.
+
+    spin is a zero-argument callable that runs the node's callbacks once;
+    without it the subscription filling values would never fire.
+    """
     while len(values) < count:
         assert time.monotonic() < deadline, f"{what}: only {len(values)} of {count} arrived"
-        time.sleep(0.05)
+        spin()

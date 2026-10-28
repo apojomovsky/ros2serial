@@ -4,6 +4,7 @@ Run directly: `python3 tests/e2e/checks_test.py`. The launch suite runs it
 before any scenario, so a broken helper fails fast instead of mid-handshake.
 """
 
+import time
 import unittest
 
 from e2e_support import checks
@@ -13,8 +14,8 @@ class Twist:
     """Field-for-field stand-in for geometry_msgs Twist in these tests."""
 
     def __init__(self, linear, angular):
-        self.linear = type("V", (), dict(zip("xyz", linear)))()
-        self.angular = type("V", (), dict(zip("xyz", angular)))()
+        self.linear = type("V", (), dict(zip("xyz", linear, strict=True)))()
+        self.angular = type("V", (), dict(zip("xyz", angular, strict=True)))()
 
 
 class TestFloatSequence(unittest.TestCase):
@@ -54,6 +55,17 @@ class TestTwistEcho(unittest.TestCase):
     def test_missing_echo_fails(self):
         with self.assertRaises(AssertionError):
             checks.check_twist_echo([Twist((1.0, 0.0, 0.0), (0.0, 0.0, 0.0))], [], "echo")
+
+
+class TestCollectUntil(unittest.TestCase):
+    def test_pumps_until_count_reached(self):
+        seen = []
+        checks.collect_until(seen, 3, time.monotonic() + 5.0, "probe", lambda: seen.append(1.0))
+        self.assertEqual(seen, [1.0, 1.0, 1.0])
+
+    def test_times_out_when_nothing_arrives(self):
+        with self.assertRaises(AssertionError):
+            checks.collect_until([], 1, time.monotonic() - 1.0, "probe", lambda: None)
 
 
 if __name__ == "__main__":

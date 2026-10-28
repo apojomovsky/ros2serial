@@ -103,8 +103,9 @@ class TestScenario3(unittest.TestCase):
             for msg in SENT:
                 pub.publish(msg)
                 time.sleep(0.2)
-            deadline = time.monotonic() + FLOW_TIMEOUT
-            checks.collect_until(echoed, ECHO_COUNT, deadline, "echo_vel")
+            checks.collect_until(
+                echoed, ECHO_COUNT, deadline, "echo_vel", lambda: rclpy.spin_once(node, timeout_sec=0.2)
+            )
             checks.check_twist_echo(SENT, list(echoed)[:ECHO_COUNT], "echo_vel")
         finally:
             node.destroy_node()
