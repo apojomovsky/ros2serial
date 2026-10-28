@@ -21,8 +21,7 @@ namespace
 constexpr std::chrono::milliseconds kPollPeriod{1};
 // Diagnostics ride the poll timer instead of their own: the snapshot must
 // read on the thread that polls the router, whose session keeps no lock.
-// The deadline is wall-clock, so a slow poll loop skips a beat instead of
-// shifting the 1 Hz the design promises.
+// The deadline is wall-clock, so the period does not drift when polling slows.
 constexpr std::chrono::seconds kDiagnosticsPeriod{1};
 
 } // namespace

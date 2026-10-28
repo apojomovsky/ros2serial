@@ -1,7 +1,7 @@
 // The bridge diagnostics: link state, session token, resets, protocol
 // version, MCU counters, per-topic gaps and drops, and the time sync slot,
 // through a real node with a scripted link and real type support.
-// covers: FRM-15, HB-2, SES-12, SES-15, SES-16, SES-19, SES-21, SES-26, SES-30
+// covers: FRM-15, HB-2, SES-15, SES-16, SES-19, SES-21, SES-26, SES-30
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -449,7 +449,9 @@ TEST_F(DiagnosticsNode, RefusedTopicCarriesNoTraffic)
     auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
         "battery", rclcpp::QoS(10).best_effort(),
         [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
-    fixture.wait_until([&sub]() { return sub->get_publisher_count() > 0u; });
+    // No match wait: the refused topic has no publisher, so none can appear.
+    // The structural fact is the missing route above; these spins only flush
+    // anything already in flight.
     const std::vector<std::uint8_t> one{0x00, 0x00, 0x80, 0x3F};
     fixture.deliver_frame(kBattery, 3u, one);
     rclcpp::spin_some(fixture.node());
