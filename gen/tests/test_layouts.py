@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from r2s_gen import bounds, cli, config, layouts, msgs
+from r2s_gen import bounds, cli, config, layouts, msgs, topics
 from r2s_gen.config import Config, Topic
 from r2s_gen.msgs import MessageError
 from r2s_gen.version import __version__
@@ -106,22 +106,21 @@ def test_generate_is_byte_identical_run_to_run(tmp_path):
     assert first == second
 
 
-def test_every_file_names_the_version_and_wrappers_the_config_hash(tmp_path):
+def test_every_file_names_the_version_and_the_config_hash(tmp_path):
     loaded, files = generated("cmake", tmp_path)
-    digest = layouts.config_hash(loaded)
+    digest = topics.config_hash(loaded)
 
     assert len(digest) == 16
     for name, text in files.items():
         assert f"r2s-gen {__version__}" in text, name
-        if "r2s_generated" not in name:
-            assert digest in text, name
+        assert digest in text, name
 
 
 def test_the_config_hash_moves_with_the_config(tmp_path):
     loaded, _ = generated("cmake", tmp_path)
     renamed, _ = generated("cmake", tmp_path, POSIX_TEXT.replace("node: r2s_posix", "node: other"))
 
-    assert layouts.config_hash(loaded) != layouts.config_hash(renamed)
+    assert topics.config_hash(loaded) != topics.config_hash(renamed)
 
 
 def test_cpp_output_is_rejected_precisely(tmp_path):
