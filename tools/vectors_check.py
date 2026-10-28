@@ -488,7 +488,7 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
                             continue
                         visit(nested, item, f"{where}[{index}].", entering | {id(item)})
                 else:
-                    visit(nested, expected, trail, entering)
+                    visit(nested, expected, f"{where}.", entering)
 
     # A cyclic YAML alias would revisit one mapping per recursion level until
     # the stack runs out. Containers already on the path are skipped instead,
