@@ -36,6 +36,8 @@ namespace
 constexpr std::uint8_t kBattery = 16u;
 constexpr std::uint8_t kCmdVel = 17u;
 constexpr std::uint8_t kHeartbeat = 4u;
+using Diagnostics = Router::Diagnostics;
+using TopicDiagnostics = Router::TopicDiagnostics;
 
 std::array<std::uint8_t, 8> installed_hash(const std::string &type)
 {
@@ -78,6 +80,16 @@ class DiagnosticsFixture
     {
         clock_.advance(std::chrono::milliseconds(ms));
         router_->poll();
+    }
+    // Discovery runs on background threads, so an endpoint created an instant
+    // ago may not be matched yet. The wait polls the condition with a
+    // deadline and returns as soon as it holds.
+    template <typename Ready> void wait_until(Ready ready)
+    {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (!ready() && std::chrono::steady_clock::now() < deadline) {
+            rclcpp::spin_some(node_);
+        }
     }
 
     void deliver_frame(std::uint8_t topic_id, std::uint8_t seq, const std::vector<std::uint8_t> &payload)
@@ -218,11 +230,14 @@ TEST_F(DiagnosticsNode, CountsSkippedMcuFramesAsGaps)
     auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
         "battery", rclcpp::QoS(10).best_effort(),
         [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
+    fixture.wait_until([&sub]() { return sub->get_publisher_count() > 0u; });
     const std::vector<std::uint8_t> one{0x00, 0x00, 0x80, 0x3F};
     fixture.deliver_frame(kBattery, 0u, one);
     fixture.deliver_frame(kBattery, 1u, one);
     fixture.deliver_frame(kBattery, 4u, one);
-    rclcpp::spin_some(fixture.node());
+    // Delivery runs on background threads, so the test waits for every
+    // sample instead of assuming one spin is enough.
+    fixture.wait_until([&received]() { return received.size() >= 3u; });
     const Diagnostics diagnostics = fixture.snapshot();
     const TopicDiagnostics *battery = find_topic(diagnostics, kBattery);
     ASSERT_NE(battery, nullptr);
@@ -275,6 +290,7 @@ TEST_F(DiagnosticsNode, ReportsKeepLatestReplacementAsDrop)
     DiagnosticsFixture fixture("latest", params);
     fixture.handshake_full(7u, 0x05u);
     auto pub = fixture.node()->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+    fixture.wait_until([&pub]() { return pub->get_subscription_count() > 0u; });
     geometry_msgs::msg::Twist first;
     first.linear.x = 1.0;
     pub->publish(first);
@@ -282,7 +298,7 @@ TEST_F(DiagnosticsNode, ReportsKeepLatestReplacementAsDrop)
     geometry_msgs::msg::Twist second;
     second.linear.x = 2.0;
     pub->publish(second);
-    rclcpp::spin_some(fixture.node());
+    fixture.wait_until([&fixture]() { return fixture.router().dropped(kCmdVel) >= 1u; });
     const Diagnostics diagnostics = fixture.snapshot();
     const TopicDiagnostics *cmd_vel = find_topic(diagnostics, kCmdVel);
     ASSERT_NE(cmd_vel, nullptr);
@@ -291,20 +307,31 @@ TEST_F(DiagnosticsNode, ReportsKeepLatestReplacementAsDrop)
 
 TEST_F(DiagnosticsNode, ReportsQueueOverflowAsDrop)
 {
-    RouterParams params;
-    params.qos_depth = 2;
-    DiagnosticsFixture fixture("queue", params);
+    DiagnosticsFixture fixture("queue", RouterParams{});
     fixture.handshake(7u);
-    auto pub = fixture.node()->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
-    for (int i = 0; i < 5; ++i) {
-        geometry_msgs::msg::Twist twist;
-        pub->publish(twist);
+    auto pub =
+        fixture.node()->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", rclcpp::QoS(10).best_effort());
+    fixture.wait_until([&pub]() { return pub->get_subscription_count() > 0u; });
+    // No poll runs between the batches, so the scheduler queues every batch;
+    // the bound is the default depth of 10. Each batch waits for its own
+    // arrival first, so a slow match fails loudly instead of skewing the
+    // count.
+    int submitted = 0;
+    for (int batch = 0; batch < 3; ++batch) {
+        for (int i = 0; i < 5; ++i) {
+            geometry_msgs::msg::Twist twist;
+            pub->publish(twist);
+            ++submitted;
+        }
+        fixture.wait_until([&fixture, submitted]() {
+            return fixture.router().queued(kCmdVel) + fixture.router().dropped(kCmdVel) ==
+                   static_cast<std::size_t>(submitted);
+        });
     }
-    rclcpp::spin_some(fixture.node());
     const Diagnostics diagnostics = fixture.snapshot();
     const TopicDiagnostics *cmd_vel = find_topic(diagnostics, kCmdVel);
     ASSERT_NE(cmd_vel, nullptr);
-    EXPECT_EQ(cmd_vel->dropped, 3u) << "a queued topic past its bound drops the oldest";
+    EXPECT_EQ(cmd_vel->dropped, 5u) << "a queued topic past its bound drops the oldest";
 }
 
 TEST_F(DiagnosticsNode, ReportsTimeSyncAsUnavailable)

@@ -149,6 +149,15 @@ class Session
     // The last completed handshake's topics, empty before the first one.
     const std::vector<TopicInfo> &topics() const;
     McuCounters mcu_counters() const;
+    // Lost MCU-to-host frames per user topic ([FRM-15]): the sum of
+    // (seq - expected) mod 256 over every user frame received while
+    // connected. Gaps accumulate across handshakes, while the expectation
+    // restarts at 0 after each one ([FRM-4]). 0 for an unseen topic.
+    std::uint32_t seq_gaps(std::uint8_t topic_id) const;
+    // HELLOs accepted while connected: the MCU rebooted and announced a new
+    // handshake ([SES-19], [SES-21]). Link timeouts re-handshake without a
+    // HELLO and do not count.
+    std::uint32_t resets() const;
     // Queues one host-to-MCU payload on its topic, assigning the topic's next
     // seq and flushing the link. The seq restarts at 0 after each handshake.
     // False when the link already holds the MCU's receive capacity in unsent
