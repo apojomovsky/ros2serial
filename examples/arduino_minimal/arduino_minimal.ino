@@ -1,7 +1,7 @@
 /* Minimal Arduino example: the generated pair on Uno and Mega, publishing
  * battery and counting cmd_vel frames. The generated header carries C
  * linkage, so the sketch includes it plainly; the port glue over Serial
- * lives in the library, which also counts the boots. */
+ * lives in the library. */
 #include <r2s_generated.h>
 
 static uint32_t s_cmd_vel_count;

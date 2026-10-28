@@ -1,5 +1,5 @@
 /* posix port: the core's port contract over a serial device, with the tick
- * from CLOCK_MONOTONIC and the boot ID from a file counter (C10). */
+ * from CLOCK_MONOTONIC. */
 #define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
@@ -17,10 +17,6 @@
 #include "r2s/r2s_session.h"
 
 #include "r2s_posix_port.h"
-
-/* The variable naming the boot ID file. The test launching the firmware sets
- * it to a path it owns, so the counter never lives in the repository. */
-#define BOOT_ENV "R2S_POSIX_BOOT_ID_FILE"
 
 static int s_fd = -1;
 
@@ -124,78 +120,4 @@ uint32_t r2s_port_tick(void)
     }
     last = (uint32_t)((ms - base_ms) * (uint32_t)(R2S_TICK_HZ / 1000u));
     return last;
-}
-
-/* Reads the file's decimal counter, adds one, writes it back and returns it.
- * A missing file starts at zero, so the first boot returns one. A file longer
- * than 31 bytes cannot be a decimal u32 with its newline, so it fails instead
- * of parsing a truncation of itself. */
-static uint32_t next_boot_id(const char *path)
-{
-    char text[33];
-    char printed[32];
-    char *end;
-    unsigned long value;
-    uint32_t id;
-    int out;
-    int fd = open(path, O_RDWR | O_CREAT, 0666);
-    ssize_t n;
-
-    if (fd < 0) {
-        fprintf(stderr, "r2s_posix: cannot open boot ID file '%s': %s\n", path, strerror(errno));
-        _exit(1);
-    }
-    n = read(fd, text, sizeof text - 1u);
-    if (n < 0) {
-        fprintf(stderr, "r2s_posix: cannot read boot ID file '%s': %s\n", path, strerror(errno));
-        _exit(1);
-    }
-    if (n > 31) {
-        fprintf(stderr, "r2s_posix: boot ID file '%s' is too long to be a decimal u32\n", path);
-        _exit(2);
-    }
-    if (n < 0) {
-        fprintf(stderr, "r2s_posix: cannot read boot ID file '%s': %s\n", path, strerror(errno));
-        _exit(1);
-    }
-    if (n == 0) {
-        value = 0ul;
-    } else {
-        text[(size_t)n] = '\0';
-        errno = 0;
-        value = strtoul(text, &end, 10);
-        while (*end == '\n') {
-            end++;
-        }
-        if (end == text || *end != '\0' || errno == ERANGE || value > 0xFFFFFFFFul) {
-            fprintf(stderr, "r2s_posix: boot ID file '%s' is not a decimal u32\n", path);
-            _exit(2);
-        }
-    }
-    id = (uint32_t)(value + 1ul);
-    out = snprintf(printed, sizeof printed, "%lu\n", (unsigned long)id);
-    if (out < 0 || (size_t)out >= sizeof printed || lseek(fd, 0, SEEK_SET) != 0 || ftruncate(fd, 0) != 0 ||
-        write(fd, printed, (size_t)out) != (ssize_t)out || close(fd) != 0) {
-        fprintf(stderr, "r2s_posix: cannot write boot ID file '%s'\n", path);
-        _exit(1);
-    }
-    return id;
-}
-
-uint32_t r2s_port_boot_id(void)
-{
-    static uint32_t cached;
-    static uint8_t cached_set;
-
-    if (cached_set == 0u) {
-        const char *path = getenv(BOOT_ENV);
-
-        if (path == NULL || path[0] == '\0') {
-            fprintf(stderr, "r2s_posix: %s is not set\n", BOOT_ENV);
-            _exit(2);
-        }
-        cached = next_boot_id(path);
-        cached_set = 1u;
-    }
-    return cached;
 }

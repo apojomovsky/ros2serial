@@ -1,0 +1,25 @@
+# Example parameters for the r2s_bridge node, launched with
+# launch/r2s_bridge.launch.py. Every key below is a declared bridge parameter
+# (docs/00-design.md, Bridge specification); the launch argument port wins
+# over the port value here. Uncomment the overrides line to pace one topic.
+r2s_bridge:
+  ros__parameters:
+    port: /dev/ttyACM0
+    baud: 115200
+    low_latency: true
+    hupcl: true
+    boot_wait_ms: 2500
+    node_map: ""
+    reconnect_period_ms: 1000
+    heartbeat_period_ms: 500
+    link_timeout_ms: 2000
+    time_sync:
+      enabled: true
+      period_ms: 5000
+    rate_limit:
+      default_hz: 0.0
+      # Per-topic caps naming the announced topic. To pace one topic, delete
+      # the leading "# " below.
+      # overrides: ["cmd_vel=20"]
+    tx_budget_pct: 50
+    qos_depth: 10

@@ -92,17 +92,18 @@ inline std::vector<std::uint8_t> helper_decode_unit(std::vector<std::uint8_t> un
     return {decoded, decoded + decoded_len};
 }
 
-// One HELLO payload: the fields of [CTL-16].
-inline std::vector<std::uint8_t> helper_hello(std::uint32_t boot_id, std::uint8_t topics,
+// One HELLO payload: the fields of [CTL-16]. The token is the MCU's echo:
+// 0 before the host assigns one.
+inline std::vector<std::uint8_t> helper_hello(std::uint32_t token, std::uint8_t topics,
                                               std::uint16_t max_frame = 512u)
 {
-    std::vector<std::uint8_t> p{0x02u, 0x01u, 0x00u};
+    std::vector<std::uint8_t> p{0x02u, 0x02u, 0x00u};
     const auto put_le = [&p](std::uint32_t value, int bytes) {
         for (int i = 0; i < bytes; ++i) {
             p.push_back(static_cast<std::uint8_t>((value >> (8 * i)) & 0xFFu));
         }
     };
-    put_le(boot_id, 4);
+    put_le(token, 4);
     put_le(max_frame, 2);
     put_le(515, 2);
     put_le(1000000u, 4);

@@ -1,6 +1,6 @@
 # ros2serial protocol specification
 
-Version 0.3 (draft) · protocol version 1
+Version 0.3 (draft) · protocol version 2
 
 This document is normative. Every normative statement is a list item starting with an ID in brackets, such as `[FRM-1]`. Conformance vectors (`spec/vectors/`) and tests name the IDs they cover, so every rule here is checked by at least one test (`docs/01-testing.md`, section 3). IDs are never reused: a removed rule keeps its list item, with its text replaced by "Retired.", so the numbering has no gaps.
 
@@ -15,7 +15,7 @@ This version covers the frame, the frame check, rCOBS, varints, the message enco
 Sizes are in bytes, and a byte is 8 bits. In this document and in the vectors, byte strings are written as lowercase hex byte pairs separated by single spaces, for example `10 02 01`.
 
 - [GEN-1] All multi-byte integers on the wire are little-endian.
-- [GEN-2] The protocol version described here is 1. Both sides announce it in the handshake.
+- [GEN-2] The protocol version described here is 2. Both sides announce it in the handshake.
 
 ## 2. Frame
 
@@ -124,11 +124,11 @@ A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3
 | Opcode | Name | Direction | Payload after the opcode |
 | --- | --- | --- | --- |
 | 0x01 | HELLO_REQ | host to MCU | `protocol_version u8` |
-| 0x02 | HELLO | MCU to host | `protocol_version u8, handshake_mode u8, boot_id u32, max_frame u16, rx_capacity u16, tick_hz u32, features u8, topic_count u8`, then `node_name string` (full) or `node_name_hash u32` (compact) |
+| 0x02 | HELLO | MCU to host | `protocol_version u8, handshake_mode u8, session_token u32, max_frame u16, rx_capacity u16, tick_hz u32, features u8, topic_count u8`, then `node_name string` (full) or `node_name_hash u32` (compact) |
 | 0x03 | TOPIC_REQ | host to MCU | `index u8` |
 | 0x04 | TOPIC | MCU to host | `index u8, topic_id u8, flags u8, type_hash[8]`, then `type_name string, topic_name string` (full) or `topic_name_hash u32` (compact) |
 | 0x05 | TOPIC_STATUS | host to MCU | `topic_id u8, status u8` |
-| 0x06 | READY | host to MCU | none |
+| 0x06 | READY | host to MCU | `token u32` |
 
 - [CTL-1] The handshake mode is 0 for full and 1 for compact.
 - [CTL-2] The `features` byte has bit 0 for time, bit 1 for log, bit 2 for parameters, bit 3 for the reliable channel, bit 4 for "`double` is 32 bits" and bit 5 for runtime topic registration. Bits 4 and 5 are informational. Every other bit is reserved and MUST be 0 in both directions.
@@ -232,7 +232,7 @@ BOOT --init, send HELLO--> ANNOUNCING --READY--> CONNECTED
 - [SES-7] The MCU returns to ANNOUNCING on a link timeout or on a HELLO_REQ.
 - [SES-8] A link timeout is no valid frame from the host for 2000 ms. The interval is a build-time setting.
 - [SES-9] In CONNECTED the MCU sends a heartbeat every 500 ms, and a publish works for the topics whose status is ok.
-- [SES-10] The `boot_id` comes from the port, once per boot, so that a host can tell a reset from a reconnect.
+- [SES-10] The MCU keeps a `session_token` in RAM: 0 after every boot, the token of the last READY afterwards. The HELLO echoes it, so a host can tell a reset from a reconnect. The MCU MUST refuse ([SYS-5]) a READY whose token is 0 or whose length is not the one the table in section 7.1 gives.
 - [SES-11] The `seq` counter of every topic restarts at 0 after each handshake (section 2, [FRM-4]).
 
 ### 8.2 The host session
@@ -248,9 +248,9 @@ DISCONNECTED --port open--> BOOT_WAIT --HELLO or boot_wait_ms--> HANDSHAKING --a
 - [SES-14] In HANDSHAKING the host sends HELLO_REQ every 500 ms until a HELLO arrives.
 - [SES-15] The host refuses a HELLO whose protocol version it does not support, and logs an error naming both versions.
 - [SES-16] For each topic index, the host sends TOPIC_REQ with a 200 ms timeout and at most 3 retries, resolves the type support, checks the hash, sends TOPIC_STATUS, and creates or reuses the publisher or subscription. When the retries are spent without a TOPIC, it abandons the walk and returns to HANDSHAKING.
-- [SES-17] The host sends READY when every topic is resolved.
+- [SES-17] The host sends READY with a nonzero token it assigns for the handshake when every topic is resolved.
 - [SES-18] In CONNECTED the host sends a heartbeat every 500 ms and forwards user traffic.
-- [SES-19] The host detects a reset when a HELLO arrives while it is connected, or when a HELLO carries a different `boot_id`. A HELLO that repeats the `boot_id` of the handshake under way, while topics are still being collected, changes nothing: the walk answering the first HELLO continues.
+- [SES-19] The host detects a reset when a HELLO arrives while it is connected, or when a HELLO carries a different `session_token` than the one recorded. A HELLO that repeats the recorded token of the handshake under way, while topics are still being collected, changes nothing: the walk answering the first HELLO continues.
 - [SES-20] On a re-handshake the host keeps its publishers and subscriptions when the new topic table is identical to the previous one, and destroys and recreates them otherwise.
 - [SES-21] The host returns to DISCONNECTED on a port error, and to HANDSHAKING on a link timeout or a reset.
 

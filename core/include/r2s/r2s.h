@@ -9,7 +9,7 @@
 
 /* The wire protocol version (spec/protocol.md, GEN-2). A change on the wire
  * that an older peer cannot handle bumps it. */
-#define R2S_PROTOCOL_VERSION 1
+#define R2S_PROTOCOL_VERSION 2
 
 /* What every core call returns: 0 for success, a negative error code. */
 typedef int8_t r2s_status_t;
@@ -24,8 +24,8 @@ typedef int8_t r2s_status_t;
 extern "C" {
 #endif
 
-/* Starts the session: reads the boot ID once, sends HELLO and enters
- * ANNOUNCING (SES-1). The table set by r2s_session_configure() or
+/* Starts the session: clears the session token, sends HELLO and enters
+ * ANNOUNCING (SES-1, SES-10). The table set by r2s_session_configure() or
  * r2s_session_configure_ram() stays; without one the node announces itself
  * nameless with no topics. */
 void r2s_init(void);

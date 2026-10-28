@@ -28,7 +28,6 @@ cxx=${CXX:-g++}
   "$root/ports/arduino/r2s_arduino_port.cpp" \
   "$root/ports/arduino/tests/test_arduino_port.cpp" \
   "$root/ports/arduino/tests/stubs/Arduino.cpp" \
-  "$root/ports/arduino/tests/stubs/EEPROM.cpp" \
   -o "$build/test_arduino_port" || exit 1
 [ "$build_only" = 1 ] && exit 0
 "$build/test_arduino_port" || exit 1

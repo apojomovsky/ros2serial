@@ -355,7 +355,6 @@ int main(int argc, char **argv)
     uint8_t count;
     uint32_t interval;
     uint32_t last_pub;
-    uint32_t boot_id;
     uint32_t sent = 0u;
     uint8_t log_booted = 0u;
 
@@ -369,9 +368,6 @@ int main(int argc, char **argv)
         return 0;
     }
     parse_options(argc, argv, &opts);
-    /* Prime the counter before opening the port, so a bad boot file fails
-     * before any byte reaches the line. */
-    boot_id = r2s_port_boot_id();
     if (r2s_posix_open(opts.port) < 0) {
         fprintf(stderr, "r2s_posix: cannot open '%s': %s\n", opts.port, strerror(errno));
         return 1;
@@ -396,8 +392,10 @@ int main(int argc, char **argv)
             continue;
         }
         if (opts.log_text != NULL && log_booted == 0u) {
-            /* A boot line that fails to publish is retried until it sends. */
-            if (publish_log_text(boot_id) == R2S_OK) {
+            /* A boot line that fails to publish is retried until it sends.
+             * It carries the assigned session token, so the host sees what
+             * the firmware stored. */
+            if (publish_log_text(r2s_session_token()) == R2S_OK) {
                 log_booted = 1u;
             }
         }

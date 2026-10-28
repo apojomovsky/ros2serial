@@ -4,7 +4,7 @@
  * generator step; the bundled descriptors compile in the library, which
  * never sees the list. The header carries C linkage, so handler definitions
  * keep it with no extern "C" block, and the port glue over Serial lives in
- * the library, which also counts the boots. */
+ * the library. */
 
 #define R2S_NODE_NAME "hello_xmacro"
 #define R2S_TOPICS(X) \

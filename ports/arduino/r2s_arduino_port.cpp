@@ -1,7 +1,6 @@
 /* Arduino port glue: the core's port contract over a Stream, default Serial.
  * The sketch never names these; node.begin() selects the stream (V7). */
 #include <Arduino.h>
-#include <EEPROM.h>
 
 #include "r2s/r2s_port.h"
 
@@ -12,8 +11,6 @@ namespace
 // Selected stream, null until attached; the accessors then serve Serial, so
 // a sketch that never selects still talks on the default port.
 Stream *s_selected;
-uint32_t s_boot_id;
-bool s_boot_done;
 
 Stream &selected(void)
 {
@@ -65,24 +62,9 @@ uint32_t r2s_port_tick(void)
     return (uint32_t)(micros() / 1000UL);
 }
 
-/* A counter in the first EEPROM cell, so every boot announces a new ID.
- * S8 removes the boot ID; until it lands the glue keeps this internally. */
-uint32_t r2s_port_boot_id(void)
-{
-    if (!s_boot_done) {
-        EEPROM.get(0, s_boot_id);
-        s_boot_id += 1u;
-        EEPROM.put(0, s_boot_id);
-        s_boot_done = true;
-    }
-    return s_boot_id;
-}
-
 #ifdef R2S_TESTING
 void r2s_arduino_port_test_reset(void)
 {
     s_selected = nullptr;
-    s_boot_id = 0u;
-    s_boot_done = false;
 }
 #endif

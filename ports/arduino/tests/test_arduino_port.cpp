@@ -1,11 +1,10 @@
 /* The Arduino glue's host test: the port contract against stub streams.
  * Fails unless the glue reads the selected stream, writes to it, reports
- * its free space, ticks from micros and keeps the EEPROM boot counter. */
+ * blocking TX space and ticks from micros. */
 #include <stdint.h>
 #include <stdio.h>
 
 #include "Arduino.h"
-#include "EEPROM.h"
 #include "r2s/r2s_port.h"
 #include "r2s_arduino_port.h"
 
@@ -21,7 +20,6 @@ static void reset_all(void)
 {
     Serial = StubStream();
     Serial1 = StubStream();
-    eeprom_stub_reset();
     set_stub_micros(0);
     r2s_arduino_port_test_reset();
 }
@@ -92,28 +90,6 @@ static int check_tick_is_micros_in_milliseconds(void)
     return 0;
 }
 
-static int check_boot_id_counts_every_boot(void)
-{
-    uint32_t first;
-    uint32_t second;
-
-    reset_all();
-    first = r2s_port_boot_id();
-    CHECK(first == 1u);
-    CHECK(r2s_port_boot_id() == first);
-    /* A reboot reruns setup but keeps EEPROM: only the RAM state resets. */
-    r2s_arduino_port_test_reset();
-    second = r2s_port_boot_id();
-    CHECK(second == first + 1u);
-    {
-        uint32_t stored = 0u;
-
-        EEPROM.get(0, stored);
-        CHECK(stored == second);
-    }
-    return 0;
-}
-
 static int check_another_port_is_selectable_without_port_code(void)
 {
     const uint8_t one[] = {'z'};
@@ -136,7 +112,6 @@ int main(void)
     CHECK(check_write_goes_to_serial() == 0);
     CHECK(check_tx_free_reports_blocking() == 0);
     CHECK(check_tick_is_micros_in_milliseconds() == 0);
-    CHECK(check_boot_id_counts_every_boot() == 0);
     CHECK(check_another_port_is_selectable_without_port_code() == 0);
     printf("arduino port ok\n");
     return 0;

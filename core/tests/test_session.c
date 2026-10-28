@@ -52,10 +52,9 @@ static const uint8_t topic_frame_payload[] = {
     's',   't',   'd',   '_',   'm',   's',   'g',   's',   '/',   'm',   's',   'g',   '/',
     'F',   'l',   'o',   'a',   't',   '3',   '2',   0x05u, 'f',   'l',   'o',   'a',   't'};
 
-static void configure(const r2s_topic_t *topics, uint8_t count, uint32_t boot_id)
+static void configure(const r2s_topic_t *topics, uint8_t count)
 {
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", topics, count));
-    fake_port_set_boot_id(boot_id);
     r2s_init();
 }
 
@@ -79,7 +78,7 @@ static void feed_host(uint8_t topic_id, uint8_t seq, const uint8_t *payload, uin
 
 /* Builds the HELLO payload the configuration announces: the hello vector's
  * shape, with the build's own limits, tick rate and features. */
-static uint16_t hello_payload(uint8_t *out, uint32_t boot_id, uint8_t topic_count)
+static uint16_t hello_payload(uint8_t *out, uint32_t token, uint8_t topic_count)
 {
     const char *name = "node";
     size_t name_len = strlen(name);
@@ -90,10 +89,10 @@ static uint16_t hello_payload(uint8_t *out, uint32_t boot_id, uint8_t topic_coun
     out[0] = 0x02u;
     out[1] = R2S_PROTOCOL_VERSION;
     out[2] = 0x00u;
-    out[3] = (uint8_t)(boot_id & 0xFFu);
-    out[4] = (uint8_t)((boot_id >> 8u) & 0xFFu);
-    out[5] = (uint8_t)((boot_id >> 16u) & 0xFFu);
-    out[6] = (uint8_t)((boot_id >> 24u) & 0xFFu);
+    out[3] = (uint8_t)(token & 0xFFu);
+    out[4] = (uint8_t)((token >> 8u) & 0xFFu);
+    out[5] = (uint8_t)((token >> 16u) & 0xFFu);
+    out[6] = (uint8_t)((token >> 24u) & 0xFFu);
     out[7] = (uint8_t)(R2S_MAX_FRAME & 0xFFu);
     out[8] = (uint8_t)((R2S_MAX_FRAME >> 8u) & 0xFFu);
     out[9] = (uint8_t)(R2S_FRAMER_RX_CAPACITY & 0xFFu);
@@ -134,10 +133,10 @@ void test_session_boot_sends_hello_and_announces(void)
     uint8_t expected[64];
     uint16_t len;
 
-    configure(one_topic, 1, 0x44332211u);
+    configure(one_topic, 1);
     TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
-    len = hello_payload(expected, 0x44332211u, 1);
+    len = hello_payload(expected, 0u, 1);
     assert_tx(0, 0, 0, expected, len);
 }
 
@@ -165,17 +164,16 @@ void test_session_names_of_128_bytes_or_more_travel_whole(void)
     big[0].type_name = big_type;
     big[0].topic_name = big_topic;
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure(big_node, big, 1));
-    fake_port_set_boot_id(0x44332211u);
     r2s_init();
 
     /* The HELLO carries the 200-byte name behind a two-byte varint. */
     expected[n++] = 0x02u;
     expected[n++] = R2S_PROTOCOL_VERSION;
     expected[n++] = 0x00u;
-    expected[n++] = 0x11u;
-    expected[n++] = 0x22u;
-    expected[n++] = 0x33u;
-    expected[n++] = 0x44u;
+    expected[n++] = 0x00u;
+    expected[n++] = 0x00u;
+    expected[n++] = 0x00u;
+    expected[n++] = 0x00u;
     expected[n++] = (uint8_t)(R2S_MAX_FRAME & 0xFFu);
     expected[n++] = (uint8_t)((R2S_MAX_FRAME >> 8u) & 0xFFu);
     expected[n++] = (uint8_t)(R2S_FRAMER_RX_CAPACITY & 0xFFu);
@@ -218,15 +216,15 @@ void test_session_a_full_handshake_reaches_connected(void)
     const uint8_t hello_req[] = {0x01u, 0x01u};
     const uint8_t topic_req[] = {0x03u, 0x00u};
     const uint8_t topic_status[] = {0x05u, 0x10u, 0x00u};
-    const uint8_t ready[] = {0x06u};
+    const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
     uint8_t expected[64];
     uint16_t len;
     const uint8_t heartbeat[] = {0x04u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
 
-    configure(one_topic, 1, 0x44332211u);
+    configure(one_topic, 1);
     feed_host(0, 0, hello_req, sizeof hello_req);
     TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
-    len = hello_payload(expected, 0x44332211u, 1);
+    len = hello_payload(expected, 0u, 1);
     assert_tx(1, 0, 1, expected, len);
 
     feed_host(0, 1, topic_req, sizeof topic_req);
@@ -253,9 +251,9 @@ void test_session_a_topic_status_rejecting_one_topic_still_connects(void)
     const uint8_t topic_req[] = {0x03u, 0x01u};
     const uint8_t ok[] = {0x05u, 0x10u, 0x00u};
     const uint8_t mismatch[] = {0x05u, 0x11u, 0x02u};
-    const uint8_t ready[] = {0x06u};
+    const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
 
-    configure(two_topics, 2, 0x44332211u);
+    configure(two_topics, 2);
     feed_host(0, 0, hello_req, sizeof hello_req);
     feed_host(0, 1, topic_req, sizeof topic_req);
     TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_frame_count());
@@ -281,13 +279,13 @@ void test_session_a_topic_status_rejecting_one_topic_still_connects(void)
 void test_session_a_link_timeout_returns_to_announcing(void)
 {
     const uint8_t hello_req[] = {0x01u, 0x01u};
-    const uint8_t ready[] = {0x06u};
+    const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
     uint8_t expected[64];
     uint16_t len;
 
     /* Near the wraparound, so the elapsed time stays an unsigned difference. */
     fake_port_set_tick(0xFFFFFC00u);
-    configure(one_topic, 1, 0x44332211u);
+    configure(one_topic, 1);
     feed_host(0, 0, hello_req, sizeof hello_req);
     feed_host(0, 1, ready, sizeof ready);
     TEST_ASSERT_EQUAL_UINT8(1, r2s_connected());
@@ -313,27 +311,43 @@ void test_session_a_link_timeout_returns_to_announcing(void)
     TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_frame_count());
     fake_port_advance(1);
     r2s_spin_some();
-    len = hello_payload(expected, 0x44332211u, 1);
+    len = hello_payload(expected, 1u, 1);
     /* The READY reset the counters, so the re-announce answers from 0. */
     assert_tx(3, 0, 0, expected, len);
 }
 
 /* covers: SES-10 */
-void test_session_the_boot_id_is_read_once_per_boot(void)
+void test_session_hello_carries_no_token_until_ready_assigns_one(void)
 {
     const uint8_t hello_req[] = {0x01u, 0x01u};
+    const uint8_t zero_ready[] = {0x06u, 0x00u, 0x00u, 0x00u, 0x00u};
+    const uint8_t ready[] = {0x06u, 0xA5u, 0xA5u, 0xA5u, 0xA5u};
     uint8_t expected[64];
     uint16_t len;
 
-    configure(one_topic, 1, 0xA5A5A5A5u);
-    len = hello_payload(expected, 0xA5A5A5A5u, 1);
+    configure(one_topic, 1);
+    TEST_ASSERT_EQUAL_HEX32(0u, r2s_session_token());
+    len = hello_payload(expected, 0u, 1);
     assert_tx(0, 0, 0, expected, len);
-
-    /* A changed port value mid-run is not a new boot: the reply keeps the old
-     * ID, so the host cannot mistake it for a reset. */
-    fake_port_set_boot_id(0xDEADBEEFu);
-    feed_host(0, 0, hello_req, sizeof hello_req);
+    /* A zero token is refused: the link stays down and the HELLO keeps
+     * carrying no token. */
+    feed_host(0, 0, zero_ready, sizeof zero_ready);
+    TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
+    TEST_ASSERT_EQUAL_HEX32(0u, r2s_session_token());
+    feed_host(0, 1, hello_req, sizeof hello_req);
     assert_tx(1, 0, 1, expected, len);
+    /* The assigned token is stored in RAM and echoed from then on, across a
+     * re-announce that is not a boot. */
+    feed_host(0, 2, ready, sizeof ready);
+    TEST_ASSERT_EQUAL_UINT8(1, r2s_connected());
+    TEST_ASSERT_EQUAL_HEX32(0xA5A5A5A5u, r2s_session_token());
+    len = hello_payload(expected, 0xA5A5A5A5u, 1);
+    feed_host(0, 3, hello_req, sizeof hello_req);
+    assert_tx(2, 0, 0, expected, len);
+    /* A boot clears the RAM again: the next HELLO carries no token. */
+    r2s_init();
+    len = hello_payload(expected, 0u, 1);
+    assert_tx(3, 0, 0, expected, len);
 }
 
 /* covers: SES-3, HB-1 */
@@ -344,8 +358,8 @@ void test_session_announcing_answers_other_frames_with_a_rate_limited_hello(void
     uint8_t expected[64];
     uint16_t len;
 
-    configure(one_topic, 1, 0x44332211u);
-    len = hello_payload(expected, 0x44332211u, 1);
+    configure(one_topic, 1);
+    len = hello_payload(expected, 0u, 1);
 
     feed_host(16, 0, user, sizeof user);
     TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
@@ -370,7 +384,7 @@ void test_session_a_reserved_channel_is_ignored_without_a_reply_or_a_count(void)
 {
     const r2s_framer_counters_t *count;
 
-    configure(one_topic, 1, 0x44332211u);
+    configure(one_topic, 1);
     /* The shape of spec/vectors/frames/reserved_channel.yaml. */
     feed_host(9, 0, NULL, 0);
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
@@ -385,8 +399,8 @@ void test_session_announcing_repeats_hello_every_second_without_host_traffic(voi
     uint8_t expected[64];
     uint16_t len;
 
-    configure(one_topic, 1, 0x44332211u);
-    len = hello_payload(expected, 0x44332211u, 1);
+    configure(one_topic, 1);
+    len = hello_payload(expected, 0u, 1);
 
     fake_port_advance(999);
     r2s_spin_some();
@@ -398,10 +412,11 @@ void test_session_announcing_repeats_hello_every_second_without_host_traffic(voi
     assert_tx(1, 0, 1, expected, len);
 }
 
-/* covers: SYS-5, CTL-14, CTL-16 */
+/* covers: SYS-5, CTL-14, CTL-16, SES-10 */
 void test_session_malformed_control_frames_are_refused(void)
 {
     const uint8_t ready_extra[] = {0x06u, 0x00u};
+    const uint8_t ready_zero[] = {0x06u, 0x00u, 0x00u, 0x00u, 0x00u};
     const uint8_t topic_req_far[] = {0x03u, 0x05u};
     const uint8_t unknown_opcode[] = {0x09u};
     const uint8_t hello_req_long[] = {0x01u, 0x01u, 0x02u};
@@ -409,7 +424,7 @@ void test_session_malformed_control_frames_are_refused(void)
     const uint8_t status_bad[] = {0x05u, 0x10u, 0x07u};
     const uint8_t status_unknown[] = {0x05u, 0x12u, 0x00u};
 
-    configure(one_topic, 1, 0x44332211u);
+    configure(one_topic, 1);
     feed_host(0, 0, ready_extra, sizeof ready_extra);
     feed_host(0, 1, topic_req_far, sizeof topic_req_far);
     feed_host(0, 2, NULL, 0);
@@ -418,10 +433,11 @@ void test_session_malformed_control_frames_are_refused(void)
     feed_host(4, 0, heartbeat_full, sizeof heartbeat_full);
     feed_host(0, 5, status_bad, sizeof status_bad);
     feed_host(0, 6, status_unknown, sizeof status_unknown);
+    feed_host(0, 7, ready_zero, sizeof ready_zero);
 
     TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
-    TEST_ASSERT_EQUAL_UINT16(8, r2s_framer_counters()->dropped_frames);
+    TEST_ASSERT_EQUAL_UINT16(9, r2s_framer_counters()->dropped_frames);
 }
 
 /* covers: FRM-4, FRM-5, SES-11 */
@@ -430,14 +446,14 @@ void test_session_sequence_numbers_increment_and_restart_after_each_handshake(vo
     const uint8_t hello_req[] = {0x01u, 0x01u};
     const uint8_t topic_req[] = {0x03u, 0x00u};
     const uint8_t status[] = {0x05u, 0x10u, 0x00u};
-    const uint8_t ready[] = {0x06u};
+    const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
     const uint8_t heartbeat[] = {0x04u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
     const uint8_t heartbeat_next[] = {0x06u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
     uint8_t expected[64];
     uint16_t len;
 
-    configure(one_topic, 1, 0x44332211u);
-    len = hello_payload(expected, 0x44332211u, 1);
+    configure(one_topic, 1);
+    len = hello_payload(expected, 0u, 1);
     assert_tx(0, 0, 0, expected, len);
 
     feed_host(0, 0, hello_req, sizeof hello_req);
@@ -461,6 +477,7 @@ void test_session_sequence_numbers_increment_and_restart_after_each_handshake(vo
     fake_port_advance(2000);
     r2s_spin_some();
     TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
+    len = hello_payload(expected, 1u, 1);
     feed_host(0, 4, hello_req, sizeof hello_req);
     assert_tx(5, 0, 0, expected, len);
     feed_host(0, 5, ready, sizeof ready);
@@ -476,7 +493,7 @@ void test_session_announcing_holds_until_ready(void)
 {
     const uint8_t topic_req[] = {0x03u, 0x00u};
 
-    configure(one_topic, 1, 0x44332211u);
+    configure(one_topic, 1);
     TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
     feed_host(0, 0, topic_req, sizeof topic_req);
     TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
@@ -488,11 +505,11 @@ void test_session_user_frames_with_a_sequence_gap_do_not_disturb_the_link(void)
 {
     const uint8_t hello_req[] = {0x01u, 0x01u};
     const uint8_t status[] = {0x05u, 0x10u, 0x00u};
-    const uint8_t ready[] = {0x06u};
+    const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
     const uint8_t user[] = {0x00u};
     const r2s_framer_counters_t *count;
 
-    configure(one_topic, 1, 0x44332211u);
+    configure(one_topic, 1);
     feed_host(0, 0, hello_req, sizeof hello_req);
     feed_host(0, 1, status, sizeof status);
     feed_host(0, 2, ready, sizeof ready);
@@ -514,12 +531,12 @@ void test_session_user_frames_with_a_sequence_gap_do_not_disturb_the_link(void)
 void test_session_the_heartbeat_carries_every_counter(void)
 {
     const uint8_t hello_req[] = {0x01u, 0x01u};
-    const uint8_t ready[] = {0x06u};
+    const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
     const uint8_t bad[] = {0x01u, 0x02u, 0x03u};
     const uint8_t heartbeat[] = {0x02u, 0x00u, 0x01u, 0x00u, 0x00u, 0x00u, 0x01u, 0x00u};
     uint16_t len;
 
-    configure(one_topic, 1, 0x44332211u);
+    configure(one_topic, 1);
     len = r2s_test_frame_bad_crc(wire, 16, 0, bad, sizeof bad);
     feed_slow(wire, len);
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
@@ -538,15 +555,15 @@ void test_session_a_spin_answers_every_queued_frame_and_ignores_user_topics(void
     const uint8_t hello_req[] = {0x01u, 0x01u};
     const uint8_t topic_req[] = {0x03u, 0x00u};
     const uint8_t status[] = {0x05u, 0x10u, 0x00u};
-    const uint8_t ready[] = {0x06u};
+    const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
     const uint8_t user[] = {0x00u};
     uint8_t expected[64];
     uint16_t len;
     uint16_t first;
     uint16_t second;
 
-    configure(one_topic, 1, 0x44332211u);
-    len = hello_payload(expected, 0x44332211u, 1);
+    configure(one_topic, 1);
+    len = hello_payload(expected, 0u, 1);
 
     first = r2s_test_frame(wire, 0, 0, hello_req, sizeof hello_req);
     fake_port_queue_rx(wire, first);
@@ -591,7 +608,7 @@ void test_session_an_unannounceable_configuration_is_refused(void)
 /* Flags past the count read as zero instead of dereferencing past the table. */
 void test_session_flags_past_the_count_are_zero(void)
 {
-    configure(one_topic, 1, 0x44332211u);
+    configure(one_topic, 1);
     TEST_ASSERT_EQUAL_UINT8(0x03u, r2s_session_topic_flags(0u));
     TEST_ASSERT_EQUAL_UINT8(0u, r2s_session_topic_flags(1u));
     TEST_ASSERT_EQUAL_UINT8(0u, r2s_session_topic_flags(0xFFu));
@@ -605,9 +622,8 @@ void test_session_a_ram_table_announces_what_it_configures(void)
     uint16_t len;
 
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure_ram("node", one_topic, 1));
-    fake_port_set_boot_id(0x44332211u);
     r2s_init();
-    len = hello_payload(expected, 0x44332211u, 1);
+    len = hello_payload(expected, 0u, 1);
     assert_tx(0, 0, 0, expected, len);
     feed_host(0, 1, topic_req, sizeof topic_req);
     assert_tx(1, 0, 1, topic_frame_payload, sizeof topic_frame_payload);
@@ -628,11 +644,11 @@ void test_session_a_refused_configuration_changes_nothing(void)
         big[i].type_name = "t";
         big[i].topic_name = "n";
     }
-    configure(one_topic, 1u, 0x44332211u);
+    configure(one_topic, 1u);
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_session_configure("other", big, R2S_SESSION_MAX_TOPICS + 1u));
     /* The next HELLO still carries the configured name and one topic, and
      * index 0 still resolves the configured entry. */
-    len = hello_payload(expected, 0x44332211u, 1);
+    len = hello_payload(expected, 0u, 1);
     feed_host(0, 0, hello_req, sizeof hello_req);
     assert_tx(1, 0, 1, expected, len);
     feed_host(0, 1, topic_req, sizeof topic_req);
@@ -654,9 +670,9 @@ void test_session_a_huge_topic_name_changes_nothing(void)
 
     memset(huge_name, 'n', sizeof huge_name - 1u);
     huge_name[sizeof huge_name - 1u] = '\0';
-    configure(one_topic, 1u, 0x44332211u);
+    configure(one_topic, 1u);
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_session_configure("other", huge_table, 1u));
-    len = hello_payload(expected, 0x44332211u, 1);
+    len = hello_payload(expected, 0u, 1);
     feed_host(0, 0, hello_req, sizeof hello_req);
     assert_tx(1, 0, 1, expected, len);
     feed_host(0, 1, topic_req, sizeof topic_req);
@@ -668,11 +684,10 @@ void test_session_without_a_configuration_announces_no_name_and_no_topics(void)
     uint8_t expected[64];
     uint16_t len;
 
-    fake_port_set_boot_id(0x44332211u);
     r2s_init();
     TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
-    len = hello_payload(expected, 0x44332211u, 0);
+    len = hello_payload(expected, 0u, 0);
     expected[17] = 0x00u;
     assert_tx(0, 0, 0, expected, (uint16_t)(len - 4u));
 }
@@ -727,9 +742,9 @@ void test_session_frames_wait_for_space_instead_of_sending_half(void)
 {
     const uint8_t topic_req[] = {0x03u, 0x00u};
     const uint8_t hello_req[] = {0x01u, R2S_PROTOCOL_VERSION};
-    const uint8_t ready[] = {0x06u};
+    const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
 
-    configure(one_topic, 1, 0x44332211u);
+    configure(one_topic, 1);
     fake_port_tx_clear();
     fake_port_set_tx_free(9u);
     r2s_init();
@@ -761,7 +776,7 @@ void test_session_unknown_topic_requests_are_refused(void)
     const uint8_t bad_status[] = {0x05u, 0x10u, 0x09u};
     const uint16_t drops_before = r2s_framer_counters()->dropped_frames;
 
-    configure(one_topic, 1, 0x44332211u);
+    configure(one_topic, 1);
     feed_host(0, 0, hello_req, sizeof hello_req);
     feed_host(0, 1, bad_req, sizeof bad_req);
     feed_host(0, 2, bad_status, sizeof bad_status);
@@ -775,9 +790,9 @@ void test_session_connected_ignores_redundant_and_later_frames(void)
 {
     const uint8_t hello_req[] = {0x01u, R2S_PROTOCOL_VERSION};
     const uint8_t ping[] = {0x01u, 0x2au};
-    const uint8_t ready[] = {0x06u};
+    const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
 
-    configure(one_topic, 1, 0x44332211u);
+    configure(one_topic, 1);
     feed_host(0, 0, hello_req, sizeof hello_req);
     feed_host(0, 1, ready, sizeof ready);
     TEST_ASSERT_EQUAL_UINT8(1, r2s_connected());
@@ -800,7 +815,7 @@ void test_session_a_spin_serves_at_most_eight_frames(void)
     uint8_t user[] = {0x00u};
     uint16_t i;
 
-    configure(one_topic, 1, 0x44332211u);
+    configure(one_topic, 1);
     feed_host(0, 0, hello_req, sizeof hello_req);
     feed_host(0, 1, ready, sizeof ready);
     before = r2s_framer_counters()->rx_frames;

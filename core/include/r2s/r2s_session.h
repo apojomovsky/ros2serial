@@ -69,6 +69,10 @@ uint8_t r2s_session_find_topic(uint8_t topic_id);
 uint8_t r2s_session_topic_flags(uint8_t index);
 uint8_t r2s_session_topic_status(uint8_t index);
 
+/* The token the last READY assigned, or 0 before any READY and after every
+ * boot: the value the HELLO echoes (SES-10). */
+uint32_t r2s_session_token(void);
+
 /* The seq the next publish on the topic at index will carry, without
  * advancing the topic's counter ([FRM-4], [FRM-5]). */
 uint8_t r2s_session_tx_seq(uint8_t index);

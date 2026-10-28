@@ -67,11 +67,6 @@ uint32_t r2s_port_tick(void)
     return 0u;
 }
 
-uint32_t r2s_port_boot_id(void)
-{
-    return 0xA53C5A3Cu;
-}
-
 int main(void)
 {
     UBRR0 = (uint16_t)UBRR_VALUE;
