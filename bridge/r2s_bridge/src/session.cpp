@@ -349,6 +349,7 @@ struct Session::Impl {
         seq_control = 0;
         seq_heartbeat = 0;
         user_seq_.clear();
+        expected_seq.clear();
         last_rx_ms = now_ms();
         next_heartbeat_ms = now_ms() + config.heartbeat_period_ms;
         if (events.handshake_completed) {
@@ -410,6 +411,9 @@ struct Session::Impl {
         // A HELLO that lands while connected is a reset, and the same HELLO
         // announces the new handshake, so no extra HELLO_REQ is needed
         // ([SES-19], [SES-21]).
+        if (state == SessionState::kConnected) {
+            ++resets;
+        }
         state = SessionState::kHandshaking;
         start_topic_walk();
         return true;
@@ -525,6 +529,14 @@ struct Session::Impl {
             // the frame still keeps the link alive.
             return;
         }
+        // [FRM-15] A gap is not an error and does not drop the frame; it only
+        // counts here, per topic, for the H8 diagnostics. The first frame
+        // after a handshake expects seq 0.
+        const std::uint8_t seq = frame.data[1];
+        const auto expected = expected_seq.find(topic_id);
+        const std::uint8_t want = expected == expected_seq.end() ? 0u : expected->second;
+        gaps[topic_id] += static_cast<std::uint32_t>((seq - want) & 0xFFu);
+        expected_seq[topic_id] = static_cast<std::uint8_t>(seq + 1u);
         for (const TopicInfo &topic : topics) {
             if (topic.topic_id == topic_id && topic.status == kTopicStatusOk && events.user_frame) {
                 events.user_frame(topic_id, std::vector<std::uint8_t>(payload, payload + len));
@@ -629,6 +641,12 @@ struct Session::Impl {
     bool had_handshake = false;
     std::uint32_t next_token = 0u;
     McuCounters mcu;
+    std::uint32_t resets = 0;
+    // The expected seq per MCU-to-host user topic, and the lost frames each
+    // one skipped ([FRM-15]). The expectation restarts after each handshake,
+    // the counts never do.
+    std::map<std::uint8_t, std::uint8_t> expected_seq;
+    std::map<std::uint8_t, std::uint32_t> gaps;
 
     std::uint8_t seq_control = 0;
     std::uint8_t seq_heartbeat = 0;
@@ -668,6 +686,17 @@ const std::vector<TopicInfo> &Session::topics() const
 McuCounters Session::mcu_counters() const
 {
     return impl_->mcu;
+}
+
+std::uint32_t Session::seq_gaps(std::uint8_t topic_id) const
+{
+    const auto found = impl_->gaps.find(topic_id);
+    return found == impl_->gaps.end() ? 0u : found->second;
+}
+
+std::uint32_t Session::resets() const
+{
+    return impl_->resets;
 }
 
 bool Session::send_user(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload)
