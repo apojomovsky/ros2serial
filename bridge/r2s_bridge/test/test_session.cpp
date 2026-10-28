@@ -1130,6 +1130,7 @@ TEST(SessionControl, BoundsPendingControlOverALongBlockedStretch)
             fixture.deliver_frame(kControl, seq++, topic_payload(1u, 17u, "b"));
         }
     }
+    EXPECT_LE(fixture.session().pending_bytes(), 128u);
     fixture.allow_writes();
     fixture.session().poll();
     std::size_t bytes = 0;
@@ -1139,6 +1140,27 @@ TEST(SessionControl, BoundsPendingControlOverALongBlockedStretch)
     // One slot per singleton plus one TOPIC_STATUS per index is below 64
     // bytes for two topics; 128 leaves margin without hiding growth.
     EXPECT_LE(bytes, 128u) << "pending control stays bounded on a wedged link";
+}
+
+TEST(SessionControl, CountsReplacedControlFrames)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    fixture.drain_units();
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 16u, "x"));
+    fixture.drain_units();
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    EXPECT_EQ(fixture.session().control_coalesced(), 0u);
+    fixture.block_writes();
+    const std::vector<std::uint8_t> counters(8u, 0u);
+    for (std::uint32_t at = 1000; at <= 5000; at += 1000) {
+        fixture.advance_to(at);
+        fixture.deliver_frame(kHeartbeat, 0u, counters);
+    }
+    fixture.advance_to(5110);
+    EXPECT_EQ(fixture.session().control_coalesced(), 9u) << "nine of ten heartbeats replaced one slot";
+    EXPECT_LE(fixture.session().pending_bytes(), 16u) << "one heartbeat frame stays queued";
 }
 
 } // namespace

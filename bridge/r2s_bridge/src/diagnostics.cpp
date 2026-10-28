@@ -45,6 +45,7 @@ diagnostic_msgs::msg::DiagnosticArray diagnostics_message(const Router::Diagnost
     status.message = snapshot.link_state;
     add_value(status, "session token", std::to_string(snapshot.session_token));
     add_value(status, "resets", std::to_string(snapshot.resets));
+    add_value(status, "control coalesced", std::to_string(snapshot.control_coalesced));
     add_value(status, "protocol version", std::to_string(snapshot.protocol_version));
     add_value(status, "mcu rx frames", std::to_string(snapshot.mcu_counters.rx_frames));
     add_value(status, "mcu crc errors", std::to_string(snapshot.mcu_counters.crc_errors));
