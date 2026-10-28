@@ -9,11 +9,8 @@ publisher depth, and Float32 traffic must flow from the MCU to the host.
 import importlib.util
 import math
 import os
-import pty
-import select
 import subprocess
 import tempfile
-import threading
 import time
 import unittest
 from pathlib import Path
@@ -31,6 +28,24 @@ from launch_ros.substitutions import FindPackageShare
 from rcl_interfaces.srv import GetParameters
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _load_relay():
+    """The pty relay from the shared e2e framework, loaded from its file.
+
+    The bridge tests run under colcon without the framework on the import
+    path, so the module loads by path instead of by package import.
+    """
+    location = REPO_ROOT / "tests" / "e2e" / "e2e_support" / "relay.py"
+    spec = importlib.util.spec_from_file_location("e2e_relay", location)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.PtyRelay
+
+
+PtyRelay = _load_relay()
 
 DOCUMENTED_PARAMETERS = frozenset(
     [
@@ -52,7 +67,6 @@ DOCUMENTED_PARAMETERS = frozenset(
     ]
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
 HANDSHAKE_TIMEOUT = 20.0
 FLOW_TIMEOUT = 20.0
 
@@ -60,58 +74,6 @@ _SCRATCH = None
 _FIRMWARE = None
 _PARAMS = None
 _RELAY = None
-
-
-class PtyRelay:
-    """One serial line between two pty slaves: bytes written on one slave
-    come out of the other. Each end opens its slave by name; this thread
-    joins the two masters, since the test images carry no socat."""
-
-    def __init__(self):
-        self._mcu_master, mcu_slave = pty.openpty()
-        self._host_master, host_slave = pty.openpty()
-        self.mcu_port = os.ttyname(mcu_slave)
-        self.host_port = os.ttyname(host_slave)
-        os.close(mcu_slave)
-        os.close(host_slave)
-
-    def start(self):
-        self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._run, name="pty-relay", daemon=True)
-        self._thread.start()
-
-    def _forward(self, source, target):
-        # A master reads EIO until its slave is open and after it closes, so
-        # a failure here only skips one turn: both processes open their slaves
-        # just after this thread starts.
-        try:
-            chunk = os.read(source, 4096)
-        except OSError:
-            time.sleep(0.005)
-            return
-        if not chunk:
-            return
-        view = memoryview(chunk)
-        while view:
-            try:
-                written = os.write(target, view)
-            except OSError:
-                time.sleep(0.005)
-                return
-            view = view[written:]
-
-    def _run(self):
-        while not self._stop.is_set():
-            readable, _, _ = select.select([self._mcu_master, self._host_master], [], [], 0.05)
-            for source in readable:
-                target = self._host_master if source == self._mcu_master else self._mcu_master
-                self._forward(source, target)
-
-    def stop(self):
-        self._stop.set()
-        self._thread.join(timeout=5.0)
-        os.close(self._mcu_master)
-        os.close(self._host_master)
 
 
 def build_posix_firmware(scratch):
