@@ -145,7 +145,16 @@ stop_canary() {
     canary_pid=""
   fi
 }
-trap stop_canary EXIT HUP INT TERM
+# A killed suite must die instead of running on: the isolation test kills
+# suites at teardown, and a suite that survives would keep publishing its
+# canary into the next run's graph. EXIT alone cleans up; the signals exit.
+cleanup_and_exit() {
+  stop_canary
+  if [ -n "${router:-}" ]; then kill "$router" 2>/dev/null || true; fi
+  exit 143
+}
+trap stop_canary EXIT
+trap cleanup_and_exit HUP INT TERM
 
 boards=${R2S_E2E_BOARDS:-"uno mega"}
 rmws=${R2S_RMWS:-rmw_fastrtps_cpp rmw_cyclonedds_cpp rmw_zenoh_cpp}
@@ -189,5 +198,6 @@ for rmw in $rmws; do
   done
   stop_canary
   if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
+  router=""
 done
 exit $status
