@@ -27,21 +27,21 @@ def example_params_file():
     return path
 
 
-def include_bridge(port, params_file):
-    """Include the bridge launch file with the scenario's port and file."""
+def include_bridge(port, params_file, log_level="info"):
+    """Include the bridge launch file with the scenario's port, file and log level."""
     return IncludeLaunchDescription(
         PythonLaunchDescriptionSource([FindPackageShare("r2s_bridge"), "/launch/r2s_bridge.launch.py"]),
-        launch_arguments={"port": port, "params_file": str(params_file)}.items(),
+        launch_arguments={"port": port, "params_file": str(params_file), "log_level": log_level}.items(),
     )
 
 
-def scoped_include_bridge(port, params_file, namespace=None, remappings=()):
+def scoped_include_bridge(port, params_file, namespace=None, remappings=(), log_level="info"):
     """Include the bridge under standard scoping actions for scenario 4.
 
     PushRosNamespace and SetRemap are the user's own tools for placing
     topics; the scenario proves they reach the MCU's topics through them.
     """
-    actions = [include_bridge(port, params_file)]
+    actions = [include_bridge(port, params_file, log_level)]
     if remappings:
         actions = [SetRemap(src, dst) for src, dst in remappings] + actions
     if namespace:
@@ -51,7 +51,7 @@ def scoped_include_bridge(port, params_file, namespace=None, remappings=()):
     return GroupAction(actions)
 
 
-def launch_bridge_only(port, params_file, namespace=None, remappings=()):
+def launch_bridge_only(port, params_file, namespace=None, remappings=(), log_level="info"):
     """A launch description with the bridge and nothing else.
 
     The scenarios spawn the firmware themselves once the bridge is up, so
@@ -59,7 +59,7 @@ def launch_bridge_only(port, params_file, namespace=None, remappings=()):
     """
     return launch.LaunchDescription(
         [
-            scoped_include_bridge(port, params_file, namespace, remappings),
+            scoped_include_bridge(port, params_file, namespace, remappings, log_level),
             launch_testing.actions.ReadyToTest(),
         ]
     )

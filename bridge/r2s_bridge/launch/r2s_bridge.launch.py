@@ -2,8 +2,10 @@
 
 The port and the parameter file stay launch arguments, so tests and users
 drive them without editing this file: port names the serial device, and
-params_file selects the parameter set, the example one by default. Namespace
-and remappings use the standard scoping actions around the inclusion.
+params_file selects the parameter set, the example one by default. log_level
+sets the node's ROS log level, debug when a test asserts on debug lines.
+Namespace and remappings use the standard scoping actions around the
+inclusion.
 """
 
 import os
@@ -38,12 +40,18 @@ def generate_launch_description():
                 default_value=[FindPackageShare("r2s_bridge"), "/config/r2s_bridge.params.yaml"],
                 description="Parameter file holding every r2s_bridge parameter.",
             ),
+            DeclareLaunchArgument(
+                "log_level",
+                default_value="info",
+                description="ROS log level for the bridge node.",
+            ),
             OpaqueFunction(function=check_params_file),
             Node(
                 package="r2s_bridge",
                 executable="bridge",
                 name="r2s_bridge",
                 parameters=[params_file, {"port": port}],
+                arguments=["--ros-args", "--log-level", LaunchConfiguration("log_level")],
                 output="screen",
             ),
         ]
