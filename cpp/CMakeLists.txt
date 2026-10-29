@@ -76,7 +76,10 @@ function(r2s_cpp_unit_test source)
     VERBATIM)
   add_executable(${name} "${source}" "${runner}")
   target_compile_options(${name} PRIVATE ${R2S_WARNINGS})
-  target_link_libraries(${name} PRIVATE r2s_cpp_test_support r2s_runtime)
+  # Extra libraries per test: the runtime test needs the registry the hooks
+  # reset, while the static test must not link it (both headers define the
+  # same r2s:: names, so one binary never carries both layers).
+  target_link_libraries(${name} PRIVATE r2s_cpp_test_support ${ARGN})
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${source}")
   execute_process(
     COMMAND "${Python3_EXECUTABLE}" "${R2S_RUNNER_TOOL}" names "${CMAKE_CURRENT_SOURCE_DIR}/${source}"
@@ -87,4 +90,14 @@ function(r2s_cpp_unit_test source)
   endforeach()
 endfunction()
 
-r2s_cpp_unit_test(tests/test_runtime.cpp)
+r2s_cpp_unit_test(tests/test_runtime.cpp r2s_runtime)
+
+# The bundled tables the static test announces: the pinned generator output,
+# so the test speaks the tables the Arduino library ships. The frozen header
+# in include/ is identical to that output, so the C file compiles against it.
+add_library(r2s_bundled STATIC "${R2S_REPO_ROOT}/gen/tests/golden/bundle/r2s_bundled.c")
+target_include_directories(r2s_bundled PUBLIC include)
+target_compile_options(r2s_bundled PRIVATE ${R2S_WARNINGS})
+target_link_libraries(r2s_bundled PUBLIC r2s_core)
+
+r2s_cpp_unit_test(tests/test_static.cpp r2s_bundled)
