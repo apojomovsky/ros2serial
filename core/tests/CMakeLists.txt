@@ -223,9 +223,10 @@ add_test(NAME vectors_session COMMAND vectors_session)
 # Every session transcript is either replayed above or owned by the host
 # runner, so a new transcript stops the configure step instead of landing
 # silently unrun. The refused HELLOs open with HELLOs no conforming firmware
-# sends, and the time transcript pins the host's own PING burst and
-# corrections, which no MCU replay checks; bridge/r2s_bridge/test/test_session.cpp
-# replays them through the host session instead.
+# sends; bridge/r2s_bridge/test/test_session.cpp replays them through the
+# host session instead. The time transcript pins the host's own PING
+# schedule and the CORRECTION it sends; the MCU half of that exchange is
+# covered by the time vectors and test_time.c instead of a second replay.
 set(R2S_SESSION_HOST_NAMES
   refused_hello
   time_sync

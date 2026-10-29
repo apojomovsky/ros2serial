@@ -796,7 +796,7 @@ DISCONNECTED ──port open──► BOOT_WAIT ──HELLO or boot_wait_ms─�
 - Reset detected: a HELLO arrives while connected, or a HELLO carries no token or a different token than the one recorded.
 - On re-handshake, publishers and subscriptions are kept if the new topic table is identical to the previous one. Otherwise they are destroyed and recreated.
 
-**Time sync on the host.** Right after READY, 8 PINGs 50 ms apart. Then one PING every `time_sync.period_ms` (1000 for the first 10 s, then the parameter's value, default 5000). The estimator keeps a sliding window of the 16 most recent samples, uses the lowest round trip ones for the offset, and a linear fit for drift. It sends a CORRECTION after the initial burst, whenever the estimate moves by more than 100 µs, and at least every 5 s.
+**Time sync on the host.** Right after READY, 8 PINGs 50 ms apart, but only when the MCU announced the time feature bit. Then one PING every `time_sync.period_ms` (1000 for the first 10 s, then the parameter's value, default 5000). The estimator keeps a sliding window of the 16 most recent samples, fits ROS time against the MCU tick, and uses the lowest round trip ones for the offset. The offset is the ROS time at MCU tick zero, so the drift carries the anchor on its own and the phase stays put. It sends a CORRECTION after the initial burst, whenever the estimate moves by more than 100 µs, and at least every 5 s.
 
 ## Codec descriptors
 

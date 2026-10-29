@@ -168,8 +168,8 @@ class Session
     // Whether the estimator has anchored a correction: false before the first
     // CORRECTION, after every re-handshake, and while time sync is disabled.
     bool time_available() const;
-    // The H8 time sync values: the ROS-minus-MCU offset at the latest anchor,
-    // the fitted drift, the latest round trip. Zero while unavailable.
+    // The H8 time sync values: the fitted ROS time at MCU tick zero, the
+    // fitted drift, the latest round trip. Zero while unavailable.
     std::int64_t time_offset_ns() const;
     std::int16_t time_drift_ppm() const;
     std::int64_t time_round_trip_ns() const;

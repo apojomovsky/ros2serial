@@ -79,10 +79,9 @@ struct QueuedFrame {
     std::uint8_t seq = 0;
 };
 
-// The slot a control payload competes for: one per control kind, and one
-// TOPIC_STATUS per topic id, the field the verdict carries on the wire. The
-// time channel has no sender yet, but the same shape covers its PING retries
-// when the time sync lands.
+// The slot a control payload competes for: one per control kind, one
+// TOPIC_STATUS per topic id, the field the verdict carries on the wire, and
+// one for the time channel's PINGs.
 QueuedFrame control_slot(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload)
 {
     QueuedFrame slot;

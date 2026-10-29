@@ -1,5 +1,5 @@
 name: time_sync
-covers: [SES-22, SES-23, SES-24, SES-25]
+covers: [CTL-2, SES-22, SES-23, SES-24, SES-25]
 steps:
   - from: mcu
     frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 01 00 04 6e 6f 64 65 73 3a"
