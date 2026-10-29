@@ -35,7 +35,21 @@ def copy_tree(dest: Path) -> Path:
     return dest
 
 
-SCOPES = ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN", "BRIDGE", "CPP", "E2E", "COVERAGE", "DOCS", "EXAMPLES", "FUZZ")
+SCOPES = (
+    "LINT",
+    "SCRIPTS",
+    "COMMITS",
+    "CORE",
+    "GEN",
+    "BRIDGE",
+    "CPP",
+    "E2E",
+    "COVERAGE",
+    "DOCS",
+    "EXAMPLES",
+    "BUDGETS",
+    "FUZZ",
+)
 
 
 def run_lint(root: Path) -> subprocess.CompletedProcess:
@@ -134,7 +148,22 @@ def stub_toolbox(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     (path / "cmake").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     (path / "arduino-cli").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-    (path / "avr-size").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    (path / "avr-size").write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '   text\\t   data\\t    bss\\t    dec\\t    hex\\tfilename\\n"
+        "   8000\\t    100\\t    200\\t   8300\\t   206c\\tfirmware.elf\\n'\n",
+        encoding="utf-8",
+    )
+    (path / "avr-objdump").write_text(
+        "#!/usr/bin/env bash\n"
+        "echo '00000100 <main>:'\n"
+        "echo ' 100:\t1c d1 \trcall\t.+56\t; 0x13a <setup>'\n"
+        "echo '0000013a <setup>:'\n"
+        "echo ' 13a:\t2a d1 \trcall\t.+84\t; 0x190 <r2s_spin>'\n"
+        "echo '00000190 <r2s_spin>:'\n"
+        "echo ' 190:\t08 95 \tret'\n",
+        encoding="utf-8",
+    )
     (path / "avr-nm").write_text(
         "#!/usr/bin/env bash\n"
         "echo '008001eb b r2s_rx_buf'\n"
@@ -143,7 +172,7 @@ def stub_toolbox(path: Path) -> Path:
         "echo '00800540 00000050 b r2s_runtime_publishers'\n",
         encoding="utf-8",
     )
-    for tool in ("cmake", "arduino-cli", "avr-size", "avr-nm"):
+    for tool in ("cmake", "arduino-cli", "avr-size", "avr-objdump", "avr-nm"):
         (path / tool).chmod(0o755)
     return path
 
@@ -162,6 +191,35 @@ def test_examples_scope_runs_its_section(tmp_path):
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "== examples" in result.stdout
+
+
+def test_budgets_scope_runs_its_section(tmp_path):
+    root = copy_tree(tmp_path)
+    build = tmp_path / "build" / "examples"
+    shipped = [
+        "cmake_minimal/hello_cmake",
+        "arduino_minimal/uno/arduino_minimal.ino.elf",
+        "arduino_minimal/mega/arduino_minimal.ino.elf",
+        "arduino_xmacro/uno/arduino_xmacro.ino.elf",
+        "arduino_xmacro/mega/arduino_xmacro.ino.elf",
+    ]
+    for rel in shipped:
+        fake = build / rel
+        fake.parent.mkdir(parents=True, exist_ok=True)
+        fake.write_bytes(b"")
+    (build / "cmake_minimal" / "hello_cmake").chmod(0o755)
+    su = "main:32:static\nsetup:16:static\nr2s_spin:64:static\n"
+    (build / "cmake_minimal" / "firmware.su").write_text(su)
+    for rel in shipped:
+        if not rel.startswith("cmake"):
+            source = build / "stack" / rel
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(b"")
+            (source.parent / "firmware.su").write_text(su)
+    result = run_scope(root, "BUDGETS", stubs=stub_toolbox(tmp_path / "bin"), build_dir=tmp_path / "build")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "== budgets" in result.stdout
 
 
 def test_fuzz_scope_runs_its_section(tmp_path, monkeypatch):

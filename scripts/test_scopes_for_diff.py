@@ -112,6 +112,9 @@ def test_tools_map_to_scripts_and_the_section_each_serves():
     assert scopes("tools/snippets_check.py") == {**CHEAP, "SCRIPTS": "1", "DOCS": "1"}
     assert scopes("tools/coverage_gate.py") == {**CHEAP, "SCRIPTS": "1", "COVERAGE": "1"}
     assert scopes("tools/fuzz_corpus.py") == {**CHEAP, "SCRIPTS": "1", "FUZZ": "1"}
+    assert scopes("tools/size_report.py") == {**CHEAP, "SCRIPTS": "1", "BUDGETS": "1"}
+    assert scopes("tools/stack_report.py") == {**CHEAP, "SCRIPTS": "1", "BUDGETS": "1"}
+    assert scopes("tools/budgets.yaml") == {**CHEAP, "SCRIPTS": "1", "BUDGETS": "1"}
     assert scopes("tools/vectors_check.py") == {**CHEAP, "SCRIPTS": "1"}
     assert scopes("tools/test_zone_check.py") == {**CHEAP, "SCRIPTS": "1"}
 
@@ -120,7 +123,8 @@ def test_section_scripts_map_to_their_section():
     assert scopes("scripts/core-test.sh") == {**CHEAP, "CORE": "1"}
     assert scopes("scripts/bridge-test.sh") == {**CHEAP, "BRIDGE": "1"}
     assert scopes("scripts/coverage-gate.sh") == {**CHEAP, "COVERAGE": "1"}
-    assert scopes("scripts/build-examples.sh") == {**CHEAP, "EXAMPLES": "1"}
+    assert scopes("scripts/build-examples.sh") == {**CHEAP, "EXAMPLES": "1", "BUDGETS": "1"}
+    assert scopes("scripts/budgets-check.sh") == {**CHEAP, "BUDGETS": "1"}
     assert scopes("scripts/cpp-test.sh") == {**CHEAP, "CPP": "1"}
     assert scopes("scripts/fuzz.sh") == {**CHEAP, "FUZZ": "1"}
     assert scopes("scripts/build-host-lib.sh") == {**CHEAP, "CORE": "1", "GEN": "1"}
