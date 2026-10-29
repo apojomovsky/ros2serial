@@ -25,7 +25,8 @@ constexpr std::chrono::milliseconds kPollPeriod{1};
 constexpr std::chrono::seconds kDiagnosticsPeriod{1};
 
 } // namespace
-Bridge::Bridge(const rclcpp::NodeOptions &options) : rclcpp::Node("r2s_bridge", options)
+Bridge::Bridge(const rclcpp::NodeOptions &options)
+    : rclcpp::Node("r2s_bridge", options), ros_clock_([this]() { return now().nanoseconds(); })
 {
     declare_parameter<std::string>("port", "/dev/ttyACM0");
     declare_parameter<int>("baud", 115200);
@@ -73,7 +74,10 @@ Bridge::Bridge(const rclcpp::NodeOptions &options) : rclcpp::Node("r2s_bridge", 
     link.boot_wait_ms = static_cast<int>(get_parameter("boot_wait_ms").as_int());
     link.heartbeat_period_ms = static_cast<int>(get_parameter("heartbeat_period_ms").as_int());
     link.link_timeout_ms = static_cast<int>(get_parameter("link_timeout_ms").as_int());
-
+    // The session refuses a period outside 1 to 5000 ms, because SES-25
+    // needs a correction at least every 5 s.
+    link.time_sync_enabled = get_parameter("time_sync.enabled").as_bool();
+    link.time_sync_period_ms = static_cast<int>(get_parameter("time_sync.period_ms").as_int());
     TermiosOptions serial;
     serial.port = get_parameter("port").as_string();
     serial.baud = pacing.baud;
@@ -82,7 +86,7 @@ Bridge::Bridge(const rclcpp::NodeOptions &options) : rclcpp::Node("r2s_bridge", 
 
     router_ = std::make_unique<Router>(
         get_node_topics_interface(),
-        [serial]() { return std::unique_ptr<Transport>(new TermiosTransport(serial)); }, clock_,
+        [serial]() { return std::unique_ptr<Transport>(new TermiosTransport(serial)); }, clock_, ros_clock_,
         std::move(pacing), forward_log, std::move(link));
     diagnostics_hardware_id_ = serial.port;
     diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10);

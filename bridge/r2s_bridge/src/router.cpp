@@ -91,9 +91,10 @@ std::map<std::string, double> parse_rate_overrides(const std::vector<std::string
 
 struct Router::Impl {
     Impl(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr in_topics, TransportFactory in_open,
-         const Clock &in_clock, RouterParams in_params, LogSink in_sink, SessionConfig session_config)
+         const Clock &in_clock, const Clock &in_ros_clock, RouterParams in_params, LogSink in_sink,
+         SessionConfig session_config)
         : topics(in_topics), params(std::move(in_params)), sink(std::move(in_sink)), clock(in_clock),
-          session_(session_config, in_clock, std::move(in_open), resolve_topic_type,
+          session_(session_config, in_clock, in_ros_clock, std::move(in_open), resolve_topic_type,
                    SessionEvents{log_event(), handshake_event(), user_event()})
     {
         if (!sink) {
@@ -283,8 +284,9 @@ struct Router::Impl {
 };
 
 Router::Router(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,
-               const Clock &clock, RouterParams params, LogSink sink, SessionConfig session_config)
-    : impl_(std::make_unique<Impl>(std::move(topics), std::move(open), clock, std::move(params),
+               const Clock &clock, const Clock &ros_clock, RouterParams params, LogSink sink,
+               SessionConfig session_config)
+    : impl_(std::make_unique<Impl>(std::move(topics), std::move(open), clock, ros_clock, std::move(params),
                                    std::move(sink), std::move(session_config)))
 {
 }
@@ -375,6 +377,10 @@ Router::Diagnostics Router::diagnostics() const
         topic.dropped = impl_->scheduler_.dropped(info.topic_id);
         out.topics.push_back(topic);
     }
+    out.time_sync_available = impl_->session_.time_available();
+    out.time_offset_ns = impl_->session_.time_offset_ns();
+    out.time_drift_ppm = impl_->session_.time_drift_ppm();
+    out.time_round_trip_ns = impl_->session_.time_round_trip_ns();
     return out;
 }
 

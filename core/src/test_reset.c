@@ -20,6 +20,9 @@ void r2s_test_reset(void)
 #ifdef R2S_WITH_LOG
     r2s_log_test_reset();
 #endif
+#ifdef R2S_WITH_TIME
+    r2s_time_test_reset();
+#endif
 }
 #else
 /* ISO C needs at least one declaration in a translation unit. */

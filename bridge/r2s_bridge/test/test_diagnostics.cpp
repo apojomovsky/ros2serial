@@ -73,7 +73,7 @@ class DiagnosticsFixture
             open = [this]() { return std::unique_ptr<Transport>(new HelperLink(transport_)); };
         }
         router_ = std::make_unique<Router>(
-            node_->get_node_topics_interface(), std::move(open), clock_, std::move(params),
+            node_->get_node_topics_interface(), std::move(open), clock_, clock_, std::move(params),
             [this](SessionLog, const std::string &text) { logged_.push_back(text); });
     }
 
@@ -118,10 +118,11 @@ class DiagnosticsFixture
     }
 
     // flags bit 0 set means the MCU subscribes (host to MCU); bit 2 selects
-    // the keep-latest queue.
-    void handshake_full(std::uint32_t token, std::uint8_t cmd_vel_flags)
+    // the keep-latest queue. features carries the HELLO feature bits
+    // ([CTL-2]); the time bit lets the host PING.
+    void handshake_full(std::uint32_t token, std::uint8_t cmd_vel_flags, std::uint8_t features = 0x00u)
     {
-        deliver_frame(kHelperControl, 0u, helper_hello(token, 2u));
+        deliver_frame(kHelperControl, 0u, helper_hello(token, 2u, 512u, features));
         router_->poll();
         const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
         deliver_frame(
@@ -588,11 +589,29 @@ TEST_F(DiagnosticsNode, ReportsQueueOverflowAsDrop)
     EXPECT_EQ(cmd_vel->dropped, 5u) << "a queued topic past its bound drops the oldest";
 }
 
-TEST_F(DiagnosticsNode, ReportsTimeSyncAsUnavailable)
+TEST_F(DiagnosticsNode, ReportsTimeSyncOncePongsAnswerTheBurst)
 {
-    DiagnosticsFixture fixture("nosync", RouterParams{});
-    fixture.handshake();
-    EXPECT_FALSE(fixture.snapshot().time_sync_available) << "the estimator lands with P3";
+    DiagnosticsFixture fixture("sync", RouterParams{});
+    fixture.handshake_full(7u, 0x01u, 0x01u);
+    // Eight PONGs, 2 ms after each burst PING, the 1 MHz tick stamped at the
+    // arrival, so the round trip is symmetric: PING k leaves at 50 k.
+    for (std::uint8_t k = 0; k < 8; ++k) {
+        fixture.advance(k == 0 ? 2u : 48u);
+        if (k != 0) {
+            fixture.advance(2u);
+        }
+        std::vector<std::uint8_t> pong{0x02u, k};
+        const std::uint32_t tick = (50u * k + 1u) * 1000u;
+        for (int shift = 0; shift < 32; shift += 8) {
+            pong.push_back(static_cast<std::uint8_t>((tick >> shift) & 0xFFu));
+        }
+        fixture.deliver_frame(0x01u, k, pong);
+    }
+    const Diagnostics diagnostics = fixture.snapshot();
+    EXPECT_TRUE(diagnostics.time_sync_available);
+    EXPECT_EQ(diagnostics.time_offset_ns, 0);
+    EXPECT_EQ(diagnostics.time_drift_ppm, 0);
+    EXPECT_EQ(diagnostics.time_round_trip_ns, 2000000);
 }
 
 TEST_F(DiagnosticsNode, CountsCoalescedControlFrames)

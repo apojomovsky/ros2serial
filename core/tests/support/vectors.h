@@ -89,6 +89,23 @@ typedef struct {
     uint16_t nsteps;
 } r2s_vec_session_t;
 
+/* One time vector case: the tick rate, the correction, the tick to read and
+ * the time it makes: synced with sec and nanosec, or unsynced with both
+ * zero. The widths keep a wraparound and a negative drift exact. */
+typedef struct {
+    const char *where;
+    const char *covers;
+    uint32_t tick_hz;
+    uint32_t tick0;
+    int32_t sec0;
+    uint32_t nanosec0;
+    int16_t drift_ppm;
+    uint32_t tick;
+    uint8_t synced;
+    int32_t sec;
+    uint32_t nanosec;
+} r2s_vec_time_t;
+
 /* One check per kind, linked in by the test executable: the runner
  * self-test, or the conformance test of the module that implements the kind. */
 void r2s_vec_check_crc(const r2s_vec_crc_t *v);
@@ -96,6 +113,7 @@ void r2s_vec_check_frames(const r2s_vec_frames_t *v);
 void r2s_vec_check_messages(const r2s_vec_messages_t *v);
 void r2s_vec_check_rcobs(const r2s_vec_rcobs_t *v);
 void r2s_vec_check_session(const r2s_vec_session_t *v);
+void r2s_vec_check_time(const r2s_vec_time_t *v);
 void r2s_vec_check_varint(const r2s_vec_varint_t *v);
 
 #endif
