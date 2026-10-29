@@ -49,7 +49,8 @@
  * C struct name; each language rejects the other's spelling with a
  * message naming its own. */
 #if !defined(R2S_TOPICS) && !defined(__cplusplus)
-#error "Define R2S_TOPICS(X) rows with the C type spelled pkg__msg__Type."
+#error                                                                                                       \
+    "Define R2S_TOPICS(X) rows as X(Publisher|Subscription, pkg__msg__Type, object[, callback]) before including <ros2serial.h>."
 #endif
 
 /* A sketch defines its topic list above the include; the bundled message

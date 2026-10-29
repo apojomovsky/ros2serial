@@ -39,6 +39,10 @@ void xmacro_setup(void)
     r2s_init();
 }
 
+/* An example publishes a fresh reading, so a missed interval is dropped,
+ * not replayed: the deadline moves one period per publish and resyncs to
+ * now when more than one period late, and the offline branch resets it
+ * the same way. A stall then skips its frames instead of bursting them. */
 void xmacro_loop(void)
 {
     static uint32_t last_pub;
@@ -47,6 +51,7 @@ void xmacro_loop(void)
     r2s_spin_some();
     now = r2s_port_tick();
     if (r2s_connected() == 0u) {
+        last_pub = now;
         return;
     }
     if ((uint32_t)(now - last_pub) >= 100u) {
@@ -55,7 +60,10 @@ void xmacro_loop(void)
 
         if (r2s_publish_battery_pub(&battery) == R2S_OK && r2s_publish_greeting_pub(&greeting) == R2S_OK) {
             s_sent++;
-            last_pub = now;
+            last_pub += 100u;
+            if ((uint32_t)(now - last_pub) >= 100u) {
+                last_pub = now;
+            }
         }
     }
 }
