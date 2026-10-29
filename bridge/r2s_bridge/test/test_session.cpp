@@ -3,7 +3,7 @@
 // millisecond. Time is the manual clock's alone.
 // covers: SES-12, SES-13, SES-14, SES-15, SES-16, SES-17, SES-18, SES-19, SES-20, SES-21, CTL-3, CTL-9
 // covers: CTL-13, SES-32, SES-33
-// covers: LOG-1, LOG-2, LOG-3, LOG-4
+// covers: LOG-1, LOG-2, LOG-3, LOG-4, ENC-14
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -1676,10 +1676,28 @@ TEST(SessionLog, DropsALogFrameWithTrailingBytes)
 
 TEST(SessionLog, IgnoresLogLinesWithoutAMcuSink)
 {
-    Fixture fixture;
-    fixture.advance_to(100);
-    fixture.deliver_frame(2u, 0u, log_payload(20u, "line"));
-    EXPECT_TRUE(fixture.drain_units().empty()) << "a log line answers nothing";
+    std::vector<std::string> logged;
+    SessionEvents events;
+    events.log = [&logged](SessionLog, const std::string &text) { logged.push_back(text); };
+    ManualClock clock;
+    FakeTransport transport;
+    Session session(
+        SessionConfig{}, clock, clock,
+        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
+        [](const TopicInfo &) { return std::uint8_t{0}; }, events);
+    std::vector<std::uint8_t> frame{2u, 0u};
+    const std::vector<std::uint8_t> payload = log_payload(20u, "line");
+    frame.insert(frame.end(), payload.begin(), payload.end());
+    transport.script_read(wire_of(with_check(frame)));
+    session.poll();
+    EXPECT_TRUE(logged.empty()) << "a log line never reaches the bridge sink";
+}
+
+TEST(SessionLog, DropsALogTextWithAnEmbeddedNul)
+{
+    LogFixture fixture;
+    fixture.deliver_log(log_payload(20u, std::string("a\0b", 3u)));
+    EXPECT_TRUE(fixture.lines().empty()) << "a NUL byte refuses the line";
 }
 
 } // namespace

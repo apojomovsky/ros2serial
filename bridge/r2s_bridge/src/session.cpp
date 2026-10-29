@@ -795,6 +795,11 @@ struct Session::Impl {
         if (!reader.u8(level) || !reader.string(text) || !reader.u8(kind)) {
             return;
         }
+        // A NUL byte never belongs in a string ([ENC-14]); the MCU holds
+        // strings NUL-terminated, so one truncates the line for its reader.
+        if (text.find('\0') != std::string::npos) {
+            return;
+        }
         std::string line = text;
         switch (kind) {
         case kLogNone:
