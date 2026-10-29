@@ -99,6 +99,14 @@ def test_a_lease_survives_the_build_lock_chain(tmp_path):
         stop_holder(second)
 
 
+def test_a_lone_holder_keeps_the_default_slot(tmp_path):
+    holder = start_holder(tmp_path)
+    try:
+        assert read_slot(holder) == (89, 7447), "a lone run left its current domain"
+    finally:
+        stop_holder(holder)
+
+
 def test_an_explicit_domain_skips_allocation(tmp_path):
     result = subprocess.run(
         ["bash", str(LEASE), "bash", "-c", "echo $R2S_E2E_DOMAIN_ID $R2S_ZENOH_ROUTER_PORT"],
