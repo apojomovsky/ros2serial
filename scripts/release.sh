@@ -53,6 +53,7 @@ git add VERSION CHANGELOG.md gen/r2s_gen/version.py gen/package.xml bridge/r2s_b
   bridge/r2s_bridge_tests/package.xml \
   gen/tests/golden/bundle/library.properties gen/tests/golden/bundle/r2s_bundled.c \
   gen/tests/golden/bundle/r2s_bundled.h gen/tests/golden/bundle/ros2serial.h \
+  gen/tests/golden/bundle/ros2serial.hpp \
   gen/tests/golden/descriptors/float32_twist.c gen/tests/golden/layouts/library.properties \
   gen/tests/golden/topics/posix.c gen/tests/golden/topics/posix.h \
   gen/tests/golden/types/float32.h gen/tests/golden/types/header.h gen/tests/golden/types/joint_state.h \
@@ -61,7 +62,7 @@ git add VERSION CHANGELOG.md gen/r2s_gen/version.py gen/package.xml bridge/r2s_b
   ports/posix/src/r2s_generated.c ports/posix/src/r2s_generated.h \
   cpp/include/builtin_interfaces/msg/time.hpp cpp/include/geometry_msgs/msg/quaternion.hpp \
   cpp/include/geometry_msgs/msg/twist.hpp cpp/include/geometry_msgs/msg/vector3.hpp \
-  cpp/include/r2s_bundled.h cpp/include/ros2serial.h cpp/include/sensor_msgs/msg/imu.hpp \
+  cpp/include/r2s_bundled.h cpp/include/ros2serial.h cpp/include/ros2serial.hpp cpp/include/sensor_msgs/msg/imu.hpp \
   cpp/include/sensor_msgs/msg/joint_state.hpp cpp/include/std_msgs/msg/float32.hpp \
   cpp/include/std_msgs/msg/header.hpp cpp/include/std_msgs/msg/string.hpp
 git commit -q -m "chore(release): v$next"
