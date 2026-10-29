@@ -2,7 +2,7 @@ name: reset_same_token
 covers: [SES-2, SES-5, SES-7, SES-8, SES-10, SES-11, SES-16, SES-17, SES-18, SES-19, SES-20, SES-21, HB-2, HB-4, HB-7, FRM-4]
 steps:
   - from: mcu
-    frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 f0 ad"
+    frame: "00 00 02 03 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 9c 9a"
     at_ms: 100
   - from: host
     frame: "00 00 03 00 49 29"
@@ -39,7 +39,7 @@ steps:
     frame: "04 02 ca b4"
     at_ms: 1820
   - from: mcu
-    frame: "00 00 02 02 00 01 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 b9 3e"
+    frame: "00 00 02 03 00 01 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 d5 09"
     at_ms: 2000
     note: "re-announce with the same token; the host detects the reset and re-walks"
   - from: host
