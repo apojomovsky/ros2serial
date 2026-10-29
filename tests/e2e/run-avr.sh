@@ -121,10 +121,33 @@ python3 tests/e2e/test_avr_support.py || exit 1
 # One DDS domain per suite run, so parallel runs on the shared host never see
 # each other's topics: every process below inherits the same domain.
 export ROS_DOMAIN_ID=${R2S_E2E_DOMAIN_ID:?e2e-lease.sh provides it}
-echo "== e2e isolation: ROS_DOMAIN_ID=$ROS_DOMAIN_ID ZENOH_ROUTER_PORT=$R2S_ZENOH_ROUTER_PORT"
+echo "== e2e isolation: ROS_DOMAIN_ID=$ROS_DOMAIN_ID ZENOH_ROUTER_PORT=$R2S_ZENOH_ROUTER_PORT${R2S_E2E_CANARY:+ CANARY=/$R2S_E2E_CANARY}"
+
+# A canary topic this run publishes for its whole suite, so a concurrent
+# run's graph proves it never saw this suite's traffic. Unset runs publish
+# nothing and behave as before.
+canary_topic=${R2S_E2E_CANARY:-}
+case "$canary_topic" in
+  "") ;;
+  *[!A-Za-z0-9_/]* | /* | */)
+    echo "R2S_E2E_CANARY must be a relative topic name, got '$canary_topic'" >&2
+    exit 2
+    ;;
+esac
+if [ -n "$canary_topic" ]; then
+  command -v ros2 >/dev/null 2>&1 || { echo "ros2 not found: cannot publish the canary"; exit 1; }
+fi
+canary_pid=""
+stop_canary() {
+  if [ -n "$canary_pid" ]; then
+    kill "$canary_pid" 2>/dev/null || true
+    wait "$canary_pid" 2>/dev/null || true
+    canary_pid=""
+  fi
+}
+trap stop_canary EXIT HUP INT TERM
 
 boards=${R2S_E2E_BOARDS:-"uno mega"}
-rmws=${R2S_RMWS:-rmw_fastrtps_cpp rmw_cyclonedds_cpp rmw_zenoh_cpp}
 
 status=0
 for rmw in $rmws; do
@@ -150,12 +173,20 @@ for rmw in $rmws; do
     sleep 2
     kill -0 "$router" 2>/dev/null || { echo "rmw_zenohd on port $R2S_ZENOH_ROUTER_PORT died"; status=1; break; }
   fi
+  if [ -n "$canary_topic" ]; then
+    # One publisher on this iteration's RMW and router, so the canary
+    # rides the same middleware the scenarios do. Killed below and on
+    # exit, so no run leaves a publisher behind.
+    RMW_IMPLEMENTATION=$rmw ros2 topic pub "/$canary_topic" std_msgs/msg/String '{data: canary}' >/dev/null 2>&1 &
+    canary_pid=$!
+  fi
   for board in $boards; do
     export R2S_E2E_BOARD=$board
     for scenario in 1 2 3 4; do
       timeout 300 launch_test "tests/e2e/test_scenario_${scenario}_avr.py" || status=1
     done
   done
+  stop_canary
   if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
 done
 exit $status
