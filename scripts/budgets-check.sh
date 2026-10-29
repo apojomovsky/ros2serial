@@ -123,6 +123,8 @@ fi
   echo "### Worst-case stack"
   echo
   cat "$build/stack-table.md"
+  echo
+  echo "Stack comes from the non-LTO rebuild under stack/; flash and RAM from the shipped firmware."
 } >"$build/budgets-table.md"
 echo "TABLE $build/budgets-table.md"
 

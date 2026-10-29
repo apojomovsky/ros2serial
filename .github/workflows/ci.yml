@@ -178,6 +178,8 @@ jobs:
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
       - if: always() && github.event_name == 'pull_request'
+        # Best effort: a fork token cannot comment, and that must not fail the gate.
+        continue-on-error: true
         run: |
           if [ -s budgets-table.path ]; then
             gh pr comment "${{ github.event.pull_request.number }}" --body-file "$(cat budgets-table.path)"

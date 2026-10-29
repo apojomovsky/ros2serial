@@ -242,6 +242,7 @@ esac
 for board in uno mega; do
   out="$build/arduino_static/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$sextras" \
+    --build-property "compiler.cpp.extra_flags=$sextras" \
     --library "$sstage" --output-dir "$out" examples/arduino_static || status=1
   if ! elf_has_symbol "$out/arduino_static.ino.elf" r2s_rx_buf; then
     echo "arduino_static ($board): the firmware links no receive buffer" >&2

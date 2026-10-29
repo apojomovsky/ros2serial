@@ -106,3 +106,15 @@ def test_check_fails_on_a_call_cycle():
     data = {"uno": {"total": 0, "path": [], "unknown": [], "dynamic": [], "cycles": [["a", "a"]]}}
     budgets = {"firmware": {"uno": {"stack": 10**9}}}
     assert stack_report.check_stacks(data, budgets) != []
+
+
+def test_collect_skips_cmake_compiler_id_frames(tmp_path, monkeypatch):
+    fw = tmp_path / "fw"
+    fw.mkdir()
+    (fw / "firmware.elf").write_bytes(b"")
+    (fw / "firmware.su").write_text("main:48:static\n")
+    probe = fw / "zzz" / "CompilerIdC"
+    probe.mkdir(parents=True)
+    (probe / "probe.su").write_text("CMakeCCompilerId.c:853:5:main\t10\tstatic\n")
+    monkeypatch.setattr(stack_report, "_run", lambda *args: OBJDUMP)
+    assert stack_report.collect(tmp_path)["fw/firmware.elf"]["total"] == 48

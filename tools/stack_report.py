@@ -221,6 +221,10 @@ def collect(build_dir: Path) -> dict:
             raise StackError(f"no stack build for {name}")
         sizes: dict = {}
         for path in sorted(source.parent.rglob("*.su")):
+            # CMake probes the compiler beside the firmware and its .su names
+            # its own main, so only the firmware frames count.
+            if any("CompilerId" in part for part in path.parts):
+                continue
             sizes.update(parse_su(path.read_text(encoding="utf-8")))
         if not sizes:
             raise StackError(f"no .su files beside {source}")
