@@ -92,6 +92,24 @@ cleanup_and_exit() {
 trap stop_canary EXIT
 trap cleanup_and_exit HUP INT TERM
 
+# A rendezvous per RMW for concurrent suites: each side touches its slot
+# file and waits for the peer's, so both sides run each RMW iteration
+# together and their graphs overlap. Unset outside the isolation test,
+# where runs never synchronize.
+barrier_wait() {
+  [ -n "${R2S_E2E_BARRIER:-}" ] || return 0
+  : "${R2S_E2E_SLOT:?barrier needs a slot}" "${R2S_E2E_PEER:?barrier needs a peer}"
+  touch "$R2S_E2E_BARRIER/$R2S_E2E_SLOT-$1" || { echo "barrier unreachable" >&2; exit 1; }
+  _barrier_end=$((SECONDS + 300))
+  while [ ! -e "$R2S_E2E_BARRIER/$R2S_E2E_PEER-$1" ]; do
+    sleep 2
+    if [ "$SECONDS" -ge "$_barrier_end" ]; then
+      echo "barrier timeout waiting for peer on $1" >&2
+      cleanup_and_exit
+    fi
+  done
+}
+
 status=0
 for leg in static runtime; do
   case $leg in
@@ -121,6 +139,7 @@ for leg in static runtime; do
       sleep 2
       kill -0 "$router" 2>/dev/null || { echo "rmw_zenohd on port $R2S_ZENOH_ROUTER_PORT died"; status=1; break; }
     fi
+    barrier_wait "$rmw"
     if [ -n "$canary_topic" ]; then
       # One publisher on this iteration's RMW and router, so the canary
       # rides the same middleware the scenarios do. Killed below and on
