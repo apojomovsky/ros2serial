@@ -8,6 +8,7 @@ environment names. Nothing here compiles or measures real code.
 """
 
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -124,4 +125,6 @@ def test_the_gate_runs_the_bridge_tests_under_a_lease(tmp_path):
     repo, run_env = fixture(tmp_path)
     result = run_gate(repo, run_env, "96 91", "96 91")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "coverage isolation: ROS_DOMAIN_ID=" in result.stdout
+    match = re.search(r"coverage isolation: ROS_DOMAIN_ID=(\d+)", result.stdout)
+    assert match is not None, "the gate ran with no leased domain:\n" + result.stdout
+    assert 89 <= int(match.group(1)) <= 120, "the domain is outside the lease range"
