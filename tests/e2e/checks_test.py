@@ -87,5 +87,50 @@ class TestCollectUntil(unittest.TestCase):
             checks.collect_until([], 1, time.monotonic() - 1.0, "probe", lambda: None)
 
 
+class FakeValue:
+    """A key/value pair shaped like a diagnostics entry."""
+
+    def __init__(self, key, value):
+        self.key = key
+        self.value = value
+
+
+class FakeDiagnostics:
+    """A /diagnostics message shaped like the bridge's own."""
+
+    def __init__(self, link_state, entries):
+        status = type("S", (), {})()
+        status.message = link_state
+        status.values = [FakeValue(key, value) for key, value in entries]
+        self.status = [status]
+
+
+class TestHandshakeReady(unittest.TestCase):
+    WANTED = ["battery", "cmd_vel"]
+
+    def test_connected_with_all_ok_is_ready(self):
+        message = FakeDiagnostics("connected", [("topic battery status", "ok"), ("topic cmd_vel status", "ok")])
+        self.assertEqual(checks.handshake_missing(message, self.WANTED), [])
+
+    def test_handshaking_link_is_missing(self):
+        message = FakeDiagnostics("handshaking", [])
+        self.assertEqual(checks.handshake_missing(message, self.WANTED), ["link handshaking"])
+
+    def test_rejected_topic_is_missing(self):
+        message = FakeDiagnostics(
+            "connected", [("topic battery status", "ok"), ("topic cmd_vel status", "hash mismatch")]
+        )
+        self.assertEqual(checks.handshake_missing(message, self.WANTED), ["topic cmd_vel"])
+
+    def test_unlisted_topic_is_missing(self):
+        message = FakeDiagnostics("connected", [("topic battery status", "ok")])
+        self.assertEqual(checks.handshake_missing(message, self.WANTED), ["topic cmd_vel"])
+
+
+class TestDiscoveryTimeout(unittest.TestCase):
+    def test_stays_generous_against_the_handshake_bound(self):
+        self.assertGreaterEqual(checks.DISCOVERY_TIMEOUT, 10.0)
+
+
 if __name__ == "__main__":
     unittest.main()
