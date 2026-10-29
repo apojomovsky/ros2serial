@@ -51,7 +51,7 @@ def _prepare():
 @launch_testing.markers.keep_alive
 def generate_test_description():
     _prepare()
-    return bridge_support.launch_bridge_only(_RELAY.host_port, _PARAMS, log_level="debug")
+    return bridge_support.launch_bridge_only(_RELAY.host_port, _PARAMS, mcu_log_level="debug")
 
 
 def tearDownModule():
