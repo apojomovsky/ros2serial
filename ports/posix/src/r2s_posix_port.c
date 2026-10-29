@@ -100,15 +100,26 @@ uint16_t r2s_port_tx_free(void)
     return 0xFFFFu;
 }
 
+/* The tick skew in parts per million, set once before the port opens. */
+static int32_t s_skew_ppm;
+
+void r2s_posix_set_tick_skew_ppm(int32_t ppm)
+{
+    s_skew_ppm = ppm;
+}
+
 uint32_t r2s_port_tick(void)
 {
-    /* Whole milliseconds since the first call. CLOCK_MONOTONIC never steps
-     * back, and the truncation keeps the order, so the tick is monotonic. */
+    /* Whole milliseconds since the first call, scaled by the skew knob.
+     * CLOCK_MONOTONIC never steps back, and the truncation keeps the order,
+     * so the tick is monotonic. The scale stays in 64 bits: the product of
+     * a millisecond count with a factor near one cannot overflow. */
     static uint64_t base_ms;
     static uint8_t base_set;
     static uint32_t last;
     struct timespec now;
     uint64_t ms;
+    uint64_t elapsed;
 
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
         return last;
@@ -118,6 +129,8 @@ uint32_t r2s_port_tick(void)
         base_ms = ms;
         base_set = 1u;
     }
-    last = (uint32_t)((ms - base_ms) * (uint32_t)(R2S_TICK_HZ / 1000u));
+    elapsed = ms - base_ms;
+    last = (uint32_t)(((elapsed * (uint64_t)(1000000 + s_skew_ppm)) / 1000000u) *
+                      (uint32_t)(R2S_TICK_HZ / 1000u));
     return last;
 }
