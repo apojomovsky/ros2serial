@@ -73,10 +73,13 @@ void on_cmd_vel(const geometry_msgs::msg::Twist &msg)
 {
     s_linear = msg.linear.x;
     s_calls++;
+    set_motors(msg.linear.x, msg.angular.z);
 }
 
 extern uint8_t stub_tx_payload[2048];
 extern uint16_t stub_tx_len;
+extern uint32_t stub_cfg_count;
+extern const char *stub_cfg_name;
 
 static void print_tx(const char *tag)
 {
@@ -112,8 +115,9 @@ int main(void)
     setup();
     loop();
     loop();
-    if (r2s_codec_encode(&r2s_bundled_table_geometry_msgs_Twist,
-                         (uint16_t)R2S_BUNDLED_INDEX_geometry_msgs_Twist, &twist, 0u, &out,
+    printf("configure %s %u\\n", stub_cfg_name, stub_cfg_count);
+    if (r2s_codec_encode(r2s::msg_traits<geometry_msgs::msg::Twist>::table(),
+                         r2s::msg_traits<geometry_msgs::msg::Twist>::type_index(), &twist, 0u, &out,
                          &field) != R2S_OK) {
         printf("encode failed\\n");
         return 1;
@@ -130,6 +134,7 @@ STUBS = """\
 #include <stdint.h>
 
 #include "r2s/r2s.h"
+#include "r2s/r2s_topics.h"
 
 uint8_t stub_tx_payload[2048];
 uint16_t stub_tx_len;
@@ -199,6 +204,38 @@ r2s_status_t r2s_tx_end(void)
 void r2s_framer_count_refused(void)
 {
     stub_refused++;
+}
+
+uint32_t stub_cfg_count;
+const char *stub_cfg_name;
+
+void r2s_init(void)
+{
+}
+
+void r2s_spin_some(void)
+{
+}
+
+uint32_t r2s_port_tick(void)
+{
+    return 0u;
+}
+
+r2s_status_t r2s_session_configure(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count)
+{
+    (void)topics;
+    stub_cfg_name = node_name;
+    stub_cfg_count = topic_count;
+    return R2S_OK;
+}
+
+r2s_status_t r2s_session_configure_ram(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count)
+{
+    (void)topics;
+    stub_cfg_name = node_name;
+    stub_cfg_count = topic_count;
+    return R2S_OK;
 }
 """
 

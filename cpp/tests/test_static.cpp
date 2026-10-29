@@ -24,14 +24,20 @@ extern "C" {
     X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_twist)
 #include "ros2serial.h"
 
+/* The hooks reset the runtime registry every test; the static binary never
+ * links it, so an empty reset satisfies the call. */
+extern "C" void r2s_runtime_test_reset(void)
+{
+}
+
 static const uint8_t s_float32_hash[8] = {0x71u, 0x70u, 0xd3u, 0xd8u, 0xf8u, 0x41u, 0xf7u, 0xbeu};
 
-static float s_linear;
+static geometry_msgs::msg::Twist s_got_twist;
 static uint8_t s_got_calls;
 
 void on_twist(const geometry_msgs::msg::Twist &msg)
 {
-    s_linear = msg.linear.x;
+    s_got_twist = msg;
     s_got_calls++;
 }
 
@@ -227,7 +233,7 @@ void test_static_dispatch_calls_the_handler_with_the_decoded_message(void)
     len = twist_payload(payload, sent, 0u);
     feed_host(17u, 0u, payload, len);
     TEST_ASSERT_EQUAL_UINT8(1, s_got_calls);
-    TEST_ASSERT_EQUAL_FLOAT(1.5f, s_linear);
+    TEST_ASSERT_EQUAL_MEMORY(&sent, &s_got_twist, sizeof sent);
 }
 
 void test_static_dispatch_on_an_unknown_topic_is_refused(void)

@@ -328,6 +328,29 @@ def test_the_umbrella_header_serves_the_runtime_api():
     assert '#include "r2s/runtime.hpp"' in header
 
 
+def test_mixing_the_two_cxx_layers_fails_naming_either_choice(tmp_path):
+    source = tmp_path / "check.cpp"
+    source.write_text('#include "ros2serial.hpp"\n#include "r2s/runtime.hpp"\n', encoding="utf-8")
+
+    compiled = subprocess.run(
+        [
+            "g++",
+            "-std=c++11",
+            "-fsyntax-only",
+            "-I",
+            str(CORE_INCLUDE),
+            "-I",
+            str(CPP_INCLUDE),
+            str(source),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert compiled.returncode != 0
+    assert "never both" in compiled.stderr
+
+
 def test_the_message_header_path_follows_the_rclcpp_convention():
     assert cpp.message_path("std_msgs/msg/Float32") == "std_msgs/msg/float32.hpp"
     assert cpp.message_path("sensor_msgs/msg/JointState") == "sensor_msgs/msg/joint_state.hpp"

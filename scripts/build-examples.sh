@@ -204,4 +204,57 @@ for board in uno mega; do
   done
 done
 
+# The static C++ sketch builds against the same bundled library: the rows
+# expand to the global objects through the static header, so one publisher
+# and one subscription link the receive buffer while the runtime registry
+# stays out: a static firmware links no runtime topic table.
+sstage="$build/arduino_static"
+rm -rf "$sstage"
+mkdir -p "$sstage/src/r2s" || status=1
+PYTHONPATH="$root/gen" python3 -m r2s_gen.cli bundle --distro jazzy --out "$sstage" || exit 1
+cp core/include/r2s/*.h "$sstage/src/r2s/" || status=1
+cp core/src/*.c "$sstage/src/" || status=1
+rm -f "$sstage/src/test_reset.c"
+cp ports/arduino/r2s_arduino_port.cpp ports/arduino/r2s_arduino_port.h "$sstage/src/" || status=1
+sextras=$(PYTHONPATH="$root/gen" python3 - "$sstage/src/r2s_bundled.h" <<'EOF'
+import sys
+
+from r2s_gen import layouts
+from r2s_gen.msgs import MessageError
+
+try:
+    defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
+except (MessageError, OSError) as error:
+    print(f"r2s-gen: error: {error}", file=sys.stderr)
+    raise SystemExit(1)
+print(" ".join("-D" + define for define in defines))
+EOF
+) || exit 1
+case "$sextras" in
+    *R2S_WITH_CODEC*R2S_MAX_FRAME=[0-9]*R2S_MAX_NEST=[0-9]*) ;;
+    *)
+        echo "build-examples: the extracted bundle flags name no limits ($sextras)" >&2
+        exit 1
+        ;;
+esac
+for board in uno mega; do
+  out="$build/arduino_static/$board"
+  arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$sextras" \
+    --library "$sstage" --output-dir "$out" examples/arduino_static || status=1
+  if ! elf_has_symbol "$out/arduino_static.ino.elf" r2s_rx_buf; then
+    echo "arduino_static ($board): the firmware links no receive buffer" >&2
+    status=1
+  fi
+  if elf_has_symbol "$out/arduino_static.ino.elf" r2s_runtime_topics; then
+    echo "arduino_static ($board): the firmware links the runtime topic table" >&2
+    status=1
+  fi
+  for unused in sensor_msgs_Imu geometry_msgs_Quaternion std_msgs_Header; do
+    if elf_has_symbol "$out/arduino_static.ino.elf" "r2s_bundled_table_$unused"; then
+      echo "arduino_static ($board): the linker kept the unused $unused table" >&2
+      status=1
+    fi
+  done
+done
+
 exit "$status"

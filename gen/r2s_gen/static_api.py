@@ -1,0 +1,192 @@
+"""The static C++ header the bundle ships: the checked-in file's text.
+
+The header carries no bundle facts itself: the sketch's translation unit
+reads the message traits from the bundled message headers and the topic
+table from the sketch header's own expansion, so every distro shares these
+bytes and only the banner names the bundle.
+"""
+
+from r2s_gen.version import __version__
+
+TEXT = """\
+#ifndef R2S_STATIC_HPP
+#define R2S_STATIC_HPP
+
+#ifdef R2S_RUNTIME_HPP
+#error "include either ros2serial.hpp (static list) or r2s/runtime.hpp (runtime registration), never both"
+#endif
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "r2s/r2s.h"
+#include "r2s/r2s_codec.h"
+#include "r2s/r2s_port.h"
+#include "r2s/r2s_session.h"
+#include "r2s/r2s_topics.h"
+#include "r2s/r2s_tx.h"
+
+#ifdef ARDUINO
+#include "r2s_arduino_port.h"
+#endif
+
+namespace r2s
+{
+/* What every message type must provide: the descriptor table that encodes
+ * and decodes it, its index in that table, its type name and the first
+ * eight bytes of its type hash. The bundled message headers specialize
+ * this template. */
+template <typename T> struct msg_traits;
+
+namespace detail
+{
+/* One publish path: measures the payload, reserves its wire form, then
+ * streams it, so a failed publish writes nothing. */
+static inline r2s_status_t publish_one(uint8_t topic_id, const void *msg, const r2s_codec_table_t *table,
+                                       uint16_t type)
+{
+    r2s_codec_out_t out = {NULL, 0u, 0u, 0u};
+    uint8_t index = r2s_session_find_topic(topic_id);
+    uint8_t narrow;
+    uint8_t field = 0xFFu;
+    uint8_t seq;
+    int8_t rc;
+
+    if (r2s_connected() == 0u) {
+        return R2S_ERR_NOT_CONNECTED;
+    }
+    if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {
+        return R2S_ERR_TOPIC_REJECTED;
+    }
+    narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);
+    rc = r2s_codec_encode(table, type, msg, narrow, &out, &field);
+    if (rc != R2S_OK) {
+        return rc;
+    }
+    seq = r2s_session_tx_seq(index);
+    rc = r2s_tx_begin(topic_id, seq, out.len);
+    if (rc != R2S_OK) {
+        return rc;
+    }
+    r2s_session_advance_tx_seq(index);
+    out.to_tx = 1u;
+    out.len = 0u;
+    (void)r2s_codec_encode(table, type, msg, narrow, &out, &field);
+    (void)r2s_tx_end();
+    return R2S_OK;
+}
+} // namespace detail
+
+/* The firmware's node: it names the session and owns the topics the list
+ * declares. One node per firmware, since the core has one session. */
+class Node
+{
+  public:
+    /* Names the node the session announces. */
+    explicit Node(const char *name) : m_name(name)
+    {
+    }
+
+    /* Starts the port at baud, binds the static topic table and starts the
+     * session. On a board the port glue also takes the stream, so the core
+     * reads it; elsewhere the port is started and nothing else. The port
+     * type must offer begin(unsigned long), as every Arduino stream does. */
+    template <typename PortT> void begin(PortT &port, unsigned long baud)
+    {
+#ifdef ARDUINO
+        detail::arduino_port_begin(port, baud);
+#else
+        port.begin(baud);
+#endif
+        if (r2s_session_configure(m_name, r2s_topics, R2S_TOPIC_COUNT) != R2S_OK) {
+            return;
+        }
+        r2s_init();
+    }
+
+    /* Runs the session: serves the link and dispatches user frames. */
+    void spin_some()
+    {
+        r2s_spin_some();
+    }
+
+    /* True while the handshake completed and user traffic may flow. */
+    bool connected() const
+    {
+        return r2s_connected() != 0u;
+    }
+
+    /* Milliseconds since boot, taken from the port tick. */
+    uint32_t now() const
+    {
+        uint32_t tick = r2s_port_tick();
+
+        if (R2S_TICK_HZ == 1000u) {
+            return tick;
+        }
+        return (tick / (uint32_t)R2S_TICK_HZ) * 1000u +
+               (((tick % (uint32_t)R2S_TICK_HZ) * 1000u) / (uint32_t)R2S_TICK_HZ);
+    }
+
+  private:
+    Node(const Node &);
+    Node &operator=(const Node &);
+
+    const char *m_name;
+};
+
+/* Publishes messages of one type on one topic. The row expands to the
+ * object with its topic id, so the sketch names the type and the object
+ * and never the table. */
+template <typename T> class Publisher
+{
+  public:
+    /* Holds the topic id the row resolves; the table and the index come
+     * from the message trait when the sketch publishes. */
+    explicit Publisher(uint8_t topic_id) : m_topic_id(topic_id)
+    {
+    }
+
+    /* Sends the message on the wire. Fails with the not-connected error
+     * while the session announces, with the rejected error when the host
+     * did not accept the topic, and with the bounds error when the
+     * message does not fit; each failure sends nothing. */
+    r2s_status_t publish(const T &msg)
+    {
+        return detail::publish_one(m_topic_id, &msg, msg_traits<T>::table(), msg_traits<T>::type_index());
+    }
+
+  private:
+    Publisher(const Publisher &);
+    Publisher &operator=(const Publisher &);
+
+    uint8_t m_topic_id;
+};
+
+/* Receives messages of one type on one topic. The object marks the
+ * subscription the row declares: the generated dispatch decodes into the
+ * shared receive buffer and calls the row's callback directly, so the
+ * object holds no storage and no handler. */
+template <typename T> class Subscription
+{
+  public:
+    Subscription()
+    {
+    }
+
+  private:
+    Subscription(const Subscription &);
+    Subscription &operator=(const Subscription &);
+};
+} // namespace r2s
+
+#endif
+"""
+
+
+def emit(distro, digest):
+    """The header as the bundle ships it: the version banner over the text."""
+    return (
+        f"/* Generated by r2s-gen {__version__} from bundle (distro {distro}, bundle {digest}); do not edit. */\n"
+        + TEXT
+    )
