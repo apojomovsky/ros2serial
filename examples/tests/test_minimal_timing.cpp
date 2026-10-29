@@ -92,19 +92,19 @@ static int stale(void)
     loop();
     CHECK(collect(samples, 10100u) == 0);
     CHECK(samples.size() == 1u);
-    set_tick(20000u);
+    set_tick(10600u);
     loop();
     loop();
     loop();
-    CHECK(collect(samples, 20000u) == 0);
+    CHECK(collect(samples, 10600u) == 0);
     CHECK(samples.size() == 2u);
-    set_tick(20099u);
+    set_tick(10699u);
     loop();
-    CHECK(collect(samples, 20099u) == 0);
+    CHECK(collect(samples, 10699u) == 0);
     CHECK(samples.size() == 2u);
-    set_tick(20100u);
+    set_tick(10700u);
     loop();
-    CHECK(collect(samples, 20100u) == 0);
+    CHECK(collect(samples, 10700u) == 0);
     CHECK(samples.size() == 3u);
     return 0;
 }
