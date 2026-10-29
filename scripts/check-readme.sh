@@ -24,6 +24,8 @@ anchors=(
   "cpp/src/runtime.cpp"
   "colcon build --base-paths bridge"
   "examples/arduino_minimal"
+  "source build/bridge/install/setup.bash"
+  "build/uno/arduino_minimal.ino.elf"
   "tests/harness/simavr/run.sh --build-only"
   "r2s_simavr --mcu atmega328p"
   "r2s_bridge.launch.py port:="
@@ -96,7 +98,7 @@ except (MessageError, OSError) as error:
 print(" ".join("-D" + define for define in defines))
 EOF
 ) || exit 1
-fw=$work/fw
+fw=build/uno
 arduino-cli compile --fqbn arduino:avr:uno \
   --build-property "compiler.c.extra_flags=$extras" \
   --build-property "compiler.cpp.extra_flags=$extras" \
@@ -105,14 +107,14 @@ elf=$fw/arduino_minimal.ino.elf
 
 # The harness the walkthrough runs, built by its own script, which stays
 # the single description of how it builds.
-bash tests/harness/simavr/run.sh --build-only || exit 1
-sim=$build/harness/simavr/r2s_simavr
-# The bridge build the walkthrough runs: the same colcon line, with the
-# bases relocated under the build directory so the tree stays clean.
-colcon build --base-paths bridge --build-base "$build/bridge/build" --install-base "$build/bridge/install" || exit 1
+R2S_BUILD_DIR=$PWD/build bash tests/harness/simavr/run.sh --build-only || exit 1
+sim=build/harness/simavr/r2s_simavr
+# The bridge build the walkthrough runs, from the repo root, exactly as
+# documented: build outputs land under build/, which the checkout ignores.
+colcon build --base-paths bridge --build-base build/bridge/build --install-base build/bridge/install || exit 1
 # shellcheck source=/dev/null
 set +u
-source "$build/bridge/install/setup.bash"
+source build/bridge/install/setup.bash
 set -u
 
 sim_pid=""

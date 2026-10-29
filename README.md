@@ -67,9 +67,11 @@ arduino-cli core install arduino:avr
 
 ```sh
 source /opt/ros/jazzy/setup.bash
-colcon build --base-paths bridge --build-base build/bridge --install-base install/bridge
-source install/bridge/setup.bash
+colcon build --base-paths bridge --build-base build/bridge/build --install-base build/bridge/install
+source build/bridge/install/setup.bash
 ```
+
+Build outputs land under `build/`, which the checkout ignores.
 
 ### 4. Compile the example
 
@@ -118,7 +120,7 @@ the bridge on that pty and watch the topic:
 
 ```sh
 source /opt/ros/jazzy/setup.bash
-source install/bridge/setup.bash
+source build/bridge/install/setup.bash
 ros2 launch r2s_bridge r2s_bridge.launch.py port:=/dev/pts/0
 ```
 
