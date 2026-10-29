@@ -4,6 +4,7 @@ Run directly: `python3 tests/e2e/checks_test.py`. The launch suite runs it
 before any scenario, so a broken helper fails fast instead of mid-handshake.
 """
 
+import struct
 import time
 import unittest
 
@@ -16,6 +17,11 @@ class Twist:
     def __init__(self, linear, angular):
         self.linear = type("V", (), dict(zip("xyz", linear, strict=True)))()
         self.angular = type("V", (), dict(zip("xyz", angular, strict=True)))()
+
+
+def narrow_floats(values):
+    """What an 8-bit MCU keeps of each double: the float32 round trip."""
+    return [struct.unpack("<f", struct.pack("<f", value))[0] for value in values]
 
 
 class TestFloatSequence(unittest.TestCase):
@@ -55,6 +61,19 @@ class TestTwistEcho(unittest.TestCase):
     def test_missing_echo_fails(self):
         with self.assertRaises(AssertionError):
             checks.check_twist_echo([Twist((1.0, 0.0, 0.0), (0.0, 0.0, 0.0))], [], "echo")
+
+
+class TestTwistEchoNarrow(unittest.TestCase):
+    def test_narrow_round_trip_passes_with_tolerance(self):
+        sent = [Twist((1.5, -2.25, 3.125), (-0.5, 100.25, -0.001))]
+        echoed = [Twist(narrow_floats((1.5, -2.25, 3.125)), narrow_floats((-0.5, 100.25, -0.001)))]
+        checks.check_twist_echo(sent, echoed, "echo", rel_tol=1e-6, abs_tol=1e-9)
+
+    def test_narrow_tolerance_still_rejects_corruption(self):
+        sent = [Twist((1.5, -2.25, 3.125), (-0.5, 100.25, -0.001))]
+        corrupted = [Twist((1.5, -2.25, 3.0), (-0.5, 100.25, -0.001))]
+        with self.assertRaises(AssertionError):
+            checks.check_twist_echo(sent, corrupted, "echo", rel_tol=1e-6, abs_tol=1e-9)
 
 
 class TestCollectUntil(unittest.TestCase):

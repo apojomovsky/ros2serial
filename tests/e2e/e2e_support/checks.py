@@ -27,7 +27,7 @@ def check_float_sequence(values, expected_count, loss_budget, what):
     assert span - len(values) <= loss_budget, f"{what}: lost {span - len(values)} of {span}"
 
 
-def check_twist_echo(sent, received, what):
+def check_twist_echo(sent, received, what, *, rel_tol=1e-9, abs_tol=0.0):
     """Every echoed Twist matches what the host published, field for field.
 
     The posix build carries 64-bit doubles end to end, so the round trip is
@@ -37,11 +37,13 @@ def check_twist_echo(sent, received, what):
     assert len(received) == len(sent), f"{what}: {len(received)} echoes for {len(sent)} publishes"
     for want, got in zip(sent, received, strict=True):
         for axis in ("x", "y", "z"):
-            assert math.isclose(getattr(got.linear, axis), getattr(want.linear, axis)), f"{what}: linear.{axis} differs"
+            assert math.isclose(
+                getattr(got.linear, axis), getattr(want.linear, axis), rel_tol=rel_tol, abs_tol=abs_tol
+            ), f"{what}: linear.{axis} differs"
         for axis in ("x", "y", "z"):
-            assert math.isclose(getattr(got.angular, axis), getattr(want.angular, axis)), (
-                f"{what}: angular.{axis} differs"
-            )
+            assert math.isclose(
+                getattr(got.angular, axis), getattr(want.angular, axis), rel_tol=rel_tol, abs_tol=abs_tol
+            ), f"{what}: angular.{axis} differs"
 
 
 def collect_until(values, count, deadline, what, spin):
