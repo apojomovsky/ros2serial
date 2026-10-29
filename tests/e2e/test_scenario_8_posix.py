@@ -40,6 +40,12 @@ DRIFT_TOL = 100
 DRIFT_COUNT = 10
 DRIFT_SAMPLE_DT = 1.1
 DRIFT_BAND = 1000
+# A starved MCU loop delays PINGs but answers PONGs at once, biasing
+# every sample one way; the estimator cannot see it. The test waits for
+# a responsive link before judging: a fast round trip proves it. The
+# wait is bounded and never fails: the median below still judges.
+QUIET_TIMEOUT = 60.0
+QUIET_RTT_NS = 2000000
 # The bridge reports announced names without the graph's leading slash.
 HANDSHAKE_TOPICS = ["battery", "cmd_vel", "echo_vel", "log_text", "time_now"]
 TOPIC_BUDGET = 3.0
