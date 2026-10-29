@@ -12,7 +12,6 @@ from pathlib import Path
 
 from r2s_gen import bundle
 
-
 ROOT = Path(__file__).resolve().parents[2]
 CORE_INCLUDE = ROOT / "core" / "include"
 CORE_SRC = ROOT / "core" / "src"
