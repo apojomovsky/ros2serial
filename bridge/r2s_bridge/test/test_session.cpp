@@ -3,6 +3,7 @@
 // millisecond. Time is the manual clock's alone.
 // covers: SES-12, SES-13, SES-14, SES-15, SES-16, SES-17, SES-18, SES-19, SES-20, SES-21, CTL-3, CTL-9
 // covers: CTL-13, SES-32, SES-33
+// covers: LOG-1, LOG-2, LOG-3, LOG-4
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -1526,6 +1527,118 @@ TEST(SessionTimeSync, RestartsBurstAndEstimateOnReset)
     const auto units = fixture.drain_units();
     ASSERT_EQ(units.size(), 2u) << "READY, then the restarted burst";
     EXPECT_EQ(hex_of(units[1]), hex_of(time_wire(0u, {0x01u, 0u})));
+}
+
+// One log payload ([LOG-1]): the level, the text as a string, the value kind,
+// then the value bytes. Short texts fit one varint byte.
+std::vector<std::uint8_t> log_payload(std::uint8_t level, const std::string &text, std::uint8_t kind = 0u,
+                                      const std::vector<std::uint8_t> &value = {})
+{
+    std::vector<std::uint8_t> payload{level, static_cast<std::uint8_t>(text.size())};
+    payload.insert(payload.end(), text.begin(), text.end());
+    payload.push_back(kind);
+    payload.insert(payload.end(), value.begin(), value.end());
+    return payload;
+}
+
+// A session whose MCU log lines are captured with their severity.
+class LogFixture
+{
+  public:
+    LogFixture()
+    {
+        SessionEvents events;
+        events.mcu_log = [this](SessionLog level, const std::string &text) {
+            lines_.emplace_back(level, text);
+        };
+        session_ = std::make_unique<Session>(
+            SessionConfig{}, clock_, clock_,
+            [this]() { return std::unique_ptr<Transport>(new Link(transport_)); },
+            [](const TopicInfo &) { return std::uint8_t{0}; }, events);
+    }
+
+    void deliver_log(const std::vector<std::uint8_t> &payload)
+    {
+        std::vector<std::uint8_t> frame{kLogTopic, 0u};
+        frame.insert(frame.end(), payload.begin(), payload.end());
+        transport_.script_read(wire_of(with_check(frame)));
+        session_->poll();
+    }
+
+    const std::vector<std::pair<SessionLog, std::string>> &lines() const
+    {
+        return lines_;
+    }
+
+  private:
+    static constexpr std::uint8_t kLogTopic = 2u;
+    ManualClock clock_;
+    FakeTransport transport_;
+    std::unique_ptr<Session> session_;
+    std::vector<std::pair<SessionLog, std::string>> lines_;
+};
+
+TEST(SessionLog, ForwardsEachLevelWithItsSeverity)
+{
+    struct Case {
+        std::uint8_t wire;
+        SessionLog severity;
+    };
+    const Case cases[] = {{10u, SessionLog::kDebug},
+                          {20u, SessionLog::kInfo},
+                          {30u, SessionLog::kWarning},
+                          {40u, SessionLog::kError},
+                          {50u, SessionLog::kFatal}};
+    for (const Case &line : cases) {
+        LogFixture fixture;
+        fixture.deliver_log(log_payload(line.wire, "line"));
+        ASSERT_EQ(fixture.lines().size(), 1u) << "level " << static_cast<int>(line.wire);
+        EXPECT_EQ(fixture.lines()[0].first, line.severity) << "level " << static_cast<int>(line.wire);
+        EXPECT_EQ(fixture.lines()[0].second, "line") << "level " << static_cast<int>(line.wire);
+    }
+}
+
+TEST(SessionLog, AppendsEachValueKindAfterTheText)
+{
+    struct Case {
+        std::uint8_t kind;
+        std::vector<std::uint8_t> bytes;
+        std::string rendered;
+    };
+    const Case cases[] = {{1u, {0x34u, 0x12u}, "v=4660"},
+                          {2u, {0xFEu, 0xFFu}, "v=-2"},
+                          {3u, {0x78u, 0x56u, 0x34u, 0x12u}, "v=305419896"},
+                          {4u, {0xFFu, 0xFFu, 0xFFu, 0xFFu}, "v=-1"},
+                          {5u, {0x00u, 0x00u, 0xC0u, 0x3Fu}, "v=1.5"}};
+    for (const Case &line : cases) {
+        LogFixture fixture;
+        fixture.deliver_log(log_payload(20u, "v=", line.kind, line.bytes));
+        ASSERT_EQ(fixture.lines().size(), 1u) << "kind " << static_cast<int>(line.kind);
+        EXPECT_EQ(fixture.lines()[0].first, SessionLog::kInfo) << "kind " << static_cast<int>(line.kind);
+        EXPECT_EQ(fixture.lines()[0].second, line.rendered) << "kind " << static_cast<int>(line.kind);
+    }
+}
+
+TEST(SessionLog, RefusesALogFrameWithAReservedValueKind)
+{
+    LogFixture fixture;
+    fixture.deliver_log(log_payload(20u, "line", 6u, {0x00u}));
+    EXPECT_TRUE(fixture.lines().empty()) << "a reserved kind forwards nothing";
+}
+
+TEST(SessionLog, DropsALogFrameWithAnUnknownLevel)
+{
+    LogFixture fixture;
+    fixture.deliver_log(log_payload(25u, "line"));
+    EXPECT_TRUE(fixture.lines().empty()) << "an unknown level forwards nothing";
+}
+
+TEST(SessionLog, DropsATruncatedLogFrame)
+{
+    LogFixture fixture;
+    fixture.deliver_log({20u});
+    fixture.deliver_log(log_payload(20u, "v=", 1u, {0x34u}));
+    EXPECT_TRUE(fixture.lines().empty()) << "a short payload forwards nothing";
 }
 
 } // namespace

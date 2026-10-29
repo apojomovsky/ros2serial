@@ -92,10 +92,11 @@ std::map<std::string, double> parse_rate_overrides(const std::vector<std::string
 struct Router::Impl {
     Impl(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr in_topics, TransportFactory in_open,
          const Clock &in_clock, const Clock &in_ros_clock, RouterParams in_params, LogSink in_sink,
-         SessionConfig session_config)
+         SessionConfig session_config, LogSink in_mcu_sink)
         : topics(in_topics), params(std::move(in_params)), sink(std::move(in_sink)), clock(in_clock),
+          mcu_sink(std::move(in_mcu_sink)),
           session_(session_config, in_clock, in_ros_clock, std::move(in_open), resolve_topic_type,
-                   SessionEvents{log_event(), handshake_event(), user_event()})
+                   SessionEvents{log_event(), handshake_event(), user_event(), mcu_log_event()})
     {
         if (!sink) {
             throw std::invalid_argument("r2s_bridge::Router: a log sink is required");
@@ -123,6 +124,19 @@ struct Router::Impl {
     std::function<void(SessionLog, const std::string &)> log_event()
     {
         return [this](SessionLog level, const std::string &text) { emit(level, text); };
+    }
+
+    // The MCU's own lines go to their own sink when one is set, so the node
+    // can log them under its child name; otherwise they join the log sink.
+    std::function<void(SessionLog, const std::string &)> mcu_log_event()
+    {
+        return [this](SessionLog level, const std::string &text) {
+            if (mcu_sink) {
+                mcu_sink(level, text);
+            } else {
+                emit(level, text);
+            }
+        };
     }
 
     std::function<void(bool)> handshake_event()
@@ -276,6 +290,7 @@ struct Router::Impl {
     RouterParams params;
     LogSink sink;
     const Clock &clock;
+    LogSink mcu_sink;
     Converter converter_;
     Scheduler scheduler_;
     std::map<std::uint8_t, Route> routes;
@@ -285,9 +300,9 @@ struct Router::Impl {
 
 Router::Router(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,
                const Clock &clock, const Clock &ros_clock, RouterParams params, LogSink sink,
-               SessionConfig session_config)
+               SessionConfig session_config, LogSink mcu_sink)
     : impl_(std::make_unique<Impl>(std::move(topics), std::move(open), clock, ros_clock, std::move(params),
-                                   std::move(sink), std::move(session_config)))
+                                   std::move(sink), std::move(session_config), std::move(mcu_sink)))
 {
 }
 
