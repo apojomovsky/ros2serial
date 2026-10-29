@@ -3,7 +3,8 @@
 # the Python sdist and wheel. The release workflow runs this in the dev image
 # and attaches what it prints to the pre-release; a maintainer runs the same
 # command locally for the dry run. Nothing here publishes anywhere.
-# Usage: build-release-artifacts.sh [--distro <name>] [--out <dir>]
+# The Python build runs from a throwaway copy of gen/, so its staging never
+# lands in the tree. Usage: build-release-artifacts.sh [--distro <name>] [--out <dir>]
 set -euo pipefail
 usage() { echo "usage: build-release-artifacts.sh [--distro <name>] [--out <dir>]"; exit 2; }
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -65,6 +66,24 @@ with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(info, (Path(out) / name).read_bytes())
 print(zip_path.name)
 EOF
-(cd "$root/gen" && python3 setup.py -q sdist --dist-dir "$out" bdist_wheel --dist-dir "$out")
+# The r2s_gen.cpp package lives out of tree, so an in-tree setup.py run
+# stages a copy at gen/cpp that sdist never removes. Build from a throwaway
+# copy instead, the way the packaging test does, keeping the cpp tree beside
+# it where setup.py looks for it.
+stage=$(mktemp -d)
+trap 'rm -rf "$stage"' EXIT
+python3 - "$root" "$stage" <<'EOF'
+import shutil
+import sys
+from pathlib import Path
+
+root, stage = (Path(sys.argv[1]), Path(sys.argv[2]))
+shutil.copytree(
+    root / "gen", stage / "gen", ignore=shutil.ignore_patterns("__pycache__", "*.egg-info", "build", "dist")
+)
+if (root / "cpp").is_dir():
+    shutil.copytree(root / "cpp", stage / "cpp", ignore=shutil.ignore_patterns("__pycache__"))
+EOF
+(cd "$stage/gen" && python3 setup.py -q sdist --dist-dir "$out" bdist_wheel --dist-dir "$out")
 rm -rf "$out/ros2serial"
 ls "$out"

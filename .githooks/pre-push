@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pre-push: refuse force pushes, run the prose gate, then the exact CI suite.
+# pre-push: refuse force pushes, run the prose gate, then the suite scopes the diff touches.
 # A force push is any push whose remote ref is not an ancestor of what is
 # pushed: it drops commits other agents may have pulled, so it needs the
 # maintainer's go-ahead and R2S_FORCE_PUSH_APPROVED=1.
@@ -17,20 +17,37 @@ while read -r local_ref local_oid remote_ref remote_oid; do
   fi
 done
 
-if git rev-parse --verify -q origin/master >/dev/null; then
-  python3 "$root/scripts/prose_check.py" --verify --base origin/master || exit 1
+base=${BASE:-origin/master}
+if git rev-parse --verify -q "$base" >/dev/null; then
+  python3 "$root/scripts/prose_check.py" --verify --base "$base" || exit 1
 fi
 
-# The stamp records the tree and the suite definition that already passed, so
-# pushing the same tree twice does not run the suite twice.
+# The stamp records the tree, the suite definition and the scope set that
+# already passed, so pushing the same tree twice does not run the suite
+# twice. A takeoff that passed records the same stamp, so the push that
+# follows it runs nothing again. R2S_FULL=1 runs the suite unscoped instead.
+if [ "${R2S_FULL:-}" = 1 ]; then scopes="FULL=1"; else
+  scopes=$(python3 "$root/scripts/scopes_for_diff.py" --base "$base" 2>/dev/null) || scopes="FULL=1"
+fi
 stamp="$(git rev-parse --absolute-git-dir)/r2s-pre-push-stamp"
-key="$(git rev-parse 'HEAD^{tree}') $(cat "$root"/.githooks/* "$root/scripts/ci-test.sh" "$root/scripts/suite-lock.sh" "$root/Makefile" | sha256sum | cut -c1-16)"
-if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$key" ]; then
+key="$(bash "$root/scripts/suite-stamp.sh" key "$scopes")" || exit 1
+# The stamp keys the committed tree, while the suite runs over the working
+# tree, so a dirty tree always runs: its uncommitted edits never land on the
+# remote, and skipping on the committed key would test nothing that pushes.
+if [ -z "$(git status --porcelain)" ] && [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$key" ]; then
   echo "pre-push: suite already passed on this tree"
   exit 0
 fi
 # The stamp path is resolved above; the suite itself must not see the hook's git variables.
 # shellcheck source=scripts/clean-git-env.sh
 source "$root/scripts/clean-git-env.sh"
-bash -c "${R2S_PRE_PUSH_SUITE:-make -s -C "$root" ci-local}" || exit 1
-echo "$key" > "$stamp"
+if [ "$scopes" = "FULL=1" ]; then
+  bash -c "${R2S_PRE_PUSH_SUITE:-make -s -C "$root" ci-local}" || exit 1
+else
+  if [ -n "${R2S_PRE_PUSH_SUITE:-}" ]; then
+    # shellcheck disable=SC2086 # the scopes are one assignment per word.
+    env $scopes bash -c "$R2S_PRE_PUSH_SUITE" || exit 1
+  # shellcheck disable=SC2086 # the scopes are make variables, one per word.
+  else make -s -C "$root" image test $scopes || exit 1; fi
+fi
+[ -n "$(git status --porcelain)" ] || echo "$key" > "$stamp"

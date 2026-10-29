@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Cut a release: next version from the commits (git-cliff and the [bump] rules
-# in cliff.toml), VERSION, the generator's version files and CHANGELOG.md
-# updated, one commit. cut-release.yml runs this in the dev image, then opens
-# the release PR; the tag follows its merge. Only feat, fix, perf, refactor,
-# revert or breaking commits make a release: docs, tests, CI and chores alone
-# are nothing to release.
-# Usage: release.sh [--dry-run] [--bump auto|patch|minor|major]
+# in cliff.toml), VERSION, the generator version files and CHANGELOG.md
+# updated, the version-stamped generated files refreshed with make regen, one
+# commit. cut-release.yml runs this in the dev image, then opens the release
+# PR; the tag follows its merge. Only feat, fix, perf, refactor, revert or
+# breaking commits make a release: docs, tests, CI and chores alone are
+# nothing to release.
 set -euo pipefail
 usage() { echo "usage: release.sh [--dry-run] [--bump auto|patch|minor|major]"; exit 2; }
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -47,7 +47,22 @@ if [ "$dry" = 1 ]; then
   exit 0
 fi
 python3 "$root/scripts/set_version.py" "$next" "$PWD"
+make -C "$PWD" regen
 "${cliff[@]}" --tag "v$next" -o CHANGELOG.md
-git add VERSION CHANGELOG.md gen/r2s_gen/version.py gen/package.xml bridge/r2s_bridge/package.xml
+git add VERSION CHANGELOG.md gen/r2s_gen/version.py gen/package.xml bridge/r2s_bridge/package.xml \
+  bridge/r2s_bridge_tests/package.xml \
+  gen/tests/golden/bundle/library.properties gen/tests/golden/bundle/r2s_bundled.c \
+  gen/tests/golden/bundle/r2s_bundled.h gen/tests/golden/bundle/ros2serial.h \
+  gen/tests/golden/descriptors/float32_twist.c gen/tests/golden/layouts/library.properties \
+  gen/tests/golden/topics/posix.c gen/tests/golden/topics/posix.h \
+  gen/tests/golden/types/float32.h gen/tests/golden/types/header.h gen/tests/golden/types/joint_state.h \
+  gen/tests/golden/types/twist.h examples/cmake_minimal/lib/CMakeLists.txt \
+  examples/cmake_minimal/lib/r2s_generated.c examples/cmake_minimal/lib/r2s_generated.h \
+  ports/posix/src/r2s_generated.c ports/posix/src/r2s_generated.h \
+  cpp/include/builtin_interfaces/msg/time.hpp cpp/include/geometry_msgs/msg/quaternion.hpp \
+  cpp/include/geometry_msgs/msg/twist.hpp cpp/include/geometry_msgs/msg/vector3.hpp \
+  cpp/include/r2s_bundled.h cpp/include/ros2serial.h cpp/include/sensor_msgs/msg/imu.hpp \
+  cpp/include/sensor_msgs/msg/joint_state.hpp cpp/include/std_msgs/msg/float32.hpp \
+  cpp/include/std_msgs/msg/header.hpp cpp/include/std_msgs/msg/string.hpp
 git commit -q -m "chore(release): v$next"
 echo "committed chore(release): v$next"
