@@ -97,7 +97,7 @@ def _refresh_bundle() -> None:
     for name, text in bundle.bundle().items():
         if name == "library.properties":
             (GOLDEN / "bundle" / name).write_text(text, encoding="utf-8")
-        elif name in ("src/ros2serial.h", "src/r2s_bundled.h", "src/r2s_bundled.c"):
+        elif name in ("src/ros2serial.h", "src/ros2serial.hpp", "src/r2s_bundled.h", "src/r2s_bundled.c"):
             (GOLDEN / "bundle" / Path(name).name).write_text(text, encoding="utf-8")
             if name != "src/r2s_bundled.c":
                 (CPP / "include" / Path(name).name).write_text(text, encoding="utf-8")

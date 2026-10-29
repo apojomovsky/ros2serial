@@ -406,6 +406,19 @@ void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, u
 }
 }
 
+/* The sketch's objects: each row expands to the global publisher or
+ * subscription the body uses. The classes come from the static header
+ * above, so a row names only the type, the object, the topic and the
+ * callback. */
+#include "ros2serial.hpp"
+
+#define R2S_X_OBJECT(KIND, ...) R2S_X_OBJECT_##KIND(__VA_ARGS__)
+#define R2S_X_OBJECT_Publisher(CTYPE, ONAME, TOPIC) r2s::Publisher<CTYPE> ONAME(R2S_ID(ONAME));
+#define R2S_X_OBJECT_Subscription(CTYPE, ONAME, TOPIC, CB) r2s::Subscription<CTYPE> ONAME;
+#define R2S_X_OBJECT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_OBJECT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+R2S_TOPICS(R2S_X_OBJECT)
+
 #endif
 
 #endif

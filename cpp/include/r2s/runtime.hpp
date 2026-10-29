@@ -6,6 +6,9 @@
 #ifndef R2S_RUNTIME_HPP
 #define R2S_RUNTIME_HPP
 
+#ifdef R2S_STATIC_HPP
+#error "include either r2s/runtime.hpp (runtime registration) or ros2serial.hpp (static list), never both"
+#endif
 #include <float.h>
 #include <stdint.h>
 
