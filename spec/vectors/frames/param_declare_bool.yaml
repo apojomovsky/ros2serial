@@ -1,5 +1,5 @@
 name: param_declare
-covers: [PAR-1, PAR-2, PAR-6]
+covers: [PAR-1, PAR-2, PAR-3, PAR-6]
 topic_id: 3
 seq: 1
 payload: "02 00 00 00 03 6c 65 64 01"

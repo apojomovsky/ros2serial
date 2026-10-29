@@ -227,10 +227,17 @@ add_test(NAME vectors_session COMMAND vectors_session)
 # host session instead. The time transcript pins the host's own PING
 # schedule and the CORRECTION it sends; the MCU half of that exchange is
 # covered by the time vectors and test_time.c instead of a second replay.
+# The parameter transcripts exercise the host side of the parameter walk
+# and the reliable channel; the bridge session tests of X4 (reliable
+# channel) and X5 (parameters) replay them.
 set(R2S_SESSION_HOST_NAMES
   refused_hello
   time_sync
-  version_mismatch)
+  version_mismatch
+  param_walk
+  param_set_reliable
+  param_set_giveup
+  param_rehandshake)
 file(GLOB R2S_SESSION_ALL_PATHS CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/session/*.yaml")
 foreach(path ${R2S_SESSION_ALL_PATHS})
   get_filename_component(stem "${path}" NAME_WE)
