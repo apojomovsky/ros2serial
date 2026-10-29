@@ -20,9 +20,10 @@ if [ "${1:-}" = --build-only ]; then build_only=1; shift; fi
 workspace=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/bridge
 # One isolation slot per run: a leased DDS domain, so concurrent suites never
 # see each other's nodes. Held for the whole run, exactly like the build
-# lock below.
+# lock below. The pool base is 0, the domain a lone bridge run always used.
 if [ -z "${R2S_E2E_LEASED:-}" ]; then
-  exec env R2S_E2E_LEASED=1 bash "$root/scripts/e2e-lease.sh" bash "$root/scripts/bridge-test.sh" "${args[@]}"
+  exec env R2S_E2E_LEASED=1 R2S_E2E_DOMAIN_BASE=${R2S_E2E_DOMAIN_BASE:-0} \
+    bash "$root/scripts/e2e-lease.sh" bash "$root/scripts/bridge-test.sh" "${args[@]}"
 fi
 # One lock for the bridge workspace, held for the entire run: a direct run
 # and a suite run of one tree must not write the same binaries.

@@ -9,9 +9,11 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root" || exit 2
 # One isolation slot per run: a leased DDS domain, so concurrent suites never
 # see each other's bridge nodes. Held for the whole run, into both the head
-# and the base measurements below.
+# and the base measurements below. The pool base is 0, the domain a lone
+# coverage run always used.
 if [ -z "${R2S_E2E_LEASED:-}" ]; then
-  exec env R2S_E2E_LEASED=1 bash "$root/scripts/e2e-lease.sh" bash "$root/scripts/coverage-gate.sh" "$@"
+  exec env R2S_E2E_LEASED=1 R2S_E2E_DOMAIN_BASE=${R2S_E2E_DOMAIN_BASE:-0} \
+    bash "$root/scripts/e2e-lease.sh" bash "$root/scripts/coverage-gate.sh" "$@"
 fi
 # One DDS domain per suite run, so parallel runs on the shared host never see
 # each other's nodes: every process below inherits the same domain.

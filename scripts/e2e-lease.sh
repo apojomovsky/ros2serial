@@ -5,10 +5,12 @@
 # It sits on fd 8: with-build-lock.sh and ci-test.sh both use fd 9.
 # An explicit R2S_E2E_DOMAIN_ID skips allocation; without one, slot 0 maps
 # to the domain and port a lone run always used, so CI behaves as before.
-# Usage: e2e-lease.sh <command> [args...]
+# R2S_E2E_DOMAIN_BASE shifts the pool: the e2e legs keep the default 89
+# while the bridge and coverage legs pass 0, so a lone run of each keeps
+# the domain it always used. Usage: e2e-lease.sh <command> [args...]
 set -uo pipefail
 [ $# -ge 1 ] || { echo "usage: e2e-lease.sh <command> [args...]" >&2; exit 2; }
-DOMAIN_BASE=89
+DOMAIN_BASE=${R2S_E2E_DOMAIN_BASE:-89}
 PORT_BASE=7447
 SLOTS=32
 if [ -n "${R2S_E2E_DOMAIN_ID:-}" ]; then
