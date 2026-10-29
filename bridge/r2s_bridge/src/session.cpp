@@ -293,6 +293,7 @@ struct Session::Impl {
     void reset_time()
     {
         sync.reset();
+        time_supported_ = false;
         pings_sent = 0;
         ping_outstanding = false;
         correction_sent_ = false;
@@ -473,7 +474,7 @@ struct Session::Impl {
 
     void maybe_send_ping(std::int64_t now)
     {
-        if (!config.time_sync_enabled || !sync) {
+        if (!config.time_sync_enabled || !sync || !time_supported_) {
             return;
         }
         if (now < next_ping_ms_) {
@@ -554,6 +555,7 @@ struct Session::Impl {
         // poll ([SES-22]). The HELLO already proved the tick form ([CTL-8]).
         reset_time();
         sync.emplace(hello.tick_hz);
+        time_supported_ = (hello.features & 0x01u) != 0u;
         connected_ms_ = now_ms();
         next_ping_ms_ = connected_ms_;
         ping_id = 0;
@@ -911,9 +913,9 @@ struct Session::Impl {
     std::int64_t connected_ms_ = 0;
     std::int64_t next_ping_ms_ = 0;
     std::int64_t pings_sent = 0;
-    // The PING awaiting its PONG, with the steady send time the round trip
-    // halves onto the arrival. Only the latest PING can match: an older one
-    // still in flight is stale by definition.
+    // Whether the MCU announced time support ([CTL-2] bit 0). Without it the
+    // host sends no PING: the firmware could never answer one.
+    bool time_supported_ = false;
     bool ping_outstanding = false;
     std::uint8_t ping_id = 0;
     std::uint8_t last_ping_id_ = 0;

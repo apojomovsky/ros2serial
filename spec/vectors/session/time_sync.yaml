@@ -2,8 +2,9 @@ name: time_sync
 covers: [SES-22, SES-23, SES-24, SES-25]
 steps:
   - from: mcu
-    frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 00 04 6e 6f 64 65 a6 a5"
+    frame: "00 00 02 02 00 00 00 00 00 00 02 03 02 40 42 0f 00 01 00 04 6e 6f 64 65 73 3a"
     at_ms: 100
+    note: "unsolicited HELLO after boot: full mode, no topics, time bit set"
   - from: host
     frame: "00 00 06 01 00 00 00 ac 54"
     at_ms: 100

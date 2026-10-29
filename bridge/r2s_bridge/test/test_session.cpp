@@ -105,17 +105,6 @@ std::vector<std::uint8_t> time_wire(std::uint8_t seq, const std::vector<std::uin
     return wire_of(with_check(decoded));
 }
 
-// Whether the unit is one of the burst PINGs: short tests meet no others.
-bool is_ping_wire(const std::vector<std::uint8_t> &unit)
-{
-    for (std::uint8_t k = 0; k < 8; ++k) {
-        if (unit == time_wire(k, {0x01u, k})) {
-            return true;
-        }
-    }
-    return false;
-}
-
 std::vector<std::vector<std::uint8_t>> units_of(const std::vector<std::uint8_t> &bytes)
 {
     std::vector<std::vector<std::uint8_t>> units;
@@ -511,11 +500,10 @@ TEST(SessionHandshake, SendsReadyAfterTheLastTopic)
     fixture.drain_units();
     fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
     const auto units = fixture.drain_units();
-    ASSERT_EQ(units.size(), 3u) << "the TOPIC_STATUS, READY, then the first PING";
+    ASSERT_EQ(units.size(), 2u) << "the TOPIC_STATUS and then READY";
     EXPECT_EQ(hex_of(units[1]),
               hex_of(wire_of(with_check({kControl, 2u, 0x06u, 0x01u, 0x00u, 0x00u, 0x00u}))))
         << "READY assigns token 1";
-    EXPECT_EQ(hex_of(units[2]), hex_of(time_wire(0u, {0x01u, 0x00u}))) << "PING id 0 at READY";
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
     EXPECT_EQ(fixture.session().token(), 1u);
     ASSERT_EQ(fixture.session().topics().size(), 1u);
@@ -547,10 +535,9 @@ TEST(SessionHandshake, RejectsOneTopicAndKeepsTheOthers)
         << "the rejected topic answers 2 (hash mismatch)";
     fixture.deliver_frame(kControl, 0u, topic_payload(1u, 0x11u, "charge"));
     const auto last = fixture.drain_units();
-    ASSERT_EQ(last.size(), 3u) << "TOPIC_STATUS, READY, then the first PING";
+    ASSERT_EQ(last.size(), 2u) << "TOPIC_STATUS, then READY";
     EXPECT_EQ(hex_of(last[0]), hex_of(wire_of(with_check({kControl, 3u, 0x05u, 0x11u, 0x00u}))))
         << "the kept topic answers 0 (ok)";
-    EXPECT_EQ(hex_of(last[2]), hex_of(time_wire(0u, {0x01u, 0x00u}))) << "PING id 0 at READY";
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
     ASSERT_EQ(fixture.session().topics().size(), 2u);
     EXPECT_EQ(fixture.session().topics()[0].status, kTopicStatusHashMismatch);
@@ -565,10 +552,9 @@ TEST(SessionHandshake, AnswersUnknownTypeWithStatus1)
     fixture.drain_units();
     fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
     const auto units = fixture.drain_units();
-    ASSERT_EQ(units.size(), 3u) << "TOPIC_STATUS, READY, then the first PING";
+    ASSERT_EQ(units.size(), 2u) << "TOPIC_STATUS, then READY";
     EXPECT_EQ(hex_of(units[0]), hex_of(wire_of(with_check({kControl, 1u, 0x05u, 0x10u, 0x01u}))))
         << "the unknown type answers 1";
-    EXPECT_EQ(hex_of(units[2]), hex_of(time_wire(0u, {0x01u, 0x00u}))) << "PING id 0 at READY";
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
     ASSERT_EQ(fixture.session().topics().size(), 1u);
     EXPECT_EQ(fixture.session().topics()[0].status, kTopicStatusUnknownType);
@@ -637,24 +623,10 @@ TEST(SessionConnected, SendsAHeartbeatEvery500ms)
     fixture.advance_to(100);
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u));
     fixture.drain_units();
-    // The PING burst shares the link; only the heartbeat counts here.
-    const auto not_ping = [&fixture]() {
-        std::vector<std::vector<std::uint8_t>> out;
-        for (auto &unit : fixture.drain_units()) {
-            bool ping = false;
-            for (std::uint8_t k = 0; k < 8 && !ping; ++k) {
-                ping = unit == time_wire(k, {0x01u, k});
-            }
-            if (!ping) {
-                out.push_back(unit);
-            }
-        }
-        return out;
-    };
     fixture.advance_to(599);
-    EXPECT_TRUE(not_ping().empty());
+    EXPECT_TRUE(fixture.drain_units().empty());
     fixture.advance_to(600);
-    const auto units = not_ping();
+    const auto units = fixture.drain_units();
     ASSERT_EQ(units.size(), 1u);
     EXPECT_EQ(units[0][0], kHeartbeat);
 }
@@ -693,20 +665,17 @@ TEST(SessionConnected, ResetsOnAHelloWithTheSameToken)
     fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u));
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
     const auto first = fixture.drain_units();
-    ASSERT_EQ(first.size(), 2u) << "READY, then the first PING";
+    ASSERT_EQ(first.size(), 1u);
     EXPECT_EQ(hex_of(first[0]),
               hex_of(wire_of(with_check({kControl, 0u, 0x06u, 0x01u, 0x00u, 0x00u, 0x00u}))));
-    EXPECT_EQ(hex_of(first[1]), hex_of(time_wire(0u, {0x01u, 0x00u}))) << "PING id 0 at READY";
     fixture.deliver_frame(kControl, 0u, hello_payload(1u, 0u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected)
         << "an empty table resolves at once, so the re-handshake is already done";
     const auto second = fixture.drain_units();
-    ASSERT_EQ(second.size(), 2u) << "READY for the new handshake, then its first PING";
+    ASSERT_EQ(second.size(), 1u) << "READY for the new handshake";
     EXPECT_EQ(hex_of(second[0]),
               hex_of(wire_of(with_check({kControl, 0u, 0x06u, 0x02u, 0x00u, 0x00u, 0x00u}))))
         << "the new handshake assigns a fresh token";
-    EXPECT_EQ(hex_of(second[1]), hex_of(time_wire(0u, {0x01u, 0x00u})))
-        << "the re-handshake restarts the PING ids";
     EXPECT_EQ(fixture.session().token(), 2u);
 }
 
@@ -828,22 +797,10 @@ TEST(SessionConnected, UsesTheConfiguredHeartbeatPeriod)
     fixture.advance_to(10);
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u));
     fixture.drain_units();
-    // The PING burst shares the link; only heartbeats count here.
-    const auto not_ping = [&fixture]() {
-        std::vector<std::vector<std::uint8_t>> out;
-        for (auto &unit : fixture.drain_units()) {
-            if (!is_ping_wire(unit)) {
-                out.push_back(unit);
-            }
-        }
-        return out;
-    };
     fixture.advance_to(109);
-    EXPECT_TRUE(not_ping().empty());
+    EXPECT_TRUE(fixture.drain_units().empty());
     fixture.advance_to(110);
-    const auto units = not_ping();
-    ASSERT_EQ(units.size(), 1u) << "the period comes from the config";
-    EXPECT_EQ(units[0][0], kHeartbeat);
+    EXPECT_EQ(fixture.drain_units().size(), 1u) << "the period comes from the config";
 }
 
 TEST(SessionHandshake, RefusesAMaxFrameAboveTheProtocolLimit)
@@ -1165,10 +1122,9 @@ TEST(SessionControl, CoalescesHeartbeatsWhenWritesBlock)
     fixture.allow_writes();
     fixture.session().poll();
     const auto units = fixture.drain_units();
-    ASSERT_EQ(units.size(), 2u) << "the heartbeat and the PING keep one slot each";
-    EXPECT_EQ(decoded_unit(units[0])[0], 0x01u) << "the PING slot queued first";
-    EXPECT_EQ(decoded_unit(units[1])[0], kHeartbeat);
-    EXPECT_EQ(decoded_unit(units[1])[1], 0u) << "the replacement keeps the slot seq for [FRM-5]";
+    ASSERT_EQ(units.size(), 1u) << "ten heartbeats collapse into one";
+    EXPECT_EQ(decoded_unit(units[0])[0], kHeartbeat);
+    EXPECT_EQ(decoded_unit(units[0])[1], 0u) << "the replacement keeps the slot seq for [FRM-5]";
 }
 
 TEST(SessionControl, CoalescesTopicStatusPerTopicWhenWritesBlock)
@@ -1221,7 +1177,7 @@ TEST(SessionControl, CoalescesTopicReqRetriesWhenWritesBlock)
         }
     }
     EXPECT_EQ(requests, 1u) << "the retries replace one TOPIC_REQ slot";
-    EXPECT_EQ(frames, 4u) << "the TOPIC_REQ, the TOPIC_STATUS, READY and the first PING";
+    EXPECT_EQ(frames, 3u) << "the TOPIC_REQ, the TOPIC_STATUS and READY";
 }
 
 TEST(SessionControl, DropsPendingControlOnRehandshake)
@@ -1298,16 +1254,13 @@ TEST(SessionControl, CountsReplacedControlFrames)
         fixture.deliver_frame(kHeartbeat, 0u, counters);
     }
     fixture.advance_to(5110);
-    EXPECT_EQ(fixture.session().control_coalesced(), 19u)
-        << "nine heartbeats and ten PINGs replaced their own slots";
-    EXPECT_LE(fixture.session().pending_bytes(), 32u) << "one heartbeat and one PING stay queued";
+    EXPECT_EQ(fixture.session().control_coalesced(), 9u) << "nine of ten heartbeats replaced one slot";
+    EXPECT_LE(fixture.session().pending_bytes(), 16u) << "one heartbeat frame stays queued";
     fixture.allow_writes();
     fixture.session().poll();
     const auto units = fixture.drain_units();
-    ASSERT_EQ(units.size(), 2u);
-    EXPECT_EQ(hex_of(units[0]), hex_of(time_wire(1u, {0x01u, 11u})))
-        << "the PING slot holds the newest id with its first seq";
-    EXPECT_EQ(decoded_unit(units[1])[1], 0u) << "the replacement keeps the slot seq for [FRM-5]";
+    ASSERT_EQ(units.size(), 1u);
+    EXPECT_EQ(decoded_unit(units[0])[1], 0u) << "the replacement keeps the slot seq for [FRM-5]";
 }
 
 // covers: SES-22, SES-23, SES-25
@@ -1329,7 +1282,8 @@ std::uint32_t le32(const std::vector<std::uint8_t> &bytes, std::size_t i)
 
 void connect_empty(Fixture &fixture)
 {
-    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u));
+    // The time bit ([CTL-2]) tells the host the MCU answers PINGs.
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u, 2u, 0x01u));
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
 }
 
@@ -1522,6 +1476,22 @@ TEST(SessionTimeSync, SendsNothingWhenDisabled)
     EXPECT_FALSE(fixture.session().time_available());
 }
 
+TEST(SessionTimeSync, SendsNothingWhenTheMcuLacksTheTimeBit)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    // The HELLO leaves the time bit ([CTL-2]) clear: the firmware answers
+    // no PING, so the host sends none.
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    fixture.drain_units();
+    fixture.advance_to(2100);
+    for (auto &unit : fixture.drain_units()) {
+        EXPECT_NE(decoded_unit(unit)[0], 0x01u) << "no PING without the time bit";
+    }
+    EXPECT_FALSE(fixture.session().time_available());
+}
+
 TEST(SessionTimeSync, RefusesAPeriodOutside1To5000ms)
 {
     ManualClock clock;
@@ -1550,7 +1520,7 @@ TEST(SessionTimeSync, RestartsBurstAndEstimateOnReset)
     answer_pings(fixture, 100);
     EXPECT_EQ(drain_time(fixture, 0x03u).size(), 1u);
     EXPECT_TRUE(fixture.session().time_available());
-    fixture.deliver_frame(kControl, 0u, hello_payload(1u, 0u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(1u, 0u, 2u, 0x01u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
     EXPECT_FALSE(fixture.session().time_available()) << "the re-handshake clears the estimate";
     const auto units = fixture.drain_units();

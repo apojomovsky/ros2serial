@@ -118,10 +118,11 @@ class DiagnosticsFixture
     }
 
     // flags bit 0 set means the MCU subscribes (host to MCU); bit 2 selects
-    // the keep-latest queue.
-    void handshake_full(std::uint32_t token, std::uint8_t cmd_vel_flags)
+    // the keep-latest queue. features carries the HELLO feature bits
+    // ([CTL-2]); the time bit lets the host PING.
+    void handshake_full(std::uint32_t token, std::uint8_t cmd_vel_flags, std::uint8_t features = 0x00u)
     {
-        deliver_frame(kHelperControl, 0u, helper_hello(token, 2u));
+        deliver_frame(kHelperControl, 0u, helper_hello(token, 2u, 512u, features));
         router_->poll();
         const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
         deliver_frame(
@@ -591,7 +592,7 @@ TEST_F(DiagnosticsNode, ReportsQueueOverflowAsDrop)
 TEST_F(DiagnosticsNode, ReportsTimeSyncOncePongsAnswerTheBurst)
 {
     DiagnosticsFixture fixture("sync", RouterParams{});
-    fixture.handshake();
+    fixture.handshake_full(7u, 0x01u, 0x01u);
     // Eight PONGs, 2 ms after each burst PING, the 1 MHz tick stamped at the
     // arrival, so the round trip is symmetric: PING k leaves at 50 k.
     for (std::uint8_t k = 0; k < 8; ++k) {
@@ -619,9 +620,8 @@ TEST_F(DiagnosticsNode, CountsCoalescedControlFrames)
     fixture.handshake();
     EXPECT_EQ(fixture.snapshot().control_coalesced, 0u);
     // Wedged writes with MCU heartbeats keeping the link alive: six host
-    // heartbeats collapse into one slot, and six PINGs into theirs. Each
-    // first frame fills its slot, so the H8 snapshot counts the ten the
-    // newer replaced.
+    // heartbeats collapse into one slot, and the H8 snapshot counts the five
+    // the newer replaced.
     fixture.block_writes();
     for (std::uint8_t seq = 0; seq < 6; ++seq) {
         fixture.advance(500u);
@@ -629,7 +629,7 @@ TEST_F(DiagnosticsNode, CountsCoalescedControlFrames)
     }
     const Diagnostics diagnostics = fixture.snapshot();
     EXPECT_EQ(diagnostics.link_state, "connected");
-    EXPECT_EQ(diagnostics.control_coalesced, 10u);
+    EXPECT_EQ(diagnostics.control_coalesced, 5u);
 }
 
 } // namespace

@@ -1014,7 +1014,7 @@ The generator computes the REP-2011 RIHS01 hash for each type in `gen/r2s_gen/ty
 | `heartbeat_period_ms` | int | 500 | |
 | `link_timeout_ms` | int | 2000 | |
 | `time_sync.enabled` | bool | true | |
-| `time_sync.period_ms` | int | 5000 | Steady-state period, 1 to 5000; refused outside |
+| `time_sync.period_ms` | int | 5000 | Steady-state period, between 1 and 5000; refused outside |
 | `rate_limit.default_hz` | double | 0 (none) | Default host-to-MCU rate limit per topic |
 | `rate_limit.overrides` | string array | empty | Per-topic limits as `"<topic>=<hz>"`, naming the announced topic, for example `"cmd_vel=20"` |
 | `tx_budget_pct` | int | 50 | Cap on host-to-MCU bandwidth, as a percentage of the link |
@@ -1025,7 +1025,7 @@ by `launch/r2s_bridge.launch.py` with `port` and `params_file` arguments.
 
 ### Published by the bridge
 
-- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, sequence gaps per topic and the host's verdict per topic (`topic <name> status`), time sync offset, drift and round trip.
+- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, sequence gaps per topic and the host's verdict per topic (`topic <name> status`), time sync offset in nanoseconds, drift in ppm and round trip in nanoseconds.
 - The MCU's topics, under the names it announced, after remapping and namespacing.
 - MCU log messages through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`.
 

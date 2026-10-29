@@ -504,14 +504,11 @@ TEST_F(RouterNode, RateOverrideKeysOnTheAnnouncedName)
     EXPECT_TRUE(fixture.drain().empty()) << "the announced-name override paces the remapped topic";
     fixture.advance(1000u);
     const std::vector<std::vector<std::uint8_t>> last = fixture.drain();
-    ASSERT_EQ(last.size(), 3u) << "the heartbeat, the PING and the paced frame";
+    ASSERT_EQ(last.size(), 2u) << "the heartbeat and the paced frame";
     const std::vector<std::uint8_t> heartbeat = fixture.checked_decode(last[0]);
     ASSERT_GE(heartbeat.size(), 1u);
     EXPECT_EQ(heartbeat[0], 4u) << "the heartbeat goes out on its period";
-    const std::vector<std::uint8_t> ping = fixture.checked_decode(last[1]);
-    ASSERT_GE(ping.size(), 3u);
-    EXPECT_EQ(ping[0], 1u) << "the burst PING shares the link";
-    const std::vector<std::uint8_t> paced = fixture.checked_decode(last[2]);
+    const std::vector<std::uint8_t> paced = fixture.checked_decode(last[1]);
     ASSERT_GE(paced.size(), 4u);
     EXPECT_EQ(paced[0], kCmdVel) << "the second frame follows its second";
 }

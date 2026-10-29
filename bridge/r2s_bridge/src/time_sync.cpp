@@ -31,7 +31,6 @@ void TimeSync::add_sample(std::int64_t send_ns, std::int64_t recv_ns, std::int64
 {
     const std::int64_t rtt = recv_ns - send_ns;
     Sample sample;
-    sample.mid_ns = recv_ns - rtt / 2;
     sample.ros_mid_ns = ros_recv_ns - rtt / 2;
     sample.rtt_ns = rtt;
     if (!has_base_) {
@@ -66,7 +65,9 @@ TimeSync::Estimate TimeSync::estimate() const
         return out;
     }
     // Tick nanoseconds from the window base: small enough for int64, exact in
-    // a double, so the fit never sees the absolute tick origin.
+    // a double, so the fit never sees the absolute tick origin. The fit runs
+    // on ROS time, which the correction stamps ([TIM-4]); the steady clock
+    // only measures the round trips the fit halves onto the arrivals.
     double x[kWindow]{};
     double y[kWindow]{};
     double rtt[kWindow]{};
@@ -75,7 +76,7 @@ TimeSync::Estimate TimeSync::estimate() const
         const Sample &sample = samples_[(head_ + i) % kWindow];
         const auto elapsed = static_cast<double>(sample.tick - base) * ns_per_tick_;
         x[i] = elapsed;
-        y[i] = static_cast<double>(sample.mid_ns) - elapsed;
+        y[i] = static_cast<double>(sample.ros_mid_ns) - elapsed;
         rtt[i] = static_cast<double>(sample.rtt_ns);
     }
     double sum_x = 0.0;
@@ -120,25 +121,26 @@ TimeSync::Estimate TimeSync::estimate() const
             take[i] = true;
         }
     }
-    double ros_offset = 0.0;
+    // The phase offset: the ROS time the drift line gives MCU tick zero,
+    // stable while the drift carries the anchor instead of growing with it.
+    double ros_base = 0.0;
     for (std::size_t i = 0; i < count_; ++i) {
         if (!take[i]) {
             continue;
         }
         const Sample &sample = samples_[(head_ + i) % kWindow];
-        ros_offset += static_cast<double>(sample.ros_mid_ns) - x[i] - slope * x[i];
+        ros_base += static_cast<double>(sample.ros_mid_ns) -
+                    (1.0 + slope) * static_cast<double>(sample.tick) * ns_per_tick_;
     }
-    ros_offset /= static_cast<double>(taken);
+    ros_base /= static_cast<double>(taken);
     const Sample &latest = samples_[(head_ + count_ - 1u) % kWindow];
-    const double x_latest = static_cast<double>(latest.tick - base) * ns_per_tick_;
-    const std::int64_t ros_ns =
-        static_cast<std::int64_t>(std::llround(ros_offset + x_latest + slope * x_latest));
+    const double anchor_ns = (1.0 + slope) * static_cast<double>(latest.tick) * ns_per_tick_;
     out.valid = true;
-    out.slope = slope;
     const double ppm = slope * 1000000.0;
     out.drift = static_cast<std::int16_t>(
         ppm > kMaxDriftPpm ? kMaxDriftPpm : (ppm < -kMaxDriftPpm ? -kMaxDriftPpm : std::llround(ppm)));
-    out.ros_ns = ros_ns;
+    out.base = static_cast<std::int64_t>(std::llround(ros_base));
+    out.ros_ns = static_cast<std::int64_t>(std::llround(ros_base + anchor_ns));
     return out;
 }
 
@@ -180,10 +182,7 @@ bool TimeSync::moved_since(const TimeCorrection &last) const
 std::int64_t TimeSync::offset_ns() const
 {
     const Estimate fit = estimate();
-    if (!fit.valid) {
-        return 0;
-    }
-    return fit.ros_ns - static_cast<std::int64_t>(latest_tick_ * ns_per_tick_);
+    return fit.valid ? fit.base : 0;
 }
 
 std::int16_t TimeSync::drift_ppm() const

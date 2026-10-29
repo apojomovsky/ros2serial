@@ -29,6 +29,9 @@ constexpr std::int64_t kScenarioBoundNs = 1000000;
 struct SimMcu {
     double drift = 0.0;
     std::int64_t skew_ns = 0;
+    // The ROS clock's own rate error: its nanoseconds per steady nanosecond
+    // minus one, for the sim-time case where ROS and steady disagree.
+    double ros_drift = 0.0;
     std::int64_t rtt_ns = 2000000;
 
     std::uint32_t tick_at(std::int64_t steady_ns) const
@@ -38,7 +41,7 @@ struct SimMcu {
 
     std::int64_t ros_at(std::int64_t steady_ns) const
     {
-        return steady_ns + skew_ns;
+        return static_cast<std::int64_t>(std::llround(steady_ns * (1.0 + ros_drift))) + skew_ns;
     }
 
     // One PONG answered at steady_ns, fed straight into the estimator. The
@@ -51,7 +54,8 @@ struct SimMcu {
 
     std::int64_t true_ros(std::uint32_t tick) const
     {
-        return static_cast<std::int64_t>(std::llround(tick * kTickNs / (1.0 + drift))) + skew_ns;
+        return static_cast<std::int64_t>(std::llround(tick * kTickNs / (1.0 + drift) * (1.0 + ros_drift))) +
+               skew_ns;
     }
 };
 
@@ -160,12 +164,37 @@ TEST(TimeSyncEstimate, Tracks5000ppmOfDriftInsideTheScenarioBound)
     // over the 75 s the fit spans.
     const int want = static_cast<int>(std::llround((1.0 / (1.0 + mcu.drift) - 1.0) * 1000000.0));
     EXPECT_NEAR(sync.drift_ppm(), want, 2);
+    // The phase offset stays at the skew instead of absorbing the drift: the
+    // drift term carries the anchor on its own.
+    EXPECT_NEAR(sync.offset_ns(), mcu.skew_ns, 100000);
     // The MCU reads within the scenario bound five seconds past the anchor.
     const std::uint32_t later = out.tick0 + 5000000u;
     std::int64_t sec = 0;
     std::int64_t nsec = 0;
     ASSERT_TRUE(mcu_time(out, later, sec, nsec));
     EXPECT_NEAR(sec * 1000000000 + nsec, mcu.true_ros(later), kScenarioBoundNs);
+}
+
+TEST(TimeSyncEstimate, TracksTheRosRateNotTheSteadyRate)
+{
+    TimeSync sync(kTickHz);
+    SimMcu mcu;
+    // ROS runs 1% fast while the MCU is exact: the drift the correction
+    // carries is the ROS rate, +10000 ppm ([TIM-4]).
+    mcu.ros_drift = 0.01;
+    for (int i = 0; i < 8; ++i) {
+        mcu.sample(sync, static_cast<std::int64_t>(i) * 50000000);
+    }
+    TimeCorrection out;
+    ASSERT_TRUE(sync.correction(out));
+    EXPECT_NEAR(sync.drift_ppm(), 10000, 2);
+    EXPECT_EQ(out.tick0, mcu.tick_at(7 * 50000000 + mcu.rtt_ns / 2));
+    // The midpoint halves the steady round trip, so a ROS rate off the
+    // steady rate biases the anchor by half the round trip's own rate
+    // difference: 2 ms at 1% is 10 us. The slope, from differences, stays
+    // exact.
+    const std::int64_t err = ros_ns_of(out) - mcu.true_ros(out.tick0);
+    EXPECT_NEAR(err > 0 ? err : -err, mcu.rtt_ns * mcu.ros_drift / 2, 1000);
 }
 
 TEST(TimeSyncEstimate, ForgetsSamplesPastTheWindow)

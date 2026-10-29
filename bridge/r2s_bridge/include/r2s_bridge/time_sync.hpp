@@ -54,8 +54,10 @@ class TimeSync
     // before the first sample.
     bool moved_since(const TimeCorrection &last) const;
 
-    // The H8 diagnostics, valid once has_estimate holds: the ROS-minus-MCU
-    // offset at the latest anchor, the fitted drift, the latest round trip.
+    // The H8 diagnostics, valid once has_estimate holds: the fitted ROS
+    // time at MCU tick zero, the fitted drift, the latest round trip. The
+    // offset stays put while the drift carries the anchor, so it names the
+    // clock phase where the drift names its rate.
     std::int64_t offset_ns() const;
     std::int16_t drift_ppm() const;
     std::int64_t round_trip_ns() const;
@@ -63,8 +65,8 @@ class TimeSync
   private:
     struct Estimate {
         bool valid = false;
-        double slope = 0.0;
         std::int16_t drift = 0;
+        std::int64_t base = 0;
         std::int64_t ros_ns = 0;
     };
 
@@ -72,7 +74,6 @@ class TimeSync
 
     std::uint32_t ns_per_tick_ = 0u;
     struct Sample {
-        std::int64_t mid_ns = 0;
         std::int64_t ros_mid_ns = 0;
         std::int64_t rtt_ns = 0;
         std::uint64_t tick = 0;
