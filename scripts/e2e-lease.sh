@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lease one e2e isolation slot for the wrapped command: a DDS domain and a
+# Lease one suite isolation slot for the wrapped command: a DDS domain and a
 # Zenoh router port no other local suite holds. The slot lock is held on an
 # open file descriptor, so the lease dies with the command however it exits.
 # It sits on fd 8: with-build-lock.sh and ci-test.sh both use fd 9.
