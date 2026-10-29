@@ -7,5 +7,6 @@ cd "$root" || exit 2
 command -v cppcheck >/dev/null 2>&1 || { echo "cppcheck not found: run it in the dev image"; exit 1; }
 cppcheck --quiet --error-exitcode=1 --std=c99 --enable=warning,style,portability,performance \
   --inline-suppr --suppress=missingIncludeSystem -D R2S_TESTING -D R2S_WITH_RX_RING -D R2S_WITH_LOG \
+  -D R2S_WITH_TIME \
   -I core/include -I core/tests/support -I core/tests/vendor/unity \
   -i core/tests/vendor core/src core/include core/tests
