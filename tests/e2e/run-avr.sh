@@ -148,6 +148,7 @@ stop_canary() {
 trap stop_canary EXIT HUP INT TERM
 
 boards=${R2S_E2E_BOARDS:-"uno mega"}
+rmws=${R2S_RMWS:-rmw_fastrtps_cpp rmw_cyclonedds_cpp rmw_zenoh_cpp}
 
 status=0
 for rmw in $rmws; do
