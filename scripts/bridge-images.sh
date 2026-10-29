@@ -13,6 +13,11 @@ fail() {
 
 distros=()
 images=()
+# A failed read leaves $line unchanged, so the guard below would mistake an
+# I/O error for EOF and loop on a stale line. Read the file first so a
+# missing or unreadable file fails here with a precise message.
+content=$(cat "$file") || fail "$file: cannot read pins"
+line=
 # read fails on a last line without a trailing newline, so the guard keeps it.
 while IFS= read -r line || [ -n "$line" ]; do
   [[ $line =~ ^ROS_([A-Z0-9]+)_IMAGE=(.*)$ ]] || continue
@@ -28,7 +33,7 @@ while IFS= read -r line || [ -n "$line" ]; do
   done
   distros+=("$distro")
   images+=("$image")
-done <"$file"
+done <<<"$content"
 
 [ ${#distros[@]} -gt 0 ] || fail "$file: no ROS_<distro>_IMAGE pins the bridge job's images"
 

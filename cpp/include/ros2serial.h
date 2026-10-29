@@ -17,6 +17,21 @@
 #include "r2s/r2s_topics.h"
 #include "r2s/r2s_tx.h"
 
+/* The bundled message types the rows name: included here so a sketch
+ * needs only this header, and after the bundled limits above so the
+ * limits stay the bundle's on every toolchain. */
+#ifdef __cplusplus
+#include <builtin_interfaces/msg/time.hpp>
+#include <geometry_msgs/msg/quaternion.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/vector3.hpp>
+#include <sensor_msgs/msg/imu.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/float32.hpp>
+#include <std_msgs/msg/header.hpp>
+#include <std_msgs/msg/string.hpp>
+#endif
+
 /* A C++ sketch without a topic list uses the runtime API: it declares
  * its publishers and subscriptions as objects, and the header brings in
  * the runtime layer that serves them. The static X-macro path below
@@ -26,21 +41,27 @@
 #include "r2s/runtime.hpp"
 #endif
 
-/* A C sketch declares its topics as X-macro rows before including this
+/* A sketch declares its topics as X-macro rows before including this
  * header; the header expands them into the topic table, the typed publish
  * functions and dispatch in the sketch's own translation unit, while the
- * descriptors stay in the library, which compiles without the list. */
+ * descriptors stay in the library, which compiles without the list. Rows
+ * name C++ types, so the list lives in a C++ translation unit; every
+ * Arduino sketch is one. Pure-C firmware generates its table from
+ * r2s.yaml instead. */
 #if !defined(R2S_TOPICS) && !defined(__cplusplus)
-#error "Define R2S_TOPICS(X) as X(DIR, name, package, Type) rows before including <ros2serial.h>."
+#error "Define R2S_TOPICS(X) rows in a C++ translation unit before including <ros2serial.h>."
 #endif
 
-/* A C++ sketch includes this header plainly: the expansion below carries
- * C linkage, so handler definitions keep it with no extern "C" block
- * of their own, and the port glue lives in the library. */
+/* A sketch defines its topic list above the include; the bundled message
+ * types are already included, so the list names them directly. The
+ * expansion below carries C linkage, so callback definitions keep it
+ * with no extern "C" block of their own, and the port glue lives
+ * in the library. */
 #ifdef R2S_TOPICS
-#ifdef __cplusplus
+#ifndef __cplusplus
+#error "R2S_TOPICS rows name C++ types (pkg::msg::Type); define the list in a C++ translation unit."
+#else
 extern "C" {
-#endif
 
 /* The bundled tables the passes below encode and decode with. */
 extern const r2s_codec_table_t r2s_bundled_table_builtin_interfaces_Time;
@@ -53,8 +74,151 @@ extern const r2s_codec_table_t r2s_bundled_table_std_msgs_Float32;
 extern const r2s_codec_table_t r2s_bundled_table_std_msgs_Header;
 extern const r2s_codec_table_t r2s_bundled_table_std_msgs_String;
 
+/* One scope map per package: a row names a C++ type, which the
+ * preprocessor cannot split, so the row pastes the package half and
+ * the trailing ::msg::Type resolves the entity it needs. */
+namespace R2S_MAP_builtin_interfaces
+{
+namespace msg
+{
+/* builtin_interfaces::msg::Time: hash, table, index and wire name. */
+constexpr uint8_t Time_hash_0 = 0xb1u;
+constexpr uint8_t Time_hash_1 = 0x06u;
+constexpr uint8_t Time_hash_2 = 0x23u;
+constexpr uint8_t Time_hash_3 = 0x5eu;
+constexpr uint8_t Time_hash_4 = 0x25u;
+constexpr uint8_t Time_hash_5 = 0xa4u;
+constexpr uint8_t Time_hash_6 = 0xc5u;
+constexpr uint8_t Time_hash_7 = 0xedu;
+constexpr const r2s_codec_table_t *Time_table = &r2s_bundled_table_builtin_interfaces_Time;
+constexpr uint16_t Time_index = 0u;
+constexpr const char Time_name[] = "builtin_interfaces/msg/Time";
+} // namespace msg
+} // namespace R2S_MAP_builtin_interfaces
+
+namespace R2S_MAP_geometry_msgs
+{
+namespace msg
+{
+/* geometry_msgs::msg::Quaternion: hash, table, index and wire name. */
+constexpr uint8_t Quaternion_hash_0 = 0x8au;
+constexpr uint8_t Quaternion_hash_1 = 0x76u;
+constexpr uint8_t Quaternion_hash_2 = 0x5fu;
+constexpr uint8_t Quaternion_hash_3 = 0x66u;
+constexpr uint8_t Quaternion_hash_4 = 0x77u;
+constexpr uint8_t Quaternion_hash_5 = 0x8cu;
+constexpr uint8_t Quaternion_hash_6 = 0x8fu;
+constexpr uint8_t Quaternion_hash_7 = 0xf7u;
+constexpr const r2s_codec_table_t *Quaternion_table = &r2s_bundled_table_geometry_msgs_Quaternion;
+constexpr uint16_t Quaternion_index = 0u;
+constexpr const char Quaternion_name[] = "geometry_msgs/msg/Quaternion";
+/* geometry_msgs::msg::Twist: hash, table, index and wire name. */
+constexpr uint8_t Twist_hash_0 = 0x9cu;
+constexpr uint8_t Twist_hash_1 = 0x45u;
+constexpr uint8_t Twist_hash_2 = 0xbfu;
+constexpr uint8_t Twist_hash_3 = 0x16u;
+constexpr uint8_t Twist_hash_4 = 0xfeu;
+constexpr uint8_t Twist_hash_5 = 0x09u;
+constexpr uint8_t Twist_hash_6 = 0x83u;
+constexpr uint8_t Twist_hash_7 = 0xd8u;
+constexpr const r2s_codec_table_t *Twist_table = &r2s_bundled_table_geometry_msgs_Twist;
+constexpr uint16_t Twist_index = 1u;
+constexpr const char Twist_name[] = "geometry_msgs/msg/Twist";
+/* geometry_msgs::msg::Vector3: hash, table, index and wire name. */
+constexpr uint8_t Vector3_hash_0 = 0xccu;
+constexpr uint8_t Vector3_hash_1 = 0x12u;
+constexpr uint8_t Vector3_hash_2 = 0xfeu;
+constexpr uint8_t Vector3_hash_3 = 0x83u;
+constexpr uint8_t Vector3_hash_4 = 0xe4u;
+constexpr uint8_t Vector3_hash_5 = 0xc0u;
+constexpr uint8_t Vector3_hash_6 = 0x27u;
+constexpr uint8_t Vector3_hash_7 = 0x19u;
+constexpr const r2s_codec_table_t *Vector3_table = &r2s_bundled_table_geometry_msgs_Vector3;
+constexpr uint16_t Vector3_index = 0u;
+constexpr const char Vector3_name[] = "geometry_msgs/msg/Vector3";
+} // namespace msg
+} // namespace R2S_MAP_geometry_msgs
+
+namespace R2S_MAP_sensor_msgs
+{
+namespace msg
+{
+/* sensor_msgs::msg::Imu: hash, table, index and wire name. */
+constexpr uint8_t Imu_hash_0 = 0x7du;
+constexpr uint8_t Imu_hash_1 = 0x9au;
+constexpr uint8_t Imu_hash_2 = 0x00u;
+constexpr uint8_t Imu_hash_3 = 0xffu;
+constexpr uint8_t Imu_hash_4 = 0x13u;
+constexpr uint8_t Imu_hash_5 = 0x10u;
+constexpr uint8_t Imu_hash_6 = 0x80u;
+constexpr uint8_t Imu_hash_7 = 0x89u;
+constexpr const r2s_codec_table_t *Imu_table = &r2s_bundled_table_sensor_msgs_Imu;
+constexpr uint16_t Imu_index = 4u;
+constexpr const char Imu_name[] = "sensor_msgs/msg/Imu";
+/* sensor_msgs::msg::JointState: hash, table, index and wire name. */
+constexpr uint8_t JointState_hash_0 = 0xa1u;
+constexpr uint8_t JointState_hash_1 = 0x3eu;
+constexpr uint8_t JointState_hash_2 = 0xe3u;
+constexpr uint8_t JointState_hash_3 = 0xa3u;
+constexpr uint8_t JointState_hash_4 = 0x30u;
+constexpr uint8_t JointState_hash_5 = 0xe3u;
+constexpr uint8_t JointState_hash_6 = 0x46u;
+constexpr uint8_t JointState_hash_7 = 0xc9u;
+constexpr const r2s_codec_table_t *JointState_table = &r2s_bundled_table_sensor_msgs_JointState;
+constexpr uint16_t JointState_index = 2u;
+constexpr const char JointState_name[] = "sensor_msgs/msg/JointState";
+} // namespace msg
+} // namespace R2S_MAP_sensor_msgs
+
+namespace R2S_MAP_std_msgs
+{
+namespace msg
+{
+/* std_msgs::msg::Float32: hash, table, index and wire name. */
+constexpr uint8_t Float32_hash_0 = 0x71u;
+constexpr uint8_t Float32_hash_1 = 0x70u;
+constexpr uint8_t Float32_hash_2 = 0xd3u;
+constexpr uint8_t Float32_hash_3 = 0xd8u;
+constexpr uint8_t Float32_hash_4 = 0xf8u;
+constexpr uint8_t Float32_hash_5 = 0x41u;
+constexpr uint8_t Float32_hash_6 = 0xf7u;
+constexpr uint8_t Float32_hash_7 = 0xbeu;
+constexpr const r2s_codec_table_t *Float32_table = &r2s_bundled_table_std_msgs_Float32;
+constexpr uint16_t Float32_index = 0u;
+constexpr const char Float32_name[] = "std_msgs/msg/Float32";
+/* std_msgs::msg::Header: hash, table, index and wire name. */
+constexpr uint8_t Header_hash_0 = 0xf4u;
+constexpr uint8_t Header_hash_1 = 0x9fu;
+constexpr uint8_t Header_hash_2 = 0xb3u;
+constexpr uint8_t Header_hash_3 = 0xaeu;
+constexpr uint8_t Header_hash_4 = 0x2cu;
+constexpr uint8_t Header_hash_5 = 0xf0u;
+constexpr uint8_t Header_hash_6 = 0x70u;
+constexpr uint8_t Header_hash_7 = 0xf7u;
+constexpr const r2s_codec_table_t *Header_table = &r2s_bundled_table_std_msgs_Header;
+constexpr uint16_t Header_index = 1u;
+constexpr const char Header_name[] = "std_msgs/msg/Header";
+/* std_msgs::msg::String: hash, table, index and wire name. */
+constexpr uint8_t String_hash_0 = 0xdfu;
+constexpr uint8_t String_hash_1 = 0x66u;
+constexpr uint8_t String_hash_2 = 0x8cu;
+constexpr uint8_t String_hash_3 = 0x74u;
+constexpr uint8_t String_hash_4 = 0x04u;
+constexpr uint8_t String_hash_5 = 0x82u;
+constexpr uint8_t String_hash_6 = 0xbbu;
+constexpr uint8_t String_hash_7 = 0xd4u;
+constexpr const r2s_codec_table_t *String_table = &r2s_bundled_table_std_msgs_String;
+constexpr uint16_t String_index = 0u;
+constexpr const char String_name[] = "std_msgs/msg/String";
+} // namespace msg
+} // namespace R2S_MAP_std_msgs
+
 /* One slot per row, in configuration order: user topic IDs run from 16. */
-#define R2S_X_SLOT(DIR, NAME, PKG, TYPE) R2S_SLOT_##NAME,
+#define R2S_X_SLOT(KIND, ...) R2S_X_SLOT_##KIND(__VA_ARGS__)
+#define R2S_X_SLOT_Publisher(CTYPE, ONAME, TOPIC) R2S_SLOT_##ONAME,
+#define R2S_X_SLOT_Subscription(CTYPE, ONAME, TOPIC, CB) R2S_SLOT_##ONAME,
+#define R2S_X_SLOT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_SLOT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
 enum r2s_topic_slot { R2S_TOPICS(R2S_X_SLOT) R2S_SLOT_COUNT };
 
 /* IDs run 16 to 255 in configuration order, and the table fits the session. */
@@ -71,28 +235,46 @@ typedef char r2s_slot_fit_check[(unsigned)R2S_SLOT_COUNT <= R2S_TOPIC_MAX_COUNT 
 #define R2S_NARROW_FLAG 0x00u
 #endif
 
-/* Helpers the passes below paste with; every name carries the R2S_ prefix. */
-#define R2S_STR_(TEXT) #TEXT
-#define R2S_STR(TEXT) R2S_STR_(TEXT)
-#define R2S_ID(NAME) ((uint8_t)(16u + R2S_SLOT_##NAME))
+/* One fact per paste: the row's type resolves its entity through the
+ * package scope above, since the preprocessor cannot split pkg::msg::Type. */
+#define R2S_HASH_0_OF(CTYPE) R2S_MAP_##CTYPE##_hash_0
+#define R2S_HASH_1_OF(CTYPE) R2S_MAP_##CTYPE##_hash_1
+#define R2S_HASH_2_OF(CTYPE) R2S_MAP_##CTYPE##_hash_2
+#define R2S_HASH_3_OF(CTYPE) R2S_MAP_##CTYPE##_hash_3
+#define R2S_HASH_4_OF(CTYPE) R2S_MAP_##CTYPE##_hash_4
+#define R2S_HASH_5_OF(CTYPE) R2S_MAP_##CTYPE##_hash_5
+#define R2S_HASH_6_OF(CTYPE) R2S_MAP_##CTYPE##_hash_6
+#define R2S_HASH_7_OF(CTYPE) R2S_MAP_##CTYPE##_hash_7
+#define R2S_TABLE_OF(CTYPE) R2S_MAP_##CTYPE##_table
+#define R2S_INDEX_OF(CTYPE) R2S_MAP_##CTYPE##_index
+#define R2S_NAME_OF(CTYPE) R2S_MAP_##CTYPE##_name
+#define R2S_ID(ONAME) ((uint8_t)(16u + R2S_SLOT_##ONAME))
 
 /* The announced topics (CTL-4, CTL-12), in configuration order. */
-#define R2S_X_TABLE(DIR, NAME, PKG, TYPE) R2S_X_TABLE_##DIR(NAME, PKG, TYPE)
-#define R2S_X_TABLE_PUB(NAME, PKG, TYPE)                                                                     \
-    {R2S_ID(NAME),                                                                                           \
+#define R2S_X_TABLE(KIND, ...) R2S_X_TABLE_##KIND(__VA_ARGS__)
+#define R2S_X_TABLE_Publisher(CTYPE, ONAME, TOPIC)                                                           \
+    {R2S_ID(ONAME),                                                                                          \
      (uint8_t)(0x00u | R2S_NARROW_FLAG),                                                                     \
-     {R2S_BUNDLED_HASH_##PKG##_##TYPE},                                                                      \
-     R2S_STR(PKG) "/msg/" R2S_STR(TYPE),                                                                     \
-     R2S_STR(NAME)},
-#define R2S_X_TABLE_SUB(NAME, PKG, TYPE)                                                                     \
-    {R2S_ID(NAME),                                                                                           \
+     {R2S_HASH_0_OF(CTYPE), R2S_HASH_1_OF(CTYPE), R2S_HASH_2_OF(CTYPE), R2S_HASH_3_OF(CTYPE),                \
+      R2S_HASH_4_OF(CTYPE), R2S_HASH_5_OF(CTYPE), R2S_HASH_6_OF(CTYPE), R2S_HASH_7_OF(CTYPE)},               \
+     R2S_NAME_OF(CTYPE),                                                                                     \
+     TOPIC},
+#define R2S_X_TABLE_Subscription(CTYPE, ONAME, TOPIC, CB)                                                    \
+    {R2S_ID(ONAME),                                                                                          \
      (uint8_t)(0x01u | R2S_NARROW_FLAG),                                                                     \
-     {R2S_BUNDLED_HASH_##PKG##_##TYPE},                                                                      \
-     R2S_STR(PKG) "/msg/" R2S_STR(TYPE),                                                                     \
-     R2S_STR(NAME)},
+     {R2S_HASH_0_OF(CTYPE), R2S_HASH_1_OF(CTYPE), R2S_HASH_2_OF(CTYPE), R2S_HASH_3_OF(CTYPE),                \
+      R2S_HASH_4_OF(CTYPE), R2S_HASH_5_OF(CTYPE), R2S_HASH_6_OF(CTYPE), R2S_HASH_7_OF(CTYPE)},               \
+     R2S_NAME_OF(CTYPE),                                                                                     \
+     TOPIC},
+#define R2S_X_TABLE_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_TABLE_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
 /* The sketch list never reaches the generator, so the header counts
  * the rows itself: an empty list stops here with the generator's message. */
-#define R2S_X_COUNT(DIR, NAME, PKG, TYPE) +1
+#define R2S_X_COUNT(KIND, ...) R2S_X_COUNT_##KIND(__VA_ARGS__)
+#define R2S_X_COUNT_Publisher(CTYPE, ONAME, TOPIC) +1
+#define R2S_X_COUNT_Subscription(CTYPE, ONAME, TOPIC, CB) +1
+#define R2S_X_COUNT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_COUNT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
 #define R2S_TOPIC_LIST_COUNT (0 R2S_TOPICS(R2S_X_COUNT))
 #if R2S_TOPIC_LIST_COUNT == 0
 #error "a node with no topics has nothing to announce; add at least one topic"
@@ -136,28 +318,36 @@ static inline r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint
     return R2S_OK;
 }
 
-#define R2S_X_PUBLISH(DIR, NAME, PKG, TYPE) R2S_X_PUBLISH_##DIR(NAME, PKG, TYPE)
-#define R2S_X_PUBLISH_PUB(NAME, PKG, TYPE)                                                                   \
-    r2s_status_t r2s_publish_##NAME(const PKG##__msg__##TYPE *msg)                                           \
+#define R2S_X_PUBLISH(KIND, ...) R2S_X_PUBLISH_##KIND(__VA_ARGS__)
+#define R2S_X_PUBLISH_Publisher(CTYPE, ONAME, TOPIC)                                                         \
+    r2s_status_t r2s_publish_##ONAME(const CTYPE *msg)                                                       \
     {                                                                                                        \
-        return r2s_publish_one(R2S_ID(NAME), r2s_session_find_topic(R2S_ID(NAME)),                           \
-                               (uint16_t)R2S_BUNDLED_INDEX_##PKG##_##TYPE, msg,                              \
-                               &R2S_BUNDLED_TABLE_##PKG##_##TYPE);                                           \
+        return r2s_publish_one(R2S_ID(ONAME), r2s_session_find_topic(R2S_ID(ONAME)),                         \
+                               (uint16_t)R2S_INDEX_OF(CTYPE), msg, R2S_TABLE_OF(CTYPE));                     \
     }
-#define R2S_X_PUBLISH_SUB(NAME, PKG, TYPE)
+#define R2S_X_PUBLISH_Subscription(CTYPE, ONAME, TOPIC, CB)
+#define R2S_X_PUBLISH_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_PUBLISH_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
 R2S_TOPICS(R2S_X_PUBLISH)
 
-#define R2S_X_HANDLER(DIR, NAME, PKG, TYPE) R2S_X_HANDLER_##DIR(NAME, PKG, TYPE)
-#define R2S_X_HANDLER_PUB(NAME, PKG, TYPE)
-#define R2S_X_HANDLER_SUB(NAME, PKG, TYPE) void r2s_on_##NAME(const PKG##__msg__##TYPE *msg);
+/* The callback each subscription row names: declared here, so the sketch
+ * defines it with no extern "C" block of its own, and the dispatch below
+ * calls it directly instead of through a stored pointer. */
+#define R2S_X_HANDLER(KIND, ...) R2S_X_HANDLER_##KIND(__VA_ARGS__)
+#define R2S_X_HANDLER_Publisher(CTYPE, ONAME, TOPIC)
+#define R2S_X_HANDLER_Subscription(CTYPE, ONAME, TOPIC, CB) void CB(const CTYPE &msg);
+#define R2S_X_HANDLER_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_HANDLER_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
 R2S_TOPICS(R2S_X_HANDLER)
 
 /* One receive buffer shared by every subscription: only one dispatch
  * runs at a time, so one slot is enough. The spare member keeps a
  * publish-only sketch a valid union. */
-#define R2S_X_BUF(DIR, NAME, PKG, TYPE) R2S_X_BUF_##DIR(NAME, PKG, TYPE)
-#define R2S_X_BUF_PUB(NAME, PKG, TYPE)
-#define R2S_X_BUF_SUB(NAME, PKG, TYPE) PKG##__msg__##TYPE NAME;
+#define R2S_X_BUF(KIND, ...) R2S_X_BUF_##KIND(__VA_ARGS__)
+#define R2S_X_BUF_Publisher(CTYPE, ONAME, TOPIC)
+#define R2S_X_BUF_Subscription(CTYPE, ONAME, TOPIC, CB) CTYPE ONAME;
+#define R2S_X_BUF_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_BUF_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
 
 typedef union r2s_rx_buf {
     uint8_t r2s_empty;
@@ -166,28 +356,30 @@ typedef union r2s_rx_buf {
 
 static r2s_rx_buf_t r2s_rx_buf;
 
-#define R2S_X_DISPATCH(DIR, NAME, PKG, TYPE) R2S_X_DISPATCH_##DIR(NAME, PKG, TYPE)
-#define R2S_X_DISPATCH_PUB(NAME, PKG, TYPE)
-#define R2S_X_DISPATCH_SUB(NAME, PKG, TYPE)                                                                  \
-    case R2S_ID(NAME): {                                                                                     \
-        index = r2s_session_find_topic(R2S_ID(NAME));                                                        \
+#define R2S_X_DISPATCH(KIND, ...) R2S_X_DISPATCH_##KIND(__VA_ARGS__)
+#define R2S_X_DISPATCH_Publisher(CTYPE, ONAME, TOPIC)
+#define R2S_X_DISPATCH_Subscription(CTYPE, ONAME, TOPIC, CB)                                                 \
+    case R2S_ID(ONAME): {                                                                                    \
+        index = r2s_session_find_topic(R2S_ID(ONAME));                                                       \
         if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {                                       \
             r2s_framer_count_refused();                                                                      \
             return;                                                                                          \
         }                                                                                                    \
         narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);                                          \
         (void)r2s_session_note_rx_seq(index, seq);                                                           \
-        if (r2s_codec_decode(&R2S_BUNDLED_TABLE_##PKG##_##TYPE, (uint16_t)R2S_BUNDLED_INDEX_##PKG##_##TYPE,  \
-                             payload, len, narrow, &r2s_rx_buf.NAME, &field) != R2S_OK) {                    \
+        if (r2s_codec_decode(R2S_TABLE_OF(CTYPE), (uint16_t)R2S_INDEX_OF(CTYPE), payload, len, narrow,       \
+                             &r2s_rx_buf.ONAME, &field) != R2S_OK) {                                         \
             r2s_framer_count_refused();                                                                      \
             return;                                                                                          \
         }                                                                                                    \
-        r2s_on_##NAME(&r2s_rx_buf.NAME);                                                                     \
+        CB(r2s_rx_buf.ONAME);                                                                                \
         return;                                                                                              \
     }
+#define R2S_X_DISPATCH_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_DISPATCH_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
 
 /* Decodes the subscribed topics into the buffer above and calls the
- * handler of the frame's topic; anything else is refused and counted. */
+ * callback the row names; anything else is refused and counted. */
 void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, uint16_t len)
 {
     uint8_t index;
@@ -212,9 +404,8 @@ void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, u
     }
     }
 }
-
-#ifdef __cplusplus
 }
+
 #endif
 
 #endif

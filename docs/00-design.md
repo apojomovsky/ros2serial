@@ -130,11 +130,11 @@ The topics live in a RAM table the runtime layer fills, and registration closes 
 
 **2. An X-macro list in the sketch** (Arduino, no Python involved). The Arduino library ships descriptors for a bundle of common types (`std_msgs`, `geometry_msgs`, `sensor_msgs`) with documented default bounds:
 
-```c
+```cpp
 #define R2S_NODE_NAME "base_controller"
 #define R2S_TOPICS(X) \
-  X(PUB, battery, std_msgs, Float32) \
-  X(SUB, cmd_vel, geometry_msgs, Twist)
+  X(Publisher, std_msgs::msg::Float32, battery_pub, "battery") \
+  X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)
 #include <ros2serial.h>
 ```
 
@@ -167,8 +167,8 @@ From the topic list the static paths emit:
 
 - message structs and their field descriptors, for the types used only;
 - the topic table (IDs, names, type names, hashes, flags) as constant data in flash;
-- one typed publish function per published topic, for example `r2s_publish_battery(const std_msgs__msg__Float32 *)`;
-- receive dispatch as a `switch (topic_id)` that calls a user-implemented handler for each subscription, for example `r2s_on_cmd_vel(const geometry_msgs__msg__Twist *)`;
+- one typed publish function per published topic, for example `r2s_publish_battery(const std_msgs__msg__Float32 *)` in the generator's C naming (an X-macro row names its object and C++ type instead, for example `r2s_publish_battery_pub(const std_msgs::msg::Float32 *)`);
+- receive dispatch as a `switch (topic_id)` that calls a user-implemented handler for each subscription, for example `r2s_on_cmd_vel(const geometry_msgs__msg__Twist *)` in the generator's C naming (an X-macro row names its own callback, for example `on_cmd_vel(const geometry_msgs::msg::Twist &)`);
 - a shared receive buffer (a union of the subscribed types) and frame sizes computed from the largest message in each direction.
 
 User topic IDs run from 16 in configuration order. The flags carry direction, narrow, keep-latest and reliable, with the narrow bit forced on builds whose C `double` is 32 bits. The frame limit covers the largest user payload plus the HELLO and TOPIC announcements, and a smaller `limits.max_frame` override is a generator error. A topic name maps onto C by replacing `/` with `_`, and two names with the same mapping are a generator error.
@@ -796,7 +796,7 @@ DISCONNECTED ──port open──► BOOT_WAIT ──HELLO or boot_wait_ms─�
 - Reset detected: a HELLO arrives while connected, or a HELLO carries no token or a different token than the one recorded.
 - On re-handshake, publishers and subscriptions are kept if the new topic table is identical to the previous one. Otherwise they are destroyed and recreated.
 
-**Time sync on the host.** Right after READY, 8 PINGs 50 ms apart. Then one PING every `time_sync.period_ms` (1000 for the first 10 s, then the parameter's value, default 5000). The estimator keeps a sliding window of the 16 most recent samples, uses the lowest round trip ones for the offset, and a linear fit for drift. It sends a CORRECTION after the initial burst, whenever the estimate moves by more than 100 µs, and at least every 5 s.
+**Time sync on the host.** Right after READY, 8 PINGs 50 ms apart, but only when the MCU announced the time feature bit. Then one PING every `time_sync.period_ms` (1000 for the first 10 s, then the parameter's value, default 5000). The estimator keeps a sliding window of the 16 most recent samples, fits ROS time against the MCU tick, and uses the lowest round trip ones for the offset. The offset is the ROS time at MCU tick zero, so the drift carries the anchor on its own and the phase stays put. It sends a CORRECTION after the initial burst, whenever the estimate moves by more than 100 µs, and at least every 5 s.
 
 ## Codec descriptors
 
@@ -1014,7 +1014,7 @@ The generator computes the REP-2011 RIHS01 hash for each type in `gen/r2s_gen/ty
 | `heartbeat_period_ms` | int | 500 | |
 | `link_timeout_ms` | int | 2000 | |
 | `time_sync.enabled` | bool | true | |
-| `time_sync.period_ms` | int | 5000 | Steady-state period, at most 5000 |
+| `time_sync.period_ms` | int | 5000 | Steady-state period, between 1 and 5000; refused outside |
 | `rate_limit.default_hz` | double | 0 (none) | Default host-to-MCU rate limit per topic |
 | `rate_limit.overrides` | string array | empty | Per-topic limits as `"<topic>=<hz>"`, naming the announced topic, for example `"cmd_vel=20"` |
 | `tx_budget_pct` | int | 50 | Cap on host-to-MCU bandwidth, as a percentage of the link |
@@ -1025,7 +1025,7 @@ by `launch/r2s_bridge.launch.py` with `port` and `params_file` arguments.
 
 ### Published by the bridge
 
-- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, sequence gaps per topic and the host's verdict per topic (`topic <name> status`), time sync offset, drift and round trip.
+- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, sequence gaps per topic and the host's verdict per topic (`topic <name> status`), time sync offset in nanoseconds, drift in ppm and round trip in nanoseconds.
 - The MCU's topics, under the names it announced, after remapping and namespacing.
 - MCU log messages through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`.
 
