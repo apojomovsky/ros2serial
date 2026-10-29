@@ -465,12 +465,18 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
     except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError):
         return []
     problems = []
+    walked: set[tuple[int, str]] = set()
 
     def visit(message, values, trail="", seen=frozenset()) -> None:
         for field in message.fields:
             expected = values[field.name]
             where = f"{trail}{message.type_name}.{field.name}"
             if field.type_name == "float32":
+                if field.is_array:
+                    key = (id(expected), field.type_name)
+                    if key in walked:
+                        continue
+                    walked.add(key)
                 elements = expected if field.is_array else [expected]
                 for index, element in enumerate(elements):
                     if isinstance(element, dict) or _exact_float32(element):
@@ -479,23 +485,29 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
                     problems.append(f"{name}/message: {where}{position} must be exactly representable in binary32")
             elif field.type_name not in msgs.PRIMITIVES:
                 nested = _MESSAGES.load(field.type_name)
-                if id(expected) in seen:
+                key = (id(expected), field.type_name)
+                if id(expected) in seen or key in walked:
                     continue
+                walked.add(key)
                 entering = seen | {id(expected)}
                 if field.is_array:
                     for index, item in enumerate(expected):
-                        if id(item) in entering:
+                        item_key = (id(item), field.type_name)
+                        if id(item) in entering or item_key in walked:
                             continue
+                        walked.add(item_key)
                         visit(nested, item, f"{where}[{index}].", entering | {id(item)})
                 else:
-                    visit(nested, expected, trail, entering)
+                    visit(nested, expected, f"{where}.", entering)
 
-    # A cyclic YAML alias would revisit one mapping per recursion level until
-    # the stack runs out. Containers already on the path are skipped instead,
-    # so a directly self-referential message cannot flood the output; finite
-    # data with repeated types is still walked in full. Findings made before
-    # any other abort are still worth reporting, next to the encode error
-    # check_message adds for the same vector.
+    # A branching alias graph would visit one node per simple path through
+    # it, which grows exponentially. Containers already walked anywhere in
+    # this vector are skipped instead, so each alias node reports once at
+    # its first path; the key holds the message type too, so one mapping
+    # under two types still reports both. Containers on the current path
+    # are still skipped, so a self-referential message cannot flood the
+    # output; finite repeated types are still walked in full. Findings made
+    # before any abort are still reported, next to check_message's error.
     try:
         visit(message, values, seen=frozenset({id(values)}))
     except (

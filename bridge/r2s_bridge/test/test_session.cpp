@@ -97,6 +97,13 @@ std::vector<std::uint8_t> with_check(std::vector<std::uint8_t> frame)
     frame.push_back(static_cast<std::uint8_t>(crc >> 8u));
     return frame;
 }
+// The wire form of a time-channel frame carrying the payload.
+std::vector<std::uint8_t> time_wire(std::uint8_t seq, const std::vector<std::uint8_t> &payload)
+{
+    std::vector<std::uint8_t> decoded{0x01u, seq};
+    decoded.insert(decoded.end(), payload.begin(), payload.end());
+    return wire_of(with_check(decoded));
+}
 
 std::vector<std::vector<std::uint8_t>> units_of(const std::vector<std::uint8_t> &bytes)
 {
@@ -178,7 +185,9 @@ class Link final : public Transport
     FakeTransport &inner_;
 };
 
-// A session over the test's own fake link, driven by the test's clock only.
+// A session over the test's own fake link, driven by the test's clocks only.
+// Steady and ROS time advance together: the mapping test that separates them
+// is the estimator's own, in test_time_sync.cpp.
 class Fixture
 {
   public:
@@ -187,7 +196,7 @@ class Fixture
         SessionConfig config = SessionConfig())
     {
         session_ = std::make_unique<Session>(
-            config, clock_, [this]() { return std::unique_ptr<Transport>(new Link(transport_)); },
+            config, clock_, ros_clock_, [this]() { return std::unique_ptr<Transport>(new Link(transport_)); },
             std::move(resolve));
     }
 
@@ -197,6 +206,7 @@ class Fixture
     {
         while (now_ms_ < ms) {
             clock_.advance(kTick);
+            ros_clock_.advance(kTick);
             ++now_ms_;
             session_->poll();
         }
@@ -255,6 +265,7 @@ class Fixture
 
   private:
     ManualClock clock_;
+    ManualClock ros_clock_;
     FakeTransport transport_;
     std::uint32_t now_ms_ = 0;
     std::unique_ptr<Session> session_;
@@ -420,7 +431,8 @@ TEST(SessionHandshake, RefusesAHelloOfAnotherProtocolVersion)
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
+        SessionConfig{}, clock, clock,
+        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
         [](const TopicInfo &) { return std::uint8_t{0}; }, events);
     const std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u, 1u);
     std::vector<std::uint8_t> frame{kControl, 0u};
@@ -557,7 +569,8 @@ TEST(SessionHandshake, ReportsWhetherTheNewTableMatchesTheOldOne)
     FakeTransport transport;
     std::uint32_t now = 0;
     Session session(
-        SessionConfig{}, clock, [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
+        SessionConfig{}, clock, clock,
+        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
         [](const TopicInfo &) { return std::uint8_t{0}; }, events);
 
     const auto advance = [&clock, &session, &now](std::uint32_t ms) {
@@ -742,7 +755,7 @@ TEST(SessionLink, DoesNotResumeAWalkOnAReopenedLink)
     FakeTransport second;
     std::unique_ptr<Session> session;
     session = std::make_unique<Session>(
-        SessionConfig{}, clock,
+        SessionConfig{}, clock, clock,
         [&opens, &first, &second]() -> std::unique_ptr<Transport> {
             ++opens;
             return std::unique_ptr<Transport>(new Link(opens == 1 ? first : second));
@@ -852,7 +865,7 @@ TEST(SessionLink, ReopensThePortWhenItIsNotThereYet)
     int opens = 0;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock,
+        SessionConfig{}, clock, clock,
         [&opens, &transport]() -> std::unique_ptr<Transport> {
             ++opens;
             if (opens == 1) {
@@ -903,7 +916,7 @@ TEST(SessionLink, ReturnsToDisconnectedOnAWriteError)
         FakeTransport &inner_;
     };
     Session session(
-        SessionConfig{}, clock,
+        SessionConfig{}, clock, clock,
         [&incoming]() { return std::unique_ptr<Transport>(new FailingWrites(incoming)); },
         [](const TopicInfo &) { return std::uint8_t{0}; });
     while (now < 100) {
@@ -925,7 +938,8 @@ TEST(SessionLink, ReturnsToDisconnectedOnAPortError)
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
+        SessionConfig{}, clock, clock,
+        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
         [](const TopicInfo &) { return std::uint8_t{0}; });
     clock.advance(std::chrono::milliseconds(100));
     session.poll();
@@ -940,7 +954,7 @@ TEST(SessionLink, RefusesANonPositivePeriod)
     SessionConfig config;
     config.link_timeout_ms = 0;
     EXPECT_THROW(Session(
-                     config, clock, []() { return std::unique_ptr<Transport>(); },
+                     config, clock, clock, []() { return std::unique_ptr<Transport>(); },
                      [](const TopicInfo &) { return std::uint8_t{0}; }),
                  std::invalid_argument);
 }
@@ -1034,7 +1048,8 @@ TEST(SessionSend, RefusesFramesPastTheMcuCapacity)
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
+        SessionConfig{}, clock, clock,
+        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
         [](const TopicInfo &) { return std::uint8_t{0}; });
     clock.advance(std::chrono::milliseconds(10));
     session.poll();
@@ -1109,6 +1124,7 @@ TEST(SessionControl, CoalescesHeartbeatsWhenWritesBlock)
     const auto units = fixture.drain_units();
     ASSERT_EQ(units.size(), 1u) << "ten heartbeats collapse into one";
     EXPECT_EQ(decoded_unit(units[0])[0], kHeartbeat);
+    EXPECT_EQ(decoded_unit(units[0])[1], 0u) << "the replacement keeps the slot seq for [FRM-5]";
 }
 
 TEST(SessionControl, CoalescesTopicStatusPerTopicWhenWritesBlock)
@@ -1245,6 +1261,271 @@ TEST(SessionControl, CountsReplacedControlFrames)
     const auto units = fixture.drain_units();
     ASSERT_EQ(units.size(), 1u);
     EXPECT_EQ(decoded_unit(units[0])[1], 0u) << "the replacement keeps the slot seq for [FRM-5]";
+}
+
+// covers: SES-22, SES-23, SES-25
+std::vector<std::uint8_t> pong_payload(std::uint8_t id, std::uint32_t tick)
+{
+    std::vector<std::uint8_t> payload{0x02u, id};
+    for (int shift = 0; shift < 32; shift += 8) {
+        payload.push_back(static_cast<std::uint8_t>((tick >> shift) & 0xFFu));
+    }
+    return payload;
+}
+
+std::uint32_t le32(const std::vector<std::uint8_t> &bytes, std::size_t i)
+{
+    return static_cast<std::uint32_t>(bytes[i]) | (static_cast<std::uint32_t>(bytes[i + 1u]) << 8u) |
+           (static_cast<std::uint32_t>(bytes[i + 2u]) << 16u) |
+           (static_cast<std::uint32_t>(bytes[i + 3u]) << 24u);
+}
+
+void connect_empty(Fixture &fixture)
+{
+    // The time bit ([CTL-2]) tells the host the MCU answers PINGs.
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u, 2u, 0x01u));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
+// The PONGs answering one burst: 2 ms after each PING, the 1 MHz tick
+// stamped at the arrival, so the round trip is symmetric.
+void answer_pings(Fixture &fixture, std::uint32_t ready_at)
+{
+    for (std::uint8_t k = 0; k < 8; ++k) {
+        const std::uint32_t at = ready_at + 50u * k + 2u;
+        fixture.advance_to(at);
+        fixture.deliver_frame(0x01u, k, pong_payload(k, (ready_at + 50u * k + 1u) * 1000u));
+    }
+}
+
+// Topic, seq and payload of the time-channel units since the last drain,
+// without their check; other topics are skipped.
+struct TimeFrame {
+    std::uint8_t seq = 0;
+    std::vector<std::uint8_t> payload;
+};
+
+std::vector<TimeFrame> drain_time(Fixture &fixture, std::uint8_t opcode = 0xFFu)
+{
+    std::vector<TimeFrame> out;
+    for (auto &unit : fixture.drain_units()) {
+        const std::vector<std::uint8_t> decoded = decoded_unit(unit);
+        if (decoded.size() >= 4u && decoded[0] == 0x01u && (opcode == 0xFFu || decoded[2] == opcode)) {
+            TimeFrame frame;
+            frame.seq = decoded[1];
+            frame.payload.assign(decoded.begin() + 2, decoded.end() - 2);
+            out.push_back(frame);
+        }
+    }
+    return out;
+}
+
+TEST(SessionTimeSync, SendsEightPings50msApartAfterReady)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    connect_empty(fixture);
+    // READY and the first PING leave in the same poll.
+    const auto first = fixture.drain_units();
+    ASSERT_EQ(first.size(), 2u);
+    EXPECT_EQ(hex_of(first[1]), hex_of(time_wire(0u, {0x01u, 0u})));
+    for (std::uint8_t k = 1; k < 8; ++k) {
+        fixture.advance_to(100u + 50u * k);
+        const auto units = drain_time(fixture);
+        ASSERT_EQ(units.size(), 1u) << "PING " << static_cast<int>(k);
+        EXPECT_EQ(units[0].seq, k);
+        EXPECT_EQ(units[0].payload, std::vector<std::uint8_t>({0x01u, k}));
+    }
+    fixture.advance_to(500);
+    EXPECT_TRUE(drain_time(fixture).empty()) << "the burst is eight PINGs";
+}
+
+TEST(SessionTimeSync, PacesSteadyPingsThenTheConfiguredPeriod)
+{
+    SessionConfig config;
+    config.time_sync_period_ms = 2000;
+    // The cadence is what this pins down; a generous timeout keeps the
+    // session connected while no MCU frame arrives.
+    config.link_timeout_ms = 3600000;
+    Fixture fixture([](const TopicInfo &) { return std::uint8_t{0}; }, config);
+    fixture.advance_to(100);
+    connect_empty(fixture);
+    fixture.drain_units();
+    fixture.advance_to(450);
+    EXPECT_EQ(drain_time(fixture).size(), 7u) << "the rest of the burst";
+    const std::uint32_t steady[] = {1450u, 2450u, 3450u, 4450u, 5450u, 6450u, 7450u, 8450u, 9450u};
+    for (std::uint32_t at : steady) {
+        fixture.advance_to(at);
+        const auto units = drain_time(fixture);
+        ASSERT_EQ(units.size(), 1u) << "steady PING at " << at;
+        EXPECT_EQ(units[0].payload[0], 0x01u);
+    }
+    fixture.advance_to(10449);
+    EXPECT_TRUE(drain_time(fixture).empty());
+    fixture.advance_to(10450);
+    EXPECT_EQ(drain_time(fixture).size(), 1u) << "the last 1000 ms step";
+    fixture.advance_to(12449);
+    EXPECT_TRUE(drain_time(fixture).empty());
+    fixture.advance_to(12450);
+    EXPECT_EQ(drain_time(fixture).size(), 1u) << "period_ms once connected for 10 s";
+}
+
+TEST(SessionTimeSync, CorrectsAfterTheBurstFromPongs)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    connect_empty(fixture);
+    fixture.drain_units();
+    answer_pings(fixture, 100);
+    const auto corrections = drain_time(fixture, 0x03u);
+    ASSERT_EQ(corrections.size(), 1u) << "one CORRECTION once the burst is done";
+    const TimeFrame &correction = corrections[0];
+    EXPECT_EQ(correction.seq, 8u);
+    ASSERT_EQ(correction.payload.size(), 15u);
+    EXPECT_EQ(correction.payload[0], 0x03u);
+    EXPECT_EQ(le32(correction.payload, 1u), 451000u) << "tick0 is the latest PONG tick";
+    EXPECT_EQ(le32(correction.payload, 5u), 0u) << "sec";
+    EXPECT_EQ(le32(correction.payload, 9u), 451000000u) << "nanosec: the arrival midpoint";
+    const std::int16_t drift = static_cast<std::int16_t>(
+        correction.payload[13u] | (static_cast<std::uint16_t>(correction.payload[14u]) << 8u));
+    EXPECT_EQ(drift, 0);
+    EXPECT_TRUE(fixture.session().time_available());
+    EXPECT_EQ(fixture.session().time_offset_ns(), 0);
+    EXPECT_EQ(fixture.session().time_drift_ppm(), 0);
+    EXPECT_EQ(fixture.session().time_round_trip_ns(), 2000000);
+}
+
+TEST(SessionTimeSync, IgnoresStrayAndHandshakePongs)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    // A PONG before READY answers nothing the host sent.
+    fixture.deliver_frame(0x01u, 0u, pong_payload(0u, 100000u));
+    connect_empty(fixture);
+    fixture.drain_units();
+    // An id the host never sent carries no sample.
+    fixture.deliver_frame(0x01u, 0u, pong_payload(9u, 200000u));
+    fixture.advance_to(450);
+    EXPECT_TRUE(drain_time(fixture, 0x03u).empty()) << "no CORRECTION without a matched PONG";
+    // An unknown time opcode is ignored like the other system channels.
+    fixture.deliver_frame(0x01u, 1u, std::vector<std::uint8_t>{0x07u});
+    fixture.advance_to(1450);
+    EXPECT_EQ(drain_time(fixture, 0x01u).size(), 1u) << "steady PINGs continue";
+    EXPECT_FALSE(fixture.session().time_available());
+}
+
+TEST(SessionTimeSync, ResendsTheCorrectionOnAMoveAndEvery5s)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    connect_empty(fixture);
+    fixture.drain_units();
+    answer_pings(fixture, 100);
+    ASSERT_EQ(drain_time(fixture, 0x03u).size(), 1u);
+    // The MCU clock jumps 300 us: the next sample misses the prediction from
+    // the first correction by the jump, past the 100 us bar.
+    fixture.advance_to(1452);
+    fixture.deliver_frame(0x01u, 0u, pong_payload(8u, 1451300u));
+    // Sixteen jumped samples settle the window: the slope returns to zero
+    // and the last correction anchors the latest arrival midpoint exactly.
+    for (std::uint8_t k = 1; k < 16; ++k) {
+        const std::uint32_t at = 1450u + 1000u * k + 2u;
+        fixture.advance_to(at);
+        fixture.deliver_frame(0x01u, k, pong_payload(8u + k, (at - 1u) * 1000u + 300u));
+    }
+    auto moved = drain_time(fixture, 0x03u);
+    EXPECT_GE(moved.size(), 1u) << "the jump corrects again";
+    ASSERT_FALSE(moved.empty());
+    EXPECT_EQ(le32(moved.front().payload, 1u), 1451300u) << "the first jump corrects at once";
+    EXPECT_EQ(le32(moved.front().payload, 5u), 1u);
+    // The 5 s floor: with no new PONGs the estimator stands still, and MCU
+    // heartbeats keep the link from timing out, so the next correction
+    // repeats the last one within 5 s of it.
+    TimeFrame floor_correction;
+    bool resent = false;
+    std::uint8_t hb_seq = 0;
+    const std::vector<std::uint8_t> counters(8u, 0u);
+    for (std::uint32_t t = 16453; t <= 26453 && !resent; ++t) {
+        fixture.advance_to(t);
+        if (t % 1000u == 0u) {
+            fixture.deliver_frame(kHeartbeat, hb_seq++, counters);
+        }
+        auto more = drain_time(fixture, 0x03u);
+        if (!more.empty()) {
+            floor_correction = more.back();
+            resent = true;
+        }
+    }
+    EXPECT_TRUE(resent) << "a CORRECTION at least every 5 s";
+    EXPECT_EQ(floor_correction.payload, moved.back().payload);
+}
+
+TEST(SessionTimeSync, SendsNothingWhenDisabled)
+{
+    SessionConfig config;
+    config.time_sync_enabled = false;
+    Fixture fixture([](const TopicInfo &) { return std::uint8_t{0}; }, config);
+    fixture.advance_to(100);
+    connect_empty(fixture);
+    // A PONG answers nothing while disabled.
+    fixture.deliver_frame(0x01u, 0u, pong_payload(0u, 100000u));
+    fixture.advance_to(2100);
+    for (auto &unit : fixture.drain_units()) {
+        EXPECT_NE(decoded_unit(unit)[0], 0x01u) << "no PING and no CORRECTION";
+    }
+    EXPECT_FALSE(fixture.session().time_available());
+}
+
+TEST(SessionTimeSync, SendsNothingWhenTheMcuLacksTheTimeBit)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    // The HELLO leaves the time bit ([CTL-2]) clear: the firmware answers
+    // no PING, so the host sends none.
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    fixture.drain_units();
+    fixture.advance_to(2100);
+    for (auto &unit : fixture.drain_units()) {
+        EXPECT_NE(decoded_unit(unit)[0], 0x01u) << "no PING without the time bit";
+    }
+    EXPECT_FALSE(fixture.session().time_available());
+}
+
+TEST(SessionTimeSync, RefusesAPeriodOutside1To5000ms)
+{
+    ManualClock clock;
+    ManualClock ros;
+    FakeTransport transport;
+    const auto open = [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); };
+    const auto resolve = [](const TopicInfo &) { return std::uint8_t{0}; };
+    for (int bad : {0, -1, 6000}) {
+        SessionConfig config;
+        config.time_sync_period_ms = bad;
+        EXPECT_THROW(Session(config, clock, ros, open, resolve), std::invalid_argument) << "period " << bad;
+    }
+    for (int good : {1, 5000}) {
+        SessionConfig config;
+        config.time_sync_period_ms = good;
+        EXPECT_NO_THROW(Session(config, clock, ros, open, resolve)) << "period " << good;
+    }
+}
+
+TEST(SessionTimeSync, RestartsBurstAndEstimateOnReset)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    connect_empty(fixture);
+    fixture.drain_units();
+    answer_pings(fixture, 100);
+    EXPECT_EQ(drain_time(fixture, 0x03u).size(), 1u);
+    EXPECT_TRUE(fixture.session().time_available());
+    fixture.deliver_frame(kControl, 0u, hello_payload(1u, 0u, 2u, 0x01u));
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+    EXPECT_FALSE(fixture.session().time_available()) << "the re-handshake clears the estimate";
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 2u) << "READY, then the restarted burst";
+    EXPECT_EQ(hex_of(units[1]), hex_of(time_wire(0u, {0x01u, 0u})));
 }
 
 } // namespace

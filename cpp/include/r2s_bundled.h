@@ -109,56 +109,56 @@ typedef struct std_msgs__msg__String {
 #define R2S_MAX_FRAME 325u
 #endif
 
-/* Bundle index, table and hash of builtin_interfaces/msg/Time: the sketch rows name these,
- * so an unknown type in the list fails naming the row. */
+/* Bundle index, table and hash of builtin_interfaces/msg/Time: the sketch header maps each
+ * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_builtin_interfaces_Time 0u
 #define R2S_BUNDLED_TABLE_builtin_interfaces_Time r2s_bundled_table_builtin_interfaces_Time
 #define R2S_BUNDLED_HASH_builtin_interfaces_Time 0xb1u, 0x06u, 0x23u, 0x5eu, 0x25u, 0xa4u, 0xc5u, 0xedu
 
-/* Bundle index, table and hash of geometry_msgs/msg/Quaternion: the sketch rows name these,
- * so an unknown type in the list fails naming the row. */
+/* Bundle index, table and hash of geometry_msgs/msg/Quaternion: the sketch header maps each
+ * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_geometry_msgs_Quaternion 0u
 #define R2S_BUNDLED_TABLE_geometry_msgs_Quaternion r2s_bundled_table_geometry_msgs_Quaternion
 #define R2S_BUNDLED_HASH_geometry_msgs_Quaternion 0x8au, 0x76u, 0x5fu, 0x66u, 0x77u, 0x8cu, 0x8fu, 0xf7u
 
-/* Bundle index, table and hash of geometry_msgs/msg/Twist: the sketch rows name these,
- * so an unknown type in the list fails naming the row. */
+/* Bundle index, table and hash of geometry_msgs/msg/Twist: the sketch header maps each
+ * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_geometry_msgs_Twist 1u
 #define R2S_BUNDLED_TABLE_geometry_msgs_Twist r2s_bundled_table_geometry_msgs_Twist
 #define R2S_BUNDLED_HASH_geometry_msgs_Twist 0x9cu, 0x45u, 0xbfu, 0x16u, 0xfeu, 0x09u, 0x83u, 0xd8u
 
-/* Bundle index, table and hash of geometry_msgs/msg/Vector3: the sketch rows name these,
- * so an unknown type in the list fails naming the row. */
+/* Bundle index, table and hash of geometry_msgs/msg/Vector3: the sketch header maps each
+ * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_geometry_msgs_Vector3 0u
 #define R2S_BUNDLED_TABLE_geometry_msgs_Vector3 r2s_bundled_table_geometry_msgs_Vector3
 #define R2S_BUNDLED_HASH_geometry_msgs_Vector3 0xccu, 0x12u, 0xfeu, 0x83u, 0xe4u, 0xc0u, 0x27u, 0x19u
 
-/* Bundle index, table and hash of sensor_msgs/msg/Imu: the sketch rows name these,
- * so an unknown type in the list fails naming the row. */
+/* Bundle index, table and hash of sensor_msgs/msg/Imu: the sketch header maps each
+ * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_sensor_msgs_Imu 4u
 #define R2S_BUNDLED_TABLE_sensor_msgs_Imu r2s_bundled_table_sensor_msgs_Imu
 #define R2S_BUNDLED_HASH_sensor_msgs_Imu 0x7du, 0x9au, 0x00u, 0xffu, 0x13u, 0x10u, 0x80u, 0x89u
 
-/* Bundle index, table and hash of sensor_msgs/msg/JointState: the sketch rows name these,
- * so an unknown type in the list fails naming the row. */
+/* Bundle index, table and hash of sensor_msgs/msg/JointState: the sketch header maps each
+ * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_sensor_msgs_JointState 2u
 #define R2S_BUNDLED_TABLE_sensor_msgs_JointState r2s_bundled_table_sensor_msgs_JointState
 #define R2S_BUNDLED_HASH_sensor_msgs_JointState 0xa1u, 0x3eu, 0xe3u, 0xa3u, 0x30u, 0xe3u, 0x46u, 0xc9u
 
-/* Bundle index, table and hash of std_msgs/msg/Float32: the sketch rows name these,
- * so an unknown type in the list fails naming the row. */
+/* Bundle index, table and hash of std_msgs/msg/Float32: the sketch header maps each
+ * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_std_msgs_Float32 0u
 #define R2S_BUNDLED_TABLE_std_msgs_Float32 r2s_bundled_table_std_msgs_Float32
 #define R2S_BUNDLED_HASH_std_msgs_Float32 0x71u, 0x70u, 0xd3u, 0xd8u, 0xf8u, 0x41u, 0xf7u, 0xbeu
 
-/* Bundle index, table and hash of std_msgs/msg/Header: the sketch rows name these,
- * so an unknown type in the list fails naming the row. */
+/* Bundle index, table and hash of std_msgs/msg/Header: the sketch header maps each
+ * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_std_msgs_Header 1u
 #define R2S_BUNDLED_TABLE_std_msgs_Header r2s_bundled_table_std_msgs_Header
 #define R2S_BUNDLED_HASH_std_msgs_Header 0xf4u, 0x9fu, 0xb3u, 0xaeu, 0x2cu, 0xf0u, 0x70u, 0xf7u
 
-/* Bundle index, table and hash of std_msgs/msg/String: the sketch rows name these,
- * so an unknown type in the list fails naming the row. */
+/* Bundle index, table and hash of std_msgs/msg/String: the sketch header maps each
+ * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_std_msgs_String 0u
 #define R2S_BUNDLED_TABLE_std_msgs_String r2s_bundled_table_std_msgs_String
 #define R2S_BUNDLED_HASH_std_msgs_String 0xdfu, 0x66u, 0x8cu, 0x74u, 0x04u, 0x82u, 0xbbu, 0xd4u
