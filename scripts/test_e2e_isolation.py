@@ -20,6 +20,7 @@ import concurrent.futures
 import os
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -29,7 +30,11 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-CACHE = Path(os.environ.get("HOME", tempfile.gettempdir())) / ".cache" / "ros2serial"
+# The shared cache both runners inherit: the lease script resolves it the
+# same way, so an image that remaps HOME still lands on real disk.
+CACHE = Path(
+    os.environ.get("R2S_CACHE_DIR", os.path.join(os.environ.get("HOME", tempfile.gettempdir()), ".cache", "ros2serial"))
+)
 RMWS = ("rmw_fastrtps_cpp", "rmw_zenoh_cpp")
 DOMAIN_TIMEOUT = 900.0
 SWEEP_PAUSE = 10.0
@@ -110,15 +115,17 @@ def wait_for_domain(path, deadline):
     raise AssertionError("a run reported no leased domain within the timeout:\n" + path.read_text()[-4000:])
 
 
-def sweep(infos, proofs):
+def sweep(infos, proofs, stats):
     """One cross-talk sweep over every side and RMW, recording proof.
 
     Each probe names what it saw, but only when both sides are on the
-    probed RMW at once: a graph with /diagnostics and without the other
-    side's canary proves isolation for that RMW, and a graph with the
-    run's own canary proves the canary plumbing ran there. Every proof
-    needs repeating, so one slow graph cannot pass it.
+    probed RMW at once. A graph with the run's own canary proves the
+    canary plumbing ran there; a graph without the other side's canary
+    proves isolation for that RMW, but only once the other's canary is
+    known up, so a canary that simply has not started yet cannot pass.
+    Every proof needs repeating, so one slow graph cannot pass it.
     """
+    stats["sweeps"] += 1
     logs = {name: info["log"].read_text() for name, info in infos.items()}
     rmws = {name: current_rmw(logs[name], infos[name]["posix"]) for name in infos}
     jobs = {}
@@ -129,13 +136,19 @@ def sweep(infos, proofs):
                 if rmws[name] != rmw or rmws[other] != rmw:
                     continue
                 jobs[(name, rmw)] = pool.submit(probe_topics, infos[name]["domain"], rmw, infos[name]["session"])
+        seen = {}
         for (name, rmw), job in jobs.items():
             topics = job.result()
             if topics is None or "/diagnostics" not in topics:
                 continue
-            other = next(candidate for candidate in infos if candidate != name)
+            stats["live"] += 1
+            seen[(name, rmw)] = topics
             if "/" + infos[name]["canary"] in topics:
                 proofs[("own", name, rmw)] += 1
+        for (name, rmw), topics in seen.items():
+            other = next(candidate for candidate in infos if candidate != name)
+            if proofs[("own", other, rmw)] == 0:
+                continue
             if "/" + infos[other]["canary"] not in topics:
                 proofs[("cross", name, rmw)] += 1
 
@@ -152,18 +165,29 @@ def run_pair(first, second):
     logs = {}
     procs = {}
     builds = []
+    CACHE.mkdir(parents=True, exist_ok=True)
+    barrier = Path(tempfile.mkdtemp(prefix="r2s-e2e-iso-barrier-", dir=CACHE))
     try:
         for name, (script, canary, extra) in (("first", first), ("second", second)):
+            other = "second" if name == "first" else "first"
             handle = tempfile.NamedTemporaryFile(prefix="r2s-e2e-" + name + "-", suffix=".log", delete=False)
             logs[name] = Path(handle.name)
             handle.close()
             build = Path(tempfile.mkdtemp(prefix="r2s-e2e-iso-build-", dir=CACHE))
             builds.append(build)
-            env = dict(os.environ, R2S_RMWS=" ".join(RMWS), R2S_E2E_CANARY=canary, R2S_BUILD_DIR=str(build))
+            env = dict(
+                os.environ,
+                R2S_RMWS=" ".join(RMWS),
+                R2S_E2E_CANARY=canary,
+                R2S_BUILD_DIR=str(build),
+                R2S_E2E_BARRIER=str(barrier),
+                R2S_E2E_SLOT=name,
+                R2S_E2E_PEER=other,
+            )
             env.update(extra)
             with logs[name].open("w") as output:
                 procs[name] = subprocess.Popen(
-                    ["bash", script], cwd=ROOT, stdout=output, stderr=subprocess.STDOUT, env=env
+                    ["bash", script], cwd=ROOT, stdout=output, stderr=subprocess.STDOUT, env=env, start_new_session=True
                 )
         deadline = time.monotonic() + DOMAIN_TIMEOUT
         domains = {name: wait_for_domain(logs[name], deadline) for name in procs}
@@ -182,16 +206,21 @@ def run_pair(first, second):
                 }
             proofs = {("own", name, rmw): 0 for name in infos for rmw in RMWS}
             proofs.update({("cross", name, rmw): 0 for name in infos for rmw in RMWS})
+            stats = {"sweeps": 0, "live": 0}
             while any(proc.poll() is None for proc in procs.values()):
-                sweep(infos, proofs)
+                sweep(infos, proofs, stats)
                 time.sleep(SWEEP_PAUSE)
-            sweep(infos, proofs)
+            sweep(infos, proofs, stats)
             outs = {name: logs[name].read_text() for name in procs}
             for name, proc in procs.items():
                 assert proc.returncode == 0, f"{name} section failed:\n" + outs[name][-4000:]
             assert domains["first"] != domains["second"], "both sections ran on one domain"
             missing = sorted(key for key, count in proofs.items() if count < PROOFS_REQUIRED)
-            assert not missing, "no proof of isolation for: " + ", ".join("/".join(part) for part in missing)
+            assert not missing, (
+                "no proof of isolation for: "
+                + ", ".join("/".join(part) for part in missing)
+                + f" ({stats['sweeps']} sweeps, {stats['live']} live evaluations)"
+            )
             return outs
         finally:
             for session in sessions:
@@ -199,11 +228,23 @@ def run_pair(first, second):
     finally:
         for proc in procs.values():
             if proc.poll() is None:
-                proc.kill()
+                try:
+                    os.killpg(proc.pid, signal.SIGTERM)
+                except (ProcessLookupError, PermissionError):
+                    pass
+        deadline = time.monotonic() + 60.0
+        while any(proc.poll() is None for proc in procs.values()) and time.monotonic() < deadline:
+            time.sleep(1.0)
+        for proc in procs.values():
+            if proc.poll() is None:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
         for proc in procs.values():
             proc.wait()
-        for build in builds:
-            shutil.rmtree(build, ignore_errors=True)
+        for path in builds + [barrier]:
+            shutil.rmtree(path, ignore_errors=True)
 
 
 @pytest.mark.skipif(shutil.which("colcon") is None or shutil.which("ros2") is None, reason="colcon is not installed")
