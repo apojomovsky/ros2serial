@@ -47,3 +47,13 @@ def test_two_concurrent_bridge_sections_pass_without_crosstalk():
     assert first.returncode == 0, "first section failed:\n" + out1[-4000:]
     assert second.returncode == 0, "second section failed:\n" + out2[-4000:]
     assert domain_of(out1) != domain_of(out2), "both sections ran on one domain"
+
+
+@pytest.mark.skipif(shutil.which("colcon") is None, reason="colcon is not installed")
+def test_a_lone_bridge_run_keeps_domain_zero(tmp_path):
+    env = dict(os.environ, R2S_CACHE_DIR=str(tmp_path))
+    result = subprocess.run(
+        ["bash", "scripts/bridge-test.sh", "--build-only"], cwd=ROOT, capture_output=True, text=True, env=env
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert domain_of(result.stdout) == 0, "a lone bridge run left domain 0:\n" + result.stdout[-4000:]
