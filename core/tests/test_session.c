@@ -379,6 +379,20 @@ void test_session_announcing_answers_other_frames_with_a_rate_limited_hello(void
     TEST_ASSERT_EQUAL_UINT16(0, r2s_framer_counters()->dropped_frames);
 }
 
+/* covers: SES-3 */
+void test_session_later_channels_answer_hello_while_announcing(void)
+{
+    const uint8_t log_line[] = {0x14u};
+
+    configure(one_topic, 1);
+    feed_host(2, 0, log_line, sizeof log_line);
+
+    /* The boot HELLO and the rate-limited answer; the frame is accepted, so
+     * no refusal is counted. */
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+    TEST_ASSERT_EQUAL_UINT16(0, r2s_framer_counters()->dropped_frames);
+}
+
 /* covers: SYS-4 */
 void test_session_a_reserved_channel_is_ignored_without_a_reply_or_a_count(void)
 {
@@ -423,6 +437,8 @@ void test_session_malformed_control_frames_are_refused(void)
     const uint8_t heartbeat_full[] = {0x00u};
     const uint8_t status_bad[] = {0x05u, 0x10u, 0x07u};
     const uint8_t status_unknown[] = {0x05u, 0x12u, 0x00u};
+    const uint8_t topic_req_short[] = {0x03u};
+    const uint8_t status_short[] = {0x05u, 0x10u};
 
     configure(one_topic, 1);
     feed_host(0, 0, ready_extra, sizeof ready_extra);
@@ -434,10 +450,12 @@ void test_session_malformed_control_frames_are_refused(void)
     feed_host(0, 5, status_bad, sizeof status_bad);
     feed_host(0, 6, status_unknown, sizeof status_unknown);
     feed_host(0, 7, ready_zero, sizeof ready_zero);
+    feed_host(0, 8, topic_req_short, sizeof topic_req_short);
+    feed_host(0, 9, status_short, sizeof status_short);
 
     TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
-    TEST_ASSERT_EQUAL_UINT16(9, r2s_framer_counters()->dropped_frames);
+    TEST_ASSERT_EQUAL_UINT16(11, r2s_framer_counters()->dropped_frames);
 }
 
 /* covers: FRM-4, FRM-5, SES-11 */

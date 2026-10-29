@@ -139,6 +139,23 @@ void test_time_pong_carries_ping_id_and_delimiter_tick(void)
     assert_tx(1, 1u, 1u, expected, sizeof expected);
 }
 
+/* covers: TIM-1, TIM-2 */
+void test_time_pong_busy_port_sends_nothing(void)
+{
+    /* A PONG is best effort: without room for its whole frame the session
+     * drops it instead of sending half a frame. */
+    static const uint8_t ping[] = {0x01u, 0x2au};
+
+    fake_port_set_tick(50000u);
+    connect();
+    fake_port_tx_clear();
+    fake_port_set_tx_free(11u);
+    feed_host(1u, ping, sizeof ping);
+
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    fake_port_set_tx_free(0xFFFFu);
+}
+
 /* covers: TIM-3, TIM-6 */
 void test_time_correction_anchors_now(void)
 {
@@ -224,6 +241,36 @@ void test_time_nanoseconds_normalize_before_and_after_the_drift(void)
 }
 
 /* covers: TIM-7 */
+void test_time_now_is_unsynced_without_a_correction(void)
+{
+    r2s_time_t got;
+
+    fake_port_set_tick(50000u);
+    connect();
+
+    TEST_ASSERT_EQUAL_UINT8(0, r2s_time_synced());
+    got = r2s_now();
+    TEST_ASSERT_EQUAL_INT32(0, got.sec);
+    TEST_ASSERT_EQUAL_UINT32(0u, got.nanosec);
+}
+
+/* covers: TIM-9 */
+void test_time_drift_can_carry_into_the_next_second(void)
+{
+    r2s_time_t got;
+
+    fake_port_set_tick(80000u);
+    connect();
+    send_correction(80000u, 100, 999999999u, 20000);
+
+    fake_port_set_tick(80999u);
+    got = r2s_now();
+    TEST_ASSERT_EQUAL_INT32(102, got.sec);
+    TEST_ASSERT_EQUAL_UINT32(18979999u, got.nanosec);
+}
+
+/* covers: TIM-7 */
+
 void test_time_anchor_older_than_the_maximum_is_unsynced(void)
 {
     r2s_time_t got;
@@ -294,6 +341,19 @@ void test_time_malformed_time_frames_are_refused(void)
     /* The handshake's three frames, and nothing the refused frames answer. */
     TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_frame_count());
     TEST_ASSERT_EQUAL_UINT16(4, r2s_framer_counters()->dropped_frames);
+    TEST_ASSERT_EQUAL_UINT8(0, r2s_time_synced());
+}
+
+/* covers: TIM-10 */
+void test_time_empty_time_frame_is_refused(void)
+{
+    fake_port_set_tick(50000u);
+    connect();
+    feed_host(1u, NULL, 0);
+
+    /* The handshake's three frames, and nothing the refused frame answers. */
+    TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_frame_count());
+    TEST_ASSERT_EQUAL_UINT16(1, r2s_framer_counters()->dropped_frames);
     TEST_ASSERT_EQUAL_UINT8(0, r2s_time_synced());
 }
 
