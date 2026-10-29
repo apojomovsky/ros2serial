@@ -50,7 +50,23 @@ done
 # The runtime header on its own, without a message type, so a change there
 # fails even when no message header exists yet.
 printf '#include "r2s/runtime.hpp"\n' >"$build/check_runtime.cpp"
-sources+=("$build/check_runtime.cpp")
+# The static header on its own: the classes reference only the core and the
+# message traits, so no sketch list is needed to compile them.
+printf '#include "ros2serial.hpp"\n' >"$build/check_static_hpp.cpp"
+sources+=("$build/check_static_hpp.cpp")
+# A static sketch: the rows expand to the global objects through the bundled
+# header, proving the whole static path in the epic-cc subset.
+cat >"$build/check_static_sketch.cpp" <<'EOF'
+#define R2S_TOPICS(X) \
+    X(Publisher, std_msgs::msg::Float32, battery_pub, "battery") \
+    X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)
+#include <ros2serial.h>
+void on_cmd_vel(const geometry_msgs::msg::Twist &msg)
+{
+    (void)msg;
+}
+EOF
+sources+=("$build/check_static_sketch.cpp")
 # The headers as a sketch includes them, with the package directories on
 # the path, so the spelling a sketch uses is the one that compiles.
 printf '#include <std_msgs/msg/float32.hpp>\n#include <geometry_msgs/msg/twist.hpp>\n' \

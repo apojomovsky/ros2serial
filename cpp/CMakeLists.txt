@@ -88,3 +88,14 @@ function(r2s_cpp_unit_test source)
 endfunction()
 
 r2s_cpp_unit_test(tests/test_runtime.cpp)
+
+# The bundled tables the static test announces: the pinned generator output,
+# so the test speaks the tables the Arduino library ships. The frozen header
+# in include/ is identical to that output, so the C file compiles against it.
+add_library(r2s_bundled STATIC "${R2S_REPO_ROOT}/gen/tests/golden/bundle/r2s_bundled.c")
+target_include_directories(r2s_bundled PUBLIC include)
+target_compile_options(r2s_bundled PRIVATE ${R2S_WARNINGS})
+target_link_libraries(r2s_bundled PUBLIC r2s_core)
+
+r2s_cpp_unit_test(tests/test_static.cpp)
+target_link_libraries(test_static PRIVATE r2s_bundled)
