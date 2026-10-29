@@ -39,17 +39,17 @@ endfunction()
 
 r2s_support_lib(r2s_test_support r2s_core)
 
-# The transcript firmware announces a 1 MHz tick without logging, while the
-# host test build runs at 1 kHz with logging. The replay compiles the core
-# again with the transcript's values, so its HELLO matches byte for byte. The
-# -U drops the directory-wide R2S_WITH_LOG after its -D, which CMake emits
-# first; both spellings are POSIX compiler options.
+# The transcript firmware announces a 1 MHz tick without logging or time sync,
+# while the host test build runs at 1 kHz with both. The replay compiles the
+# core again with the transcript's values, so its HELLO matches byte for
+# byte. Each -U drops the directory-wide define after its -D, which CMake
+# emits first; both spellings are POSIX compiler options.
 file(GLOB_RECURSE R2S_SESSION_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../src/*.c")
 add_library(r2s_core_session STATIC ${R2S_SESSION_SOURCES})
 target_include_directories(r2s_core_session PUBLIC ../include)
 target_compile_options(r2s_core_session PRIVATE ${R2S_WARNINGS})
 target_compile_definitions(r2s_core_session PRIVATE R2S_TICK_HZ=1000000)
-target_compile_options(r2s_core_session PRIVATE -U R2S_WITH_LOG)
+target_compile_options(r2s_core_session PRIVATE -UR2S_WITH_LOG -UR2S_WITH_TIME)
 r2s_support_lib(r2s_session_support r2s_core_session)
 
 # The handwritten publish wrappers and dispatch, with the handler their tests
@@ -162,7 +162,7 @@ set_tests_properties(selftest_mismatch.test_must_fail_selftest_rejects_mistransc
 # The self-test runs the fixtures and every published vector of each kind
 # through support/vector_selftest.c, so the transcription is checked before
 # the modules (C2 to C4) register their own checks for the same files.
-set(R2S_VECTOR_KINDS crc frames messages rcobs session varint)
+set(R2S_VECTOR_KINDS crc frames messages rcobs session time varint)
 foreach(kind ${R2S_VECTOR_KINDS})
   file(GLOB fixtures CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/vectors/${kind}/*.yaml")
   file(GLOB published CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/${kind}/*.yaml")
@@ -186,6 +186,8 @@ r2s_vector_test(vectors_frames frames vectors/frames_check.c ${frames_vectors})
 file(GLOB messages_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/messages/*.yaml")
 r2s_vector_test(vectors_messages messages vectors/messages_check.c ${messages_vectors})
 
+file(GLOB time_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/time/*.yaml")
+r2s_vector_test(vectors_time time vectors/time_check.c ${time_vectors})
 # The replay runs the transcripts the conforming session passes byte for
 # The replay runs the transcripts the conforming session passes byte for
 # byte. Loss and reset need harness reenactment: a lost frame is not fed, an
@@ -237,10 +239,10 @@ foreach(path ${R2S_SESSION_ALL_PATHS})
   endif()
 endforeach()
 
-# Vector kinds the C runner does not read yet, each with the ticket that adds
-# it. A kind with files that is in neither list would be silently skipped, so
-# it stops the configure step instead.
-set(R2S_VECTOR_KINDS_PENDING time:P2)
+# Every vector kind with files is either run above or listed here with the
+# ticket that adds its C check, so a kind with files but no check stops the
+# configure step instead of landing silently unrun.
+set(R2S_VECTOR_KINDS_PENDING)
 file(GLOB kind_dirs LIST_DIRECTORIES true "${R2S_REPO_ROOT}/spec/vectors/*")
 foreach(dir ${kind_dirs})
   get_filename_component(kind "${dir}" NAME)

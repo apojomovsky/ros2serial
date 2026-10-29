@@ -13,7 +13,3 @@ ERR-5   P5
 ERR-6   P5
 LOG-4   P1
 SYS-3   S5
-TIM-1   P2
-TIM-3   P2
-TIM-5   P2
-TIM-11  P2
