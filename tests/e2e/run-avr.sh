@@ -163,7 +163,7 @@ trap cleanup_and_exit HUP INT TERM
 barrier_wait() {
   [ -n "${R2S_E2E_BARRIER:-}" ] || return 0
   : "${R2S_E2E_SLOT:?barrier needs a slot}" "${R2S_E2E_PEER:?barrier needs a peer}"
-  touch "$R2S_E2E_BARRIER/$R2S_E2E_SLOT-$1" || { echo "barrier unreachable" >&2; exit 1; }
+  touch "$R2S_E2E_BARRIER/$R2S_E2E_SLOT-$1" || { echo "barrier unreachable" >&2; cleanup_and_exit; }
   _barrier_end=$((SECONDS + 300))
   while [ ! -e "$R2S_E2E_BARRIER/$R2S_E2E_PEER-$1" ]; do
     sleep 2
@@ -215,6 +215,9 @@ for rmw in $rmws; do
       timeout 300 launch_test "tests/e2e/test_scenario_${scenario}_avr.py" || status=1
     done
   done
+  # Both sides wait for each other here too, so the whole iteration
+  # overlaps, not just its start: the canary stays up while waiting.
+  barrier_wait "$rmw-done"
   stop_canary
   if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
   router=""
