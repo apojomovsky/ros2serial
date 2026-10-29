@@ -21,6 +21,7 @@ def tree(tmp_path: Path) -> Path:
     root = tmp_path / "repo"
     (root / "gen" / "r2s_gen").mkdir(parents=True)
     (root / "bridge" / "r2s_bridge").mkdir(parents=True)
+    (root / "bridge" / "r2s_bridge_tests").mkdir(parents=True)
     (root / "VERSION").write_text("0.1.0\n")
     (root / "gen" / "r2s_gen" / "version.py").write_text('__version__ = "0.1.0"\nPROTOCOL_VERSION = 1\n')
     (root / "gen" / "package.xml").write_text(
@@ -28,6 +29,9 @@ def tree(tmp_path: Path) -> Path:
     )
     (root / "bridge" / "r2s_bridge" / "package.xml").write_text(
         '<package format="3">\n  <name>r2s_bridge</name>\n  <version>0.1.0</version>\n</package>\n'
+    )
+    (root / "bridge" / "r2s_bridge_tests" / "package.xml").write_text(
+        '<package format="3">\n  <name>r2s_bridge_tests</name>\n  <version>0.1.0</version>\n</package>\n'
     )
     return root
 
@@ -44,6 +48,7 @@ def test_every_carrier_gets_the_version(tmp_path):
     assert '__version__ = "0.2.0"' in (root / "gen" / "r2s_gen" / "version.py").read_text()
     assert "<version>0.2.0</version>" in (root / "gen" / "package.xml").read_text()
     assert "<version>0.2.0</version>" in (root / "bridge" / "r2s_bridge" / "package.xml").read_text()
+    assert "<version>0.2.0</version>" in (root / "bridge" / "r2s_bridge_tests" / "package.xml").read_text()
 
 
 def test_the_protocol_version_is_left_alone(tmp_path):

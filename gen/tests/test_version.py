@@ -19,14 +19,11 @@ def test_the_generator_version_is_the_repository_version():
     assert __version__ == (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 
-def test_the_ros_package_version_is_the_repository_version():
-    manifest = (ROOT / "gen" / "package.xml").read_text(encoding="utf-8")
-    assert _capture(r"<version>([^<]+)</version>", manifest) == __version__
-
-
-def test_the_bridge_package_version_is_the_repository_version():
-    manifest = (ROOT / "bridge" / "r2s_bridge" / "package.xml").read_text(encoding="utf-8")
-    assert _capture(r"<version>([^<]+)</version>", manifest) == __version__
+def test_every_ros_manifest_carries_the_repository_version():
+    manifests = sorted(ROOT.rglob("package.xml"))
+    assert len(manifests) >= 3, manifests
+    for manifest in manifests:
+        assert _capture(r"<version>([^<]+)</version>", manifest.read_text(encoding="utf-8")) == __version__, manifest
 
 
 def test_the_bundled_library_version_is_the_repository_version():
