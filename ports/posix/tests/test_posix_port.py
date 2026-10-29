@@ -235,6 +235,14 @@ class Host:
         self.send(0, b"\x06" + struct.pack("<I", token))
         return token
 
+    def ping(self, ping_id):
+        """One PING carrying the id its PONG answers with ([TIM-2])."""
+        self.send(1, bytes((0x01, ping_id)))
+
+    def correction(self, tick0, sec, nanosec, drift_ppm=0):
+        """One CORRECTION anchoring tick0 to the given ROS time ([TIM-3])."""
+        self.send(1, b"\x03" + struct.pack("<IiIh", tick0, sec, nanosec, drift_ppm))
+
 
 def do_handshake(fw, host=None):
     """HELLO_REQ, one TOPIC_REQ per announced topic with an ok status each,
@@ -269,15 +277,15 @@ def test_hello_announces_firmware(tmp_path):
     assert hello["version"] == 2
     assert hello["mode"] == 0
     assert hello["token"] == 0, "no token before the first READY"
-    assert hello["max_frame"] == 52
-    assert hello["rx_capacity"] == 52 + 52 // 254 + 1
+    assert hello["max_frame"] == 53
+    assert hello["rx_capacity"] == 53 + 53 // 254 + 1
     # covers: CTL-8
     assert hello["tick_hz"] == 1000
     # covers: CTL-10
     assert hello["max_frame"] <= 65277
     # covers: CTL-2
     assert hello["features"] & 0xC0 == 0
-    assert hello["count"] == 4
+    assert hello["count"] == 5
     assert hello["node"] == "r2s_posix"
 
 
@@ -285,18 +293,19 @@ def test_hello_announces_firmware(tmp_path):
 def test_handshake_reaches_connected(tmp_path):
     with Firmware("--rate", "10") as fw:
         hello, topics, _host = do_handshake(fw)
-        assert [t["topic"] for t in topics] == ["battery", "cmd_vel", "echo_vel", "log_text"]
+        assert [t["topic"] for t in topics] == ["battery", "cmd_vel", "echo_vel", "log_text", "time_now"]
         assert [(t["type"], t["id"]) for t in topics] == [
             ("std_msgs/msg/Float32", 16),
             ("geometry_msgs/msg/Twist", 17),
             ("geometry_msgs/msg/Twist", 18),
             ("std_msgs/msg/String", 19),
+            ("builtin_interfaces/msg/Time", 20),
         ]
         # covers: FRM-3
         assert all(16 <= t["id"] <= 255 for t in topics)
         # covers: CTL-4
         assert all(t["flags"] & 0xF0 == 0 for t in topics)
-        assert [t["flags"] & 0x01 for t in topics] == [0, 1, 0, 0]
+        assert [t["flags"] & 0x01 for t in topics] == [0, 1, 0, 0, 0]
         _, _, payload = read_frame(fw.master, want=4, timeout=2.0)
         assert len(payload) == 8, "the heartbeat carries four u16 counters"
     assert hello["node"] == "r2s_posix"
@@ -327,8 +336,13 @@ def test_configured_topics(tmp_path):
     with Firmware(*args) as fw:
         hello, topics, _host = do_handshake(fw)
         assert hello["node"] == "custom"
-        assert hello["count"] == 3
-        assert [(t["id"], t["topic"]) for t in topics] == [(16, "volt"), (17, "drive"), (18, "echo_vel")]
+        assert hello["count"] == 4
+        assert [(t["id"], t["topic"]) for t in topics] == [
+            (16, "volt"),
+            (17, "drive"),
+            (18, "echo_vel"),
+            (20, "time_now"),
+        ]
 
 
 # covers: FRM-4, FRM-5
@@ -431,11 +445,47 @@ def test_bad_rate_fails(tmp_path):
     assert "--rate" in error
 
 
+def test_bad_tick_skew_fails(tmp_path):
+    for bad in ("abc", "20001", "-20001"):
+        code, error = run_once(["--tick-skew-ppm", bad])
+        assert code == 2
+        assert "--tick-skew-ppm" in error
+
+
+# covers: TIM-1, TIM-2, TIM-3, TIM-6
+def test_time_now_tracks_correction(tmp_path):
+    """time_now stays silent until a correction anchors the clock, then
+    publishes the anchored time: the PONG tick stands in for the publish
+    tick, so a zero-drift correction pins the first stamp near its time."""
+    with Firmware("--rate", "20", "--no-log-text") as fw:
+        _hello, _topics, host = do_handshake(fw)
+        for _ in range(8):
+            topic, _seq, _payload = read_frame(fw.master)
+            assert topic != 20, "time_now published while unsynced"
+        host.ping(7)
+        _topic, _seq, payload = read_frame(fw.master, want=1)
+        assert payload[0] == 0x02, "the MCU answers a PING with a PONG"
+        assert payload[1] == 7, "the PONG carries the PING id"
+        tick0 = int.from_bytes(payload[2:6], "little")
+        host.correction(tick0, 1700000000, 0)
+        stamps = []
+        for _ in range(3):
+            _topic, _seq, payload = read_frame(fw.master, want=20)
+            assert len(payload) == 8, "a Time payload carries sec and nanosec"
+            sec, nanosec = struct.unpack("<iI", payload)
+            stamps.append(sec * 1_000_000_000 + nanosec)
+        anchored = 1700000000 * 1_000_000_000
+        assert abs(stamps[0] - anchored) < 2_000_000_000, "the first stamp left its correction"
+        assert stamps[0] < stamps[1] < stamps[2], "the stamps stand still"
+        assert stamps[2] - stamps[0] < 2_000_000_000, "the stamps ran past their interval"
+
+
 LAUNCH_NAME_TYPES = [
     ("--pub", "std_msgs/msg/Float32"),
     ("--sub", "geometry_msgs/msg/Twist"),
     ("--echo", "geometry_msgs/msg/Twist"),
     ("--log-text", "std_msgs/msg/String"),
+    ("--time-now", "builtin_interfaces/msg/Time"),
 ]
 
 
@@ -602,6 +652,7 @@ def build_firmware_without_cmd_vel(tmp_path):
         "-I",
         str(root / "ports" / "posix" / "src"),
         "-DR2S_WITH_CODEC",
+        "-DR2S_WITH_TIME",
         *(["-include", str(gen_dir / "twist_shim.h")] if needs_shim else []),
         *[str(p) for p in sources],
         "-o",
