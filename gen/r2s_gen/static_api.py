@@ -16,6 +16,10 @@ TEXT = """\
 #error "include either ros2serial.hpp (static list) or r2s/runtime.hpp (runtime registration), never both"
 #endif
 
+#ifndef R2S_TOPICS
+#error "include <ros2serial.h> with an R2S_TOPICS list instead of this header directly"
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -83,14 +87,15 @@ class Node
 {
   public:
     /* Names the node the session announces. */
-    explicit Node(const char *name) : m_name(name)
+    explicit Node(const char *name) : m_name(name), m_bound(false)
     {
     }
 
-    /* Starts the port at baud, binds the static topic table and starts the
-     * session. On a board the port glue also takes the stream, so the core
-     * reads it; elsewhere the port is started and nothing else. The port
-     * type must offer begin(unsigned long), as every Arduino stream does. */
+    /* Starts the port at baud. On a board the port glue also takes the
+     * stream, so the core reads it; elsewhere the port is started and
+     * nothing else. The port type must offer begin(unsigned long), as
+     * every Arduino stream does. The session starts on the first spin,
+     * when the node binds the static topic table. */
     template <typename PortT> void begin(PortT &port, unsigned long baud)
     {
 #ifdef ARDUINO
@@ -98,15 +103,20 @@ class Node
 #else
         port.begin(baud);
 #endif
-        if (r2s_session_configure(m_name, r2s_topics, R2S_TOPIC_COUNT) != R2S_OK) {
-            return;
-        }
-        r2s_init();
     }
 
-    /* Runs the session: serves the link and dispatches user frames. */
+    /* Binds the static topic table on the first call, then serves the link
+     * and dispatches user frames. A configure failure leaves the node
+     * unconnected, which connected() reports. */
     void spin_some()
     {
+        if (!m_bound) {
+            m_bound = true;
+            if (r2s_session_configure(m_name, r2s_topics, R2S_TOPIC_COUNT) != R2S_OK) {
+                return;
+            }
+            r2s_init();
+        }
         r2s_spin_some();
     }
 
@@ -133,6 +143,7 @@ class Node
     Node &operator=(const Node &);
 
     const char *m_name;
+    bool m_bound;
 };
 
 /* Publishes messages of one type on one topic. The row expands to the

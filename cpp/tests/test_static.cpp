@@ -121,6 +121,8 @@ class StubPort
     bool m_begun = false;
 };
 
+/* Boots a node the way a sketch does: begin the port, then run the first
+ * spin, which binds the static topic table. */
 static void begin(const char *name)
 {
     static StubPort port;
@@ -128,15 +130,25 @@ static void begin(const char *name)
     r2s::Node node(name);
 
     node.begin(port, 115200UL);
+    node.spin_some();
 }
 
 /* covers: SES-1 */
-void test_static_begin_configures_the_session_table(void)
+void test_static_first_spin_binds_the_session_table(void)
 {
     begin("base_controller");
     TEST_ASSERT_EQUAL_UINT8(2, r2s_topic_count());
     TEST_ASSERT_EQUAL_UINT8(16u, r2s_topic_get(0)->topic_id);
     TEST_ASSERT_EQUAL_UINT8(17u, r2s_topic_get(1)->topic_id);
+}
+
+void test_static_begin_leaves_the_table_unbound(void)
+{
+    r2s::Node node("base_controller");
+    StubPort port;
+
+    node.begin(port, 115200UL);
+    TEST_ASSERT_EQUAL_UINT8(0, r2s_topic_count());
 }
 
 /* covers: CTL-4 */

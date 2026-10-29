@@ -139,6 +139,7 @@ STUBS = """\
 uint8_t stub_tx_payload[2048];
 uint16_t stub_tx_len;
 static uint8_t stub_refused;
+static uint8_t stub_configured;
 
 uint8_t r2s_connected(void)
 {
@@ -147,6 +148,9 @@ uint8_t r2s_connected(void)
 
 uint8_t r2s_session_find_topic(uint8_t topic_id)
 {
+    if (stub_configured == 0u) {
+        return 0xFFu;
+    }
     return (uint8_t)(topic_id - 16u);
 }
 
@@ -227,6 +231,7 @@ r2s_status_t r2s_session_configure(const char *node_name, const r2s_topic_t *top
     (void)topics;
     stub_cfg_name = node_name;
     stub_cfg_count = topic_count;
+    stub_configured = 1u;
     return R2S_OK;
 }
 
@@ -235,6 +240,7 @@ r2s_status_t r2s_session_configure_ram(const char *node_name, const r2s_topic_t 
     (void)topics;
     stub_cfg_name = node_name;
     stub_cfg_count = topic_count;
+    stub_configured = 1u;
     return R2S_OK;
 }
 """
