@@ -2,8 +2,8 @@
 
 Each run.sh and run-avr.sh leases its own DDS domain and zenoh port, so two
 suites never see each other's topics even though they share the tree.
-Narrowed to Fast DDS and Zenoh, one board for the avr side; the RMW matrix
-covers each leg alone, and these tests cover the overlap.
+Narrowed to Fast DDS and Zenoh, one board in the avr scenario loop; the RMW
+matrix covers each leg alone, and these tests cover the overlap.
 """
 
 import os
@@ -26,7 +26,7 @@ def domain_of(output):
 
 def port_of(output):
     """The leased zenoh port the run reports, failing the run that reports none."""
-    match = re.search(r"ZENOH_ROUTER_PORT=(\d+)", output)
+    match = re.search(r"e2e isolation: ROS_DOMAIN_ID=\d+ ZENOH_ROUTER_PORT=(\d+)", output)
     assert match is not None, "no leased zenoh port in the last 4000 bytes:\n" + output[-4000:]
     return int(match.group(1))
 

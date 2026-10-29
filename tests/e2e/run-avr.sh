@@ -136,11 +136,13 @@ for rmw in $rmws; do
     [ -n "$router" ] || { echo "rmw_zenohd not found for $ROS_DISTRO"; status=1; break; }
     # A router per run on the leased port, and every node pointed at it, so
     # concurrent suites never share a Zenoh session the way the DDS domain
-    # separates the other legs.
+    # separates the other legs. Multicast scouting stays off, as in the
+    # distro default: otherwise every leased router joins one multicast
+    # group and the suites merge no matter the port.
     router_config=$build/zenoh-router-$R2S_ZENOH_ROUTER_PORT.json5
     session_config=$build/zenoh-session-$R2S_ZENOH_ROUTER_PORT.json5
-    printf '{\n  mode: "router",\n  listen: {\n    endpoints: ["tcp/127.0.0.1:%s"],\n  },\n}\n' "$R2S_ZENOH_ROUTER_PORT" >"$router_config"
-    printf '{\n  connect: {\n    endpoints: ["tcp/127.0.0.1:%s"],\n  },\n}\n' "$R2S_ZENOH_ROUTER_PORT" >"$session_config"
+    printf '{\n  mode: "router",\n  scouting: { multicast: { enabled: false } },\n  listen: {\n    endpoints: ["tcp/127.0.0.1:%s"],\n  },\n}\n' "$R2S_ZENOH_ROUTER_PORT" >"$router_config"
+    printf '{\n  scouting: { multicast: { enabled: false } },\n  connect: {\n    endpoints: ["tcp/127.0.0.1:%s"],\n  },\n}\n' "$R2S_ZENOH_ROUTER_PORT" >"$session_config"
     export ZENOH_ROUTER_CONFIG_URI=$router_config
     export ZENOH_SESSION_CONFIG_URI=$session_config
     "$router" >/dev/null 2>&1 &

@@ -28,7 +28,7 @@ REMAPPINGS = (("battery", "cell_voltage"), ("cmd_vel", "steer"))
 WANTED = ["/" + NAMESPACE + "/cell_voltage", "/" + NAMESPACE + "/steer"]
 GONE = ["/battery", "/cmd_vel", "/" + NAMESPACE + "/battery", "/" + NAMESPACE + "/cmd_vel"]
 # The bridge reports announced names without remapping or namespace.
-HANDSHAKE_TOPICS = ["battery", "cmd_vel"]
+HANDSHAKE_TOPICS = ["battery", "cmd_vel", "echo_vel", "log_text"]
 TOPIC_BUDGET = 3.0
 
 _SCRATCH = None
@@ -87,6 +87,9 @@ class TestScenario4(unittest.TestCase):
                 self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
             received.clear()
             _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
+            # /diagnostics publishes at 1 Hz, so the observed time can lag the
+            # real handshake by one period; the bound still holds because the
+            # handshake traffic itself is tens of milliseconds.
             while True:
                 rclpy.spin_once(node, timeout_sec=0.5)
                 missing = checks.handshake_missing(received[-1], HANDSHAKE_TOPICS) if received else ["link silent"]
