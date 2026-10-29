@@ -30,6 +30,14 @@ SKETCH_TOPICS = """\
     X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel) \\
     X(Subscription, sensor_msgs::msg::JointState, joints_sub, "joints", on_joints)
 """
+C_SKETCH_TOPICS = """\
+#define R2S_NODE_NAME "test_bundle"
+#define R2S_TOPICS(X) \\
+    X(Publisher, std_msgs__msg__Float32, battery_pub, "battery") \\
+    X(Publisher, std_msgs__msg__String, greeting_pub, "greeting") \\
+    X(Subscription, geometry_msgs__msg__Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel) \\
+    X(Subscription, sensor_msgs__msg__JointState, joints_sub, "joints", on_joints)
+"""
 
 
 def files(distro="jazzy"):
@@ -247,7 +255,8 @@ def c_bytes(payload):
     return ", ".join(f"0x{byte:02x}" for byte in payload)
 
 
-def host_sketch(frame, nest):
+def proof_vectors():
+    """The reference payloads and hashes every host proof checks against."""
     repository = msgs.MessageRepository(distro="jazzy")
     battery = messages.encode(repository, "std_msgs/msg/Float32", {"data": 1.5}, narrow=False)
     greeting = messages.encode(repository, "std_msgs/msg/String", {"data": "hi"}, narrow=False)
@@ -274,6 +283,11 @@ def host_sketch(frame, nest):
     ):
         digest = typehash.type_hash(repository, type_name)
         hashes[type_name] = ", ".join(f"0x{byte:02x}" for byte in bytes.fromhex(digest[len("RIHS01_") :])[:8])
+    return battery, greeting, twist_payload, joints_payload, twist_narrow, hashes
+
+
+def host_sketch(frame, nest):
+    battery, greeting, twist_payload, joints_payload, twist_narrow, hashes = proof_vectors()
     return (
         """\
 /* The host proof of the X-macro expansion: the table, the wrappers and
@@ -551,6 +565,207 @@ def test_the_expansion_matches_the_reference_on_the_host(tmp_path):
     assert "bundle-host-ok" in run.stdout
 
 
+def host_sketch_c(frame, nest):
+    battery, greeting, twist_payload, joints_payload, twist_narrow, hashes = proof_vectors()
+    return (
+        """\
+/* The host proof of the C X-macro expansion: the table, the wrappers and
+ * dispatch against the Python reference, with stubbed session and tx. */
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
+"""
+        + C_SKETCH_TOPICS
+        + f'#define EXPECTED_FRAME {frame}u\n#define EXPECTED_NEST {nest}u\n#include "ros2serial.h"\n'
+        + "static geometry_msgs__msg__Twist got_twist;\n"
+        + """\
+static sensor_msgs__msg__JointState got_joints;
+static uint8_t got_twist_calls;
+static uint8_t got_joints_calls;
+
+extern uint8_t stub_tx_payload[2048];
+extern uint16_t stub_tx_len;
+extern uint8_t stub_refused;
+
+void on_cmd_vel(const geometry_msgs__msg__Twist *msg)
+{
+    got_twist = *msg;
+    got_twist_calls++;
+}
+
+void on_joints(const sensor_msgs__msg__JointState *msg)
+{
+    got_joints = *msg;
+    got_joints_calls++;
+}
+
+#define CHECK(cond) \\
+    do { \\
+        if (!(cond)) { \\
+            printf("fail line %d: %s\\n", __LINE__, #cond); \\
+            return 1; \\
+        } \\
+    } while (0)
+
+int main(void)
+{
+    static const uint8_t battery_payload[] = {"""
+        + c_bytes(battery)
+        + """};
+    static const uint8_t greeting_payload[] = {"""
+        + c_bytes(greeting)
+        + """};
+    static const uint8_t twist_payload[] = {"""
+        + c_bytes(twist_payload)
+        + """};
+    static const uint8_t joints_payload[] = {"""
+        + c_bytes(joints_payload)
+        + """};
+    static const uint8_t twist_narrow[] = {"""
+        + c_bytes(twist_narrow)
+        + """};
+    static const uint8_t float_hash[] = {"""
+        + hashes["std_msgs/msg/Float32"]
+        + """};
+    std_msgs__msg__Float32 battery;
+    std_msgs__msg__String greeting;
+    sensor_msgs__msg__JointState joints;
+    r2s_codec_out_t out = {NULL, 0u, 0u, 0u};
+    uint8_t field = 0xFFu;
+    uint8_t narrow = 0u;
+
+    CHECK(R2S_TOPIC_COUNT == 4u);
+    CHECK(R2S_MAX_FRAME == EXPECTED_FRAME);
+    CHECK(R2S_MAX_NEST == EXPECTED_NEST);
+    CHECK(r2s_topics[0].topic_id == 16u);
+    CHECK(r2s_topics[3].topic_id == 19u);
+    CHECK(r2s_topics[0].flags == (uint8_t)(0x00u | R2S_NARROW_FLAG));
+    CHECK(r2s_topics[2].flags == (uint8_t)(0x01u | R2S_NARROW_FLAG));
+    CHECK(strcmp(r2s_topics[1].type_name, "std_msgs/msg/String") == 0);
+    CHECK(strcmp(r2s_topics[3].topic_name, "joints") == 0);
+    CHECK(memcmp(r2s_topics[0].type_hash, float_hash, 8) == 0);
+
+    memset(&battery, 0, sizeof battery);
+    battery.data = 1.5f;
+    CHECK(r2s_publish_battery_pub(&battery) == R2S_OK);
+    CHECK(stub_tx_len == sizeof battery_payload);
+    CHECK(memcmp(stub_tx_payload, battery_payload, sizeof battery_payload) == 0);
+
+    memset(&greeting, 0, sizeof greeting);
+    strcpy(greeting.data, "hi");
+    CHECK(r2s_publish_greeting_pub(&greeting) == R2S_OK);
+    CHECK(stub_tx_len == sizeof greeting_payload);
+    CHECK(memcmp(stub_tx_payload, greeting_payload, sizeof greeting_payload) == 0);
+
+    r2s_codec_dispatch(18u, 7u, twist_payload, (uint16_t)sizeof twist_payload);
+    CHECK(got_twist_calls == 1u);
+    CHECK(got_twist.linear.x == 1.0);
+    CHECK(got_twist.angular.z == 6.0);
+    CHECK(stub_refused == 0u);
+
+    r2s_codec_dispatch(19u, 3u, joints_payload, (uint16_t)sizeof joints_payload);
+    CHECK(got_joints_calls == 1u);
+    CHECK(got_joints.name.size == 2u);
+    CHECK(strcmp(got_joints.name.data[0], "a") == 0);
+    CHECK(got_joints.position.data[1] == 2.0);
+    CHECK(stub_refused == 0u);
+
+    r2s_codec_dispatch(200u, 0u, twist_payload, (uint16_t)sizeof twist_payload);
+    CHECK(stub_refused == 1u);
+    r2s_codec_dispatch(18u, 8u, twist_payload, 1u);
+    CHECK(stub_refused == 2u);
+
+    memset(&joints, 0, sizeof joints);
+    joints.header.stamp.sec = 1;
+    joints.header.stamp.nanosec = 2;
+    strcpy(joints.header.frame_id, "base");
+    strcpy(joints.name.data[0], "a");
+    strcpy(joints.name.data[1], "bb");
+    joints.name.size = 2u;
+    joints.position.data[0] = 1.0;
+    joints.position.data[1] = 2.0;
+    joints.position.size = 2u;
+    joints.velocity.data[0] = 3.0;
+    joints.velocity.size = 1u;
+    out.len = 0u;
+    field = 0xFFu;
+    CHECK(
+        r2s_codec_encode(
+            &R2S_BUNDLED_TABLE_sensor_msgs_JointState,
+            R2S_BUNDLED_INDEX_sensor_msgs_JointState,
+            &joints,
+            narrow,
+            &out,
+            &field) == R2S_OK);
+    CHECK(out.len == sizeof joints_payload);
+    CHECK(out.len + 4u <= R2S_MAX_FRAME);
+
+    narrow = 1u;
+    out.len = 0u;
+    field = 0xFFu;
+    {
+        geometry_msgs__msg__Twist narrow_twist;
+        uint8_t narrow_buf[64];
+        out.buf = narrow_buf;
+        out.cap = (uint16_t)sizeof narrow_buf;
+        memset(&narrow_twist, 0, sizeof narrow_twist);
+        narrow_twist.linear.x = 1.0;
+        narrow_twist.linear.y = 2.0;
+        narrow_twist.linear.z = 3.0;
+        narrow_twist.angular.x = 4.0;
+        narrow_twist.angular.y = 5.0;
+        narrow_twist.angular.z = 6.0;
+        CHECK(
+            r2s_codec_encode(
+                &R2S_BUNDLED_TABLE_geometry_msgs_Twist,
+                R2S_BUNDLED_INDEX_geometry_msgs_Twist,
+                &narrow_twist,
+                narrow,
+                &out,
+                &field) == R2S_OK);
+        CHECK(out.len == sizeof twist_narrow);
+        CHECK(memcmp(narrow_buf, twist_narrow, sizeof twist_narrow) == 0);
+    }
+
+    printf("bundle-host-c-ok\\n");
+    return 0;
+}
+"""
+    )
+
+
+def test_the_c_expansion_matches_the_reference_on_the_host(tmp_path):
+    out_files = files()
+    root = sketch_dir(tmp_path, out_files)
+    frame = frame_limit(out_files)
+    nest = nest_limit(out_files)
+    (root / "sketch.c").write_text(host_sketch_c(frame, nest), encoding="utf-8")
+    (root / "stubs.c").write_text(STUBS, encoding="utf-8")
+
+    compile_sketch(
+        root,
+        [
+            str(root / "sketch.c"),
+            str(root / "stubs.c"),
+            str(root / "src" / "r2s_bundled.c"),
+        ],
+        [
+            str(CORE_SRC / "codec.c"),
+            str(CORE_SRC / "varint.c"),
+        ],
+        extra=(
+            "-DR2S_WITH_CODEC",
+            f"-DR2S_MAX_FRAME={frame}",
+            f"-DR2S_MAX_NEST={nest}",
+        ),
+    )
+    run = subprocess.run([str(root / "sketch")], capture_output=True, text=True)
+
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "bundle-host-c-ok" in run.stdout
+
+
 def frame_limit(out_files):
     match = re.search(r"^#define R2S_MAX_FRAME ([0-9]+)u$", out_files["src/r2s_bundled.h"], re.MULTILINE)
     assert match is not None
@@ -628,16 +843,41 @@ def test_a_missing_list_fails_naming_it(tmp_path):
 
     assert compiled.returncode != 0
     assert "R2S_TOPICS" in compiled.stderr
+    assert "pkg__msg__Type" in compiled.stderr
 
 
-def test_a_c_list_fails_pointing_at_a_cxx_translation_unit(tmp_path):
+def test_a_c_list_with_cxx_rows_names_the_c_spelling(tmp_path):
     root = sketch_dir(tmp_path, files())
-    body = case_with_rows('X(Publisher, std_msgs::msg::Float32, battery_pub, "battery")')
+    body = '#define R2S_TOPICS(X) X(Publisher, std_msgs::msg::Float32, battery_pub, "battery")\n'
+    body += '#include "ros2serial.h"\n'
 
     compiled = compile_case(root, body)
 
     assert compiled.returncode != 0
-    assert "C++ translation unit" in compiled.stderr
+    assert "pkg__msg__Type" in compiled.stderr
+
+
+def test_a_cxx_list_with_underscore_rows_names_the_cxx_spelling(tmp_path):
+    root = sketch_dir(tmp_path, files())
+    body = '#define R2S_TOPICS(X) X(Publisher, std_msgs__msg__Float32, battery_pub, "battery")\n'
+    body += '#include "ros2serial.h"\n'
+
+    compiled = compile_case_cxx(root, body)
+
+    assert compiled.returncode != 0
+    assert "double_colon" in compiled.stderr
+
+
+def test_an_unknown_c_type_in_the_list_fails_naming_it(tmp_path):
+    root = sketch_dir(tmp_path, files())
+    body = '#define R2S_TOPICS(X) X(Subscription, foo_msgs__msg__Bar, x, "x", on_x)\n'
+    body += '#include "ros2serial.h"\n'
+    body += "void on_x(const foo_msgs__msg__Bar *msg)\n{\n    (void)msg;\n}\n"
+
+    compiled = compile_case(root, body)
+
+    assert compiled.returncode != 0
+    assert "R2S_CTYPE_HASH_foo_msgs__msg__Bar" in compiled.stderr
 
 
 def test_an_empty_list_fails_in_cxx(tmp_path):
