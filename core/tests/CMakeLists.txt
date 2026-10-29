@@ -220,11 +220,13 @@ add_test(NAME vectors_session COMMAND vectors_session)
 
 # Every session transcript is either replayed above or owned by the host
 # runner, so a new transcript stops the configure step instead of landing
-# silently unrun. The two host-owned transcripts open with HELLOs no
-# conforming firmware sends; bridge/r2s_bridge/test/test_session.cpp
+# silently unrun. The refused HELLOs open with HELLOs no conforming firmware
+# sends, and the time transcript pins the host's own PING burst and
+# corrections, which no MCU replay checks; bridge/r2s_bridge/test/test_session.cpp
 # replays them through the host session instead.
 set(R2S_SESSION_HOST_NAMES
   refused_hello
+  time_sync
   version_mismatch)
 file(GLOB R2S_SESSION_ALL_PATHS CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/session/*.yaml")
 foreach(path ${R2S_SESSION_ALL_PATHS})
