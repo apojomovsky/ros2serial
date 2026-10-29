@@ -475,11 +475,8 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
             r.u8()  # rel seq
             r.u8()  # index
             value = r.take(len(payload) - r.pos)
-            if len(value) == 1:
-                if value[0] not in (0, 1):
-                    problems.append(f"{name}/payload: the bool value is neither 0 nor 1")
-            elif len(value) == 8:
-                pass  # i64, f64
+            if len(value) == 8 or value in (b"\x00", b"\x01"):
+                pass  # i64, f64, or a bool; a SET carries no type byte
             else:
                 # A SET carries no type byte, so anything else must parse as
                 # a string: a varint length holding exactly the rest.
