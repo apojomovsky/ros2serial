@@ -1635,10 +1635,51 @@ TEST(SessionLog, DropsALogFrameWithAnUnknownLevel)
 
 TEST(SessionLog, DropsATruncatedLogFrame)
 {
-    LogFixture fixture;
-    fixture.deliver_log({20u});
-    fixture.deliver_log(log_payload(20u, "v=", 1u, {0x34u}));
-    EXPECT_TRUE(fixture.lines().empty()) << "a short payload forwards nothing";
+    struct Case {
+        std::vector<std::uint8_t> payload;
+    };
+    const Case cases[] = {{{}},
+                          {{20u}},
+                          {{20u, 2u, 'v', '='}},
+                          {log_payload(20u, "v=", 1u, {0x34u})},
+                          {log_payload(20u, "v=", 2u, {0x34u})},
+                          {log_payload(20u, "v=", 3u, {0x34u, 0x12u, 0x00u})},
+                          {log_payload(20u, "v=", 4u, {0x34u, 0x12u, 0x00u})},
+                          {log_payload(20u, "v=", 5u, {0x00u, 0x00u, 0xC0u})}};
+    for (const Case &line : cases) {
+        LogFixture fixture;
+        fixture.deliver_log(line.payload);
+        EXPECT_TRUE(fixture.lines().empty()) << "a short payload forwards nothing";
+    }
+}
+
+TEST(SessionLog, DropsALogFrameWithTrailingBytes)
+{
+    struct Case {
+        std::uint8_t kind;
+        std::vector<std::uint8_t> bytes;
+    };
+    const Case cases[] = {{0u, {}},
+                          {1u, {0x34u, 0x12u}},
+                          {2u, {0xFEu, 0xFFu}},
+                          {3u, {0x78u, 0x56u, 0x34u, 0x12u}},
+                          {4u, {0xFFu, 0xFFu, 0xFFu, 0xFFu}},
+                          {5u, {0x00u, 0x00u, 0xC0u, 0x3Fu}}};
+    for (const Case &line : cases) {
+        std::vector<std::uint8_t> bytes = line.bytes;
+        bytes.push_back(0x00u);
+        LogFixture fixture;
+        fixture.deliver_log(log_payload(20u, "v=", line.kind, bytes));
+        EXPECT_TRUE(fixture.lines().empty()) << "kind " << static_cast<int>(line.kind);
+    }
+}
+
+TEST(SessionLog, IgnoresLogLinesWithoutAMcuSink)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver_frame(2u, 0u, log_payload(20u, "line"));
+    EXPECT_TRUE(fixture.drain_units().empty()) << "a log line answers nothing";
 }
 
 } // namespace

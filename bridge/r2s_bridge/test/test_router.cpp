@@ -60,15 +60,18 @@ class RouterFixture
 {
   public:
     RouterFixture(const std::string &name, rclcpp::NodeOptions options, RouterParams params,
-                  std::uint16_t max_frame = 512u)
+                  std::uint16_t max_frame = 512u, bool with_mcu_sink = true)
         : max_frame_(max_frame), node_(std::make_shared<rclcpp::Node>(name, "robot1", options))
     {
+        LogSink mcu_sink;
+        if (with_mcu_sink) {
+            mcu_sink = [this](SessionLog level, const std::string &text) { mcu_.emplace_back(level, text); };
+        }
         router_ = std::make_unique<Router>(
             node_->get_node_topics_interface(),
             [this]() { return std::unique_ptr<Transport>(new HelperLink(transport_)); }, clock_, clock_,
             std::move(params), [this](SessionLog, const std::string &text) { logged_.push_back(text); },
-            SessionConfig{},
-            [this](SessionLog level, const std::string &text) { mcu_.emplace_back(level, text); });
+            SessionConfig{}, std::move(mcu_sink));
     }
 
     void advance(std::uint32_t ms)
@@ -607,6 +610,16 @@ TEST_F(RouterNode, ForwardsMcuLogLinesToTheirOwnSink)
     EXPECT_EQ(fixture.mcu_logged()[1].first, SessionLog::kError);
     EXPECT_EQ(fixture.mcu_logged()[1].second, "hotter");
     EXPECT_TRUE(fixture.logged().empty()) << "MCU lines bypass the bridge sink";
+}
+
+TEST_F(RouterNode, FallsBackToTheLogSinkWithoutAnMcuSink)
+{
+    RouterFixture fixture("mcu_fallback", remapped(), RouterParams{}, 512u, false);
+    fixture.handshake();
+    fixture.deliver_frame(2u, 0u, mcu_log_payload(20u, "line"));
+    EXPECT_TRUE(fixture.mcu_logged().empty());
+    ASSERT_EQ(fixture.logged().size(), 1u);
+    EXPECT_EQ(fixture.logged()[0], "line");
 }
 
 TEST(RouterOverrides, ParsesTopicRates)
