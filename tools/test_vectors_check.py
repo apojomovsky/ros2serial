@@ -679,7 +679,7 @@ payload: ""
         "messages/repeated.yaml/message: demo_msgs/msg/A.b.demo_msgs/msg/B.e must be exactly representable in binary32",
         "messages/repeated.yaml/message: demo_msgs/msg/A.b.demo_msgs/msg/B.a.demo_msgs/msg/A.d must be exactly representable in binary32",
         "messages/repeated.yaml/message: demo_msgs/msg/A.b.demo_msgs/msg/B.a.demo_msgs/msg/A.b.demo_msgs/msg/B.e must be exactly representable in binary32",
-        "messages/repeated.yaml/message: the reference does not make it: demo_msgs/msg/A.b.demo_msgs/msg/B.a: no value",
+        "messages/repeated.yaml/message: the reference does not make it: demo_msgs/msg/A.b.demo_msgs/msg/B.a.demo_msgs/msg/A.b.demo_msgs/msg/B.a: no value",
     ]
 
 
