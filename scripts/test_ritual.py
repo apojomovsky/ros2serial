@@ -331,9 +331,10 @@ def test_a_non_conventional_subject_outside_a_merge_still_fails(tmp_path):
 
 
 def test_a_branch_behind_its_base_is_told_to_merge_it_in(tmp_path):
+    """A branch whose files overlap master's must merge it in first."""
     main, wt = fixture(tmp_path)
-    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
-    commit(main, {"b.txt": "b\n"}, "chore: master moves on")
+    commit(wt, {"shared.txt": "branch\n"}, "feat(core): a")
+    commit(main, {"shared.txt": "master\n"}, "chore: master moves on")
     git(main, "push", "-q", "origin", "master")
     git(wt, "fetch", "-q", "origin")
     out = ritual(wt).stdout
@@ -715,3 +716,161 @@ def test_the_pr_range_script_reports_an_unresolvable_base(tmp_path):
     out = run(["bash", str(ROOT / "scripts/pr-title-range.sh")], wt, {"BASE_REF": "no-such-branch"})
     assert out.returncode != 0
     assert "no merge base" in out.stderr
+
+
+def _behind(main: Path, wt: Path, branch_files: dict, master_files: dict) -> None:
+    commit(wt, branch_files, "feat(core): a branch thing")
+    for name, text in master_files.items():
+        commit(main, {name: text}, f"docs(core): master adds {name}")
+    git(main, "push", "-q", "origin", "master")
+    git(wt, "fetch", "-q", "origin")
+
+
+def test_a_branch_behind_without_overlap_or_conflict_passes(tmp_path):
+    """Only an overlap or a conflict needs a merge first; CI tests the rest."""
+    main, wt = fixture(tmp_path)
+    _behind(main, wt, {"branch.txt": "b\n"}, {"master.txt": "m\n"})
+    result = ritual(wt)
+    assert "merge origin/master" not in result.stdout, result.stdout
+    assert "no overlapping files" in result.stdout, result.stdout
+
+
+def test_a_branch_behind_with_overlap_merges_first(tmp_path):
+    main, wt = fixture(tmp_path)
+    _behind(main, wt, {"shared.txt": "branch\n"}, {"shared.txt": "master\n"})
+    out = ritual(wt).stdout
+    assert "merge origin/master" in out, out
+
+
+def test_a_branch_behind_with_conflict_merges_first(tmp_path):
+    """A file on one side colliding with a directory on the other conflicts."""
+    main, wt = fixture(tmp_path)
+    commit(wt, {"clash": "a file\n"}, "feat(core): a branch thing")
+    commit(main, {"clash/inner.txt": "a dir\n"}, "docs(core): master adds a directory")
+    git(main, "push", "-q", "origin", "master")
+    git(wt, "fetch", "-q", "origin")
+    out = ritual(wt).stdout
+    assert "merge origin/master" in out, out
+
+
+def test_a_takeoff_pass_makes_the_push_skip_the_suite(tmp_path):
+    """The takeoff records the pre-push stamp, so the push runs nothing twice."""
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    git(main, "config", "core.hooksPath", ".githooks")
+    head = git(wt, "rev-parse", "HEAD").stdout.strip()
+    line = f"refs/heads/feat/1-thing {head} refs/heads/feat/1-thing {'0' * 40}\n"
+    suite_log = tmp_path / "suite.log"
+    recorder = tmp_path / "record-suite.sh"
+    recorder.write_text(f"#!/usr/bin/env bash\necho ran >> {suite_log}\n")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+    result = ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="feat(core): a", R2S_SUITE=str(recorder))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert suite_log.read_text().split() == ["ran"]
+    assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=f"bash {recorder}").returncode == 0
+    assert suite_log.read_text().split() == ["ran"], "the push reran the suite"
+
+
+def test_full_env_runs_the_suite_unscoped(tmp_path):
+    """R2S_FULL=1 forces the full suite: the hook passes no scope at all."""
+    _, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    head = git(wt, "rev-parse", "HEAD").stdout.strip()
+    line = f"refs/heads/feat/1-thing {head} refs/heads/feat/1-thing {'0' * 40}\n"
+    seen = tmp_path / "env.txt"
+    suite = f"env > {seen}"
+    assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=suite, R2S_FULL="1").returncode == 0
+    text = seen.read_text()
+    scopes = ("FULL", "LINT", "SCRIPTS", "COMMITS", "CORE", "GEN")
+    scopes += ("BRIDGE", "E2E", "COVERAGE", "DOCS", "EXAMPLES", "FUZZ")
+    # The outer suite may export scopes of its own; the hook must add none.
+    present = {name for name in scopes if name in os.environ}
+    added = {line.split("=")[0] for line in text.splitlines() if line.split("=")[0] in scopes} - present
+    assert added == set(), f"the hook scoped a full run: {sorted(added)}"
+
+
+def test_ci_runs_every_scope_on_pull_requests():
+    """The local gate is scoped; CI still runs the full suite on the merge."""
+    workflows = ROOT / ".github/workflows"
+    assert (workflows / "ci.yml").read_text().count("pull_request") >= 1
+    runs = []
+    for workflow in sorted(workflows.glob("*.yml")):
+        runs += [
+            line.strip() for line in workflow.read_text().splitlines() if "make test" in line or "ci-test.sh" in line
+        ]
+    assert runs, "CI runs no suite at all"
+    assert not any("R2S_FULL" in line for line in runs), "CI must not narrow the suite"
+    mentioned = set()
+    for line in runs:
+        for scope in (
+            "LINT",
+            "SCRIPTS",
+            "COMMITS",
+            "CORE",
+            "GEN",
+            "BRIDGE",
+            "CPP",
+            "COVERAGE",
+            "DOCS",
+            "EXAMPLES",
+            "FUZZ",
+        ):
+            if scope in line:
+                mentioned.add(scope)
+        if "E2E=avr" in line:
+            mentioned.add("E2E=avr")
+        if "E2E=posix" in line:
+            mentioned.add("E2E=posix")
+    missing = {
+        "LINT",
+        "SCRIPTS",
+        "COMMITS",
+        "CORE",
+        "GEN",
+        "BRIDGE",
+        "CPP",
+        "COVERAGE",
+        "DOCS",
+        "EXAMPLES",
+        "FUZZ",
+        "E2E=avr",
+        "E2E=posix",
+    } - mentioned
+    assert not missing, f"CI no longer runs every scope: {sorted(missing)}"
+
+
+def test_a_dirty_takeoff_runs_the_suite_but_records_no_stamp(tmp_path):
+    """The stamp keys the committed tree, so a dirty tree records nothing."""
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    git(main, "config", "core.hooksPath", ".githooks")
+    (wt / "dirty.txt").write_text("uncommitted\n")
+    suite_log = tmp_path / "suite.log"
+    recorder = tmp_path / "record-suite.sh"
+    recorder.write_text(f"#!/usr/bin/env bash\necho ran >> {suite_log}\n")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+    result = ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="feat(core): a", R2S_SUITE=str(recorder))
+    assert suite_log.read_text().split() == ["ran"]
+    assert "not clean" in result.stdout, result.stdout
+    stamp = Path(git(wt, "rev-parse", "--absolute-git-dir").stdout.strip()) / "r2s-pre-push-stamp"
+    assert not stamp.exists(), "a dirty tree recorded a stamp for uncommitted edits"
+
+
+def test_a_dirty_push_reruns_the_suite(tmp_path):
+    """Uncommitted edits never land on the remote, so the push tests them."""
+    main, wt = fixture(tmp_path)
+    commit(wt, {"a.txt": "a\n"}, "feat(core): a")
+    git(main, "config", "core.hooksPath", ".githooks")
+    suite_log = tmp_path / "suite.log"
+    recorder = tmp_path / "record-suite.sh"
+    recorder.write_text(f"#!/usr/bin/env bash\necho ran >> {suite_log}\n")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+    assert ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="feat(core): a", R2S_SUITE=str(recorder)).returncode == 0
+    (wt / "dirty.txt").write_text("uncommitted\n")
+    head = git(wt, "rev-parse", "HEAD").stdout.strip()
+    line = f"refs/heads/feat/1-thing {head} refs/heads/feat/1-thing {'0' * 40}\n"
+    assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=f"bash {recorder}").returncode == 0
+    assert suite_log.read_text().split() == ["ran", "ran"], "a dirty push skipped the suite on a stale stamp"

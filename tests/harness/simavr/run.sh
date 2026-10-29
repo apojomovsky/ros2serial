@@ -13,7 +13,10 @@ if [ -z "${R2S_SIMAVR_LOCKED:-}" ]; then
   exec env R2S_SIMAVR_LOCKED=1 bash "$root/scripts/with-build-lock.sh" "$build/.lock" \
     bash "$root/tests/harness/simavr/run.sh" "$@"
 fi
-mkdir -p "$build" || exit 1
+
+build_only=0
+if [ "${1:-}" = --build-only ]; then build_only=1; shift; fi
+[ "$#" -eq 0 ] || { echo "usage: tests/harness/simavr/run.sh [--build-only]" >&2; exit 2; }
 
 status=0
 cc -std=c99 -Wall -Wextra -Werror -O2 -o "$build/r2s_simavr" tests/harness/simavr/r2s_simavr.c \
@@ -68,5 +71,6 @@ if [ "$status" -ne 0 ]; then
   echo "the simavr harness or its firmware did not build" >&2
   exit 1
 fi
+[ "$build_only" = 1 ] && exit 0
 
 R2S_SIMAVR_BIN="$build/r2s_simavr" R2S_SIMAVR_FW="$build" python3 -m pytest tests/harness/simavr -q
