@@ -103,6 +103,23 @@ def test_a_file_without_pins_is_refused(tmp_path):
     assert "ci/versions.env" in result.stderr
 
 
+def test_a_directory_as_versions_env_fails_with_a_read_error(tmp_path):
+    root = tmp_path / "root"
+    (root / "scripts").mkdir(parents=True)
+    shutil.copy2(SCRIPT, root / "scripts" / "bridge-images.sh")
+    (root / "ci").mkdir()
+    (root / "ci" / "versions.env").mkdir()
+    result = subprocess.run(
+        ["bash", str(root / "scripts" / "bridge-images.sh")],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    assert result.returncode == 1
+    assert "cannot read pins" in result.stderr
+    assert "unbound variable" not in result.stderr
+
+
 def test_the_workflow_carries_no_image_of_its_own():
     workflow = yaml.safe_load(WORKFLOW.read_text())
     bridge = workflow["jobs"]["bridge"]

@@ -12,6 +12,7 @@
 
 #include <diagnostic_msgs/msg/diagnostic_array.hpp>
 
+#include "r2s_bridge/ros_clock.hpp"
 #include "r2s_bridge/router.hpp"
 #include "r2s_bridge/steady_clock.hpp"
 
@@ -26,6 +27,7 @@ class Bridge : public rclcpp::Node
 
   private:
     SteadyClock clock_;
+    RosClock ros_clock_;
     std::unique_ptr<Router> router_;
     rclcpp::TimerBase::SharedPtr timer_;
     rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_pub_;

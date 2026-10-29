@@ -64,7 +64,7 @@ class RouterFixture
     {
         router_ = std::make_unique<Router>(
             node_->get_node_topics_interface(),
-            [this]() { return std::unique_ptr<Transport>(new HelperLink(transport_)); }, clock_,
+            [this]() { return std::unique_ptr<Transport>(new HelperLink(transport_)); }, clock_, clock_,
             std::move(params), [this](SessionLog, const std::string &text) { logged_.push_back(text); });
     }
 
@@ -573,7 +573,7 @@ TEST_F(RouterNode, RejectsAnEmptySink)
     EXPECT_THROW(Router(
                      node->get_node_topics_interface(),
                      [&transport]() { return std::unique_ptr<Transport>(new HelperLink(transport)); }, clock,
-                     RouterParams{}, LogSink{}),
+                     clock, RouterParams{}, LogSink{}),
                  std::invalid_argument);
 }
 
