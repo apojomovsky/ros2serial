@@ -1,0 +1,23 @@
+# Flash, RAM and worst-case static stack per firmware, in bytes. Limits sit
+# about a fifth above the measured numbers; a bigger jump needs a new budget.
+firmware:
+  arduino_minimal/uno/arduino_minimal.ino.elf:
+    flash: 12000
+    ram: 1400
+    stack: 200
+  arduino_minimal/mega/arduino_minimal.ino.elf:
+    flash: 12500
+    ram: 1400
+    stack: 200
+  arduino_xmacro/uno/arduino_xmacro.ino.elf:
+    flash: 12000
+    ram: 1250
+    stack: 256
+  arduino_xmacro/mega/arduino_xmacro.ino.elf:
+    flash: 12500
+    ram: 1250
+    stack: 256
+  cmake_minimal/hello_cmake:
+    flash: 11200
+    ram: 400
+    stack: 224

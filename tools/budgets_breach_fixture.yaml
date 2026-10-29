@@ -1,0 +1,23 @@
+# Impossible limits: every check against this file must fail. The budgets
+# gate runs both checkers against it to prove they can catch a breach.
+firmware:
+  arduino_minimal/uno/arduino_minimal.ino.elf:
+    flash: 1
+    ram: 1
+    stack: 1
+  arduino_minimal/mega/arduino_minimal.ino.elf:
+    flash: 1
+    ram: 1
+    stack: 1
+  arduino_xmacro/uno/arduino_xmacro.ino.elf:
+    flash: 1
+    ram: 1
+    stack: 1
+  arduino_xmacro/mega/arduino_xmacro.ino.elf:
+    flash: 1
+    ram: 1
+    stack: 1
+  cmake_minimal/hello_cmake:
+    flash: 1
+    ram: 1
+    stack: 1
