@@ -130,11 +130,11 @@ The topics live in a RAM table the runtime layer fills, and registration closes 
 
 **2. An X-macro list in the sketch** (Arduino, no Python involved). The Arduino library ships descriptors for a bundle of common types (`std_msgs`, `geometry_msgs`, `sensor_msgs`) with documented default bounds:
 
-```c
+```cpp
 #define R2S_NODE_NAME "base_controller"
 #define R2S_TOPICS(X) \
-  X(PUB, battery, std_msgs, Float32) \
-  X(SUB, cmd_vel, geometry_msgs, Twist)
+  X(Publisher, std_msgs::msg::Float32, battery_pub, "battery") \
+  X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)
 #include <ros2serial.h>
 ```
 
@@ -167,8 +167,8 @@ From the topic list the static paths emit:
 
 - message structs and their field descriptors, for the types used only;
 - the topic table (IDs, names, type names, hashes, flags) as constant data in flash;
-- one typed publish function per published topic, for example `r2s_publish_battery(const std_msgs__msg__Float32 *)`;
-- receive dispatch as a `switch (topic_id)` that calls a user-implemented handler for each subscription, for example `r2s_on_cmd_vel(const geometry_msgs__msg__Twist *)`;
+- one typed publish function per published topic, for example `r2s_publish_battery(const std_msgs__msg__Float32 *)` in the generator's C naming (an X-macro row names its object and C++ type instead, for example `r2s_publish_battery_pub(const std_msgs::msg::Float32 *)`);
+- receive dispatch as a `switch (topic_id)` that calls a user-implemented handler for each subscription, for example `r2s_on_cmd_vel(const geometry_msgs__msg__Twist *)` in the generator's C naming (an X-macro row names its own callback, for example `on_cmd_vel(const geometry_msgs::msg::Twist &)`);
 - a shared receive buffer (a union of the subscribed types) and frame sizes computed from the largest message in each direction.
 
 User topic IDs run from 16 in configuration order. The flags carry direction, narrow, keep-latest and reliable, with the narrow bit forced on builds whose C `double` is 32 bits. The frame limit covers the largest user payload plus the HELLO and TOPIC announcements, and a smaller `limits.max_frame` override is a generator error. A topic name maps onto C by replacing `/` with `_`, and two names with the same mapping are a generator error.
