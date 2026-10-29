@@ -796,7 +796,7 @@ DISCONNECTED ──port open──► BOOT_WAIT ──HELLO or boot_wait_ms─�
 - Reset detected: a HELLO arrives while connected, or a HELLO carries no token or a different token than the one recorded.
 - On re-handshake, publishers and subscriptions are kept if the new topic table is identical to the previous one. Otherwise they are destroyed and recreated.
 
-**Time sync on the host.** Right after READY, 8 PINGs 50 ms apart. Then one PING every `time_sync.period_ms` (1000 for the first 10 s, then the parameter's value, default 5000). The estimator keeps a sliding window of the 16 most recent samples, uses the lowest round trip ones for the offset, and a linear fit for drift. It sends a CORRECTION after the initial burst, whenever the estimate moves by more than 100 µs, and at least every 5 s.
+**Time sync on the host.** Right after READY, 8 PINGs 50 ms apart, but only when the MCU announced the time feature bit. Then one PING every `time_sync.period_ms` (1000 for the first 10 s, then the parameter's value, default 5000). The estimator keeps a sliding window of the 16 most recent samples, fits ROS time against the MCU tick, and uses the lowest round trip ones for the offset. The offset is the ROS time at MCU tick zero, so the drift carries the anchor on its own and the phase stays put. It sends a CORRECTION after the initial burst, whenever the estimate moves by more than 100 µs, and at least every 5 s.
 
 ## Codec descriptors
 
@@ -1014,7 +1014,7 @@ The generator computes the REP-2011 RIHS01 hash for each type in `gen/r2s_gen/ty
 | `heartbeat_period_ms` | int | 500 | |
 | `link_timeout_ms` | int | 2000 | |
 | `time_sync.enabled` | bool | true | |
-| `time_sync.period_ms` | int | 5000 | Steady-state period, at most 5000 |
+| `time_sync.period_ms` | int | 5000 | Steady-state period, between 1 and 5000; refused outside |
 | `rate_limit.default_hz` | double | 0 (none) | Default host-to-MCU rate limit per topic |
 | `rate_limit.overrides` | string array | empty | Per-topic limits as `"<topic>=<hz>"`, naming the announced topic, for example `"cmd_vel=20"` |
 | `tx_budget_pct` | int | 50 | Cap on host-to-MCU bandwidth, as a percentage of the link |
@@ -1025,7 +1025,7 @@ by `launch/r2s_bridge.launch.py` with `port` and `params_file` arguments.
 
 ### Published by the bridge
 
-- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, sequence gaps per topic and the host's verdict per topic (`topic <name> status`), time sync offset, drift and round trip.
+- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, sequence gaps per topic and the host's verdict per topic (`topic <name> status`), time sync offset in nanoseconds, drift in ppm and round trip in nanoseconds.
 - The MCU's topics, under the names it announced, after remapping and namespacing.
 - MCU log messages through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`.
 

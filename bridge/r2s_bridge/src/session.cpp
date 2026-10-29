@@ -5,15 +5,18 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <map>
+#include <optional>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "core_port.hpp"
 #include "r2s_bridge/framing.hpp"
-
+#include "r2s_bridge/time_sync.hpp"
 extern "C" {
 #include "r2s/r2s.h"
 #include "r2s/r2s_crc.h"
@@ -34,7 +37,22 @@ constexpr std::uint8_t kTopicStatus = 0x05u;
 constexpr std::uint8_t kReady = 0x06u;
 
 constexpr std::uint8_t kControlTopic = 0u;
+constexpr std::uint8_t kTimeTopic = 1u;
 constexpr std::uint8_t kHeartbeatTopic = 4u;
+
+// The time channel's opcodes (spec/protocol.md, section 7.2).
+constexpr std::uint8_t kPing = 0x01u;
+constexpr std::uint8_t kPong = 0x02u;
+constexpr std::uint8_t kCorrection = 0x03u;
+
+// The time sync cadence ([SES-22], [SES-23]): the burst right after READY,
+// the slower PINGs of the first 10 s, then the configured period.
+constexpr std::int64_t kPingBurst = 8;
+constexpr std::int64_t kPingBurstPeriodMs = 50;
+constexpr std::int64_t kPingWarmPeriodMs = 1000;
+constexpr std::int64_t kPingWarmWindowMs = 10000;
+// A CORRECTION goes out at least this often ([SES-25]).
+constexpr std::int64_t kCorrectionFloorNs = 5000000000;
 
 // The spec's cadence ([SES-13] to [SES-18]).
 constexpr std::int64_t kHelloReqPeriodMs = 500;
@@ -61,10 +79,9 @@ struct QueuedFrame {
     std::uint8_t seq = 0;
 };
 
-// The slot a control payload competes for: one per control kind, and one
-// TOPIC_STATUS per topic id, the field the verdict carries on the wire. The
-// time channel has no sender yet, but the same shape covers its PING retries
-// when the time sync lands.
+// The slot a control payload competes for: one per control kind, one
+// TOPIC_STATUS per topic id, the field the verdict carries on the wire, and
+// one for the time channel's PINGs.
 QueuedFrame control_slot(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload)
 {
     QueuedFrame slot;
@@ -197,14 +214,18 @@ bool tick_hz_is_valid(std::uint32_t tick_hz)
 } // namespace
 
 struct Session::Impl {
-    Impl(SessionConfig in_config, const Clock &in_clock, TransportFactory in_open, TopicResolver in_resolve,
-         SessionEvents in_events)
-        : config(in_config), clock(in_clock), open(std::move(in_open)), resolve(std::move(in_resolve)),
-          events(std::move(in_events))
+    Impl(SessionConfig in_config, const Clock &in_clock, const Clock &in_ros_clock, TransportFactory in_open,
+         TopicResolver in_resolve, SessionEvents in_events)
+        : config(in_config), clock(in_clock), ros_clock(in_ros_clock), open(std::move(in_open)),
+          resolve(std::move(in_resolve)), events(std::move(in_events))
     {
         if (config.reconnect_period_ms <= 0 || config.boot_wait_ms <= 0 || config.heartbeat_period_ms <= 0 ||
             config.link_timeout_ms <= 0) {
             throw std::invalid_argument("every session period must be positive");
+        }
+        if (config.time_sync_period_ms < 1 || config.time_sync_period_ms > 5000) {
+            throw std::invalid_argument("r2s_bridge: time_sync.period_ms must be between 1 and 5000, got " +
+                                        std::to_string(config.time_sync_period_ms));
         }
         next_open_ms = now_ms();
         try_open();
@@ -213,6 +234,16 @@ struct Session::Impl {
     std::int64_t now_ms() const
     {
         return std::chrono::duration_cast<std::chrono::milliseconds>(clock.now()).count();
+    }
+
+    std::int64_t now_ns() const
+    {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(clock.now()).count();
+    }
+
+    std::int64_t ros_now_ns() const
+    {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(ros_clock.now()).count();
     }
 
     void log(SessionLog level, const std::string &text)
@@ -251,8 +282,20 @@ struct Session::Impl {
         transport.reset();
         clear_queue();
         awaiting_topic = false;
+        reset_time();
         state = SessionState::kDisconnected;
         next_open_ms = now_ms() + config.reconnect_period_ms;
+    }
+
+    // The estimator and the schedule start over: a correction anchored the
+    // old handshake's ticks, and a PONG still in flight answers its PINGs.
+    void reset_time()
+    {
+        sync.reset();
+        time_supported_ = false;
+        pings_sent = 0;
+        ping_outstanding = false;
+        correction_sent_ = false;
     }
 
     void clear_queue()
@@ -388,6 +431,66 @@ struct Session::Impl {
         next_heartbeat_ms = now_ms() + config.heartbeat_period_ms;
     }
 
+    void put_le(std::vector<std::uint8_t> &payload, std::uint32_t value)
+    {
+        for (int shift = 0; shift < 32; shift += 8) {
+            payload.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFu));
+        }
+    }
+
+    void send_ping()
+    {
+        // The send time stamps the sample; the frame carries the id the PONG
+        // answers with ([TIM-2]). One slot holds the PINGs ([SES-33]), so a
+        // wedged link keeps the newest id with the first seq.
+        last_ping_send_ns_ = now_ns();
+        last_ping_id_ = ping_id;
+        std::vector<std::uint8_t> ping;
+        ping.reserve(2u);
+        ping.push_back(kPing);
+        ping.push_back(ping_id);
+        queue_frame(kTimeTopic, seq_time, ping);
+        ++seq_time;
+        ++ping_id;
+        ++pings_sent;
+        ping_outstanding = true;
+    }
+
+    void send_correction(const TimeCorrection &correction)
+    {
+        std::vector<std::uint8_t> payload;
+        payload.reserve(15u);
+        payload.push_back(kCorrection);
+        put_le(payload, correction.tick0);
+        put_le(payload, static_cast<std::uint32_t>(correction.sec));
+        put_le(payload, correction.nanosec);
+        const auto drift = static_cast<std::uint16_t>(correction.drift_ppm);
+        payload.push_back(static_cast<std::uint8_t>(drift & 0xFFu));
+        payload.push_back(static_cast<std::uint8_t>((drift >> 8u) & 0xFFu));
+        queue_frame(kTimeTopic, seq_time, payload);
+        ++seq_time;
+    }
+
+    void maybe_send_ping(std::int64_t now)
+    {
+        if (!config.time_sync_enabled || !sync || !time_supported_) {
+            return;
+        }
+        if (now < next_ping_ms_) {
+            return;
+        }
+        if (pings_sent >= kPingBurst) {
+            // The burst is over: one PING every second for the first 10 s,
+            // then every configured period ([SES-23]).
+            send_ping();
+            const std::int64_t age = now - connected_ms_;
+            next_ping_ms_ = now + (age < kPingWarmWindowMs ? kPingWarmPeriodMs : config.time_sync_period_ms);
+            return;
+        }
+        send_ping();
+        next_ping_ms_ = now + (pings_sent < kPingBurst ? kPingBurstPeriodMs : kPingWarmPeriodMs);
+    }
+
     void begin_handshake_wait()
     {
         state = SessionState::kHandshaking;
@@ -401,6 +504,7 @@ struct Session::Impl {
         retries = 0;
         collected.clear();
         clear_pending_control();
+        reset_time();
         begin_handshake_wait();
     }
 
@@ -446,6 +550,15 @@ struct Session::Impl {
         expected_seq.clear();
         last_rx_ms = now_ms();
         next_heartbeat_ms = now_ms() + config.heartbeat_period_ms;
+        // The burst starts with READY: the first PING leaves in the same
+        // poll ([SES-22]). The HELLO already proved the tick form ([CTL-8]).
+        reset_time();
+        sync.emplace(hello.tick_hz);
+        time_supported_ = (hello.features & 0x01u) != 0u;
+        connected_ms_ = now_ms();
+        next_ping_ms_ = connected_ms_;
+        ping_id = 0;
+        seq_time = 0;
         if (events.handshake_completed) {
             events.handshake_completed(identical);
         }
@@ -595,6 +708,55 @@ struct Session::Impl {
         }
     }
 
+    void maybe_send_correction(std::int64_t now)
+    {
+        if (!sync || !sync->has_estimate()) {
+            return;
+        }
+        TimeCorrection fresh;
+        if (!sync->correction(fresh)) {
+            return;
+        }
+        if (correction_sent_) {
+            // The floor resends on schedule; otherwise only a move past the
+            // threshold since the last correction earns a new one ([SES-25]).
+            if (now - last_correction_ns_ < kCorrectionFloorNs && !sync->moved_since(last_correction_)) {
+                return;
+            }
+        } else if (pings_sent < kPingBurst) {
+            // The first correction waits for the burst ([SES-25]).
+            return;
+        }
+        send_correction(fresh);
+        last_correction_ = fresh;
+        last_correction_ns_ = now;
+        correction_sent_ = true;
+    }
+
+    void on_time(const std::uint8_t *payload, std::uint16_t len)
+    {
+        if (state != SessionState::kConnected || !config.time_sync_enabled || !sync) {
+            return;
+        }
+        // A PONG is the id it answers plus the delimiter tick ([TIM-2]).
+        // Anything else on the channel is a later ticket's system frame.
+        if (len != 6u || payload[0] != kPong) {
+            return;
+        }
+        if (!ping_outstanding || payload[1] != last_ping_id_) {
+            return;
+        }
+        ping_outstanding = false;
+        Reader reader(payload + 2u, 4u);
+        std::uint32_t tick = 0;
+        if (!reader.u32(tick) || !reader.at_end()) {
+            return;
+        }
+        const std::int64_t now = now_ns();
+        sync->add_sample(last_ping_send_ns_, now, ros_now_ns(), tick);
+        maybe_send_correction(now);
+    }
+
     void on_frame(const Frame &frame)
     {
         last_rx_ms = now_ms();
@@ -606,6 +768,10 @@ struct Session::Impl {
         const std::uint16_t len = static_cast<std::uint16_t>(frame.size - 4u);
         if (topic_id == kControlTopic) {
             on_control(payload, len);
+            return;
+        }
+        if (topic_id == kTimeTopic) {
+            on_time(payload, len);
             return;
         }
         if (topic_id == kHeartbeatTopic) {
@@ -681,8 +847,16 @@ struct Session::Impl {
                 log(SessionLog::kWarning, "no frame from the MCU within the link timeout");
                 restart_handshake();
                 send_hello_req();
-            } else if (now >= next_heartbeat_ms) {
-                send_heartbeat();
+            } else {
+                if (now >= next_heartbeat_ms) {
+                    send_heartbeat();
+                }
+                maybe_send_ping(now);
+                // The correction floor needs no new PONG: with the estimate
+                // standing still the timer resends it on schedule ([SES-25]).
+                if (correction_sent_) {
+                    maybe_send_correction(now_ns());
+                }
             }
             break;
         default:
@@ -711,6 +885,7 @@ struct Session::Impl {
 
     SessionConfig config;
     const Clock &clock;
+    const Clock &ros_clock;
     TransportFactory open;
     TopicResolver resolve;
     SessionEvents events;
@@ -732,6 +907,24 @@ struct Session::Impl {
     std::int64_t topic_deadline_ms = 0;
     std::int64_t next_heartbeat_ms = 0;
     std::int64_t last_rx_ms = 0;
+    // The PING schedule: the handshake's time for the warm window, the next
+    // due PING, and how many of the burst went out ([SES-22], [SES-23]).
+    std::int64_t connected_ms_ = 0;
+    std::int64_t next_ping_ms_ = 0;
+    std::int64_t pings_sent = 0;
+    // Whether the MCU announced time support ([CTL-2] bit 0). Without it the
+    // host sends no PING: the firmware could never answer one.
+    bool time_supported_ = false;
+    bool ping_outstanding = false;
+    std::uint8_t ping_id = 0;
+    std::uint8_t last_ping_id_ = 0;
+    std::int64_t last_ping_send_ns_ = 0;
+    // The estimator behind the CORRECTIONs, alive only while connected, and
+    // the last correction sent for the move and floor checks ([SES-25]).
+    std::optional<TimeSync> sync;
+    bool correction_sent_ = false;
+    TimeCorrection last_correction_{};
+    std::int64_t last_correction_ns_ = 0;
 
     HelloFacts hello;
     bool seen_hello = false;
@@ -753,14 +946,18 @@ struct Session::Impl {
 
     std::uint8_t seq_control = 0;
     std::uint8_t seq_heartbeat = 0;
+    // The seq the time channel shares between its PINGs and CORRECTIONs,
+    // restarting at 0 after each handshake ([FRM-4], [FRM-5]).
+    std::uint8_t seq_time = 0;
     // The next seq per host-to-MCU topic id, restarting at 0 after each
     // handshake ([FRM-4], [SES-11]).
     std::map<std::uint8_t, std::uint8_t> user_seq_;
 };
 
-Session::Session(SessionConfig config, const Clock &clock, TransportFactory open, TopicResolver resolve,
-                 SessionEvents events)
-    : impl_(std::make_unique<Impl>(config, clock, std::move(open), std::move(resolve), std::move(events)))
+Session::Session(SessionConfig config, const Clock &clock, const Clock &ros_clock, TransportFactory open,
+                 TopicResolver resolve, SessionEvents events)
+    : impl_(std::make_unique<Impl>(config, clock, ros_clock, std::move(open), std::move(resolve),
+                                   std::move(events)))
 {
 }
 
@@ -800,6 +997,26 @@ std::uint32_t Session::seq_gaps(std::uint8_t topic_id) const
 std::uint32_t Session::resets() const
 {
     return impl_->resets;
+}
+
+bool Session::time_available() const
+{
+    return impl_->correction_sent_ && impl_->sync.has_value() && impl_->sync->has_estimate();
+}
+
+std::int64_t Session::time_offset_ns() const
+{
+    return time_available() ? impl_->sync->offset_ns() : 0;
+}
+
+std::int16_t Session::time_drift_ppm() const
+{
+    return time_available() ? impl_->sync->drift_ppm() : 0;
+}
+
+std::int64_t Session::time_round_trip_ns() const
+{
+    return time_available() ? impl_->sync->round_trip_ns() : 0;
 }
 
 std::size_t Session::pending_bytes() const

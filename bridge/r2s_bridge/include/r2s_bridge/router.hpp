@@ -51,9 +51,8 @@ class Router
     // budget outside 0 to 100, no baud, a negative default rate) or a missing
     // log sink.
     // session_config carries the H4 link timing; the pacing params above are
-    // the H7 ones.
     Router(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,
-           const Clock &clock, RouterParams params, LogSink sink,
+           const Clock &clock, const Clock &ros_clock, RouterParams params, LogSink sink,
            SessionConfig session_config = SessionConfig());
     ~Router();
     Router(const Router &) = delete;
@@ -76,8 +75,9 @@ class Router
         std::size_t dropped = 0;
     };
     // The H8 snapshot: link state is one of disconnected, boot_wait,
-    // handshaking or connected; time_sync_available stays false until the P3
-    // estimator lands, and the bridge reports it as not available.
+    // handshaking or connected; the time sync values are real once a
+    // CORRECTION anchors the estimator, and read 0 with available false
+    // before that.
     struct Diagnostics {
         std::string link_state;
         std::uint32_t session_token = 0;
@@ -89,6 +89,9 @@ class Router
         McuCounters mcu_counters;
         std::vector<TopicDiagnostics> topics;
         bool time_sync_available = false;
+        std::int64_t time_offset_ns = 0;
+        std::int16_t time_drift_ppm = 0;
+        std::int64_t time_round_trip_ns = 0;
     };
 
     std::size_t publisher_count() const;
