@@ -679,7 +679,7 @@ payload: ""
         "messages/repeated.yaml/message: demo_msgs/msg/A.b.demo_msgs/msg/B.e must be exactly representable in binary32",
         "messages/repeated.yaml/message: demo_msgs/msg/A.b.demo_msgs/msg/B.a.demo_msgs/msg/A.d must be exactly representable in binary32",
         "messages/repeated.yaml/message: demo_msgs/msg/A.b.demo_msgs/msg/B.a.demo_msgs/msg/A.b.demo_msgs/msg/B.e must be exactly representable in binary32",
-        "messages/repeated.yaml/message: the reference does not make it: demo_msgs/msg/B.a: no value",
+        "messages/repeated.yaml/message: the reference does not make it: demo_msgs/msg/A.b.demo_msgs/msg/B.a: no value",
     ]
 
 
@@ -760,6 +760,52 @@ def test_a_branching_alias_graph_reports_each_node_once(tmp_path, monkeypatch):
     assert problems == expected
 
 
+def test_one_mapping_under_two_types_reports_both(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "A2.msg").write_text("float32 d\n", encoding="utf-8")
+    (definitions / "B2.msg").write_text("float64 d\n", encoding="utf-8")
+    (definitions / "Both.msg").write_text("B2 b\nA2 a\n", encoding="utf-8")
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    message = {"b": {"d": 1.1}, "a": {"d": 1.1}}
+    message["a"] = message["b"]
+    payload = messages.encode(repository, "demo_msgs/msg/Both", message, narrow=False).hex(" ")
+    files = {
+        "messages/shared_mapping.yaml": """
+name: shared_mapping
+covers: [ENC-3]
+type: demo_msgs/msg/Both
+profile: {narrow_float64: false}
+message: {b: &x {d: 1.1}, a: *x}
+payload: "%s"
+"""
+        % payload
+    }
+    vectors = make_tree(tmp_path / "vectors", files)
+    assert vectors_check.check_tree(vectors) == [
+        "messages/shared_mapping.yaml/message: "
+        "demo_msgs/msg/Both.a.demo_msgs/msg/A2.d must be exactly representable in binary32",
+    ]
+
+
+def test_one_list_under_two_array_types_reports_both(tmp_path, monkeypatch):
+    definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
+    definitions.mkdir(parents=True)
+    (definitions / "Inner.msg").write_text("float32 data\n", encoding="utf-8")
+    (definitions / "Mixed.msg").write_text("float32[] flat\nInner[] deep\n", encoding="utf-8")
+    repository = msgs.MessageRepository(msg_paths=[tmp_path / "definitions"])
+    monkeypatch.setattr(vectors_check, "_MESSAGES", repository)
+    shared = [{"data": 1.1}]
+    problems = vectors_check.check_float32_exact(
+        "messages/shared_list.yaml", {"type": "demo_msgs/msg/Mixed", "message": {"flat": shared, "deep": shared}}
+    )
+    assert problems == [
+        "messages/shared_list.yaml/message: "
+        "demo_msgs/msg/Mixed.deep[0].demo_msgs/msg/Inner.data must be exactly representable in binary32",
+    ]
+
+
 def test_a_cyclic_alias_in_a_message_is_reported_not_a_crash(tmp_path, monkeypatch):
     definitions = tmp_path / "definitions" / "demo_msgs" / "msg"
     definitions.mkdir(parents=True)
@@ -803,7 +849,7 @@ payload: ""
         "messages/cycle.yaml: cyclic YAML alias",
         "messages/cycle.yaml/message: the reference does not make it: maximum recursion depth exceeded",
         "messages/cycle_array.yaml: cyclic YAML alias",
-        "messages/cycle_array.yaml/message: the reference does not make it: demo_msgs/msg/Single.items: unknown field",
+        "messages/cycle_array.yaml/message: the reference does not make it: demo_msgs/msg/Arr.items[0].demo_msgs/msg/Single.items: unknown field",
         "messages/cycle_covers.yaml: cyclic YAML alias",
     ], problems
     shared = {"data": 1.5}
