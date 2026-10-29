@@ -37,7 +37,7 @@ def test_build_only_survives_the_lease_and_lock(tmp_path):
         ["bash", "scripts/bridge-test.sh", "--build-only"], cwd=ROOT, capture_output=True, text=True, env=env
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    calls = log.read_text().splitlines()
+    calls = log.read_text().splitlines() if log.exists() else []
     assert len(calls) == 1, "a --build-only run must call colcon once:\n" + "\n".join(calls)
     verbs = calls[0].split()
     assert "build" in verbs, "the one colcon call is not a build:\n" + calls[0]
