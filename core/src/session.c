@@ -520,18 +520,15 @@ static void on_frame(const r2s_frame_t *frame)
         } else if (session.state == ANNOUNCING) {
             answer_with_hello(frame->tick);
         }
-    } else if (topic == 1u) {
 #ifdef R2S_WITH_TIME
+    } else if (topic == 1u) {
         /* While connected a PING is answered and a CORRECTION anchors
          * r2s_now(); in ANNOUNCING both are answered like any other
          * non-handshake frame ([SES-3]). */
         if (session.state == CONNECTED) {
             on_time(frame->tick, payload, payload_len);
-        } else if (session.state == ANNOUNCING) {
-            answer_with_hello(frame->tick);
-        }
-#else
-        if (session.state == ANNOUNCING) {
+        } else {
+            /* ANNOUNCING is the only other state. */
             answer_with_hello(frame->tick);
         }
 #endif
