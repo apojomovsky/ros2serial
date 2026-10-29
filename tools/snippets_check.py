@@ -29,9 +29,11 @@ fence. A line that only mentions a marker in passing is not one. The run
 prints every skipped snippet, with its ticket and reason when it has them,
 so none is forgotten. C and C++ snippets compile with -I core/include,
 -I cpp/include, and the staged generated-header fixtures (the golden
-generator output as r2s_generated.h, the bundle sketch header as
-ros2serial.h), so snippets using today's real headers compile instead of
-being skipped.
+generator output as r2s_generated.h, the bundled message header as
+r2s_bundled.h, the bundle sketch header as ros2serial.h), so snippets using
+today's real headers compile instead of being skipped. A snippet includes at
+most one of r2s_generated.h and r2s_bundled.h, which define the same message
+structs; including both is an error naming both headers.
 """
 
 import argparse
@@ -61,8 +63,10 @@ GENERATED_FIXTURES = (
 # dedented line pops back out. A marker past column 3 of its container gets
 # its own diagnostic.
 FENCE = re.compile(r"^ *```")
+QUOTED_FENCE = re.compile(r"^\s*(?:>\s*|[*+-]\s+|\d{1,9}[.)]\s+)+```")
 MARKER_ANY = re.compile(r"^\s*<!--[ \t]*snippet:.*-->\s*$")
 SWEEP = re.compile(r"^\s*(?:>\s*|[*+-]\s+|\d{1,9}[.)]\s+)*```([A-Za-z0-9+#-]+)")
+STAGED_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]\s*(r2s_generated\.h|r2s_bundled\.h)\s*[">]')
 
 LANGUAGES = ("c", "cpp", "python")
 EXTENSION = {"c": ".c", "cpp": ".cpp", "python": ".py"}
@@ -221,6 +225,18 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
             code = "\n".join(_dedent(body_line, indent) for body_line in body) + "\n"
             snippets.append(Snippet(rel, open_line, language, code, ticket, reason=reason))
             continue
+        if QUOTED_FENCE.match(line):
+            # A fence after a quote or list marker is literal text the scan
+            # never compiles; the sweep reports it when tagged. Skip to its
+            # closer so the closer is not misread as a new fence.
+            i += 1
+            while i < len(lines):
+                if (FENCE.match(lines[i]) and _indent_of(lines[i]) - base <= 3) or QUOTED_FENCE.match(lines[i]):
+                    break
+                i += 1
+            if i < len(lines):
+                i += 1
+            continue
         content = _list_content(line, base)
         if content is not None:
             if stack and stack[-1] == content:
@@ -249,9 +265,22 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
     return snippets, problems
 
 
+def _staged_headers(code: str) -> set[str]:
+    # Staged generated headers the snippet really includes: an include inside
+    # a C comment names no header, so a commented-out include stays silent.
+    bare = re.sub(r"/\*.*?\*/", "", code, flags=re.DOTALL)
+    found = set()
+    for line in bare.splitlines():
+        match = STAGED_INCLUDE.match(line.split("//", 1)[0])
+        if match:
+            found.add(match.group(1))
+    return found
+
+
 def _stage_fixtures(root: Path, workdir: Path) -> None:
     # Generated-header fixtures the snippets include: the golden generator
-    # output under the name firmware uses, and the bundle sketch header.
+    # output and the bundled message header under the names firmware uses,
+    # and the bundle sketch header.
     # Missing files stay out, so a tree without them behaves as before and a
     # snippet needing one fails with the compiler's file-not-found error.
     for src, name in GENERATED_FIXTURES:
@@ -273,7 +302,8 @@ def _compile_c(snippet: Snippet, root: Path, workdir: Path) -> str | None:
     src.write_text(snippet.code)
     cmd = [compiler, f"-std={standard}", *warnings, "-fsyntax-only", str(src)]
     # The staged generated-header fixtures live in the workdir, so a snippet
-    # including r2s_generated.h or ros2serial.h finds them there. The core's
+    # including r2s_generated.h, r2s_bundled.h or ros2serial.h finds them
+    # there. The core's
     # headers and the C++ layer's own headers ride on -I, so the runtime
     # API and the message headers resolve too.
     cmd += ["-I", str(workdir)]
@@ -331,6 +361,15 @@ def check_tree(root: Path) -> list[str]:
                     print(f"skip {rel}:{snippet.line} ({snippet.language}) until #{snippet.ticket}{why}")
                     skipped += 1
                     continue
+                if snippet.language in ("c", "cpp"):
+                    headers = sorted(_staged_headers(snippet.code))
+                    if len(headers) > 1:
+                        both = " and ".join(headers)
+                        problems.append(
+                            f"{snippet.path}:{snippet.line}: snippet includes both {both}; "
+                            "include at most one staged generated header"
+                        )
+                        continue
                 failed = compile_snippet(snippet, root, workdir)
                 if failed is None:
                     compiled += 1
