@@ -46,7 +46,13 @@ base_stack=""
 
 # The base half: the same run judges the head numbers by the base ref's
 # script and budgets, so a pull request cannot relax its own judge. A base
-# from before the budgets land has no script, and only the head judge runs.
+# from before the budgets land has no script, and a base that is HEAD (a
+# push to the base branch itself) has nothing to compare: either way only
+# the head judge runs.
+if [ -n "$base_ref" ] && [ "$(git rev-parse HEAD)" = "$(git rev-parse "$base_ref" 2>/dev/null)" ]; then
+  echo "budgets: base is HEAD; only the head judge runs" >&2
+  base_ref=""
+fi
 if [ -n "$base_ref" ]; then
   if git cat-file -e "$base_ref:tools/size_report.py" 2>/dev/null &&
     git cat-file -e "$base_ref:tools/stack_report.py" 2>/dev/null &&

@@ -676,8 +676,8 @@ def test_the_ci_workflow_resolves_its_ranges_from_the_merge_base():
     """
     text = (ROOT / ".github/workflows/ci.yml").read_text()
     assert "pull_request.base.sha" not in text
-    assert text.count('range="$(bash scripts/pr-title-range.sh)" || exit 1') == 2
-    assert text.count("BASE_REF: ${{ github.event.pull_request.base.ref }}") == 2
+    assert text.count('range="$(bash scripts/pr-title-range.sh)" || exit 1') == 3
+    assert text.count("BASE_REF: ${{ github.event.pull_request.base.ref }}") == 3
 
 
 def test_the_pr_title_workflow_uses_the_range_script():

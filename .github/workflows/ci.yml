@@ -168,14 +168,15 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/dev-image
       - run: |
-          if [ "${{ github.event_name }}" = pull_request ]; then
-            export BASE="${{ github.event.pull_request.base.sha }}"
-          fi
+          range="$(bash scripts/pr-title-range.sh)" || exit 1
+          export BASE="${range%%..*}"
           set +e
           make test BUDGETS=1 | tee budgets.log
           status=${PIPESTATUS[0]}
           grep '^TABLE ' budgets.log | tail -1 | cut -d' ' -f2 > budgets-table.path
           exit "$status"
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
       - if: always() && github.event_name == 'pull_request'
         run: |
           if [ -s budgets-table.path ]; then
