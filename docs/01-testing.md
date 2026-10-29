@@ -227,12 +227,15 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 | --- | --- | --- |
 | While editing | `make test CORE=1` (or the component being changed) | Seconds |
 | `pre-commit` hook | Format, warnings, unit tests of the touched component | Under 30 s |
-| `pre-push` hook (`make ci-local`) | The full PR suite, skipped when the suite stamp shows this tree already passed | Same as PR CI |
+| `pre-push` hook | The suite scopes the diff touches (`scripts/scopes_for_diff.py`), plus the cheap checks, skipped when the stamp shows this tree already passed | Same as PR CI |
+| Takeoff (`make pre-pr-check TEST=1`) | The same scoped run, recording the stamp the push checks; `R2S_FULL=1` runs the full suite | Scoped, minutes |
 | Every PR | Unit, component, contract, integration on posix, simavr scenarios, fuzz smoke (60 s per target), sanitizers, coverage, spec coverage, budgets, build matrix, golden, docs snippets | Under 15 min wall clock, in parallel jobs |
 | Nightly | Long fuzzing (30 min per target), mutation testing, extended property and model-based runs, long fault injection, soak (2 h), big-endian, Rolling | Hours |
 | Release | Everything above, the hardware checklist on a Uno and a Mega, the full distro and RMW matrix, frozen-vector check | |
 
 When the PR suite exceeds its budget, the slowest tests are made faster or moved down a level; the budget is not raised without the maintainer's approval.
+
+The local gate runs what the diff touches: each top-level tree maps to the sections that test it and the sections that consume it, and the cheap checks always run. Changes to the gate machinery itself, and paths the mapping does not know, run the full suite: unknown means full, never less. CI still runs everything on the merge with master, and a PR merges only on green CI.
 
 ## 8. Keeping the tests honest
 
@@ -301,7 +304,7 @@ directly above it. The check skips the example without compiling it:
 
 In `tests/e2e/`, each a launch_testing test parameterized by MCU backend (posix, simavr, hardware) and registration path:
 
-1. Handshake completes; `ros2 topic list` shows the announced topics within 3 s of the MCU's HELLO.
+1. Handshake completes within 3 s of the MCU's HELLO, as the bridge reports it; `ros2 topic list` shows the announced topics within a further generous timeout.
 2. MCU publishes Float32 at 50 Hz for 10 s; the host receives at least 99% with correct values.
 3. Host publishes Twist; the MCU echoes it on a test topic; values match after the narrow round trip.
 4. Launch remapping and namespace apply to the MCU's topics.
