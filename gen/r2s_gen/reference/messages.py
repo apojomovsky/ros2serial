@@ -77,13 +77,14 @@ def _encode_message(
     values: Mapping[str, Any],
     narrow: bool,
     out: bytearray,
+    trail: str = "",
 ) -> None:
     known = {field.name for field in message.fields}
     for key in values:
         if key not in known:
-            raise ValueError(f"{message.type_name}.{key}: unknown field")
+            raise ValueError(f"{trail}{message.type_name}.{key}: unknown field")
     for field in message.fields:
-        where = f"{message.type_name}.{field.name}"
+        where = f"{trail}{message.type_name}.{field.name}"
         if field.name not in values:
             raise ValueError(f"{where}: no value")
         value = values[field.name]
@@ -126,7 +127,7 @@ def _encode_element(
     else:
         if not isinstance(value, Mapping):
             raise ValueError(f"{where}: expected a mapping of {kind}'s fields")
-        _encode_message(repository, repository.load(kind), value, narrow, out)
+        _encode_message(repository, repository.load(kind), value, narrow, out, trail=f"{where}.")
 
 
 def _decode_message(
@@ -134,13 +135,16 @@ def _decode_message(
     message: Message,
     reader: _Reader,
     narrow: bool,
+    trail: str = "",
 ) -> dict[str, Any]:
     values: dict[str, Any] = {}
     for field in message.fields:
-        where = f"{message.type_name}.{field.name}"
+        where = f"{trail}{message.type_name}.{field.name}"
         if field.is_array:
             count = field.array_length if field.array_length is not None else reader.varint()
-            values[field.name] = [_decode_element(repository, where, field, reader, narrow) for _ in range(count)]
+            values[field.name] = [
+                _decode_element(repository, f"{where}[{index}]", field, reader, narrow) for index in range(count)
+            ]
         else:
             values[field.name] = _decode_element(repository, where, field, reader, narrow)
     return values
@@ -172,7 +176,7 @@ def _decode_element(
         return struct.unpack("<d", reader.take(8))[0]
     if kind in _WIDE:
         raise Rejected("ENC-19", f"{where}: {kind} has no wire encoding")
-    return _decode_message(repository, repository.load(kind), reader, narrow)
+    return _decode_message(repository, repository.load(kind), reader, narrow, trail=f"{where}.")
 
 
 def _string_bytes(where: str, value: Any) -> bytes:
