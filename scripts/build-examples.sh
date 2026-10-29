@@ -256,6 +256,59 @@ for board in uno mega; do
     fi
   done
 done
+# The C X-macro sketch builds against the same bundled library: its rows
+# spell the generated C struct names, so a pure-C translation unit expands
+# the table, the publish functions and the dispatch, with the same receive
+# buffer checks as the C++ lists and no runtime topic table.
+cstage="$build/arduino_xmacro_c"
+rm -rf "$cstage"
+mkdir -p "$cstage/src/r2s" || status=1
+PYTHONPATH="$root/gen" python3 -m r2s_gen.cli bundle --distro jazzy --out "$cstage" || exit 1
+cp core/include/r2s/*.h "$cstage/src/r2s/" || status=1
+cp core/src/*.c "$cstage/src/" || status=1
+rm -f "$cstage/src/test_reset.c"
+cp ports/arduino/r2s_arduino_port.cpp ports/arduino/r2s_arduino_port.h "$cstage/src/" || status=1
+cextras=$(PYTHONPATH="$root/gen" python3 - "$cstage/src/r2s_bundled.h" <<'EOF'
+import sys
+
+from r2s_gen import layouts
+from r2s_gen.msgs import MessageError
+
+try:
+    defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
+except (MessageError, OSError) as error:
+    print(f"r2s-gen: error: {error}", file=sys.stderr)
+    raise SystemExit(1)
+print(" ".join("-D" + define for define in defines))
+EOF
+) || exit 1
+case "$cextras" in
+    *R2S_WITH_CODEC*R2S_MAX_FRAME=[0-9]*R2S_MAX_NEST=[0-9]*) ;;
+    *)
+        echo "build-examples: the extracted bundle flags name no limits ($cextras)" >&2
+        exit 1
+        ;;
+esac
+for board in uno mega; do
+  out="$build/arduino_xmacro_c/$board"
+  arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$cextras" \
+    --library "$cstage" --output-dir "$out" examples/arduino_xmacro_c || status=1
+  if ! elf_has_symbol "$out/arduino_xmacro_c.ino.elf" r2s_rx_buf; then
+    echo "arduino_xmacro_c ($board): the firmware links no receive buffer" >&2
+    status=1
+  fi
+  if elf_has_symbol "$out/arduino_xmacro_c.ino.elf" r2s_runtime_topics; then
+    echo "arduino_xmacro_c ($board): the firmware links the runtime topic table" >&2
+    status=1
+  fi
+  for unused in sensor_msgs_Imu geometry_msgs_Quaternion std_msgs_Header; do
+    if elf_has_symbol "$out/arduino_xmacro_c.ino.elf" "r2s_bundled_table_$unused"; then
+      echo "arduino_xmacro_c ($board): the linker kept the unused $unused table" >&2
+      status=1
+    fi
+  done
+done
+
 # The example timing tests drive each loop on the host against a scripted
 # tick: resync for the examples, catch-up for the slice. No DDS is involved.
 bash "$root/examples/tests/run.sh" || status=1

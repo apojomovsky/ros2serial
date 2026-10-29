@@ -138,7 +138,17 @@ The topics live in a RAM table the runtime layer fills, and registration closes 
 #include <ros2serial.h>
 ```
 
-The header expands the list into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator. The header counts the rows itself, so an empty list fails the build with the generator's message instead of emitting an empty table.
+A C sketch spells the same rows with the generated C struct name instead of the double-colon type:
+
+```c
+#define R2S_NODE_NAME "base_controller"
+#define R2S_TOPICS(X) \
+  X(Publisher, std_msgs__msg__Float32, battery_pub, "battery") \
+  X(Subscription, geometry_msgs__msg__Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)
+#include <ros2serial.h>
+```
+
+The header expands either spelling into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator. The header counts the rows itself, so an empty list fails the build with the generator's message instead of emitting an empty table.
 **3. `r2s.yaml` and the generator** (custom messages, bare metal, CMake, PlatformIO, PIC):
 
 ```yaml
