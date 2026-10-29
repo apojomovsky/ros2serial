@@ -171,9 +171,15 @@ jobs:
           if [ "${{ github.event_name }}" = pull_request ]; then
             export BASE="${{ github.event.pull_request.base.sha }}"
           fi
+          set +e
           make test BUDGETS=1 | tee budgets.log
+          status=${PIPESTATUS[0]}
           grep '^TABLE ' budgets.log | tail -1 | cut -d' ' -f2 > budgets-table.path
-      - if: github.event_name == 'pull_request'
-        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file "$(cat budgets-table.path)"
+          exit "$status"
+      - if: always() && github.event_name == 'pull_request'
+        run: |
+          if [ -s budgets-table.path ]; then
+            gh pr comment "${{ github.event.pull_request.number }}" --body-file "$(cat budgets-table.path)"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

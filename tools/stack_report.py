@@ -226,7 +226,6 @@ def collect(build_dir: Path) -> dict:
             raise StackError(f"no .su files beside {source}")
         stacks[name] = worst_stack(sizes, parse_calls(_run(OBJDUMP, "-d", str(source))), ["main"])
     return stacks
-    return stacks
 
 
 def check_stacks(stacks: dict, budgets: dict) -> list:
@@ -256,6 +255,10 @@ def markdown_table(stacks: dict, budgets: dict, base: dict | None = None) -> str
         if worst.get("unknown"):
             cell += f"; unknown: {', '.join(worst['unknown'][:3])}"
             if len(worst["unknown"]) > 3:
+                cell += ", ..."
+        if worst.get("dynamic"):
+            cell += f"; dynamic: {', '.join(worst['dynamic'][:3])}"
+            if len(worst["dynamic"]) > 3:
                 cell += ", ..."
         budget = budgets.get("firmware", {}).get(name, {}).get("stack", "n/a")
         rows.append(f"| {name} | {cell} | {budget} |")
