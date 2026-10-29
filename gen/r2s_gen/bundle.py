@@ -302,7 +302,7 @@ def _scope_maps(
 
 def _c_type_aliases(
     tables: Mapping[str, descriptors.DescriptorTable],
-    repository: MessageRepository,
+    repository: msgs.MessageRepository,
 ) -> list[str]:
     """One alias macro per bundled type for the C row spelling.
 
@@ -364,7 +364,7 @@ def _cxx_spelling_traps() -> list[str]:
 
 def _sketch_h_c(
     tables: Mapping[str, descriptors.DescriptorTable],
-    repository: MessageRepository,
+    repository: msgs.MessageRepository,
 ) -> list[str]:
     """The C expansion for underscore rows: the table, the typed publish
     functions and dispatch in the sketch's own translation unit."""
@@ -615,7 +615,8 @@ def _sketch_h(
         " * message naming its own. */",
         "#if !defined(R2S_TOPICS) && !defined(__cplusplus)",
         p("#error"),
-        '    "Define R2S_TOPICS(X) rows as X(Publisher|Subscription, pkg__msg__Type, object[, callback]) before including <ros2serial.h>."',
+        '    "Define R2S_TOPICS(X) rows as X(Publisher|Subscription,'
+        ' pkg__msg__Type, object[, callback]) before including <ros2serial.h>."',
         "#endif",
         "",
         "/* A sketch defines its topic list above the include; the bundled message",
