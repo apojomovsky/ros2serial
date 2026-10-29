@@ -53,12 +53,12 @@ def test_gen_maps_to_gen_examples_docs_and_bridge():
     }
 
 
-def test_bridge_maps_to_bridge_coverage_and_posix_e2e():
+def test_bridge_maps_to_bridge_coverage_and_both_e2e():
     assert scopes("bridge/r2s_bridge/src/node.cpp") == {
         **CHEAP,
         "BRIDGE": "1",
         "COVERAGE": "1",
-        "E2E": "posix",
+        "E2E": "both",
     }
 
 
@@ -97,10 +97,25 @@ def test_other_ports_fail_safe_to_full():
     assert scopes("ports/stm32/src/port.c") == {"FULL": "1"}
 
 
-def test_e2e_tests_map_to_their_backend_and_bridge():
-    assert scopes("tests/e2e/test_scenario_1_posix.py") == {**CHEAP, "E2E": "posix", "BRIDGE": "1"}
-    assert scopes("tests/e2e/e2e_support/relay.py") == {**CHEAP, "E2E": "posix", "BRIDGE": "1"}
+def test_e2e_tests_map_to_both_backends_and_bridge():
+    assert scopes("tests/e2e/test_scenario_1_posix.py") == {**CHEAP, "E2E": "both", "BRIDGE": "1"}
+    assert scopes("tests/e2e/e2e_support/relay.py") == {**CHEAP, "E2E": "both", "BRIDGE": "1"}
+    assert scopes("tests/e2e/run.sh") == {**CHEAP, "E2E": "both", "BRIDGE": "1"}
     assert scopes("tests/harness/simavr/run.sh") == {**CHEAP, "E2E": "avr"}
+
+
+def test_avr_only_e2e_paths_map_to_the_avr_leg():
+    for path in (
+        "tests/e2e/run-avr.sh",
+        "tests/e2e/avr_slice/avr_slice.ino",
+        "tests/e2e/e2e_support/avr.py",
+        "tests/e2e/test_avr_support.py",
+        "tests/e2e/test_scenario_1_avr.py",
+        "tests/e2e/test_scenario_2_avr.py",
+        "tests/e2e/test_scenario_3_avr.py",
+        "tests/e2e/test_scenario_4_avr.py",
+    ):
+        assert scopes(path) == {**CHEAP, "E2E": "avr"}, path
 
 
 def test_docs_map_to_docs():
@@ -182,6 +197,15 @@ def test_e2e_backends_merge_to_both():
     assert scopes("tests/e2e/run.sh", "tests/harness/simavr/run.sh") == {
         **CHEAP,
         "BRIDGE": "1",
+        "E2E": "both",
+    }
+
+
+def test_bridge_and_avr_only_paths_merge_to_both():
+    assert scopes("bridge/r2s_bridge/src/node.cpp", "tests/e2e/run-avr.sh") == {
+        **CHEAP,
+        "BRIDGE": "1",
+        "COVERAGE": "1",
         "E2E": "both",
     }
 

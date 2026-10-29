@@ -82,8 +82,9 @@ PREFIX_RULES = (
     # The generator is tested by GEN, runs during the example builds and the
     # DOCS reference, and feeds the BRIDGE hash test with its type hashes.
     ("gen/", {"GEN": "1", "EXAMPLES": "1", "DOCS": "1", "BRIDGE": "1"}),
-    # The bridge is built by BRIDGE, measured by COVERAGE, launched by E2E.
-    ("bridge/", {"BRIDGE": "1", "COVERAGE": "1", "E2E": "posix"}),
+    # The bridge is built by BRIDGE, measured by COVERAGE, launched by both
+    # e2e backends.
+    ("bridge/", {"BRIDGE": "1", "COVERAGE": "1", "E2E": "both"}),
     # The C++ layer is built and tested by CPP over core sources, staged into
     # the arduino_minimal example, into the simavr runtime firmware, and into
     # the DOCS snippets.
@@ -100,8 +101,18 @@ PREFIX_RULES = (
     ("ports/posix/", {"CORE": "1", "E2E": "posix", "BRIDGE": "1"}),
     ("ports/arduino/", {"CORE": "1", "EXAMPLES": "1"}),
     ("ports/", FULL),
-    # The BRIDGE launch test loads the shared e2e relay from its file.
-    ("tests/e2e/", {"E2E": "posix", "BRIDGE": "1"}),
+    # The avr backend compiles the slice sketch and runs its scenarios, so
+    # avr-only files map to the avr leg. The rest of the tree is shared by
+    # both backends, and the BRIDGE launch test loads the relay from its file.
+    ("tests/e2e/avr_slice/", {"E2E": "avr"}),
+    ("tests/e2e/run-avr.sh", {"E2E": "avr"}),
+    ("tests/e2e/e2e_support/avr.py", {"E2E": "avr"}),
+    ("tests/e2e/test_avr_support.py", {"E2E": "avr"}),
+    ("tests/e2e/test_scenario_1_avr.py", {"E2E": "avr"}),
+    ("tests/e2e/test_scenario_2_avr.py", {"E2E": "avr"}),
+    ("tests/e2e/test_scenario_3_avr.py", {"E2E": "avr"}),
+    ("tests/e2e/test_scenario_4_avr.py", {"E2E": "avr"}),
+    ("tests/e2e/", {"E2E": "both", "BRIDGE": "1"}),
     ("tests/harness/", {"E2E": "avr"}),
     ("tests/", FULL),
     ("docs/", {"DOCS": "1"}),

@@ -149,7 +149,8 @@ if wants E2E; then scope_now=E2E
     avr) section e2e-avr-harness bash tests/harness/simavr/run.sh
         section e2e-avr bash tests/e2e/run-avr.sh ;;
     posix) section e2e-posix bash tests/e2e/run.sh ;;
-    both) section e2e-avr bash tests/harness/simavr/run.sh
+    both) section e2e-avr-harness bash tests/harness/simavr/run.sh
+        section e2e-avr bash tests/e2e/run-avr.sh
         section e2e-posix bash tests/e2e/run.sh ;;
     *)
       echo "unknown E2E backend '${E2E}': known are posix, avr and both" >&2
