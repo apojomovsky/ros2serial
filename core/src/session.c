@@ -15,6 +15,9 @@
 #ifdef R2S_WITH_CODEC
 #include "r2s/r2s_codec.h"
 #endif
+#ifdef R2S_WITH_TIME
+#include "r2s/r2s_time.h"
+#endif
 
 /* The link states (SES-1, SES-6, SES-7). */
 #define ANNOUNCING 0u
@@ -28,24 +31,35 @@
 #define OP_TOPIC_STATUS 0x05u
 #define OP_READY 0x06u
 
+/* Time opcodes (TIM-10). */
+#define OP_PING 0x01u
+#define OP_PONG 0x02u
+#define OP_CORRECTION 0x03u
+
 /* ANNOUNCING repeats HELLO this often without host traffic (SES-5), and
  * answers other host frames with HELLO at most this often (SES-3). */
 #define HELLO_REPEAT_MS 1000u
 #define HELLO_NACK_MS 100u
 
-/* The CTL-2 feature bits this build sets. Time, parameters and the reliable
- * channel set theirs when they land; bit 4 is informational. Log (bit 1)
- * rides on R2S_WITH_LOG, like the logging calls it announces. */
+/* The CTL-2 feature bits this build sets: bit 0 for time, bit 1 for logging.
+ * Parameters and the reliable channel set theirs when they land; bit 4 is
+ * informational. Each bit rides on the switch of the calls it announces. */
 #if DBL_MANT_DIG == FLT_MANT_DIG
 #define R2S_FEATURE_BASE 0x10u
 #else
 #define R2S_FEATURE_BASE 0x00u
 #endif
 #ifdef R2S_WITH_LOG
-#define R2S_FEATURE_BITS (R2S_FEATURE_BASE | 0x02u)
+#define R2S_FEATURE_LOG 0x02u
 #else
-#define R2S_FEATURE_BITS R2S_FEATURE_BASE
+#define R2S_FEATURE_LOG 0x00u
 #endif
+#ifdef R2S_WITH_TIME
+#define R2S_FEATURE_TIME 0x01u
+#else
+#define R2S_FEATURE_TIME 0x00u
+#endif
+#define R2S_FEATURE_BITS (R2S_FEATURE_BASE | R2S_FEATURE_LOG | R2S_FEATURE_TIME)
 
 /* tick_hz is 1000 times a divisor of 10^6, so a tick converts to nanoseconds
  * with integer math alone (CTL-8). A failing build names the rule here. */
@@ -68,6 +82,7 @@ static struct {
     uint16_t rx_lost[R2S_SESSION_MAX_TOPICS];
     uint8_t tx_seq_ctrl;
     uint8_t tx_seq_hb;
+    uint8_t tx_seq_time;
     uint32_t token;
     uint32_t last_host_tick;
     uint32_t last_hello_tick;
@@ -210,6 +225,9 @@ static void enter_connected(uint32_t now)
     session.state = CONNECTED;
     session.tx_seq_ctrl = 0u;
     session.tx_seq_hb = 0u;
+#ifdef R2S_WITH_TIME
+    session.tx_seq_time = 0u;
+#endif
 #ifdef R2S_WITH_LOG
     r2s_log_note_connected();
 #endif
@@ -341,6 +359,73 @@ static void refuse(void)
     r2s_framer_count_refused();
 }
 
+#ifdef R2S_WITH_TIME
+static uint32_t read_u32(const uint8_t *at)
+{
+    return (uint32_t)at[0] | ((uint32_t)at[1] << 8u) | ((uint32_t)at[2] << 16u) | ((uint32_t)at[3] << 24u);
+}
+
+static int16_t read_i16(const uint8_t *at)
+{
+    return (int16_t)((uint16_t)at[0] | ((uint16_t)at[1] << 8u));
+}
+
+/* A CORRECTION carries its five fields in this many payload bytes (TIM-10);
+ * the drift and the nanosec stay inside the header's limits (TIM-4, TIM-11).
+ * Anything else is refused before it can anchor r2s_now. */
+#define TIME_CORRECTION_LEN 15u
+
+static void send_pong(uint8_t ping_id, uint32_t tick)
+{
+    if (r2s_tx_begin(1u, session.tx_seq_time, 6u) != R2S_OK) {
+        return;
+    }
+    put_byte(OP_PONG);
+    put_byte(ping_id);
+    put_u32(tick);
+    if (r2s_tx_end() == R2S_OK) {
+        session.tx_seq_time++;
+    }
+}
+
+static void on_time(uint32_t delimiter_tick, const uint8_t *payload, uint16_t len)
+{
+    int16_t drift;
+    uint32_t nanosec;
+
+    if (len == 0u) {
+        refuse();
+        return;
+    }
+    switch (payload[0]) {
+    case OP_PING:
+        if (len != 2u) {
+            refuse();
+            return;
+        }
+        send_pong(payload[1], delimiter_tick);
+        break;
+    case OP_CORRECTION:
+        if (len != TIME_CORRECTION_LEN) {
+            refuse();
+            return;
+        }
+        drift = read_i16(payload + 13u);
+        nanosec = read_u32(payload + 9u);
+        if (drift > R2S_TIME_MAX_DRIFT_PPM || drift < -R2S_TIME_MAX_DRIFT_PPM ||
+            nanosec >= R2S_TIME_MAX_NANOSEC) {
+            refuse();
+            return;
+        }
+        r2s_time_note_correction(read_u32(payload + 1u), (int32_t)read_u32(payload + 5u), nanosec, drift);
+        break;
+    default:
+        refuse();
+        break;
+    }
+}
+#endif
+
 /* Answers a non-handshake host frame with HELLO, at most once per 100 ms
  * (SES-3). Solicited answers do not go through here and are never limited. */
 static void answer_with_hello(uint32_t now)
@@ -435,10 +520,22 @@ static void on_frame(const r2s_frame_t *frame)
         } else if (session.state == ANNOUNCING) {
             answer_with_hello(frame->tick);
         }
+#ifdef R2S_WITH_TIME
+    } else if (topic == 1u) {
+        /* While connected a PING is answered and a CORRECTION anchors
+         * r2s_now(); in ANNOUNCING both are answered like any other
+         * non-handshake frame ([SES-3]). */
+        if (session.state == CONNECTED) {
+            on_time(frame->tick, payload, payload_len);
+        } else {
+            /* ANNOUNCING is the only other state. */
+            answer_with_hello(frame->tick);
+        }
+#endif
     } else if (topic <= 6u) {
-        /* The channels later tickets own (time, log, parameters, error
-         * report, reliable ack): accepted, and answered in ANNOUNCING like
-         * any other non-handshake frame, otherwise ignored. */
+        /* The channels later tickets own (log, parameters, error report,
+         * reliable ack): accepted, and answered in ANNOUNCING like any other
+         * non-handshake frame, otherwise ignored. */
         if (session.state == ANNOUNCING) {
             answer_with_hello(frame->tick);
         }
@@ -474,6 +571,9 @@ void r2s_init(void)
     session.token = 0u;
     session.tx_seq_ctrl = 0u;
     session.tx_seq_hb = 0u;
+#ifdef R2S_WITH_TIME
+    session.tx_seq_time = 0u;
+#endif
     enter_announcing(now);
     send_hello();
 }
@@ -527,6 +627,9 @@ void r2s_session_test_reset(void)
     }
     session.tx_seq_ctrl = 0u;
     session.tx_seq_hb = 0u;
+#ifdef R2S_WITH_TIME
+    session.tx_seq_time = 0u;
+#endif
     session.token = 0u;
     session.last_host_tick = 0u;
     session.last_hello_tick = 0u;
