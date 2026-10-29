@@ -256,5 +256,8 @@ for board in uno mega; do
     fi
   done
 done
+# The example timing tests drive each loop on the host against a scripted
+# tick: resync for the examples, catch-up for the slice. No DDS is involved.
+bash "$root/examples/tests/run.sh" || status=1
 
 exit "$status"
