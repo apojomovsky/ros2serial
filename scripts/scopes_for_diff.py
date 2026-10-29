@@ -111,6 +111,7 @@ PREFIX_RULES = (
     ("tests/e2e/test_scenario_4_avr.py", {"E2E": "avr"}),
     ("tests/e2e/", {"E2E": "both", "BRIDGE": "1"}),
     ("tests/harness/", {"E2E": "avr"}),
+    ("tests/", FULL),
     # The walkthrough check reads the README and runs its commands on simavr.
     ("README.md", {"DOCS": "1", "README": "1"}),
     ("docs/", {"DOCS": "1"}),

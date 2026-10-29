@@ -139,6 +139,7 @@ if wants CPP; then scope_now=CPP; section cpp bash scripts/cpp-test.sh; fi
 if wants COVERAGE; then scope_now=COVERAGE; section coverage bash scripts/coverage-gate.sh; fi
 if wants DOCS; then scope_now=DOCS; section docs python3 tools/snippets_check.py; fi
 if wants EXAMPLES; then scope_now=EXAMPLES; section examples bash scripts/build-examples.sh; fi
+if wants FUZZ; then scope_now=FUZZ; section fuzz bash scripts/fuzz.sh; fi
 if wants README; then scope_now=README; section readme bash scripts/check-readme.sh; fi
 if wants E2E; then scope_now=E2E
   case "${E2E:-}" in

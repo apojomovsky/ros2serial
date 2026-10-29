@@ -103,11 +103,13 @@ arduino-cli compile --fqbn arduino:avr:uno \
   --library "$lib" --output-dir "$fw" examples/arduino_minimal || exit 1
 elf=$fw/arduino_minimal.ino.elf
 
-# The harness and the bridge the walkthrough runs, built by their own
-# scripts, which stay the single description of how each builds.
+# The harness the walkthrough runs, built by its own script, which stays
+# the single description of how it builds.
 bash tests/harness/simavr/run.sh --build-only || exit 1
 sim=$build/harness/simavr/r2s_simavr
-bash scripts/bridge-test.sh --build-only || exit 1
+# The bridge build the walkthrough runs: the same colcon line, with the
+# bases relocated under the build directory so the tree stays clean.
+colcon build --base-paths bridge --build-base "$build/bridge/build" --install-base "$build/bridge/install" || exit 1
 # shellcheck source=/dev/null
 set +u
 source "$build/bridge/install/setup.bash"
@@ -145,7 +147,10 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 [ -n "$seen" ] || { echo "check-readme: /battery never appeared" >&2; exit 1; }
-echo "$seen" | grep -qx "/cmd_vel" || { echo "check-readme: /cmd_vel never appeared" >&2; exit 1; }
+# The topics the walkthrough shows: the firmware pair plus the node's own.
+for topic in /battery /cmd_vel /diagnostics /parameter_events /rosout; do
+  echo "$seen" | grep -qx "$topic" || { echo "check-readme: $topic never appeared" >&2; exit 1; }
+done
 echo "check-readme: topics announced"
 echo "$seen"
 
