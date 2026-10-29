@@ -57,6 +57,9 @@ void loop(void)
     r2s_spin_some();
     now = r2s_port_tick();
     if (r2s_connected() == 0u) {
+        /* Offline there are no samples, so the clock resyncs instead of
+         * queueing a burst for the reconnect. */
+        last_pub = now;
         return;
     }
     if (s_log_booted == 0u) {
@@ -67,16 +70,20 @@ void loop(void)
             s_log_booted = 1u;
         }
     }
-    if ((uint32_t)(now - last_pub) >= 20u) {
+    /* The slice mirrors the posix firmware, so it owes every missed tick:
+     * one frame per missed interval keeps the count whole when the host
+     * steals the firmware tick. */
+    while ((uint32_t)(now - last_pub) >= 20u) {
         std_msgs__msg__Float32 msg;
 
         msg.data = (float)s_sent;
-        if (r2s_publish_battery(&msg) == R2S_OK) {
-            s_sent++;
-            last_pub = now;
-            if (s_sent % 10u == 0u) {
-                (void)publish_log_text(s_sent);
-            }
+        if (r2s_publish_battery(&msg) != R2S_OK) {
+            break;
+        }
+        s_sent++;
+        last_pub += 20u;
+        if (s_sent % 10u == 0u) {
+            (void)publish_log_text(s_sent);
         }
     }
 }
