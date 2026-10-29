@@ -40,6 +40,7 @@ def test_files_for_names_the_exact_bundle_set():
     assert bundle.files_for() == (
         "library.properties",
         "src/ros2serial.h",
+        "src/ros2serial.hpp",
         "src/r2s_bundled.h",
         "src/r2s_bundled.c",
         "src/builtin_interfaces/msg/time.hpp",
@@ -93,6 +94,10 @@ def test_the_golden_library_properties_are_emitted():
 
 def test_the_golden_sketch_header_is_emitted():
     assert files()["src/ros2serial.h"] == (GOLDEN / "ros2serial.h").read_text(encoding="utf-8")
+
+
+def test_the_golden_static_header_is_emitted():
+    assert files()["src/ros2serial.hpp"] == (GOLDEN / "ros2serial.hpp").read_text(encoding="utf-8")
 
 
 def test_the_golden_bundled_header_is_emitted():

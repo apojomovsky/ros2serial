@@ -15,7 +15,7 @@ import hashlib
 import sys
 from collections.abc import Mapping
 
-from r2s_gen import bounds, cpp, descriptors, emit, layouts, msgs, topics, typehash
+from r2s_gen import bounds, cpp, descriptors, emit, layouts, msgs, static_api, topics, typehash
 from r2s_gen.bounds import ResolvedMessage
 from r2s_gen.msgs import MessageError
 from r2s_gen.version import __version__
@@ -49,6 +49,7 @@ NAME_ALLOWANCE = 31
 _FILES = (
     "library.properties",
     "src/ros2serial.h",
+    "src/ros2serial.hpp",
     "src/r2s_bundled.h",
     "src/r2s_bundled.c",
 )
@@ -92,6 +93,7 @@ def bundle(distro: str = "jazzy") -> dict[str, str]:
     files = {
         "library.properties": _library_properties(distro, digest),
         "src/ros2serial.h": _sketch_h(tables, repository, distro, digest),
+        "src/ros2serial.hpp": static_api.emit(distro, digest),
         "src/r2s_bundled.h": _bundled_h(resolved, tables, repository, distro, digest, max_nest),
         "src/r2s_bundled.c": _bundled_c(resolved, tables, distro, digest),
     }
@@ -568,6 +570,19 @@ def _sketch_h(
         "    }",
         "}",
         "}",
+        "",
+        "/* The sketch's objects: each row expands to the global publisher or",
+        " * subscription the body uses. The classes come from the static header",
+        " * above, so a row names only the type, the object, the topic and the",
+        " * callback. */",
+        '#include "ros2serial.hpp"',
+        "",
+        "#define R2S_X_OBJECT(KIND, ...) R2S_X_OBJECT_##KIND(__VA_ARGS__)",
+        "#define R2S_X_OBJECT_Publisher(CTYPE, ONAME, TOPIC) r2s::Publisher<CTYPE> ONAME(R2S_ID(ONAME));",
+        "#define R2S_X_OBJECT_Subscription(CTYPE, ONAME, TOPIC, CB) r2s::Subscription<CTYPE> ONAME;",
+        "#define R2S_X_OBJECT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
+        "#define R2S_X_OBJECT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
+        "R2S_TOPICS(R2S_X_OBJECT)",
         "",
         "#endif",
         "",

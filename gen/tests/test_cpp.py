@@ -288,6 +288,12 @@ def test_the_tree_carries_the_umbrella_header_the_bundle_ships():
     assert (CPP_INCLUDE / "ros2serial.h").read_text(encoding="utf-8") == files["src/ros2serial.h"]
 
 
+def test_the_tree_carries_the_static_header_the_bundle_ships():
+    files = bundle.bundle("jazzy")
+
+    assert (CPP_INCLUDE / "ros2serial.hpp").read_text(encoding="utf-8") == files["src/ros2serial.hpp"]
+
+
 def test_the_umbrella_header_compiles_on_the_host(tmp_path):
     source = tmp_path / "check.cpp"
     source.write_text("#include <ros2serial.h>\nint main(void) { return 0; }\n", encoding="utf-8")
@@ -320,6 +326,57 @@ def test_the_umbrella_header_serves_the_runtime_api():
 
     assert "#if defined(__cplusplus) && !defined(R2S_TOPICS)" in header
     assert '#include "r2s/runtime.hpp"' in header
+
+
+def test_mixing_the_two_cxx_layers_fails_naming_either_choice(tmp_path):
+    source = tmp_path / "check.cpp"
+    source.write_text(
+        '#define R2S_TOPICS(X) X(Publisher, std_msgs::msg::Float32, battery_pub, "battery")\n'
+        '#include "ros2serial.hpp"\n'
+        '#include "r2s/runtime.hpp"\n',
+        encoding="utf-8",
+    )
+
+    compiled = subprocess.run(
+        [
+            "g++",
+            "-std=c++11",
+            "-fsyntax-only",
+            "-I",
+            str(CORE_INCLUDE),
+            "-I",
+            str(CPP_INCLUDE),
+            str(source),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert compiled.returncode != 0
+    assert "never both" in compiled.stderr
+
+
+def test_a_bare_static_header_names_the_sketch_header(tmp_path):
+    source = tmp_path / "check.cpp"
+    source.write_text('#include "ros2serial.hpp"\n', encoding="utf-8")
+
+    compiled = subprocess.run(
+        [
+            "g++",
+            "-std=c++11",
+            "-fsyntax-only",
+            "-I",
+            str(CORE_INCLUDE),
+            "-I",
+            str(CPP_INCLUDE),
+            str(source),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert compiled.returncode != 0
+    assert "R2S_TOPICS" in compiled.stderr
 
 
 def test_the_message_header_path_follows_the_rclcpp_convention():
