@@ -269,8 +269,6 @@ void test_time_drift_can_carry_into_the_next_second(void)
     TEST_ASSERT_EQUAL_UINT32(18979999u, got.nanosec);
 }
 
-/* covers: TIM-7 */
-
 void test_time_anchor_older_than_the_maximum_is_unsynced(void)
 {
     r2s_time_t got;
