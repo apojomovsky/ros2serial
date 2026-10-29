@@ -93,14 +93,20 @@ trap stop_canary EXIT
 trap cleanup_and_exit HUP INT TERM
 
 # A rendezvous per RMW for concurrent suites: each side touches its slot
-# file and waits for the peer's, so both sides run each RMW iteration
-# together and their graphs overlap. Unset outside the isolation test,
-# where runs never synchronize.
+# file and waits for the peer's, so both sides run each RMW's first
+# iteration together and their graphs overlap. Later passes reuse the
+# files and ride the same timing; the isolation test only counts windows
+# where both sides name the same RMW, so an accidental overlap still
+# proves something and a miss proves nothing. Unset outside the isolation
+# test, where runs never synchronize.
 barrier_wait() {
   [ -n "${R2S_E2E_BARRIER:-}" ] || return 0
   : "${R2S_E2E_SLOT:?barrier needs a slot}" "${R2S_E2E_PEER:?barrier needs a peer}"
   touch "$R2S_E2E_BARRIER/$R2S_E2E_SLOT-$1" || { echo "barrier unreachable" >&2; cleanup_and_exit; }
-  _barrier_end=$((SECONDS + 300))
+  # The peer may still be building or finishing its previous iteration on
+  # a loaded host; bound the wait well above a cold build skew and fail
+  # loudly instead of hanging.
+  _barrier_end=$((SECONDS + 1200))
   while [ ! -e "$R2S_E2E_BARRIER/$R2S_E2E_PEER-$1" ]; do
     sleep 2
     if [ "$SECONDS" -ge "$_barrier_end" ]; then
