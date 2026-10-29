@@ -1,0 +1,7 @@
+name: param_declare
+covers: [PAR-1, PAR-2]
+topic_id: 3
+seq: 2
+payload: "02 01 01 00 06 70 65 72 69 6f 64 18 fc ff ff ff ff ff ff"
+frame: "03 02 02 01 01 00 06 70 65 72 69 6f 64 18 fc ff ff ff ff ff ff c0 87"
+wire: "03 02 02 01 01 06 06 70 65 72 69 6f 64 18 fc ff ff ff ff ff ff c0 87 12 00"
