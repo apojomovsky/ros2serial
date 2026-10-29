@@ -279,8 +279,11 @@ Docs snippets follow `tools/snippets_check.py --help`. A fence tagged `c`,
 skipped by tag; any other tag is an error. A snippet that cannot compile
 yet carries its ticket alone on the line above the fence. C and C++
 snippets compile against the core headers plus the staged
-generated-header fixtures, so snippets using `r2s_generated.h` or
-`ros2serial.h` compile instead of being skipped. A snippet that never
+generated-header fixtures, so snippets using `r2s_generated.h`,
+`r2s_bundled.h` or `ros2serial.h` compile instead of being skipped.
+A snippet includes at most one of `r2s_generated.h` and `r2s_bundled.h`,
+which define the same message structs; including both fails the check.
+A snippet that never
 compiles keeps its ticket with the reason after a colon:
 
 ```text

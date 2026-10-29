@@ -374,6 +374,102 @@ def test_generated_header_missing_fails(tmp_path):
     assert "r2s_generated.h" in problems[0]
 
 
+@needs_gcc
+def test_snippet_including_both_staged_headers_fails(tmp_path):
+    # The two staged headers define the same message structs, so a snippet
+    # uses at most one; the checker names both headers and the rule.
+    root = write_tree(
+        tmp_path,
+        {
+            "gen/tests/golden/topics/posix.h": (
+                "#ifndef R2S_GENERATED_H\n"
+                "#define R2S_GENERATED_H\n"
+                "typedef struct widget_a { int x; } widget_a;\n"
+                "#endif\n"
+            ),
+            "gen/tests/golden/bundle/r2s_bundled.h": (
+                "#ifndef R2S_BUNDLED_H\n#define R2S_BUNDLED_H\ntypedef struct widget_b { int x; } widget_b;\n#endif\n"
+            ),
+            "README.md": (
+                '# T\n\n```c\n#include "r2s_generated.h"\n'
+                '#include "r2s_bundled.h"\n'
+                "int snippet_main(void) { return 0; }\n```\n"
+            ),
+        },
+    )
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "README.md:3" in problems[0]
+    assert "r2s_generated.h" in problems[0] and "r2s_bundled.h" in problems[0]
+    assert "at most one" in problems[0]
+
+
+@needs_gcc
+def test_snippet_including_both_staged_headers_angle_form_fails(tmp_path):
+    root = write_tree(
+        tmp_path,
+        {
+            "gen/tests/golden/topics/posix.h": "#ifndef R2S_GENERATED_H\n#define R2S_GENERATED_H\n#endif\n",
+            "gen/tests/golden/bundle/r2s_bundled.h": "#ifndef R2S_BUNDLED_H\n#define R2S_BUNDLED_H\n#endif\n",
+            "README.md": (
+                "# T\n\n```c\n#include <r2s_generated.h>\n"
+                "#include <r2s_bundled.h>\n"
+                "int snippet_main(void) { return 0; }\n```\n"
+            ),
+        },
+    )
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "at most one" in problems[0]
+
+
+@needs_gcc
+def test_snippet_sees_bundled_header_fixture(tmp_path):
+    root = write_tree(
+        tmp_path,
+        {
+            "gen/tests/golden/bundle/r2s_bundled.h": (
+                "#ifndef R2S_BUNDLED_H\n"
+                "#define R2S_BUNDLED_H\n"
+                "typedef struct widget_b { int x; } widget_b;\n"
+                "int r2s_bundled_magic(void);\n"
+                "#endif\n"
+            ),
+            "README.md": (
+                '# T\n\n```c\n#include "r2s_bundled.h"\n'
+                "static widget_b widget;\n"
+                "int snippet_main(void) { widget.x = 1; return r2s_bundled_magic(); }\n```\n"
+            ),
+        },
+    )
+    assert snippets_check.check_tree(root) == []
+
+
+@needs_gcc
+def test_commented_out_second_header_passes(tmp_path):
+    # An include inside a C comment is not a use of the staged header.
+    root = write_tree(
+        tmp_path,
+        {
+            "gen/tests/golden/topics/posix.h": "#ifndef R2S_GENERATED_H\n#define R2S_GENERATED_H\n#endif\n",
+            "gen/tests/golden/bundle/r2s_bundled.h": "#ifndef R2S_BUNDLED_H\n#define R2S_BUNDLED_H\n#endif\n",
+            "README.md": (
+                '# T\n\n```c\n#include "r2s_generated.h"\n'
+                '/* #include "r2s_bundled.h" */\n'
+                "// #include <r2s_bundled.h>\n"
+                "int snippet_main(void) { return 0; }\n```\n"
+            ),
+        },
+    )
+    assert snippets_check.check_tree(root) == []
+
+
+def test_python_comment_naming_both_headers_passes(tmp_path):
+    text = "# T\n\n```python\n# uses r2s_generated.h and r2s_bundled.h\nx = 1\n```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
+
+
 def test_skip_marker_with_reason_skips_and_prints_reason(tmp_path, capsys):
     text = "# T\n\n<!-- snippet: skip until #75: template placeholders, never literal C -->\n" + C_BROKEN
     root = write_tree(tmp_path, {"README.md": text})
@@ -440,3 +536,41 @@ def test_marker_above_outer_fence_does_not_silence_inner_fence(tmp_path):
     root = write_tree(tmp_path, {"README.md": text})
     problems = snippets_check.check_tree(root)
     assert any("never opened a snippet" in p for p in problems)
+
+
+def test_list_marker_fence_reports_one_diagnostic(tmp_path):
+    # A tagged fence right after a list marker names the opener once; the
+    # closer is literal text, not a second unclosed fence.
+    text = "# T\n\n- ```c\n  broken\n  ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "README.md:3" in problems[0]
+    assert "never opened a snippet" in problems[0]
+
+
+def test_ordered_marker_fence_reports_one_diagnostic(tmp_path):
+    text = "# T\n\n1. ```c\n   broken\n   ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 1
+    assert "README.md:3" in problems[0]
+    assert "never opened a snippet" in problems[0]
+
+
+def test_two_list_marker_fences_report_one_each(tmp_path):
+    # Two broken fences in one file yield one diagnostic per fence.
+    text = "# T\n\n- ```c\n  broken\n  ```\n\n- ```c\n  broken\n  ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    problems = snippets_check.check_tree(root)
+    assert len(problems) == 2
+    assert "README.md:3" in problems[0] and "README.md:7" in problems[1]
+    assert all("never opened a snippet" in p for p in problems)
+
+
+def test_plain_literal_block_after_marker_passes(tmp_path):
+    # A plain fence is prose, so a closed literal block after a list marker
+    # yields no diagnostic at all.
+    text = "# T\n\n- ```\n  text\n  ```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []

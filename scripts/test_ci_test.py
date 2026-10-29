@@ -243,15 +243,16 @@ def test_every_header_scope_runs_a_section():
     assert not missing, f"header scopes with no section: {missing}"
 
 
-def test_e2e_both_backend_runs_both_suites(tmp_path):
-    """E2E=both runs the avr and the posix end-to-end suites in one scope."""
+def test_e2e_both_backend_runs_all_three_suites(tmp_path):
+    """E2E=both runs the harness, the avr and the posix end-to-end suites in one scope."""
     copy = _minimal_suite(tmp_path / "copy")
     (copy / "scripts" / "core-test.sh").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     (copy / "tests" / "e2e").mkdir(parents=True)
     (copy / "tests" / "harness" / "simavr").mkdir(parents=True)
     (copy / "tests" / "e2e" / "run.sh").write_text('#!/usr/bin/env bash\necho "posix ran"\n', encoding="utf-8")
+    (copy / "tests" / "e2e" / "run-avr.sh").write_text('#!/usr/bin/env bash\necho "avr ran"\n', encoding="utf-8")
     (copy / "tests" / "harness" / "simavr" / "run.sh").write_text(
-        '#!/usr/bin/env bash\necho "avr ran"\n', encoding="utf-8"
+        '#!/usr/bin/env bash\necho "harness ran"\n', encoding="utf-8"
     )
     env = {k: v for k, v in os.environ.items() if k not in SCOPES}
     env["PATH"] = os.pathsep.join([str(Path(sys.executable).parent), env.get("PATH", "")])
@@ -265,5 +266,6 @@ def test_e2e_both_backend_runs_both_suites(tmp_path):
         timeout=600,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    assert "== e2e-avr-harness" in result.stdout
     assert "== e2e-avr" in result.stdout
     assert "== e2e-posix" in result.stdout
