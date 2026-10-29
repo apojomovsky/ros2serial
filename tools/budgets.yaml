@@ -17,6 +17,14 @@ firmware:
     flash: 12500
     ram: 1250
     stack: 256
+  arduino_static/uno/arduino_static.ino.elf:
+    flash: 11200
+    ram: 950
+    stack: 240
+  arduino_static/mega/arduino_static.ino.elf:
+    flash: 11600
+    ram: 950
+    stack: 250
   cmake_minimal/hello_cmake:
     flash: 11200
     ram: 400

@@ -17,6 +17,14 @@ firmware:
     flash: 1
     ram: 1
     stack: 1
+  arduino_static/uno/arduino_static.ino.elf:
+    flash: 1
+    ram: 1
+    stack: 1
+  arduino_static/mega/arduino_static.ino.elf:
+    flash: 1
+    ram: 1
+    stack: 1
   cmake_minimal/hello_cmake:
     flash: 1
     ram: 1

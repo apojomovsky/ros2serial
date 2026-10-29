@@ -208,6 +208,8 @@ def test_budgets_scope_runs_its_section(tmp_path):
         "arduino_minimal/mega/arduino_minimal.ino.elf",
         "arduino_xmacro/uno/arduino_xmacro.ino.elf",
         "arduino_xmacro/mega/arduino_xmacro.ino.elf",
+        "arduino_static/uno/arduino_static.ino.elf",
+        "arduino_static/mega/arduino_static.ino.elf",
     ]
     for rel in shipped:
         fake = build / rel
