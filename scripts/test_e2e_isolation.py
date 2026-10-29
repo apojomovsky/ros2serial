@@ -121,9 +121,10 @@ def sweep(infos, proofs, stats):
     Each probe names what it saw, but only when both sides are on the
     probed RMW at once. A graph with the run's own canary proves the
     canary plumbing ran there; a graph without the other side's canary
-    proves isolation for that RMW, but only once the other's canary is
-    known up, so a canary that simply has not started yet cannot pass.
-    Every proof needs repeating, so one slow graph cannot pass it.
+    proves isolation for that RMW, but only when the other's canary is
+    proven up in the same sweep, so a canary that already stopped (or
+    never started) cannot pass. Every proof needs repeating, so one
+    slow graph cannot pass it.
     """
     stats["sweeps"] += 1
     logs = {name: info["log"].read_text() for name, info in infos.items()}
@@ -143,14 +144,15 @@ def sweep(infos, proofs, stats):
                 continue
             stats["live"] += 1
             seen[(name, rmw)] = topics
-            if "/" + infos[name]["canary"] in topics:
-                proofs[("own", name, rmw)] += 1
-        for (name, rmw), topics in seen.items():
-            other = next(candidate for candidate in infos if candidate != name)
-            if proofs[("own", other, rmw)] == 0:
-                continue
-            if "/" + infos[other]["canary"] not in topics:
-                proofs[("cross", name, rmw)] += 1
+    own_hit = {(name, rmw) for (name, rmw), topics in seen.items() if "/" + infos[name]["canary"] in topics}
+    for name, rmw in own_hit:
+        proofs[("own", name, rmw)] += 1
+    for (name, rmw), topics in seen.items():
+        other = next(candidate for candidate in infos if candidate != name)
+        if (other, rmw) not in own_hit:
+            continue
+        if "/" + infos[other]["canary"] not in topics:
+            proofs[("cross", name, rmw)] += 1
 
 
 def run_pair(first, second):
