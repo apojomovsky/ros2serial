@@ -105,6 +105,11 @@ struct SessionConfig {
     int boot_wait_ms = 2500;
     int heartbeat_period_ms = 500;
     int link_timeout_ms = 2000;
+    // Time sync (spec/protocol.md, section 8.3): PINGs after READY and the
+    // estimator behind the CORRECTIONs. A period outside 1 to 5000 ms throws,
+    // because SES-25 needs a correction at least every 5 s.
+    bool time_sync_enabled = true;
+    int time_sync_period_ms = 5000;
 };
 
 // Opens the port. Returns the transport, or null when the port is not there
@@ -133,9 +138,11 @@ struct SessionEvents {
 class Session
 {
   public:
-    // Throws std::invalid_argument when a period is not positive.
-    Session(SessionConfig config, const Clock &clock, TransportFactory open, TopicResolver resolve,
-            SessionEvents events = SessionEvents());
+    // Throws std::invalid_argument when a period is not positive, or when the
+    // time sync period is outside 1 to 5000 ms. The ROS clock stamps the
+    // CORRECTIONs; the steady clock measures the round trips and the timers.
+    Session(SessionConfig config, const Clock &clock, const Clock &ros_clock, TransportFactory open,
+            TopicResolver resolve, SessionEvents events = SessionEvents());
     ~Session();
     Session(const Session &) = delete;
     Session &operator=(const Session &) = delete;
@@ -158,6 +165,14 @@ class Session
     // handshake ([SES-19], [SES-21]). Link timeouts re-handshake without a
     // HELLO and do not count.
     std::uint32_t resets() const;
+    // Whether the estimator has anchored a correction: false before the first
+    // CORRECTION, after every re-handshake, and while time sync is disabled.
+    bool time_available() const;
+    // The H8 time sync values: the fitted ROS time at MCU tick zero, the
+    // fitted drift, the latest round trip. Zero while unavailable.
+    std::int64_t time_offset_ns() const;
+    std::int16_t time_drift_ppm() const;
+    std::int64_t time_round_trip_ns() const;
     // Unsent bytes held for the link, user and control frames together.
     std::size_t pending_bytes() const;
     // Control frames a newer frame of the same slot replaced while the link

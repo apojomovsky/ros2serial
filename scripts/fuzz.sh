@@ -22,7 +22,7 @@ probe="$build/seed_probe"
 codec_sources="core/src/codec.c core/src/tx.c core/src/rcobs.c core/src/crc.c core/src/varint.c"
 clang -std=c99 -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow \
   -Wstrict-prototypes -Wmissing-prototypes -Wundef \
-  -DR2S_TESTING -DR2S_MAX_FRAME=512 -DR2S_WITH_CODEC -DR2S_MAX_NEST=2 -DR2S_WITH_LOG \
+  -DR2S_TESTING -DR2S_MAX_FRAME=512 -DR2S_WITH_CODEC -DR2S_MAX_NEST=2 -DR2S_WITH_LOG -DR2S_WITH_TIME \
   -I core/include -fsanitize=address,undefined -fno-sanitize-recover=all \
   -fno-omit-frame-pointer -g -O1 core/fuzz/seed_probe.c $codec_sources -o "$probe" || exit 1
 "$probe" core/fuzz/corpus/codec/* || exit 1
@@ -48,7 +48,7 @@ for target in "${targets[@]}"; do
   # shellcheck disable=SC2086 # sources holds several files.
   clang -std=c99 -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow \
     -Wstrict-prototypes -Wmissing-prototypes -Wundef \
-    -DR2S_TESTING -DR2S_MAX_FRAME=512 -DR2S_WITH_CODEC -DR2S_MAX_NEST=2 -DR2S_WITH_LOG \
+    -DR2S_TESTING -DR2S_MAX_FRAME=512 -DR2S_WITH_CODEC -DR2S_MAX_NEST=2 -DR2S_WITH_LOG -DR2S_WITH_TIME \
     -I core/include -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=all \
     -fno-omit-frame-pointer -g -O1 $sources "$source" -o "$binary" || {
     echo "-- fuzz: $target build FAILED"

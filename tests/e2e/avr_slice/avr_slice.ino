@@ -6,10 +6,10 @@
 
 #define R2S_NODE_NAME "r2s_slice"
 #define R2S_TOPICS(X) \
-    X(PUB, battery, std_msgs, Float32) \
-    X(SUB, cmd_vel, geometry_msgs, Twist) \
-    X(PUB, echo_vel, geometry_msgs, Twist) \
-    X(PUB, log_text, std_msgs, String)
+    X(Publisher, std_msgs::msg::Float32, battery_pub, "battery") \
+    X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel) \
+    X(Publisher, geometry_msgs::msg::Twist, echo_vel_pub, "echo_vel") \
+    X(Publisher, std_msgs::msg::String, log_text_pub, "log_text")
 
 #include <ros2serial.h>
 
@@ -18,16 +18,16 @@ static uint8_t s_log_booted;
 
 /* Best effort echo for scenario 3: five messages on an idle link never fill
  * the port, so the return carries no signal the test would use. */
-void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
+void on_cmd_vel(const geometry_msgs::msg::Twist &msg)
 {
-    (void)r2s_publish_echo_vel(msg);
+    (void)r2s_publish_echo_vel_pub(&msg);
 }
 
 /* One log_text line: the value as 8 hex digits. Fixed width fits the
  * bundled String bound of 16 characters for every id. */
 static r2s_status_t publish_log_text(uint32_t value)
 {
-    std_msgs__msg__String msg;
+    std_msgs::msg::String msg;
     uint8_t i;
 
     for (i = 0u; i < 8u; i++) {
@@ -37,7 +37,7 @@ static r2s_status_t publish_log_text(uint32_t value)
         value <<= 4u;
     }
     msg.data[8] = '\0';
-    return r2s_publish_log_text(&msg);
+    return r2s_publish_log_text_pub(&msg);
 }
 
 void setup(void)
@@ -68,10 +68,10 @@ void loop(void)
         }
     }
     if ((uint32_t)(now - last_pub) >= 20u) {
-        std_msgs__msg__Float32 msg;
+        std_msgs::msg::Float32 msg;
 
         msg.data = (float)s_sent;
-        if (r2s_publish_battery(&msg) == R2S_OK) {
+        if (r2s_publish_battery_pub(&msg) == R2S_OK) {
             s_sent++;
             last_pub = now;
             if (s_sent % 10u == 0u) {

@@ -11,8 +11,8 @@ function pointer uses.
 
 Because the receive ring is compiled only with its switch, every source and
 header is checked with `R2S_WITH_RX_RING` defined, so the ring is inspected
-instead of compiled away. Logging is compiled only with `R2S_WITH_LOG`, so
-the log calls are inspected the same way.
+instead of compiled away. Logging and time sync are compiled only with
+`R2S_WITH_LOG` and `R2S_WITH_TIME`, so those calls are inspected the same way.
 
 Two limits come with checking objects: only the ATmega328P configuration is
 compiled, so code behind other #if branches is not seen, and float expressions
@@ -34,7 +34,16 @@ CC = os.environ.get("R2S_ZONE_CC", "avr-gcc")
 OBJDUMP = os.environ.get("R2S_ZONE_OBJDUMP", "avr-objdump")
 NM = os.environ.get("R2S_ZONE_NM", "avr-nm")
 MCU = ["-mmcu=atmega328p"]
-FLAGS = ["-std=c99", "-Os", *MCU, "-fno-jump-tables", "-ffunction-sections", "-DR2S_WITH_RX_RING", "-DR2S_WITH_LOG"]
+FLAGS = [
+    "-std=c99",
+    "-Os",
+    *MCU,
+    "-fno-jump-tables",
+    "-ffunction-sections",
+    "-DR2S_WITH_RX_RING",
+    "-DR2S_WITH_LOG",
+    "-DR2S_WITH_TIME",
+]
 HEADER_FLAGS = ["-fkeep-inline-functions", "-fkeep-static-functions"]
 INSTRUCTION = re.compile(r"^\s+[0-9a-f]+:\t(?:[0-9a-f]{2} )+\s*\t(\S+)", re.MULTILINE)
 INDIRECT = {"icall", "eicall", "ijmp", "eijmp"}

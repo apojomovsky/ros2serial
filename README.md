@@ -6,11 +6,11 @@ rosserial for ROS 2: publish and subscribe to ROS 2 topics from small microcontr
 
 ## What it will look like
 
-```c
+```cpp
 #define R2S_NODE_NAME "base_controller"
 #define R2S_TOPICS(X) \
-  X(PUB, battery, std_msgs, Float32) \
-  X(SUB, cmd_vel, geometry_msgs, Twist)
+  X(Publisher, std_msgs::msg::Float32, battery_pub, "battery") \
+  X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)
 #include <ros2serial.h>
 ```
 

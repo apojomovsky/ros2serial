@@ -122,6 +122,18 @@ void r2s_log_note_connected(void);
 #define R2S_LOG_FATAL_U16(lit, v) ((void)sizeof(lit), (void)sizeof((v) + 0))
 #endif
 
+#ifdef R2S_WITH_TIME
+#include "r2s/r2s_time.h"
+
+/* The MCU's ROS time: the correction's anchor plus the ticks since it
+ * (spec/protocol.md, section 7.2). Returns {0, 0} while no correction
+ * anchors the clock. */
+r2s_time_t r2s_now(void);
+
+/* Nonzero while a correction anchors the clock. */
+uint8_t r2s_time_synced(void);
+#endif
+
 #ifdef R2S_TESTING
 /* Host test builds only: returns every core module to its state after
  * power-up, so each test starts from the same place. */
