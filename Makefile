@@ -18,7 +18,7 @@ BUILD_DIR := $(CACHE)/build$(subst /,-,$(CURDIR))
 # container and must not key a shared lock.
 export R2S_HOST_MOUNT := $(REPO_ROOT)
 TTY := $(shell [ -t 0 ] && echo -it)
-PASS_VARS := LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES FUZZ PR_TITLE COMMIT_RANGE BASE PR_BODY TEST TARGET R2S_FUZZ_SECONDS R2S_FULL
+PASS_VARS := LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES BUDGETS FUZZ PR_TITLE COMMIT_RANGE BASE PR_BODY TEST TARGET R2S_FUZZ_SECONDS R2S_FULL
 
 DOCKER_BASE = docker run --rm $(TTY) --user $$(id -u):$$(id -g) \
 	-v $(REPO_ROOT):$(REPO_ROOT) -w $(CURDIR) -v $(CACHE):$(CACHE) -e R2S_BUILD_DIR=$(BUILD_DIR) -e R2S_CACHE_DIR=$(CACHE) -e R2S_HOST_MOUNT=$(REPO_ROOT)
@@ -63,8 +63,8 @@ compile: ## Build an example firmware and print flash, RAM and stack
 fuzz: guard-main-clone cache-dir ## Fuzz each target for 60 s (TARGET=name and R2S_FUZZ_SECONDS=n narrow it)
 	@$(call in_image,env TARGET='$(TARGET)' R2S_FUZZ_SECONDS='$(R2S_FUZZ_SECONDS)' bash scripts/fuzz.sh)
 
-size-report: ## Regenerate the flash, RAM and stack report
-	@$(call pending,size-report,P6 in docs/00-design.md)
+size-report: guard-main-clone cache-dir ## Regenerate the flash, RAM and stack report
+	@$(call in_image,bash scripts/budgets-check.sh --report)
 
 vectors: guard-main-clone cache-dir ## Validate every vector file and regenerate the fuzz seeds
 	@$(call in_image,python3 tools/vectors_check.py)

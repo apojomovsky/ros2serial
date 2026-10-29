@@ -158,6 +158,22 @@ jobs:
       - run: make test EXAMPLES=1
   budgets:
     runs-on: ubuntu-24.04
-    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - run: echo "pending P6, see docs/00-design.md"
+      # Full history: the head numbers are judged by the base commit's tools.
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/dev-image
+      - run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            export BASE="${{ github.event.pull_request.base.sha }}"
+          fi
+          make test BUDGETS=1 | tee budgets.log
+          grep '^TABLE ' budgets.log | tail -1 | cut -d' ' -f2 > budgets-table.path
+      - if: github.event_name == 'pull_request'
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file "$(cat budgets-table.path)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
