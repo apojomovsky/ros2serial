@@ -364,22 +364,34 @@ void setup() { node.begin(Serial, 115200); }
 void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node.spin_some(); }
 ```
 
-**2. Static topics** (every C++ target, including PIC). The topic list comes from the X-macro or `r2s.yaml`, and the dispatch `switch` is generated, so every handler call is direct:
+**2. Static topics** (every C++ target, including PIC). The topic list comes from the X-macro list, and the dispatch `switch` is generated, so every handler call is direct:
 
-<!-- snippet: skip until #94 -->
 ```cpp
-#define R2S_NODE_NAME "base_controller"
 #define R2S_TOPICS(X) \
-  X(PUB, battery, std_msgs, Float32) \
-  X(SUB, cmd_vel, geometry_msgs, Twist)
-#include <ros2serial.hpp>
+  X(Publisher, std_msgs::msg::Float32, battery_pub, "battery") \
+  X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)
+#include <ros2serial.h>
+
+/* The board hooks the sketch calls; a real firmware drives the hardware. */
+static void set_motors(double linear, double angular) { (void)linear; (void)angular; }
+static float read_battery(void) { return 0.0f; }
+
+/* The port the node serves; on a board this is Serial. */
+class StubStream
+{
+  public:
+    void begin(unsigned long baud) { (void)baud; }
+};
+StubStream Serial;
+
+r2s::Node node("base_controller");
 
 std_msgs::msg::Float32 battery;
 
-void r2s_on_cmd_vel(const geometry_msgs::msg::Twist &msg) { set_motors(msg.linear.x, msg.angular.z); }
+void on_cmd_vel(const geometry_msgs::msg::Twist &msg) { set_motors(msg.linear.x, msg.angular.z); }
 
-void setup() { r2s::init(); }
-void loop()  { battery.data = read_battery(); r2s::pub::battery.publish(battery); r2s::spin_some(); }
+void setup() { node.begin(Serial, 115200); }
+void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node.spin_some(); }
 ```
 
 **3. rosserial-compatible runtime registration** (gcc-class targets, Phase 2). Existing rosserial sketches port by changing the include:

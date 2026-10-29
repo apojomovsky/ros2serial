@@ -125,11 +125,13 @@ def run_scope(
 
 
 def stub_toolbox(path: Path) -> Path:
-    """Fake the example toolchain: every build step succeeds and the ELF carries the runtime symbols.
+    """Fake the example toolchain: every build step succeeds and the ELF carries its symbols.
 
     The runtime sketch's firmware is checked for the runtime topic table and
-    the subscriber records, and the static one for the generated receive
-    buffer, so the stub's nm prints all three.
+    the subscriber records, and the static ones for the generated receive
+    buffer, so the stub's nm prints the receive buffer always and the runtime
+    symbols only for the runtime sketch (whose path names it): the static
+    firmware must not link the runtime table.
     """
     path.mkdir(parents=True, exist_ok=True)
     (path / "cmake").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
@@ -138,9 +140,13 @@ def stub_toolbox(path: Path) -> Path:
     (path / "avr-nm").write_text(
         "#!/usr/bin/env bash\n"
         "echo '008001eb b r2s_rx_buf'\n"
-        "echo '00800460 000000e0 b r2s_runtime_topics'\n"
-        "echo '00800410 00000050 b r2s_runtime_subscribers'\n"
-        "echo '00800540 00000050 b r2s_runtime_publishers'\n",
+        'case "$*" in\n'
+        "    *arduino_minimal*)\n"
+        "        echo '00800460 000000e0 b r2s_runtime_topics'\n"
+        "        echo '00800410 00000050 b r2s_runtime_subscribers'\n"
+        "        echo '00800540 00000050 b r2s_runtime_publishers'\n"
+        "        ;;\n"
+        "esac\n",
         encoding="utf-8",
     )
     for tool in ("cmake", "arduino-cli", "avr-size", "avr-nm"):
