@@ -1,16 +1,22 @@
 """One e2e section next to another on one host: both pass without cross-talk.
 
 Each run.sh and run-avr.sh leases its own DDS domain and zenoh port, so two
-suites never see each other's topics even though they share the tree.
-Narrowed to Fast DDS and Zenoh, one board in the avr scenario loop; the RMW
-matrix covers each leg alone, and these tests cover the overlap.
+suites never share a domain even though they share the tree. Narrowed to
+Fast DDS and Zenoh, one board in the avr scenario loop; the RMW matrix
+covers each leg alone, and these tests cover the overlap.
 
 Beyond distinct leases, each side publishes a uniquely named canary topic
 for the whole run, and the test asserts the other side's graph never lists
 it while both run. A canary the lease reports would merely repeat the lease
-numbers; a canary on the graph proves absence of cross-talk.
+numbers; a canary on the graph proves absence of cross-talk. Both sides run
+in their own build directory, so the shared build lock cannot serialize
+them: without overlap there would be no concurrency to prove anything
+about. A proof counts only when both sides are on the probed RMW at once
+and only after repeating, so a slow graph or a missed probe cannot pass
+it.
 """
 
+import concurrent.futures
 import os
 import re
 import shutil
@@ -23,22 +29,17 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
+CACHE = Path(os.environ.get("HOME", tempfile.gettempdir())) / ".cache" / "ros2serial"
 RMWS = ("rmw_fastrtps_cpp", "rmw_zenoh_cpp")
 DOMAIN_TIMEOUT = 900.0
 SWEEP_PAUSE = 10.0
 PROBE_TIMEOUT = 120
+PROOFS_REQUIRED = 2
 
 
 def fresh_canary():
     """A per-run topic name no other suite can collide with."""
     return "r2s_canary_" + uuid.uuid4().hex[:12]
-
-
-def domain_of(output):
-    """The leased domain the run reports, failing the run that reports none."""
-    match = re.search(r"e2e isolation: ROS_DOMAIN_ID=(\d+)", output)
-    assert match is not None, "no leased domain in the last 4000 bytes:\n" + output[-4000:]
-    return int(match.group(1))
 
 
 def port_of(output):
@@ -90,6 +91,15 @@ def probe_topics(domain, rmw, session_file=None):
     return set(proc.stdout.split())
 
 
+def current_rmw(log_text, posix):
+    """The RMW iteration the log's last header names, or None while building."""
+    if posix:
+        matches = re.findall(r"== e2e-posix \(\w+\): (\S+)", log_text)
+    else:
+        matches = re.findall(r"== e2e-avr: (\S+)", log_text)
+    return matches[-1] if matches else None
+
+
 def wait_for_domain(path, deadline):
     """The leased domain a run reports, once its builds finish."""
     while time.monotonic() < deadline:
@@ -100,45 +110,61 @@ def wait_for_domain(path, deadline):
     raise AssertionError("a run reported no leased domain within the timeout:\n" + path.read_text()[-4000:])
 
 
-def sweep(infos, verified):
+def sweep(infos, proofs):
     """One cross-talk sweep over every side and RMW, recording proof.
 
-    Each probe names what it saw: a graph with /diagnostics but without
-    the other side's canary proves isolation for that RMW; a graph with
-    the run's own canary proves the canary plumbing ran there.
+    Each probe names what it saw, but only when both sides are on the
+    probed RMW at once: a graph with /diagnostics and without the other
+    side's canary proves isolation for that RMW, and a graph with the
+    run's own canary proves the canary plumbing ran there. Every proof
+    needs repeating, so one slow graph cannot pass it.
     """
-    for name, info in infos.items():
-        for rmw in RMWS:
-            topics = probe_topics(info["domain"], rmw, info["session"])
+    logs = {name: info["log"].read_text() for name, info in infos.items()}
+    rmws = {name: current_rmw(logs[name], infos[name]["posix"]) for name in infos}
+    jobs = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        for name in infos:
+            for rmw in RMWS:
+                other = next(candidate for candidate in infos if candidate != name)
+                if rmws[name] != rmw or rmws[other] != rmw:
+                    continue
+                jobs[(name, rmw)] = pool.submit(probe_topics, infos[name]["domain"], rmw, infos[name]["session"])
+        for (name, rmw), job in jobs.items():
+            topics = job.result()
             if topics is None or "/diagnostics" not in topics:
                 continue
-            own = "/" + info["canary"]
-            if own in topics:
-                verified.add(("own", name, rmw))
-            other = next(candidate for candidate in infos.values() if candidate is not info)
-            if "/" + other["canary"] not in topics:
-                verified.add(("cross", name, rmw))
+            other = next(candidate for candidate in infos if candidate != name)
+            if "/" + infos[name]["canary"] in topics:
+                proofs[("own", name, rmw)] += 1
+            if "/" + infos[other]["canary"] not in topics:
+                proofs[("cross", name, rmw)] += 1
 
 
 def run_pair(first, second):
     """Two suites side by side, failing on any cross-talk either way.
 
-    first and second name (script, canary, extra env) triples. Each side's
-    graph must show its own canary and never the other's, on every RMW, at
-    least once while both run. Distinct leases alone would pass without
-    that.
+    first and second name (script, canary, extra env) triples. Each side
+    builds and runs in its own build directory, so the shared build lock
+    cannot serialize them. Each side's graph must show its own canary and
+    never the other's, on every RMW, at least twice while both sides are
+    on that RMW. Distinct leases alone would pass without that.
     """
     logs = {}
     procs = {}
-    for name, (script, canary, extra) in (("first", first), ("second", second)):
-        handle = tempfile.NamedTemporaryFile(prefix="r2s-e2e-" + name + "-", suffix=".log", delete=False)
-        logs[name] = Path(handle.name)
-        handle.close()
-        env = dict(os.environ, R2S_RMWS=" ".join(RMWS), R2S_E2E_CANARY=canary)
-        env.update(extra)
-        with logs[name].open("w") as output:
-            procs[name] = subprocess.Popen(["bash", script], cwd=ROOT, stdout=output, stderr=subprocess.STDOUT, env=env)
+    builds = []
     try:
+        for name, (script, canary, extra) in (("first", first), ("second", second)):
+            handle = tempfile.NamedTemporaryFile(prefix="r2s-e2e-" + name + "-", suffix=".log", delete=False)
+            logs[name] = Path(handle.name)
+            handle.close()
+            build = Path(tempfile.mkdtemp(prefix="r2s-e2e-iso-build-", dir=CACHE))
+            builds.append(build)
+            env = dict(os.environ, R2S_RMWS=" ".join(RMWS), R2S_E2E_CANARY=canary, R2S_BUILD_DIR=str(build))
+            env.update(extra)
+            with logs[name].open("w") as output:
+                procs[name] = subprocess.Popen(
+                    ["bash", script], cwd=ROOT, stdout=output, stderr=subprocess.STDOUT, env=env
+                )
         deadline = time.monotonic() + DOMAIN_TIMEOUT
         domains = {name: wait_for_domain(logs[name], deadline) for name in procs}
         infos = {}
@@ -147,20 +173,24 @@ def run_pair(first, second):
             for name, (_script, canary, _extra) in (("first", first), ("second", second)):
                 session = zenoh_session_file(port_of(logs[name].read_text()))
                 sessions.append(session)
-                infos[name] = {"domain": domains[name], "canary": canary, "session": session}
-            verified = set()
+                infos[name] = {
+                    "domain": domains[name],
+                    "canary": canary,
+                    "session": session,
+                    "log": logs[name],
+                    "posix": _script == "tests/e2e/run.sh",
+                }
+            proofs = {("own", name, rmw): 0 for name in infos for rmw in RMWS}
+            proofs.update({("cross", name, rmw): 0 for name in infos for rmw in RMWS})
             while any(proc.poll() is None for proc in procs.values()):
-                sweep(infos, verified)
+                sweep(infos, proofs)
                 time.sleep(SWEEP_PAUSE)
-            sweep(infos, verified)
+            sweep(infos, proofs)
             outs = {name: logs[name].read_text() for name in procs}
             for name, proc in procs.items():
                 assert proc.returncode == 0, f"{name} section failed:\n" + outs[name][-4000:]
             assert domains["first"] != domains["second"], "both sections ran on one domain"
-            wanted = {("own", name, rmw) for name in infos for rmw in RMWS} | {
-                ("cross", name, rmw) for name in infos for rmw in RMWS
-            }
-            missing = sorted(set(wanted) - set(verified))
+            missing = sorted(key for key, count in proofs.items() if count < PROOFS_REQUIRED)
             assert not missing, "no proof of isolation for: " + ", ".join("/".join(part) for part in missing)
             return outs
         finally:
@@ -172,6 +202,8 @@ def run_pair(first, second):
                 proc.kill()
         for proc in procs.values():
             proc.wait()
+        for build in builds:
+            shutil.rmtree(build, ignore_errors=True)
 
 
 @pytest.mark.skipif(shutil.which("colcon") is None or shutil.which("ros2") is None, reason="colcon is not installed")
