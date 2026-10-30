@@ -2,6 +2,7 @@
 // QoS depth, paced host-to-MCU traffic and converted payloads both ways,
 // through a real node with a scripted link and real type support.
 // covers: SES-16, SES-18, SES-20, SES-27, SES-31, FRM-11
+// covers: LOG-1, LOG-2
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -59,13 +60,18 @@ class RouterFixture
 {
   public:
     RouterFixture(const std::string &name, rclcpp::NodeOptions options, RouterParams params,
-                  std::uint16_t max_frame = 512u)
+                  std::uint16_t max_frame = 512u, bool with_mcu_sink = true)
         : max_frame_(max_frame), node_(std::make_shared<rclcpp::Node>(name, "robot1", options))
     {
+        LogSink mcu_sink;
+        if (with_mcu_sink) {
+            mcu_sink = [this](SessionLog level, const std::string &text) { mcu_.emplace_back(level, text); };
+        }
         router_ = std::make_unique<Router>(
             node_->get_node_topics_interface(),
             [this]() { return std::unique_ptr<Transport>(new HelperLink(transport_)); }, clock_, clock_,
-            std::move(params), [this](SessionLog, const std::string &text) { logged_.push_back(text); });
+            std::move(params), [this](SessionLog, const std::string &text) { logged_.push_back(text); },
+            SessionConfig{}, std::move(mcu_sink));
     }
 
     void advance(std::uint32_t ms)
@@ -179,6 +185,10 @@ class RouterFixture
     {
         return logged_;
     }
+    const std::vector<std::pair<SessionLog, std::string>> &mcu_logged() const
+    {
+        return mcu_;
+    }
 
   private:
     std::uint16_t max_frame_;
@@ -187,6 +197,7 @@ class RouterFixture
     rclcpp::Node::SharedPtr node_;
     std::unique_ptr<Router> router_;
     std::vector<std::string> logged_;
+    std::vector<std::pair<SessionLog, std::string>> mcu_;
 };
 
 class RouterNode : public ::testing::Test
@@ -575,6 +586,40 @@ TEST_F(RouterNode, RejectsAnEmptySink)
                      [&transport]() { return std::unique_ptr<Transport>(new HelperLink(transport)); }, clock,
                      clock, RouterParams{}, LogSink{}),
                  std::invalid_argument);
+}
+
+// One log payload ([LOG-1]): the level, the text as a string, then the value
+// kind with no value.
+std::vector<std::uint8_t> mcu_log_payload(std::uint8_t level, const std::string &text)
+{
+    std::vector<std::uint8_t> payload{level, static_cast<std::uint8_t>(text.size())};
+    payload.insert(payload.end(), text.begin(), text.end());
+    payload.push_back(0u);
+    return payload;
+}
+
+TEST_F(RouterNode, ForwardsMcuLogLinesToTheirOwnSink)
+{
+    RouterFixture fixture("mcu_log", remapped(), RouterParams{});
+    fixture.handshake();
+    fixture.deliver_frame(2u, 0u, mcu_log_payload(30u, "hot"));
+    fixture.deliver_frame(2u, 1u, mcu_log_payload(40u, "hotter"));
+    ASSERT_EQ(fixture.mcu_logged().size(), 2u);
+    EXPECT_EQ(fixture.mcu_logged()[0].first, SessionLog::kWarning);
+    EXPECT_EQ(fixture.mcu_logged()[0].second, "hot");
+    EXPECT_EQ(fixture.mcu_logged()[1].first, SessionLog::kError);
+    EXPECT_EQ(fixture.mcu_logged()[1].second, "hotter");
+    EXPECT_TRUE(fixture.logged().empty()) << "MCU lines bypass the bridge sink";
+}
+
+TEST_F(RouterNode, FallsBackToTheLogSinkWithoutAnMcuSink)
+{
+    RouterFixture fixture("mcu_fallback", remapped(), RouterParams{}, 512u, false);
+    fixture.handshake();
+    fixture.deliver_frame(2u, 0u, mcu_log_payload(20u, "line"));
+    EXPECT_TRUE(fixture.mcu_logged().empty());
+    ASSERT_EQ(fixture.logged().size(), 1u);
+    EXPECT_EQ(fixture.logged()[0], "line");
 }
 
 TEST(RouterOverrides, ParsesTopicRates)

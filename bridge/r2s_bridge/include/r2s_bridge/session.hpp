@@ -26,11 +26,14 @@ enum class SessionState : std::uint8_t {
     kConnected,
 };
 
-// Severity of a SessionEvents::log call. The bridge maps these to its loggers.
+// Severity of a SessionEvents::log or ::mcu_log call. The bridge maps these
+// to its loggers with the same severity.
 enum class SessionLog : std::uint8_t {
     kError,
     kWarning,
     kInfo,
+    kDebug,
+    kFatal,
 };
 
 // The TOPIC_STATUS verdicts ([CTL-13]): 3 names a topic the bridge cannot
@@ -125,11 +128,14 @@ using TopicResolver = std::function<std::uint8_t(const TopicInfo &)>;
 // The session's observable edge: log lines the bridge forwards to its
 // loggers, one call per completed handshake saying whether the new topic
 // table matches the previous one ([SES-20]), and one call per decoded user
-// payload from a topic whose handshake verdict is ok. All default to ignoring.
+// payload from a topic whose handshake verdict is ok. The MCU's own log
+// lines ([LOG-1]) arrive on mcu_log with the severity [LOG-2] names, so the
+// bridge can log them under its own child name; all default to ignoring.
 struct SessionEvents {
     std::function<void(SessionLog, const std::string &)> log;
     std::function<void(bool identical)> handshake_completed;
     std::function<void(std::uint8_t, const std::vector<std::uint8_t> &)> user_frame;
+    std::function<void(SessionLog, const std::string &)> mcu_log;
 };
 
 // The section 8.2 state machine. poll() advances timers, drains the link and

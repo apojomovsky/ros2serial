@@ -11,5 +11,4 @@ ERR-3   P5
 ERR-4   P5
 ERR-5   P5
 ERR-6   P5
-LOG-4   P1
 SYS-3   S5

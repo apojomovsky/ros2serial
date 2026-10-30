@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <deque>
 #include <map>
 #include <optional>
@@ -38,7 +40,21 @@ constexpr std::uint8_t kReady = 0x06u;
 
 constexpr std::uint8_t kControlTopic = 0u;
 constexpr std::uint8_t kTimeTopic = 1u;
+constexpr std::uint8_t kLogTopic = 2u;
 constexpr std::uint8_t kHeartbeatTopic = 4u;
+
+// The log channel's levels ([LOG-2]) and value kinds ([LOG-3]).
+constexpr std::uint8_t kLogDebug = 10u;
+constexpr std::uint8_t kLogInfo = 20u;
+constexpr std::uint8_t kLogWarn = 30u;
+constexpr std::uint8_t kLogError = 40u;
+constexpr std::uint8_t kLogFatal = 50u;
+constexpr std::uint8_t kLogNone = 0u;
+constexpr std::uint8_t kLogU16 = 1u;
+constexpr std::uint8_t kLogI16 = 2u;
+constexpr std::uint8_t kLogU32 = 3u;
+constexpr std::uint8_t kLogI32 = 4u;
+constexpr std::uint8_t kLogF32 = 5u;
 
 // The time channel's opcodes (spec/protocol.md, section 7.2).
 constexpr std::uint8_t kPing = 0x01u;
@@ -250,6 +266,13 @@ struct Session::Impl {
     {
         if (events.log) {
             events.log(level, text);
+        }
+    }
+
+    void mcu_log(SessionLog level, const std::string &text)
+    {
+        if (events.mcu_log) {
+            events.mcu_log(level, text);
         }
     }
 
@@ -757,6 +780,101 @@ struct Session::Impl {
         maybe_send_correction(now);
     }
 
+    // A log line ([LOG-1]): the level, the text, the value kind and the
+    // value. The line carries the value after the text, since a log sink
+    // takes one string; floats render with 9 significant digits, which
+    // round-trips a 32-bit value. A short payload, trailing bytes, a
+    // reserved kind ([LOG-4]) or an unknown level refuses the frame
+    // ([SYS-5]). Lines decode in any state, so boot lines are not lost.
+    void on_log(const std::uint8_t *payload, std::uint16_t len)
+    {
+        Reader reader(payload, len);
+        std::uint8_t level = 0;
+        std::string text;
+        std::uint8_t kind = 0;
+        if (!reader.u8(level) || !reader.string(text) || !reader.u8(kind)) {
+            return;
+        }
+        // A NUL byte never belongs in a string ([ENC-14]); the MCU holds
+        // strings NUL-terminated, so one truncates the line for its reader.
+        if (text.find('\0') != std::string::npos) {
+            return;
+        }
+        std::string line = text;
+        switch (kind) {
+        case kLogNone:
+            if (!reader.at_end()) {
+                return;
+            }
+            break;
+        case kLogU16: {
+            std::uint16_t value = 0;
+            if (!reader.u16(value) || !reader.at_end()) {
+                return;
+            }
+            line += std::to_string(value);
+            break;
+        }
+        case kLogI16: {
+            std::uint16_t raw = 0;
+            if (!reader.u16(raw) || !reader.at_end()) {
+                return;
+            }
+            line += std::to_string(static_cast<std::int16_t>(raw));
+            break;
+        }
+        case kLogU32: {
+            std::uint32_t value = 0;
+            if (!reader.u32(value) || !reader.at_end()) {
+                return;
+            }
+            line += std::to_string(value);
+            break;
+        }
+        case kLogI32: {
+            std::uint32_t raw = 0;
+            if (!reader.u32(raw) || !reader.at_end()) {
+                return;
+            }
+            line += std::to_string(static_cast<std::int32_t>(raw));
+            break;
+        }
+        case kLogF32: {
+            std::uint32_t bits = 0;
+            if (!reader.u32(bits) || !reader.at_end()) {
+                return;
+            }
+            float value = 0.0F;
+            std::memcpy(&value, &bits, sizeof value);
+            char rendered[24];
+            (void)std::snprintf(rendered, sizeof rendered, "%.9g", static_cast<double>(value));
+            line += rendered;
+            break;
+        }
+        default:
+            return;
+        }
+        switch (level) {
+        case kLogDebug:
+            mcu_log(SessionLog::kDebug, line);
+            break;
+        case kLogInfo:
+            mcu_log(SessionLog::kInfo, line);
+            break;
+        case kLogWarn:
+            mcu_log(SessionLog::kWarning, line);
+            break;
+        case kLogError:
+            mcu_log(SessionLog::kError, line);
+            break;
+        case kLogFatal:
+            mcu_log(SessionLog::kFatal, line);
+            break;
+        default:
+            break;
+        }
+    }
+
     void on_frame(const Frame &frame)
     {
         last_rx_ms = now_ms();
@@ -772,6 +890,11 @@ struct Session::Impl {
         }
         if (topic_id == kTimeTopic) {
             on_time(payload, len);
+            return;
+        }
+        if (topic_id == kLogTopic) {
+            // Boot lines arrive before READY, so any state decodes them.
+            on_log(payload, len);
             return;
         }
         if (topic_id == kHeartbeatTopic) {
