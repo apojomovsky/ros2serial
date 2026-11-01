@@ -17,6 +17,7 @@ steps:
     frame: "03 00 01 00 34 3f"
     at_ms: 50
     note: "param walk starts after the topic walk"
+  - from: mcu
     frame: "03 00 02 00 00 00 03 6c 65 64 01 32 a9"
     at_ms: 100
   - from: host
