@@ -230,6 +230,17 @@ def test_budgets_scope_runs_its_section(tmp_path):
     assert "== budgets" in result.stdout
 
 
+def test_examples_builds_isolate_their_build_paths():
+    """Every sketch build keeps its own arduino build path: the shared cache
+    once leaked the e2e slice serial flags into a sketch without one."""
+    text = (ROOT / "scripts" / "build-examples.sh").read_text()
+    joined = re.sub(r"\\\n", " ", text)
+    compiles = [line for line in joined.splitlines() if "arduino-cli compile" in line]
+    assert compiles, "no arduino-cli compile line left to isolate"
+    for line in compiles:
+        assert "--build-path" in line, f"sketch build shares the arduino cache:\n{line.strip()}"
+
+
 def test_fuzz_scope_runs_its_section(tmp_path, monkeypatch):
     # Seeds only: the run still builds every target and runs each corpus.
     monkeypatch.setenv("R2S_FUZZ_SECONDS", "0")
