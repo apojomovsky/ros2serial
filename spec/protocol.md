@@ -225,8 +225,8 @@ The MCU sends on this channel; the host does not.
 - [PAR-4] The `flags` byte has bit 0 for read-only. Every other bit is reserved and MUST be 0. A receiver MUST refuse ([SYS-5]) a DECLARE with a reserved bit set.
 - [PAR-5] A PARAM_STATUS `status` is 0 for applied, 1 for unknown index, 2 for bad type or length, 3 for read-only and 4 for out of range. Every other value is reserved. A receiver MUST refuse ([SYS-5]) a PARAM_STATUS whose status is not one of those five.
 - [PAR-6] A DECLARE carries the full name in both handshake modes.
-- [PAR-7] The host walks the parameters after the topic walk and before READY: one PARAM_REQ per index, with a 200 ms timeout and at most 3 retries, mirroring [SES-16]. The first PARAM_STATUS with status 1 (unknown index) ends the walk.
-- [PAR-8] A PARAM_SET and the PARAM_STATUS that answers it ride the reliable channel ([REL-2]) while CONNECTED. During HANDSHAKING a PARAM_STATUS that answers a PARAM_REQ is a plain reply under the requester's retry, never a reliable frame.
+- [PAR-7] The host walks the parameters after the topic walk and before READY: one PARAM_REQ per index, with a 200 ms timeout and at most 3 retries, mirroring [SES-16]. The first PARAM_STATUS with status 1 (unknown index) ends the walk. When the retries are spent without an answer, the host abandons the walk and returns to HANDSHAKING.
+- [PAR-8] A PARAM_SET and the PARAM_STATUS that answers it ride the reliable channel ([REL-2]) while CONNECTED. During HANDSHAKING a PARAM_STATUS that answers a PARAM_REQ is a plain reply under the requester's retry, never a reliable frame. A plain reply carries `rel_seq` 0.
 - [PAR-9] After READY the bridge declares each parameter as a ROS parameter and pushes values that differ from the declared defaults with SET. After every re-handshake it re-pushes the current values.
 - [PAR-10] In ANNOUNCING the MCU answers a PARAM_REQ the way [SES-2] answers a TOPIC_REQ, and ignores a SET the way [SES-3] describes. A SET never applies before CONNECTED.
 
