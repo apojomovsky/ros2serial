@@ -504,7 +504,7 @@ void serialize_message(const rosidl_message_type_support_t *cpp_ts, const std::u
     // error state (fastrtps tries the C identifier before the C++ one), so a
     // later failure would report that text. Dropping it keeps the next error
     // truthful.
-    rmw_reset_error();
+    rmw_reset_error(); // GCOVR_EXCL_BR_LINE: a unit test cannot throw out of this call
     cdr.assign(guard.msg.buffer, guard.msg.buffer + guard.msg.buffer_length);
 }
 // The wire holds at most a 16-bit length: take_varint refuses more, so the

@@ -241,6 +241,9 @@ struct Router::Impl {
         rcl.buffer_length = cdr.size();
         try {
             route.pub->publish(out);
+            // GCOVR_EXCL_BR_START: a unit test cannot throw out of the logging,
+            // locking, or counting calls below, nor inject a foreign exception
+            // type, so the unwind edges never run.
         } catch (const std::exception &error) {
             // A failed publish (a context shutting down under the poll loop)
             // is a dropped frame, never an abort: it names its topic and counts.
@@ -251,6 +254,7 @@ struct Router::Impl {
             std::lock_guard<std::mutex> guard(mutex);
             ++routes[topic_id].publish_failures;
             return;
+            // GCOVR_EXCL_BR_STOP
         }
     }
 
