@@ -149,7 +149,13 @@ if [ "${TEST:-}" = 1 ]; then
   # suite unscoped instead.
   suite=${R2S_SUITE:-$root/scripts/ci-test.sh}
   if [ "${R2S_FULL:-}" = 1 ]; then scopes="FULL=1"; else
-    scopes=$(python3 "$root/scripts/scopes_for_diff.py" --base "$base" 2>/dev/null) || scopes="FULL=1"
+    # A diff that would run the full suite runs the reduced scopes instead
+    # outside CI. The notice goes to the ritual output, and the stamp below
+    # keys the reduced set, so the push that follows skips on it.
+    scopes_err=$(mktemp "${TMPDIR:-/tmp}/r2s-scopes.XXXXXX")
+    scopes=$(python3 "$root/scripts/scopes_for_diff.py" --base "$base" 2>"$scopes_err") || scopes="FULL=1"
+    grep "leaving the full suite to CI" "$scopes_err" 2>/dev/null || true
+    rm -f "$scopes_err"
   fi
   # Caller scopes stay, so the child does what this run was asked to do; the
   # computed scopes add. A caller E2E and a computed E2E merge to both, so

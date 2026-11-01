@@ -115,6 +115,15 @@ PREFIX_RULES = (
 )
 
 
+def _merge(found, scopes):
+    for scope, value in scopes.items():
+        if scope == "E2E" and found.get("E2E") not in (None, value):
+            found["E2E"] = "both"
+        else:
+            found[scope] = value
+    return found
+
+
 def scopes_for_paths(paths):
     found = dict(CHEAP)
     for path in paths:
@@ -123,11 +132,27 @@ def scopes_for_paths(paths):
         scopes = _scopes_for_path(path.strip())
         if scopes is FULL:
             return dict(FULL)
-        for scope, value in scopes.items():
-            if scope == "E2E" and found.get("E2E") not in (None, value):
-                found["E2E"] = "both"
-            else:
-                found[scope] = value
+        _merge(found, scopes)
+    return found
+
+
+def reduced_scopes_for_paths(paths):
+    """The local gate for a diff that would otherwise run the full suite.
+
+    Suite machinery and unknown paths still need the full suite, but CI
+    already runs it on the merge, so a local run covers the cheap scopes,
+    the SCRIPTS scope that tests the gate itself, and whatever the diff's
+    other paths map to.
+    """
+    found = dict(CHEAP)
+    found["SCRIPTS"] = "1"
+    for path in paths:
+        if not path:
+            continue
+        scopes = _scopes_for_path(path.strip())
+        if scopes is FULL:
+            continue
+        _merge(found, scopes)
     return found
 
 
@@ -173,8 +198,17 @@ def main(argv=None):
         print("FULL=1")
         return 0
     result = scopes_for_paths(paths)
-    for scope in sorted(result):
-        print(f"{scope}={result[scope]}")
+    if result != FULL or os.environ.get("GITHUB_ACTIONS"):
+        for scope in sorted(result):
+            print(f"{scope}={result[scope]}")
+        return 0
+    reduced = reduced_scopes_for_paths(paths)
+    for scope in sorted(reduced):
+        print(f"{scope}={reduced[scope]}")
+    print(
+        "scopes_for_diff: the diff touches the suite machinery, so this run covers the reduced scopes, leaving the full suite to CI",
+        file=sys.stderr,
+    )
     return 0
 
 
