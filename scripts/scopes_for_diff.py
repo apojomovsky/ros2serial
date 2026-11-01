@@ -206,7 +206,8 @@ def main(argv=None):
     for scope in sorted(reduced):
         print(f"{scope}={reduced[scope]}")
     print(
-        "scopes_for_diff: the diff touches the suite machinery, so this run covers the reduced scopes, leaving the full suite to CI",
+        "scopes_for_diff: machinery changed, so this run covers the reduced scopes,",
+        "leaving the full suite to CI",
         file=sys.stderr,
     )
     return 0
