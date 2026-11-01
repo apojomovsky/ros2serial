@@ -284,8 +284,9 @@ struct Step {
 // the names from this set when it lands its own replay.
 std::vector<std::string> transcript_vectors()
 {
-    static const std::set<std::string> pending = {"param_walk.yaml", "param_set_reliable.yaml",
-                                                  "param_set_giveup.yaml", "param_rehandshake.yaml"};
+    static const std::set<std::string> pending = {"param_walk.yaml", "param_walk_retry.yaml",
+                                                  "param_set_reliable.yaml", "param_set_giveup.yaml",
+                                                  "param_rehandshake.yaml"};
     std::vector<std::string> files;
     for (const auto &entry : std::filesystem::directory_iterator(R2S_SESSION_VECTOR_DIR)) {
         if (entry.path().extension() != ".yaml") {

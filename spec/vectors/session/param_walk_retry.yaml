@@ -13,6 +13,7 @@ steps:
     at_ms: 50
   - from: host
     frame: "00 01 05 10 00 1f 80"
+    at_ms: 50
   - from: host
     frame: "03 00 01 00 34 3f"
     at_ms: 50
