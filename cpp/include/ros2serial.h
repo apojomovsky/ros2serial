@@ -44,12 +44,13 @@
 /* A sketch declares its topics as X-macro rows before including this
  * header; the header expands them into the topic table, the typed publish
  * functions and dispatch in the sketch's own translation unit, while the
- * descriptors stay in the library, which compiles without the list. Rows
- * name C++ types, so the list lives in a C++ translation unit; every
- * Arduino sketch is one. Pure-C firmware generates its table from
- * r2s.yaml instead. */
+ * descriptors stay in the library, which compiles without the list. A C++
+ * row spells the type with double colons and a C row with the generated
+ * C struct name; each language rejects the other's spelling with a
+ * message naming its own. */
 #if !defined(R2S_TOPICS) && !defined(__cplusplus)
-#error "Define R2S_TOPICS(X) rows in a C++ translation unit before including <ros2serial.h>."
+#error                                                                                                       \
+    "Define R2S_TOPICS(X) rows as X(Publisher|Subscription, pkg__msg__Type, object[, callback]) before including <ros2serial.h>."
 #endif
 
 /* A sketch defines its topic list above the include; the bundled message
@@ -59,7 +60,257 @@
  * in the library. */
 #ifdef R2S_TOPICS
 #ifndef __cplusplus
-#error "R2S_TOPICS rows name C++ types (pkg::msg::Type); define the list in a C++ translation unit."
+/* The bundled tables the passes below encode and decode with. */
+extern const r2s_codec_table_t r2s_bundled_table_builtin_interfaces_Time;
+extern const r2s_codec_table_t r2s_bundled_table_geometry_msgs_Quaternion;
+extern const r2s_codec_table_t r2s_bundled_table_geometry_msgs_Twist;
+extern const r2s_codec_table_t r2s_bundled_table_geometry_msgs_Vector3;
+extern const r2s_codec_table_t r2s_bundled_table_sensor_msgs_Imu;
+extern const r2s_codec_table_t r2s_bundled_table_sensor_msgs_JointState;
+extern const r2s_codec_table_t r2s_bundled_table_std_msgs_Float32;
+extern const r2s_codec_table_t r2s_bundled_table_std_msgs_Header;
+extern const r2s_codec_table_t r2s_bundled_table_std_msgs_String;
+
+/* One alias per bundled type for the C row spelling: the row names
+ * the generated C struct, which pastes straight onto these. */
+/* builtin_interfaces__msg__Time: hash, table, index and wire name. */
+#define R2S_CTYPE_HASH_builtin_interfaces__msg__Time 0xb1u, 0x06u, 0x23u, 0x5eu, 0x25u, 0xa4u, 0xc5u, 0xedu
+#define R2S_CTYPE_TABLE_builtin_interfaces__msg__Time (&r2s_bundled_table_builtin_interfaces_Time)
+#define R2S_CTYPE_INDEX_builtin_interfaces__msg__Time 0u
+#define R2S_CTYPE_NAME_builtin_interfaces__msg__Time "builtin_interfaces/msg/Time"
+/* geometry_msgs__msg__Quaternion: hash, table, index and wire name. */
+#define R2S_CTYPE_HASH_geometry_msgs__msg__Quaternion 0x8au, 0x76u, 0x5fu, 0x66u, 0x77u, 0x8cu, 0x8fu, 0xf7u
+#define R2S_CTYPE_TABLE_geometry_msgs__msg__Quaternion (&r2s_bundled_table_geometry_msgs_Quaternion)
+#define R2S_CTYPE_INDEX_geometry_msgs__msg__Quaternion 0u
+#define R2S_CTYPE_NAME_geometry_msgs__msg__Quaternion "geometry_msgs/msg/Quaternion"
+/* geometry_msgs__msg__Twist: hash, table, index and wire name. */
+#define R2S_CTYPE_HASH_geometry_msgs__msg__Twist 0x9cu, 0x45u, 0xbfu, 0x16u, 0xfeu, 0x09u, 0x83u, 0xd8u
+#define R2S_CTYPE_TABLE_geometry_msgs__msg__Twist (&r2s_bundled_table_geometry_msgs_Twist)
+#define R2S_CTYPE_INDEX_geometry_msgs__msg__Twist 1u
+#define R2S_CTYPE_NAME_geometry_msgs__msg__Twist "geometry_msgs/msg/Twist"
+/* geometry_msgs__msg__Vector3: hash, table, index and wire name. */
+#define R2S_CTYPE_HASH_geometry_msgs__msg__Vector3 0xccu, 0x12u, 0xfeu, 0x83u, 0xe4u, 0xc0u, 0x27u, 0x19u
+#define R2S_CTYPE_TABLE_geometry_msgs__msg__Vector3 (&r2s_bundled_table_geometry_msgs_Vector3)
+#define R2S_CTYPE_INDEX_geometry_msgs__msg__Vector3 0u
+#define R2S_CTYPE_NAME_geometry_msgs__msg__Vector3 "geometry_msgs/msg/Vector3"
+/* sensor_msgs__msg__Imu: hash, table, index and wire name. */
+#define R2S_CTYPE_HASH_sensor_msgs__msg__Imu 0x7du, 0x9au, 0x00u, 0xffu, 0x13u, 0x10u, 0x80u, 0x89u
+#define R2S_CTYPE_TABLE_sensor_msgs__msg__Imu (&r2s_bundled_table_sensor_msgs_Imu)
+#define R2S_CTYPE_INDEX_sensor_msgs__msg__Imu 4u
+#define R2S_CTYPE_NAME_sensor_msgs__msg__Imu "sensor_msgs/msg/Imu"
+/* sensor_msgs__msg__JointState: hash, table, index and wire name. */
+#define R2S_CTYPE_HASH_sensor_msgs__msg__JointState 0xa1u, 0x3eu, 0xe3u, 0xa3u, 0x30u, 0xe3u, 0x46u, 0xc9u
+#define R2S_CTYPE_TABLE_sensor_msgs__msg__JointState (&r2s_bundled_table_sensor_msgs_JointState)
+#define R2S_CTYPE_INDEX_sensor_msgs__msg__JointState 2u
+#define R2S_CTYPE_NAME_sensor_msgs__msg__JointState "sensor_msgs/msg/JointState"
+/* std_msgs__msg__Float32: hash, table, index and wire name. */
+#define R2S_CTYPE_HASH_std_msgs__msg__Float32 0x71u, 0x70u, 0xd3u, 0xd8u, 0xf8u, 0x41u, 0xf7u, 0xbeu
+#define R2S_CTYPE_TABLE_std_msgs__msg__Float32 (&r2s_bundled_table_std_msgs_Float32)
+#define R2S_CTYPE_INDEX_std_msgs__msg__Float32 0u
+#define R2S_CTYPE_NAME_std_msgs__msg__Float32 "std_msgs/msg/Float32"
+/* std_msgs__msg__Header: hash, table, index and wire name. */
+#define R2S_CTYPE_HASH_std_msgs__msg__Header 0xf4u, 0x9fu, 0xb3u, 0xaeu, 0x2cu, 0xf0u, 0x70u, 0xf7u
+#define R2S_CTYPE_TABLE_std_msgs__msg__Header (&r2s_bundled_table_std_msgs_Header)
+#define R2S_CTYPE_INDEX_std_msgs__msg__Header 1u
+#define R2S_CTYPE_NAME_std_msgs__msg__Header "std_msgs/msg/Header"
+/* std_msgs__msg__String: hash, table, index and wire name. */
+#define R2S_CTYPE_HASH_std_msgs__msg__String 0xdfu, 0x66u, 0x8cu, 0x74u, 0x04u, 0x82u, 0xbbu, 0xd4u
+#define R2S_CTYPE_TABLE_std_msgs__msg__String (&r2s_bundled_table_std_msgs_String)
+#define R2S_CTYPE_INDEX_std_msgs__msg__String 0u
+#define R2S_CTYPE_NAME_std_msgs__msg__String "std_msgs/msg/String"
+/* A C row that spells its type with double colons pastes only the
+ * package half here, and fails naming the underscore spelling. */
+#define R2S_CTYPE_HASH_builtin_interfaces R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_TABLE_builtin_interfaces R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_INDEX_builtin_interfaces R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_NAME_builtin_interfaces R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_HASH_geometry_msgs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_TABLE_geometry_msgs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_INDEX_geometry_msgs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_NAME_geometry_msgs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_HASH_sensor_msgs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_TABLE_sensor_msgs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_INDEX_sensor_msgs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_NAME_sensor_msgs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_HASH_std_msgs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_TABLE_std_msgs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_INDEX_std_msgs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_NAME_std_msgs R2S_error_expected_c_row_pkg__msg__Type
+/* One slot per row, in configuration order: user topic IDs run from 16. */
+#define R2S_X_SLOT(KIND, ...) R2S_X_SLOT_##KIND(__VA_ARGS__)
+#define R2S_X_SLOT_Publisher(CTYPE, ONAME, TOPIC) R2S_SLOT_##ONAME,
+#define R2S_X_SLOT_Subscription(CTYPE, ONAME, TOPIC, CB) R2S_SLOT_##ONAME,
+#define R2S_X_SLOT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_SLOT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+enum r2s_topic_slot { R2S_TOPICS(R2S_X_SLOT) R2S_SLOT_COUNT };
+
+/* IDs run 16 to 255 in configuration order, and the table fits the session. */
+typedef char r2s_slot_count_check[(R2S_SLOT_COUNT <= 240) ? 1 : -1];
+typedef char r2s_slot_fit_check[(unsigned)R2S_SLOT_COUNT <= R2S_TOPIC_MAX_COUNT ? 1 : -1];
+
+/* The sketch's topic count, for r2s_session_configure(). */
+#define R2S_TOPIC_COUNT ((uint8_t)R2S_SLOT_COUNT)
+
+/* A build whose double is 32 bits travels narrow on every topic (ENC-12). */
+#if DBL_MANT_DIG == FLT_MANT_DIG
+#define R2S_NARROW_FLAG 0x02u
+#else
+#define R2S_NARROW_FLAG 0x00u
+#endif
+
+#define R2S_ID(ONAME) ((uint8_t)(16u + R2S_SLOT_##ONAME))
+
+/* The announced topics (CTL-4, CTL-12), in configuration order. */
+#define R2S_X_TABLE(KIND, ...) R2S_X_TABLE_##KIND(__VA_ARGS__)
+#define R2S_X_TABLE_Publisher(CTYPE, ONAME, TOPIC)                                                           \
+    {R2S_ID(ONAME),                                                                                          \
+     (uint8_t)(0x00u | R2S_NARROW_FLAG),                                                                     \
+     {R2S_CTYPE_HASH_##CTYPE},                                                                               \
+     R2S_CTYPE_NAME_##CTYPE,                                                                                 \
+     TOPIC},
+#define R2S_X_TABLE_Subscription(CTYPE, ONAME, TOPIC, CB)                                                    \
+    {R2S_ID(ONAME),                                                                                          \
+     (uint8_t)(0x01u | R2S_NARROW_FLAG),                                                                     \
+     {R2S_CTYPE_HASH_##CTYPE},                                                                               \
+     R2S_CTYPE_NAME_##CTYPE,                                                                                 \
+     TOPIC},
+#define R2S_X_TABLE_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_TABLE_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+/* The sketch list never reaches the generator, so the header counts
+ * the rows itself: an empty list stops here with the generator's message. */
+#define R2S_X_COUNT(KIND, ...) R2S_X_COUNT_##KIND(__VA_ARGS__)
+#define R2S_X_COUNT_Publisher(CTYPE, ONAME, TOPIC) +1
+#define R2S_X_COUNT_Subscription(CTYPE, ONAME, TOPIC, CB) +1
+#define R2S_X_COUNT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_COUNT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_TOPIC_LIST_COUNT (0 R2S_TOPICS(R2S_X_COUNT))
+#if R2S_TOPIC_LIST_COUNT == 0
+#error "a node with no topics has nothing to announce; add at least one topic"
+#endif
+
+const r2s_topic_t R2S_FLASH r2s_topics[] = {R2S_TOPICS(R2S_X_TABLE)};
+
+/* One publish path for every wrapper: measures the payload, reserves
+ * its wire form, then streams it, so a failed publish writes nothing.
+ * Inline, so a subscribe-only list leaves it unused without a warning. */
+static inline r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint16_t type, const void *msg,
+                                           const r2s_codec_table_t *table)
+{
+    r2s_codec_out_t out = {NULL, 0u, 0u, 0u};
+    uint8_t narrow;
+    uint8_t field = 0xFFu;
+    uint8_t seq;
+    int8_t rc;
+
+    if (r2s_connected() == 0u) {
+        return R2S_ERR_NOT_CONNECTED;
+    }
+    if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {
+        return R2S_ERR_TOPIC_REJECTED;
+    }
+    narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);
+    rc = r2s_codec_encode(table, type, msg, narrow, &out, &field);
+    if (rc != R2S_OK) {
+        return rc;
+    }
+    seq = r2s_session_tx_seq(index);
+    rc = r2s_tx_begin(topic_id, seq, out.len);
+    if (rc != R2S_OK) {
+        return rc;
+    }
+    r2s_session_advance_tx_seq(index);
+    out.to_tx = 1u;
+    out.len = 0u;
+    (void)r2s_codec_encode(table, type, msg, narrow, &out, &field);
+    (void)r2s_tx_end();
+    return R2S_OK;
+}
+
+#define R2S_X_PUBLISH(KIND, ...) R2S_X_PUBLISH_##KIND(__VA_ARGS__)
+#define R2S_X_PUBLISH_Publisher(CTYPE, ONAME, TOPIC)                                                         \
+    r2s_status_t r2s_publish_##ONAME(const CTYPE *msg)                                                       \
+    {                                                                                                        \
+        return r2s_publish_one(R2S_ID(ONAME), r2s_session_find_topic(R2S_ID(ONAME)),                         \
+                               (uint16_t)R2S_CTYPE_INDEX_##CTYPE, msg, R2S_CTYPE_TABLE_##CTYPE);             \
+    }
+#define R2S_X_PUBLISH_Subscription(CTYPE, ONAME, TOPIC, CB)
+#define R2S_X_PUBLISH_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_PUBLISH_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+R2S_TOPICS(R2S_X_PUBLISH)
+
+/* The callback each subscription row names: declared here, so the sketch
+ * defines it with no extra declaration of its own. */
+#define R2S_X_HANDLER(KIND, ...) R2S_X_HANDLER_##KIND(__VA_ARGS__)
+#define R2S_X_HANDLER_Publisher(CTYPE, ONAME, TOPIC)
+#define R2S_X_HANDLER_Subscription(CTYPE, ONAME, TOPIC, CB) void CB(const CTYPE *msg);
+#define R2S_X_HANDLER_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_HANDLER_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+R2S_TOPICS(R2S_X_HANDLER)
+
+/* One receive buffer shared by every subscription: only one dispatch
+ * runs at a time, so one slot is enough. The spare member keeps a
+ * publish-only sketch a valid union. */
+#define R2S_X_BUF(KIND, ...) R2S_X_BUF_##KIND(__VA_ARGS__)
+#define R2S_X_BUF_Publisher(CTYPE, ONAME, TOPIC)
+#define R2S_X_BUF_Subscription(CTYPE, ONAME, TOPIC, CB) CTYPE ONAME;
+#define R2S_X_BUF_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_BUF_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+
+typedef union r2s_rx_buf {
+    uint8_t r2s_empty;
+    R2S_TOPICS(R2S_X_BUF)
+} r2s_rx_buf_t;
+
+static r2s_rx_buf_t r2s_rx_buf;
+
+#define R2S_X_DISPATCH(KIND, ...) R2S_X_DISPATCH_##KIND(__VA_ARGS__)
+#define R2S_X_DISPATCH_Publisher(CTYPE, ONAME, TOPIC)
+#define R2S_X_DISPATCH_Subscription(CTYPE, ONAME, TOPIC, CB)                                                 \
+    case R2S_ID(ONAME): {                                                                                    \
+        index = r2s_session_find_topic(R2S_ID(ONAME));                                                       \
+        if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {                                       \
+            r2s_framer_count_refused();                                                                      \
+            return;                                                                                          \
+        }                                                                                                    \
+        narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);                                          \
+        (void)r2s_session_note_rx_seq(index, seq);                                                           \
+        if (r2s_codec_decode(R2S_CTYPE_TABLE_##CTYPE, (uint16_t)R2S_CTYPE_INDEX_##CTYPE, payload, len,       \
+                             narrow, &r2s_rx_buf.ONAME, &field) != R2S_OK) {                                 \
+            r2s_framer_count_refused();                                                                      \
+            return;                                                                                          \
+        }                                                                                                    \
+        CB(&r2s_rx_buf.ONAME);                                                                               \
+        return;                                                                                              \
+    }
+#define R2S_X_DISPATCH_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+#define R2S_X_DISPATCH_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription
+
+/* Decodes the subscribed topics into the buffer above and calls the
+ * callback the row names; anything else is refused and counted. */
+void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, uint16_t len)
+{
+    uint8_t index;
+    uint8_t narrow;
+    uint8_t field = 0xFFu;
+
+    /* A publish-only list expands no case below, so every name here is
+     * unused there; the casts keep that list warning-free. */
+    (void)seq;
+    (void)payload;
+    (void)len;
+    (void)index;
+    (void)narrow;
+    (void)field;
+    (void)r2s_rx_buf;
+
+    switch (topic_id) {
+        R2S_TOPICS(R2S_X_DISPATCH)
+    default: {
+        r2s_framer_count_refused();
+        return;
+    }
+    }
+}
 #else
 extern "C" {
 
@@ -213,6 +464,108 @@ constexpr const char String_name[] = "std_msgs/msg/String";
 } // namespace msg
 } // namespace R2S_MAP_std_msgs
 
+/* A C++ row that spells its type with underscores selects one of
+ * these instead of the scope maps above, and fails naming the
+ * double-colon spelling. */
+#define R2S_MAP_builtin_interfaces__msg__Time_hash_0 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_builtin_interfaces__msg__Time_hash_1 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_builtin_interfaces__msg__Time_hash_2 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_builtin_interfaces__msg__Time_hash_3 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_builtin_interfaces__msg__Time_hash_4 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_builtin_interfaces__msg__Time_hash_5 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_builtin_interfaces__msg__Time_hash_6 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_builtin_interfaces__msg__Time_hash_7 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_builtin_interfaces__msg__Time_table R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_builtin_interfaces__msg__Time_index R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_builtin_interfaces__msg__Time_name R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Quaternion_hash_0 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Quaternion_hash_1 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Quaternion_hash_2 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Quaternion_hash_3 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Quaternion_hash_4 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Quaternion_hash_5 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Quaternion_hash_6 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Quaternion_hash_7 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Quaternion_table R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Quaternion_index R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Quaternion_name R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Twist_hash_0 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Twist_hash_1 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Twist_hash_2 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Twist_hash_3 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Twist_hash_4 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Twist_hash_5 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Twist_hash_6 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Twist_hash_7 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Twist_table R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Twist_index R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Twist_name R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Vector3_hash_0 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Vector3_hash_1 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Vector3_hash_2 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Vector3_hash_3 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Vector3_hash_4 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Vector3_hash_5 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Vector3_hash_6 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Vector3_hash_7 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Vector3_table R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Vector3_index R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_geometry_msgs__msg__Vector3_name R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__Imu_hash_0 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__Imu_hash_1 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__Imu_hash_2 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__Imu_hash_3 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__Imu_hash_4 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__Imu_hash_5 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__Imu_hash_6 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__Imu_hash_7 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__Imu_table R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__Imu_index R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__Imu_name R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__JointState_hash_0 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__JointState_hash_1 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__JointState_hash_2 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__JointState_hash_3 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__JointState_hash_4 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__JointState_hash_5 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__JointState_hash_6 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__JointState_hash_7 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__JointState_table R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__JointState_index R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_sensor_msgs__msg__JointState_name R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Float32_hash_0 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Float32_hash_1 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Float32_hash_2 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Float32_hash_3 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Float32_hash_4 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Float32_hash_5 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Float32_hash_6 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Float32_hash_7 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Float32_table R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Float32_index R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Float32_name R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Header_hash_0 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Header_hash_1 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Header_hash_2 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Header_hash_3 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Header_hash_4 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Header_hash_5 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Header_hash_6 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Header_hash_7 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Header_table R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Header_index R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__Header_name R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__String_hash_0 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__String_hash_1 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__String_hash_2 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__String_hash_3 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__String_hash_4 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__String_hash_5 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__String_hash_6 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__String_hash_7 R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__String_table R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__String_index R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_msgs__msg__String_name R2S_error_cxx_rows_use_double_colon_not_underscores
 /* One slot per row, in configuration order: user topic IDs run from 16. */
 #define R2S_X_SLOT(KIND, ...) R2S_X_SLOT_##KIND(__VA_ARGS__)
 #define R2S_X_SLOT_Publisher(CTYPE, ONAME, TOPIC) R2S_SLOT_##ONAME,

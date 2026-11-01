@@ -88,7 +88,7 @@ for leg in static runtime; do
       sleep 2
       kill -0 "$router" 2>/dev/null || { echo "rmw_zenohd on port $R2S_ZENOH_ROUTER_PORT died"; status=1; break; }
     fi
-    for test_file in test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_publish_catchup_posix; do
+    for test_file in test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_9_posix test_publish_catchup_posix; do
       timeout 300 launch_test "tests/e2e/${test_file}.py" || status=1
     done
     if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
