@@ -246,11 +246,10 @@ struct Router::Impl {
             // is a dropped frame, never an abort: it names its topic and counts.
             emit(SessionLog::kWarning,
                  "topic '" + route.info.topic_name + "': failed to publish (" + error.what() + ")");
+            // The route exists: only the poll thread mutates the table, so
+            // the entry looked up above is still there.
             std::lock_guard<std::mutex> guard(mutex);
-            const auto found = routes.find(topic_id);
-            if (found != routes.end()) {
-                ++found->second.publish_failures;
-            }
+            ++routes[topic_id].publish_failures;
             return;
         }
     }
