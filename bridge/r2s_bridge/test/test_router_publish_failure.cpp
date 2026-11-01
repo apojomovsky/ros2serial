@@ -28,6 +28,7 @@ namespace
 {
 
 constexpr std::uint8_t kBattery = 16u;
+constexpr std::uint8_t kPower = 17u;
 
 std::array<std::uint8_t, 8> installed_hash(const std::string &type)
 {
@@ -80,17 +81,20 @@ class PublishFailureFixture
         router_->poll();
     }
 
-    // Answers what the session asks until CONNECTED: one Float32 publisher.
+    // Answers what the session asks until CONNECTED: two Float32 publishers.
     void handshake()
     {
-        deliver_frame(kHelperControl, 0u, helper_hello(7u, 1u));
+        deliver_frame(kHelperControl, 0u, helper_hello(7u, 2u));
         expect_topic_req(0u);
         const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
         deliver_frame(
             kHelperControl, 1u,
             helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
+        expect_topic_req(1u);
+        deliver_frame(kHelperControl, 2u,
+                      helper_topic(1u, kPower, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "power"));
         drain();
-        EXPECT_EQ(router_->publisher_count(), 1u);
+        EXPECT_EQ(router_->publisher_count(), 2u);
     }
 
     void expect_topic_req(std::uint8_t index)
@@ -164,11 +168,16 @@ TEST_F(RouterPublishFailure, FailedPublishIsLoggedCountedAndSurvived)
     // loop still delivers frames, so the serialized publish throws.
     rclcpp::shutdown();
     fixture.deliver_frame(kBattery, 1u, {0x00, 0x00, 0xC0, 0x3F});
+    fixture.deliver_frame(kPower, 0u, {0x00, 0x00, 0xC0, 0x3F});
+    fixture.deliver_frame(kBattery, 2u, {0x00, 0x00, 0xC0, 0x3F});
     EXPECT_TRUE(logged_has(fixture.logged(), "battery")) << "the failure names the topic";
+    EXPECT_TRUE(logged_has(fixture.logged(), "power")) << "each topic names itself";
     const Router::Diagnostics diagnostics = fixture.router().diagnostics();
-    ASSERT_EQ(diagnostics.topics.size(), 1u);
-    EXPECT_EQ(diagnostics.topics[0].topic_id, kBattery);
-    EXPECT_EQ(diagnostics.topics[0].publish_failures, 1u) << "the failure is counted";
+    ASSERT_EQ(diagnostics.topics.size(), 2u);
+    ASSERT_EQ(diagnostics.topics[0].topic_id, kBattery);
+    ASSERT_EQ(diagnostics.topics[1].topic_id, kPower);
+    EXPECT_EQ(diagnostics.topics[0].publish_failures, 2u) << "each failure counts on its own topic";
+    EXPECT_EQ(diagnostics.topics[1].publish_failures, 1u);
     EXPECT_EQ(received.size(), 1u) << "nothing publishes after the shutdown";
 }
 

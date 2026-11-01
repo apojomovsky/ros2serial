@@ -177,7 +177,6 @@ struct Router::Impl {
             return;
         }
         routes.clear();
-        publish_failures_.clear();
         std::vector<SchedulerTopic> pacing;
         const double budget_bytes_per_sec =
             static_cast<double>(params.baud) / 10.0 * static_cast<double>(params.tx_budget_pct) / 100.0;
@@ -248,7 +247,10 @@ struct Router::Impl {
             emit(SessionLog::kWarning,
                  "topic '" + route.info.topic_name + "': failed to publish (" + error.what() + ")");
             std::lock_guard<std::mutex> guard(mutex);
-            ++publish_failures_[topic_id];
+            const auto found = routes.find(topic_id);
+            if (found != routes.end()) {
+                ++found->second.publish_failures;
+            }
             return;
         }
     }
@@ -295,10 +297,10 @@ struct Router::Impl {
         TopicInfo info;
         rclcpp::GenericPublisher::SharedPtr pub;
         rclcpp::GenericSubscription::SharedPtr sub;
+        std::size_t publish_failures = 0;
     };
 
     rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics;
-    std::map<std::uint8_t, std::size_t> publish_failures_;
     RouterParams params;
     LogSink sink;
     const Clock &clock;
@@ -402,8 +404,8 @@ Router::Diagnostics Router::diagnostics() const
         topic.status = info.status;
         topic.seq_gaps = impl_->session_.seq_gaps(info.topic_id);
         topic.dropped = impl_->scheduler_.dropped(info.topic_id);
-        const auto failures = impl_->publish_failures_.find(info.topic_id);
-        topic.publish_failures = failures == impl_->publish_failures_.end() ? 0u : failures->second;
+        const auto route = impl_->routes.find(info.topic_id);
+        topic.publish_failures = route == impl_->routes.end() ? 0u : route->second.publish_failures;
         out.topics.push_back(topic);
     }
     out.time_sync_available = impl_->session_.time_available();
