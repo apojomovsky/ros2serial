@@ -32,6 +32,7 @@ void add_topic(diagnostic_msgs::msg::DiagnosticStatus &status, const Router::Top
     add_value(status, head + " status", verdict);
     add_value(status, head + " seq gaps", std::to_string(topic.seq_gaps));
     add_value(status, head + " dropped", std::to_string(topic.dropped));
+    add_value(status, head + " publish failures", std::to_string(topic.publish_failures));
 }
 } // namespace
 

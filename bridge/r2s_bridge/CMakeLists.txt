@@ -178,6 +178,15 @@ if(BUILD_TESTING)
     sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
     std_msgs::std_msgs__rosidl_typesupport_cpp)
 
+  # A publish that fails on the ROS graph (a context shutting down under
+  # the poll loop) is logged, counted and survived, never an abort.
+  ament_add_gtest(test_router_publish_failure test/test_router_publish_failure.cpp)
+  target_include_directories(test_router_publish_failure PRIVATE ${R2S_CORE_DIR}/include)
+  target_link_libraries(test_router_publish_failure
+    r2s_bridge_component
+    r2s_bridge_test_support
+    std_msgs::std_msgs__rosidl_typesupport_cpp)
+
   # The diagnostics snapshot reports the same scripted link through the
   # router's public interface, covering the H8 values after losses and errors.
   ament_add_gtest(test_diagnostics test/test_diagnostics.cpp)
