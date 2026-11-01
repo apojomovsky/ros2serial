@@ -235,6 +235,7 @@ set(R2S_SESSION_HOST_NAMES
   time_sync
   version_mismatch
   param_walk
+  param_walk_retry
   param_set_reliable
   param_set_giveup
   param_rehandshake)
