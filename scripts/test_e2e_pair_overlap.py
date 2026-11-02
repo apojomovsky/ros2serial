@@ -39,3 +39,9 @@ def test_an_explicit_build_dir_stays_separate(monkeypatch, tmp_path):
     first, second = pair.pair_build_dir("a"), pair.pair_build_dir("b")
     assert first != second, "both pair legs share one build directory"
     assert str(tmp_path) in first and str(tmp_path) in second
+
+
+def test_the_pairs_start_from_the_repository_root(monkeypatch):
+    pair = load_pair(monkeypatch, None)
+    assert (pair.ROOT / "tests" / "e2e" / "run.sh").is_file(), pair.ROOT
+    assert (pair.ROOT / "tests" / "e2e" / "run-avr.sh").is_file(), pair.ROOT
