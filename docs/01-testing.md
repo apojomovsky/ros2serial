@@ -239,6 +239,8 @@ Each top-level tree maps to the sections that test it and the sections that cons
 
 Suites share nothing: every section that starts ROS nodes (bridge, coverage, e2e) leases its own DDS domain from one slot pool (`scripts/e2e-lease.sh`), and the e2e legs take a Zenoh router port from the same slot, so two suites on one host never see each other's topics. Slot 0 maps to the domain and port each leg always used (89 for the e2e legs, 0 for bridge and coverage), so a lone run and CI keep their domains. An explicit `R2S_E2E_DOMAIN_ID` skips allocation; `R2S_E2E_DOMAIN_BASE` shifts the pool and defaults to 89.
 
+The SCRIPTS scope runs in CI as one job per shard over the collected test node ids: shard 0 holds the e2e isolation tests on their own, and the rest spread round-robin over the other shards in sorted order (`scripts/shard_nodes.py`, selected with `pytest --shard`), so the split is deterministic and every test runs in exactly one shard. `make test SCRIPTS=1` still runs the whole scope locally unless `SCRIPTS_SHARD` names a shard.
+
 ## 8. Keeping the tests honest
 
 - **Flaky tests are bugs.** A test that fails without a code change gets an issue and is fixed at the root cause. Tests are never retried automatically, skipped or quarantined to get green (the ground rule in `AGENTS.md`).
