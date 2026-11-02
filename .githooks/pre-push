@@ -27,9 +27,9 @@ fi
 # twice. A takeoff that passed records the same stamp, so the push that
 # follows it runs nothing again. R2S_FULL=1 runs the suite unscoped instead.
 if [ "${R2S_FULL:-}" = 1 ]; then scopes="FULL=1"; else
-  # A diff that would run the full suite runs the reduced scopes instead
+  # A diff that would run the full suite runs the cheap scopes instead
   # outside CI, and the scope script says so on stderr. The stamp below
-  # keys that reduced set, so a takeoff that passed still skips this push.
+  # keys that cheap set, so a takeoff that passed still skips this push.
   scopes_err=$(mktemp "${TMPDIR:-/tmp}/r2s-scopes.XXXXXX")
   scopes=$(python3 "$root/scripts/scopes_for_diff.py" --base "$base" 2>"$scopes_err") || scopes="FULL=1"
   grep "leaving the full suite to CI" "$scopes_err" 2>/dev/null || true
