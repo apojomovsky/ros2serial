@@ -43,6 +43,9 @@ budgets="$root/tools/budgets.yaml"
 breach="$root/tools/budgets_breach_fixture.yaml"
 base_measurements=""
 base_stack=""
+# A run without a base must not reuse the previous run's base files: the
+# comment step reads them from this directory to decide whether to post.
+rm -f "$build/base-measurements.json" "$build/base-stack.json" "$build/base-budgets.yaml"
 
 # The base half: the same run judges the head numbers by the base ref's
 # script and budgets, so a pull request cannot relax its own judge. A base
@@ -80,6 +83,11 @@ if [ -n "$base_ref" ]; then
     fi
     base_measurements="$tmp/base-measurements.json"
     base_stack="$tmp/base-stack.json"
+    # The comment step runs after this script exits, when the trap has removed
+    # the temporary base checkout, so the base inputs it compares live here.
+    cp "$tmp/base-measurements.json" "$build/base-measurements.json"
+    cp "$tmp/base-stack.json" "$build/base-stack.json"
+    cp "$tmp/btools/budgets.yaml" "$build/base-budgets.yaml"
   else
     echo "budgets: $base_ref carries no budget tools; only the head judge runs" >&2
   fi

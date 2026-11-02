@@ -3,11 +3,18 @@ name: ci
 # Every job runs `make test` with a scope inside the dev image, exactly as a
 # contributor does locally. Placeholder jobs mark where each test layer lands;
 # each names the ticket that fills it in.
+#
+# The plan job maps the pull request's diff to the ci-test.sh scopes that
+# read it and exposes one output per scope. Each section job needs the plan
+# and runs only when its scope is selected; pushes to master and
+# workflow_dispatch run every job, and a FULL result runs every job. A job
+# skipped by its if still satisfies branch protection, so skipping is safe.
 
 on:
   push:
     branches: [master]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,7 +24,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The diff to the scope map. Stdlib-only, so it needs no dev image, and
+  # Actions sets GITHUB_ACTIONS so it reports the real scopes, not the
+  # cheap local ones.
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      lint: ${{ steps.scopes.outputs.lint }}
+      scripts: ${{ steps.scopes.outputs.scripts }}
+      commits: ${{ steps.scopes.outputs.commits }}
+      core: ${{ steps.scopes.outputs.core }}
+      gen: ${{ steps.scopes.outputs.gen }}
+      bridge: ${{ steps.scopes.outputs.bridge }}
+      cpp: ${{ steps.scopes.outputs.cpp }}
+      e2e: ${{ steps.scopes.outputs.e2e }}
+      coverage: ${{ steps.scopes.outputs.coverage }}
+      docs: ${{ steps.scopes.outputs.docs }}
+      examples: ${{ steps.scopes.outputs.examples }}
+      budgets: ${{ steps.scopes.outputs.budgets }}
+      fuzz: ${{ steps.scopes.outputs.fuzz }}
+      readme: ${{ steps.scopes.outputs.readme }}
+      full: ${{ steps.scopes.outputs.full }}
+    steps:
+      # Full history: the script diffs against the merge base with the base.
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - id: scopes
+        run: |
+          base="origin/${{ github.event.pull_request.base.ref }}"
+          if [ "$base" = "origin/" ]; then base="origin/master"; fi
+          python3 scripts/scopes_for_diff.py --base "$base" > scopes.env
+          cat scopes.env
+          while IFS='=' read -r key value; do
+            echo "$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')=$value" >> "$GITHUB_OUTPUT"
+          done < scopes.env
+
   lint:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.lint == '1'
     runs-on: ubuntu-24.04
     steps:
       # Full history: the spec coverage check compares the pending list with the PR's base.
@@ -31,14 +76,25 @@ jobs:
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
 
+  # The SCRIPTS scope runs as one job per shard: shard 0 holds the e2e
+  # isolation tests on their own until #337 moves them to the nightly, and
+  # the rest spread round-robin over the other shards (scripts/shard_nodes.py).
   scripts:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.scripts == '1'
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
-      - run: make test SCRIPTS=1
+      - run: make test SCRIPTS=1 SCRIPTS_SHARD=${{ matrix.shard }}
 
   core:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.core == '1'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4.2.2
@@ -46,24 +102,40 @@ jobs:
       - run: make test CORE=1
 
   gen:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.gen == '1'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test GEN=1
   cpp:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.cpp == '1'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test CPP=1
   docs:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.docs == '1'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test DOCS=1
+  readme:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.readme == '1'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test README=1
   coverage:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.coverage == '1'
     runs-on: ubuntu-24.04
     steps:
       # Full history: the gate measures the base commit in the same run.
@@ -78,6 +150,8 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
 
   e2e-avr:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.e2e == 'avr' || needs.plan.outputs.e2e == 'both'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4.2.2
@@ -86,7 +160,7 @@ jobs:
 
   # The bridge job's distro images, resolved from ci/versions.env before it
   # starts: a job's container is fixed before any step runs, so the bridge job
-  # cannot read the file itself.
+  # cannot read the file itself. Always runs: it is setup, not a section.
   bridge-images:
     runs-on: ubuntu-24.04
     outputs:
@@ -101,7 +175,8 @@ jobs:
   # own pinned image. The dev image is the jazzy one, so the local run and the
   # jazzy job share a toolchain.
   bridge:
-    needs: bridge-images
+    needs: [plan, bridge-images]
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.bridge == '1'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -119,7 +194,8 @@ jobs:
   # design names, with the Zenoh router started first on its leg. The suite
   # runs the same run.sh locally, so each leg matches `make test E2E=posix`.
   e2e-posix:
-    needs: bridge-images
+    needs: [plan, bridge-images]
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.e2e == 'posix' || needs.plan.outputs.e2e == 'both'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -144,12 +220,16 @@ jobs:
   # Placeholders. Each becomes a real job in the ticket it names, and stays
   # out of the required checks until then.
   fuzz-smoke:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.fuzz == '1'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test FUZZ=1
   build-matrix:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.examples == '1'
     runs-on: ubuntu-24.04
     continue-on-error: true
     steps:
@@ -157,6 +237,8 @@ jobs:
       - uses: ./.github/actions/dev-image
       - run: make test EXAMPLES=1
   budgets:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.budgets == '1'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -177,12 +259,38 @@ jobs:
           exit "$status"
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+      # The table is one click from the run on every push, whether or not the
+      # gate passes: an empty path means the builds failed before any table.
+      - if: always()
+        run: |
+          if [ -s budgets-table.path ]; then
+            cat "$(cat budgets-table.path)" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - if: always() && github.event_name == 'pull_request'
         # Best effort: a fork token cannot comment, and that must not fail the gate.
         continue-on-error: true
         run: |
-          if [ -s budgets-table.path ]; then
-            gh pr comment "${{ github.event.pull_request.number }}" --body-file "$(cat budgets-table.path)"
+          [ -s budgets-table.path ] || exit 0
+          table="$(cat budgets-table.path)"
+          dir="$(dirname "$table")"
+          args=(--measurements "$dir/measurements.json" --stack "$dir/stack.json"
+            --budgets tools/budgets.yaml --table "$table")
+          if [ -f "$dir/base-measurements.json" ] && [ -f "$dir/base-stack.json" ]; then
+            args+=(--base-measurements "$dir/base-measurements.json" --base-stack "$dir/base-stack.json")
+          fi
+          if [ -f "$dir/base-budgets.yaml" ]; then
+            args+=(--base-budgets "$dir/base-budgets.yaml")
+          fi
+          marker='<!-- r2s-budgets -->'
+          existing=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            --paginate -q '[.[] | select(.body | contains("'"$marker"'")) | .id] | last // empty' || true)
+          if [ -n "$existing" ]; then args+=(--has-comment 1); else args+=(--has-comment 0); fi
+          action=$(python3 scripts/budgets_comment.py "${args[@]}" --out budgets-comment.md) || exit 0
+          [ "$action" = skip ] && exit 0
+          if [ -n "$existing" ]; then
+            gh api "repos/${{ github.repository }}/issues/comments/$existing" -X PATCH -F "body=@budgets-comment.md"
+          else
+            gh pr comment "${{ github.event.pull_request.number }}" --body-file budgets-comment.md
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

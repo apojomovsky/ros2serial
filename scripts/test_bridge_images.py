@@ -123,7 +123,9 @@ def test_a_directory_as_versions_env_fails_with_a_read_error(tmp_path):
 def test_the_workflow_carries_no_image_of_its_own():
     workflow = yaml.safe_load(WORKFLOW.read_text())
     bridge = workflow["jobs"]["bridge"]
-    assert bridge["needs"] == "bridge-images"
+    needs = bridge["needs"]
+    needs = needs if isinstance(needs, list) else [needs]
+    assert "bridge-images" in needs
     assert "needs.bridge-images.outputs.matrix" in bridge["strategy"]["matrix"]
     assert "needs.bridge-images.outputs.images" in bridge["container"]["image"]
     assert "matrix.distro" in bridge["container"]["image"]

@@ -37,6 +37,7 @@ PREFIX_RULES = (
     ("scripts/coverage-filters.sh", {"COVERAGE": "1"}),
     ("scripts/build-examples.sh", {"EXAMPLES": "1", "BUDGETS": "1"}),
     ("scripts/budgets-check.sh", {"BUDGETS": "1"}),
+    ("scripts/budgets_comment.py", {"SCRIPTS": "1", "BUDGETS": "1"}),
     # The C++ layer builds core sources into its host tests.
     ("scripts/cpp-test.sh", {"CPP": "1"}),
     ("scripts/fuzz.sh", {"FUZZ": "1"}),
@@ -51,7 +52,8 @@ PREFIX_RULES = (
     ("scripts/pr_body_check.py", {"COMMITS": "1"}),
     ("scripts/pr-title-range.sh", {"COMMITS": "1"}),
     ("scripts/prose_check.py", {"COMMITS": "1"}),
-    # Any other suite script may change what a section does: run all of it.
+    # The README walkthrough check runs the Getting started commands on simavr.
+    ("scripts/check-readme.sh", {"README": "1"}),
     ("scripts/", FULL),
     # Every tool is exercised by the SCRIPTS scope; the LINT sections that
     # consume most tools always run as cheap checks.
@@ -115,6 +117,8 @@ PREFIX_RULES = (
     ("tests/e2e/", {"E2E": "both", "BRIDGE": "1"}),
     ("tests/harness/", {"E2E": "avr"}),
     ("tests/", FULL),
+    # The walkthrough check reads the README and runs its commands on simavr.
+    ("README.md", {"DOCS": "1", "README": "1"}),
     ("docs/", {"DOCS": "1"}),
 )
 
