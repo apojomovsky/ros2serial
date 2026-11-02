@@ -7,6 +7,8 @@ minutes. These tests pin the contract from the workflow files.
 
 from pathlib import Path
 
+import re
+
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,12 +36,18 @@ def test_every_job_sets_a_timeout():
     assert not missing, "jobs without timeout-minutes: " + ", ".join(missing)
 
 
+# The long fuzzing is the one job whose length is chosen, not observed:
+# its bound comes from its targets and seconds (see below).
+LONG_JOBS = {("nightly-jobs.yml", "fuzz-long")}
+
+
 def test_every_timeout_stays_within_two_hours():
     out_of_range = [
         f"{path.name}.{name}={job['timeout-minutes']}"
         for path in WORKFLOWS
         for name, job in jobs_of(path).items()
-        if "timeout-minutes" in job
+        if (path.name, name) not in LONG_JOBS
+        and "timeout-minutes" in job
         and not (isinstance(job["timeout-minutes"], (int, float)) and job["timeout-minutes"] <= 120)
     ]
     assert not out_of_range, "timeout-minutes above 120: " + ", ".join(out_of_range)
@@ -64,3 +72,20 @@ def test_jobs_that_build_nothing_stay_at_five():
     for file_name, job_name in NO_BUILD_JOBS:
         job = jobs_of(next(p for p in WORKFLOWS if p.name == file_name))[job_name]
         assert job.get("timeout-minutes") == 5, f"{file_name}.{job_name} should stay at 5"
+
+
+def fuzz_targets():
+    script = (ROOT / "scripts" / "fuzz.sh").read_text(encoding="utf-8")
+    match = re.search(r"targets=\(\$\{TARGET:-([^}]*)\}\)", script)
+    assert match, "fuzz.sh no longer lists its default targets"
+    return match.group(1).split()
+
+
+def test_fuzz_long_outlasts_its_targets_plus_the_image_floor():
+    job = jobs_of(ROOT / ".github" / "workflows" / "nightly-jobs.yml")["fuzz-long"]
+    seconds = [
+        int(step["env"]["R2S_FUZZ_SECONDS"]) for step in job["steps"] if "R2S_FUZZ_SECONDS" in step.get("env", {})
+    ]
+    assert len(seconds) == 1
+    need = len(fuzz_targets()) * seconds[0] // 60 + 30
+    assert job["timeout-minutes"] >= need, f"fuzz-long needs {need} minutes, has {job['timeout-minutes']}"
