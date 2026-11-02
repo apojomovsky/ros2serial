@@ -1,7 +1,9 @@
 """Scenario 3: the host publishes Twist and the MCU echoes it back.
 
 Five distinct Twists go out on cmd_vel; the firmware republishes each on
-echo_vel, and every echoed field matches what was sent.
+echo_vel, and every echoed field matches what was sent. The handshake is
+observed on bridge state and discovery waits on its own generous timeout,
+so a slow runner cannot fail a correct echo path on the priming budget.
 """
 
 import os
@@ -12,6 +14,7 @@ from pathlib import Path
 
 import launch_testing.markers
 import rclpy
+from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
 from e2e_support import checks, firmware, teardown
 from e2e_support.relay import PtyRelay
@@ -22,6 +25,11 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 ECHO_COUNT = 5
 FLOW_TIMEOUT = 20.0
+# The bridge reports announced names without the graph's leading slash.
+HANDSHAKE_TOPICS = ["battery", "cmd_vel", "echo_vel", "log_text", "time_now"]
+TOPIC_BUDGET = 3.0
+# Both directions of the echo path, as the graph names them.
+ECHO_TOPICS = ["/cmd_vel", "/echo_vel"]
 
 _SCRATCH = None
 _FIRMWARE = None
@@ -106,7 +114,34 @@ class TestScenario3(unittest.TestCase):
         node = rclpy.create_node("e2e_s3_probe")
         try:
             bridge_support.wait_for_bridge(node)
+            # Matched before the firmware boots, so the handshake wait below
+            # observes bridge state, not DDS discovery of the new topics.
+            received = []
+            node.create_subscription(DiagnosticArray, "/diagnostics", received.append, 10)
+            deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
+            while not received:
+                rclpy.spin_once(node, timeout_sec=0.5)
+                self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
+            received.clear()
             _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
+            # /diagnostics publishes at 1 Hz, so the observed time can lag the
+            # real handshake by one period; the bound still holds because the
+            # handshake traffic itself is tens of milliseconds.
+            while True:
+                rclpy.spin_once(node, timeout_sec=0.5)
+                missing = checks.handshake_missing(received[-1], HANDSHAKE_TOPICS) if received else ["link silent"]
+                took = time.monotonic() - _SPAWNED.ready_at
+                if not missing:
+                    break
+                self.assertLess(took, TOPIC_BUDGET, f"handshake still missing {missing} after {took:.1f} s")
+            self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
+            # The echo path needs both directions matched: the bridge's
+            # endpoints appear on the graph once the handshake above completes,
+            # so this waits out DDS discovery instead of spending the priming
+            # budget on it.
+            bridge_support.wait_for_topics(
+                node, ECHO_TOPICS, _SPAWNED.ready_at, checks.DISCOVERY_TIMEOUT, "echo topics"
+            )
             # The bridge forwards MCU traffic best effort in both directions,
             # so both ends of the probe match that; reliable ends never match.
             best_effort = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)

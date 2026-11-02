@@ -2,7 +2,9 @@
 
 Five distinct Twists go out on cmd_vel; the firmware republishes each on
 echo_vel, and every echoed field matches what was sent within the float32
-round trip the 8-bit MCU keeps.
+round trip the 8-bit MCU keeps. Discovery of the echo topics waits on its
+own budget, so a slow runner cannot fail a correct echo path on the
+priming budget.
 """
 
 import os
@@ -25,6 +27,9 @@ FLOW_TIMEOUT = 20.0
 # The MCU holds float32: the widest relative error the round trip keeps.
 REL_TOL = 1e-6
 ABS_TOL = 1e-9
+# Both directions of the echo path, as the graph names them.
+ECHO_TOPICS = ["/cmd_vel", "/echo_vel"]
+TOPIC_BUDGET = 3.0
 
 _SCRATCH = None
 _SPAWNED = None
@@ -101,6 +106,12 @@ class TestScenario3(unittest.TestCase):
         node = rclpy.create_node("e2e_s3_avr_probe")
         try:
             bridge_support.wait_for_bridge(node)
+            # The boot HELLO predates the bridge, so the budget runs from
+            # bridge-up, when the parameter service answers. The graph shows
+            # the echo topics once the handshake completes, so this waits out
+            # DDS discovery instead of spending the priming budget on it.
+            _SPAWNED.ready_at = time.monotonic()
+            bridge_support.wait_for_topics(node, ECHO_TOPICS, _SPAWNED.ready_at, TOPIC_BUDGET, "echo topics")
             # The bridge forwards MCU traffic best effort in both directions,
             # so both ends of the probe match that; reliable ends never match.
             best_effort = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
