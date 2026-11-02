@@ -75,7 +75,8 @@ for sketch in examples/arduino_minimal/arduino_minimal.ino examples/arduino_xmac
   fi
 done
 cmake -S examples/cmake_minimal -B "$build/cmake_minimal" \
-  --toolchain "$root/examples/cmake_minimal/avr-toolchain.cmake" || status=1
+  --toolchain "$root/examples/cmake_minimal/avr-toolchain.cmake" \
+  -DCMAKE_C_FLAGS="-fstack-usage" || status=1
 cmake --build "$build/cmake_minimal" || status=1
 if [ "$status" -eq 0 ]; then
   avr-size "$build/cmake_minimal/hello_cmake" || status=1
@@ -140,9 +141,9 @@ elf_has_symbol() {
 for board in uno mega; do
   out="$build/arduino_minimal/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" \
-    --build-property "compiler.c.extra_flags=$extras" \
-    --build-property "compiler.cpp.extra_flags=$extras" \
-    --library "$stage" --output-dir "$out" examples/arduino_minimal || status=1
+    --build-property "compiler.c.extra_flags=$extras -fstack-usage" \
+    --build-property "compiler.cpp.extra_flags=$extras -fstack-usage" \
+    --library "$stage" --build-path "$out/build" --output-dir "$out" examples/arduino_minimal || status=1
   # The subscriber records prove the codec flag reached the core. The
   # runtime path has no generated receive buffer like the static one, but
   # the records are only reachable through the dispatch hook, and the
@@ -190,8 +191,9 @@ case "$xextras" in
 esac
 for board in uno mega; do
   out="$build/arduino_xmacro/$board"
-  arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$xextras" \
-    --library "$xstage" --output-dir "$out" examples/arduino_xmacro || status=1
+  arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$xextras -fstack-usage" \
+    --build-property "compiler.cpp.extra_flags=$xextras -fstack-usage" \
+    --library "$xstage" --build-path "$out/build" --output-dir "$out" examples/arduino_xmacro || status=1
   if ! elf_has_symbol "$out/arduino_xmacro.ino.elf" r2s_rx_buf; then
     echo "arduino_xmacro ($board): the firmware links no receive buffer" >&2
     status=1
@@ -203,5 +205,144 @@ for board in uno mega; do
     fi
   done
 done
+
+# The static C++ sketch builds against the same bundled library: the rows
+# expand to the global objects through the static header, so one publisher
+# and one subscription link the receive buffer while the runtime registry
+# stays out: a static firmware links no runtime topic table.
+sstage="$build/arduino_static"
+rm -rf "$sstage"
+mkdir -p "$sstage/src/r2s" || status=1
+PYTHONPATH="$root/gen" python3 -m r2s_gen.cli bundle --distro jazzy --out "$sstage" || exit 1
+cp core/include/r2s/*.h "$sstage/src/r2s/" || status=1
+cp core/src/*.c "$sstage/src/" || status=1
+rm -f "$sstage/src/test_reset.c"
+cp ports/arduino/r2s_arduino_port.cpp ports/arduino/r2s_arduino_port.h "$sstage/src/" || status=1
+sextras=$(PYTHONPATH="$root/gen" python3 - "$sstage/src/r2s_bundled.h" <<'EOF'
+import sys
+
+from r2s_gen import layouts
+from r2s_gen.msgs import MessageError
+
+try:
+    defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
+except (MessageError, OSError) as error:
+    print(f"r2s-gen: error: {error}", file=sys.stderr)
+    raise SystemExit(1)
+print(" ".join("-D" + define for define in defines))
+EOF
+) || exit 1
+case "$sextras" in
+    *R2S_WITH_CODEC*R2S_MAX_FRAME=[0-9]*R2S_MAX_NEST=[0-9]*) ;;
+    *)
+        echo "build-examples: the extracted bundle flags name no limits ($sextras)" >&2
+        exit 1
+        ;;
+esac
+for board in uno mega; do
+  out="$build/arduino_static/$board"
+  arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$sextras" \
+    --build-property "compiler.cpp.extra_flags=$sextras" \
+    --library "$sstage" --build-path "$out/build" --output-dir "$out" examples/arduino_static || status=1
+  if ! elf_has_symbol "$out/arduino_static.ino.elf" r2s_rx_buf; then
+    echo "arduino_static ($board): the firmware links no receive buffer" >&2
+    status=1
+  fi
+  if elf_has_symbol "$out/arduino_static.ino.elf" r2s_runtime_topics; then
+    echo "arduino_static ($board): the firmware links the runtime topic table" >&2
+    status=1
+  fi
+  for unused in sensor_msgs_Imu geometry_msgs_Quaternion std_msgs_Header; do
+    if elf_has_symbol "$out/arduino_static.ino.elf" "r2s_bundled_table_$unused"; then
+      echo "arduino_static ($board): the linker kept the unused $unused table" >&2
+      status=1
+    fi
+  done
+done
+# The C X-macro sketch builds against the same bundled library: its rows
+# spell the generated C struct names, so a pure-C translation unit expands
+# the table, the publish functions and the dispatch, with the same receive
+# buffer checks as the C++ lists and no runtime topic table.
+cstage="$build/arduino_xmacro_c"
+rm -rf "$cstage"
+mkdir -p "$cstage/src/r2s" || status=1
+PYTHONPATH="$root/gen" python3 -m r2s_gen.cli bundle --distro jazzy --out "$cstage" || exit 1
+cp core/include/r2s/*.h "$cstage/src/r2s/" || status=1
+cp core/src/*.c "$cstage/src/" || status=1
+rm -f "$cstage/src/test_reset.c"
+cp ports/arduino/r2s_arduino_port.cpp ports/arduino/r2s_arduino_port.h "$cstage/src/" || status=1
+cextras=$(PYTHONPATH="$root/gen" python3 - "$cstage/src/r2s_bundled.h" <<'EOF'
+import sys
+
+from r2s_gen import layouts
+from r2s_gen.msgs import MessageError
+
+try:
+    defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
+except (MessageError, OSError) as error:
+    print(f"r2s-gen: error: {error}", file=sys.stderr)
+    raise SystemExit(1)
+print(" ".join("-D" + define for define in defines))
+EOF
+) || exit 1
+case "$cextras" in
+    *R2S_WITH_CODEC*R2S_MAX_FRAME=[0-9]*R2S_MAX_NEST=[0-9]*) ;;
+    *)
+        echo "build-examples: the extracted bundle flags name no limits ($cextras)" >&2
+        exit 1
+        ;;
+esac
+for board in uno mega; do
+  out="$build/arduino_xmacro_c/$board"
+  arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$cextras" \
+    --library "$cstage" --build-path "$out/build" --output-dir "$out" examples/arduino_xmacro_c || status=1
+  if ! elf_has_symbol "$out/arduino_xmacro_c.ino.elf" r2s_rx_buf; then
+    echo "arduino_xmacro_c ($board): the firmware links no receive buffer" >&2
+    status=1
+  fi
+  if elf_has_symbol "$out/arduino_xmacro_c.ino.elf" r2s_runtime_topics; then
+    echo "arduino_xmacro_c ($board): the firmware links the runtime topic table" >&2
+    status=1
+  fi
+  for unused in sensor_msgs_Imu geometry_msgs_Quaternion std_msgs_Header; do
+    if elf_has_symbol "$out/arduino_xmacro_c.ino.elf" "r2s_bundled_table_$unused"; then
+      echo "arduino_xmacro_c ($board): the linker kept the unused $unused table" >&2
+      status=1
+    fi
+  done
+done
+
+# The stack budgets need .su files, which avr-gcc does not write under the
+# shipped link-time optimized flags, so the budget gate rebuilds each sketch
+# without LTO under stack/. Same sources and defines, only the optimizer
+# differs, and the deeper non-LTO paths overestimate rather than hide.
+if [ -n "${R2S_STACK_BUILD:-}" ]; then
+  for sketch in arduino_minimal arduino_xmacro arduino_static arduino_xmacro_c; do
+    if [ "$sketch" = arduino_minimal ]; then
+      sstage_lib=$stage
+      sflags=$extras
+    elif [ "$sketch" = arduino_xmacro ]; then
+      sstage_lib=$xstage
+      sflags=$xextras
+    elif [ "$sketch" = arduino_xmacro_c ]; then
+      sstage_lib=$cstage
+      sflags=$cextras
+    else
+      sstage_lib=$sstage
+      sflags=$sextras
+    fi
+    for board in uno mega; do
+      sout="$build/stack/$sketch/$board"
+      arduino-cli compile --fqbn "arduino:avr:$board" \
+        --build-property "compiler.c.extra_flags=$sflags -fno-lto -fstack-usage" \
+        --build-property "compiler.cpp.extra_flags=$sflags -fno-lto -fstack-usage" \
+        --build-property "compiler.c.elf.extra_flags=-fno-lto" \
+        --library "$sstage_lib" --build-path "$sout" "examples/$sketch" || status=1
+    done
+  done
+fi
+# The example timing tests drive each loop on the host against a scripted
+# tick: resync for the examples, catch-up for the slice. No DDS is involved.
+bash "$root/examples/tests/run.sh" || status=1
 
 exit "$status"

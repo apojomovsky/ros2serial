@@ -35,7 +35,8 @@ PREFIX_RULES = (
     ("scripts/bridge-test.sh", {"BRIDGE": "1"}),
     ("scripts/coverage-gate.sh", {"COVERAGE": "1"}),
     ("scripts/coverage-filters.sh", {"COVERAGE": "1"}),
-    ("scripts/build-examples.sh", {"EXAMPLES": "1"}),
+    ("scripts/build-examples.sh", {"EXAMPLES": "1", "BUDGETS": "1"}),
+    ("scripts/budgets-check.sh", {"BUDGETS": "1"}),
     # The C++ layer builds core sources into its host tests.
     ("scripts/cpp-test.sh", {"CPP": "1"}),
     ("scripts/fuzz.sh", {"FUZZ": "1"}),
@@ -58,6 +59,9 @@ PREFIX_RULES = (
     ("tools/snippets_check.py", {"SCRIPTS": "1", "DOCS": "1"}),
     ("tools/coverage_gate.py", {"SCRIPTS": "1", "COVERAGE": "1"}),
     ("tools/fuzz_corpus.py", {"SCRIPTS": "1", "FUZZ": "1"}),
+    ("tools/budgets", {"SCRIPTS": "1", "BUDGETS": "1"}),
+    ("tools/size_report.py", {"SCRIPTS": "1", "BUDGETS": "1"}),
+    ("tools/stack_report.py", {"SCRIPTS": "1", "BUDGETS": "1"}),
     ("tools/", {"SCRIPTS": "1"}),
     # Core is built by CORE, measured by COVERAGE, linked by FUZZ and the
     # examples, compiled into the GEN host library, the DOCS snippets, the
@@ -118,6 +122,15 @@ PREFIX_RULES = (
 )
 
 
+def _merge(found, scopes):
+    for scope, value in scopes.items():
+        if scope == "E2E" and found.get("E2E") not in (None, value):
+            found["E2E"] = "both"
+        else:
+            found[scope] = value
+    return found
+
+
 def scopes_for_paths(paths):
     found = dict(CHEAP)
     for path in paths:
@@ -126,11 +139,7 @@ def scopes_for_paths(paths):
         scopes = _scopes_for_path(path.strip())
         if scopes is FULL:
             return dict(FULL)
-        for scope, value in scopes.items():
-            if scope == "E2E" and found.get("E2E") not in (None, value):
-                found["E2E"] = "both"
-            else:
-                found[scope] = value
+        _merge(found, scopes)
     return found
 
 
@@ -169,15 +178,26 @@ def main(argv=None):
     if os.environ.get("R2S_FULL") == "1":
         print("FULL=1")
         return 0
-    try:
-        paths = changed_paths(args.base)
-    except (RuntimeError, IndexError) as exc:
-        print(f"scopes_for_diff: {exc}; running the full suite", file=sys.stderr)
-        print("FULL=1")
+    if os.environ.get("GITHUB_ACTIONS"):
+        try:
+            paths = changed_paths(args.base)
+        except (RuntimeError, IndexError) as exc:
+            print(f"scopes_for_diff: {exc}; running the full suite", file=sys.stderr)
+            print("FULL=1")
+            return 0
+        result = scopes_for_paths(paths)
+        for scope in sorted(result):
+            print(f"{scope}={result[scope]}")
         return 0
-    result = scopes_for_paths(paths)
-    for scope in sorted(result):
-        print(f"{scope}={result[scope]}")
+    # Every local diff runs the cheap scopes: the workstation gate stays
+    # fast, and CI runs the mapped scopes on the merge with the base.
+    for scope in sorted(CHEAP):
+        print(f"{scope}={CHEAP[scope]}")
+    print(
+        "scopes_for_diff: this run covers the cheap scopes,",
+        "leaving the full suite to CI",
+        file=sys.stderr,
+    )
     return 0
 
 

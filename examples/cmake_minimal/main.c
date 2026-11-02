@@ -88,33 +88,50 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
     s_cmd_vel_count++;
 }
 
+static uint32_t s_last_pub;
+static uint32_t s_sent;
+
+/* One loop step, broken out so the host test drives it directly. */
+void loop_once(void);
+
+/* An example publishes a fresh reading, so a missed interval is dropped,
+ * not replayed: the deadline moves one period per publish and resyncs to
+ * now when more than one period late, and the offline branch resets it
+ * the same way. A stall then skips its frames instead of bursting them;
+ * the posix test firmware owes every tick, which its count needs. */
+void loop_once(void)
+{
+    uint32_t now;
+
+    r2s_spin_some();
+    now = r2s_port_tick();
+    if (r2s_connected() == 0u) {
+        s_last_pub = now;
+        return;
+    }
+    if ((uint32_t)(now - s_last_pub) >= 100u) {
+        std_msgs__msg__Float32 msg;
+
+        msg.data = (float)s_sent;
+        if (r2s_publish_battery(&msg) == R2S_OK) {
+            s_sent++;
+            s_last_pub += 100u;
+            if ((uint32_t)(now - s_last_pub) >= 100u) {
+                s_last_pub = now;
+            }
+        }
+    }
+}
+
 int main(void)
 {
-    uint32_t last_pub;
-    uint32_t sent = 0u;
-
     hardware_init();
     if (r2s_session_configure("hello_cmake", r2s_topics, R2S_TOPIC_COUNT) != R2S_OK) {
         return 1;
     }
     r2s_init();
-    last_pub = r2s_port_tick();
+    s_last_pub = r2s_port_tick();
     for (;;) {
-        uint32_t now;
-
-        r2s_spin_some();
-        now = r2s_port_tick();
-        if (r2s_connected() == 0u) {
-            continue;
-        }
-        if ((uint32_t)(now - last_pub) >= 100u) {
-            std_msgs__msg__Float32 msg;
-
-            msg.data = (float)sent;
-            if (r2s_publish_battery(&msg) == R2S_OK) {
-                sent++;
-                last_pub = now;
-            }
-        }
+        loop_once();
     }
 }
