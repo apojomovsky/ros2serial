@@ -140,14 +140,34 @@ def fixture_repo(path):
     return repo
 
 
+STRIPPED_SCOPES = (
+    "LINT",
+    "SCRIPTS",
+    "COMMITS",
+    "CORE",
+    "GEN",
+    "BRIDGE",
+    "CPP",
+    "E2E",
+    "COVERAGE",
+    "DOCS",
+    "EXAMPLES",
+    "BUDGETS",
+    "FUZZ",
+    "README",
+    "NIGHTLY",
+    "FULL",
+    "R2S_FULL",
+    "SCRIPTS_SHARD",
+)
+
+
 def run_check(repo, out_file, **env):
     recorder = out_file.parent / "recorder.sh"
     recorder.write_text(f'#!/usr/bin/env bash\nenv | sort > "{out_file}"\n')
     recorder.chmod(0o755)
-    clean = {k: v for k, v in os.environ.items() if k not in ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN")}
-    clean.update({k: v for k, v in os.environ.items() if k not in ("BRIDGE", "CPP", "E2E", "COVERAGE", "DOCS")})
-    clean.update({k: v for k, v in os.environ.items() if k not in ("EXAMPLES", "BUDGETS", "FUZZ", "README")})
-    clean.update({k: v for k, v in os.environ.items() if k not in ("NIGHTLY", "FULL", "R2S_FULL", "SCRIPTS_SHARD")})
+    # One pass: the runner's own scopes must not leak in as caller scopes.
+    clean = {k: v for k, v in os.environ.items() if k not in STRIPPED_SCOPES}
     clean.update({"PATH": os.environ["PATH"], "BASE": "origin/master", "R2S_SUITE": str(recorder), **env})
     result = subprocess.run(
         ["bash", str(ROOT / "scripts/check.sh")], cwd=repo, capture_output=True, text=True, env=clean
