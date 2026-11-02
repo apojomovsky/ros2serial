@@ -75,7 +75,8 @@ for sketch in examples/arduino_minimal/arduino_minimal.ino examples/arduino_xmac
   fi
 done
 cmake -S examples/cmake_minimal -B "$build/cmake_minimal" \
-  --toolchain "$root/examples/cmake_minimal/avr-toolchain.cmake" || status=1
+  --toolchain "$root/examples/cmake_minimal/avr-toolchain.cmake" \
+  -DCMAKE_C_FLAGS="-fstack-usage" || status=1
 cmake --build "$build/cmake_minimal" || status=1
 if [ "$status" -eq 0 ]; then
   avr-size "$build/cmake_minimal/hello_cmake" || status=1
@@ -140,9 +141,9 @@ elf_has_symbol() {
 for board in uno mega; do
   out="$build/arduino_minimal/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" \
-    --build-property "compiler.c.extra_flags=$extras" \
-    --build-property "compiler.cpp.extra_flags=$extras" \
-    --library "$stage" --output-dir "$out" examples/arduino_minimal || status=1
+    --build-property "compiler.c.extra_flags=$extras -fstack-usage" \
+    --build-property "compiler.cpp.extra_flags=$extras -fstack-usage" \
+    --library "$stage" --build-path "$out/build" --output-dir "$out" examples/arduino_minimal || status=1
   # The subscriber records prove the codec flag reached the core. The
   # runtime path has no generated receive buffer like the static one, but
   # the records are only reachable through the dispatch hook, and the
@@ -190,8 +191,9 @@ case "$xextras" in
 esac
 for board in uno mega; do
   out="$build/arduino_xmacro/$board"
-  arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$xextras" \
-    --library "$xstage" --output-dir "$out" examples/arduino_xmacro || status=1
+  arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$xextras -fstack-usage" \
+    --build-property "compiler.cpp.extra_flags=$xextras -fstack-usage" \
+    --library "$xstage" --build-path "$out/build" --output-dir "$out" examples/arduino_xmacro || status=1
   if ! elf_has_symbol "$out/arduino_xmacro.ino.elf" r2s_rx_buf; then
     echo "arduino_xmacro ($board): the firmware links no receive buffer" >&2
     status=1
@@ -240,7 +242,8 @@ esac
 for board in uno mega; do
   out="$build/arduino_static/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$sextras" \
-    --library "$sstage" --output-dir "$out" examples/arduino_static || status=1
+    --build-property "compiler.cpp.extra_flags=$sextras" \
+    --library "$sstage" --build-path "$out/build" --output-dir "$out" examples/arduino_static || status=1
   if ! elf_has_symbol "$out/arduino_static.ino.elf" r2s_rx_buf; then
     echo "arduino_static ($board): the firmware links no receive buffer" >&2
     status=1
@@ -292,7 +295,7 @@ esac
 for board in uno mega; do
   out="$build/arduino_xmacro_c/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$cextras" \
-    --library "$cstage" --output-dir "$out" examples/arduino_xmacro_c || status=1
+    --library "$cstage" --build-path "$out/build" --output-dir "$out" examples/arduino_xmacro_c || status=1
   if ! elf_has_symbol "$out/arduino_xmacro_c.ino.elf" r2s_rx_buf; then
     echo "arduino_xmacro_c ($board): the firmware links no receive buffer" >&2
     status=1
@@ -309,6 +312,35 @@ for board in uno mega; do
   done
 done
 
+# The stack budgets need .su files, which avr-gcc does not write under the
+# shipped link-time optimized flags, so the budget gate rebuilds each sketch
+# without LTO under stack/. Same sources and defines, only the optimizer
+# differs, and the deeper non-LTO paths overestimate rather than hide.
+if [ -n "${R2S_STACK_BUILD:-}" ]; then
+  for sketch in arduino_minimal arduino_xmacro arduino_static arduino_xmacro_c; do
+    if [ "$sketch" = arduino_minimal ]; then
+      sstage_lib=$stage
+      sflags=$extras
+    elif [ "$sketch" = arduino_xmacro ]; then
+      sstage_lib=$xstage
+      sflags=$xextras
+    elif [ "$sketch" = arduino_xmacro_c ]; then
+      sstage_lib=$cstage
+      sflags=$cextras
+    else
+      sstage_lib=$sstage
+      sflags=$sextras
+    fi
+    for board in uno mega; do
+      sout="$build/stack/$sketch/$board"
+      arduino-cli compile --fqbn "arduino:avr:$board" \
+        --build-property "compiler.c.extra_flags=$sflags -fno-lto -fstack-usage" \
+        --build-property "compiler.cpp.extra_flags=$sflags -fno-lto -fstack-usage" \
+        --build-property "compiler.c.elf.extra_flags=-fno-lto" \
+        --library "$sstage_lib" --build-path "$sout" "examples/$sketch" || status=1
+    done
+  done
+fi
 # The example timing tests drive each loop on the host against a scripted
 # tick: resync for the examples, catch-up for the slice. No DDS is involved.
 bash "$root/examples/tests/run.sh" || status=1

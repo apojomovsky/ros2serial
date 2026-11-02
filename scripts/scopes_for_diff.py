@@ -35,7 +35,8 @@ PREFIX_RULES = (
     ("scripts/bridge-test.sh", {"BRIDGE": "1"}),
     ("scripts/coverage-gate.sh", {"COVERAGE": "1"}),
     ("scripts/coverage-filters.sh", {"COVERAGE": "1"}),
-    ("scripts/build-examples.sh", {"EXAMPLES": "1"}),
+    ("scripts/build-examples.sh", {"EXAMPLES": "1", "BUDGETS": "1"}),
+    ("scripts/budgets-check.sh", {"BUDGETS": "1"}),
     # The C++ layer builds core sources into its host tests.
     ("scripts/cpp-test.sh", {"CPP": "1"}),
     ("scripts/fuzz.sh", {"FUZZ": "1"}),
@@ -57,6 +58,9 @@ PREFIX_RULES = (
     ("tools/snippets_check.py", {"SCRIPTS": "1", "DOCS": "1"}),
     ("tools/coverage_gate.py", {"SCRIPTS": "1", "COVERAGE": "1"}),
     ("tools/fuzz_corpus.py", {"SCRIPTS": "1", "FUZZ": "1"}),
+    ("tools/budgets", {"SCRIPTS": "1", "BUDGETS": "1"}),
+    ("tools/size_report.py", {"SCRIPTS": "1", "BUDGETS": "1"}),
+    ("tools/stack_report.py", {"SCRIPTS": "1", "BUDGETS": "1"}),
     ("tools/", {"SCRIPTS": "1"}),
     # Core is built by CORE, measured by COVERAGE, linked by FUZZ and the
     # examples, compiled into the GEN host library, the DOCS snippets, the
