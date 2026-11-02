@@ -227,15 +227,15 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 | --- | --- | --- |
 | While editing | `make test CORE=1` (or the component being changed) | Seconds |
 | `pre-commit` hook | Format, warnings, unit tests of the touched component | Under 30 s |
-| `pre-push` hook | The suite scopes the diff touches (`scripts/scopes_for_diff.py`), plus the cheap checks, skipped when the stamp shows this tree already passed; a diff that would run the full suite runs only the cheap scopes instead and leaves the full suite to CI | Scoped, minutes |
-| Takeoff (`make pre-pr-check TEST=1`) | The same scoped run, cheap scopes only like the hook when the diff would run the full suite, recording the stamp the push checks; `R2S_FULL=1` runs the full suite | Scoped, minutes |
+| `pre-push` hook | The cheap checks locally, leaving the suite to CI; skipped when the stamp shows this tree already passed | Cheap, minutes |
+| Takeoff (`make pre-pr-check TEST=1`) | The same cheap run as the hook, recording the stamp the push checks; scopes named on the command line and `R2S_FULL=1` still run locally | Cheap, minutes |
 | Every PR | Unit, component, contract, integration on posix, simavr scenarios, fuzz smoke (60 s per target), sanitizers, coverage, spec coverage, budgets, build matrix, golden, docs snippets | Under 15 min wall clock, in parallel jobs |
 | Nightly | Long fuzzing (30 min per target), mutation testing, extended property and model-based runs, long fault injection, soak (2 h), big-endian, Rolling | Hours |
 | Release | Everything above, the hardware checklist on a Uno and a Mega, the full distro and RMW matrix, frozen-vector check | |
 
 When the PR suite exceeds its budget, the slowest tests are made faster or moved down a level; the budget is not raised without the maintainer's approval.
 
-The local gate runs what the diff touches: each top-level tree maps to the sections that test it and the sections that consume it, and the cheap checks always run. Changes to the gate machinery itself, and paths the mapping does not know, would run the full suite: unknown means full, never less. Outside CI those diffs run only the cheap scopes instead, with one line saying the full suite is left to CI. Scopes named on the command line still run, and `R2S_FULL=1` still runs everything locally. CI is where the suite runs: it still runs everything on the merge with master, and a PR merges only on green CI.
+Each top-level tree maps to the sections that test it and the sections that consume it (`scripts/scopes_for_diff.py`), and the cheap checks always run. Changes to the gate machinery itself, and paths the mapping does not know, map to the full suite: unknown means full, never less. Outside CI every diff runs only the cheap scopes instead, with one line saying the full suite is left to CI. Scopes named on the command line still run, and `R2S_FULL=1` still runs everything locally. CI is where the suite runs: it still runs everything on the merge with master, and a PR merges only on green CI.
 
 ## 8. Keeping the tests honest
 
