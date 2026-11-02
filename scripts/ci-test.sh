@@ -3,6 +3,7 @@
 # Scope with one or more of LINT=1 SCRIPTS=1 COMMITS=1 CORE=1 GEN=1 BRIDGE=1
 # CPP=1 E2E=<backend> COVERAGE=1 DOCS=1 EXAMPLES=1 BUDGETS=1 FUZZ=1 README=1; no scope runs everything.
 # E2E takes posix, avr, or both; both runs each backend once in one scope.
+# SCRIPTS_SHARD=N runs one CI shard of the SCRIPTS scope; unset runs it whole.
 # COMMITS checks COMMIT_RANGE (default origin/master..HEAD) and PR_TITLE when set,
 # then runs the prose gate on the same range. Exits non-zero if any section fails.
 set -uo pipefail
@@ -14,6 +15,12 @@ cd "$root" || exit 2
 # TEST goes here and not further down: the script tests call the ritual, and a
 # ritual that sees TEST=1 runs the suite again, so the pair would fork.
 unset TEST
+
+# SCRIPTS_SHARD is consumed here too: the section reads the copy below, and
+# the inherited variable is unset so nested suite runs the script tests start
+# select only what their own caller sets.
+scripts_shard=${SCRIPTS_SHARD:-}
+unset SCRIPTS_SHARD
 
 # One suite at a time per tree. A second run would wait on the same lock and
 # then test a tree the first run had already changed, so it says so and stops
@@ -125,8 +132,17 @@ if wants COMMITS; then scope_now=COMMITS
   section commits check_commits
   section prose check_prose
 fi
+scripts_tests() {
+  # scripts_shard selects one CI shard (0 to N-1) of the collected node ids;
+  # empty runs the whole scope, exactly as before.
+  if [ -n "$scripts_shard" ]; then
+    python3 -m pytest scripts tools --shard="$scripts_shard"
+  else
+    python3 -m pytest scripts tools
+  fi
+}
 if wants SCRIPTS; then scope_now=SCRIPTS
-  section scripts-tests python3 -m pytest scripts tools
+  section scripts-tests scripts_tests
 fi
 if wants CORE; then scope_now=CORE; section core bash scripts/core-test.sh; fi
 gen_tests() {

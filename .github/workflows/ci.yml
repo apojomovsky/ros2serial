@@ -31,12 +31,19 @@ jobs:
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
 
+  # The SCRIPTS scope runs as one job per shard: shard 0 holds the e2e
+  # isolation tests on their own until #337 moves them to the nightly, and
+  # the rest spread round-robin over the other shards (scripts/shard_nodes.py).
   scripts:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
-      - run: make test SCRIPTS=1
+      - run: make test SCRIPTS=1 SCRIPTS_SHARD=${{ matrix.shard }}
 
   core:
     runs-on: ubuntu-24.04

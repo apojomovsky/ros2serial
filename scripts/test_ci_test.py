@@ -50,6 +50,7 @@ SCOPES = (
     "BUDGETS",
     "FUZZ",
     "README",
+    "SCRIPTS_SHARD",
 )
 
 
