@@ -11,6 +11,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+CI = ROOT / ".github" / "workflows" / "ci.yml"
 JOBS = ROOT / ".github" / "workflows" / "nightly-jobs.yml"
 NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
 RELEASE = ROOT / ".github" / "workflows" / "release.yml"
@@ -50,6 +51,35 @@ def test_the_scheduled_nightly_keeps_the_long_fuzzing():
 
 def test_the_reusable_workflow_holds_fuzzing_and_the_isolation_pairs():
     assert set(workflow(JOBS)["jobs"]) == {"fuzz-long", "e2e-isolation"}
+
+
+def ci_nightly_call():
+    calls = {name: job for name, job in workflow(CI)["jobs"].items() if "nightly-jobs.yml" in str(job.get("uses", ""))}
+    assert len(calls) == 1, f"ci.yml should call nightly-jobs.yml once: {sorted(calls)}"
+    return next(iter(calls.values()))
+
+
+def test_pr_ci_runs_the_reusable_nightly_jobs_when_the_plan_selects_nightly():
+    job = ci_nightly_call()
+    needs = job["needs"] if isinstance(job["needs"], list) else [job["needs"]]
+    assert "plan" in needs
+    condition = str(job.get("if", ""))
+    assert "github.event_name" in condition
+    assert "needs.plan.outputs.full" in condition
+    assert "needs.plan.outputs.nightly" in condition
+
+
+def test_pr_ci_leaves_out_the_long_fuzzing_unless_fuzz_is_selected():
+    job = ci_nightly_call()
+    assert "timeout-minutes" not in job
+    fuzz = (job.get("with") or {}).get("fuzz")
+    assert "needs.plan.outputs.fuzz" in str(fuzz)
+
+
+def test_the_release_call_skips_the_long_fuzzing():
+    calls = [job for job in workflow(RELEASE)["jobs"].values() if "nightly-jobs.yml" in str(job.get("uses", ""))]
+    assert len(calls) == 1
+    assert (calls[0].get("with") or {}).get("fuzz") is False
 
 
 def test_fuzz_long_keeps_its_half_hour_per_target():

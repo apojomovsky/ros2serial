@@ -36,6 +36,7 @@ OUTPUTS = (
     "examples",
     "budgets",
     "fuzz",
+    "nightly",
     "readme",
     "full",
 )
@@ -55,6 +56,7 @@ SECTION_SCOPE = {
     "fuzz-smoke": "fuzz",
     "build-matrix": "examples",
     "budgets": "budgets",
+    "nightly": "nightly",
     "e2e-avr": "e2e",
     "e2e-posix": "e2e",
 }
@@ -182,6 +184,29 @@ def test_posix_only_diff_runs_only_the_posix_leg():
         "lint",
         "plan",
     ]
+
+
+def test_isolation_diff_runs_the_nightly_job_not_the_e2e_legs():
+    assert running_jobs("pull_request", ["tests/e2e/test_isolation.py"]) == [
+        "bridge-images",
+        "lint",
+        "nightly",
+        "plan",
+        "scripts",
+    ]
+
+
+def test_fuzz_tree_diff_runs_fuzz_smoke_without_the_nightly_job():
+    assert running_jobs("pull_request", ["scripts/fuzz.sh"]) == [
+        "bridge-images",
+        "fuzz-smoke",
+        "lint",
+        "plan",
+    ]
+
+
+def test_nightly_jobs_file_diff_runs_every_job():
+    assert running_jobs("pull_request", [".github/workflows/nightly-jobs.yml"]) == sorted(workflow()["jobs"])
 
 
 def test_full_diff_runs_every_job():
