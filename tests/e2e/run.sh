@@ -84,6 +84,24 @@ stop_canary() {
 # A killed suite must die instead of running on: the isolation test kills
 # suites at teardown, and a suite that survives would keep publishing its
 # canary into the next run's graph. EXIT alone cleans up; the signals exit.
+await_canary() {
+  # Wait until this iteration's canary shows in its own graph, so sweeps
+  # never judge an iteration whose canary is still undiscovered. Bound
+  # the wait and fail loudly instead of proving nothing forever. grep
+  # without -q reads to end of input, which a pipefail shell needs.
+  _canary_end=$((SECONDS + 180))
+  while true; do
+    if RMW_IMPLEMENTATION=$rmw ros2 topic list 2>/dev/null | grep "/$canary_topic" >/dev/null; then
+      return 0
+    fi
+    sleep 2
+    if [ "$SECONDS" -ge "$_canary_end" ]; then
+      echo "canary $canary_topic never appeared" >&2
+      cleanup_and_exit
+    fi
+  done
+}
+
 cleanup_and_exit() {
   stop_canary
   if [ -n "${router:-}" ]; then kill "$router" 2>/dev/null || true; fi
@@ -157,6 +175,7 @@ for leg in ${R2S_E2E_LEGS:-static runtime}; do
       # exit, so no run leaves a publisher behind.
       RMW_IMPLEMENTATION=$rmw ros2 topic pub "/$canary_topic" std_msgs/msg/String '{data: canary}' >/dev/null 2>&1 &
       canary_pid=$!
+      await_canary
     fi
     for test_file in test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_8_posix test_scenario_9_posix test_publish_catchup_posix; do
       # The isolation pairs skip scenario 8 through R2S_E2E_SKIP: its 1 ms
