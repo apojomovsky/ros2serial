@@ -705,7 +705,7 @@ ros2serial/
 └── .github/workflows/
 ```
 
-**Code reuse between MCU and host.** The bridge links `core/src/crc.c`, `rcobs.c`, `varint.c` and `framer.c` compiled for the host. Framing, CRC and lengths therefore have a single implementation. The host session logic is separate C++.
+**Code reuse between MCU and host.** The bridge links `core/src/crc.c`, `framer.c` and `rcobs.c` compiled for the host, the three sources named in `bridge/r2s_bridge/CMakeLists.txt`. Framing, rCOBS and CRC therefore have a single implementation. Lengths stay on each side: the MCU codec and the bridge converter each decode varints. The host session logic is separate C++.
 
 **The rCOBS encoder is a stream.** `r2s_rcobs_encode_byte()` takes one byte and writes the bytes it produces, at most two, so the MCU serializes, computes the CRC and encodes in one pass with no TX buffer. `r2s_rcobs_encode_end()` writes the last code byte; the delimiter is the framer's. The decoder takes the encoded frame in a buffer and writes the decoded frame over it, right aligned, so it needs no second copy.
 
