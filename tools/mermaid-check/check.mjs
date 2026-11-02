@@ -88,7 +88,7 @@ export async function checkFile(rel, text) {
   }
   for (const block of blocks) {
     for (const problem of await validateDiagram(block.code)) {
-      const line = problem.line === null ? block.line : block.line + problem.line - 1;
+      const line = problem.line === null ? block.line : block.line + problem.line;
       found.push(`${rel}:${line}: ${problem.message}`);
     }
   }

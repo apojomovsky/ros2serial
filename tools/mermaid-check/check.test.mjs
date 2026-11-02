@@ -80,4 +80,11 @@ describe('checkFile', () => {
     assert.equal(found.length, 1);
     assert.match(found[0], /^docs\/x\.md:3: /);
   });
+
+  it('maps an in-block problem to the absolute line', async () => {
+    const text = ['# T', '', '```mermaid', ...EM_DASH.split('\n'), '```'].join('\n');
+    const { found } = await checkFile('docs/x.md', text);
+    assert.equal(found.length, 1);
+    assert.match(found[0], /^docs\/x\.md:5: .*em-dash/);
+  });
 });
