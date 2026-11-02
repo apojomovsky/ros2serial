@@ -40,6 +40,16 @@ def test_every_job_sets_a_timeout():
 LONG_JOBS = {("nightly-jobs.yml", "fuzz-long")}
 
 
+def test_reusable_workflow_calls_carry_no_timeout():
+    timed_calls = [
+        f"{path.name}.{name}"
+        for path in WORKFLOWS
+        for name, job in jobs_of(path).items()
+        if "uses" in job and "timeout-minutes" in job
+    ]
+    assert not timed_calls, "reusable calls with timeout-minutes: " + ", ".join(timed_calls)
+
+
 def test_every_timeout_stays_within_two_hours():
     out_of_range = [
         f"{path.name}.{name}={job['timeout-minutes']}"

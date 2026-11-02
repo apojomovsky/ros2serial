@@ -3,6 +3,8 @@
 Oct 20, 2026 · @Alexis Pojomovsky · from the kickoff proposal v3, which superseded v2 (Oct 3, 2026); both are in the git history
 
 > **How to use this document.** Part I is the design: what we build and why. Part II is the implementation specification: repository layout, exact protocol details, APIs, test strategy, CI, research tickets and the seed backlog. An agent creating tickets should start from Part II, section "Epics and seed tickets", and follow the links back into Part I for rationale. Where something is still unknown, Part II names a research ticket and a default to use until it is answered, so no ticket is blocked on a decision. Everything is built test-first, and every test runs on GitHub Actions.
+>
+> **New here?** Start with the [architecture page](02-architecture.md): five diagrams from the sketch to the ROS 2 graph. To change X, read Y: firmware behavior, Part I from Architecture through User API; wire bytes, Part II Protocol details plus `spec/protocol.md`; code layout and test scopes, the architecture Containers section plus Part II Repository layout; generator output, Part II Code generator specification; bridge internals, Part II Bridge specification.
 
 # Part I: Design
 
@@ -1099,10 +1101,10 @@ Scenario numbers in the tickets below refer to the key end-to-end scenarios in `
 
 | Workflow | Trigger | Jobs |
 | --- | --- | --- |
-| `ci.yml` | Push, PR and manual | `plan` (maps the diff to the scopes each section job gates on); `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component, fails on a drop); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `docs` (every code snippet in `README.md` and `docs/` extracted and compiled); `readme` (every Getting started command runs on simavr); `cpp`; `bridge` (colcon build and test in `ros:jazzy` and `ros:lyrical`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `pic-canary` (advisory, from Phase 2); `budgets` (size table as a PR comment, fails on budget breach) |
+| `ci.yml` | Push, PR and manual | `plan` (maps the diff to the scopes each section job gates on); `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component, fails on a drop); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `docs` (every code snippet in `README.md` and `docs/` extracted and compiled); `readme` (every Getting started command runs on simavr); `cpp`; `bridge` (colcon build and test in `ros:jazzy` and `ros:lyrical`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `pic-canary` (advisory, from Phase 2); `budgets` (size table as a PR comment, fails on budget breach); `nightly` (calls `nightly-jobs.yml` when the plan selects `NIGHTLY`; the long fuzzing runs only when it also selects `FUZZ`) |
 | `nightly.yml` | Schedule | Calls `nightly-jobs.yml`; files or comments on one `needs-triage` issue when the scheduled run fails |
 | `nightly-jobs.yml` | Reusable | `fuzz-long` (30 min per target); `e2e-isolation` (two e2e sections side by side) |
-| `release.yml` | Tag | Runs `nightly-jobs.yml` on a tag first, then the pre-release with the Arduino library zip and the Python sdist and wheel attached; publishes nowhere else |
+| `release.yml` | Tag | Runs `nightly-jobs.yml` on a tag first, then the release with the Arduino library zip and the Python sdist and wheel attached: a full release marked Latest, or a pre-release when the tag carries a SemVer pre-release suffix; publishes nowhere else |
 
 Rules:
 - Every job runs in a pinned container image or pinned action versions. Toolchain versions (avr-gcc, arduino-cli core, ROS images, epic-cc bundle) are pinned in one file, `ci/versions.env`. A required check's image is pinned by digest as well as tag: the bridge job's per-distro images (`ROS_<distro>_IMAGE`) carry both, so an upstream rebuild cannot change that job's toolchain without a commit here.
