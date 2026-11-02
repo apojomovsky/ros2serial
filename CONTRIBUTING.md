@@ -29,8 +29,19 @@ make bootstrap
 ```
 
 `bootstrap` checks the host dependencies, installs the git hooks and
-builds the dev image. The first build takes several minutes. Later runs
-finish at once, because the image tag changes only when its inputs do.
+builds the dev image. The first build takes several minutes. On a
+machine that is already set up it finishes at once (local):
+
+```text
+ok       git
+ok       make
+ok       docker
+ok       docker daemon reachable
+ok       dev image ros2serial-dev:9f07976c03ee
+ok       git hooks installed
+git hooks installed (core.hooksPath = .githooks)
+ros2serial-dev:9f07976c03ee is up to date
+```
 
 Check that the setup is whole. This command changes nothing:
 
@@ -61,9 +72,13 @@ On a tree with no changes this takes a few seconds and ends with
 (local):
 
 ```text
+== layout: ok
+== python-lint: ok
+== c-format: ok
+== cppcheck: ok
+== workflow-lint: ok
 == vectors: ok
-== spec-coverage: ok
-== zone: ok
+...
 == commits: ok
 == prose: ok
 all sections passed
@@ -110,17 +125,20 @@ ticket gets one branch and one pull request.
 
 1. **Write a failing test first.** It proves the bug exists before the
    fix, and it proves the fix works after.
-2. **Make the fix.** Keep it to the one issue. Unrelated cleanups
-   belong in their own issue.
+2. **Make the fix.** Keep it to the one issue. Small diffs get
+   reviewed faster.
 3. **Run `make check`.** It runs the gates and every scope your diff
-   touches. CI runs the same script, so green here means green there.
+   touches. CI runs the same script, so a scope that is green here
+   stays green there. A diff that maps to the full suite still runs
+   only the fast gates locally, leaving the rest to CI.
 4. **Commit with a Conventional Commit subject.** One line, at most
    three lines total, for example `fix(core): ...`. The scope names the
    area. No trailers and no em-dashes. The style matters because the
    squash merge lands the pull request title as the one commit on
    `master`, and the changelog is built from these subjects.
 5. **Open a pull request when it is ready for review.** Put `Closes #N`
-   in the body and add the issue's `area:*` labels.
+   in the body and add the issue's `area:*` labels. The link closes the
+   issue on merge, and the labels route the pull request to review.
 
 ## When CI is red
 
@@ -129,7 +147,7 @@ Run that target inside the image and you see the same failure CI saw:
 
 | CI job | Local reproduction |
 | --- | --- |
-| `plan` | `make check` prints the scopes CI would run for the diff |
+| `plan` | No local run. `make check` prints the scopes CI would run for the diff |
 | `lint` | `make test LINT=1` |
 | `scripts` | `make test-scripts`, or one shard with `make test SCRIPTS=1 SCRIPTS_SHARD=N` |
 | `core` | `make test-core` |
