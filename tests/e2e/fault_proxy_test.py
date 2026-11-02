@@ -61,8 +61,8 @@ def frame(topic, seq, payload):
     The payload must hold no zero bytes, so the encoding is one group and
     the first byte is its code.
     """
-    assert 0 not in payload
     body = bytes([topic, seq]) + payload
+    assert 0 not in body
     return bytes([len(body) + 1]) + body + b"\x00"
 
 
@@ -169,7 +169,7 @@ class TestCorruption(unittest.TestCase):
         self.assertEqual(counts.corrupted, len(first) + len(second) - 2)
 
     def test_user_boundary_at_topic_16(self):
-        wire = frame(15, 0, b"q") + frame(16, 0, b"q")
+        wire = frame(15, 3, b"q") + frame(16, 3, b"q")
         proxy = fault_proxy.FaultProxy(seed=42)
         proxy.set_faults(corrupt_rate=1.0)
         proxy.start()
