@@ -37,6 +37,7 @@ PREFIX_RULES = (
     ("scripts/coverage-filters.sh", {"COVERAGE": "1"}),
     ("scripts/build-examples.sh", {"EXAMPLES": "1", "BUDGETS": "1"}),
     ("scripts/budgets-check.sh", {"BUDGETS": "1"}),
+    ("scripts/budgets_comment.py", {"SCRIPTS": "1", "BUDGETS": "1"}),
     # The C++ layer builds core sources into its host tests.
     ("scripts/cpp-test.sh", {"CPP": "1"}),
     ("scripts/fuzz.sh", {"FUZZ": "1"}),

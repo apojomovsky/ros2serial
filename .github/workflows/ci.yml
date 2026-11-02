@@ -177,12 +177,38 @@ jobs:
           exit "$status"
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+      # The table is one click from the run on every push, whether or not the
+      # gate passes: an empty path means the builds failed before any table.
+      - if: always()
+        run: |
+          if [ -s budgets-table.path ]; then
+            cat "$(cat budgets-table.path)" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - if: always() && github.event_name == 'pull_request'
         # Best effort: a fork token cannot comment, and that must not fail the gate.
         continue-on-error: true
         run: |
-          if [ -s budgets-table.path ]; then
-            gh pr comment "${{ github.event.pull_request.number }}" --body-file "$(cat budgets-table.path)"
+          [ -s budgets-table.path ] || exit 0
+          table="$(cat budgets-table.path)"
+          dir="$(dirname "$table")"
+          args=(--measurements "$dir/measurements.json" --stack "$dir/stack.json"
+            --budgets tools/budgets.yaml --table "$table")
+          if [ -f "$dir/base-measurements.json" ] && [ -f "$dir/base-stack.json" ]; then
+            args+=(--base-measurements "$dir/base-measurements.json" --base-stack "$dir/base-stack.json")
+          fi
+          if [ -f "$dir/base-budgets.yaml" ]; then
+            args+=(--base-budgets "$dir/base-budgets.yaml")
+          fi
+          marker='<!-- r2s-budgets -->'
+          existing=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            --paginate -q '[.[] | select(.body | contains("'"$marker"'")) | .id] | last // empty' || true)
+          if [ -n "$existing" ]; then args+=(--has-comment 1); else args+=(--has-comment 0); fi
+          action=$(python3 scripts/budgets_comment.py "${args[@]}" --out budgets-comment.md) || exit 0
+          [ "$action" = skip ] && exit 0
+          if [ -n "$existing" ]; then
+            gh api "repos/${{ github.repository }}/issues/comments/$existing" -X PATCH -F "body=@budgets-comment.md"
+          else
+            gh pr comment "${{ github.event.pull_request.number }}" --body-file budgets-comment.md
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

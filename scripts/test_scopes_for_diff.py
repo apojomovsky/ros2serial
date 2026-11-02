@@ -140,6 +140,7 @@ def test_section_scripts_map_to_their_section():
     assert scopes("scripts/coverage-gate.sh") == {**CHEAP, "COVERAGE": "1"}
     assert scopes("scripts/build-examples.sh") == {**CHEAP, "EXAMPLES": "1", "BUDGETS": "1"}
     assert scopes("scripts/budgets-check.sh") == {**CHEAP, "BUDGETS": "1"}
+    assert scopes("scripts/budgets_comment.py") == {**CHEAP, "SCRIPTS": "1", "BUDGETS": "1"}
     assert scopes("scripts/cpp-test.sh") == {**CHEAP, "CPP": "1"}
     assert scopes("scripts/fuzz.sh") == {**CHEAP, "FUZZ": "1"}
     assert scopes("scripts/build-host-lib.sh") == {**CHEAP, "CORE": "1", "GEN": "1"}
