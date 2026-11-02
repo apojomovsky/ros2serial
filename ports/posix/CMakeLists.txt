@@ -22,22 +22,26 @@ target_include_directories(r2s_posix_firmware PRIVATE
 # The frame and nesting limits live in the generated header, but the core
 # translation units never include it, so the build reads them out as defines:
 # macros are per translation unit, and a default here would silently disagree.
-file(STRINGS src/r2s_generated.h R2S_MAX_FRAME_LINE REGEX "^#define R2S_MAX_FRAME [0-9]+u$")
-file(STRINGS src/r2s_generated.h R2S_MAX_NEST_LINE REGEX "^#define R2S_MAX_NEST [0-9]+u$")
-file(STRINGS src/r2s_generated.h R2S_TOPIC_MAX_COUNT_LINE REGEX "^#define R2S_TOPIC_MAX_COUNT [0-9]+u$")
+file(STRINGS src/r2s_generated.h R2S_MAX_FRAME_LINE REGEX "^#define R2S_MAX_FRAME[ \t]+[0-9]+u$")
+file(STRINGS src/r2s_generated.h R2S_MAX_NEST_LINE REGEX "^#define R2S_MAX_NEST[ \t]+[0-9]+u$")
+file(STRINGS src/r2s_generated.h R2S_TOPIC_MAX_COUNT_LINE REGEX "^#define R2S_TOPIC_MAX_COUNT[ \t]+[0-9]+u$")
+file(STRINGS src/r2s_generated.h R2S_TOPIC_MAX_COUNT_ANY REGEX "^#define R2S_TOPIC_MAX_COUNT([ \t]|$)")
 # A generated header changes without any CMakeLists edit, so the limits above
 # go stale unless the configure step watches it.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS src/r2s_generated.h)
 if(NOT R2S_MAX_FRAME_LINE OR NOT R2S_MAX_NEST_LINE)
   message(FATAL_ERROR "r2s_generated.h names no frame or nesting limit")
 endif()
-string(REGEX MATCH "^#define R2S_MAX_FRAME ([0-9]+)u$" _ignored "${R2S_MAX_FRAME_LINE}")
+if(R2S_TOPIC_MAX_COUNT_ANY AND NOT R2S_TOPIC_MAX_COUNT_LINE)
+  message(FATAL_ERROR "r2s_generated.h names a malformed topic limit")
+endif()
+string(REGEX MATCH "^#define R2S_MAX_FRAME[ \t]+([0-9]+)u$" _ignored "${R2S_MAX_FRAME_LINE}")
 set(R2S_MAX_FRAME "${CMAKE_MATCH_1}")
-string(REGEX MATCH "^#define R2S_MAX_NEST ([0-9]+)u$" _ignored "${R2S_MAX_NEST_LINE}")
+string(REGEX MATCH "^#define R2S_MAX_NEST[ \t]+([0-9]+)u$" _ignored "${R2S_MAX_NEST_LINE}")
 set(R2S_MAX_NEST "${CMAKE_MATCH_1}")
 set(R2S_GENERATED_DEFS R2S_MAX_FRAME=${R2S_MAX_FRAME} R2S_MAX_NEST=${R2S_MAX_NEST})
 if(R2S_TOPIC_MAX_COUNT_LINE)
-  string(REGEX MATCH "^#define R2S_TOPIC_MAX_COUNT ([0-9]+)u$" _ignored
+  string(REGEX MATCH "^#define R2S_TOPIC_MAX_COUNT[ \t]+([0-9]+)u$" _ignored
     "${R2S_TOPIC_MAX_COUNT_LINE}")
   list(APPEND R2S_GENERATED_DEFS R2S_TOPIC_MAX_COUNT=${CMAKE_MATCH_1})
 endif()
