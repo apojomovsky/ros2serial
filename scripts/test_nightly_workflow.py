@@ -32,7 +32,20 @@ def steps_of(doc, name):
 
 
 def test_the_nightly_jobs_are_reusable_and_trigger_on_nothing():
-    assert triggers(workflow(JOBS)) == {"workflow_call": None}
+    assert set(triggers(workflow(JOBS))) == {"workflow_call"}
+
+
+def test_the_long_fuzzing_runs_unless_the_caller_turns_it_off():
+    doc = workflow(JOBS)
+    fuzz = triggers(doc)["workflow_call"]["inputs"]["fuzz"]
+    assert (fuzz["type"], fuzz["default"]) == ("boolean", True)
+    assert doc["jobs"]["fuzz-long"].get("if") == "${{ inputs.fuzz }}"
+
+
+def test_the_scheduled_nightly_keeps_the_long_fuzzing():
+    for job in workflow(NIGHTLY)["jobs"].values():
+        if "nightly-jobs.yml" in str(job.get("uses", "")):
+            assert (job.get("with") or {}).get("fuzz", True) is True
 
 
 def test_the_reusable_workflow_holds_fuzzing_and_the_isolation_pairs():

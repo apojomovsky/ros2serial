@@ -72,6 +72,14 @@ def test_release_calls_the_nightly_jobs_on_a_tag_only():
     assert "refs/tags/v" in str(doc["jobs"][callers[0]].get("if", ""))
 
 
+def test_release_skips_the_time_boxed_fuzzing():
+    """Fuzzing for a fixed time can disagree between two runs of one commit;
+    the seed corpus replay in CI is the deterministic part."""
+    doc = workflow()
+    (caller,) = [job for job in doc["jobs"].values() if "nightly-jobs.yml" in str(job.get("uses", ""))]
+    assert (caller.get("with") or {}).get("fuzz") is False
+
+
 def test_release_publishes_only_after_the_nightly_jobs():
     doc = workflow()
     callers = [name for name, job in doc["jobs"].items() if "nightly-jobs.yml" in str(job.get("uses", ""))]
