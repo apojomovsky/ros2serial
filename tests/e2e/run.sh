@@ -40,9 +40,9 @@ set +u
 source "$build/bridge/install/setup.bash"
 set -u
 
-# Both registration paths run the same scenarios: the generated C firmware
-# and the runtime C++ firmware announce the same topics, so one scenario
-# file covers both legs through R2S_E2E_FW.
+# All three firmware shapes announce the same topics: the generated C
+# firmware, the runtime C++ firmware and the static C++ firmware, so one
+# scenario file covers every leg through R2S_E2E_FW.
 bash ports/posix/run.sh --build-only || exit 1
 
 # The scenario files import the framework as a package; direct launch_test
@@ -60,10 +60,11 @@ export ROS_DOMAIN_ID=${R2S_E2E_DOMAIN_ID:?e2e-lease.sh provides it}
 echo "== e2e isolation: ROS_DOMAIN_ID=$ROS_DOMAIN_ID ZENOH_ROUTER_PORT=$R2S_ZENOH_ROUTER_PORT"
 
 status=0
-for leg in static runtime; do
+for leg in static runtime static_cpp; do
   case $leg in
     static) export R2S_E2E_FW=$build/ports/posix/r2s_posix_firmware ;;
     runtime) export R2S_E2E_FW=$build/ports/posix/r2s_posix_runtime_firmware ;;
+    static_cpp) export R2S_E2E_FW=$build/ports/posix/r2s_posix_static_firmware ;;
   esac
   for rmw in $rmws; do
     echo "== e2e-posix ($leg): $rmw"
@@ -88,7 +89,13 @@ for leg in static runtime; do
       sleep 2
       kill -0 "$router" 2>/dev/null || { echo "rmw_zenohd on port $R2S_ZENOH_ROUTER_PORT died"; status=1; break; }
     fi
-    for test_file in test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_8_posix test_scenario_9_posix test_publish_catchup_posix; do
+    # The static C++ leg covers scenarios 1 to 4, the ticket's scope; the
+    # other legs run the whole file list.
+    case $leg in
+      static_cpp) files="test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix" ;;
+      *) files="test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_8_posix test_scenario_9_posix test_publish_catchup_posix" ;;
+    esac
+    for test_file in $files; do
       # The isolation pairs skip scenario 8 through R2S_E2E_SKIP: its bound
       # assumes a lone suite and cannot survive two suites on one host.
       case " ${R2S_E2E_SKIP:-} " in
