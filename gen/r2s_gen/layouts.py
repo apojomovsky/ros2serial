@@ -40,14 +40,14 @@ def files_for(layout: str) -> tuple[str, ...]:
 
 def _defined(header: str, name: str) -> bool:
     """Whether the header names `name`, with or without a value."""
-    return re.search(rf"^#define {name}( |$)", header, re.MULTILINE) is not None
+    return re.search(rf"^#define {name}([ \t]|$)", header, re.MULTILINE) is not None
 
 
 def build_defines(header: str, source: str = "r2s_generated.h") -> list[str]:
     """The -D flags a non-CMake build needs: the codec flag plus the header's limits."""
     defines = ["R2S_WITH_CODEC"]
     for name in ("R2S_MAX_FRAME", "R2S_MAX_NEST", "R2S_TOPIC_MAX_COUNT"):
-        match = re.search(rf"^#define {name} ([0-9]+)u$", header, re.MULTILINE)
+        match = re.search(rf"^#define {name}[ \t]+([0-9]+)u$", header, re.MULTILINE)
         if match is not None:
             defines.append(f"{name}={match.group(1)}")
         elif name != "R2S_TOPIC_MAX_COUNT" or _defined(header, name):
@@ -110,22 +110,22 @@ def _cmake_lists(source: str, digest: str) -> str:
         'target_include_directories(r2s_generated PUBLIC "${R2S_CORE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}")',
         "# The frame and nesting limits live in the generated header, but the core",
         "# translation units never include it, so the build reads them out as defines.",
-        'file(STRINGS r2s_generated.h R2S_MAX_FRAME_LINE REGEX "^#define R2S_MAX_FRAME [0-9]+u$")',
-        'file(STRINGS r2s_generated.h R2S_MAX_NEST_LINE REGEX "^#define R2S_MAX_NEST [0-9]+u$")',
-        'file(STRINGS r2s_generated.h R2S_TOPIC_MAX_COUNT_LINE REGEX "^#define R2S_TOPIC_MAX_COUNT [0-9]+u$")',
-        'file(STRINGS r2s_generated.h R2S_TOPIC_MAX_COUNT_ANY REGEX "^#define R2S_TOPIC_MAX_COUNT( |$)")',
+        'file(STRINGS r2s_generated.h R2S_MAX_FRAME_LINE REGEX "^#define R2S_MAX_FRAME[ \\t]+[0-9]+u$")',
+        'file(STRINGS r2s_generated.h R2S_MAX_NEST_LINE REGEX "^#define R2S_MAX_NEST[ \\t]+[0-9]+u$")',
+        'file(STRINGS r2s_generated.h R2S_TOPIC_MAX_COUNT_LINE REGEX "^#define R2S_TOPIC_MAX_COUNT[ \\t]+[0-9]+u$")',
+        'file(STRINGS r2s_generated.h R2S_TOPIC_MAX_COUNT_ANY REGEX "^#define R2S_TOPIC_MAX_COUNT([ \\t]|$)")',
         "if(NOT R2S_MAX_FRAME_LINE OR NOT R2S_MAX_NEST_LINE)",
         '  message(FATAL_ERROR "r2s_generated.h names no frame or nesting limit")',
         "endif()",
         "if(R2S_TOPIC_MAX_COUNT_ANY AND NOT R2S_TOPIC_MAX_COUNT_LINE)",
         '  message(FATAL_ERROR "r2s_generated.h names a malformed topic limit")',
         "endif()",
-        'string(REGEX MATCH "^#define R2S_MAX_FRAME ([0-9]+)u$" _ignored "${R2S_MAX_FRAME_LINE}")',
+        'string(REGEX MATCH "^#define R2S_MAX_FRAME[ \\t]+([0-9]+)u$" _ignored "${R2S_MAX_FRAME_LINE}")',
         "set(R2S_GENERATED_DEFS R2S_WITH_CODEC R2S_MAX_FRAME=${CMAKE_MATCH_1})",
-        'string(REGEX MATCH "^#define R2S_MAX_NEST ([0-9]+)u$" _ignored "${R2S_MAX_NEST_LINE}")',
+        'string(REGEX MATCH "^#define R2S_MAX_NEST[ \\t]+([0-9]+)u$" _ignored "${R2S_MAX_NEST_LINE}")',
         "list(APPEND R2S_GENERATED_DEFS R2S_MAX_NEST=${CMAKE_MATCH_1})",
         "if(R2S_TOPIC_MAX_COUNT_LINE)",
-        '  string(REGEX MATCH "^#define R2S_TOPIC_MAX_COUNT ([0-9]+)u$" _ignored',
+        '  string(REGEX MATCH "^#define R2S_TOPIC_MAX_COUNT[ \\t]+([0-9]+)u$" _ignored',
         '    "${R2S_TOPIC_MAX_COUNT_LINE}")',
         "  list(APPEND R2S_GENERATED_DEFS R2S_TOPIC_MAX_COUNT=${CMAKE_MATCH_1})",
         "endif()",

@@ -6,6 +6,7 @@ under src/, every file names the generator version and the config hash, and
 unsupported layouts, C++ output and compact handshakes fail precisely.
 """
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -238,6 +239,43 @@ def test_the_cmake_layout_rejects_a_valueless_topic_limit(tmp_path):
     assert "malformed topic limit" in configured.stderr
 
 
+def test_the_cmake_layout_accepts_tab_separated_limits(tmp_path):
+    loaded = Config(
+        node="wide",
+        topics=tuple(Topic(name=f"t{i}", type_name="std_msgs/msg/Float32", direction="pub") for i in range(17)),
+        bounds={},
+    )
+    repository = msgs.MessageRepository()
+    resolved = bounds.resolve(repository, ["std_msgs/msg/Float32"])
+    files = layouts.generate(loaded, resolved, repository, "cmake")
+    tabbed = files["r2s_generated.h"]
+    for name in ("R2S_MAX_FRAME", "R2S_MAX_NEST", "R2S_TOPIC_MAX_COUNT"):
+        tabbed = re.sub(rf"^#define {name} ", f"#define {name}\t", tabbed, flags=re.MULTILINE)
+    assert tabbed != files["r2s_generated.h"]
+
+    configured = configure_lib(tmp_path, dict(files, **{"r2s_generated.h": tabbed}))
+
+    assert configured.returncode == 0, configured.stderr
+
+
+def test_the_cmake_layout_rejects_a_tab_separated_valueless_topic_limit(tmp_path):
+    loaded = Config(
+        node="wide",
+        topics=tuple(Topic(name=f"t{i}", type_name="std_msgs/msg/Float32", direction="pub") for i in range(17)),
+        bounds={},
+    )
+    repository = msgs.MessageRepository()
+    resolved = bounds.resolve(repository, ["std_msgs/msg/Float32"])
+    files = layouts.generate(loaded, resolved, repository, "cmake")
+    broken = files["r2s_generated.h"].replace("#define R2S_TOPIC_MAX_COUNT 17u", "#define R2S_TOPIC_MAX_COUNT\t")
+    assert broken != files["r2s_generated.h"]
+
+    configured = configure_lib(tmp_path, dict(files, **{"r2s_generated.h": broken}))
+
+    assert configured.returncode != 0
+    assert "malformed topic limit" in configured.stderr
+
+
 def test_the_arduino_properties_name_the_node_and_the_toolchain(tmp_path):
     _, files = generated("arduino", tmp_path)
 
@@ -394,6 +432,52 @@ def test_build_defines_rejects_a_valueless_topic_limit(tmp_path):
         layouts.build_defines(broken)
 
     assert str(caught.value) == "r2s_generated.h: no R2S_TOPIC_MAX_COUNT limit; regenerate the sources"
+
+
+def test_build_defines_accepts_tab_separated_limits(tmp_path):
+    _, files = generated("cmake", tmp_path)
+    tabbed = (
+        files["r2s_generated.h"]
+        .replace("#define R2S_MAX_FRAME 52u", "#define R2S_MAX_FRAME\t52u")
+        .replace("#define R2S_MAX_NEST 2u", "#define R2S_MAX_NEST\t2u")
+    )
+    assert tabbed != files["r2s_generated.h"]
+
+    assert layouts.build_defines(tabbed) == [
+        "R2S_WITH_CODEC",
+        "R2S_MAX_FRAME=52",
+        "R2S_MAX_NEST=2",
+    ]
+
+
+def test_build_defines_rejects_a_tab_separated_valueless_topic_limit(tmp_path):
+    loaded = Config(
+        node="wide",
+        topics=tuple(Topic(name=f"t{i}", type_name="std_msgs/msg/Float32", direction="pub") for i in range(17)),
+        bounds={},
+    )
+    repository = msgs.MessageRepository()
+    resolved = bounds.resolve(repository, ["std_msgs/msg/Float32"])
+    files = layouts.generate(loaded, resolved, repository, "cmake")
+    broken = files["r2s_generated.h"].replace("#define R2S_TOPIC_MAX_COUNT 17u", "#define R2S_TOPIC_MAX_COUNT\t")
+    assert broken != files["r2s_generated.h"]
+
+    with pytest.raises(MessageError) as caught:
+        layouts.build_defines(broken)
+
+    assert str(caught.value) == "r2s_generated.h: no R2S_TOPIC_MAX_COUNT limit; regenerate the sources"
+
+
+def test_the_posix_build_mirrors_the_malformed_topic_limit_guard():
+    text = (ROOT / "ports" / "posix" / "CMakeLists.txt").read_text(encoding="utf-8")
+
+    assert 'file(STRINGS src/r2s_generated.h R2S_MAX_FRAME_LINE REGEX "^#define R2S_MAX_FRAME[ \\t]+[0-9]+u$")' in text
+    assert (
+        'file(STRINGS src/r2s_generated.h R2S_TOPIC_MAX_COUNT_ANY REGEX "^#define R2S_TOPIC_MAX_COUNT([ \\t]|$)")'
+        in text
+    )
+    assert "if(R2S_TOPIC_MAX_COUNT_ANY AND NOT R2S_TOPIC_MAX_COUNT_LINE)" in text
+    assert 'message(FATAL_ERROR "r2s_generated.h names a malformed topic limit")' in text
 
 
 ENCODE_MAIN = """\

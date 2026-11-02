@@ -108,7 +108,7 @@ from r2s_gen.msgs import MessageError
 
 try:
     defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
-except (MessageError, OSError) as error:
+except (MessageError, OSError, UnicodeDecodeError) as error:
     print(f"r2s-gen: error: {error}", file=sys.stderr)
     raise SystemExit(1)
 print(" ".join("-D" + define for define in defines))
@@ -176,7 +176,7 @@ from r2s_gen.msgs import MessageError
 
 try:
     defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
-except (MessageError, OSError) as error:
+except (MessageError, OSError, UnicodeDecodeError) as error:
     print(f"r2s-gen: error: {error}", file=sys.stderr)
     raise SystemExit(1)
 print(" ".join("-D" + define for define in defines))
@@ -226,7 +226,7 @@ from r2s_gen.msgs import MessageError
 
 try:
     defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
-except (MessageError, OSError) as error:
+except (MessageError, OSError, UnicodeDecodeError) as error:
     print(f"r2s-gen: error: {error}", file=sys.stderr)
     raise SystemExit(1)
 print(" ".join("-D" + define for define in defines))
@@ -279,7 +279,7 @@ from r2s_gen.msgs import MessageError
 
 try:
     defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
-except (MessageError, OSError) as error:
+except (MessageError, OSError, UnicodeDecodeError) as error:
     print(f"r2s-gen: error: {error}", file=sys.stderr)
     raise SystemExit(1)
 print(" ".join("-D" + define for define in defines))
