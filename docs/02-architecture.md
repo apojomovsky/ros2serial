@@ -19,7 +19,6 @@ flowchart LR
 
     sketch --> mcu
     gen -. "r2s_generated.h/.c" .-> mcu
-    gen -. "node map, compact mode" .-> bridge
     mcu <--> link
     link <--> bridge
     bridge <--> ros
@@ -65,8 +64,8 @@ The core compiles with no ROS and no hardware: ports implement the
 `r2s_port.h` contract (`r2s_port_read`, `r2s_port_write`,
 `r2s_port_tx_free`, `r2s_port_tick`) and the C++ layer calls the same C
 API a C sketch calls. The bridge reuses the core framing sources
-(`core/src/framer.c`, `rcobs.c`, `crc.c`, `varint.c`) compiled for the
-host, so framing has one implementation. `spec/vectors/` checks all
+(`core/src/framer.c`, `rcobs.c`, `crc.c`) compiled for the host, so
+framing has one implementation. `spec/vectors/` checks all
 three implementations. See [Part II, Repository layout](00-design.md#repository-layout)
 and [Part II, Test strategy](00-design.md#test-strategy).
 
