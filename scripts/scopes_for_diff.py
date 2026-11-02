@@ -106,7 +106,8 @@ PREFIX_RULES = (
     # The avr backend compiles the slice sketch and runs its scenarios, so
     # avr-only files map to the avr leg. The rest of the tree is shared by
     # both backends, and the BRIDGE launch test loads the relay from its file.
-    # The isolation pairs run in the nightly workflow, never on a PR. The
+    # The isolation pairs run in the nightly workflow, on a PR only through
+    # the ci.yml nightly job when the plan selects NIGHTLY. The
     # scripts/test_e2e_* tests load files from tests/e2e/, so every e2e path
     # also runs SCRIPTS.
     ("tests/e2e/test_isolation.py", {"NIGHTLY": "1", "SCRIPTS": "1"}),
