@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from r2s_gen import bundle
 from r2s_gen.version import PROTOCOL_VERSION, __version__
 
@@ -50,9 +49,15 @@ def test_the_protocol_version_is_the_one_the_core_announces():
 
 
 # covers: GEN-2
+def _spec_text() -> str:
+    try:
+        return SPEC.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        pytest.fail(f"spec/protocol.md: unreadable ({str(e).splitlines()[0]})")
+
+
 def test_the_protocol_version_is_the_one_the_spec_describes():
-    spec = SPEC.read_text(encoding="utf-8")
-    assert str(PROTOCOL_VERSION) == _capture(r"The protocol version described here is (\d+)", spec)
+    assert str(PROTOCOL_VERSION) == _capture(r"The protocol version described here is (\d+)", _spec_text())
 
 
 def test_a_spec_that_is_not_utf8_fails(tmp_path, monkeypatch):
