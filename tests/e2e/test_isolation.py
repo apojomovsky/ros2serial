@@ -1,11 +1,9 @@
-"""One e2e section next to another on one host: both pass without cross-talk.
+"""Two e2e sections side by side on one host: both pass without crosstalk.
 
-Each run.sh and run-avr.sh leases its own DDS domain and zenoh port, so two
-suites never see each other's topics even though they share the tree.
-Narrowed to Fast DDS and Zenoh, one board in the avr scenario loop; the RMW
-matrix covers each leg alone, and these tests cover the overlap. The pairs
-skip load-sensitive scenario 8 through R2S_E2E_SKIP; the standalone legs
-keep judging it.
+Each run.sh and run-avr.sh leases its own DDS domain and zenoh port, so
+two suites never see each other's topics though they share the tree. The
+pairs skip load-sensitive scenario 8; the standalone legs keep judging
+it. The nightly workflow runs this file; PR CI does not.
 """
 
 import os
@@ -33,14 +31,34 @@ def port_of(output):
     return int(match.group(1))
 
 
+def pair_build_dir(suffix):
+    """One leg's R2S_BUILD_DIR: separate dirs lock separately, so the legs overlap."""
+    base = os.environ.get("R2S_BUILD_DIR", "")
+    if not base:
+        # Mirrors the run.sh default; run.sh appends e2e/posix and locks build/.lock.
+        base = os.path.join(os.path.expanduser("~"), ".cache", "ros2serial", "build" + str(ROOT).replace("/", "-"))
+    return base + "-iso-" + suffix
+
+
 @pytest.mark.skipif(shutil.which("colcon") is None, reason="colcon is not installed")
 def test_two_concurrent_e2e_sections_pass_without_crosstalk():
-    env = dict(os.environ, R2S_RMWS="rmw_fastrtps_cpp rmw_zenoh_cpp", R2S_E2E_SKIP="test_scenario_8_posix")
+    env_a = dict(
+        os.environ,
+        R2S_RMWS="rmw_fastrtps_cpp rmw_zenoh_cpp",
+        R2S_E2E_SKIP="test_scenario_8_posix",
+        R2S_BUILD_DIR=pair_build_dir("a"),
+    )
+    env_b = dict(
+        os.environ,
+        R2S_RMWS="rmw_fastrtps_cpp rmw_zenoh_cpp",
+        R2S_E2E_SKIP="test_scenario_8_posix",
+        R2S_BUILD_DIR=pair_build_dir("b"),
+    )
     first = subprocess.Popen(
-        ["bash", "tests/e2e/run.sh"], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
+        ["bash", "tests/e2e/run.sh"], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env_a
     )
     second = subprocess.Popen(
-        ["bash", "tests/e2e/run.sh"], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
+        ["bash", "tests/e2e/run.sh"], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env_b
     )
     out1, _ = first.communicate()
     out2, _ = second.communicate()

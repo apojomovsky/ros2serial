@@ -26,7 +26,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--shard",
         default=None,
-        help="run only one CI shard of the SCRIPTS scope: 0 to N-1, shard 0 holds the e2e isolation tests",
+        help="run only one CI shard of the SCRIPTS scope: 0 to N-1",
     )
 
 

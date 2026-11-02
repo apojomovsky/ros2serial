@@ -230,8 +230,8 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 | `pre-push` hook | The cheap checks locally, leaving the suite to CI; skipped when the stamp shows this tree already passed | Cheap, minutes |
 | Takeoff (`make pre-pr-check TEST=1`) | The same cheap run as the hook, recording the stamp the push checks; scopes named on the command line and `R2S_FULL=1` still run locally | Cheap, minutes |
 | Every PR | Unit, component, contract, integration on posix, simavr scenarios, fuzz smoke (60 s per target), sanitizers, coverage, spec coverage, budgets, build matrix, golden, docs snippets | Under 15 min wall clock, in parallel jobs |
-| Nightly | Long fuzzing (30 min per target), mutation testing, extended property and model-based runs, long fault injection, soak (2 h), big-endian, Rolling | Hours |
-| Release | Everything above, the hardware checklist on a Uno and a Mega, the full distro and RMW matrix, frozen-vector check | |
+| Nightly | Long fuzzing (30 min per target), mutation testing, extended property and model-based runs, long fault injection, soak (2 h), big-endian, Rolling, e2e isolation pairs | Hours |
+| Release | Everything above; on a tag the nightly jobs run first and gate the publish, then the hardware checklist on a Uno and a Mega, the full distro and RMW matrix, frozen-vector check | |
 
 When the PR suite exceeds its budget, the slowest tests are made faster or moved down a level; the budget is not raised without the maintainer's approval.
 
@@ -239,7 +239,7 @@ Each top-level tree maps to the sections that test it and the sections that cons
 
 Suites share nothing: every section that starts ROS nodes (bridge, coverage, e2e) leases its own DDS domain from one slot pool (`scripts/e2e-lease.sh`), and the e2e legs take a Zenoh router port from the same slot, so two suites on one host never see each other's topics. Slot 0 maps to the domain and port each leg always used (89 for the e2e legs, 0 for bridge and coverage), so a lone run and CI keep their domains. An explicit `R2S_E2E_DOMAIN_ID` skips allocation; `R2S_E2E_DOMAIN_BASE` shifts the pool and defaults to 89.
 
-The SCRIPTS scope runs in CI as one job per shard over the collected test node ids: shard 0 holds the e2e isolation tests on their own, and the rest spread round-robin over the other shards in sorted order (`scripts/shard_nodes.py`, selected with `pytest --shard`), so the split is deterministic and every test runs in exactly one shard. `make test SCRIPTS=1` still runs the whole scope locally unless `SCRIPTS_SHARD` names a shard.
+The SCRIPTS scope runs in CI as one job per shard over the collected node ids, spread round-robin in sorted order (`scripts/shard_nodes.py`, selected with `pytest --shard`), so the split is deterministic and every test runs in exactly one shard. `make test SCRIPTS=1` still runs the whole scope locally unless `SCRIPTS_SHARD` names a shard. The e2e isolation pairs (`tests/e2e/test_isolation.py`) run in the nightly workflow instead (`make test NIGHTLY=1` locally); PR CI no longer runs them.
 
 ## 8. Keeping the tests honest
 

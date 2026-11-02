@@ -1,0 +1,33 @@
+name: nightly-jobs
+
+# The runs too long or too exhaustive for a PR: the long fuzzing and the e2e
+# isolation pairs. nightly.yml calls this on schedule; release.yml calls it
+# on a tag before anything is published, so no release ships with them red.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz-long:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test FUZZ=1
+        env:
+          R2S_FUZZ_SECONDS: 1800
+
+  # Two full e2e sections side by side on one host. The load-sensitive
+  # scenario is skipped and the sync bound keeps headroom for the shared
+  # host, as the CI e2e jobs do.
+  e2e-isolation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test NIGHTLY=1
+        env:
+          R2S_E2E_SKIP: test_scenario_8_posix
+          R2S_SYNC_BOUND_NS: 5000000

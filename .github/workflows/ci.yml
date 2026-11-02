@@ -76,9 +76,9 @@ jobs:
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
 
-  # The SCRIPTS scope runs as one job per shard: shard 0 holds the e2e
-  # isolation tests on their own until #337 moves them to the nightly, and
-  # the rest spread round-robin over the other shards (scripts/shard_nodes.py).
+  # The SCRIPTS scope runs as one job per shard over the collected node
+  # ids, spread round-robin in sorted order (scripts/shard_nodes.py). The
+  # e2e isolation pairs run in the nightly workflow instead.
   scripts:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.scripts == '1'
