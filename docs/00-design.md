@@ -677,7 +677,7 @@ ros2serial/
 │   └── vectors/              conformance vectors (YAML), the single source of truth for every codec test
 │       ├── crc/  rcobs/  varint/  frames/  messages/  session/  time/
 ├── core/                     C99 MCU core (no ROS, no hardware)
-│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h; r2s_crc.h, r2s_rcobs.h, r2s_varint.h, r2s_framer.h and r2s_tx.h, shared with the bridge
+│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h, r2s_varint.h and r2s_tx.h; r2s_crc.h, r2s_rcobs.h and r2s_framer.h, shared with the bridge
 │   ├── src/                  crc.c, rcobs.c, varint.c, framer.c, tx.c, session.c, time.c, log.c, ring.c, codec.c, topics.c
 │   ├── tests/                Unity unit tests, vector runner, CMakeLists.txt
 │   └── fuzz/                 libFuzzer targets and seed corpora
@@ -915,8 +915,8 @@ typedef const char *r2s_fstr_t;
 ```c
 #include <stdint.h>
 /* r2s_varint.h: lengths as unsigned LEB128 (spec/protocol.md, section 5).
-   Not part of the firmware API: the codec uses it, and so does the bridge,
-   which reads and writes the lengths of a packed payload. */
+   Not part of the firmware API: the codec uses it. The bridge reads and
+   writes packed lengths with its own converter code. */
 #define R2S_VARINT_MAX 0xFFFFu
 #define R2S_VARINT_MAX_BYTES 3u
 
