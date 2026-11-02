@@ -97,15 +97,20 @@ def test_other_ports_fail_safe_to_full():
     assert scopes("ports/stm32/src/port.c") == {"FULL": "1"}
 
 
-def test_e2e_tests_map_to_both_backends_and_bridge():
-    assert scopes("tests/e2e/test_scenario_1_posix.py") == {**CHEAP, "E2E": "both", "BRIDGE": "1"}
-    assert scopes("tests/e2e/e2e_support/relay.py") == {**CHEAP, "E2E": "both", "BRIDGE": "1"}
-    assert scopes("tests/e2e/run.sh") == {**CHEAP, "E2E": "both", "BRIDGE": "1"}
+# scripts/test_e2e_* load files from tests/e2e/, so every e2e path also runs SCRIPTS.
+E2E_SHARED = {**CHEAP, "E2E": "both", "BRIDGE": "1", "SCRIPTS": "1"}
+
+
+def test_e2e_tests_map_to_both_backends_bridge_and_scripts():
+    assert scopes("tests/e2e/test_scenario_1_posix.py") == E2E_SHARED
+    assert scopes("tests/e2e/e2e_support/relay.py") == E2E_SHARED
+    assert scopes("tests/e2e/e2e_support/teardown.py") == E2E_SHARED
+    assert scopes("tests/e2e/run.sh") == E2E_SHARED
     assert scopes("tests/harness/simavr/run.sh") == {**CHEAP, "E2E": "avr"}
 
 
 def test_nightly_isolation_pair_runs_outside_the_pr_scopes():
-    assert scopes("tests/e2e/test_isolation.py") == {**CHEAP, "NIGHTLY": "1"}
+    assert scopes("tests/e2e/test_isolation.py") == {**CHEAP, "NIGHTLY": "1", "SCRIPTS": "1"}
 
 
 def test_avr_only_e2e_paths_map_to_the_avr_leg():
@@ -119,7 +124,7 @@ def test_avr_only_e2e_paths_map_to_the_avr_leg():
         "tests/e2e/test_scenario_3_avr.py",
         "tests/e2e/test_scenario_4_avr.py",
     ):
-        assert scopes(path) == {**CHEAP, "E2E": "avr"}, path
+        assert scopes(path) == {**CHEAP, "E2E": "avr", "SCRIPTS": "1"}, path
 
 
 def test_docs_map_to_docs():
@@ -204,6 +209,7 @@ def test_e2e_backends_merge_to_both():
         **CHEAP,
         "BRIDGE": "1",
         "E2E": "both",
+        "SCRIPTS": "1",
     }
 
 
@@ -213,6 +219,7 @@ def test_bridge_and_avr_only_paths_merge_to_both():
         "BRIDGE": "1",
         "COVERAGE": "1",
         "E2E": "both",
+        "SCRIPTS": "1",
     }
 
 

@@ -106,17 +106,19 @@ PREFIX_RULES = (
     # The avr backend compiles the slice sketch and runs its scenarios, so
     # avr-only files map to the avr leg. The rest of the tree is shared by
     # both backends, and the BRIDGE launch test loads the relay from its file.
-    # The isolation pairs run in the nightly workflow, never on a PR.
-    ("tests/e2e/test_isolation.py", {"NIGHTLY": "1"}),
-    ("tests/e2e/avr_slice/", {"E2E": "avr"}),
-    ("tests/e2e/run-avr.sh", {"E2E": "avr"}),
-    ("tests/e2e/e2e_support/avr.py", {"E2E": "avr"}),
-    ("tests/e2e/test_avr_support.py", {"E2E": "avr"}),
-    ("tests/e2e/test_scenario_1_avr.py", {"E2E": "avr"}),
-    ("tests/e2e/test_scenario_2_avr.py", {"E2E": "avr"}),
-    ("tests/e2e/test_scenario_3_avr.py", {"E2E": "avr"}),
-    ("tests/e2e/test_scenario_4_avr.py", {"E2E": "avr"}),
-    ("tests/e2e/", {"E2E": "both", "BRIDGE": "1"}),
+    # The isolation pairs run in the nightly workflow, never on a PR. The
+    # scripts/test_e2e_* tests load files from tests/e2e/, so every e2e path
+    # also runs SCRIPTS.
+    ("tests/e2e/test_isolation.py", {"NIGHTLY": "1", "SCRIPTS": "1"}),
+    ("tests/e2e/avr_slice/", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/run-avr.sh", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/e2e_support/avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/test_avr_support.py", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/test_scenario_1_avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/test_scenario_2_avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/test_scenario_3_avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/test_scenario_4_avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/", {"E2E": "both", "BRIDGE": "1", "SCRIPTS": "1"}),
     ("tests/harness/", {"E2E": "avr"}),
     ("tests/", FULL),
     # The walkthrough check reads the README and runs its commands on simavr.
