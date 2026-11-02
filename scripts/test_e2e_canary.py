@@ -2,11 +2,13 @@
 
 await_canary blocks until the iteration's canary lists in its own graph,
 so sweeps never judge an iteration whose canary is still undiscovered.
-These tests run the runners' own function with a stubbed ros2, never
-a suite.
+These tests run the runners' own function against a fake ros2 binary on
+PATH (a shell function would be invisible through env), never a suite.
 """
 
+import os
 import shlex
+import stat
 import subprocess
 from pathlib import Path
 
@@ -27,34 +29,55 @@ def await_function(path):
     return "\n".join(lines[start : end + 1])
 
 
-def run_gate(path, ros_body, extra=""):
-    """await_canary against a stubbed ros2 CLI; canary_topic is always set."""
+def run_gate(path, show_after, record):
+    """await_canary against a fake ros2 that lists the canary from one call on."""
+    bindir = record.parent / "bin"
+    bindir.mkdir(exist_ok=True)
+    counter = record.parent / "calls"
+    counter.write_text("0")
+    fake = bindir / "ros2"
+    fake.write_text(
+        "#!/bin/bash\n"
+        f'echo "args: $*" >> {shlex.quote(str(record))}\n'
+        'echo "router: ${ZENOH_ROUTER_CONFIG_URI-}" >> "$R2S_TEST_RECORD"\n'
+        f"n=$(cat {shlex.quote(str(counter))}); echo $((n + 1)) > {shlex.quote(str(counter))}\n"
+        'echo "/diagnostics"\n'
+        f'if [ "$n" -ge {show_after} ]; then echo "/r2s_canary_test"; fi\n'
+    )
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     script = "set -u\ncleanup_and_exit() { echo BAILED; exit 1; }\nsleep() { :; }\n"
-    script += "ros2() {\n" + ros_body + "\n}\n"
-    script += "rmw=rmw_fastrtps_cpp\ncanary_topic=r2s_canary_test\n" + extra
+    script += "rmw=rmw_fastrtps_cpp\ncanary_topic=r2s_canary_test\n"
+    script += "ZENOH_ROUTER_CONFIG_URI=for-rmw-zenohd-only\n"
     script += await_function(path) + "\nawait_canary\n"
-    return subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    env = {"PATH": str(bindir) + ":" + os.environ["PATH"], "R2S_TEST_RECORD": str(record)}
+    return subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
 
 
 @pytest.mark.parametrize("runner", sorted(RUNNERS), ids=sorted(RUNNERS))
 def test_visible_canary_proceeds(runner, tmp_path):
-    proc = run_gate(RUNNERS[runner], 'echo "/diagnostics"; echo "/r2s_canary_test"')
+    proc = run_gate(RUNNERS[runner], 0, tmp_path / "probe")
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "BAILED" not in proc.stdout
 
 
 @pytest.mark.parametrize("runner", sorted(RUNNERS), ids=sorted(RUNNERS))
 def test_hidden_canary_retries_until_seen(runner, tmp_path):
-    seen = tmp_path / "calls"
-    seen.write_text("0")
-    ros_body = (
-        f"n=$(cat {shlex.quote(str(seen))}); echo $((n + 1)) > {shlex.quote(str(seen))}\n"
-        'echo "/diagnostics"\nif [ "$n" -ge 2 ]; then echo "/r2s_canary_test"; fi'
-    )
-    proc = run_gate(RUNNERS[runner], ros_body)
+    record = tmp_path / "probe"
+    proc = run_gate(RUNNERS[runner], 2, record)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "BAILED" not in proc.stdout
-    assert int(seen.read_text()) >= 3
+    assert sum(1 for line in record.read_text().splitlines() if line.startswith("args:")) >= 3
+
+
+@pytest.mark.parametrize("runner", sorted(RUNNERS), ids=sorted(RUNNERS))
+def test_probe_skips_the_daemon_and_the_router_uri(runner, tmp_path):
+    """The warm-up probe matches the sweep probe: no daemon, no router URI."""
+    record = tmp_path / "probe"
+    proc = run_gate(RUNNERS[runner], 0, record)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    lines = record.read_text().splitlines()
+    assert "topic list --no-daemon" in lines[0], lines
+    assert lines[1] == "router: ", lines
 
 
 @pytest.mark.parametrize("runner", sorted(RUNNERS), ids=sorted(RUNNERS))

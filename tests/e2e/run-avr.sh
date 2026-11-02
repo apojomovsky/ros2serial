@@ -150,12 +150,14 @@ stop_canary() {
 # canary into the next run's graph. EXIT alone cleans up; the signals exit.
 await_canary() {
   # Wait until this iteration's canary shows in its own graph, so sweeps
-  # never judge an iteration whose canary is still undiscovered. Bound
-  # the wait and fail loudly instead of proving nothing forever. grep
-  # without -q reads to end of input, which a pipefail shell needs.
+  # never judge an iteration whose canary is still undiscovered. Probe
+  # like the isolation test does: no daemon, and no router URI, which is
+  # for rmw_zenohd rather than clients. Bound the wait and fail loudly
+  # instead of proving nothing forever. grep without -q reads to end of
+  # input, which a pipefail shell needs.
   _canary_end=$((SECONDS + 180))
   while true; do
-    if RMW_IMPLEMENTATION=$rmw ros2 topic list 2>/dev/null | grep "/$canary_topic" >/dev/null; then
+    if env -u ZENOH_ROUTER_CONFIG_URI RMW_IMPLEMENTATION=$rmw ros2 topic list --no-daemon 2>/dev/null | grep "/$canary_topic" >/dev/null; then
       return 0
     fi
     sleep 2
