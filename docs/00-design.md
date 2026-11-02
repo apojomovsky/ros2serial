@@ -3,6 +3,8 @@
 Oct 20, 2026 · @Alexis Pojomovsky · from the kickoff proposal v3, which superseded v2 (Oct 3, 2026); both are in the git history
 
 > **How to use this document.** Part I is the design: what we build and why. Part II is the implementation specification: repository layout, exact protocol details, APIs, test strategy, CI, research tickets and the seed backlog. An agent creating tickets should start from Part II, section "Epics and seed tickets", and follow the links back into Part I for rationale. Where something is still unknown, Part II names a research ticket and a default to use until it is answered, so no ticket is blocked on a decision. Everything is built test-first, and every test runs on GitHub Actions.
+>
+> **New here?** Start with the [architecture page](02-architecture.md): five diagrams from the sketch to the ROS 2 graph. To change X, read Y: firmware behavior, Part I from Architecture through User API; wire bytes, Part II Protocol details plus `spec/protocol.md`; code layout and test scopes, the architecture Containers section plus Part II Repository layout; generator output, Part II Code generator specification; bridge internals, Part II Bridge specification.
 
 # Part I: Design
 
