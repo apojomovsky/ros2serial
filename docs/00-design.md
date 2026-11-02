@@ -3,6 +3,8 @@
 Oct 20, 2026 · @Alexis Pojomovsky · from the kickoff proposal v3, which superseded v2 (Oct 3, 2026); both are in the git history
 
 > **How to use this document.** Part I is the design: what we build and why. Part II is the implementation specification: repository layout, exact protocol details, APIs, test strategy, CI, research tickets and the seed backlog. An agent creating tickets should start from Part II, section "Epics and seed tickets", and follow the links back into Part I for rationale. Where something is still unknown, Part II names a research ticket and a default to use until it is answered, so no ticket is blocked on a decision. Everything is built test-first, and every test runs on GitHub Actions.
+>
+> **New here?** Start with the [architecture page](02-architecture.md): five diagrams from the sketch to the ROS 2 graph. To change X, read Y: firmware behavior, Part I from Architecture through User API; wire bytes, Part II Protocol details plus `spec/protocol.md`; code layout and test scopes, the architecture Containers section plus Part II Repository layout; generator output, Part II Code generator specification; bridge internals, Part II Bridge specification.
 
 # Part I: Design
 
@@ -675,7 +677,7 @@ ros2serial/
 │   └── vectors/              conformance vectors (YAML), the single source of truth for every codec test
 │       ├── crc/  rcobs/  varint/  frames/  messages/  session/  time/
 ├── core/                     C99 MCU core (no ROS, no hardware)
-│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h; r2s_crc.h, r2s_rcobs.h, r2s_varint.h, r2s_framer.h and r2s_tx.h, shared with the bridge
+│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h, r2s_varint.h and r2s_tx.h; r2s_crc.h, r2s_rcobs.h and r2s_framer.h, shared with the bridge
 │   ├── src/                  crc.c, rcobs.c, varint.c, framer.c, tx.c, session.c, time.c, log.c, ring.c, codec.c, topics.c
 │   ├── tests/                Unity unit tests, vector runner, CMakeLists.txt
 │   └── fuzz/                 libFuzzer targets and seed corpora
@@ -703,7 +705,7 @@ ros2serial/
 └── .github/workflows/
 ```
 
-**Code reuse between MCU and host.** The bridge links `core/src/crc.c`, `rcobs.c`, `varint.c` and `framer.c` compiled for the host. Framing, CRC and lengths therefore have a single implementation. The host session logic is separate C++.
+**Code reuse between MCU and host.** The bridge links `core/src/crc.c`, `framer.c` and `rcobs.c` compiled for the host, the three sources named in `bridge/r2s_bridge/CMakeLists.txt`. Framing, rCOBS and CRC therefore have a single implementation. Lengths stay on each side: the MCU codec and the bridge converter each decode varints. The host session logic is separate C++.
 
 **The rCOBS encoder is a stream.** `r2s_rcobs_encode_byte()` takes one byte and writes the bytes it produces, at most two, so the MCU serializes, computes the CRC and encodes in one pass with no TX buffer. `r2s_rcobs_encode_end()` writes the last code byte; the delimiter is the framer's. The decoder takes the encoded frame in a buffer and writes the decoded frame over it, right aligned, so it needs no second copy.
 
@@ -913,8 +915,8 @@ typedef const char *r2s_fstr_t;
 ```c
 #include <stdint.h>
 /* r2s_varint.h: lengths as unsigned LEB128 (spec/protocol.md, section 5).
-   Not part of the firmware API: the codec uses it, and so does the bridge,
-   which reads and writes the lengths of a packed payload. */
+   Not part of the firmware API: the codec uses it. The bridge reads and
+   writes packed lengths with its own converter code. */
 #define R2S_VARINT_MAX 0xFFFFu
 #define R2S_VARINT_MAX_BYTES 3u
 
@@ -956,7 +958,7 @@ Each port implements these as ordinary functions, resolved at link time:
 uint16_t r2s_port_read(uint8_t *buf, uint16_t max);       /* non-blocking; returns bytes read (core provides it with R2S_WITH_RX_RING) */
 void     r2s_port_write(const uint8_t *buf, uint16_t len); /* must accept len bytes when tx_free said so */
 uint16_t r2s_port_tx_free(void);                          /* bytes writable without blocking; 0xFFFF if blocking is acceptable */
-uint32_t r2s_port_tick(void);                             /* monotonic, wraps; rate = R2S_TICK_HZ */
+uint32_t r2s_port_tick(void);                             /* monotonic, wraps; rate = R2S_TICK_HZ; the posix port reads CLOCK_MONOTONIC */
 ```
 
 The core calls `r2s_port_read` with `max = 1` while it assembles a frame, so it never consumes bytes beyond the current delimiter.

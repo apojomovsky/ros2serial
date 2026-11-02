@@ -4,6 +4,69 @@ Oct 20, 2026 · @Alexis Pojomovsky · part of the design series after `docs/00-d
 
 > **What this is.** The testing strategy: the principles, how code must be written so it can be tested, what is tested at which level, when each test runs, how much is enough, and how the tests themselves are kept honest. It is normative: a ticket that adds code follows it, and a reviewer rejects code that breaks it. `docs/00-design.md` Part II summarizes it and links here.
 
+## Testing in practice
+
+Start here when something fails. The sections below stay normative; this one maps them to commands. For where each part lives in the tree and how a message travels through the running system, see `docs/02-architecture.md`.
+
+### Test levels
+
+Each level with the tree it lives in and the target that runs it:
+
+```mermaid
+flowchart TB
+    unit["Unit, component and bridge<br/>core/tests, gen/tests, bridge tests with fakes<br/>make test-core, test-gen, test-bridge, test-cpp"]
+    contract["Contract and golden<br/>spec/vectors, gen/tests snapshots<br/>same scopes as unit"]
+    posix["Integration<br/>tests/e2e with ports/posix over a pty<br/>make e2e-posix"]
+    avr["System<br/>tests/e2e with tests/harness in simavr<br/>make e2e-avr"]
+    fuzz["Fuzz<br/>core/fuzz corpus<br/>FUZZ scope"]
+
+    unit --> contract --> posix --> avr
+    unit --> fuzz
+```
+
+### CI flow
+
+The `plan` job maps the pull request diff to the scopes each section job gates on; pushes to `master` and manual runs select every scope. The SCRIPTS scope runs as one job per shard; the `nightly` job calls the shared nightly jobs on pull requests that select them. A version tag runs the same nightly jobs with the long fuzzing off, and they gate the publish.
+
+```mermaid
+flowchart TB
+    diff["Pull request diff"]
+    plan["plan: scopes_for_diff.py maps changed paths to scopes; unknown paths select FULL"]
+    subgraph jobs["Section jobs, each running only when its scope is selected"]
+        lint["lint"]
+        shards["scripts, one job per shard"]
+        backends["core, gen, bridge, cpp"]
+        e2e["e2e-posix matrix, e2e-avr"]
+        gates["coverage, docs, readme, examples, budgets, fuzz-smoke"]
+        cinight["nightly: nightly-jobs.yml when NIGHTLY is selected; fuzz-long only with FUZZ"]
+    end
+    full["FULL: a push to master or a manual run selects every scope"]
+    shared["nightly-jobs.yml: fuzz-long plus e2e-isolation"]
+    sched["nightly.yml on schedule"]
+    rel["release.yml on a version tag: nightly jobs with fuzz off gate the publish; a plain tag ships Latest, an -rc tag ships a pre-release"]
+
+    diff --> plan --> jobs
+    full --> jobs
+    cinight --> shared
+    sched --> shared
+    rel --> shared
+```
+
+### Rerunning one failure
+
+`make check` runs the scopes CI would run for the current diff against `origin/master`, plus the fast gates, and prints which scopes it chose. A diff that maps to FULL runs only the fast gates locally and leaves the full suite to CI. From there, narrow down:
+
+- One scope: `make test-core`, `test-gen`, `test-bridge`, `test-cpp`, `test-scripts`, `make e2e-posix`, `make e2e-avr`. `make test-all` runs the whole suite unscoped.
+- One pytest file or node: `make pytest ARGS='<path>[::name] [-k expr]'`.
+- One core unit test: `make ctest ARGS='<regex>'`, which builds the gcc config only and keeps the random order.
+- A misspelled scope variable fails with the list of valid scopes instead of running the wrong set.
+
+### Flakes
+
+The likely flakes live at the upper levels, where timing is real. The time sync scenario judges stamps within a bound, and the shared CI host needs headroom above the default (the CI e2e jobs set a wider bound, and the isolation pairs skip that scenario). simavr runs at its own pace, so wall-clock sleeps never appear in tests. A timing-sensitive e2e scenario that passes locally and fails on CI is the classic signature.
+
+Rerun exactly the failing scope locally first. If it passes, rerun the failed CI job once. A second failure is a real bug: file it as an issue. Flaky tests are bugs, fixed at the root cause, never retried automatically, quarantined, or loosened.
+
 ## 1. Principles
 
 1. **Tests are the specification's executable form.** The spec says what must happen on the wire; the vectors and tests prove each implementation does it. A behavior without a test is not guaranteed.
@@ -313,7 +376,7 @@ In `tests/e2e/`, each a launch_testing test parameterized by MCU backend (posix,
 
 1. Handshake completes within 3 s of the MCU's HELLO, as the bridge reports it; `ros2 topic list` shows the announced topics within a further generous timeout.
 2. MCU publishes Float32 at 50 Hz for 10 s; the host receives at least 99% with correct values.
-3. Host publishes Twist; the MCU echoes it on a test topic; values match after the narrow round trip.
+3. Host publishes Twist; the MCU echoes it on a test topic; values match after the narrow round trip. The handshake reads from bridge state within 3 s and the echo topics wait on the graph within a further generous timeout, so discovery never spends the echo budget.
 4. Launch remapping and namespace apply to the MCU's topics.
 5. A type hash mismatch rejects only that topic, with an error naming the type.
 6. Unplug (close the pty) and replug: CONNECTED again within `boot_wait_ms` + 3 s without restarting the bridge.
