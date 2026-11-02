@@ -54,6 +54,7 @@ tracked files.
 | `regen` | Regenerate every version-stamped generated file (goldens, example and cpp libraries, posix sources) |
 | `docs-gen` | Not built yet (pending G1 and H1): will regenerate reference docs (CLI, vectors, bridge parameters) |
 | `fmt` / `lint` / `check-warnings` | Formatting, linters (advisory), warnings (hard gate) |
+| `lint-docs` | Check mermaid blocks in the docs with mermaid's own parser (needs host docker) |
 | `setup-hooks` / `pre-pr-check` | Install hooks / run the takeoff ritual |
 | `help` | List all targets |
 

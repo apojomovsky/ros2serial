@@ -129,6 +129,9 @@ docs-gen: ## Not built yet (pending G1 and H1): will regenerate reference docs
 lint: guard-main-clone cache-dir ## Linters: the LINT section of the suite
 	@$(call in_image,env LINT=1 bash scripts/ci-test.sh)
 
+lint-docs: guard-main-clone cache-dir ## Check mermaid blocks in the docs with mermaid's own parser (needs host docker)
+	@bash scripts/lint-docs.sh
+
 check-warnings: guard-main-clone cache-dir ## Fail on any compiler warning (hard gate): core builds with -Werror, cppcheck
 	@$(call in_image,bash scripts/check-warnings.sh)
 

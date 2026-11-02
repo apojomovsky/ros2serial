@@ -44,6 +44,9 @@ done
 scopes="$caller$computed_rest"
 
 echo "check: scopes for the diff against $base:$scopes"
+# The mermaid check runs on the host through docker run (make lint-docs),
+# never inside the dev image, so the suite cannot run it from here.
+case "$scopes" in *" MERMAID=1"*) echo "check: mermaid blocks selected; run make lint-docs on the host (needs docker)" ;; esac
 if [ "$scopes" = " FULL=1" ]; then
   echo "check: the diff maps to FULL; running the fast gates locally, leaving the full suite to CI"
   env LINT=1 COMMITS=1 bash "$suite"
