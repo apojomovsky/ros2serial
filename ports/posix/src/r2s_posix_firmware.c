@@ -46,6 +46,7 @@ struct options {
     const char *time_now;
     int32_t skew_ppm;
     unsigned rate;
+    uint8_t log_lines;
 };
 
 /* The name a generated topic launches under: its command-line option, or
@@ -103,7 +104,7 @@ static void usage(FILE *out)
     fprintf(out, "Usage: r2s_posix_firmware PORT [--node NAME] [--rate HZ]\n"
                  "           [--pub NAME | --no-pub] [--sub NAME | --no-sub]\n"
                  "           [--echo NAME | --no-echo] [--time-now NAME | --no-time-now]\n"
-                 "           [--log-text NAME | --no-log-text] [--tick-skew-ppm PPM]\n");
+                 "           [--log-text NAME | --no-log-text] [--log-lines] [--tick-skew-ppm PPM]\n");
 }
 
 static const char *take_value(int argc, char **argv, int *i, const char *flag)
@@ -313,6 +314,7 @@ static void parse_options(int argc, char **argv, struct options *opts)
     opts->time_now = kDefaultTimeNow;
     opts->skew_ppm = 0;
     opts->rate = 10u;
+    opts->log_lines = 0u;
     for (i = 2; i < argc; i++) {
         const char *arg = argv[i];
 
@@ -342,6 +344,8 @@ static void parse_options(int argc, char **argv, struct options *opts)
             opts->log_text = NULL;
         } else if (strcmp(arg, "--no-time-now") == 0) {
             opts->time_now = NULL;
+        } else if (strcmp(arg, "--log-lines") == 0) {
+            opts->log_lines = 1u;
         } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
             usage(stdout);
             exit(0);
@@ -398,6 +402,19 @@ static r2s_status_t publish_log_text(uint32_t value)
     return r2s_publish_log_text(&msg);
 }
 
+/* One line per level every LOG_PERIOD_MS while connected, so the host log
+ * test sees every severity. Plain text, which the bridge renders verbatim. */
+#define LOG_PERIOD_MS 2000u
+
+static void emit_log_lines(void)
+{
+    R2S_LOG_DEBUG("r2s log debug");
+    R2S_LOG_INFO("r2s log info");
+    R2S_LOG_WARN("r2s log warn");
+    R2S_LOG_ERROR("r2s log error");
+    R2S_LOG_FATAL("r2s log fatal");
+}
+
 static void sleep_1ms(void)
 {
     const struct timespec req = {0, 1000000L};
@@ -425,6 +442,7 @@ int main(int argc, char **argv)
     uint32_t interval;
     uint32_t last_pub;
     uint32_t last_time;
+    uint32_t last_log = 0u;
     uint32_t sent = 0u;
     uint8_t log_booted = 0u;
 
@@ -466,6 +484,10 @@ int main(int argc, char **argv)
             last_time = now;
             sleep_1ms();
             continue;
+        }
+        if (opts.log_lines != 0u && (uint32_t)(now - last_log) >= LOG_PERIOD_MS) {
+            emit_log_lines();
+            last_log = now;
         }
         if (opts.log_text != NULL && log_booted == 0u) {
             /* A boot line that fails to publish is retried until it sends.

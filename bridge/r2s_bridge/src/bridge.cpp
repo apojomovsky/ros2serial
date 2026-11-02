@@ -44,8 +44,34 @@ Bridge::Bridge(const rclcpp::NodeOptions &options)
     declare_parameter<int>("tx_budget_pct", 50);
     declare_parameter<int>("qos_depth", 10);
 
+    // The bridge's own lines stay on the node logger; the MCU's lines go to
+    // the mcu child, so they reach /rosout under <node>.mcu (docs/00-design.md,
+    // E4) with the severity the log frame names.
+    const rclcpp::Logger mcu_log = get_logger().get_child("mcu");
+    const auto forward_mcu_log = [mcu_log](SessionLog level, const std::string &text) {
+        switch (level) {
+        case SessionLog::kDebug:
+            RCLCPP_DEBUG(mcu_log, "%s", text.c_str());
+            break;
+        case SessionLog::kInfo:
+            RCLCPP_INFO(mcu_log, "%s", text.c_str());
+            break;
+        case SessionLog::kWarning:
+            RCLCPP_WARN(mcu_log, "%s", text.c_str());
+            break;
+        case SessionLog::kError:
+            RCLCPP_ERROR(mcu_log, "%s", text.c_str());
+            break;
+        case SessionLog::kFatal:
+            RCLCPP_FATAL(mcu_log, "%s", text.c_str());
+            break;
+        }
+    };
     const auto forward_log = [this](SessionLog level, const std::string &text) {
         switch (level) {
+        case SessionLog::kDebug:
+            RCLCPP_DEBUG(get_logger(), "%s", text.c_str());
+            break;
         case SessionLog::kError:
             RCLCPP_ERROR(get_logger(), "%s", text.c_str());
             break;
@@ -54,6 +80,9 @@ Bridge::Bridge(const rclcpp::NodeOptions &options)
             break;
         case SessionLog::kInfo:
             RCLCPP_INFO(get_logger(), "%s", text.c_str());
+            break;
+        case SessionLog::kFatal:
+            RCLCPP_FATAL(get_logger(), "%s", text.c_str());
             break;
         }
     };
@@ -87,7 +116,7 @@ Bridge::Bridge(const rclcpp::NodeOptions &options)
     router_ = std::make_unique<Router>(
         get_node_topics_interface(),
         [serial]() { return std::unique_ptr<Transport>(new TermiosTransport(serial)); }, clock_, ros_clock_,
-        std::move(pacing), forward_log, std::move(link));
+        std::move(pacing), forward_log, std::move(link), forward_mcu_log);
     diagnostics_hardware_id_ = serial.port;
     diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10);
     timer_ = create_wall_timer(kPollPeriod, [this]() {

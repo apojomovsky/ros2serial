@@ -153,7 +153,7 @@ for leg in static runtime; do
       RMW_IMPLEMENTATION=$rmw ros2 topic pub "/$canary_topic" std_msgs/msg/String '{data: canary}' >/dev/null 2>&1 &
       canary_pid=$!
     fi
-    for test_file in test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_8_posix test_publish_catchup_posix; do
+    for test_file in test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_8_posix test_scenario_9_posix test_publish_catchup_posix; do
       timeout 300 launch_test "tests/e2e/${test_file}.py" || status=1
     done
     # Both sides wait for each other here too, so the whole iteration

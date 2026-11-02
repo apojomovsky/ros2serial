@@ -138,7 +138,17 @@ The topics live in a RAM table the runtime layer fills, and registration closes 
 #include <ros2serial.h>
 ```
 
-The header expands the list into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator. The header counts the rows itself, so an empty list fails the build with the generator's message instead of emitting an empty table.
+A C sketch spells the same rows with the generated C struct name instead of the double-colon type:
+
+```c
+#define R2S_NODE_NAME "base_controller"
+#define R2S_TOPICS(X) \
+  X(Publisher, std_msgs__msg__Float32, battery_pub, "battery") \
+  X(Subscription, geometry_msgs__msg__Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)
+#include <ros2serial.h>
+```
+
+The header expands either spelling into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator. The header counts the rows itself, so an empty list fails the build with the generator's message instead of emitting an empty table.
 **3. `r2s.yaml` and the generator** (custom messages, bare metal, CMake, PlatformIO, PIC):
 
 ```yaml
@@ -242,7 +252,7 @@ The bridge loads the type support for each type name and compares the hash with 
 
 **Session, reset and reconnection.** Heartbeats run in both directions. The host treats any of these as an MCU reset and redoes the handshake and the time sync: a `HELLO` carrying no token or a different token than the one recorded, an unsolicited `HELLO` while connected, or a `HELLO` sent in reply to a heartbeat. An MCU that is not connected answers any non-handshake host frame with a rate-limited `HELLO`, so a reset is detected within one heartbeat period, without entropy. If the MCU stops seeing host traffic, it stops publishing and returns to announcing.
 
-**Losses and errors.** User topics are best effort. A gap in `seq` increments a counter that the bridge publishes as diagnostics. Parameters, services and the handshake use a small reliable channel (stop-and-wait with ack on ID 6, one outstanding message per direction).
+**Losses and errors.** User topics are best effort. A gap in `seq` increments a counter that the bridge publishes as diagnostics. A serialized publish that fails on the ROS graph is dropped the same way: the bridge logs the topic and counts the failure per topic instead of aborting. Parameters, services and the handshake use a small reliable channel (stop-and-wait with ack on ID 6, one outstanding message per direction).
 
 **Flow control.** The MCU announces its RX capacity (the size of its frame buffer). The bridge rate-limits host-to-MCU traffic per topic, caps its total host-to-MCU bandwidth to a fraction of the link, and, for keep-latest topics such as `cmd_vel`, keeps only the most recent message instead of queueing. Topics are serviced round-robin, so one busy topic cannot starve the others. Pending control frames coalesce while the link is wedged ([SES-33]): one per control kind and one TOPIC_STATUS per topic id, dropped on re-handshake, with the replaced count in `/diagnostics`.
 

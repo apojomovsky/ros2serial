@@ -51,9 +51,11 @@ class Router
     // budget outside 0 to 100, no baud, a negative default rate) or a missing
     // log sink.
     // session_config carries the H4 link timing; the pacing params above are
+    // the RouterParams. mcu_sink carries the MCU's own log lines ([LOG-1])
+    // and defaults to the log sink.
     Router(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,
            const Clock &clock, const Clock &ros_clock, RouterParams params, LogSink sink,
-           SessionConfig session_config = SessionConfig());
+           SessionConfig session_config = SessionConfig(), LogSink mcu_sink = LogSink());
     ~Router();
     Router(const Router &) = delete;
 
@@ -62,10 +64,12 @@ class Router
 
     // One announced topic's H8 values: the announced name and direction, the
     // host's TOPIC_STATUS verdict for it ([CTL-13]), the MCU-to-host frames
-    // it skipped ([FRM-15]), and the host-to-MCU payloads the pacer dropped
-    // ([SES-26], [SES-30]). The direction the topic never uses reads 0.
-    // Every announced topic is listed in announcement order, including one
-    // the host refused: its verdict says why it carries no traffic.
+    // it skipped ([FRM-15]), the host-to-MCU payloads the pacer dropped
+    // ([SES-26], [SES-30]), and the converted frames a failed serialized
+    // publish dropped instead of aborting. The direction the topic never
+    // uses reads 0. Every announced topic is listed in announcement order,
+    // including one the host refused: its verdict says why it carries no
+    // traffic.
     struct TopicDiagnostics {
         std::uint8_t topic_id = 0;
         std::string topic_name;
@@ -73,6 +77,9 @@ class Router
         std::uint8_t status = 0;
         std::uint32_t seq_gaps = 0;
         std::size_t dropped = 0;
+        // Converted device-to-host frames the serialized publish refused,
+        // logged and counted instead of aborting.
+        std::size_t publish_failures = 0;
     };
     // The H8 snapshot: link state is one of disconnected, boot_wait,
     // handshaking or connected; the time sync values are real once a
