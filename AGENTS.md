@@ -164,7 +164,7 @@ Pass the title the PR will carry as `make pre-pr-check PR_TITLE="<title>"`, so t
 
 | Workflow | Trigger | Role |
 | --- | --- | --- |
-| `ci.yml` | Push and PR | The suite (jobs listed in `docs/00-design.md`, Part II) |
+| `ci.yml` | Push, PR and manual | The suite (jobs listed in `docs/00-design.md`, Part II) |
 | `pr-body.yml` | PR opened or edited | Fails on literal `\n` or `\r` in the body |
 | `nightly.yml` | Schedule | Long fuzzing and fault injection, big-endian, Rolling |
 | `cut-release.yml` | Manual | Next version from commits (git-cliff), changelog, release PR, auto-merge, tag |
