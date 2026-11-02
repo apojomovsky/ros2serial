@@ -313,7 +313,7 @@ In `tests/e2e/`, each a launch_testing test parameterized by MCU backend (posix,
 
 1. Handshake completes within 3 s of the MCU's HELLO, as the bridge reports it; `ros2 topic list` shows the announced topics within a further generous timeout.
 2. MCU publishes Float32 at 50 Hz for 10 s; the host receives at least 99% with correct values.
-3. Host publishes Twist; the MCU echoes it on a test topic; values match after the narrow round trip.
+3. Host publishes Twist; the MCU echoes it on a test topic; values match after the narrow round trip. The handshake reads from bridge state within 3 s and the echo topics wait on the graph within a further generous timeout, so discovery never spends the echo budget.
 4. Launch remapping and namespace apply to the MCU's topics.
 5. A type hash mismatch rejects only that topic, with an error naming the type.
 6. Unplug (close the pty) and replug: CONNECTED again within `boot_wait_ms` + 3 s without restarting the bridge.
