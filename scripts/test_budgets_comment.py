@@ -149,7 +149,9 @@ def test_missing_base_with_breach_comments_the_table():
     assert "TABLE" in body
 
 
-def write_inputs(root: Path, head_sizes, head_stacks, over, base_sizes=None, base_stacks=None, table="TABLE\n"):
+def write_inputs(
+    root: Path, head_sizes, head_stacks, over, base_sizes=None, base_stacks=None, base_over=None, table="TABLE\n"
+):
     (root / "head_sizes.json").write_text(json.dumps(head_sizes), encoding="utf-8")
     (root / "head_stacks.json").write_text(json.dumps(head_stacks), encoding="utf-8")
     (root / "budgets.yaml").write_text(
@@ -179,6 +181,16 @@ def write_inputs(root: Path, head_sizes, head_stacks, over, base_sizes=None, bas
         (root / "base_sizes.json").write_text(json.dumps(base_sizes), encoding="utf-8")
         (root / "base_stacks.json").write_text(json.dumps(base_stacks), encoding="utf-8")
         args += ["--base-measurements", str(root / "base_sizes.json"), "--base-stack", str(root / "base_stacks.json")]
+    if base_over is not None:
+        (root / "base_budgets.yaml").write_text(
+            "firmware:\n"
+            f"  {FIRMWARE}:\n"
+            f"    flash: {base_over['firmware'][FIRMWARE]['flash']}\n"
+            f"    ram: {base_over['firmware'][FIRMWARE]['ram']}\n"
+            f"    stack: {base_over['firmware'][FIRMWARE]['stack']}\n",
+            encoding="utf-8",
+        )
+        args += ["--base-budgets", str(root / "base_budgets.yaml")]
     return args
 
 
@@ -214,6 +226,17 @@ def test_cli_reports_cleared_for_a_return_with_prior_comment(tmp_path):
     body = (tmp_path / "body.md").read_text(encoding="utf-8")
     assert body.splitlines()[0] == budgets_comment.MARKER
     assert "TABLE" not in body
+
+
+def test_cli_comments_on_a_base_budget_breach(tmp_path):
+    generous = limits(flash=99999, ram=99999, stack=99999)
+    args = write_inputs(tmp_path, sizes(), stacks(), generous, sizes(), stacks(), base_over=limits(flash=7000))
+
+    result = subprocess.run(args, capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "comment"
+    assert (tmp_path / "body.md").read_text(encoding="utf-8").splitlines()[0] == budgets_comment.MARKER
 
 
 def test_cli_fails_on_a_missing_table(tmp_path):
