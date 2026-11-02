@@ -5,9 +5,8 @@ GitHub's six hour default: #350 saw a SCRIPTS shard sit silent for 38
 minutes. These tests pin the contract from the workflow files.
 """
 
-from pathlib import Path
-
 import re
+from pathlib import Path
 
 import yaml
 
