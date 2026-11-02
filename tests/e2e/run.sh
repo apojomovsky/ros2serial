@@ -88,8 +88,13 @@ for leg in static runtime; do
       sleep 2
       kill -0 "$router" 2>/dev/null || { echo "rmw_zenohd on port $R2S_ZENOH_ROUTER_PORT died"; status=1; break; }
     fi
-    for test_file in test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_9_posix test_publish_catchup_posix; do
-      timeout 300 launch_test "tests/e2e/${test_file}.py" || status=1
+    for test_file in test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_8_posix test_scenario_9_posix test_publish_catchup_posix; do
+      # The isolation pairs skip scenario 8 through R2S_E2E_SKIP: its bound
+      # assumes a lone suite and cannot survive two suites on one host.
+      case " ${R2S_E2E_SKIP:-} " in
+        *" $test_file "*) echo "skip $test_file (R2S_E2E_SKIP)" ;;
+        *) timeout 300 launch_test "tests/e2e/${test_file}.py" || status=1 ;;
+      esac
     done
     if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
   done

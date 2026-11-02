@@ -21,7 +21,7 @@ from e2e_support.relay import PtyRelay
 
 # covers: SES-1, SES-2, SES-5, SES-6, SES-13, SES-16, SES-17
 
-ANNOUNCED = ["/battery", "/cmd_vel", "/echo_vel", "/log_text"]
+ANNOUNCED = ["/battery", "/cmd_vel", "/echo_vel", "/log_text", "/time_now"]
 # The bridge reports announced names without the graph's leading slash.
 HANDSHAKE_TOPICS = [name.removeprefix("/") for name in ANNOUNCED]
 TOPIC_BUDGET = 3.0

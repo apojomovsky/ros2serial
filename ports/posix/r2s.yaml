@@ -16,5 +16,8 @@ topics:
   - name: log_text
     type: std_msgs/msg/String
     direction: pub
+  - name: time_now
+    type: builtin_interfaces/msg/Time
+    direction: pub
 bounds:
   std_msgs/msg/String.data: 8

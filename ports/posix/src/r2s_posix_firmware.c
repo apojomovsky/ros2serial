@@ -29,6 +29,12 @@ static const char *const kDefaultPub = "battery";
 static const char *const kDefaultSub = "cmd_vel";
 static const char *const kDefaultEcho = "echo_vel";
 static const char *const kDefaultLogText = "log_text";
+static const char *const kDefaultTimeNow = "time_now";
+
+/* The skew range the wire correction carries (spec/protocol.md [TIM-4]):
+ * past it the host must refuse the correction, so the knob stops here. */
+#define SKEW_MIN_PPM (-20000)
+#define SKEW_MAX_PPM 20000
 
 struct options {
     const char *port;
@@ -37,6 +43,8 @@ struct options {
     const char *sub;
     const char *echo;
     const char *log_text;
+    const char *time_now;
+    int32_t skew_ppm;
     unsigned rate;
     uint8_t log_lines;
 };
@@ -61,6 +69,10 @@ static const char *rename_for(const struct options *opts, const char *name, uint
     if (strcmp(name, kDefaultLogText) == 0) {
         *drop = (opts->log_text == NULL);
         return opts->log_text;
+    }
+    if (strcmp(name, kDefaultTimeNow) == 0) {
+        *drop = (opts->time_now == NULL);
+        return opts->time_now;
     }
     *drop = 0u;
     return name;
@@ -91,8 +103,8 @@ static void usage(FILE *out)
 {
     fprintf(out, "Usage: r2s_posix_firmware PORT [--node NAME] [--rate HZ]\n"
                  "           [--pub NAME | --no-pub] [--sub NAME | --no-sub]\n"
-                 "           [--echo NAME | --no-echo]\n"
-                 "           [--log-text NAME | --no-log-text] [--log-lines]\n");
+                 "           [--echo NAME | --no-echo] [--time-now NAME | --no-time-now]\n"
+                 "           [--log-text NAME | --no-log-text] [--log-lines] [--tick-skew-ppm PPM]\n");
 }
 
 static const char *take_value(int argc, char **argv, int *i, const char *flag)
@@ -119,6 +131,23 @@ static unsigned take_rate(const char *text)
         exit(2);
     }
     return (unsigned)rate;
+}
+
+static int32_t take_skew(const char *text)
+{
+    char *end;
+    long skew;
+
+    errno = 0;
+    skew = strtol(text, &end, 10);
+    if (end == text || *end != '\0' || errno == ERANGE || skew < (long)SKEW_MIN_PPM ||
+        skew > (long)SKEW_MAX_PPM) {
+        fprintf(stderr, "r2s_posix: --tick-skew-ppm needs %d..%d, got '%s'\n", SKEW_MIN_PPM, SKEW_MAX_PPM,
+                text);
+        usage(stderr);
+        exit(2);
+    }
+    return (int32_t)skew;
 }
 
 static void check_name(const char *flag, const char *name)
@@ -282,6 +311,8 @@ static void parse_options(int argc, char **argv, struct options *opts)
     opts->sub = kDefaultSub;
     opts->echo = kDefaultEcho;
     opts->log_text = kDefaultLogText;
+    opts->time_now = kDefaultTimeNow;
+    opts->skew_ppm = 0;
     opts->rate = 10u;
     opts->log_lines = 0u;
     for (i = 2; i < argc; i++) {
@@ -299,6 +330,10 @@ static void parse_options(int argc, char **argv, struct options *opts)
             opts->echo = take_value(argc, argv, &i, arg);
         } else if (strcmp(arg, "--log-text") == 0) {
             opts->log_text = take_value(argc, argv, &i, arg);
+        } else if (strcmp(arg, "--time-now") == 0) {
+            opts->time_now = take_value(argc, argv, &i, arg);
+        } else if (strcmp(arg, "--tick-skew-ppm") == 0) {
+            opts->skew_ppm = take_skew(take_value(argc, argv, &i, arg));
         } else if (strcmp(arg, "--no-pub") == 0) {
             opts->pub = NULL;
         } else if (strcmp(arg, "--no-sub") == 0) {
@@ -307,6 +342,8 @@ static void parse_options(int argc, char **argv, struct options *opts)
             opts->echo = NULL;
         } else if (strcmp(arg, "--no-log-text") == 0) {
             opts->log_text = NULL;
+        } else if (strcmp(arg, "--no-time-now") == 0) {
+            opts->time_now = NULL;
         } else if (strcmp(arg, "--log-lines") == 0) {
             opts->log_lines = 1u;
         } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
@@ -330,6 +367,9 @@ static void parse_options(int argc, char **argv, struct options *opts)
     }
     if (opts->log_text != NULL) {
         check_renamed_name("--log-text", opts->log_text, kDefaultLogText);
+    }
+    if (opts->time_now != NULL) {
+        check_renamed_name("--time-now", opts->time_now, kDefaultTimeNow);
     }
 }
 
@@ -382,6 +422,18 @@ static void sleep_1ms(void)
     (void)nanosleep(&req, NULL);
 }
 
+static void publish_time_now(void)
+{
+    /* The MCU's ROS time for the host to check: unsynced time reads zero,
+     * so the caller only publishes once a correction anchors the clock. */
+    builtin_interfaces__msg__Time stamp;
+    r2s_time_t now = r2s_now();
+
+    stamp.sec = now.sec;
+    stamp.nanosec = now.nanosec;
+    (void)r2s_publish_time_now(&stamp);
+}
+
 int main(int argc, char **argv)
 {
     struct options opts;
@@ -389,6 +441,7 @@ int main(int argc, char **argv)
     uint8_t count;
     uint32_t interval;
     uint32_t last_pub;
+    uint32_t last_time;
     uint32_t last_log = 0u;
     uint32_t sent = 0u;
     uint8_t log_booted = 0u;
@@ -403,6 +456,7 @@ int main(int argc, char **argv)
         return 0;
     }
     parse_options(argc, argv, &opts);
+    r2s_posix_set_tick_skew_ppm(opts.skew_ppm);
     if (r2s_posix_open(opts.port) < 0) {
         fprintf(stderr, "r2s_posix: cannot open '%s': %s\n", opts.port, strerror(errno));
         return 1;
@@ -417,6 +471,7 @@ int main(int argc, char **argv)
     fprintf(stderr, "r2s_posix: ready node=%s topics=%u rate=%u\n", opts.node, count, opts.rate);
     interval = (uint32_t)(1000u / opts.rate);
     last_pub = r2s_port_tick();
+    last_time = last_pub;
     for (;;) {
         uint32_t now;
 
@@ -426,6 +481,7 @@ int main(int argc, char **argv)
             /* Offline there are no samples, so the clock resyncs instead of
              * queueing a burst for the reconnect. */
             last_pub = now;
+            last_time = now;
             sleep_1ms();
             continue;
         }
@@ -456,6 +512,14 @@ int main(int argc, char **argv)
                 if (opts.log_text != NULL && sent % 10u == 0u) {
                     (void)publish_log_text(sent);
                 }
+            }
+        }
+        if (opts.time_now != NULL && r2s_time_synced() != 0u) {
+            /* One stamp per interval, no catch-up: a stalled link skips
+             * samples the host would read as the past. */
+            if ((uint32_t)(now - last_time) >= interval) {
+                publish_time_now();
+                last_time = now;
             }
         }
         sleep_1ms();

@@ -216,6 +216,8 @@ jobs:
           R2S_IN_IMAGE: 1
           R2S_BUILD_DIR: /tmp/r2s-build
           R2S_RMWS: ${{ matrix.rmw }}
+          # Scenario 8's median bound: the shared host needs headroom above the 1 ms default.
+          R2S_SYNC_BOUND_NS: 5000000
 
   # Placeholders. Each becomes a real job in the ticket it names, and stays
   # out of the required checks until then.

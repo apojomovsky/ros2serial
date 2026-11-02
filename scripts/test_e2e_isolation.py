@@ -3,7 +3,9 @@
 Each run.sh and run-avr.sh leases its own DDS domain and zenoh port, so two
 suites never see each other's topics even though they share the tree.
 Narrowed to Fast DDS and Zenoh, one board in the avr scenario loop; the RMW
-matrix covers each leg alone, and these tests cover the overlap.
+matrix covers each leg alone, and these tests cover the overlap. The pairs
+skip load-sensitive scenario 8 through R2S_E2E_SKIP; the standalone legs
+keep judging it.
 """
 
 import os
@@ -33,7 +35,7 @@ def port_of(output):
 
 @pytest.mark.skipif(shutil.which("colcon") is None, reason="colcon is not installed")
 def test_two_concurrent_e2e_sections_pass_without_crosstalk():
-    env = dict(os.environ, R2S_RMWS="rmw_fastrtps_cpp rmw_zenoh_cpp")
+    env = dict(os.environ, R2S_RMWS="rmw_fastrtps_cpp rmw_zenoh_cpp", R2S_E2E_SKIP="test_scenario_8_posix")
     first = subprocess.Popen(
         ["bash", "tests/e2e/run.sh"], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
     )
@@ -49,7 +51,12 @@ def test_two_concurrent_e2e_sections_pass_without_crosstalk():
 
 @pytest.mark.skipif(shutil.which("colcon") is None, reason="colcon is not installed")
 def test_avr_and_posix_sections_pass_side_by_side():
-    env = dict(os.environ, R2S_RMWS="rmw_fastrtps_cpp rmw_zenoh_cpp", R2S_E2E_BOARDS="uno")
+    env = dict(
+        os.environ,
+        R2S_RMWS="rmw_fastrtps_cpp rmw_zenoh_cpp",
+        R2S_E2E_BOARDS="uno",
+        R2S_E2E_SKIP="test_scenario_8_posix",
+    )
     avr = subprocess.Popen(
         ["bash", "tests/e2e/run-avr.sh"], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
     )

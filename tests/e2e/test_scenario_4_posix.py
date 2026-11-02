@@ -28,7 +28,7 @@ REMAPPINGS = (("battery", "cell_voltage"), ("cmd_vel", "steer"))
 WANTED = ["/" + NAMESPACE + "/cell_voltage", "/" + NAMESPACE + "/steer"]
 GONE = ["/battery", "/cmd_vel", "/" + NAMESPACE + "/battery", "/" + NAMESPACE + "/cmd_vel"]
 # The bridge reports announced names without remapping or namespace.
-HANDSHAKE_TOPICS = ["battery", "cmd_vel", "echo_vel", "log_text"]
+HANDSHAKE_TOPICS = ["battery", "cmd_vel", "echo_vel", "log_text", "time_now"]
 TOPIC_BUDGET = 3.0
 
 _SCRATCH = None
