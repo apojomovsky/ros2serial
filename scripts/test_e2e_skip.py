@@ -2,8 +2,8 @@
 
 run.sh and run-avr.sh skip the test files named in R2S_E2E_SKIP, so the
 concurrent pairs can drop load-sensitive scenario 8 while the standalone
-legs keep judging its 1 ms bound. These tests run the runners' own skip
-lines with stubbed launch commands, never a suite.
+legs keep judging it under R2S_SYNC_BOUND_NS. These tests run the
+runners' own skip lines with stubbed launch commands, never a suite.
 """
 
 import shlex

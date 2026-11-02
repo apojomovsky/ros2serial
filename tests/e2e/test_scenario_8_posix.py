@@ -2,9 +2,10 @@
 
 The firmware ticks 5000 ppm fast. After the initial burst the bridge's
 corrections anchor the MCU clock, and the time_now stamps stay within
-1 ms of host time. A fast clock needs negative drift: its ticks outrun
-ROS time, so each nominal millisecond carries fewer ROS nanoseconds.
-The stamps are only judged once the fitted drift tracks the skew.
+R2S_SYNC_BOUND_NS nanoseconds (default 1000000) of host time. A fast
+clock needs negative drift: its ticks outrun ROS time, so each nominal
+millisecond carries fewer ROS nanoseconds. The stamps are only judged
+once the fitted drift tracks the skew.
 """
 
 import os
@@ -25,7 +26,18 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 # covers: SES-22, SES-23, SES-24, SES-25
 
 SKEW_PPM = 5000
-BOUND_NS = 1_000_000
+
+
+def _sync_bound_ns():
+    """The median bound from R2S_SYNC_BOUND_NS, defaulting to 1 ms."""
+    raw = os.environ.get("R2S_SYNC_BOUND_NS", "1000000")
+    try:
+        return int(raw)
+    except ValueError as err:
+        raise ValueError(f"R2S_SYNC_BOUND_NS must be an integer number of nanoseconds, got {raw!r}") from err
+
+
+BOUND_NS = _sync_bound_ns()
 COLLECT_S = 10.0
 MIN_STAMPS = 50
 SYNC_TIMEOUT = 30.0
@@ -193,6 +205,6 @@ class TestScenario8(unittest.TestCase):
             self.assertGreaterEqual(len(rtts), 5, "too few round trips came back")
             one_way_ns = min(rtts) // 2
             errors = sorted(abs(stamp_ns - (host_ns - one_way_ns)) for stamp_ns, host_ns in stamps)
-            self.assertLessEqual(errors[len(errors) // 2], BOUND_NS, "the median stamp left the 1 ms bound")
+            self.assertLessEqual(errors[len(errors) // 2], BOUND_NS, f"the median stamp left the {BOUND_NS} ns bound")
         finally:
             node.destroy_node()

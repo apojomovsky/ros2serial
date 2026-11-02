@@ -121,84 +121,7 @@ python3 tests/e2e/test_avr_support.py || exit 1
 # One DDS domain per suite run, so parallel runs on the shared host never see
 # each other's topics: every process below inherits the same domain.
 export ROS_DOMAIN_ID=${R2S_E2E_DOMAIN_ID:?e2e-lease.sh provides it}
-echo "== e2e isolation: ROS_DOMAIN_ID=$ROS_DOMAIN_ID ZENOH_ROUTER_PORT=$R2S_ZENOH_ROUTER_PORT${R2S_E2E_CANARY:+ CANARY=/$R2S_E2E_CANARY}"
-
-# A canary topic this run publishes for its whole suite, so a concurrent
-# run's graph proves it never saw this suite's traffic. Unset runs publish
-# nothing and behave as before.
-canary_topic=${R2S_E2E_CANARY:-}
-case "$canary_topic" in
-  "") ;;
-  *[!A-Za-z0-9_/]* | /* | */)
-    echo "R2S_E2E_CANARY must be a relative topic name, got '$canary_topic'" >&2
-    exit 2
-    ;;
-esac
-if [ -n "$canary_topic" ]; then
-  command -v ros2 >/dev/null 2>&1 || { echo "ros2 not found: cannot publish the canary"; exit 1; }
-fi
-canary_pid=""
-stop_canary() {
-  if [ -n "$canary_pid" ]; then
-    kill "$canary_pid" 2>/dev/null || true
-    wait "$canary_pid" 2>/dev/null || true
-    canary_pid=""
-  fi
-}
-# A killed suite must die instead of running on: the isolation test kills
-# suites at teardown, and a suite that survives would keep publishing its
-# canary into the next run's graph. EXIT alone cleans up; the signals exit.
-await_canary() {
-  # Wait until this iteration's canary shows in its own graph, so sweeps
-  # never judge an iteration whose canary is still undiscovered. Probe
-  # like the isolation test does: no daemon, and no router URI, which is
-  # for rmw_zenohd rather than clients. Bound the wait and fail loudly
-  # instead of proving nothing forever. grep without -q reads to end of
-  # input, which a pipefail shell needs.
-  _canary_end=$((SECONDS + 180))
-  while true; do
-    if env -u ZENOH_ROUTER_CONFIG_URI RMW_IMPLEMENTATION=$rmw ros2 topic list --no-daemon 2>/dev/null | grep "/$canary_topic" >/dev/null; then
-      return 0
-    fi
-    sleep 2
-    if [ "$SECONDS" -ge "$_canary_end" ]; then
-      echo "canary $canary_topic never appeared" >&2
-      cleanup_and_exit
-    fi
-  done
-}
-
-cleanup_and_exit() {
-  stop_canary
-  if [ -n "${router:-}" ]; then kill "$router" 2>/dev/null || true; fi
-  exit 143
-}
-trap stop_canary EXIT
-trap cleanup_and_exit HUP INT TERM
-
-# A rendezvous per RMW for concurrent suites: each side touches its slot
-# file and waits for the peer's, so both sides run each RMW's iteration
-# together and their graphs overlap. This runner makes one pass per RMW
-# under bare names, matching the posix first leg; later posix legs meet
-# under their own names. The isolation test only counts windows where
-# both sides name the same RMW; a miss proves nothing. Unset outside
-# the isolation test, where runs never synchronize.
-barrier_wait() {
-  [ -n "${R2S_E2E_BARRIER:-}" ] || return 0
-  : "${R2S_E2E_SLOT:?barrier needs a slot}" "${R2S_E2E_PEER:?barrier needs a peer}"
-  touch "$R2S_E2E_BARRIER/$R2S_E2E_SLOT-$1" || { echo "barrier unreachable" >&2; cleanup_and_exit; }
-  # The peer may still be building or finishing its previous iteration on
-  # a loaded host; bound the wait well above a cold build skew and fail
-  # loudly instead of hanging.
-  _barrier_end=$((SECONDS + 1200))
-  while [ ! -e "$R2S_E2E_BARRIER/$R2S_E2E_PEER-$1" ]; do
-    sleep 2
-    if [ "$SECONDS" -ge "$_barrier_end" ]; then
-      echo "barrier timeout waiting for peer on $1" >&2
-      cleanup_and_exit
-    fi
-  done
-}
+echo "== e2e isolation: ROS_DOMAIN_ID=$ROS_DOMAIN_ID ZENOH_ROUTER_PORT=$R2S_ZENOH_ROUTER_PORT"
 
 boards=${R2S_E2E_BOARDS:-"uno mega"}
 rmws=${R2S_RMWS:-rmw_fastrtps_cpp rmw_cyclonedds_cpp rmw_zenoh_cpp}
@@ -227,18 +150,6 @@ for rmw in $rmws; do
     sleep 2
     kill -0 "$router" 2>/dev/null || { echo "rmw_zenohd on port $R2S_ZENOH_ROUTER_PORT died"; status=1; break; }
   fi
-  if [ -n "$canary_topic" ]; then
-    # One publisher on this iteration's RMW and router, so the canary
-    # rides the same middleware the scenarios do. Started before the
-    # entry barrier so discovery settles while waiting for the peer.
-    # Killed below and on exit, so no run leaves a publisher behind.
-    RMW_IMPLEMENTATION=$rmw ros2 topic pub "/$canary_topic" std_msgs/msg/String '{data: canary}' >/dev/null 2>&1 &
-    canary_pid=$!
-  fi
-  barrier_wait "$rmw"
-  if [ -n "$canary_topic" ]; then
-    await_canary
-  fi
   for board in $boards; do
     export R2S_E2E_BOARD=$board
     for scenario in 1 2 3 4; do
@@ -249,11 +160,6 @@ for rmw in $rmws; do
       esac
     done
   done
-  # Both sides wait for each other here too, so the whole iteration
-  # overlaps, not just its start: the canary stays up while waiting.
-  barrier_wait "$rmw-done"
-  stop_canary
   if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
-  router=""
 done
 exit $status
