@@ -958,7 +958,7 @@ Each port implements these as ordinary functions, resolved at link time:
 uint16_t r2s_port_read(uint8_t *buf, uint16_t max);       /* non-blocking; returns bytes read (core provides it with R2S_WITH_RX_RING) */
 void     r2s_port_write(const uint8_t *buf, uint16_t len); /* must accept len bytes when tx_free said so */
 uint16_t r2s_port_tx_free(void);                          /* bytes writable without blocking; 0xFFFF if blocking is acceptable */
-uint32_t r2s_port_tick(void);                             /* monotonic, wraps; rate = R2S_TICK_HZ */
+uint32_t r2s_port_tick(void);                             /* monotonic, wraps; rate = R2S_TICK_HZ; the posix port reads CLOCK_MONOTONIC */
 ```
 
 The core calls `r2s_port_read` with `max = 1` while it assembles a frame, so it never consumes bytes beyond the current delimiter.
