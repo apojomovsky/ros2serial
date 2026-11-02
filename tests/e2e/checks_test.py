@@ -4,11 +4,13 @@ Run directly: `python3 tests/e2e/checks_test.py`. The launch suite runs it
 before any scenario, so a broken helper fails fast instead of mid-handshake.
 """
 
+import contextlib
+import io
 import struct
 import time
 import unittest
 
-from e2e_support import checks
+from e2e_support import checks, teardown
 
 
 class Twist:
@@ -130,6 +132,31 @@ class TestHandshakeReady(unittest.TestCase):
 class TestDiscoveryTimeout(unittest.TestCase):
     def test_stays_generous_against_the_handshake_bound(self):
         self.assertGreaterEqual(checks.DISCOVERY_TIMEOUT, 10.0)
+
+
+class TestTeardownShutdown(unittest.TestCase):
+    CLOSE_TIMEOUT = "Failed to close the session(Error code: -128)"
+
+    def test_clean_shutdown_calls_through(self):
+        called = []
+        teardown.shutdown(lambda: called.append(True))
+        self.assertEqual(called, [True])
+
+    def test_session_close_timeout_logs_instead_of_raising(self):
+        def closing():
+            raise RuntimeError(self.CLOSE_TIMEOUT)
+
+        logged = io.StringIO()
+        with contextlib.redirect_stderr(logged):
+            teardown.shutdown(closing)
+        self.assertIn(self.CLOSE_TIMEOUT, logged.getvalue())
+
+    def test_other_shutdown_failure_still_raises(self):
+        def failing():
+            raise RuntimeError("failed to shutdown: some other cause")
+
+        with self.assertRaises(RuntimeError):
+            teardown.shutdown(failing)
 
 
 if __name__ == "__main__":

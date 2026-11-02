@@ -13,7 +13,7 @@ from pathlib import Path
 import launch_testing.markers
 import rclpy
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, firmware
+from e2e_support import checks, firmware, teardown
 from e2e_support.relay import PtyRelay
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32
@@ -64,7 +64,7 @@ class TestScenario2(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        rclpy.shutdown()
+        teardown.shutdown()
 
     def test_50hz_flow_arrives_nearly_whole_with_correct_values(self):
         global _SPAWNED

@@ -16,7 +16,7 @@ import launch_testing.markers
 import rclpy
 from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, firmware
+from e2e_support import checks, firmware, teardown
 from e2e_support.relay import PtyRelay
 
 # covers: SES-1, SES-2, SES-5, SES-6, SES-13, SES-16, SES-17
@@ -65,7 +65,7 @@ class TestScenario1(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        rclpy.shutdown()
+        teardown.shutdown()
 
     def test_handshake_announces_topics_within_3s_of_hello(self):
         global _SPAWNED

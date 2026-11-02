@@ -14,7 +14,7 @@ from pathlib import Path
 import launch_testing.markers
 import rclpy
 from e2e_support import bridge as bridge_support
-from e2e_support import firmware
+from e2e_support import firmware, teardown
 from e2e_support.relay import PtyRelay
 from rcl_interfaces.msg import Log
 from rclpy.qos import QoSProfile, ReliabilityPolicy
@@ -70,7 +70,7 @@ class TestScenario9(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        rclpy.shutdown()
+        teardown.shutdown()
 
     def test_mcu_log_lines_reach_rosout_with_severity_and_name(self):
         global _SPAWNED

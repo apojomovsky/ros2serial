@@ -14,7 +14,7 @@ import launch_testing.markers
 import rclpy
 from e2e_support import avr as avr_support
 from e2e_support import bridge as bridge_support
-from e2e_support import checks
+from e2e_support import checks, teardown
 from geometry_msgs.msg import Twist
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
@@ -94,7 +94,7 @@ class TestScenario3(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        rclpy.shutdown()
+        teardown.shutdown()
 
     def test_published_twists_come_back_on_the_echo_topic(self):
         self.assertTrue(all(not _is_prime(msg) for msg in SENT), "prime collides with the sequence")

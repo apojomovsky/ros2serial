@@ -19,7 +19,7 @@ import rclpy
 from builtin_interfaces.msg import Time
 from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, firmware
+from e2e_support import checks, firmware, teardown
 from e2e_support.relay import PtyRelay
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
@@ -106,7 +106,7 @@ class TestScenario8(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        rclpy.shutdown()
+        teardown.shutdown()
 
     def test_skewed_mcu_time_stays_within_1ms_of_host_time(self):
         global _SPAWNED

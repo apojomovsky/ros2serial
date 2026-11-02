@@ -15,7 +15,7 @@ import launch_testing.markers
 import rclpy
 from e2e_support import avr as avr_support
 from e2e_support import bridge as bridge_support
-from e2e_support import checks
+from e2e_support import checks, teardown
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32
 
@@ -55,7 +55,7 @@ class TestScenario2(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        rclpy.shutdown()
+        teardown.shutdown()
 
     def test_50hz_flow_arrives_nearly_whole_with_correct_values(self):
         node = rclpy.create_node("e2e_s2_avr_probe")
