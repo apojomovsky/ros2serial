@@ -3,6 +3,7 @@ name: nightly-jobs
 # The runs too long or too exhaustive for a PR: the long fuzzing and the e2e
 # isolation pairs. nightly.yml calls this on schedule; release.yml calls it
 # on a tag before anything is published, so no release ships with them red.
+# Timeout floor (see the rule comment in ci.yml): image jobs carry 30 or more.
 on:
   workflow_call:
 
@@ -12,6 +13,7 @@ permissions:
 jobs:
   fuzz-long:
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
@@ -24,6 +26,7 @@ jobs:
   # host, as the CI e2e jobs do.
   e2e-isolation:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image

@@ -135,11 +135,13 @@ if wants COMMITS; then scope_now=COMMITS
 fi
 scripts_tests() {
   # scripts_shard selects one CI shard (0 to N-1) of the collected node ids;
-  # empty runs the whole scope, exactly as before.
+  # empty runs the whole scope, exactly as before. A stuck test dumps every
+  # thread's stack past the timeout, and the slowest tests are always listed,
+  # so the next hang names its test instead of going silent.
   if [ -n "$scripts_shard" ]; then
-    python3 -m pytest scripts tools --shard="$scripts_shard"
+    python3 -m pytest scripts tools --shard="$scripts_shard" -o faulthandler_timeout=300 --durations=10
   else
-    python3 -m pytest scripts tools
+    python3 -m pytest scripts tools -o faulthandler_timeout=300 --durations=10
   fi
 }
 if wants SCRIPTS; then scope_now=SCRIPTS
