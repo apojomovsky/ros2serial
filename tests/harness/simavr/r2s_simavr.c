@@ -6,6 +6,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -53,6 +54,7 @@ struct harness {
     int slave_fd;
     avr_irq_t *uart_input;
     int uart_xoff;
+    unsigned long output_errors;
     unsigned char ring[INPUT_RING];
     size_t ring_head;
     size_t ring_tail;
@@ -101,10 +103,23 @@ static void uart_output(struct avr_irq_t *irq, uint32_t value, void *param)
     (void)irq;
     (void)param;
     unsigned char byte = (unsigned char)value;
-    /* A client that stops reading fills the pty buffer; the byte is lost then,
-       as it would be on a real link with no flow control towards the host. */
-    if (write(harness.master_fd, &byte, 1) != 1) {
-        return;
+    for (;;) {
+        if (write(harness.master_fd, &byte, 1) == 1) {
+            return;
+        }
+        if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+            harness.output_errors++;
+            return;
+        }
+        if (stop_requested) {
+            return;
+        }
+        /* A starved reader fills the pty while simavr keeps emitting; dropping
+           the byte would corrupt the frame on the wire, so the firmware waits
+           here and the link paces itself to the reader. The wait is bounded so
+           the run limit and SIGTERM still take effect promptly. */
+        struct pollfd ready = {.fd = harness.master_fd, .events = POLLOUT};
+        poll(&ready, 1, 100);
     }
 }
 
@@ -355,8 +370,9 @@ int main(int argc, char **argv)
     }
 
     unsigned long long wall = monotonic_ms() - harness.start_ms;
-    printf("r2s_simavr: stop cycles=%llu simulated_ms=%llu wall_ms=%llu frequency=%u",
-           (unsigned long long)harness.avr->cycle, simulated_ms(&harness), wall, harness.avr->frequency);
+    printf("r2s_simavr: stop cycles=%llu simulated_ms=%llu wall_ms=%llu frequency=%u output_errors=%lu",
+           (unsigned long long)harness.avr->cycle, simulated_ms(&harness), wall, harness.avr->frequency,
+           harness.output_errors);
     if (harness.options.stack_paint) {
         printf(" stack_peak=%u", stack_peak(&harness));
     }
