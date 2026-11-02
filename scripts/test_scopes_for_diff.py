@@ -260,3 +260,58 @@ def test_cli_full_env_forces_the_full_suite(tmp_path):
     out = run_scopes(repo, R2S_FULL="1")
     assert out.returncode == 0, out.stdout + out.stderr
     assert out.stdout.split() == ["FULL=1"]
+
+
+def test_reduced_scopes_cover_cheap_scripts_and_the_non_full_paths():
+    assert scopes_for_diff.reduced_scopes_for_paths(["Makefile"]) == {**CHEAP, "SCRIPTS": "1"}
+    assert scopes_for_diff.reduced_scopes_for_paths(["Makefile", "bridge/r2s_bridge/src/node.cpp"]) == {
+        **CHEAP,
+        "SCRIPTS": "1",
+        "BRIDGE": "1",
+        "COVERAGE": "1",
+        "E2E": "both",
+    }
+
+
+def test_cli_machinery_only_diff_runs_the_reduced_set_locally(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    repo = tiny_repo(tmp_path)
+    (repo / "Makefile").write_text("# machinery\n")
+    out = run_scopes(repo)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert sorted(out.stdout.split()) == ["COMMITS=1", "LINT=1", "SCRIPTS=1"]
+    assert "leaving the full suite to CI" in out.stderr
+
+
+def test_cli_machinery_plus_bridge_diff_adds_the_bridge_scopes(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    repo = tiny_repo(tmp_path)
+    (repo / "Makefile").write_text("# machinery\n")
+    (repo / "bridge").mkdir()
+    (repo / "bridge" / "node.cpp").write_text("// bridge\n")
+    out = run_scopes(repo)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "FULL" not in out.stdout
+    for scope in ("COMMITS=1", "LINT=1", "SCRIPTS=1", "BRIDGE=1", "COVERAGE=1", "E2E=both"):
+        assert scope in out.stdout.split()
+    assert "leaving the full suite to CI" in out.stderr
+
+
+def test_cli_full_env_still_runs_the_full_suite_for_machinery(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    repo = tiny_repo(tmp_path)
+    (repo / "Makefile").write_text("# machinery\n")
+    out = run_scopes(repo, R2S_FULL="1")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert out.stdout.split() == ["FULL=1"]
+    assert "leaving the full suite to CI" not in out.stderr
+
+
+def test_cli_ci_runs_the_full_suite_for_machinery(tmp_path, monkeypatch):
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    repo = tiny_repo(tmp_path)
+    (repo / "Makefile").write_text("# machinery\n")
+    out = run_scopes(repo)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert out.stdout.split() == ["FULL=1"]
+    assert "leaving the full suite to CI" not in (out.stdout + out.stderr)
