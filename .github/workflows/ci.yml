@@ -60,11 +60,14 @@ jobs:
         run: |
           base="origin/${{ github.event.pull_request.base.ref }}"
           if [ "$base" = "origin/" ]; then base="origin/master"; fi
-          python3 scripts/scopes_for_diff.py --base "$base" > scopes.env
-          cat scopes.env
+          # Outside the checkout: an untracked file in it counts as a changed
+          # path, and an unknown path maps to FULL.
+          scopes="$RUNNER_TEMP/scopes.env"
+          python3 scripts/scopes_for_diff.py --base "$base" > "$scopes"
+          cat "$scopes"
           while IFS='=' read -r key value; do
             echo "$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')=$value" >> "$GITHUB_OUTPUT"
-          done < scopes.env
+          done < "$scopes"
 
   lint:
     needs: plan

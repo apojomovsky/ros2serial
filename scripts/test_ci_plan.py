@@ -6,6 +6,8 @@ the plan and runs only when its scope is selected; pushes to master and
 workflow_dispatch run every job. A FULL result runs every job, as today.
 """
 
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -191,3 +193,35 @@ def test_master_push_runs_every_job():
 
 def test_workflow_dispatch_runs_every_job():
     assert running_jobs("workflow_dispatch", ["docs/01-testing.md"]) == sorted(workflow()["jobs"])
+
+
+def run_plan_step(tmp_path, changed):
+    """The plan step's own shell, from ci.yml, on a throwaway repository."""
+    step = next(s for s in workflow()["jobs"]["plan"]["steps"] if s.get("id") == "scopes")
+    script = step["run"].replace("${{ github.event.pull_request.base.ref }}", "master")
+    repo = tmp_path / "repo"
+    (repo / "scripts").mkdir(parents=True)
+    (repo / "scripts" / "scopes_for_diff.py").write_text((ROOT / "scripts" / "scopes_for_diff.py").read_text())
+    (repo / "README.md").write_text("base\n")
+    git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-qm", "base"], check=True)
+    subprocess.run([*git, "update-ref", "refs/remotes/origin/master", "HEAD"], check=True)
+    for path in changed:
+        (repo / path).write_text("changed\n")
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-qm", "change"], check=True)
+    runner_temp = tmp_path / "runner"
+    runner_temp.mkdir()
+    output = tmp_path / "output"
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update(GITHUB_ACTIONS="true", GITHUB_OUTPUT=str(output), RUNNER_TEMP=str(runner_temp))
+    subprocess.run(["bash", "-e", "-c", script], cwd=repo, env=env, check=True, capture_output=True)
+    return dict(line.split("=", 1) for line in output.read_text().split())
+
+
+def test_the_plan_step_does_not_count_its_own_output_as_a_change(tmp_path):
+    outputs = run_plan_step(tmp_path, ["README.md", "CONTRIBUTING.md"])
+    assert "full" not in outputs, outputs
+    assert outputs == {"lint": "1", "commits": "1", "docs": "1", "readme": "1"}
