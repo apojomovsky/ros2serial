@@ -29,6 +29,7 @@ jobs:
   # cheap local ones.
   plan:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       lint: ${{ steps.scopes.outputs.lint }}
       scripts: ${{ steps.scopes.outputs.scripts }}
@@ -64,6 +65,7 @@ jobs:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.lint == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       # Full history: the spec coverage check compares the pending list with the PR's base.
       - uses: actions/checkout@v4.2.2
@@ -83,6 +85,7 @@ jobs:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.scripts == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -96,6 +99,7 @@ jobs:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.core == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
@@ -105,6 +109,7 @@ jobs:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.gen == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
@@ -113,6 +118,7 @@ jobs:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.cpp == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
@@ -121,6 +127,7 @@ jobs:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.docs == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
@@ -129,6 +136,7 @@ jobs:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.readme == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
@@ -137,6 +145,7 @@ jobs:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.coverage == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       # Full history: the gate measures the base commit in the same run.
       - uses: actions/checkout@v4.2.2
@@ -153,6 +162,7 @@ jobs:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.e2e == 'avr' || needs.plan.outputs.e2e == 'both'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
@@ -163,6 +173,7 @@ jobs:
   # cannot read the file itself. Always runs: it is setup, not a section.
   bridge-images:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       matrix: ${{ steps.pins.outputs.matrix }}
       images: ${{ steps.pins.outputs.images }}
@@ -178,6 +189,7 @@ jobs:
     needs: [plan, bridge-images]
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.bridge == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.bridge-images.outputs.matrix) }}
@@ -197,6 +209,7 @@ jobs:
     needs: [plan, bridge-images]
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.e2e == 'posix' || needs.plan.outputs.e2e == 'both'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -225,6 +238,7 @@ jobs:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.fuzz == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
@@ -233,6 +247,7 @@ jobs:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.examples == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4.2.2
@@ -242,6 +257,7 @@ jobs:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.budgets == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: write
