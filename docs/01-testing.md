@@ -237,6 +237,8 @@ When the PR suite exceeds its budget, the slowest tests are made faster or moved
 
 The local gate runs what the diff touches: each top-level tree maps to the sections that test it and the sections that consume it, and the cheap checks always run. Changes to the gate machinery itself, and paths the mapping does not know, would run the full suite: unknown means full, never less. Outside CI those diffs run only the cheap scopes instead, with one line saying the full suite is left to CI. Scopes named on the command line still run, and `R2S_FULL=1` still runs everything locally. CI is where the suite runs: it still runs everything on the merge with master, and a PR merges only on green CI.
 
+Suites share nothing: every section that starts ROS nodes (bridge, coverage, e2e) leases its own DDS domain from one slot pool (`scripts/e2e-lease.sh`), and the e2e legs take a Zenoh router port from the same slot, so two suites on one host never see each other's topics. Slot 0 maps to the domain and port each leg always used (89 for the e2e legs, 0 for bridge and coverage), so a lone run and CI keep their domains. An explicit `R2S_E2E_DOMAIN_ID` skips allocation; `R2S_E2E_DOMAIN_BASE` shifts the pool and defaults to 89.
+
 ## 8. Keeping the tests honest
 
 - **Flaky tests are bugs.** A test that fails without a code change gets an issue and is fixed at the root cause. Tests are never retried automatically, skipped or quarantined to get green (the ground rule in `AGENTS.md`).

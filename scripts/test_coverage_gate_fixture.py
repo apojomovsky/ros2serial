@@ -1,12 +1,14 @@
 """The coverage gate judges a fixture PR: fail on a drop, pass on equal figures.
 
-The fixture repo carries the real scripts/coverage-gate.sh, the real
+The fixture repo carries the real scripts/coverage-gate.sh with the real
+scripts/e2e-lease.sh behind its isolation lease, the real
 scripts/coverage-filters.sh and the real tools/coverage_gate.py, with stub
 builds (core-test.sh, colcon) and a stub gcovr that reports the figures its
 environment names. Nothing here compiles or measures real code.
 """
 
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -51,11 +53,12 @@ def fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     (repo / "tools").mkdir()
     (repo / "bridge").mkdir()
     shutil.copy(ROOT / "scripts" / "coverage-gate.sh", repo / "scripts" / "coverage-gate.sh")
+    shutil.copy(ROOT / "scripts" / "e2e-lease.sh", repo / "scripts" / "e2e-lease.sh")
     shutil.copy(ROOT / "scripts" / "coverage-filters.sh", repo / "scripts" / "coverage-filters.sh")
     shutil.copy(ROOT / "tools" / "coverage_gate.py", repo / "tools" / "coverage_gate.py")
     (repo / "scripts" / "core-test.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
     (repo / "bridge" / "dummy.txt").write_text("bridge sources live here on a real tree\n")
-    for name in ("scripts/coverage-gate.sh", "scripts/core-test.sh"):
+    for name in ("scripts/coverage-gate.sh", "scripts/e2e-lease.sh", "scripts/core-test.sh"):
         path = repo / name
         path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     bindir = tmp_path / "bin"
@@ -116,3 +119,12 @@ def test_the_gate_uses_the_base_filters_on_head(tmp_path):
     commit_on_head(repo, run_env, "scripts/coverage-filters.sh", "this is not bash\n")
     result = run_gate(repo, run_env, "96 91", "96 91")
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_the_gate_runs_the_bridge_tests_under_a_lease(tmp_path):
+    repo, run_env = fixture(tmp_path)
+    result = run_gate(repo, run_env, "96 91", "96 91")
+    assert result.returncode == 0, result.stdout + result.stderr
+    match = re.search(r"coverage isolation: ROS_DOMAIN_ID=(\d+)", result.stdout)
+    assert match is not None, "the gate ran with no leased domain:\n" + result.stdout
+    assert 0 <= int(match.group(1)) <= 31, "the domain is outside the bridge pool range"
