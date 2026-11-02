@@ -59,6 +59,7 @@ def test_bridge_maps_to_bridge_coverage_and_both_e2e():
         "BRIDGE": "1",
         "COVERAGE": "1",
         "E2E": "both",
+        "SCRIPTS": "1",
     }
 
 
@@ -209,6 +210,7 @@ def test_e2e_backends_merge_to_both():
         **CHEAP,
         "BRIDGE": "1",
         "E2E": "both",
+        "SCRIPTS": "1",
     }
 
 

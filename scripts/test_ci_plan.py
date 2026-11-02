@@ -169,6 +169,7 @@ def test_avr_only_diff_runs_only_the_avr_leg():
         "e2e-avr",
         "lint",
         "plan",
+        "scripts",
     ]
 
 
