@@ -136,26 +136,6 @@ def scopes_for_paths(paths):
     return found
 
 
-def reduced_scopes_for_paths(paths):
-    """The local gate for a diff that would otherwise run the full suite.
-
-    Suite machinery and unknown paths still need the full suite, but CI
-    already runs it on the merge, so a local run covers the cheap scopes,
-    the SCRIPTS scope that tests the gate itself, and whatever the diff's
-    other paths map to.
-    """
-    found = dict(CHEAP)
-    found["SCRIPTS"] = "1"
-    for path in paths:
-        if not path:
-            continue
-        scopes = _scopes_for_path(path.strip())
-        if scopes is FULL:
-            continue
-        _merge(found, scopes)
-    return found
-
-
 def _scopes_for_path(path):
     for prefix, scopes in PREFIX_RULES:
         if path == prefix.rstrip("/") or path.startswith(prefix):
@@ -202,11 +182,10 @@ def main(argv=None):
         for scope in sorted(result):
             print(f"{scope}={result[scope]}")
         return 0
-    reduced = reduced_scopes_for_paths(paths)
-    for scope in sorted(reduced):
-        print(f"{scope}={reduced[scope]}")
+    for scope in sorted(CHEAP):
+        print(f"{scope}={CHEAP[scope]}")
     print(
-        "scopes_for_diff: the diff would run the full suite, so this run covers the reduced scopes,",
+        "scopes_for_diff: the diff would run the full suite, so this run covers the cheap scopes,",
         "leaving the full suite to CI",
         file=sys.stderr,
     )
