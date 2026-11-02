@@ -9,8 +9,6 @@ import shlex
 import subprocess
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parent.parent
 RUN_SH = ROOT / "tests" / "e2e" / "run.sh"
 ISOLATION = ROOT / "scripts" / "test_e2e_isolation.py"
