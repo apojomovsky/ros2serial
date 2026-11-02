@@ -2,9 +2,9 @@
 
 rosserial for ROS 2: publish and subscribe to ROS 2 topics from small microcontrollers, down to an 8-bit Arduino Uno, over a serial link.
 
-**Status:** pre-release. The stack runs end to end; the walkthrough below takes an Uno (real or emulated) to `ros2 topic echo`. The design is in [`docs/00-design.md`](docs/00-design.md), and the work in the [issues](https://github.com/apojomovsky/ros2serial/issues).
+**Status:** pre-release. The stack runs end to end on an emulated Uno and Mega; the walkthrough below takes an emulated Uno to `ros2 topic echo`. Real-hardware runs are not verified yet (see [Not yet](#not-yet)). The design is in [`docs/00-design.md`](docs/00-design.md), and the work in the [issues](https://github.com/apojomovsky/ros2serial/issues).
 
-## What it will look like
+## What it looks like
 
 ```cpp
 #define R2S_NODE_NAME "base_controller"
@@ -14,7 +14,47 @@ rosserial for ROS 2: publish and subscribe to ROS 2 topics from small microcontr
 #include <ros2serial.h>
 ```
 
-Install the Arduino library, declare your topics, publish, call spin. On the host, a regular ROS 2 node bridges the serial port to any RMW.
+Install the Arduino library, declare your topics, publish, call spin. On the host, a regular ROS 2 node bridges the serial port into the ROS 2 graph. The snippet above is the static C++ API, which exists today alongside the runtime C++ API and the C API (see [What works in 0.1.0](#what-works-in-010)).
+
+## Context
+
+```mermaid
+flowchart LR
+    GEN["r2s-gen<br/>(build time)"] -->|"headers and tables"| MCU
+    subgraph MCU["MCU (Uno or Mega)"]
+        SK["sketch"] --> CORE["r2s core and C++ layer"]
+    end
+    MCU <-->|"rCOBS frames over serial"| BR["r2s_bridge"]
+    BR <--> ROS["ROS 2 graph"]
+```
+
+The generator runs once at build time and produces the firmware headers. At runtime the sketch and the core run on the MCU, exchange frames over the serial link with the bridge, and the bridge publishes and subscribes on the ROS 2 graph.
+
+## What works in 0.1.0
+
+Tested on every PR in CI unless noted.
+
+- **APIs.** The C API (`r2s_publish_*`, `r2s_on_*`, `r2s_spin_some`), the runtime C++ API (`r2s::Node`, `r2s::Publisher`, `r2s::Subscription` with ROS 2 names), and the static C++ API over the `R2S_TOPICS` X-macro list. All three run the same end-to-end scenarios.
+- **Boards and ports.** Arduino Uno (ATmega328P) and Mega (ATmega2560), in simavr; the Arduino port (`Serial`), AVR bare metal, and the posix virtual MCU over a pty. Real hardware is not verified yet ([#95](https://github.com/apojomovsky/ros2serial/issues/95)).
+- **Distros and RMWs.** The bridge builds and is tested on Jazzy and Lyrical; the generator bundles snapshots for Jazzy, Lyrical and Rolling. End to end runs under Fast DDS, Cyclone DDS and Zenoh.
+- **Message types.** The bundle ships nine common types: `builtin_interfaces/msg/Time`, `geometry_msgs/msg/Quaternion`, `geometry_msgs/msg/Twist`, `geometry_msgs/msg/Vector3`, `sensor_msgs/msg/Imu`, `sensor_msgs/msg/JointState`, `std_msgs/msg/Float32`, `std_msgs/msg/Header`, `std_msgs/msg/String`, with documented default bounds.
+- **Bridge features.** Full-mode handshake with hash check and `TOPIC_STATUS`, generic publishers and subscriptions with remapping, introspection-based packed-to-CDR conversion, Uno reset handling (`boot_wait_ms`, default 2500 ms), MCU log forwarding to `/rosout`, host time-sync estimation, and per-topic rate limits with a host-to-MCU bandwidth cap.
+- **How it is tested.** Core unit, component, contract (every `spec/vectors/` file), and model-based tests; scenarios 1 to 4 end to end on the posix virtual MCU and on simavr for both chips and both C++ registration paths; the walkthrough below runs green in CI on simavr (`scripts/check-readme.sh`).
+
+## Not yet
+
+Planned work, each with its issue. The design marks these as P1, Phase 2+, or out of scope.
+
+- Parameters ([#155](https://github.com/apojomovsky/ros2serial/issues/155), spec [#133](https://github.com/apojomovsky/ros2serial/issues/133))
+- Reliable channel ([#154](https://github.com/apojomovsky/ros2serial/issues/154))
+- Services ([#156](https://github.com/apojomovsky/ros2serial/issues/156), spec [#316](https://github.com/apojomovsky/ros2serial/issues/316))
+- Actions (out of scope for v1; spec [#316](https://github.com/apojomovsky/ros2serial/issues/316))
+- Reconnect and reset handling ([#138](https://github.com/apojomovsky/ros2serial/issues/138))
+- Link saturation and `TX_BUSY` ([#146](https://github.com/apojomovsky/ros2serial/issues/146))
+- One live link per bridge process ([#122](https://github.com/apojomovsky/ros2serial/issues/122))
+- rosserial-compatible runtime aliases ([#145](https://github.com/apojomovsky/ros2serial/issues/145)) and the porting guide ([#149](https://github.com/apojomovsky/ros2serial/issues/149))
+- Compact handshake and PIC ports (Phase 5)
+- Real-hardware checklist ([#95](https://github.com/apojomovsky/ros2serial/issues/95))
 
 ## Getting started
 
@@ -31,10 +71,11 @@ r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
 void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node.spin_some(); }
 ```
 
-You need ROS 2 Jazzy with `colcon`, `arduino-cli` with the AVR core and
-`avr-gcc`, Python 3.10 or newer with `pip`, and libsimavr for the emulated
-run. Every command below also runs in CI against simavr, so the steps
-cannot drift from the code.
+You need ROS 2 Jazzy with `colcon` (the bridge is also tested on Lyrical),
+`arduino-cli` with the AVR core and `avr-gcc`, Python 3.10 or newer with
+`pip`, and libsimavr for the emulated run. Every command below also runs in
+CI against simavr (`scripts/check-readme.sh`), so the steps cannot drift
+from the code.
 
 ### 1. Install the generator
 
@@ -146,7 +187,7 @@ data: 0.0
 
 ### 7. On real hardware
 
-Flash the same build to an Uno and point the bridge at the serial port
+Not yet verified on hardware ([checklist](https://github.com/apojomovsky/ros2serial/issues/95)). Flash the same build to an Uno and point the bridge at the serial port
 instead of the pty:
 
 ```console
