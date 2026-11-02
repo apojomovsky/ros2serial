@@ -1,12 +1,13 @@
 name: release
 
-# The first GitHub pre-release (0.1.0): on a maintainer's v* tag, build the
-# Arduino library zip from the G11 bundle and the Python sdist and wheel, and
-# attach them to a GitHub pre-release. Nothing is published elsewhere: no
-# PyPI, no Arduino Library Manager, no buildfarm. Pull requests touching this
-# workflow or the artifact script, and manual dispatches, run the same build
-# without publishing. The tag is pushed by hand once the milestone closes,
-# never by this workflow.
+# Releases from a maintainer's v* tag: build the Arduino library zip from
+# the G11 bundle and the Python sdist and wheel, and attach them to a GitHub
+# release. A plain version tag becomes a full release marked Latest; a tag
+# with a SemVer pre-release suffix (as in v0.2.0-rc.1) becomes a pre-release.
+# Nothing is published elsewhere: no PyPI, no Arduino Library Manager, no
+# buildfarm. Pull requests touching this workflow or the artifact script, and
+# manual dispatches, run the same build without publishing. The tag is pushed
+# by hand once the milestone closes, never by this workflow.
 on:
   push:
     tags: ["v*"]
@@ -69,8 +70,10 @@ jobs:
             found { print }
           ' CHANGELOG.md >notes.md
           [ -s notes.md ] || { echo "CHANGELOG.md has no section for $version"; exit 1; }
-      - name: Create the pre-release
+      - name: Create the release
         if: startsWith(github.ref, 'refs/tags/v') && (github.event_name != 'workflow_dispatch' || github.event.inputs.dry_run == false)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --prerelease --title "$GITHUB_REF_NAME" --notes-file notes.md dist/*
+        run: |
+          flag=$(bash scripts/release-flags.sh "$GITHUB_REF_NAME")
+          gh release create "$GITHUB_REF_NAME" "$flag" --title "$GITHUB_REF_NAME" --notes-file notes.md dist/*
