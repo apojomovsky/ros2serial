@@ -18,6 +18,9 @@ it.
 Scenario 8 stays out of the pairs through R2S_E2E_SKIP: its 1 ms stamp
 bound assumes a lone suite and median-shifts over the bound under two
 suites on one host. The standalone e2e-posix legs keep judging it.
+Both sides run the static leg only through R2S_E2E_LEGS: one pass per
+RMW keeps every iteration rendezvous'd, and the standalone suites cover
+the runtime leg.
 """
 
 import concurrent.futures
@@ -188,6 +191,7 @@ def run_pair(first, second):
                 R2S_RMWS=" ".join(RMWS),
                 R2S_E2E_CANARY=canary,
                 R2S_E2E_SKIP="test_scenario_8_posix",
+                R2S_E2E_LEGS="static",
                 R2S_BUILD_DIR=str(build),
                 R2S_E2E_BARRIER=str(barrier),
                 R2S_E2E_SLOT=name,

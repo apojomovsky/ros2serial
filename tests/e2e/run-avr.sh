@@ -158,11 +158,12 @@ trap cleanup_and_exit HUP INT TERM
 
 # A rendezvous per RMW for concurrent suites: each side touches its slot
 # file and waits for the peer's, so both sides run each RMW's iteration
-# together and their graphs overlap. The exit barrier clears the slot
-# files, so every leg and pass re-rendezvouses instead of only the first;
-# the isolation test only counts windows where both sides name the same
-# RMW, so an accidental overlap still proves something and a miss proves
-# nothing. Unset outside the isolation test, where runs never synchronize.
+# together and their graphs overlap. Pairs run a single pass per RMW
+# (R2S_E2E_LEGS narrows the posix loop), so one rendezvous each is
+# enough; the isolation test only counts windows where both sides name
+# the same RMW, so an accidental overlap still proves something and a
+# miss proves nothing. Unset outside the isolation test, where runs
+# never synchronize.
 barrier_wait() {
   [ -n "${R2S_E2E_BARRIER:-}" ] || return 0
   : "${R2S_E2E_SLOT:?barrier needs a slot}" "${R2S_E2E_PEER:?barrier needs a peer}"
@@ -178,16 +179,6 @@ barrier_wait() {
       cleanup_and_exit
     fi
   done
-}
-
-# Forget one RMW's slot files once both sides met at its exit barrier, so
-# the next leg and pass rendezvous again. Runs only after the done wait
-# saw both sides, when nobody reads these files anymore.
-barrier_clear() {
-  [ -n "${R2S_E2E_BARRIER:-}" ] || return 0
-  rm -f "$R2S_E2E_BARRIER/$R2S_E2E_SLOT-$1" "$R2S_E2E_BARRIER/$R2S_E2E_PEER-$1" \
-    "$R2S_E2E_BARRIER/$R2S_E2E_SLOT-$1-done" "$R2S_E2E_BARRIER/$R2S_E2E_PEER-$1-done" \
-    || { echo "barrier unreachable" >&2; cleanup_and_exit; }
 }
 
 boards=${R2S_E2E_BOARDS:-"uno mega"}
@@ -238,7 +229,6 @@ for rmw in $rmws; do
   # Both sides wait for each other here too, so the whole iteration
   # overlaps, not just its start: the canary stays up while waiting.
   barrier_wait "$rmw-done"
-  barrier_clear "$rmw"
   stop_canary
   if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
   router=""
