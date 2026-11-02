@@ -39,7 +39,7 @@ def _install_ros_stubs():
     diagnostic_msgs.msg = _stub_module("diagnostic_msgs.msg")
     diagnostic_msgs.msg.DiagnosticArray = type("DiagnosticArray", (), {})
     support = _stub_module("e2e_support")
-    for leaf in ("bridge", "checks", "firmware", "relay"):
+    for leaf in ("bridge", "checks", "firmware", "relay", "teardown"):
         child = _stub_module(f"e2e_support.{leaf}")
         setattr(support, leaf, child)
     support.relay.PtyRelay = type("PtyRelay", (), {})
