@@ -94,12 +94,12 @@ trap cleanup_and_exit HUP INT TERM
 
 # A rendezvous per RMW for concurrent suites: each side touches its slot
 # file and waits for the peer's, so both sides run each RMW's iteration
-# together and their graphs overlap. Pairs run a single pass per RMW
-# (R2S_E2E_LEGS narrows the loop below), so one rendezvous each is
-# enough; the isolation test only counts windows where both sides name
-# the same RMW, so an accidental overlap still proves something and a
-# miss proves nothing. Unset outside the isolation test, where runs
-# never synchronize.
+# together and their graphs overlap. Later legs meet under their own
+# names, so every pass rendezvous instead of only the first; the mixed
+# pair stays on the first leg, where names always match the avr side.
+# The isolation test only counts windows where both sides name the same
+# RMW, so an accidental overlap still proves something and a miss proves
+# nothing. Unset outside the isolation test, where runs never synchronize.
 barrier_wait() {
   [ -n "${R2S_E2E_BARRIER:-}" ] || return 0
   : "${R2S_E2E_SLOT:?barrier needs a slot}" "${R2S_E2E_PEER:?barrier needs a peer}"
@@ -118,8 +118,11 @@ barrier_wait() {
 }
 
 status=0
-# Pairs narrow this to one leg through R2S_E2E_LEGS; standalone runs both.
+# R2S_E2E_LEGS narrows the loop for concurrent pairs; standalone runs both.
 for leg in ${R2S_E2E_LEGS:-static runtime}; do
+  # Later legs meet under their own names, so every pass rendezvous; the
+  # mixed pair stays on the first leg, where names match the avr side.
+  if [ "$leg" = static ]; then bk=""; else bk="$leg-"; fi
   case $leg in
     static) export R2S_E2E_FW=$build/ports/posix/r2s_posix_firmware ;;
     runtime) export R2S_E2E_FW=$build/ports/posix/r2s_posix_runtime_firmware ;;
@@ -147,7 +150,7 @@ for leg in ${R2S_E2E_LEGS:-static runtime}; do
       sleep 2
       kill -0 "$router" 2>/dev/null || { echo "rmw_zenohd on port $R2S_ZENOH_ROUTER_PORT died"; status=1; break; }
     fi
-    barrier_wait "$rmw"
+    barrier_wait "${bk}${rmw}"
     if [ -n "$canary_topic" ]; then
       # One publisher on this iteration's RMW and router, so the canary
       # rides the same middleware the scenarios do. Killed below and on
@@ -165,7 +168,7 @@ for leg in ${R2S_E2E_LEGS:-static runtime}; do
     done
     # Both sides wait for each other here too, so the whole iteration
     # overlaps, not just its start: the canary stays up while waiting.
-    barrier_wait "$rmw-done"
+    barrier_wait "${bk}${rmw}-done"
     stop_canary
     if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
     router=""

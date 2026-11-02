@@ -1,25 +1,36 @@
-"""The posix runner honors R2S_E2E_LEGS, and the isolation pairs pin one leg.
+"""The posix runner honors R2S_E2E_LEGS, and the pairs pin legs by pairing.
 
-Pairs run the static leg only, so every RMW gets a single rendezvous'd
-pass on both sides; standalone runs keep both legs. These tests run the
-runner's own loop header with stubbed bodies, never a suite.
+Posix pairs run both legs with per-leg barrier names; a mixed pair runs
+the static leg only, matching the avr single pass. Standalone runs keep
+both legs. These tests run the runner's own lines with stubbed bodies,
+never a suite.
 """
 
 import shlex
 import subprocess
 from pathlib import Path
 
+from test_e2e_isolation import pair_legs
+
 ROOT = Path(__file__).resolve().parent.parent
 RUN_SH = ROOT / "tests" / "e2e" / "run.sh"
 ISOLATION = ROOT / "scripts" / "test_e2e_isolation.py"
 
 LEG_HEADER = "for leg in ${R2S_E2E_LEGS:-static runtime}; do"
+KEY_LINE = 'if [ "$leg" = static ]; then bk=""; else bk="$leg-"; fi'
 
 
 def loop_header():
     """The leg loop header exactly as the runner carries it."""
     matches = [line for line in RUN_SH.read_text().splitlines() if line.strip() == LEG_HEADER]
     assert len(matches) == 1, "posix loop header changed shape"
+    return matches[0]
+
+
+def key_line():
+    """The barrier key line exactly as the runner carries it."""
+    matches = [line for line in RUN_SH.read_text().splitlines() if line.strip() == KEY_LINE]
+    assert len(matches) == 1, "posix barrier key changed shape"
     return matches[0]
 
 
@@ -30,6 +41,14 @@ def legs_of(assignments):
     proc = subprocess.run(["bash", "-c", setup + script], capture_output=True, text=True)
     assert proc.returncode == 0, proc.stderr
     return [line.split(" ", 1)[1] for line in proc.stdout.splitlines() if line.startswith("LEG ")]
+
+
+def key_of(leg):
+    """The barrier prefix the runner derives for one leg."""
+    script = key_line() + '\n echo "KEY ${bk}."\n'
+    proc = subprocess.run(["bash", "-c", f"leg={shlex.quote(leg)}\n" + script], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    return proc.stdout.strip().removeprefix("KEY ").removesuffix(".")
 
 
 def test_pair_runs_the_static_leg_only():
@@ -45,6 +64,25 @@ def test_loop_header_still_names_both_legs():
     assert LEG_HEADER in RUN_SH.read_text()
 
 
-def test_pairs_pin_the_static_leg():
-    """run_pair tells both runners to run the static leg only."""
-    assert 'R2S_E2E_LEGS="static"' in ISOLATION.read_text()
+def test_first_leg_keeps_bare_barrier_names():
+    assert key_of("static") == ""
+
+
+def test_later_legs_meet_under_their_own_names():
+    assert key_of("runtime") == "runtime-"
+
+
+def test_posix_pair_runs_both_legs():
+    assert pair_legs(("tests/e2e/run.sh", "a", {}), ("tests/e2e/run.sh", "b", {})) == "static runtime"
+
+
+def test_mixed_pair_runs_static_only():
+    avr = ("tests/e2e/run-avr.sh", "a", {"R2S_E2E_BOARDS": "uno"})
+    posix = ("tests/e2e/run.sh", "b", {})
+    assert pair_legs(avr, posix) == "static"
+    assert pair_legs(posix, avr) == "static"
+
+
+def test_pairs_derive_legs_from_the_pairing():
+    """run_pair pins legs per pairing instead of hard-coding one loop."""
+    assert "R2S_E2E_LEGS=pair_legs(first, second)" in ISOLATION.read_text()

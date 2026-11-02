@@ -158,12 +158,11 @@ trap cleanup_and_exit HUP INT TERM
 
 # A rendezvous per RMW for concurrent suites: each side touches its slot
 # file and waits for the peer's, so both sides run each RMW's iteration
-# together and their graphs overlap. Pairs run a single pass per RMW
-# (R2S_E2E_LEGS narrows the posix loop), so one rendezvous each is
-# enough; the isolation test only counts windows where both sides name
-# the same RMW, so an accidental overlap still proves something and a
-# miss proves nothing. Unset outside the isolation test, where runs
-# never synchronize.
+# together and their graphs overlap. This runner makes one pass per RMW
+# under bare names, matching the posix first leg; later posix legs meet
+# under their own names. The isolation test only counts windows where
+# both sides name the same RMW; a miss proves nothing. Unset outside
+# the isolation test, where runs never synchronize.
 barrier_wait() {
   [ -n "${R2S_E2E_BARRIER:-}" ] || return 0
   : "${R2S_E2E_SLOT:?barrier needs a slot}" "${R2S_E2E_PEER:?barrier needs a peer}"

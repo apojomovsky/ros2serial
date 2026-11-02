@@ -18,9 +18,9 @@ it.
 Scenario 8 stays out of the pairs through R2S_E2E_SKIP: its 1 ms stamp
 bound assumes a lone suite and median-shifts over the bound under two
 suites on one host. The standalone e2e-posix legs keep judging it.
-Both sides run the static leg only through R2S_E2E_LEGS: one pass per
-RMW keeps every iteration rendezvous'd, and the standalone suites cover
-the runtime leg.
+R2S_E2E_LEGS follows the pairing: both legs when both sides run posix,
+the static leg only with avr, so every pass rendezvous under a name
+both sides derive. The standalone suites cover whatever the pairs skip.
 """
 
 import concurrent.futures
@@ -54,6 +54,13 @@ PROOFS_REQUIRED = 2
 def fresh_canary():
     """A per-run topic name no other suite can collide with."""
     return "r2s_canary_" + uuid.uuid4().hex[:12]
+
+
+def pair_legs(first, second):
+    """The legs both suites run: avr has no legs, so a mixed pair runs static only."""
+    if "run-avr" in first[0] or "run-avr" in second[0]:
+        return "static"
+    return "static runtime"
 
 
 def port_of(output):
@@ -191,7 +198,7 @@ def run_pair(first, second):
                 R2S_RMWS=" ".join(RMWS),
                 R2S_E2E_CANARY=canary,
                 R2S_E2E_SKIP="test_scenario_8_posix",
-                R2S_E2E_LEGS="static",
+                R2S_E2E_LEGS=pair_legs(first, second),
                 R2S_BUILD_DIR=str(build),
                 R2S_E2E_BARRIER=str(barrier),
                 R2S_E2E_SLOT=name,
