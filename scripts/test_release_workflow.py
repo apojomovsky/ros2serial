@@ -65,6 +65,35 @@ def test_only_a_release_tag_without_dry_run_creates_the_pre_release():
     assert "refs/tags/v" in guard and "dry_run" in guard, guard
 
 
+def test_release_calls_the_nightly_jobs_on_a_tag_only():
+    doc = workflow()
+    callers = [name for name, job in doc["jobs"].items() if "nightly-jobs.yml" in str(job.get("uses", ""))]
+    assert len(callers) == 1
+    assert "refs/tags/v" in str(doc["jobs"][callers[0]].get("if", ""))
+
+
+def test_release_publishes_only_after_the_nightly_jobs():
+    doc = workflow()
+    callers = [name for name, job in doc["jobs"].items() if "nightly-jobs.yml" in str(job.get("uses", ""))]
+    (job,) = [job for name, job in doc["jobs"].items() if name == "release"]
+    needs = job.get("needs", [])
+    if isinstance(needs, str):
+        needs = [needs]
+    assert callers[0] in needs
+
+
+def test_release_still_builds_when_the_nightly_call_is_skipped():
+    """A skipped caller must not skip the build: pull requests touching this
+    file and manual dispatches run the same build without publishing."""
+    doc = workflow()
+    (job,) = [job for name, job in doc["jobs"].items() if name == "release"]
+    condition = str(job.get("if", ""))
+    assert "always()" in condition, "a skipped nightly call skips the release build"
+    assert "needs.nightly.result" in condition
+    assert "'success'" in condition and "'skipped'" in condition
+    assert "'failure'" not in condition and "'cancelled'" not in condition
+
+
 def test_a_tag_the_repository_version_does_not_name_refuses_to_publish():
     job = steps_of(workflow())
     gates = [step for step in job["steps"] if "GITHUB_REF_NAME" in str(step.get("run", ""))]

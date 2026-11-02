@@ -1,7 +1,8 @@
 name: nightly
 
-# Long runs the PR suite cannot afford. Each ticket fills in its own job;
-# C11 brings the long fuzzing.
+# Long runs the PR suite cannot afford live in nightly-jobs.yml, called here
+# on schedule and on demand. A failed scheduled run files an issue, or
+# comments on the open one, so the failure is triaged instead of silent.
 on:
   schedule:
     - cron: "0 3 * * *"
@@ -11,11 +12,25 @@ permissions:
   contents: read
 
 jobs:
-  fuzz-long:
+  nightly:
+    uses: ./.github/workflows/nightly-jobs.yml
+
+  report-failure:
+    needs: [nightly]
+    if: github.event_name == 'schedule' && failure()
     runs-on: ubuntu-24.04
+    permissions:
+      issues: write
     steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: ./.github/actions/dev-image
-      - run: make test FUZZ=1
+      - run: |
+          title="Nightly run failed"
+          body="The scheduled nightly run failed: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          existing=$(gh issue list --search "$title in:title" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --label needs-triage --body "$body"
+          fi
         env:
-          R2S_FUZZ_SECONDS: 1800
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}

@@ -106,6 +106,8 @@ PREFIX_RULES = (
     # The avr backend compiles the slice sketch and runs its scenarios, so
     # avr-only files map to the avr leg. The rest of the tree is shared by
     # both backends, and the BRIDGE launch test loads the relay from its file.
+    # The isolation pairs run in the nightly workflow, never on a PR.
+    ("tests/e2e/test_isolation.py", {"NIGHTLY": "1"}),
     ("tests/e2e/avr_slice/", {"E2E": "avr"}),
     ("tests/e2e/run-avr.sh", {"E2E": "avr"}),
     ("tests/e2e/e2e_support/avr.py", {"E2E": "avr"}),

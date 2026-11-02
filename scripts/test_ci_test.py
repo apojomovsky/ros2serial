@@ -50,6 +50,7 @@ SCOPES = (
     "BUDGETS",
     "FUZZ",
     "README",
+    "NIGHTLY",
     "SCRIPTS_SHARD",
 )
 
@@ -331,6 +332,13 @@ def test_every_header_scope_runs_a_section():
     assert scopes, "no scopes found in the header comment"
     missing = [scope for scope in scopes if f"wants {scope}" not in text]
     assert not missing, f"header scopes with no section: {missing}"
+
+
+def test_nightly_scope_names_its_section():
+    """NIGHTLY runs the isolation pairs file as its own section, not a suite."""
+    text = (ROOT / "scripts" / "ci-test.sh").read_text()
+    assert "wants NIGHTLY" in text
+    assert "tests/e2e/test_isolation.py" in text
 
 
 def test_e2e_both_backend_runs_all_three_suites(tmp_path):

@@ -104,6 +104,10 @@ def test_e2e_tests_map_to_both_backends_and_bridge():
     assert scopes("tests/harness/simavr/run.sh") == {**CHEAP, "E2E": "avr"}
 
 
+def test_nightly_isolation_pair_runs_outside_the_pr_scopes():
+    assert scopes("tests/e2e/test_isolation.py") == {**CHEAP, "NIGHTLY": "1"}
+
+
 def test_avr_only_e2e_paths_map_to_the_avr_leg():
     for path in (
         "tests/e2e/run-avr.sh",

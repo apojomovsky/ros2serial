@@ -1076,8 +1076,9 @@ Scenario numbers in the tickets below refer to the key end-to-end scenarios in `
 | Workflow | Trigger | Jobs |
 | --- | --- | --- |
 | `ci.yml` | Push, PR and manual | `plan` (maps the diff to the scopes each section job gates on); `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component, fails on a drop); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `docs` (every code snippet in `README.md` and `docs/` extracted and compiled); `readme` (every Getting started command runs on simavr); `cpp`; `bridge` (colcon build and test in `ros:jazzy` and `ros:lyrical`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `pic-canary` (advisory, from Phase 2); `budgets` (size table as a PR comment, fails on budget breach) |
-| `nightly.yml` | Schedule | Long fuzzing, long fault injection, big-endian qemu, extended hypothesis runs, Rolling distro |
-| `release.yml` | Tag | Pre-release with the Arduino library zip and the Python sdist and wheel attached; publishes nowhere else |
+| `nightly.yml` | Schedule | Calls `nightly-jobs.yml`; files or comments on one `needs-triage` issue when the scheduled run fails |
+| `nightly-jobs.yml` | Reusable | `fuzz-long` (30 min per target); `e2e-isolation` (two e2e sections side by side) |
+| `release.yml` | Tag | Runs `nightly-jobs.yml` on a tag first, then the pre-release with the Arduino library zip and the Python sdist and wheel attached; publishes nowhere else |
 
 Rules:
 - Every job runs in a pinned container image or pinned action versions. Toolchain versions (avr-gcc, arduino-cli core, ROS images, epic-cc bundle) are pinned in one file, `ci/versions.env`. A required check's image is pinned by digest as well as tag: the bridge job's per-distro images (`ROS_<distro>_IMAGE`) carry both, so an upstream rebuild cannot change that job's toolchain without a commit here.

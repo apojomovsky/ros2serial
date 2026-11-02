@@ -15,7 +15,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 RUN_SH = ROOT / "tests" / "e2e" / "run.sh"
 RUN_AVR_SH = ROOT / "tests" / "e2e" / "run-avr.sh"
-ISOLATION = ROOT / "scripts" / "test_e2e_isolation.py"
+ISOLATION = ROOT / "tests" / "e2e" / "test_isolation.py"
 
 ANCHOR = 'case " ${R2S_E2E_SKIP:-} " in'
 
