@@ -164,6 +164,29 @@ def test_the_mcu_runs_at_the_requested_frequency(mcu):
     assert harness.summary["frequency"] == 16_000_000
 
 
+def test_echo_survives_a_starved_reader():
+    # The harness must wait out a full pty instead of dropping bytes: under
+    # host load the reader starves while simavr keeps emitting, which used to
+    # mangle frames on the wire (#324). The reader here drains slower than the
+    # firmware emits on purpose, with no host load at all.
+    payload = bytes(range(256)) * 256
+    with Harness("atmega328p", "--run-ms", "60000") as harness:
+        with serial.Serial(harness.pty, 115200, timeout=0.2) as port:
+            echoed = bytearray()
+            writer = threading.Thread(target=port.write, args=(payload,))
+            writer.start()
+            deadline = time.monotonic() + 50
+            while len(echoed) < len(payload) and time.monotonic() < deadline:
+                # A starved reader: the pty fills while simavr keeps sending.
+                if select.select([port.fileno()], [], [], 0.5)[0]:
+                    echoed += os.read(port.fileno(), min(256, len(payload) - len(echoed)))
+                    time.sleep(0.01)
+            writer.join(timeout=10)
+            assert not writer.is_alive(), "the firmware stopped consuming input"
+    assert bytes(echoed) == payload
+    assert harness.stop() == 0
+
+
 def test_echo_carries_more_than_the_input_ring():
     # One burst larger than the ring, written while the echo drains: the pty
     # then holds more than the ring's free space, which is where a chunk-sized
