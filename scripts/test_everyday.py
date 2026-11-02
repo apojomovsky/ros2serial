@@ -141,7 +141,7 @@ def fixture_repo(path):
 
 
 def run_check(repo, out_file, **env):
-    recorder = repo / "recorder.sh"
+    recorder = out_file.parent / "recorder.sh"
     recorder.write_text(f'#!/usr/bin/env bash\nenv | sort > "{out_file}"\n')
     recorder.chmod(0o755)
     clean = {k: v for k, v in os.environ.items() if k not in ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN")}
@@ -178,7 +178,7 @@ def test_check_runs_the_fast_gates_for_a_machinery_diff(tmp_path):
     assert recorded.get("LINT") == "1"
     assert recorded.get("COMMITS") == "1"
     assert "CORE" not in recorded
-    assert "left to CI" in stdout
+    assert "full suite to CI" in stdout
 
 
 def test_check_runs_everything_only_when_asked_for_full(tmp_path):
