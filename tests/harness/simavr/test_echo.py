@@ -164,13 +164,14 @@ def test_the_mcu_runs_at_the_requested_frequency(mcu):
     assert harness.summary["frequency"] == 16_000_000
 
 
-def test_echo_survives_a_starved_reader():
+@pytest.mark.parametrize("mcu", sorted(SRAM_BYTES))
+def test_echo_survives_a_starved_reader(mcu):
     # The harness must wait out a full pty instead of dropping bytes: under
     # host load the reader starves while simavr keeps emitting, which used to
     # mangle frames on the wire (#324). The reader here drains slower than the
     # firmware emits on purpose, with no host load at all.
     payload = bytes(range(256)) * 256
-    with Harness("atmega328p", "--run-ms", "60000") as harness:
+    with Harness(mcu, "--run-ms", "60000") as harness:
         with serial.Serial(harness.pty, 115200, timeout=0.2) as port:
             echoed = bytearray()
             writer = threading.Thread(target=port.write, args=(payload,))
@@ -184,6 +185,7 @@ def test_echo_survives_a_starved_reader():
             writer.join(timeout=10)
             assert not writer.is_alive(), "the firmware stopped consuming input"
     assert bytes(echoed) == payload
+    assert harness.summary["output_errors"] == 0
     assert harness.stop() == 0
 
 

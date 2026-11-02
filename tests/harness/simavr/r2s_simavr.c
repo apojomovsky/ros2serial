@@ -111,7 +111,9 @@ static void uart_output(struct avr_irq_t *irq, uint32_t value, void *param)
             harness.output_errors++;
             return;
         }
-        if (stop_requested) {
+        /* SIGTERM ends the run at once; the run limit lives in the main loop,
+           so a dead reader is bounded here too instead of outliving it. */
+        if (stop_requested || monotonic_ms() - harness.start_ms >= harness.options.run_ms) {
             return;
         }
         /* A starved reader fills the pty while simavr keeps emitting; dropping
