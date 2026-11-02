@@ -81,6 +81,16 @@ def test_probe_skips_the_daemon_and_the_router_uri(runner, tmp_path):
 
 
 @pytest.mark.parametrize("runner", sorted(RUNNERS), ids=sorted(RUNNERS))
+def test_canary_starts_before_the_entry_barrier(runner):
+    """Discovery settles during the rendezvous wait instead of the proving window."""
+    text = RUNNERS[runner].read_text()
+    started = text.index("canary_pid=$!")
+    waited = text.index('barrier_wait "')
+    gated = text.index("await_canary\n", waited)
+    assert started < waited < gated
+
+
+@pytest.mark.parametrize("runner", sorted(RUNNERS), ids=sorted(RUNNERS))
 def test_a_missing_canary_fails_loudly_on_a_bound(runner):
     body = await_function(RUNNERS[runner])
     assert "SECONDS + 180" in body

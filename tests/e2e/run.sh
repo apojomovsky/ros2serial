@@ -170,13 +170,16 @@ for leg in ${R2S_E2E_LEGS:-static runtime}; do
       sleep 2
       kill -0 "$router" 2>/dev/null || { echo "rmw_zenohd on port $R2S_ZENOH_ROUTER_PORT died"; status=1; break; }
     fi
-    barrier_wait "${bk}${rmw}"
     if [ -n "$canary_topic" ]; then
       # One publisher on this iteration's RMW and router, so the canary
-      # rides the same middleware the scenarios do. Killed below and on
-      # exit, so no run leaves a publisher behind.
+      # rides the same middleware the scenarios do. Started before the
+      # entry barrier so discovery settles while waiting for the peer.
+      # Killed below and on exit, so no run leaves a publisher behind.
       RMW_IMPLEMENTATION=$rmw ros2 topic pub "/$canary_topic" std_msgs/msg/String '{data: canary}' >/dev/null 2>&1 &
       canary_pid=$!
+    fi
+    barrier_wait "${bk}${rmw}"
+    if [ -n "$canary_topic" ]; then
       await_canary
     fi
     for test_file in test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_8_posix test_scenario_9_posix test_publish_catchup_posix; do
