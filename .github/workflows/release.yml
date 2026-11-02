@@ -36,6 +36,9 @@ jobs:
 
   release:
     needs: [nightly]
+    # The nightly gate only binds on a tag: a skipped caller (a pull request
+    # or a dispatch) still builds below, while a red one blocks the publish.
+    if: always() && (needs.nightly.result == 'success' || needs.nightly.result == 'skipped')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
