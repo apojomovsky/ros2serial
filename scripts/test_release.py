@@ -268,7 +268,12 @@ def cut_fixture(tmp_path, version=None):
     git(cut, "config", "user.email", "t@example.com")
     git(cut, "config", "user.name", "t")
     git(cut, "add", ".")
-    git(cut, "commit", "-q", "-m", "feat(core): cut fixture")
+    git(cut, "commit", "-q", "-m", "chore: cut fixture base")
+    # The last release is the tree's own VERSION: without its tag, git-cliff
+    # starts over at its initial version, which a released tree already has.
+    released = (cut / "VERSION").read_text(encoding="utf-8").strip()
+    git(cut, "tag", f"v{released}")
+    git(cut, "commit", "-q", "--allow-empty", "-m", "feat(core): cut fixture")
     result = subprocess.run(
         ["bash", str(ROOT / "scripts/release.sh"), "--bump", "patch"], cwd=cut, capture_output=True, text=True
     )
