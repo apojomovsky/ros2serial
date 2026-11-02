@@ -1,12 +1,16 @@
 """The versions r2s-gen reports: the repository's, and the one the wire speaks."""
 
 import re
+import sys
 from pathlib import Path
+
+import pytest
 
 from r2s_gen import bundle
 from r2s_gen.version import PROTOCOL_VERSION, __version__
 
 ROOT = Path(__file__).resolve().parents[2]
+SPEC = ROOT / "spec" / "protocol.md"
 
 
 def _capture(pattern: str, text: str) -> str:
@@ -47,5 +51,13 @@ def test_the_protocol_version_is_the_one_the_core_announces():
 
 # covers: GEN-2
 def test_the_protocol_version_is_the_one_the_spec_describes():
-    spec = (ROOT / "spec" / "protocol.md").read_text(encoding="utf-8")
+    spec = SPEC.read_text(encoding="utf-8")
     assert str(PROTOCOL_VERSION) == _capture(r"The protocol version described here is (\d+)", spec)
+
+
+def test_a_spec_that_is_not_utf8_fails(tmp_path, monkeypatch):
+    bad = tmp_path / "protocol.md"
+    bad.write_bytes(b"The protocol version described here is 1\n\xff")
+    monkeypatch.setattr(sys.modules[__name__], "SPEC", bad)
+    with pytest.raises(pytest.fail.Exception, match=r"spec/protocol\.md"):
+        test_the_protocol_version_is_the_one_the_spec_describes()
