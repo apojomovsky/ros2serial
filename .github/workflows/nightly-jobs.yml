@@ -2,16 +2,23 @@ name: nightly-jobs
 
 # The runs too long or too exhaustive for a PR: the long fuzzing and the e2e
 # isolation pairs. nightly.yml calls this on schedule; release.yml calls it
-# on a tag before anything is published, so no release ships with them red.
+# on a tag before anything is published, without the long fuzzing: fuzzing
+# for a fixed time is exploration, and CI already replays the seed corpus.
 # Timeout floor (see the rule comment in ci.yml): image jobs carry 30 or more.
 on:
   workflow_call:
+    inputs:
+      fuzz:
+        description: Run the long fuzzing
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
 jobs:
   fuzz-long:
+    if: ${{ inputs.fuzz }}
     runs-on: ubuntu-24.04
     # Four targets at R2S_FUZZ_SECONDS each, plus the image floor.
     timeout-minutes: 150
