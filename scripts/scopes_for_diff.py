@@ -175,21 +175,23 @@ def main(argv=None):
     if os.environ.get("R2S_FULL") == "1":
         print("FULL=1")
         return 0
-    try:
-        paths = changed_paths(args.base)
-    except (RuntimeError, IndexError) as exc:
-        print(f"scopes_for_diff: {exc}; running the full suite", file=sys.stderr)
-        print("FULL=1")
-        return 0
-    result = scopes_for_paths(paths)
-    if result != FULL or os.environ.get("GITHUB_ACTIONS"):
+    if os.environ.get("GITHUB_ACTIONS"):
+        try:
+            paths = changed_paths(args.base)
+        except (RuntimeError, IndexError) as exc:
+            print(f"scopes_for_diff: {exc}; running the full suite", file=sys.stderr)
+            print("FULL=1")
+            return 0
+        result = scopes_for_paths(paths)
         for scope in sorted(result):
             print(f"{scope}={result[scope]}")
         return 0
+    # Every local diff runs the cheap scopes: the workstation gate stays
+    # fast, and CI runs the mapped scopes on the merge with the base.
     for scope in sorted(CHEAP):
         print(f"{scope}={CHEAP[scope]}")
     print(
-        "scopes_for_diff: the diff would run the full suite, so this run covers the cheap scopes,",
+        "scopes_for_diff: this run covers the cheap scopes,",
         "leaving the full suite to CI",
         file=sys.stderr,
     )
