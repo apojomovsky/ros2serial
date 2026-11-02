@@ -26,11 +26,21 @@ DOCKER_RUN = $(DOCKER_BASE) $(foreach v,$(PASS_VARS),-e $(v)) $(IMAGE)
 in_image = $(if $(R2S_IN_IMAGE),$(1),$(DOCKER_RUN) $(1))
 pending = echo "make $(1): not available until $(2)"; exit 1
 
-.PHONY: help bootstrap doctor image shell exec test ci-local compile fuzz size-report vectors regen docs-gen \
-	fmt lint check-warnings setup-hooks pre-pr-check guard-main-clone cache-dir
+# A misspelled scope must fail with the valid scopes, not silently run nothing
+# or everything. Only command-line variables are checked, so environment
+# knobs pass through untouched.
+_CMDLINE_VARS := $(foreach v,$(.VARIABLES),$(if $(filter command line,$(origin $v)),$v))
+_SCOPE_ERROR := $(shell bash scripts/check-scope-vars.sh $(_CMDLINE_VARS))
+$(if $(_SCOPE_ERROR),$(error $(_SCOPE_ERROR)))
 
-help: ## List all targets
-	@grep -E '^[a-z][a-z-]*:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
+.PHONY: help bootstrap doctor check test test-core test-gen test-bridge test-cpp test-scripts \
+	test-all e2e-posix e2e-avr pytest ctest fmt shell image exec ci-local compile fuzz size-report \
+	vectors regen docs-gen lint check-warnings setup-hooks pre-pr-check guard-main-clone cache-dir
+
+##@Everyday
+
+help: ## Show this help: everyday targets first, then CI and agent targets
+	@awk 'BEGIN {FS = ":.*## "} /^##@/ {printf "\n%s\n", substr($$0, 4)} /^[a-z][a-z0-9-]*:.*## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 bootstrap: ## First-time setup: host deps check, git hooks, dev image
 	@bash scripts/doctor.sh || { echo "fix the MISSING items above, then re-run make bootstrap"; exit 1; }
@@ -40,19 +50,59 @@ bootstrap: ## First-time setup: host deps check, git hooks, dev image
 doctor: ## Report what setup is missing, change nothing
 	@bash scripts/doctor.sh
 
-image: ## Build the dev image (content-addressed tag, idempotent)
-	@docker image inspect $(IMAGE) >/dev/null 2>&1 && echo "$(IMAGE) is up to date" \
-		|| docker build --target dev $(BUILD_ARGS) -t $(IMAGE) .
+check: guard-main-clone cache-dir ## Run the scopes your diff needs, plus the fast gates
+	@$(call in_image,bash scripts/check.sh)
+
+test: guard-main-clone cache-dir ## Run scripts/ci-test.sh, the exact suite CI runs (scope: LINT=1 SCRIPTS=1 COMMITS=1 ...)
+	@$(call in_image,bash scripts/ci-test.sh)
+
+test-core: guard-main-clone cache-dir ## Run the CORE scope: same as make test CORE=1
+	@$(MAKE) --no-print-directory test CORE=1
+
+test-gen: guard-main-clone cache-dir ## Run the GEN scope: same as make test GEN=1
+	@$(MAKE) --no-print-directory test GEN=1
+
+test-bridge: guard-main-clone cache-dir ## Run the BRIDGE scope: same as make test BRIDGE=1
+	@$(MAKE) --no-print-directory test BRIDGE=1
+
+test-cpp: guard-main-clone cache-dir ## Run the CPP scope: same as make test CPP=1
+	@$(MAKE) --no-print-directory test CPP=1
+
+test-scripts: guard-main-clone cache-dir ## Run the SCRIPTS scope: same as make test SCRIPTS=1
+	@$(MAKE) --no-print-directory test SCRIPTS=1
+
+test-all: guard-main-clone cache-dir ## Run the whole suite, unscoped
+	@$(MAKE) --no-print-directory test
+
+e2e-posix: guard-main-clone cache-dir ## Run the posix end-to-end suite: same as make test E2E=posix
+	@$(MAKE) --no-print-directory test E2E=posix
+
+e2e-avr: guard-main-clone cache-dir ## Run the avr end-to-end suite: same as make test E2E=avr
+	@$(MAKE) --no-print-directory test E2E=avr
+
+pytest: guard-main-clone cache-dir ## Run one pytest file or node: make pytest ARGS='<path>[::name] [-k expr]'
+	@test -n "$(ARGS)" || { echo "usage: make pytest ARGS='<path>[::name] [-k expr]'"; exit 2; }
+	@$(call in_image,bash scripts/pytest-one.sh '$(ARGS)')
+
+ctest: guard-main-clone cache-dir ## Rerun core unit tests by name: make ctest ARGS='<regex>'
+	@test -n "$(ARGS)" || { echo "usage: make ctest ARGS='<regex>'"; exit 2; }
+	@$(call in_image,bash scripts/ctest-one.sh '$(ARGS)')
+
+fmt: guard-main-clone cache-dir ## Format the tree (ruff, clang-format)
+	@$(call in_image,bash -c 'ruff format . && bash scripts/c-format.sh --fix')
 
 shell: guard-main-clone cache-dir ## Interactive shell inside the image
 	@$(DOCKER_RUN) bash
 
+##@CI and agents
+
+image: ## Build the dev image (content-addressed tag, idempotent)
+	@docker image inspect $(IMAGE) >/dev/null 2>&1 && echo "$(IMAGE) is up to date" \
+		|| docker build --target dev $(BUILD_ARGS) -t $(IMAGE) .
+
 exec: guard-main-clone cache-dir ## One-off command inside the image: make exec CMD='...'
 	@test -n "$(CMD)" || { echo "usage: make exec CMD='...'"; exit 2; }
 	@$(call in_image,bash -c '$(CMD)')
-
-test: guard-main-clone cache-dir ## Run scripts/ci-test.sh, the exact suite CI runs (scope: LINT=1 SCRIPTS=1 COMMITS=1 ...)
-	@$(call in_image,bash scripts/ci-test.sh)
 
 ci-local: guard-main-clone cache-dir image ## The exact CI run, unscoped, in the ci image
 	@$(DOCKER_BASE) $(IMAGE) bash scripts/ci-test.sh
@@ -75,9 +125,6 @@ regen: cache-dir ## Regenerate every version-stamped generated file (goldens, ex
 
 docs-gen: ## Regenerate reference docs (CLI, vectors, bridge parameters)
 	@$(call pending,docs-gen,G1 and H1 in docs/00-design.md)
-
-fmt: guard-main-clone cache-dir ## Format the tree (ruff, clang-format)
-	@$(call in_image,bash -c 'ruff format . && bash scripts/c-format.sh --fix')
 
 lint: guard-main-clone cache-dir ## Linters: the LINT section of the suite
 	@$(call in_image,env LINT=1 bash scripts/ci-test.sh)

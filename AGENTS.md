@@ -35,6 +35,17 @@ tracked files.
 | `image` | Build the dev image (content-addressed tag, idempotent) |
 | `shell` / `exec CMD='...'` | Interactive shell / one-off command inside the image |
 | `test` (`CORE=1`, `GEN=1`, `BRIDGE=1`, `E2E=posix`, `E2E=avr`, `COVERAGE=1`, `DOCS=1`, `EXAMPLES=1`, `README=1`) | Runs `scripts/ci-test.sh`, the exact script CI runs, optionally scoped |
+| `check` | Runs the scopes the diff needs, plus the fast gates |
+| `test-core` | Same as `make test CORE=1` |
+| `test-gen` | Same as `make test GEN=1` |
+| `test-bridge` | Same as `make test BRIDGE=1` |
+| `test-cpp` | Same as `make test CPP=1` |
+| `test-scripts` | Same as `make test SCRIPTS=1` |
+| `test-all` | Runs the whole suite, unscoped |
+| `e2e-posix` | Same as `make test E2E=posix` |
+| `e2e-avr` | Same as `make test E2E=avr` |
+| `pytest` ARGS=`...` | Runs one pytest file or node in the image |
+| `ctest` ARGS=`...` | Reruns core unit tests by name in the image |
 | `ci-local` | The exact CI run, unscoped, in the `ci` image |
 | `compile EXAMPLE=<name> BOARD=<uno\|mega\|...>` | Build an example firmware and print flash, RAM and stack |
 | `fuzz TARGET=<name>` | Run one libFuzzer target for 60 s |

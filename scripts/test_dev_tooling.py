@@ -131,13 +131,13 @@ def agents_targets() -> set[str]:
     for line in (ln for ln in table.splitlines()[2:] if ln.startswith("|")):
         # Cells split on unescaped pipes: a target cell may contain `uno\|mega`.
         first = re.split(r"(?<!\\)\|", line)[1]
-        names.update(re.findall(r"`([a-z][a-z-]*)", first))
+        names.update(re.findall(r"`([a-z][a-z0-9-]*)", first))
     return names - {"Target"}
 
 
 def test_make_help_lists_exactly_the_targets_in_agents_md():
     out = run(["make", "help"], check=True).stdout
-    listed = set(re.findall(r"^  ([a-z][a-z-]*)\s", out, re.MULTILINE))
+    listed = set(re.findall(r"^  ([a-z][a-z0-9-]*)\s", out, re.MULTILINE))
     assert listed == agents_targets()
 
 
