@@ -239,7 +239,8 @@ def run_scopes(repo: Path, **env) -> subprocess.CompletedProcess:
     )
 
 
-def test_cli_lists_assignments_for_committed_and_untracked_changes(tmp_path):
+def test_cli_lists_assignments_for_committed_and_untracked_changes(tmp_path, monkeypatch):
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
     repo = tiny_repo(tmp_path)
     (repo / "core" / "b.c").write_text("int y;\n")
     out = run_scopes(repo)
@@ -272,17 +273,25 @@ def test_cli_machinery_only_diff_runs_the_cheap_scopes_locally(tmp_path, monkeyp
     assert "leaving the full suite to CI" in out.stderr
 
 
-def test_cli_bridge_diff_runs_its_scopes_locally(tmp_path, monkeypatch):
+def test_cli_bridge_diff_runs_the_cheap_scopes_locally(tmp_path, monkeypatch):
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     repo = tiny_repo(tmp_path)
     (repo / "bridge").mkdir()
     (repo / "bridge" / "node.cpp").write_text("// bridge\n")
     out = run_scopes(repo)
     assert out.returncode == 0, out.stdout + out.stderr
-    assert "FULL" not in out.stdout
-    for scope in ("COMMITS=1", "LINT=1", "BRIDGE=1", "COVERAGE=1", "E2E=both"):
-        assert scope in out.stdout.split()
-    assert "leaving the full suite to CI" not in (out.stdout + out.stderr)
+    assert sorted(out.stdout.split()) == ["COMMITS=1", "LINT=1"]
+    assert "leaving the full suite to CI" in out.stderr
+
+
+def test_cli_core_diff_runs_the_cheap_scopes_locally(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    repo = tiny_repo(tmp_path)
+    (repo / "core" / "b.c").write_text("int y;\n")
+    out = run_scopes(repo)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert sorted(out.stdout.split()) == ["COMMITS=1", "LINT=1"]
+    assert "leaving the full suite to CI" in out.stderr
 
 
 def test_cli_machinery_plus_bridge_diff_runs_the_cheap_scopes(tmp_path, monkeypatch):
