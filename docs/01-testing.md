@@ -318,7 +318,7 @@ In `tests/e2e/`, each a launch_testing test parameterized by MCU backend (posix,
 5. A type hash mismatch rejects only that topic, with an error naming the type.
 6. Unplug (close the pty) and replug: CONNECTED again within `boot_wait_ms` + 3 s without restarting the bridge.
 7. MCU reset: detected within 500 ms (HELLO in reply to a heartbeat), re-handshake follows; publishers are kept when the table is unchanged.
-8. Time sync: with a simulated MCU clock off by 5000 ppm, stamps stay within 1 ms of host time after the initial burst.
+8. Time sync: with a simulated MCU clock off by 5000 ppm, stamps stay within 1 ms of host time after the initial burst. The concurrent isolation pairs skip this scenario through R2S_E2E_SKIP; the standalone legs keep judging it.
 9. Log messages at each level appear on `/rosout` with the right severity and logger name.
 10. Fault injection at 1% byte corruption: no crash, the counters match the injected faults, and delivery recovers on the next frame.
 11. A subscribed message that exceeds a bound is dropped, and the bridge logs the topic and the field path.

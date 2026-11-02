@@ -218,7 +218,11 @@ for rmw in $rmws; do
   for board in $boards; do
     export R2S_E2E_BOARD=$board
     for scenario in 1 2 3 4; do
-      timeout 300 launch_test "tests/e2e/test_scenario_${scenario}_avr.py" || status=1
+      # Same R2S_E2E_SKIP contract as run.sh, matched on the avr file name.
+      case " ${R2S_E2E_SKIP:-} " in
+        *" test_scenario_${scenario}_avr "*) echo "skip test_scenario_${scenario}_avr (R2S_E2E_SKIP)" ;;
+        *) timeout 300 launch_test "tests/e2e/test_scenario_${scenario}_avr.py" || status=1 ;;
+      esac
     done
   done
   # Both sides wait for each other here too, so the whole iteration

@@ -154,7 +154,12 @@ for leg in static runtime; do
       canary_pid=$!
     fi
     for test_file in test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_8_posix test_scenario_9_posix test_publish_catchup_posix; do
-      timeout 300 launch_test "tests/e2e/${test_file}.py" || status=1
+      # The isolation pairs skip scenario 8 through R2S_E2E_SKIP: its 1 ms
+      # bound assumes a lone suite and cannot survive two suites on one host.
+      case " ${R2S_E2E_SKIP:-} " in
+        *" $test_file "*) echo "skip $test_file (R2S_E2E_SKIP)" ;;
+        *) timeout 300 launch_test "tests/e2e/${test_file}.py" || status=1 ;;
+      esac
     done
     # Both sides wait for each other here too, so the whole iteration
     # overlaps, not just its start: the canary stays up while waiting.

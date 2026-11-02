@@ -14,6 +14,10 @@ them: without overlap there would be no concurrency to prove anything
 about. A proof counts only when both sides are on the probed RMW at once
 and only after repeating, so a slow graph or a missed probe cannot pass
 it.
+
+Scenario 8 stays out of the pairs through R2S_E2E_SKIP: its 1 ms stamp
+bound assumes a lone suite and median-shifts over the bound under two
+suites on one host. The standalone e2e-posix legs keep judging it.
 """
 
 import concurrent.futures
@@ -181,6 +185,7 @@ def run_pair(first, second):
                 os.environ,
                 R2S_RMWS=" ".join(RMWS),
                 R2S_E2E_CANARY=canary,
+                R2S_E2E_SKIP="test_scenario_8_posix",
                 R2S_BUILD_DIR=str(build),
                 R2S_E2E_BARRIER=str(barrier),
                 R2S_E2E_SLOT=name,
