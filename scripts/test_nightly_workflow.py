@@ -91,3 +91,5 @@ def test_a_failed_scheduled_nightly_files_or_comments_one_issue():
     assert "needs-triage" in runs
     assert "gh issue comment" in runs
     assert "GITHUB_RUN_ID" in runs
+    envs = [step.get("env", {}) or {} for step in reporter["steps"]]
+    assert any(str(env.get("GH_REPO")) == "${{ github.repository }}" for env in envs)
