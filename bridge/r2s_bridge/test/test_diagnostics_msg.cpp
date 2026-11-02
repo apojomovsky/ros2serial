@@ -47,6 +47,7 @@ Router::Diagnostics connected_snapshot()
     battery.device_to_host = true;
     battery.seq_gaps = 4u;
     battery.dropped = 0u;
+    battery.publish_failures = 1u;
     snapshot.topics.push_back(battery);
     Router::TopicDiagnostics cmd_vel;
     cmd_vel.topic_id = 17u;
@@ -79,6 +80,7 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(values.at("topic battery direction"), "device to host");
     EXPECT_EQ(values.at("topic battery seq gaps"), "4");
     EXPECT_EQ(values.at("topic battery dropped"), "0");
+    EXPECT_EQ(values.at("topic battery publish failures"), "1");
     EXPECT_EQ(values.at("topic cmd_vel direction"), "host to device");
     EXPECT_EQ(values.at("topic cmd_vel seq gaps"), "0");
     EXPECT_EQ(values.at("topic cmd_vel dropped"), "5");

@@ -20,7 +20,11 @@ def test_the_generator_version_is_the_repository_version():
 
 
 def test_every_ros_manifest_carries_the_repository_version():
-    manifests = sorted(ROOT.rglob("package.xml"))
+    # Installed copies are build outputs, not sources: the walkthrough builds
+    # in-tree, so its install tree carries manifests with older versions.
+    manifests = sorted(
+        path for path in ROOT.rglob("package.xml") if path.relative_to(ROOT).parts[0] not in ("build", "install", "log")
+    )
     assert len(manifests) >= 3, manifests
     for manifest in manifests:
         assert _capture(r"<version>([^<]+)</version>", manifest.read_text(encoding="utf-8")) == __version__, manifest

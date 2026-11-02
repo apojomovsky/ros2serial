@@ -49,6 +49,7 @@ SCOPES = (
     "EXAMPLES",
     "BUDGETS",
     "FUZZ",
+    "README",
 )
 
 

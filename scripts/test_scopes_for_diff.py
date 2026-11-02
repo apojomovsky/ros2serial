@@ -120,7 +120,7 @@ def test_avr_only_e2e_paths_map_to_the_avr_leg():
 
 def test_docs_map_to_docs():
     assert scopes("docs/01-testing.md") == {**CHEAP, "DOCS": "1"}
-    assert scopes("README.md") == {**CHEAP, "DOCS": "1"}
+    assert scopes("README.md") == {**CHEAP, "DOCS": "1", "README": "1"}
 
 
 def test_tools_map_to_scripts_and_the_section_each_serves():
@@ -141,6 +141,7 @@ def test_section_scripts_map_to_their_section():
     assert scopes("scripts/build-examples.sh") == {**CHEAP, "EXAMPLES": "1", "BUDGETS": "1"}
     assert scopes("scripts/budgets-check.sh") == {**CHEAP, "BUDGETS": "1"}
     assert scopes("scripts/budgets_comment.py") == {**CHEAP, "SCRIPTS": "1", "BUDGETS": "1"}
+    assert scopes("scripts/check-readme.sh") == {**CHEAP, "README": "1"}
     assert scopes("scripts/cpp-test.sh") == {**CHEAP, "CPP": "1"}
     assert scopes("scripts/fuzz.sh") == {**CHEAP, "FUZZ": "1"}
     assert scopes("scripts/build-host-lib.sh") == {**CHEAP, "CORE": "1", "GEN": "1"}
