@@ -10,12 +10,11 @@ from pathlib import PurePosixPath
 
 N_SHARDS = 4
 E2E_ISOLATION_FILE = "scripts/test_e2e_isolation.py"
-E2E_ISOLATION_NAME = "test_e2e_isolation.py"
 
 
 def is_pinned(node_id):
     """Pinned node ids run in shard 0 whatever directory pytest started in."""
-    return PurePosixPath(node_id.split("::", 1)[0]).name == E2E_ISOLATION_NAME
+    return PurePosixPath(node_id.split("::", 1)[0]).name == PurePosixPath(E2E_ISOLATION_FILE).name
 
 
 def parse_spec(spec, n=N_SHARDS):

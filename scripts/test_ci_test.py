@@ -110,6 +110,17 @@ def test_the_suite_does_not_pass_test_down_to_its_own_tests(tmp_path):
     assert seen.read_text() == "", "TEST reached the script tests"
 
 
+def test_the_suite_consumes_the_shard_before_starting_pytest():
+    """SCRIPTS_SHARD selects the outer run's own shard, and the script tests
+    start nested suite runs. The suite consumes the variable up front, the way
+    it unsets TEST, so a nested run inherits only what its caller sets."""
+    lines = (ROOT / "scripts" / "ci-test.sh").read_text().splitlines()
+    capture_at = next(i for i, line in enumerate(lines) if line.startswith("scripts_shard="))
+    unset_at = next(i for i, line in enumerate(lines) if line == "unset SCRIPTS_SHARD")
+    pytest_at = next(i for i, line in enumerate(lines) if "python3 -m pytest scripts tools" in line)
+    assert capture_at < unset_at < pytest_at, "the shard must be captured and unset before pytest starts"
+
+
 def test_lint_fails_on_a_python_lint_error(tmp_path):
     root = copy_tree(tmp_path)
     (root / "scripts" / "broken.py").write_text("import os\n")
