@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>r2s_bridge</name>
-  <version>0.0.0</version>
+  <version>0.1.0</version>
   <description>ROS 2 bridge between a serial port and the rest of the ROS 2 graph.</description>
   <maintainer email="apojomovsky@gmail.com">Alexis Pojomovsky</maintainer>
   <license>MIT</license>
