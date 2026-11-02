@@ -41,7 +41,7 @@ if(R2S_TOPIC_MAX_COUNT_LINE)
     "${R2S_TOPIC_MAX_COUNT_LINE}")
   list(APPEND R2S_GENERATED_DEFS R2S_TOPIC_MAX_COUNT=${CMAKE_MATCH_1})
 endif()
-target_compile_definitions(r2s_posix_firmware PRIVATE R2S_WITH_CODEC ${R2S_GENERATED_DEFS})
+target_compile_definitions(r2s_posix_firmware PRIVATE R2S_WITH_CODEC R2S_WITH_LOG ${R2S_GENERATED_DEFS})
 target_compile_options(r2s_posix_firmware PRIVATE
     -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow
     -Wstrict-prototypes -Wmissing-prototypes -Wundef)
@@ -86,7 +86,7 @@ target_include_directories(r2s_posix_runtime_firmware PRIVATE
     "${R2S_REPO_ROOT}/core/include" "${R2S_REPO_ROOT}/cpp/include"
     "${R2S_BUNDLE_DIR}/src" src)
 target_compile_definitions(r2s_posix_runtime_firmware PRIVATE
-    R2S_WITH_CODEC R2S_MAX_FRAME=${R2S_BUNDLE_MAX_FRAME} R2S_MAX_NEST=${R2S_BUNDLE_MAX_NEST})
+    R2S_WITH_CODEC R2S_WITH_LOG R2S_MAX_FRAME=${R2S_BUNDLE_MAX_FRAME} R2S_MAX_NEST=${R2S_BUNDLE_MAX_NEST})
 target_compile_features(r2s_posix_runtime_firmware PRIVATE cxx_std_11)
 set_target_properties(r2s_posix_runtime_firmware PROPERTIES CXX_EXTENSIONS OFF)
 target_compile_options(r2s_posix_runtime_firmware PRIVATE

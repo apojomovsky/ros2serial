@@ -91,7 +91,7 @@ Work is plain GitHub issues.
 10. PR body: real newlines, `Closes #N`, a `## Review` section.
 11. Hooks installed.
 12. README and docs freshness: user-visible changes update `README.md` or `docs/` in the same PR, or the PR body says `README: n/a` (advisory).
-13. `make pre-pr-check TEST=1` runs the suite scopes the diff touches (`scripts/scopes_for_diff.py`), plus the cheap checks, and records the pass under the same stamp the pre-push hook checks, so pushing that tree runs nothing twice. `R2S_FULL=1` runs the full suite. CI still runs everything on the merge with master, and a PR merges only on green CI.
+13. `make pre-pr-check TEST=1` runs the suite scopes the diff touches (`scripts/scopes_for_diff.py`), plus the cheap checks, and records the pass under the same stamp the pre-push hook checks, so pushing that tree runs nothing twice. `R2S_FULL=1` runs the full suite. A diff that would run the full suite runs only the cheap scopes locally and leaves the full suite to CI. CI is where the suite runs: it still runs everything on the merge with master, and a PR merges only on green CI.
 
 Write PR bodies to a unique file under the cache, which the dev image can see (`mktemp "$HOME/.cache/ros2serial/pr-<issue>-XXXXXX.md"`), and pass it as `make pre-pr-check PR_BODY=<file>`. Never use an inline `\n` string, and never a shared fixed path such as `/tmp/pr_body.md`, which another agent can overwrite.
 

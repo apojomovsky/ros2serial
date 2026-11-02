@@ -158,6 +158,31 @@ jobs:
       - run: make test EXAMPLES=1
   budgets:
     runs-on: ubuntu-24.04
-    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - run: echo "pending P6, see docs/00-design.md"
+      # Full history: the head numbers are judged by the base commit's tools.
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/dev-image
+      - run: |
+          range="$(bash scripts/pr-title-range.sh)" || exit 1
+          export BASE="${range%%..*}"
+          set +e
+          make test BUDGETS=1 | tee budgets.log
+          status=${PIPESTATUS[0]}
+          grep '^TABLE ' budgets.log | tail -1 | cut -d' ' -f2 > budgets-table.path
+          exit "$status"
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+      - if: always() && github.event_name == 'pull_request'
+        # Best effort: a fork token cannot comment, and that must not fail the gate.
+        continue-on-error: true
+        run: |
+          if [ -s budgets-table.path ]; then
+            gh pr comment "${{ github.event.pull_request.number }}" --body-file "$(cat budgets-table.path)"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

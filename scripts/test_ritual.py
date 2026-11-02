@@ -676,8 +676,8 @@ def test_the_ci_workflow_resolves_its_ranges_from_the_merge_base():
     """
     text = (ROOT / ".github/workflows/ci.yml").read_text()
     assert "pull_request.base.sha" not in text
-    assert text.count('range="$(bash scripts/pr-title-range.sh)" || exit 1') == 2
-    assert text.count("BASE_REF: ${{ github.event.pull_request.base.ref }}") == 2
+    assert text.count('range="$(bash scripts/pr-title-range.sh)" || exit 1') == 3
+    assert text.count("BASE_REF: ${{ github.event.pull_request.base.ref }}") == 3
 
 
 def test_the_pr_title_workflow_uses_the_range_script():
@@ -788,6 +788,106 @@ def test_full_env_runs_the_suite_unscoped(tmp_path):
     present = {name for name in scopes if name in os.environ}
     added = {line.split("=")[0] for line in text.splitlines() if line.split("=")[0] in scopes} - present
     assert added == set(), f"the hook scoped a full run: {sorted(added)}"
+
+
+def test_pre_push_leaves_the_full_suite_to_ci(tmp_path, monkeypatch):
+    """A machinery-only diff runs the cheap scopes locally and says CI runs the rest."""
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    # The suite itself may run scoped: drop any ambient scope so the suite
+    # only sees what the hook computes.
+    monkeypatch.delenv("SCRIPTS", raising=False)
+    _, wt = fixture(tmp_path)
+    commit(wt, {"Makefile": "# machinery\n"}, "chore: touch the gate")
+    head = git(wt, "rev-parse", "HEAD").stdout.strip()
+    line = f"refs/heads/feat/1-thing {head} refs/heads/feat/1-thing {'0' * 40}\n"
+    seen = tmp_path / "env.txt"
+    suite = f"env > {seen}"
+    result = pre_push(wt, line, R2S_PRE_PUSH_SUITE=suite)
+    assert result.returncode == 0, result.stdout + result.stderr
+    text = seen.read_text()
+    assert "LINT=1" in text
+    assert "COMMITS=1" in text
+    assert "SCRIPTS=1" not in text
+    assert "FULL=1" not in text
+    assert "leaving the full suite to CI" in result.stdout
+
+
+def test_pre_push_explicit_scope_still_runs(tmp_path, monkeypatch):
+    """A scope named on the command line still runs when the suite is left to CI."""
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    _, wt = fixture(tmp_path)
+    commit(wt, {"Makefile": "# machinery\n"}, "chore: touch the gate")
+    head = git(wt, "rev-parse", "HEAD").stdout.strip()
+    line = f"refs/heads/feat/1-thing {head} refs/heads/feat/1-thing {'0' * 40}\n"
+    seen = tmp_path / "env.txt"
+    suite = f"env > {seen}"
+    result = pre_push(wt, line, R2S_PRE_PUSH_SUITE=suite, CORE="1")
+    assert result.returncode == 0, result.stdout + result.stderr
+    text = seen.read_text()
+    assert "CORE=1" in text
+    assert "leaving the full suite to CI" in result.stdout
+
+
+def test_ci_pre_push_runs_the_full_suite_for_machinery(tmp_path, monkeypatch):
+    """In CI the same machinery-only diff still runs everything."""
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    _, wt = fixture(tmp_path)
+    commit(wt, {"Makefile": "# machinery\n"}, "chore: touch the gate")
+    head = git(wt, "rev-parse", "HEAD").stdout.strip()
+    line = f"refs/heads/feat/1-thing {head} refs/heads/feat/1-thing {'0' * 40}\n"
+    seen = tmp_path / "env.txt"
+    suite = f"env > {seen}"
+    result = pre_push(wt, line, R2S_PRE_PUSH_SUITE=suite)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "leaving the full suite to CI" not in (result.stdout + result.stderr)
+
+
+def test_takeoff_leaves_the_full_suite_to_ci(tmp_path, monkeypatch):
+    """The takeoff runs the cheap scopes for machinery and the push skips on its stamp."""
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    # The suite itself may run scoped: drop any ambient scope so the suite
+    # only sees what the ritual computes.
+    monkeypatch.delenv("SCRIPTS", raising=False)
+    main, wt = fixture(tmp_path)
+    commit(wt, {"Makefile": "# machinery\n"}, "chore: touch the gate")
+    git(main, "config", "core.hooksPath", ".githooks")
+    head = git(wt, "rev-parse", "HEAD").stdout.strip()
+    line = f"refs/heads/feat/1-thing {head} refs/heads/feat/1-thing {'0' * 40}\n"
+    seen = tmp_path / "env.txt"
+    log = tmp_path / "suite.log"
+    recorder = tmp_path / "record-suite.sh"
+    recorder.write_text(f"#!/usr/bin/env bash\necho ran >> {log}\nenv > {seen}\n")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+    result = ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="chore: touch the gate", R2S_SUITE=str(recorder))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "leaving the full suite to CI" in result.stdout
+    text = seen.read_text()
+    assert "LINT=1" in text
+    assert "COMMITS=1" in text
+    assert "SCRIPTS=1" not in text
+    assert "FULL=1" not in text
+    assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=f"bash {recorder}").returncode == 0
+    assert log.read_text().split() == ["ran"], "the push reran the suite"
+
+
+def test_takeoff_explicit_scope_still_runs(tmp_path, monkeypatch):
+    """A scope named on the command line still runs when the suite is left to CI."""
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    main, wt = fixture(tmp_path)
+    commit(wt, {"Makefile": "# machinery\n"}, "chore: touch the gate")
+    git(main, "config", "core.hooksPath", ".githooks")
+    seen = tmp_path / "env.txt"
+    recorder = tmp_path / "record-suite.sh"
+    recorder.write_text(f"#!/usr/bin/env bash\nenv > {seen}\n")
+    body = tmp_path / "body.md"
+    body.write_text(GOOD_BODY)
+    result = ritual(
+        wt, TEST="1", CORE="1", PR_BODY=str(body), PR_TITLE="chore: touch the gate", R2S_SUITE=str(recorder)
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "CORE=1" in seen.read_text()
+    assert "leaving the full suite to CI" in result.stdout
 
 
 def test_ci_runs_every_scope_on_pull_requests():
