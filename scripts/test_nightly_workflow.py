@@ -73,7 +73,7 @@ def test_pr_ci_leaves_out_the_long_fuzzing_unless_fuzz_is_selected():
     job = ci_nightly_call()
     assert "timeout-minutes" not in job
     fuzz = (job.get("with") or {}).get("fuzz")
-    assert "needs.plan.outputs.fuzz" in str(fuzz)
+    assert str(fuzz).strip() == "${{ needs.plan.outputs.fuzz == '1' }}"
 
 
 def test_the_release_call_skips_the_long_fuzzing():
