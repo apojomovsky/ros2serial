@@ -137,8 +137,8 @@ ticket gets one branch and one pull request.
    squash merge lands the pull request title as the one commit on
    `master`, and the changelog is built from these subjects.
 5. **Open a pull request when it is ready for review.** Put `Closes #N`
-   in the body and add the issue's `area:*` labels. The link closes the
-   issue on merge, and the labels route the pull request to review.
+   in the body. The link closes the issue on merge. The maintainer adds
+   the issue's `area:*` labels, since outside contributors cannot label.
 
 ## When CI is red
 

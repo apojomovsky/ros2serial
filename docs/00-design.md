@@ -32,6 +32,8 @@ The intended user experience is a hobbyist's: install a library, declare a few t
 
 ## Hardware tiers
 
+*Status (0.1.0): built: tier M on Uno and Mega in simavr; planned: 32-bit ports in Phase 3, PIC in Phase 5.*
+
 Tiers are defined by resources, not ISA bitness: a 32-bit core is not automatically big.
 
 | Tier | Examples | RAM | Features |
@@ -51,6 +53,8 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 
 ## Scope: parity with rosserial
 
+*Status (0.1.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++; planned: parameters, services and reliable channel in #133, #154, #155 and #156, rosserial compatibility in #145 and #149; actions are out of scope.*
+
 | Feature | Priority | Notes |
 | --- | --- | --- |
 | Publish and subscribe | P0 | Float32 and Twist first, then Range, Imu and JointState |
@@ -69,6 +73,8 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 The list is still based on prior knowledge of rosserial; the Phase 0 archaeology validated it against the source code.
 
 ## Architecture
+
+*Status (0.1.0): built: one bridge per serial port; planned: one live link per process until the framer gains per-instance state in #122.*
 
 ```
  build time                                        runtime
@@ -109,6 +115,8 @@ PIC-enabling rules that apply from day one, even though PIC work comes last:
 - every buffer small enough to fit one bank where the target banks RAM.
 
 ## Declaring topics
+
+*Status (0.1.0): built: runtime registration, X-macro list, and `r2s.yaml` with the generator; planned: rosserial-compatible runtime registration in Phase 2.*
 
 There are three ways to declare topics. All three produce the same wire behavior and run the same conformance and end-to-end tests.
 
@@ -226,6 +234,8 @@ Lengths are varints (LEB128): 1 byte for values under 128, which covers almost a
 
 ## Protocol draft (v1)
 
+*Status (0.1.0): built: full-mode handshake, time, log, heartbeat and error channels; planned: parameters and reliable channel in #133 and #154, services and actions in #316; compact mode lands with tier S in Phase 5.*
+
 ```
 frame = rCOBS( topic_id[1] | seq[1] | payload[N] | crc16[2] ) + 0x00
 ```
@@ -289,6 +299,8 @@ rCOBS decoding runs backwards in place in the frame buffer once the delimiter ar
 
 ## Time
 
+*Status (0.1.0): built: PONG with delimiter tick, CORRECTION and `r2s_now()` with the host estimator; planned: the measured accuracy figure in #348.*
+
 **What rosserial did.** Right after connecting, and then every few seconds, the MCU asked the host for the current time. When the reply came, the MCU stored an offset from its own `millis()`, correcting for the round trip. From then on `nh.now()` was that offset plus `millis()`, with millisecond resolution. That is how sketches stamped their messages.
 
 **Why it matters for IMUs.** A 150-byte Imu frame takes about 13 ms to send at 115200 baud. USB-serial adapters add jitter on top: an FTDI adapter's default latency timer is 16 ms, and the Uno's ATmega16U2 and CH340 clones behave differently again. If the bridge stamped messages on arrival, the stamps would be late and irregular. Stamping at the moment of sampling needs `now()` on the MCU.
@@ -305,6 +317,8 @@ The drift term matters: the Uno's ATmega328P runs from a ceramic resonator that 
 The tick comes from the port: `micros()` on Arduino (1 MHz nominal, 4 µs resolution), a 1 ms tick from epic-hal on PIC, a hardware timer elsewhere. The tick rate is announced in the handshake. The bridge also sets the serial port to low latency where the OS supports it. Target accuracy: about 1 ms, bounded by the tick resolution. Phase 2 measures the real figure.
 
 ## User API
+
+*Status (0.1.0): built: C, runtime C++ and static C++ APIs; planned: rosserial-compatible runtime registration in #145 and the porting guide in #149.*
 
 ### C (P0)
 
@@ -477,6 +491,8 @@ Node(
 
 ## Code generator and packaging
 
+*Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling; planned: rosidl plugin wrapper and `.action` support in #317.*
+
 `r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required). It parses the `.msg` grammar itself, since `rosidl_parser` ships only with a ROS installation and the bundled snapshots make the ROS-free path complete. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources, the optional C++ headers, and the compact-mode node map. It also builds the bundled Arduino library (common types with default bounds) that the X-macro path uses. Outputs are laid out to be usable as:
 
 - an Arduino library (Library Manager), the default path;
@@ -488,6 +504,8 @@ The generator targets a ROS distro explicitly (`distro:` in the config, default 
 
 ## Host bridge
 
+*Status (0.1.0): built: full-mode handshake, generic pub/sub, packed-to-CDR conversion, Uno boot handling, log forwarding, time-sync estimation, rate limiting; planned: parameters and services in #155 and #156, launch remapping arguments in #235.*
+
 - C++ (rclcpp), packaged as a component so several bridges (one per serial port) can share a process. The framing allows one live link per process until the framer gains a per-instance state (#122).
 - Generic publishers and subscriptions, plus introspection-based conversion from packed to CDR.
 - Serial I/O behind a small interface; termios first (research ticket R8).
@@ -498,6 +516,8 @@ The generator targets a ROS distro explicitly (`distro:` in the config, default 
 - P1 services: generic client and service APIs differ by distro (research ticket R4). If they are missing on a supported distro, fall back to introspection-based typed services there.
 
 ## Portability notes (AVR now, PIC last)
+
+*Status (0.1.0): built: AVR Uno and Mega; planned: 32-bit ports in Phase 3, PIC on epic-hal in Phase 5.*
 
 Validation is Arduino Uno + Mega (AVR) with open-source tools for the first phases. PIC work comes in the last phase, built with epic-cc on epic-hal, but the PIC16 constraints shape the portable core now (see "Two zones").
 
@@ -518,6 +538,8 @@ Constraints that shape the core. Most of them also make it leaner on AVR.
 **Testing.** The conformance vectors run on host builds and on simavr for AVR (328P/2560). PIC end-to-end tests run under MPLAB SIM through epic-hal's mdb gate in Phase 5; until then, an advisory CI job compiles the core with epic-cc so PIC-hostile code is caught early.
 
 ## Quality bar
+
+*Status (0.1.0): built: spec with vectors, conformance suite, fuzzing, budgets and stack tracking in CI; planned: the hardware-in-the-loop checklist in #95.*
 
 What "professional" means in concrete terms:
 
@@ -546,6 +568,8 @@ The tier M budget is 2 KB of RAM (ATmega328P; Mega gives headroom at 8 KB).
 - **No entropy source on small parts.** The host assigns the session token at the handshake, so the MCU needs no random source and no EEPROM counter.
 
 ## Plan
+
+*Status (0.1.0): built: Phase 1 vertical slice on AVR; planned: Phases 2 to 5.*
 
 Each phase ends in a decision gate and a publishable artifact.
 
@@ -644,7 +668,7 @@ ros2serial/
 ├── Makefile                  only entry point: bootstrap, image, shell, test, pre-pr-check, help
 ├── Dockerfile                base/dev/ci(=dev)/release stages; versions pinned via ci/versions.env
 ├── .githooks/                pre-commit, commit-msg, pre-push (installed by make setup-hooks)
-├── scripts/                  ci-test.sh, pre-pr-check.sh, prose-diff.sh, lint-python.sh, helpers + test_*.py
+├── scripts/                  ci-test.sh, pre-pr-check.sh, prose_check.py, lint-python.sh, helpers + test_*.py
 ├── LICENSE                   MIT
 ├── spec/
 │   ├── protocol.md           the normative protocol specification (grows from Part I + this Part II)
@@ -1131,7 +1155,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | B3 | Conventional commits check and git-cliff config | B1 | PR title check enforced in CI |
 | B4 | Vector schema and `tools/vectors_check.py` | B1 | Invalid vector files fail CI |
 | B5 | Makefile entry points + Docker dev/ci/release images + `make bootstrap`/`doctor` | B1 | Clean clone to `make test` per AGENTS.md; `dev` and `ci` identical |
-| B6 | Git hooks + `make pre-pr-check` (takeoff) + `scripts/prose-diff.sh` + `scripts/lint-python.sh` + `scripts/push.sh` | B5 | Ritual fails a deliberately dirty PR in a test run |
+| B6 | Git hooks + `make pre-pr-check` (takeoff) + `scripts/prose_check.py` + `scripts/lint-python.sh` + `scripts/push.sh` | B5 | Ritual fails a deliberately dirty PR in a test run |
 | B8 | `pr-body.yml`, `cut-release.yml` | B2 | The release dry run is green |
 | B7 | `tools/zone_check.py` | B2 | Fails on a deliberate function pointer and a deliberate float operation in `core/` |
 
@@ -1216,7 +1240,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | P3 | Time: host estimator and scheduling | H4 | Simulated drift tests; scenario 8 |
 | P4 | Reconnect and reset handling | V1 | Scenarios 6 and 7 |
 | P5 | Range, Imu, JointState with bounds; error reports with field index | G8, H6 | Vectors; scenario 11 |
-| P6 | Budgets: `tools/size_report.py`, `tools/stack_report.py`, `budgets.yaml`, PR comment | V4 | Job fails on a deliberate breach in a test PR |
+| P6 | Budgets: `tools/size_report.py`, `tools/stack_report.py`, `tools/budgets.yaml`, PR comment | V4 | Job fails on a deliberate breach in a test PR |
 | P7 | Stack painting in simavr during the e2e scenarios | V4, R5 | Measured worst case reported next to the static figure |
 | P8 | Big-endian qemu job | C1 | Nightly green |
 | P9 | Framing and CRC benchmark (AVR Uno/Mega): rCOBS, COBS, SLIP, rosserial style | V4, R7 | Write-up in `docs/benchmarks/` |

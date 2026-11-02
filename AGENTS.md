@@ -34,7 +34,7 @@ tracked files.
 | `doctor` | Report what setup is missing, change nothing |
 | `image` | Build the dev image (content-addressed tag, idempotent) |
 | `shell` / `exec CMD='...'` | Interactive shell / one-off command inside the image |
-| `test` (`CORE=1`, `GEN=1`, `BRIDGE=1`, `E2E=posix`, `E2E=avr`, `COVERAGE=1`, `DOCS=1`, `EXAMPLES=1`, `README=1`) | Runs `scripts/ci-test.sh`, the exact script CI runs, optionally scoped |
+| `test` (`CORE=1`, `GEN=1`, `BRIDGE=1`, `CPP=1`, `SCRIPTS=1`, `E2E=posix`, `E2E=avr`, `COVERAGE=1`, `DOCS=1`, `EXAMPLES=1`, `BUDGETS=1`, `FUZZ=1`, `README=1`, ...) | Runs `scripts/ci-test.sh`, the exact script CI runs, optionally scoped |
 | `check` | Runs the scopes the diff needs, plus the fast gates |
 | `test-core` | Same as `make test CORE=1` |
 | `test-gen` | Same as `make test GEN=1` |
@@ -47,12 +47,12 @@ tracked files.
 | `pytest` ARGS=`...` | Runs one pytest file or node in the image |
 | `ctest` ARGS=`...` | Reruns core unit tests by name in the image |
 | `ci-local` | The exact CI run, unscoped, in the `ci` image |
-| `compile EXAMPLE=<name> BOARD=<uno\|mega\|...>` | Build an example firmware and print flash, RAM and stack |
+| `compile EXAMPLE=<name> BOARD=<uno\|mega\|...>` | Not built yet (pending G10 and V4): will build an example firmware and print flash, RAM and stack |
 | `fuzz TARGET=<name>` | Run one libFuzzer target for 60 s |
 | `size-report` | Regenerate the flash, RAM and stack report |
 | `vectors` | Validate every vector file |
 | `regen` | Regenerate every version-stamped generated file (goldens, example and cpp libraries, posix sources) |
-| `docs-gen` | Regenerate reference docs (CLI, vectors, bridge parameters) |
+| `docs-gen` | Not built yet (pending G1 and H1): will regenerate reference docs (CLI, vectors, bridge parameters) |
 | `fmt` / `lint` / `check-warnings` | Formatting, linters (advisory), warnings (hard gate) |
 | `setup-hooks` / `pre-pr-check` | Install hooks / run the takeoff ritual |
 | `help` | List all targets |
@@ -76,7 +76,7 @@ Work is plain GitHub issues.
 
 ## Development cycle
 
-- Inner loop in the container: `make shell`, then `make test CORE=1` (or `GEN=1`, `BRIDGE=1`, `E2E=posix`) and `make compile EXAMPLE=<name>`.
+- Inner loop in the container: `make shell`, then `make test CORE=1` (or `GEN=1`, `BRIDGE=1`, `E2E=posix`). `make compile` is pending (see above); compile examples as the README walkthrough does until it lands.
 - **Tests first.** The first commit of a PR adds tests, vectors or fuzz corpus entries that fail. Bugs are fixed by first reproducing them in a test.
 - **`docs/01-testing.md` is normative:** how code must be written to be testable, what to test at which level, coverage, mutation and spec-coverage gates, and the rules for the tests themselves. Read it before writing any code.
 - Behavior that crosses the wire is specified by a conformance vector before any code is written. The first message vectors are computed by hand; the Python reference must reproduce them before it generates any further vector.
@@ -98,7 +98,7 @@ Work is plain GitHub issues.
 6. Lint: ruff, clang-format, ament linters.
 7. Zone check: `tools/zone_check.py` (no function pointers, float operations or C++ includes in `core/`).
 8. Spec sync: if `spec/protocol.md` changed, vectors changed in the same PR. A vectors-only PR passes when every rule ID its vectors cover is already defined there; a vector naming an unknown rule fails.
-9. Prose: `scripts/prose-diff.sh` lists every added comment block; the mechanical rules (8-line cap, no decoration, no narrative, no em-dashes) fail the ritual. Content judgment stays with the author.
+9. Prose: `scripts/prose_check.py` lists every added comment block; the mechanical rules (8-line cap, no decoration, no narrative, no em-dashes) fail the ritual. Content judgment stays with the author.
 10. PR body: real newlines, `Closes #N`, a `## Review` section.
 11. Hooks installed.
 12. README and docs freshness: user-visible changes update `README.md` or `docs/` in the same PR, or the PR body says `README: n/a` (advisory).

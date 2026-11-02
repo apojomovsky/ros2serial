@@ -107,7 +107,7 @@ exec: guard-main-clone cache-dir ## One-off command inside the image: make exec 
 ci-local: guard-main-clone cache-dir image ## The exact CI run, unscoped, in the ci image
 	@$(DOCKER_BASE) $(IMAGE) bash scripts/ci-test.sh
 
-compile: ## Build an example firmware and print flash, RAM and stack
+compile: ## Not built yet (pending G10 and V4): will build an example firmware
 	@$(call pending,compile,G10 and V4 in docs/00-design.md)
 
 fuzz: guard-main-clone cache-dir ## Fuzz each target for 60 s (TARGET=name and R2S_FUZZ_SECONDS=n narrow it)
@@ -123,7 +123,7 @@ vectors: guard-main-clone cache-dir ## Validate every vector file and regenerate
 regen: cache-dir ## Regenerate every version-stamped generated file (goldens, example and cpp libraries, posix sources)
 	@$(call in_image,python3 tools/refresh_generated.py)
 
-docs-gen: ## Regenerate reference docs (CLI, vectors, bridge parameters)
+docs-gen: ## Not built yet (pending G1 and H1): will regenerate reference docs
 	@$(call pending,docs-gen,G1 and H1 in docs/00-design.md)
 
 lint: guard-main-clone cache-dir ## Linters: the LINT section of the suite
