@@ -161,6 +161,26 @@ def test_bridge_diff_runs_bridge_coverage_and_both_e2e_legs():
     ]
 
 
+def test_avr_only_diff_runs_only_the_avr_leg():
+    assert running_jobs("pull_request", ["tests/e2e/run-avr.sh"]) == [
+        "bridge-images",
+        "e2e-avr",
+        "lint",
+        "plan",
+    ]
+
+
+def test_posix_only_diff_runs_only_the_posix_leg():
+    assert running_jobs("pull_request", ["ports/posix/src/r2s_posix_firmware.c"]) == [
+        "bridge",
+        "bridge-images",
+        "core",
+        "e2e-posix",
+        "lint",
+        "plan",
+    ]
+
+
 def test_full_diff_runs_every_job():
     assert running_jobs("pull_request", ["Makefile"]) == sorted(workflow()["jobs"])
 
