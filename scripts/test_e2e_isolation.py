@@ -41,7 +41,9 @@ CACHE = Path(
 )
 RMWS = ("rmw_fastrtps_cpp", "rmw_zenoh_cpp")
 DOMAIN_TIMEOUT = 900.0
-SWEEP_PAUSE = 10.0
+# Sample fast: each proof needs repeating, and the pairs' agreement windows
+# are short once scenario 8 sits out, so sparse sweeps starve the counts.
+SWEEP_PAUSE = 5.0
 PROBE_TIMEOUT = 120
 PROOFS_REQUIRED = 2
 
