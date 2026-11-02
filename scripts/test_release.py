@@ -254,6 +254,42 @@ VERSIONED_TESTS = [
 ]
 
 
+def cut_fixture(tmp_path, version=None):
+    """A copy of the tree in a fresh repository, cut with release.sh --bump patch.
+
+    `version`, when given, stands in for the tree's VERSION, as on a tree
+    whose last release is that version.
+    """
+    cut = tmp_path / "cut"
+    shutil.copytree(ROOT, cut, ignore=shutil.ignore_patterns(".git"))
+    if version is not None:
+        (cut / "VERSION").write_text(f"{version}\n", encoding="utf-8")
+    git(cut, "init", "-q", "-b", "master")
+    git(cut, "config", "user.email", "t@example.com")
+    git(cut, "config", "user.name", "t")
+    git(cut, "add", ".")
+    git(cut, "commit", "-q", "-m", "chore: cut fixture base")
+    # The last release is the tree's own VERSION: without its tag, git-cliff
+    # starts over at its initial version, which a released tree already has.
+    released = (cut / "VERSION").read_text(encoding="utf-8").strip()
+    git(cut, "tag", f"v{released}")
+    git(cut, "commit", "-q", "--allow-empty", "-m", "feat(core): cut fixture")
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/release.sh"), "--bump", "patch"], cwd=cut, capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return cut
+
+
+def test_a_cut_after_a_release_moves_past_it(tmp_path):
+    cut = cut_fixture(tmp_path, version="0.1.0")
+    assert (cut / "VERSION").read_text(encoding="utf-8").strip() == "0.1.1"
+    committed = subprocess.run(
+        ["git", "show", "--name-only", "--format=", "HEAD"], cwd=cut, capture_output=True, text=True
+    ).stdout.split()
+    assert "VERSION" in committed
+
+
 def test_a_simulated_cut_leaves_the_versioned_tests_green(tmp_path):
     """A release.sh --bump patch on the real tree regenerates the stamped files.
 
@@ -262,17 +298,7 @@ def test_a_simulated_cut_leaves_the_versioned_tests_green(tmp_path):
     commit itself must carry every carrier: a hand-kept git add list that
     misses one would leave the tree green and the release red.
     """
-    cut = tmp_path / "cut"
-    shutil.copytree(ROOT, cut, ignore=shutil.ignore_patterns(".git"))
-    git(cut, "init", "-q", "-b", "master")
-    git(cut, "config", "user.email", "t@example.com")
-    git(cut, "config", "user.name", "t")
-    git(cut, "add", ".")
-    git(cut, "commit", "-q", "-m", "feat(core): cut fixture")
-    result = subprocess.run(
-        ["bash", str(ROOT / "scripts/release.sh"), "--bump", "patch"], cwd=cut, capture_output=True, text=True
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
+    cut = cut_fixture(tmp_path)
     version = (cut / "VERSION").read_text(encoding="utf-8").strip()
     assert version != "0.0.0", version
     for rel in STAMPED:
