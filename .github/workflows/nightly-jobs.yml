@@ -13,7 +13,8 @@ permissions:
 jobs:
   fuzz-long:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # Four targets at R2S_FUZZ_SECONDS each, plus the image floor.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
