@@ -1,0 +1,11 @@
+{
+  "name": "r2s-mermaid-check",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Parse every fenced mermaid block in the tracked markdown with mermaid's own parser.",
+  "dependencies": {
+    "jsdom": "30.1.3",
+    "mermaid": "12.2.0"
+  }
+}
