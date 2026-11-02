@@ -164,7 +164,7 @@ in both commands.
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+New here? Start with the quickstart in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 
