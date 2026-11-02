@@ -13,7 +13,7 @@ from pathlib import Path
 import launch_testing.markers
 import rclpy
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, firmware
+from e2e_support import checks, firmware, teardown
 from e2e_support.relay import PtyRelay
 from geometry_msgs.msg import Twist
 from rclpy.qos import QoSProfile, ReliabilityPolicy
@@ -98,7 +98,7 @@ class TestScenario3(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        rclpy.shutdown()
+        teardown.shutdown()
 
     def test_published_twists_come_back_on_the_echo_topic(self):
         global _SPAWNED

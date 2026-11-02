@@ -17,7 +17,7 @@ import launch_testing.markers
 import rclpy
 from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, firmware
+from e2e_support import checks, firmware, teardown
 from e2e_support.relay import PtyRelay
 
 # covers: SES-16, SES-27
@@ -70,7 +70,7 @@ class TestScenario4(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        rclpy.shutdown()
+        teardown.shutdown()
 
     def test_remapping_and_namespace_apply_to_mcu_topics(self):
         global _SPAWNED

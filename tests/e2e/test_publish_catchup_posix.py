@@ -17,7 +17,7 @@ from pathlib import Path
 import launch_testing.markers
 import rclpy
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, firmware
+from e2e_support import checks, firmware, teardown
 from e2e_support.relay import PtyRelay
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32
@@ -72,7 +72,7 @@ class TestPublishCatchup(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        rclpy.shutdown()
+        teardown.shutdown()
 
     def test_stalled_publisher_keeps_its_count(self):
         global _SPAWNED
