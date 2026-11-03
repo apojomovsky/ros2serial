@@ -22,6 +22,8 @@ GOLDEN_CASES = [
     pytest.param("geometry_msgs/msg/Twist", {}, "twist.h", id="twist"),
     pytest.param("std_msgs/msg/Header", HEADER_BOUNDS, "header.h", id="header"),
     pytest.param("sensor_msgs/msg/JointState", JOINT_STATE_BOUNDS, "joint_state.h", id="joint_state"),
+    pytest.param("sensor_msgs/msg/Imu", HEADER_BOUNDS, "imu.h", id="imu"),
+    pytest.param("sensor_msgs/msg/Range", HEADER_BOUNDS, "range.h", id="range"),
 ]
 
 

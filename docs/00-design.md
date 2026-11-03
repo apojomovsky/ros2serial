@@ -27,7 +27,7 @@ The intended user experience is a hobbyist's: install a library, declare a few t
 
 - Interoperability with MAVLink or other ecosystems.
 - Competing with micro-ROS on 32-bit MCUs with an RTOS.
-- Actions, full QoS, and taking part in DDS discovery from the MCU.
+- Full QoS and taking part in DDS discovery from the MCU.
 - Transports other than serial (UART, USB CDC) in the first version.
 - ROS 1 or ROS 2 distros older than Jazzy.
 - Windows hosts in v1 (Linux first, macOS best effort).
@@ -55,7 +55,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 
 ## Scope: parity with rosserial
 
-*Status (0.1.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++; planned: parameters, services and reliable channel in #133, #154, #155 and #156, rosserial compatibility in #145 and #149; actions are out of scope.*
+*Status (0.1.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++; planned: parameters, services, actions and the reliable channel in #133, #154, #155, #156 and #315 to #320, rosserial compatibility in #145 and #149.*
 
 | Feature | Priority | Notes |
 | --- | --- | --- |
@@ -70,7 +70,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 | Parameters | P1 | Declared by the MCU, exposed as ROS 2 parameters of the bridge node |
 | Services (server and client) | P1 | Need the reliable channel |
 | TF and diagnostics | P2 | Probably better handled on the host |
-| Actions | Out of scope | |
+| Actions | P1 | Minimal action server on the MCU (one active goal per action), bridge as the ROS 2 action server; needs services and the reliable channel |
 
 The list is still based on prior knowledge of rosserial; the Phase 0 archaeology validated it against the source code.
 
@@ -264,7 +264,7 @@ The bridge loads the type support for each type name and compares the hash with 
 
 **Session, reset and reconnection.** Heartbeats run in both directions. The host treats any of these as an MCU reset and redoes the handshake and the time sync: a `HELLO` carrying no token or a different token than the one recorded, an unsolicited `HELLO` while connected, or a `HELLO` sent in reply to a heartbeat. An MCU that is not connected answers any non-handshake host frame with a rate-limited `HELLO`, so a reset is detected within one heartbeat period, without entropy. If the MCU stops seeing host traffic, it stops publishing and returns to announcing.
 
-**Losses and errors.** User topics are best effort. A gap in `seq` increments a counter that the bridge publishes as diagnostics. A serialized publish that fails on the ROS graph is dropped the same way: the bridge logs the topic and counts the failure per topic instead of aborting. Parameters, services and the handshake use a small reliable channel (stop-and-wait with ack on ID 6, one outstanding message per direction).
+**Losses and errors.** User topics are best effort. A gap in `seq` increments a counter that the bridge publishes as diagnostics. A serialized publish that fails on the ROS graph is dropped the same way: the bridge logs the topic and counts the failure per topic instead of aborting. Parameters, services, actions and the handshake use a small reliable channel (stop-and-wait with ack on ID 6, one outstanding message per direction); action feedback stays best effort.
 
 **Flow control.** The MCU announces its RX capacity (the size of its frame buffer). The bridge rate-limits host-to-MCU traffic per topic, caps its total host-to-MCU bandwidth to a fraction of the link, and, for keep-latest topics such as `cmd_vel`, keeps only the most recent message instead of queueing. Topics are serviced round-robin, so one busy topic cannot starve the others. Pending control frames coalesce while the link is wedged ([SES-33]): one per control kind and one TOPIC_STATUS per topic id, dropped on re-handshake, with the replaced count in `/diagnostics`.
 
@@ -480,6 +480,10 @@ The C++ objects are globals, as in rosserial sketches, which relies on static co
 
 ROS 2-style aliases (`std_msgs::msg::Float32`) are always provided; rosserial-style aliases (`std_msgs::Float32`) come with the compatibility headers.
 
+### Services and actions (P1)
+
+The service and action APIs mirror `rclcpp` and `rclcpp_action`: the MCU runs a minimal action server and the bridge is the ROS 2 action server on its behalf. The exact shapes are left to S6.
+
 ### Remapping from a launch file
 
 The bridge creates its publishers and subscriptions under the names the MCU announces. ROS 2 applies remapping and namespace rules when a node creates a topic, so the standard launch syntax works with no extra code:
@@ -519,6 +523,7 @@ The generator targets a ROS distro explicitly (`distro:` in the config, default 
 - Compact mode: loads the node map generated with the firmware.
 - P1 parameters: the MCU declares name, type and default in the handshake. The bridge declares them as ROS parameters on its own node, so `ros2 param set` works, and pushes changes to the MCU over the reliable channel.
 - P1 services: generic client and service APIs differ by distro (research ticket R4). If they are missing on a supported distro, fall back to introspection-based typed services there.
+- P1 actions: generic action server and client APIs differ by distro (research ticket R14). If they are missing on a supported distro, fall back to assembling from generic services and topics or the rcl action API there.
 
 ## Portability notes (AVR now, PIC last)
 
@@ -603,7 +608,7 @@ Each phase ends in a decision gate and a publishable artifact.
 
 **Phase 3: 32-bit ports and P1**
 - 32-bit ports: CH32V00x (tier M proof on a modern toolchain) + one small STM32 for tier M/L; RP2040 for tier L; ESP32 build-only via the Arduino layout (no WiFi transport in v1).
-- Parameters, services, the reliable channel, PlatformIO packaging, rosidl plugin wrapper.
+- Parameters, services, actions, the reliable channel, PlatformIO packaging, rosidl plugin wrapper.
 - *Demo:* the same sketch on Uno, Mega and a 32-bit board, all publishing into the same ROS 2 graph.
 - *Gate:* release candidate.
 
@@ -641,6 +646,7 @@ Each open decision has a default. Tickets use the default until the decision is 
 | Narrow per field or per topic (64-bit-`double` targets only) | Per topic | Maintainer, after the Phase 2 encoding benchmark |
 | Serial library for the bridge | Plain POSIX `termios` behind a small interface | Research ticket R8 |
 | Generic service support per distro | Use generic APIs where present, introspection-based typed services elsewhere | Research ticket R4 |
+| Generic action support per distro | Use generic action APIs where present, assembled from generic services and topics or the rcl action API elsewhere | Research ticket R14 |
 | Bounds of bundled Arduino types | Strings 16, `frame_id` 16, JointState up to 6 joints | Maintainer, after R1 and the Phase 2 benchmarks |
 | Default baud rate | 115200 | Maintainer, after the Phase 2 baud matrix |
 
@@ -1126,6 +1132,7 @@ Each one ends as an issue comment whose first line starts with `Findings` and, w
 | R2 | Prior art: rosserial-like projects for ROS 2, micro-ROS on small parts, zenoh-pico over serial, ROS 2 hosts for the original rosserial protocol | Annotated list and a go/no-go recommendation | Proceed |
 | R3 | Can `rosidl_parser` and the RIHS01 algorithm be used without a ROS install (pip), or must they be vendored | Working proof inside `gen/` with a hash test | Decided in #71: compute in `gen/r2s_gen/typehash.py` with the standard library only; no pip package, no vendored modules |
 | R4 | Generic service and client APIs per supported distro | API inventory with versions | Generic where present, introspection-based typed services elsewhere |
+| R14 | Generic action server and client APIs per supported distro | API inventory with versions | Generic where present, assembled from generic services and topics or the rcl action API elsewhere |
 | R5 | simavr: UART-to-pty bridging for ATmega328P/2560, tick source, EEPROM, stack painting, run in CI | `tests/harness/simavr/` running echo firmware (Uno + Mega) in CI | None needed: blocks only the e2e-avr job |
 | R6 | PIC end-to-end under MPLAB SIM through epic-hal's mdb gate: UART input and output, tick, EEPROM (Phase 5) | Working echo test in CI | Build-only PIC canary |
 | R7 | CRC choice: Hamming distance of CRC-16/MCRF4XX and alternatives at our frame sizes (Koopman tables), cost on AVR | Table and recommendation | CRC-16/MCRF4XX, bitwise |
@@ -1173,6 +1180,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | S3 | Vectors: CRC, rCOBS, varint | B4, S1 | Includes the published check value and the rCOBS edge cases (empty, all zeros, 254 and 255 non-zero bytes) |
 | S4 | Vectors: Float32, Twist (full and narrow) by hand first, then frames and a handshake transcript from the reference | S1, G4 | Hand vectors reviewed; reference reproduces them |
 | S5 | P1 spec: parameters (ID 3) and the reliable channel (ID 6) | S2 | Byte tables and state machines |
+| S6 | P1 spec: services and actions over the reliable channel, with a ROS 2-consistent board API | S5, R4, R14 | Byte tables and state machines; vectors for every new frame |
 | S6 | Descriptor format spec (type records, field entries, validation rules) | S1 | Reviewed; used by C9 and G7 |
 | S7 | Time vectors: wraparound, maximum drift, anchor expiry | S2 | Reference and C agree |
 
@@ -1255,7 +1263,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | P13 | Baud-rate matrix: 115200, 250000, 500000, 1000000 in simavr and on hardware | V4 | Results documented; default confirmed or changed |
 | P14 | PIC canary job with epic-cc (advisory) | C9, V5 | Core and static C++ compile for PIC16F1938 and PIC18F4550 |
 | P15 | Draft "port your rosserial sketch" guide | P11 | Reviewed by the maintainer |
-| P16 | Protocol spec v1.0 freeze | P1 to P5, P12 | Tagged; vectors frozen |
+| P16 | Protocol spec v1.0 freeze | P1 to P5, P12, S6 | Tagged; vectors frozen |
 
 ### E7: 32-bit ports and P1 (Phase 3)
 
@@ -1270,6 +1278,10 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | X7 | PlatformIO layout | G10 | Install-and-build tests in CI |
 | X8 | rosidl plugin wrapper | G8 | Generation from `colcon build` in a test package |
 | X9 | Cross-board demo: same sketch on Uno, Mega and a 32-bit board | X1 or X2, V6 | Demo recording |
+| X10a | Generator support for `.action` types | S6 | Goal, Result and Feedback emitted with ROS 2-matching hashes; golden tests |
+| X10b | MCU action server with a ROS 2-consistent API | S6, X10a, X4 | S6 frames in the core and the C++ layer; unit tests and vectors; RAM per action reported |
+| X10c | Bridge as the ROS 2 action server for MCU actions | S6, R14, X10a, X4, X6 | Goals reach ROS clients on every distro; disconnect and reset end goals per S6 |
+| X10d | E2E scenario for actions on posix and avr | X10b, X10c | Goal, feedback and result end to end; second goal, cancel, disconnect and reset per S6 |
 
 ### E8: release (Phase 4)
 

@@ -13,7 +13,9 @@
 void r2s_vec_check_messages(const r2s_vec_messages_t *v)
 {
     char label[256];
-    uint8_t storage[sizeof(geometry_msgs__msg__Twist)];
+    /* Sized by the largest handwritten struct, so every vector image fits;
+     * the assert below turns a future larger type into a clean failure. */
+    uint8_t storage[sizeof(sensor_msgs__msg__Imu)];
     uint8_t out[R2S_MAX_FRAME];
     r2s_codec_out_t sink = {out, (uint16_t)sizeof out, 0u, 0u};
     uint8_t field = 0xFFu;
@@ -27,12 +29,22 @@ void r2s_vec_check_messages(const r2s_vec_messages_t *v)
     } else if (strcmp(v->type, "geometry_msgs/msg/Twist") == 0) {
         type = R2S_HANDWRITTEN_TWIST;
         size = (uint16_t)sizeof(geometry_msgs__msg__Twist);
+    } else if (strcmp(v->type, "sensor_msgs/msg/Range") == 0) {
+        type = R2S_HANDWRITTEN_RANGE;
+        size = (uint16_t)sizeof(sensor_msgs__msg__Range);
+    } else if (strcmp(v->type, "sensor_msgs/msg/Imu") == 0) {
+        type = R2S_HANDWRITTEN_IMU;
+        size = (uint16_t)sizeof(sensor_msgs__msg__Imu);
+    } else if (strcmp(v->type, "sensor_msgs/msg/JointState") == 0) {
+        type = R2S_HANDWRITTEN_JOINT_STATE;
+        size = (uint16_t)sizeof(sensor_msgs__msg__JointState);
     } else {
-        TEST_FAIL_MESSAGE("the C runner knows Float32 and Twist");
+        TEST_FAIL_MESSAGE("the C runner knows Float32, Twist, Range, Imu and JointState");
         return;
     }
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(size, v->encode_len, label);
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(size, v->decode_len, label);
+    TEST_ASSERT_TRUE_MESSAGE(size <= (uint16_t)sizeof storage, label);
     memcpy(storage, v->encode, size);
     TEST_ASSERT_EQUAL_INT8_MESSAGE(
         R2S_OK, r2s_codec_encode(&R2S_HANDWRITTEN_TABLE, type, storage, v->narrow, &sink, &field), label);

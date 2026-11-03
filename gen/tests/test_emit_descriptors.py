@@ -612,15 +612,49 @@ def test_wide_values_match_the_hand_derivation(tmp_path):
 def test_generated_tables_match_c9_handwritten_tables(tmp_path):
     # covers: DSC-1, DSC-2, DSC-3, DSC-4
     demo = repository_for(tmp_path, {"std_msgs/msg/String": "string<=8 data"})
-    resolved = resolve(msgs.MessageRepository(), [FLOAT32, TWIST])
+    bounds = {
+        "std_msgs/msg/Header.frame_id": 24,
+        "sensor_msgs/msg/JointState.name": [4, 12],
+        "sensor_msgs/msg/JointState.position": 4,
+        "sensor_msgs/msg/JointState.velocity": 4,
+        "sensor_msgs/msg/JointState.effort": 4,
+    }
+    resolved = resolve(
+        msgs.MessageRepository(),
+        [
+            FLOAT32,
+            TWIST,
+            "builtin_interfaces/msg/Time",
+            "std_msgs/msg/Header",
+            "sensor_msgs/msg/Range",
+            "sensor_msgs/msg/Imu",
+            "sensor_msgs/msg/JointState",
+        ],
+        bounds,
+    )
     resolved.update(resolve(demo, ["std_msgs/msg/String"]))
-    roots = [FLOAT32, TWIST, "std_msgs/msg/String"]
+    roots = [
+        FLOAT32,
+        TWIST,
+        "std_msgs/msg/String",
+        "builtin_interfaces/msg/Time",
+        "std_msgs/msg/Header",
+        "sensor_msgs/msg/Range",
+        "sensor_msgs/msg/Imu",
+        "sensor_msgs/msg/JointState",
+    ]
     table = descriptors.build(resolved, roots)
     assert [record.type_name for record in table.records] == [
         FLOAT32,
         VECTOR3,
         TWIST,
         "std_msgs/msg/String",
+        "builtin_interfaces/msg/Time",
+        "std_msgs/msg/Header",
+        "sensor_msgs/msg/Range",
+        "geometry_msgs/msg/Quaternion",
+        "sensor_msgs/msg/Imu",
+        "sensor_msgs/msg/JointState",
     ]
     (tmp_path / "r2s_generated.h").write_text(emit.emit_types(resolved, max_nest=table.max_nest), encoding="utf-8")
     (tmp_path / "r2s_descriptors.c").write_text(descriptors.emit_c(table), encoding="utf-8")
@@ -640,13 +674,13 @@ def test_generated_tables_match_c9_handwritten_tables(tmp_path):
                 "                                   uint8_t topic_count) { return R2S_OK; }",
                 "int main(void)",
                 "{",
-                "    if (R2S_HANDWRITTEN_TABLE.type_count != 4u || R2S_HANDWRITTEN_TABLE.field_count != 7u) {",
+                "    if (R2S_HANDWRITTEN_TABLE.type_count != 10u || R2S_HANDWRITTEN_TABLE.field_count != 34u) {",
                 "        return 1;",
                 "    }",
-                "    if (memcmp(R2S_HANDWRITTEN_TABLE.types, r2s_type_records, 4u * 5u) != 0) {",
+                "    if (memcmp(R2S_HANDWRITTEN_TABLE.types, r2s_type_records, 10u * 5u) != 0) {",
                 "        return 1;",
                 "    }",
-                "    if (memcmp(R2S_HANDWRITTEN_TABLE.fields, r2s_field_entries, 7u * 8u) != 0) {",
+                "    if (memcmp(R2S_HANDWRITTEN_TABLE.fields, r2s_field_entries, 34u * 8u) != 0) {",
                 "        return 1;",
                 "    }",
                 '    printf("match\\n");',

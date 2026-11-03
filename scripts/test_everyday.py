@@ -224,5 +224,5 @@ def test_make_forwards_the_e2e_loop_narrowers():
     # tests/e2e/README.md documents both for a quicker local loop; make
     # must hand them into the dev image or they are silently ignored.
     line = next(line for line in (ROOT / "Makefile").read_text().splitlines() if line.startswith("PASS_VARS"))
-    for var in ("R2S_RMWS", "R2S_E2E_BOARDS"):
+    for var in ("R2S_RMWS", "R2S_E2E_BOARDS", "R2S_E2E_BAUDS"):
         assert var in line.split(), f"make drops {var} before the container"

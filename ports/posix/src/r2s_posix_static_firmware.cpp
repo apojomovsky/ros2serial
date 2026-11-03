@@ -1,7 +1,7 @@
-/* Static posix firmware: the same Float32, Twist, String and Time topics as
- * the generated C firmware, announced from a fixed R2S_TOPICS list through
- * the static C++ API, so the end-to-end suite drives the static path as a
- * process on a pty. The command line mirrors the C firmware's, and the
+/* Static posix firmware: the same Float32, Twist, String, Time and JointState
+ * topics as the generated C firmware, announced from a fixed R2S_TOPICS list
+ * through the static C++ API, so the end-to-end suite drives the static path
+ * as a process on a pty. The command line mirrors the C firmware's, and the
  * topics announce in the same order with IDs from 16. Renaming or dropping
  * a row is rejected: the static list fixes the announce, so only
  * --no-log-text silences its traffic while staying announced. */
@@ -18,10 +18,12 @@
     X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)                           \
     X(Publisher, geometry_msgs::msg::Twist, echo_vel_pub, "echo_vel")                                        \
     X(Publisher, std_msgs::msg::String, log_text_pub, "log_text")                                            \
-    X(Publisher, builtin_interfaces::msg::Time, time_now_pub, "time_now")
+    X(Publisher, builtin_interfaces::msg::Time, time_now_pub, "time_now")                                    \
+    X(Subscription, sensor_msgs::msg::JointState, joints_sub, "joints", on_joints)
 #include "ros2serial.h"
 
 #include <builtin_interfaces/msg/time.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/string.hpp>
 
@@ -75,11 +77,21 @@ void on_cmd_vel(const geometry_msgs::msg::Twist &msg)
     (void)echo_vel_pub.publish(msg);
 }
 
+static uint32_t s_joints_count;
+
+void on_joints(const sensor_msgs::msg::JointState &msg)
+{
+    (void)msg;
+    s_joints_count++;
+    fprintf(stderr, "r2s_posix: joints n=%lu\n", (unsigned long)s_joints_count);
+}
+
 static void usage(FILE *out)
 {
     fprintf(out, "Usage: r2s_posix_static_firmware PORT [--node NAME] [--rate HZ]\n"
                  "           [--pub NAME | --no-pub] [--sub NAME | --no-sub]\n"
                  "           [--echo NAME | --no-echo] [--time-now NAME | --no-time-now]\n"
+                 "           [--joints NAME | --no-joints]\n"
                  "           [--log-text NAME | --no-log-text] [--log-lines] [--tick-skew-ppm PPM]\n");
 }
 
@@ -130,6 +142,69 @@ static void check_name(const char *flag, const char *name)
 {
     if (name[0] == '\0') {
         fprintf(stderr, "r2s_posix: %s needs a non-empty name\n", flag);
+        usage(stderr);
+        exit(2);
+    }
+}
+
+/* Scratch name the node probe below configures: overlong candidates are
+ * refused, and the static Node's first spin binds the launch name before
+ * use. Static storage, so the pointer the core keeps stays valid until then. */
+static char s_node_probe[R2S_MAX_FRAME];
+
+/* Whether the core gate binds a node name of len x's with no topics: the
+ * probe asks r2s_session_configure() itself instead of copying its sum. */
+static uint8_t node_probe_fits(uint32_t len)
+{
+    uint32_t i;
+
+    if (len >= (uint32_t)R2S_MAX_FRAME) {
+        return 0u;
+    }
+    for (i = 0u; i < len; i++) {
+        s_node_probe[i] = 'x';
+    }
+    s_node_probe[len] = '\0';
+    return (uint8_t)(r2s_session_configure(s_node_probe, NULL, 0u) == R2S_OK);
+}
+
+/* Longest node name the core gate still binds: a binary search finds the
+ * exact edge, so the configured name stays the length bound with no hidden
+ * headroom. */
+static size_t node_name_limit(void)
+{
+    uint32_t lo = 0u;
+    uint32_t hi = (uint32_t)R2S_MAX_FRAME;
+
+    if (node_probe_fits(0u) == 0u) {
+        return 0u;
+    }
+    while (lo + 1u < hi) {
+        uint32_t mid = lo + (hi - lo) / 2u;
+
+        if (node_probe_fits(mid) != 0u) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    return (size_t)lo;
+}
+
+/* A node name that would not fit the hello entry is rejected here, with its
+ * length and the limit, instead of leaving the node unconnected with only
+ * a handshake timeout to show for it. */
+static void check_node_name(const char *flag, const char *name)
+{
+    size_t len;
+    size_t limit;
+
+    check_name(flag, name);
+    len = strlen(name);
+    limit = node_name_limit();
+    if (len > limit) {
+        fprintf(stderr, "r2s_posix: %s node name '%s' too long: %lu chars, limit %lu\n", flag, name,
+                (unsigned long)len, (unsigned long)limit);
         usage(stderr);
         exit(2);
     }
@@ -214,6 +289,8 @@ static void parse_options(int argc, char **argv, struct options *opts)
             reject_list_change(arg, take_value(argc, argv, &i, arg));
         } else if (strcmp(arg, "--time-now") == 0) {
             reject_list_change(arg, take_value(argc, argv, &i, arg));
+        } else if (strcmp(arg, "--joints") == 0) {
+            reject_list_change(arg, take_value(argc, argv, &i, arg));
         } else if (strcmp(arg, "--tick-skew-ppm") == 0) {
             opts->skew_ppm = take_skew(take_value(argc, argv, &i, arg));
         } else if (strcmp(arg, "--no-pub") == 0) {
@@ -228,6 +305,8 @@ static void parse_options(int argc, char **argv, struct options *opts)
             opts->log_text = NULL;
         } else if (strcmp(arg, "--no-time-now") == 0) {
             reject_list_change(arg, kDefaultTimeNow);
+        } else if (strcmp(arg, "--no-joints") == 0) {
+            reject_list_change(arg, "joints");
         } else if (strcmp(arg, "--log-lines") == 0) {
             opts->log_lines = 1u;
         } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
@@ -239,7 +318,7 @@ static void parse_options(int argc, char **argv, struct options *opts)
             exit(2);
         }
     }
-    check_name("--node", opts->node);
+    check_node_name("--node", opts->node);
 }
 
 int main(int argc, char **argv)
@@ -268,9 +347,8 @@ int main(int argc, char **argv)
         return 1;
     }
     /* The node names the session at runtime; the topics stay the compiled
-     * rows. The first spin binds the static topic table, and a name the
-     * announce cannot hold leaves the node unconnected instead of failing
-     * the handshake with no detail. */
+     * rows. The option probe above refused an overlong name, so the first
+     * spin binds the static topic table instead of meeting it unconnected. */
     static r2s::Node node(opts.node);
     node.spin_some();
     fprintf(stderr, "r2s_posix: ready node=%s rate=%u\n", opts.node, opts.rate);
