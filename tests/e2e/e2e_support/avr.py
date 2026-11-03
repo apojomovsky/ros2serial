@@ -56,15 +56,20 @@ def harness_binary():
     return Path(given)
 
 
-def firmware_image(board, flavor="slice"):
+def firmware_image(board, flavor="slice", baud=None):
     """The board's ELF of one flavor, built by tests/e2e/run-avr.sh.
 
-    The slice carries scenarios 1 to 4; the flood feeds scenario 12.
+    The slice carries scenarios 1 to 4; the flood feeds scenario 12. A baud
+    names one matrix image; the default baud keeps the legacy file name.
     """
     given = os.environ.get("R2S_E2E_AVR_FW", "")
     assert given, "R2S_E2E_AVR_FW is unset: run tests/e2e/run-avr.sh, which builds the firmware"
     assert flavor in ("slice", "flood"), f"unknown firmware flavor {flavor!r}: want slice or flood"
-    path = Path(given) / f"{flavor}-{board_mcu(board)}.elf"
+    if baud is None or str(baud) == "115200":
+        name = f"{flavor}-{board_mcu(board)}.elf"
+    else:
+        name = f"{flavor}-{board_mcu(board)}-{baud}.elf"
+    path = Path(given) / name
     assert path.is_file(), "no firmware at " + str(path) + ": run tests/e2e/run-avr.sh"
     return path
 
@@ -80,9 +85,11 @@ def parse_stop_summary(line):
     return summary
 
 
-def firmware_label(board, flavor="slice"):
-    """The measured-stack key for one firmware: flavor plus MCU."""
-    return f"{flavor}-{board_mcu(board)}"
+def firmware_label(board, flavor="slice", baud=None):
+    """The measured-stack key for one firmware: flavor plus MCU plus matrix baud."""
+    if baud is None or str(baud) == "115200":
+        return f"{flavor}-{board_mcu(board)}"
+    return f"{flavor}-{board_mcu(board)}-{baud}"
 
 
 def record_peak(label, peak):
@@ -114,14 +121,14 @@ def record_peak(label, peak):
         print(f"avr: cannot write {path}: {error}", file=sys.stderr)
 
 
-def harness_argv(board, flavor="slice"):
+def harness_argv(board, flavor="slice", baud=None):
     """The r2s_simavr command for one firmware, always painting the stack."""
     return [
         str(harness_binary()),
         "--mcu",
         board_mcu(board),
         "--firmware",
-        str(firmware_image(board, flavor)),
+        str(firmware_image(board, flavor, baud)),
         *RUN_MS,
         "--stack-paint",
     ]
@@ -178,10 +185,10 @@ def _await_pty(proc, deadline):
     raise AssertionError(f"the harness announced no pty within {READY_TIMEOUT:.0f} s")
 
 
-def spawn(board, flavor="slice"):
+def spawn(board, flavor="slice", baud=None):
     """Start the board's firmware under simavr and return it once booted."""
     proc = subprocess.Popen(
-        harness_argv(board, flavor),
+        harness_argv(board, flavor, baud),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         bufsize=0,
@@ -191,4 +198,4 @@ def spawn(board, flavor="slice"):
     except BaseException:
         proc.kill()
         raise
-    return Spawned(proc, pty, ready_at, firmware_label(board, flavor))
+    return Spawned(proc, pty, ready_at, firmware_label(board, flavor, baud))
