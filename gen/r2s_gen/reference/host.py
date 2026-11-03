@@ -157,15 +157,15 @@ class HostSession:
         return {
             "connected": int(self.lib.r2s_connected()),
             "token": int(self.lib.r2s_session_token()),
-            "status": [int(self.lib.r2s_session_topic_status(i)) for i in range(3)],
+            "status": [int(self.lib.r2s_session_topic_status(i)) for i in range(4)],
             "counters": (
                 int(counters.rx_frames),
                 int(counters.crc_errors),
                 int(counters.rx_overflows),
                 int(counters.dropped_frames),
             ),
-            "tx_seq": [int(self.lib.r2s_session_tx_seq(i)) for i in range(3)],
-            "rx_lost": [int(self.lib.r2s_session_rx_lost(i)) for i in range(3)],
+            "tx_seq": [int(self.lib.r2s_session_tx_seq(i)) for i in range(4)],
+            "rx_lost": [int(self.lib.r2s_session_rx_lost(i)) for i in range(4)],
         }
 
     def topic_flags(self, index: int) -> int:

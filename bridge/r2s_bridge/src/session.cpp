@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "core_port.hpp"
+#include "r2s_bridge/converter.hpp"
 #include "r2s_bridge/framing.hpp"
 #include "r2s_bridge/time_sync.hpp"
 extern "C" {
@@ -42,6 +43,7 @@ constexpr std::uint8_t kControlTopic = 0u;
 constexpr std::uint8_t kTimeTopic = 1u;
 constexpr std::uint8_t kLogTopic = 2u;
 constexpr std::uint8_t kHeartbeatTopic = 4u;
+constexpr std::uint8_t kErrorTopic = 5u;
 
 // The log channel's levels ([LOG-2]) and value kinds ([LOG-3]).
 constexpr std::uint8_t kLogDebug = 10u;
@@ -875,6 +877,49 @@ struct Session::Impl {
         }
     }
 
+    // An error report ([ERR-1], [ERR-2]): the code, the topic, the count
+    // and the field. Reports decode in any state like log lines: a code 5
+    // arrives while the link is not connected. A short payload or an
+    // unknown code refuses the frame ([SYS-5]). The topic names its
+    // announcement when the handshake knows it, and a code 1 field its
+    // introspected path ([ERR-5]); otherwise both stay numeric.
+    void on_error(const std::uint8_t *payload, std::uint16_t len)
+    {
+        Reader reader(payload, len);
+        std::uint8_t code = 0;
+        std::uint8_t topic = 0;
+        std::uint16_t count = 0;
+        std::uint8_t field = 0;
+        if (!reader.u8(code) || !reader.u8(topic) || !reader.u16(count) || !reader.u8(field) ||
+            !reader.at_end()) {
+            return;
+        }
+        if (code < 1u || code > 6u) {
+            return;
+        }
+        std::string topic_text = std::to_string(topic);
+        std::string field_text;
+        for (const TopicInfo &info : topics) {
+            if (info.topic_id == topic) {
+                topic_text = "'" + info.topic_name + "'";
+                if (code == 1u && field != 0xFFu) {
+                    field_text = converter_.field_path(info.type_name, field);
+                    if (field_text.empty()) {
+                        field_text = "#";
+                        field_text += std::to_string(field);
+                    }
+                }
+                break;
+            }
+        }
+        std::string line = "mcu error report code " + std::to_string(code) + " on topic " + topic_text +
+                           ": " + std::to_string(count) + (count == 1u ? " occurrence" : " occurrences");
+        if (!field_text.empty()) {
+            line += " at field '" + field_text + "'";
+        }
+        mcu_log(SessionLog::kWarning, line);
+    }
+
     void on_frame(const Frame &frame)
     {
         last_rx_ms = now_ms();
@@ -895,6 +940,10 @@ struct Session::Impl {
         if (topic_id == kLogTopic) {
             // Boot lines arrive before READY, so any state decodes them.
             on_log(payload, len);
+            return;
+        }
+        if (topic_id == kErrorTopic) {
+            on_error(payload, len);
             return;
         }
         if (topic_id == kHeartbeatTopic) {
@@ -1057,6 +1106,7 @@ struct Session::Impl {
 
     std::vector<TopicInfo> collected;
     std::vector<TopicInfo> topics;
+    Converter converter_;
     bool had_handshake = false;
     std::uint32_t next_token = 0u;
     McuCounters mcu;

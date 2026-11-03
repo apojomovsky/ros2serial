@@ -375,6 +375,28 @@ def _call_lines(first: str, args: list, last: str, limit: int = 110) -> list:
     return block
 
 
+def _switch_call_lines(first: str, args: list, last: str, limit: int = 110) -> list:
+    """A switch on a call wrapped the way clang-format wraps one.
+
+    A single line when it fits, else the fewest lines of the two shapes
+    clang-format chooses between: arguments kept on the first line and
+    continued at the paren, or broken after the paren and packed one level
+    past the statement. Ties keep the arguments on the first line. An if
+    keeps aligning where a switch breaks, so the block indent differs from
+    _call_lines: the long topic names probe every rung.
+    """
+    single = first + ", ".join(_arg_text(arg) for arg in args) + last
+    if len(single) <= limit:
+        return [single]
+    aligned = _fill(first, " " * len(first), args, last, limit)
+    cont = _indent_of(first) + "    "
+    block = [first] + _fill(cont, cont, args, last, limit)
+    fitting = [shape for shape in (aligned, block) if all(len(line) <= limit for line in shape)]
+    if fitting:
+        return min(fitting, key=len)
+    return block
+
+
 def _decl_lines(ret: str, name: str, params: str, last: str, limit: int = 110) -> list:
     """A declaration wrapped the way clang-format wraps one.
 
@@ -579,6 +601,7 @@ def emit_c(table: TopicTable) -> str:
         "",
         "#include <float.h>",
         "",
+        '#include "r2s/r2s_error.h"',
         '#include "r2s/r2s_framer.h"',
         '#include "r2s/r2s_session.h"',
         '#include "r2s/r2s_tx.h"',
@@ -632,6 +655,7 @@ def emit_c(table: TopicTable) -> str:
                 "    int8_t rc;",
                 "",
                 "    if (r2s_connected() == 0u) {",
+                "        r2s_error_note(R2S_ERROR_NOT_CONNECTED, topic_id, 0xFFu, 1u);",
                 "        return R2S_ERR_NOT_CONNECTED;",
                 "    }",
                 "    if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {",
@@ -645,6 +669,9 @@ def emit_c(table: TopicTable) -> str:
                 "    seq = r2s_session_tx_seq(index);",
                 "    rc = r2s_tx_begin(topic_id, seq, out.len);",
                 "    if (rc != R2S_OK) {",
+                "        if (rc == R2S_ERR_TX_BUSY) {",
+                "            r2s_error_note(R2S_ERROR_TX_BUSY, topic_id, 0xFFu, 1u);",
+                "        }",
                 "        return rc;",
                 "    }",
                 "    r2s_session_advance_tx_seq(index);",
@@ -732,8 +759,8 @@ def emit_c(table: TopicTable) -> str:
                     "        }",
                     "        narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);",
                     "        (void)r2s_session_note_rx_seq(index, seq);",
-                    *_call_lines(
-                        "        if (r2s_codec_decode(",
+                    *_switch_call_lines(
+                        "        switch (r2s_codec_decode(",
                         [
                             "&r2s_generated_table",
                             f"R2S_TOPIC_{macro}_TYPE",
@@ -743,8 +770,15 @@ def emit_c(table: TopicTable) -> str:
                             f"&r2s_rx_buf.{entry.c_name}",
                             "&field",
                         ],
-                        ") != R2S_OK) {",
+                        ")) {",
                     ),
+                    "        case R2S_OK:",
+                    "            break;",
+                    "        case R2S_ERR_BOUNDS:",
+                    "            r2s_error_note(R2S_ERROR_BOUND, topic_id, field, 1u);",
+                    "            r2s_framer_count_refused();",
+                    "            return;",
+                    "        default:",
                     "            r2s_framer_count_refused();",
                     "            return;",
                     "        }",
@@ -760,6 +794,9 @@ def emit_c(table: TopicTable) -> str:
         lines.extend(
             [
                 "    default: {",
+                "        if (r2s_session_find_topic(topic_id) == 0xFFu) {",
+                "            r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);",
+                "        }",
                 "        r2s_framer_count_refused();",
                 "        return;",
                 "    }",
@@ -771,13 +808,16 @@ def emit_c(table: TopicTable) -> str:
         lines.extend(
             [
                 "",
-                "/* No subscriptions: every user frame is refused and counted. */",
+                "/* No subscriptions: every user frame is refused and counted, and a frame",
+                " * for no configured topic names an unknown id. */",
                 "void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, uint16_t len)",
                 "{",
-                "    (void)topic_id;",
                 "    (void)seq;",
                 "    (void)payload;",
                 "    (void)len;",
+                "    if (r2s_session_find_topic(topic_id) == 0xFFu) {",
+                "        r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);",
+                "    }",
                 "    r2s_framer_count_refused();",
                 "}",
             ]

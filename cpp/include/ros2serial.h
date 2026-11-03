@@ -11,6 +11,7 @@
 #include "r2s_bundled.h"
 
 #include "r2s/r2s_codec.h"
+#include "r2s/r2s_error.h"
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_port.h"
 #include "r2s/r2s_session.h"
@@ -203,6 +204,7 @@ static inline r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint
     int8_t rc;
 
     if (r2s_connected() == 0u) {
+        r2s_error_note(R2S_ERROR_NOT_CONNECTED, topic_id, 0xFFu, 1u);
         return R2S_ERR_NOT_CONNECTED;
     }
     if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {
@@ -216,6 +218,9 @@ static inline r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint
     seq = r2s_session_tx_seq(index);
     rc = r2s_tx_begin(topic_id, seq, out.len);
     if (rc != R2S_OK) {
+        if (rc == R2S_ERR_TX_BUSY) {
+            r2s_error_note(R2S_ERROR_TX_BUSY, topic_id, 0xFFu, 1u);
+        }
         return rc;
     }
     r2s_session_advance_tx_seq(index);
@@ -274,8 +279,15 @@ static r2s_rx_buf_t r2s_rx_buf;
         }                                                                                                    \
         narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);                                          \
         (void)r2s_session_note_rx_seq(index, seq);                                                           \
-        if (r2s_codec_decode(R2S_CTYPE_TABLE_##CTYPE, (uint16_t)R2S_CTYPE_INDEX_##CTYPE, payload, len,       \
-                             narrow, &r2s_rx_buf.ONAME, &field) != R2S_OK) {                                 \
+        switch (r2s_codec_decode(R2S_CTYPE_TABLE_##CTYPE, (uint16_t)R2S_CTYPE_INDEX_##CTYPE, payload, len,   \
+                                 narrow, &r2s_rx_buf.ONAME, &field)) {                                       \
+        case R2S_OK:                                                                                         \
+            break;                                                                                           \
+        case R2S_ERR_BOUNDS:                                                                                 \
+            r2s_error_note(R2S_ERROR_BOUND, topic_id, field, 1u);                                            \
+            r2s_framer_count_refused();                                                                      \
+            return;                                                                                          \
+        default:                                                                                             \
             r2s_framer_count_refused();                                                                      \
             return;                                                                                          \
         }                                                                                                    \
@@ -306,6 +318,9 @@ void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, u
     switch (topic_id) {
         R2S_TOPICS(R2S_X_DISPATCH)
     default: {
+        if (r2s_session_find_topic(topic_id) == 0xFFu) {
+            r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);
+        }
         r2s_framer_count_refused();
         return;
     }
@@ -648,6 +663,7 @@ static inline r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint
     int8_t rc;
 
     if (r2s_connected() == 0u) {
+        r2s_error_note(R2S_ERROR_NOT_CONNECTED, topic_id, 0xFFu, 1u);
         return R2S_ERR_NOT_CONNECTED;
     }
     if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {
@@ -661,6 +677,9 @@ static inline r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint
     seq = r2s_session_tx_seq(index);
     rc = r2s_tx_begin(topic_id, seq, out.len);
     if (rc != R2S_OK) {
+        if (rc == R2S_ERR_TX_BUSY) {
+            r2s_error_note(R2S_ERROR_TX_BUSY, topic_id, 0xFFu, 1u);
+        }
         return rc;
     }
     r2s_session_advance_tx_seq(index);
@@ -720,8 +739,15 @@ static r2s_rx_buf_t r2s_rx_buf;
         }                                                                                                    \
         narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);                                          \
         (void)r2s_session_note_rx_seq(index, seq);                                                           \
-        if (r2s_codec_decode(R2S_TABLE_OF(CTYPE), (uint16_t)R2S_INDEX_OF(CTYPE), payload, len, narrow,       \
-                             &r2s_rx_buf.ONAME, &field) != R2S_OK) {                                         \
+        switch (r2s_codec_decode(R2S_TABLE_OF(CTYPE), (uint16_t)R2S_INDEX_OF(CTYPE), payload, len, narrow,   \
+                                 &r2s_rx_buf.ONAME, &field)) {                                               \
+        case R2S_OK:                                                                                         \
+            break;                                                                                           \
+        case R2S_ERR_BOUNDS:                                                                                 \
+            r2s_error_note(R2S_ERROR_BOUND, topic_id, field, 1u);                                            \
+            r2s_framer_count_refused();                                                                      \
+            return;                                                                                          \
+        default:                                                                                             \
             r2s_framer_count_refused();                                                                      \
             return;                                                                                          \
         }                                                                                                    \
@@ -752,6 +778,9 @@ void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, u
     switch (topic_id) {
         R2S_TOPICS(R2S_X_DISPATCH)
     default: {
+        if (r2s_session_find_topic(topic_id) == 0xFFu) {
+            r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);
+        }
         r2s_framer_count_refused();
         return;
     }

@@ -107,6 +107,7 @@ R2S_FIELD_CHECK(geometry_msgs__msg__Twist, angular, angular);
 
 #include <float.h>
 
+#include "r2s/r2s_error.h"
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_session.h"
 #include "r2s/r2s_tx.h"
@@ -151,6 +152,7 @@ static r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint16_t ty
     int8_t rc;
 
     if (r2s_connected() == 0u) {
+        r2s_error_note(R2S_ERROR_NOT_CONNECTED, topic_id, 0xFFu, 1u);
         return R2S_ERR_NOT_CONNECTED;
     }
     if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {
@@ -164,6 +166,9 @@ static r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint16_t ty
     seq = r2s_session_tx_seq(index);
     rc = r2s_tx_begin(topic_id, seq, out.len);
     if (rc != R2S_OK) {
+        if (rc == R2S_ERR_TX_BUSY) {
+            r2s_error_note(R2S_ERROR_TX_BUSY, topic_id, 0xFFu, 1u);
+        }
         return rc;
     }
     r2s_session_advance_tx_seq(index);
@@ -205,8 +210,15 @@ void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, u
         }
         narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);
         (void)r2s_session_note_rx_seq(index, seq);
-        if (r2s_codec_decode(&r2s_generated_table, R2S_TOPIC_CMD_VEL_TYPE, payload, len, narrow,
-                             &r2s_rx_buf.cmd_vel, &field) != R2S_OK) {
+        switch (r2s_codec_decode(&r2s_generated_table, R2S_TOPIC_CMD_VEL_TYPE, payload, len, narrow,
+                                 &r2s_rx_buf.cmd_vel, &field)) {
+        case R2S_OK:
+            break;
+        case R2S_ERR_BOUNDS:
+            r2s_error_note(R2S_ERROR_BOUND, topic_id, field, 1u);
+            r2s_framer_count_refused();
+            return;
+        default:
             r2s_framer_count_refused();
             return;
         }
@@ -214,6 +226,9 @@ void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, u
         return;
     }
     default: {
+        if (r2s_session_find_topic(topic_id) == 0xFFu) {
+            r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);
+        }
         r2s_framer_count_refused();
         return;
     }

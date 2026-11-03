@@ -1,0 +1,7 @@
+name: error_report
+covers: [ERR-1, ERR-2, ERR-6]
+topic_id: 5
+seq: 0
+payload: "06 10 ff ff ff"
+frame: "05 00 06 10 ff ff ff 5e 4d"
+wire: "05 02 06 10 ff ff ff 5e 4d 08 00"

@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "r2s/r2s.h"
+#include "r2s/r2s_error.h"
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_port.h"
 #include "r2s/r2s_tx.h"
@@ -231,6 +232,10 @@ static void enter_connected(uint32_t now)
 #ifdef R2S_WITH_LOG
     r2s_log_note_connected();
 #endif
+    /* The report sequence restarts with the handshake, and a new connection
+     * may report a not-connected failure again; failures the old connection
+     * counted flush now. */
+    r2s_error_note_connected();
     session.last_hb_tick = now;
 }
 
@@ -468,6 +473,7 @@ static void on_control(uint32_t now, const uint8_t *payload, uint16_t len)
         i = r2s_topic_find(payload[1]);
         if (i == 0xFFu) {
             refuse();
+            r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, payload[1], 0xFFu, 1u);
             break;
         }
         session.status[i] = payload[2];
@@ -583,12 +589,27 @@ void r2s_spin_some(void)
     uint16_t n = 0u;
     r2s_frame_t frame;
     uint32_t now;
+    uint16_t overflow = 0u;
+    uint16_t too_large = 0u;
+    uint8_t too_large_topic = 0xFFu;
 
     while (n < R2S_SPIN_MAX_FRAMES && r2s_framer_poll(&frame) != 0u) {
         on_frame(&frame);
         r2s_framer_release();
         n++;
     }
+    /* Drops the framer refused outright never reach on_frame, so their
+     * reports are taken here: overflows name no topic, while a frame past
+     * the limit names the topic it decoded. The flush also releases a
+     * report whose rate limit expired with no new failure. */
+    r2s_framer_take_error_reports(&overflow, &too_large, &too_large_topic);
+    if (overflow != 0u) {
+        r2s_error_note(R2S_ERROR_RX_OVERFLOW, 0xFFu, 0xFFu, overflow);
+    }
+    if (too_large != 0u) {
+        r2s_error_note(R2S_ERROR_FRAME_TOO_LARGE, too_large_topic, 0xFFu, too_large);
+    }
+    r2s_error_flush();
     now = r2s_port_tick();
     if (session.state == CONNECTED &&
         (uint32_t)(now - session.last_host_tick) >= ms_to_ticks(R2S_LINK_TIMEOUT_MS)) {

@@ -209,6 +209,14 @@ void r2s_framer_count_refused(void)
     stub_refused++;
 }
 
+void r2s_error_note(uint8_t code, uint8_t topic_id, uint8_t field, uint16_t count)
+{
+    (void)code;
+    (void)topic_id;
+    (void)field;
+    (void)count;
+}
+
 uint32_t stub_cfg_count;
 const char *stub_cfg_name;
 

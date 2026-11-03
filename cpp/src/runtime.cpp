@@ -4,6 +4,7 @@
  * keeps no function pointer; the callbacks live here. */
 #include "r2s/runtime.hpp"
 
+#include "r2s/r2s_error.h"
 #include "r2s/r2s_tx.h"
 
 /* The RAM the runtime costs, named so a size report can find it: the topic
@@ -164,6 +165,7 @@ r2s_status_t publish(uint8_t topic_id, const void *msg)
         return R2S_ERR_TOPIC_REJECTED;
     }
     if (r2s_connected() == 0u) {
+        r2s_error_note(R2S_ERROR_NOT_CONNECTED, topic_id, 0xFFu, 1u);
         return R2S_ERR_NOT_CONNECTED;
     }
     table_index = r2s_session_find_topic(topic_id);
@@ -183,6 +185,9 @@ r2s_status_t publish(uint8_t topic_id, const void *msg)
     seq = r2s_session_tx_seq(table_index);
     rc = r2s_tx_begin(topic_id, seq, out.len);
     if (rc != R2S_OK) {
+        if (rc == R2S_ERR_TX_BUSY) {
+            r2s_error_note(R2S_ERROR_TX_BUSY, topic_id, 0xFFu, 1u);
+        }
         return rc;
     }
     r2s_session_advance_tx_seq(table_index);
@@ -293,6 +298,11 @@ extern "C" __attribute__((weak)) void r2s_codec_dispatch(uint8_t topic_id, uint8
     uint8_t narrow;
 
     if (index == 0xFFu) {
+        /* A frame for no registered topic names an unknown id; one for a
+         * publisher is refused without a report. */
+        if (find_publisher(topic_id) == 0xFFu) {
+            r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);
+        }
         r2s_framer_count_refused();
         return;
     }
