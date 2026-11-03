@@ -2,8 +2,9 @@
 
 Five distinct Twists go out on cmd_vel; the firmware republishes each on
 echo_vel, and every echoed field matches what was sent. The handshake is
-observed on bridge state and discovery waits on its own generous timeout,
-so a slow runner cannot fail a correct echo path on the priming budget.
+observed on bridge state and discovery waits on its own generous timeout
+from the handshake, so a slow runner cannot fail a correct echo path on
+the priming budget.
 """
 
 import os
@@ -138,9 +139,11 @@ class TestScenario3(unittest.TestCase):
             # The echo path needs both directions matched: the bridge's
             # endpoints appear on the graph once the handshake above completes,
             # so this waits out DDS discovery instead of spending the priming
-            # budget on it.
+            # budget on it. The generous timeout runs from the handshake, not
+            # from the firmware spawn: a slow handshake must not spend it.
+            handshake_done_at = time.monotonic()
             bridge_support.wait_for_topics(
-                node, ECHO_TOPICS, _SPAWNED.ready_at, checks.DISCOVERY_TIMEOUT, "echo topics"
+                node, ECHO_TOPICS, handshake_done_at, checks.DISCOVERY_TIMEOUT, "echo topics"
             )
             # The bridge forwards MCU traffic best effort in both directions,
             # so both ends of the probe match that; reliable ends never match.
