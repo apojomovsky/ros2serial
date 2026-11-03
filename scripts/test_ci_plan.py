@@ -33,6 +33,7 @@ OUTPUTS = (
     "e2e",
     "coverage",
     "docs",
+    "mermaid",
     "examples",
     "budgets",
     "fuzz",
@@ -50,6 +51,7 @@ SECTION_SCOPE = {
     "gen": "gen",
     "cpp": "cpp",
     "docs": "docs",
+    "mermaid": "mermaid",
     "readme": "readme",
     "coverage": "coverage",
     "bridge": "bridge",
@@ -144,12 +146,23 @@ def test_a_gated_job_never_needs_a_skippable_job():
         assert not (set(needs) & skippable), f"{name} needs a job that can skip"
 
 
-def test_docs_only_diff_runs_lint_and_docs():
+def test_docs_only_diff_runs_lint_docs_and_mermaid():
     assert running_jobs("pull_request", ["docs/01-testing.md"]) == [
         "bridge-images",
         "docs",
         "lint",
+        "mermaid",
         "plan",
+    ]
+
+
+def test_mermaid_tool_diff_runs_mermaid_scripts_and_lint():
+    assert running_jobs("pull_request", ["tools/mermaid-check/check.mjs"]) == [
+        "bridge-images",
+        "lint",
+        "mermaid",
+        "plan",
+        "scripts",
     ]
 
 
@@ -250,4 +263,4 @@ def run_plan_step(tmp_path, changed):
 def test_the_plan_step_does_not_count_its_own_output_as_a_change(tmp_path):
     outputs = run_plan_step(tmp_path, ["README.md", "CONTRIBUTING.md"])
     assert "full" not in outputs, outputs
-    assert outputs == {"lint": "1", "commits": "1", "docs": "1", "readme": "1"}
+    assert outputs == {"lint": "1", "commits": "1", "docs": "1", "mermaid": "1", "readme": "1"}

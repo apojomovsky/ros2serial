@@ -127,9 +127,19 @@ def test_avr_only_e2e_paths_map_to_the_avr_leg():
         assert scopes(path) == {**CHEAP, "E2E": "avr", "SCRIPTS": "1"}, path
 
 
-def test_docs_map_to_docs():
-    assert scopes("docs/01-testing.md") == {**CHEAP, "DOCS": "1"}
-    assert scopes("README.md") == {**CHEAP, "DOCS": "1", "README": "1"}
+def test_docs_map_to_docs_and_mermaid():
+    assert scopes("docs/01-testing.md") == {**CHEAP, "DOCS": "1", "MERMAID": "1"}
+    assert scopes("README.md") == {**CHEAP, "DOCS": "1", "README": "1", "MERMAID": "1"}
+
+
+def test_any_markdown_maps_to_docs_and_mermaid():
+    assert scopes("CHANGELOG.md") == {**CHEAP, "DOCS": "1", "MERMAID": "1"}
+    assert scopes("CONTRIBUTING.md") == {**CHEAP, "DOCS": "1", "MERMAID": "1"}
+
+
+def test_mermaid_check_tool_maps_to_scripts_and_mermaid():
+    assert scopes("tools/mermaid-check/check.mjs") == {**CHEAP, "SCRIPTS": "1", "MERMAID": "1"}
+    assert scopes("tools/mermaid-check/package.json") == {**CHEAP, "SCRIPTS": "1", "MERMAID": "1"}
 
 
 def test_tools_map_to_scripts_and_the_section_each_serves():

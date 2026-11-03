@@ -57,6 +57,7 @@ PREFIX_RULES = (
     ("scripts/", FULL),
     # Every tool is exercised by the SCRIPTS scope; the LINT sections that
     # consume most tools always run as cheap checks.
+    ("tools/mermaid-check/", {"SCRIPTS": "1", "MERMAID": "1"}),
     ("tools/snippets_check.py", {"SCRIPTS": "1", "DOCS": "1"}),
     ("tools/coverage_gate.py", {"SCRIPTS": "1", "COVERAGE": "1"}),
     ("tools/fuzz_corpus.py", {"SCRIPTS": "1", "FUZZ": "1"}),
@@ -123,8 +124,9 @@ PREFIX_RULES = (
     ("tests/harness/", {"E2E": "avr"}),
     ("tests/", FULL),
     # The walkthrough check reads the README and runs its commands on simavr.
-    ("README.md", {"DOCS": "1", "README": "1"}),
-    ("docs/", {"DOCS": "1"}),
+    # Markdown also feeds the mermaid job, which parses every mermaid block.
+    ("README.md", {"DOCS": "1", "README": "1", "MERMAID": "1"}),
+    ("docs/", {"DOCS": "1", "MERMAID": "1"}),
 )
 
 
@@ -155,7 +157,7 @@ def _scopes_for_path(path):
             return scopes
     name = path.rsplit("/", 1)[-1]
     if name in DOC_NAMES or name.endswith(".md"):
-        return {"DOCS": "1"}
+        return {"DOCS": "1", "MERMAID": "1"}
     if path in ("Makefile", "VERSION"):
         return FULL
     return FULL
