@@ -4,11 +4,16 @@ Each scenario spawns the board's ELF under r2s_simavr and talks to the pty
 the harness announces, reusing the bridge launcher and the shared checks.
 The harness binary and the firmware directory come from tests/e2e/run-avr.sh,
 which builds both; R2S_E2E_BOARD picks the board for a standalone run.
+Every spawn paints the stack, and the stop summary's peak is kept per
+firmware in the JSON file R2S_E2E_AVR_STACK_OUT names, so run-avr.sh can
+report the measured worst case next to the static figure.
 """
 
+import json
 import os
 import select
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -75,13 +80,61 @@ def parse_stop_summary(line):
     return summary
 
 
+def firmware_label(board, flavor="slice"):
+    """The measured-stack key for one firmware: flavor plus MCU."""
+    return f"{flavor}-{board_mcu(board)}"
+
+
+def record_peak(label, peak):
+    """Keep the max painted peak per firmware in the run's JSON file.
+
+    A run without R2S_E2E_AVR_STACK_OUT records nothing, so standalone
+    launches and unit tests stay file-free. A broken file restarts fresh
+    with a warning on stderr; the table step reports which firmware never
+    measured instead of failing the scenarios it summarizes.
+    """
+    path = os.environ.get("R2S_E2E_AVR_STACK_OUT", "")
+    if not path:
+        return
+    try:
+        stored = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        print(f"avr: cannot read {path}: {error}; recording fresh", file=sys.stderr)
+        stored = {}
+    if not isinstance(stored, dict):
+        print(f"avr: {path} holds no mapping; recording fresh", file=sys.stderr)
+        stored = {}
+    prior = stored.get(label, 0)
+    if not isinstance(prior, int) or isinstance(prior, bool):
+        prior = 0
+    stored[label] = max(prior, peak)
+    try:
+        Path(path).write_text(json.dumps(stored, indent=2) + "\n", encoding="utf-8")
+    except OSError as error:
+        print(f"avr: cannot write {path}: {error}", file=sys.stderr)
+
+
+def harness_argv(board, flavor="slice"):
+    """The r2s_simavr command for one firmware, always painting the stack."""
+    return [
+        str(harness_binary()),
+        "--mcu",
+        board_mcu(board),
+        "--firmware",
+        str(firmware_image(board, flavor)),
+        *RUN_MS,
+        "--stack-paint",
+    ]
+
+
 class Spawned:
     """A running harness, with the pty path and the time it was announced."""
 
-    def __init__(self, proc, pty, ready_at):
+    def __init__(self, proc, pty, ready_at, label=""):
         self.proc = proc
         self.pty = pty
         self.ready_at = ready_at
+        self.label = label
         self.returncode = None
         self.summary = {}
 
@@ -101,6 +154,8 @@ class Spawned:
         for line in tail.decode().splitlines():
             if line.startswith("r2s_simavr: stop "):
                 self.summary = parse_stop_summary(line + "\n")
+        if self.label and "stack_peak" in self.summary:
+            record_peak(self.label, self.summary["stack_peak"])
         return self.returncode
 
 
@@ -126,7 +181,7 @@ def _await_pty(proc, deadline):
 def spawn(board, flavor="slice"):
     """Start the board's firmware under simavr and return it once booted."""
     proc = subprocess.Popen(
-        [str(harness_binary()), "--mcu", board_mcu(board), "--firmware", str(firmware_image(board, flavor)), *RUN_MS],
+        harness_argv(board, flavor),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         bufsize=0,
@@ -136,4 +191,4 @@ def spawn(board, flavor="slice"):
     except BaseException:
         proc.kill()
         raise
-    return Spawned(proc, pty, ready_at)
+    return Spawned(proc, pty, ready_at, firmware_label(board, flavor))
