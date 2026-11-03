@@ -903,8 +903,11 @@ struct Session::Impl {
             if (info.topic_id == topic) {
                 topic_text = "'" + info.topic_name + "'";
                 if (code == 1u && field != 0xFFu) {
-                    const std::string path = converter_.field_path(info.type_name, field);
-                    field_text = path.empty() ? "#" + std::to_string(field) : path;
+                    field_text = converter_.field_path(info.type_name, field);
+                    if (field_text.empty()) {
+                        field_text = "#";
+                        field_text += std::to_string(field);
+                    }
                 }
                 break;
             }
