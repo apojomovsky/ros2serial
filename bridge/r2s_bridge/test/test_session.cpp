@@ -1807,6 +1807,8 @@ TEST(SessionError, UsesTheSingularOccurrenceForACountOfOne)
     fixture.deliver_report({2u, 20u, 1u, 0u, 0xFFu});
     ASSERT_EQ(fixture.lines().size(), 1u) << "one report forwards one line";
     EXPECT_NE(fixture.lines()[0].second.find("1 occurrence"), std::string::npos) << fixture.lines()[0].second;
+    EXPECT_EQ(fixture.lines()[0].second.find("1 occurrences"), std::string::npos)
+        << fixture.lines()[0].second;
 }
 
 // covers: ERR-5
