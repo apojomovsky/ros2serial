@@ -1,7 +1,8 @@
 /* The compat firmware: the runtime firmware's topics and timing through
  * the rosserial-compatible layer, so the e2e suite also covers the compat
- * path. Intervals come from the monotonic clock, while the stamps ride the
- * shared clock through nh.now(), exactly like the runtime firmware. */
+ * path. Publish intervals come from the monotonic clock rather than the
+ * skewed port tick, so they stay true-time under --tick-skew-ppm; the
+ * stamps ride the shared clock through nh.now(), like the runtime. */
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -240,8 +241,10 @@ int main(int argc, char **argv)
         const char *arg = argv[i];
 
         if (strcmp(arg, "--node") == 0) {
-            (void)take_value(argc, argv, &i, arg);
-            check_name(arg, opts.node, argv[0]);
+            /* The compat layer names no node: the value is validated like
+             * the runtime's, then ignored, since sketches announce as
+             * rosserial. */
+            check_name(arg, take_value(argc, argv, &i, arg), argv[0]);
         } else if (strcmp(arg, "--rate") == 0) {
             opts.rate = take_rate(take_value(argc, argv, &i, arg), argv[0]);
         } else if (strcmp(arg, "--pub") == 0) {
