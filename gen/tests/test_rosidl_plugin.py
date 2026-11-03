@@ -47,6 +47,17 @@ float32 temperature
 int16 rpm
 """
 
+STD_CONFIG = """\
+node: fw_std
+topics:
+  - name: battery
+    type: std_msgs/msg/Float32
+    direction: pub
+  - name: alive
+    type: std_msgs/msg/Bool
+    direction: sub
+"""
+
 BAD_CONFIG = """\
 node: fw_bad
 topics:
@@ -255,6 +266,24 @@ def test_colcon_build_honors_explicit_paths(tmp_path):
         workspace,
         fixture,
         workspace / "build" / "fw_explicit" / "custom_out",
+        src,
+    )
+
+
+@pytest.mark.skipif(needs_ros() is not None, reason=needs_ros() or "no ROS underlay")
+def test_colcon_build_covers_a_package_without_local_messages(tmp_path):
+    workspace = tmp_path / "ws"
+    src = package_sources(workspace)
+    fixture = write_fixture(src, "fw_std", STD_CONFIG, with_msg=False)
+
+    built = colcon_build(workspace, "fw_std")
+
+    assert built.returncode == 0, built.stdout + built.stderr
+    check_wrapped_matches_direct(
+        tmp_path,
+        workspace,
+        fixture,
+        workspace / "build" / "fw_std" / "r2s_generated",
         src,
     )
 
