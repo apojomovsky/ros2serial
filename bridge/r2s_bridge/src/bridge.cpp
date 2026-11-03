@@ -131,7 +131,13 @@ void Bridge::poll()
         diagnostic_msgs::msg::DiagnosticArray message =
             diagnostics_message(router_->diagnostics(), get_name(), diagnostics_hardware_id_);
         message.header.stamp = now();
-        publish_diagnostics(message);
+        try {
+            publish_diagnostics(message);
+        } catch (const std::exception &error) {
+            // A failed /diagnostics publish (a context shutting down under
+            // the poll loop) is a dropped message, never an abort.
+            RCLCPP_WARN(get_logger(), "topic '/diagnostics': failed to publish (%s)", error.what());
+        }
     }
 }
 
