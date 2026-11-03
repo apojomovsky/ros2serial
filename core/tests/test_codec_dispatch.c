@@ -120,14 +120,23 @@ static void assert_tx(uint16_t index, uint8_t topic_id, uint8_t seq, const uint8
     R2S_ASSERT_BYTES(expected, (uint16_t)(expected_len - 1u), encoded, encoded_len, label);
 }
 
-/* covers: SES-4 */
-void test_codec_publish_while_announcing_fails_and_sends_nothing(void)
+/* covers: SES-4, ERR-1, ERR-2, ERR-3, ERR-6 */
+void test_codec_publish_while_announcing_reports_not_connected_once(void)
 {
     std_msgs__msg__Float32 battery = {1.5f};
+    /* code 5, battery, one occurrence, no field. */
+    const uint8_t report[] = {0x05u, R2S_HANDWRITTEN_BATTERY_ID, 0x01u, 0x00u, 0xFFu};
+    static uint8_t expected[WIRE_MAX];
+    uint16_t expected_len = r2s_test_frame(expected, 5u, 0, report, sizeof report);
+    uint16_t encoded_len;
+    const uint8_t *encoded;
 
     configure();
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_NOT_CONNECTED, r2s_publish_battery(&battery));
-    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+    encoded = fake_port_tx_frame(1, &encoded_len);
+    TEST_ASSERT_NOT_NULL(encoded);
+    R2S_ASSERT_BYTES(expected, (uint16_t)(expected_len - 1u), encoded, encoded_len, "error report");
 }
 
 /* covers: FRM-4, FRM-5 */

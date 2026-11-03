@@ -126,11 +126,12 @@ file(GLOB unit_tests CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" te
 # are registered below with those libraries instead of the shared support.
 # The dispatch test also links the handwritten firmware wiring, which carries
 # the handler the test provides.
-list(REMOVE_ITEM unit_tests test_rx_ring.c test_rx_ring_min.c test_codec_dispatch.c)
+list(REMOVE_ITEM unit_tests test_rx_ring.c test_rx_ring_min.c test_codec_dispatch.c test_error.c)
 foreach(source ${unit_tests})
   r2s_unit_test(${source})
 endforeach()
 r2s_unit_test(test_codec_dispatch.c unity r2s_test_support r2s_handwritten_firmware)
+r2s_unit_test(test_error.c unity r2s_test_support r2s_handwritten_firmware)
 
 add_executable(cxx_headers cxx_headers.cpp)
 target_link_libraries(cxx_headers PRIVATE r2s_test_support)
