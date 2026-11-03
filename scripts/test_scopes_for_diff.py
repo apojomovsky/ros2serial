@@ -170,6 +170,18 @@ def test_section_scripts_map_to_their_section():
     assert scopes("scripts/push.sh") == {**CHEAP, "SCRIPTS": "1"}
 
 
+def test_mutation_files_run_the_script_tests_but_never_a_suite_scope():
+    for path in (
+        "scripts/mutation_triage.py",
+        "scripts/test_mutation_triage.py",
+        "scripts/run-mutation.sh",
+        "docker/mutation/Dockerfile",
+        "docker/mutation/mull.yml",
+        "mutation/equivalent.yaml",
+    ):
+        assert scopes(path) == {**CHEAP, "SCRIPTS": "1"}, path
+
+
 def test_suite_machinery_maps_to_full():
     for path in (
         ".githooks/pre-push",

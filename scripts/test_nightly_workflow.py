@@ -49,8 +49,8 @@ def test_the_scheduled_nightly_keeps_the_long_fuzzing():
             assert (job.get("with") or {}).get("fuzz", True) is True
 
 
-def test_the_reusable_workflow_holds_fuzzing_isolation_and_soak():
-    assert set(workflow(JOBS)["jobs"]) == {"fuzz-long", "e2e-isolation", "soak"}
+def test_the_reusable_workflow_holds_fuzzing_isolation_soak_and_mutation():
+    assert set(workflow(JOBS)["jobs"]) == {"fuzz-long", "e2e-isolation", "soak", "mutation"}
 
 
 def test_the_soak_runs_only_when_the_caller_asks_for_it():
@@ -168,3 +168,47 @@ def test_a_failed_scheduled_nightly_files_or_comments_one_issue():
     assert "GITHUB_RUN_ID" in runs
     envs = [step.get("env", {}) or {} for step in reporter["steps"]]
     assert any(str(env.get("GH_REPO")) == "${{ github.repository }}" for env in envs)
+
+
+def mutation_job():
+    return workflow(JOBS)["jobs"]["mutation"]
+
+
+def test_the_mutation_job_runs_unless_the_caller_turns_it_off():
+    doc = workflow(JOBS)
+    mutation = triggers(doc)["workflow_call"]["inputs"]["mutation"]
+    assert (mutation["type"], mutation["default"]) is (bool, True)
+    assert doc["jobs"]["mutation"].get("if") == "${{ inputs.mutation }}"
+
+
+def test_the_scheduled_nightly_keeps_the_mutation_job():
+    for job in workflow(NIGHTLY)["jobs"].values():
+        if "nightly-jobs.yml" in str(job.get("uses", "")):
+            assert (job.get("with") or {}).get("mutation", True) is True
+
+
+def test_pr_ci_turns_the_mutation_job_off():
+    job = ci_nightly_call()
+    assert (job.get("with") or {}).get("mutation") is False
+
+
+def test_the_release_call_skips_the_mutation_job():
+    calls = [job for job in workflow(RELEASE)["jobs"].values() if "nightly-jobs.yml" in str(job.get("uses", ""))]
+    assert len(calls) == 1
+    assert (calls[0].get("with") or {}).get("mutation") is False
+
+
+def test_the_mutation_job_builds_its_own_image():
+    assert any("docker/mutation/Dockerfile" in str(step.get("run", "")) for step in mutation_job()["steps"])
+
+
+def test_the_mutation_job_runs_the_mutation_script_and_publishes_a_report():
+    runs = " ".join(str(step.get("run", "")) for step in mutation_job()["steps"])
+    assert "scripts/run-mutation.sh" in runs
+    assert "GITHUB_STEP_SUMMARY" in runs
+    assert any("upload-artifact" in str(step.get("uses", "")) for step in mutation_job()["steps"])
+
+
+def test_the_mutation_report_uses_the_triage_script():
+    runs = " ".join(str(step.get("run", "")) for step in mutation_job()["steps"])
+    assert "scripts/mutation_triage.py" in runs
