@@ -422,7 +422,7 @@ TEST(SessionHandshake, RejectsATickRateBelowOneKilohertz)
 {
     Fixture fixture;
     fixture.advance_to(10);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 2u, 0u, 500u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 3u, 0u, 500u));
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
     EXPECT_FALSE(fixture.session().seen_hello());
 }
@@ -2292,7 +2292,7 @@ TEST(SessionTime, IgnoresNonPongTimeFrames)
 {
     Fixture fixture;
     fixture.advance_to(100);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 2u, 0x01u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 3u, 0x01u));
     fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
     fixture.deliver(with_check({0x01u, 0u, 0x01u, 0x00u, 0x00u, 0x00u, 0x00u}));
@@ -2305,7 +2305,7 @@ TEST(SessionTime, SendsAPingOnceTimeSyncIsUp)
 {
     Fixture fixture;
     fixture.advance_to(100);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 2u, 0x01u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 3u, 0x01u));
     fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
     bool pinged = false;
@@ -2320,7 +2320,7 @@ TEST(SessionTime, PublishesACorrectionAfterEightPongs)
 {
     Fixture fixture;
     fixture.advance_to(100);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 2u, 0x01u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 3u, 0x01u));
     fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
     EXPECT_FALSE(fixture.session().time_available()) << "no estimate before the first PONG";
