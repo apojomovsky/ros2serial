@@ -119,17 +119,31 @@ Bridge::Bridge(const rclcpp::NodeOptions &options)
         std::move(pacing), forward_log, std::move(link), forward_mcu_log);
     diagnostics_hardware_id_ = serial.port;
     diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10);
-    timer_ = create_wall_timer(kPollPeriod, [this]() {
-        router_->poll();
-        const std::chrono::nanoseconds tick = clock_.now();
-        if (tick - last_diagnostics_ >= kDiagnosticsPeriod) {
-            last_diagnostics_ = tick;
-            diagnostic_msgs::msg::DiagnosticArray message =
-                diagnostics_message(router_->diagnostics(), get_name(), diagnostics_hardware_id_);
-            message.header.stamp = now();
-            diagnostics_pub_->publish(message);
+    timer_ = create_wall_timer(kPollPeriod, [this]() { poll(); });
+}
+
+void Bridge::poll()
+{
+    router_->poll();
+    const std::chrono::nanoseconds tick = clock_.now();
+    if (tick - last_diagnostics_ >= kDiagnosticsPeriod) {
+        last_diagnostics_ = tick;
+        diagnostic_msgs::msg::DiagnosticArray message =
+            diagnostics_message(router_->diagnostics(), get_name(), diagnostics_hardware_id_);
+        message.header.stamp = now();
+        try {
+            publish_diagnostics(message);
+        } catch (const std::exception &error) {
+            // A failed /diagnostics publish (a context shutting down under
+            // the poll loop) is a dropped message, never an abort.
+            RCLCPP_WARN(get_logger(), "topic '/diagnostics': failed to publish (%s)", error.what());
         }
-    });
+    }
+}
+
+void Bridge::publish_diagnostics(const diagnostic_msgs::msg::DiagnosticArray &message)
+{
+    diagnostics_pub_->publish(message);
 }
 
 Bridge::~Bridge() = default;
