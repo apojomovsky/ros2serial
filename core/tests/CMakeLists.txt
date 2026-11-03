@@ -52,18 +52,18 @@ target_compile_definitions(r2s_core_session PRIVATE R2S_TICK_HZ=1000000)
 target_compile_options(r2s_core_session PRIVATE -UR2S_WITH_LOG -UR2S_WITH_TIME)
 r2s_support_lib(r2s_session_support r2s_core_session)
 
-# The message vectors nest three deep (a Time in a Header in Range, Imu and
-# JointState), past the R2S_MAX_NEST=2 every other test builds with, so their
-# runner links a core with room for one more level. The target definition
-# comes after the directory's, so it wins.
-file(GLOB_RECURSE R2S_NEST3_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../src/*.c")
-add_library(r2s_core_nest3 STATIC ${R2S_NEST3_SOURCES})
-target_include_directories(r2s_core_nest3 PUBLIC ../include)
-target_compile_options(r2s_core_nest3 PRIVATE ${R2S_WARNINGS})
+# The message vectors nest four deep (a Time in a Header in a TransformStamped
+# in TFMessage), past the R2S_MAX_NEST=2 every other test builds with, so
+# their runner links a core with room for two more levels. The target
+# definition comes after the directory's, so it wins.
+file(GLOB_RECURSE R2S_NEST4_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../src/*.c")
+add_library(r2s_core_nest4 STATIC ${R2S_NEST4_SOURCES})
+target_include_directories(r2s_core_nest4 PUBLIC ../include)
+target_compile_options(r2s_core_nest4 PRIVATE ${R2S_WARNINGS})
 # The -U drops the directory's R2S_MAX_NEST=2 after its -D, and the -D after
 # it sets the deeper stack; a second -D would warn as a redefinition.
-target_compile_options(r2s_core_nest3 PRIVATE -UR2S_MAX_NEST -DR2S_MAX_NEST=3)
-r2s_support_lib(r2s_test_support_nest3 r2s_core_nest3)
+target_compile_options(r2s_core_nest4 PRIVATE -UR2S_MAX_NEST -DR2S_MAX_NEST=4)
+r2s_support_lib(r2s_test_support_nest4 r2s_core_nest4)
 
 # The handwritten publish wrappers and dispatch, with the handler their tests
 # provide: only the link tests need them, so they stay out of the shared
@@ -216,7 +216,7 @@ add_custom_command(
   VERBATIM)
 add_executable(vectors_messages vectors/messages_check.c "${messages_runner}")
 target_compile_options(vectors_messages PRIVATE ${R2S_TEST_WARNINGS})
-target_link_libraries(vectors_messages PRIVATE r2s_test_support_nest3)
+target_link_libraries(vectors_messages PRIVATE r2s_test_support_nest4)
 add_test(NAME vectors_messages COMMAND vectors_messages)
 
 file(GLOB time_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/time/*.yaml")

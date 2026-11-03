@@ -167,11 +167,135 @@ void loop()
     nh.loginfo(F("loop"));
 }
 EOF
+# The porting guide's one-line edits, compiling for the board: strings copy
+# into fixed buffers, bounded arrays set their size beside the elements, and
+# the header fills its stamp and frame id. The tf broadcaster keeps its
+# ros_lib shape, advertising /tf and sending the stamped transform.
+cat >"$build/check_ros_edits.cpp" <<'EOF'
+#include <ros2serial/ros.h>
+#include <ros2serial/geometry_msgs/TransformStamped.h>
+#include <ros2serial/sensor_msgs/Imu.h>
+#include <ros2serial/sensor_msgs/JointState.h>
+#include <ros2serial/std_msgs/Header.h>
+#include <ros2serial/std_msgs/String.h>
+#include <ros2serial/tf/transform_broadcaster.h>
+#include <stdio.h>
+ros::NodeHandle nh;
+tf::TransformBroadcaster broadcaster;
+sensor_msgs::JointState joints;
+std_msgs::String greeting;
+std_msgs::Header frame;
+sensor_msgs::Imu imu;
+void fill_greeting(std_msgs::String &msg, const char *text)
+{
+    (void)snprintf(msg.data, sizeof msg.data, "%s", text);
+}
+void fill_joints(sensor_msgs::JointState &msg)
+{
+    msg.position.size = 2u;
+    msg.position.data[0] = 1.5;
+    msg.position.data[1] = -0.5;
+    msg.name.size = 2u;
+    (void)snprintf(msg.name.data[0], sizeof msg.name.data[0], "%s", "left");
+    (void)snprintf(msg.name.data[1], sizeof msg.name.data[1], "%s", "right");
+}
+void fill_frame(std_msgs::Header &msg)
+{
+    msg.stamp.sec = 12;
+    msg.stamp.nanosec = 500000000u;
+    (void)snprintf(msg.frame_id, sizeof msg.frame_id, "%s", "base_link");
+}
+void setup()
+{
+    nh.initNode();
+    broadcaster.init(nh);
+    imu.orientation_covariance[0] = 0.0;
+    fill_greeting(greeting, "hello");
+    fill_joints(joints);
+    fill_frame(frame);
+}
+void loop()
+{
+    geometry_msgs::TransformStamped transform;
+
+    transform.header.stamp.sec = 1;
+    transform.header.stamp.nanosec = 0u;
+    (void)snprintf(transform.header.frame_id, sizeof transform.header.frame_id, "%s", "base");
+    (void)snprintf(transform.child_frame_id, sizeof transform.child_frame_id, "%s", "gripper");
+    transform.transform.translation.x = 1.0;
+    transform.transform.rotation.w = 1.0;
+    broadcaster.sendTransform(transform);
+    (void)nh.spinOnce();
+}
+EOF
+sources+=("$build/check_ros_edits.cpp")
 
 status=0
 for source in "${sources[@]}"; do
   if ! avr-g++ "${flags[@]}" -fsyntax-only "$source"; then
     echo "avr-syntax: $source did not compile"
+    status=1
+  fi
+done
+# Services have no runtime until X6: a TU that advertises a service or
+# names a client must fail to compile with the X6 message. The check
+# fails when the TU compiles, or when the error names another cause.
+cat >"$build/check_ros_service_server.cpp" <<'EOF'
+#include <ros2serial/ros.h>
+#include <ros2serial/ros/service_server.h>
+struct AddTwoIntsReq {
+    int32_t a;
+    int32_t b;
+};
+struct AddTwoIntsRes {
+    int32_t sum;
+};
+void on_add(const AddTwoIntsReq &req, AddTwoIntsRes &res)
+{
+    (void)req;
+    res.sum = 0;
+}
+ros::NodeHandle nh;
+ros::ServiceServer<AddTwoIntsReq, AddTwoIntsRes> server("add_two_ints", &on_add);
+void setup()
+{
+    nh.initNode();
+    nh.advertiseService(server);
+}
+void loop()
+{
+    (void)nh.spinOnce();
+}
+EOF
+cat >"$build/check_ros_service_client.cpp" <<'EOF'
+#include <ros2serial/ros.h>
+#include <ros2serial/ros/service_client.h>
+struct AddTwoIntsReq {
+    int32_t a;
+    int32_t b;
+};
+struct AddTwoIntsRes {
+    int32_t sum;
+};
+ros::NodeHandle nh;
+ros::ServiceClient<AddTwoIntsReq, AddTwoIntsRes> client("add_two_ints");
+void setup()
+{
+    nh.initNode();
+    nh.serviceClient(client);
+}
+void loop()
+{
+    (void)nh.spinOnce();
+}
+EOF
+for source in "$build/check_ros_service_server.cpp" "$build/check_ros_service_client.cpp"; do
+  if avr-g++ "${flags[@]}" -fsyntax-only "$source" 2>"$build/service_err.log"; then
+    echo "avr-syntax: $source compiled, but services wait on X6"
+    status=1
+  elif ! grep -q "X6" "$build/service_err.log"; then
+    echo "avr-syntax: $source failed without naming X6"
+    cat "$build/service_err.log"
     status=1
   fi
 done

@@ -41,6 +41,25 @@ def build_header(message):
     return Header(stamp=build_time(message["stamp"]), frame_id=message["frame_id"])
 
 
+def build_transform(message):
+    from geometry_msgs.msg import Transform
+
+    return Transform(
+        translation=build_vector3(message["translation"]),
+        rotation=build_quaternion(message["rotation"]),
+    )
+
+
+def build_stamped(message):
+    from geometry_msgs.msg import TransformStamped
+
+    return TransformStamped(
+        header=build_header(message["header"]),
+        child_frame_id=message["child_frame_id"],
+        transform=build_transform(message["transform"]),
+    )
+
+
 def build(type_name, message):
     if type_name == "std_msgs/msg/Float32":
         from std_msgs.msg import Float32
@@ -62,6 +81,14 @@ def build(type_name, message):
         from std_msgs.msg import String
 
         return String(data=message["data"])
+    if type_name == "geometry_msgs/msg/Transform":
+        return build_transform(message)
+    if type_name == "geometry_msgs/msg/TransformStamped":
+        return build_stamped(message)
+    if type_name == "tf2_msgs/msg/TFMessage":
+        from tf2_msgs.msg import TFMessage
+
+        return TFMessage(transforms=[build_stamped(item) for item in message["transforms"]])
     if type_name == "sensor_msgs/msg/Range":
         from sensor_msgs.msg import Range
 

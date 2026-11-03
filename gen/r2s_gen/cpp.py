@@ -44,8 +44,14 @@ def cpp_type(type_name: str) -> str:
 
 
 def _snake(name: str) -> str:
-    """A type name as the rclcpp file name spells it: `JointState` to `joint_state`."""
-    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+    """A type name as the rclcpp file name spells it: `JointState` to `joint_state`.
+
+    A leading acronym stays one word, as rclcpp spells it: `TFMessage` to
+    `tf_message`, not `t_f_message`. The first split breaks before a word
+    starting uppercase, the second before an uppercase after lowercase.
+    """
+    word = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
+    return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", word).lower()
 
 
 def emit_message_hpp(
@@ -133,6 +139,16 @@ def _cont(line: str) -> str:
     return line.ljust(109) + "\\"
 
 
+def _same_offset(cpp: str, c_name: str, field: str) -> list[str]:
+    """A layout check clang-format keeps: one line within 110 columns,
+    otherwise the field on its own line under the open paren."""
+    line = f"R2S_CPP_SAME_OFFSET({cpp}, {c_name}, {field});"
+    if len(line) <= 110:
+        return [line]
+    head = f"R2S_CPP_SAME_OFFSET({cpp}, {c_name},"
+    return [head, " " * len("R2S_CPP_SAME_OFFSET(") + f"{field});"]
+
+
 def _layout_checks(message: ResolvedMessage) -> list[str]:
     """The checks that the C++ struct holds what the C struct the codec writes into holds."""
     c_name = emit._c_name(message.type_name)
@@ -148,10 +164,10 @@ def _layout_checks(message: ResolvedMessage) -> list[str]:
         f"R2S_CPP_SAME_SIZE({cpp}, {c_name});",
     ]
     for field in message.fields:
-        lines.append(f"R2S_CPP_SAME_OFFSET({cpp}, {c_name}, {field.name});")
+        lines.extend(_same_offset(cpp, c_name, field.name))
         if field.is_sequence:
-            lines.append(f"R2S_CPP_SAME_OFFSET({cpp}, {c_name}, {field.name}.data);")
-            lines.append(f"R2S_CPP_SAME_OFFSET({cpp}, {c_name}, {field.name}.size);")
+            lines.extend(_same_offset(cpp, c_name, f"{field.name}.data"))
+            lines.extend(_same_offset(cpp, c_name, f"{field.name}.size"))
     lines.extend(["", "#undef R2S_CPP_SAME_SIZE", "#undef R2S_CPP_SAME_OFFSET"])
     return lines
 

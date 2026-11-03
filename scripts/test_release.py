@@ -23,6 +23,9 @@ STAMPED = [
     "gen/tests/golden/types/imu.h",
     "gen/tests/golden/types/joint_state.h",
     "gen/tests/golden/types/range.h",
+    "gen/tests/golden/types/tf_message.h",
+    "gen/tests/golden/types/transform.h",
+    "gen/tests/golden/types/transform_stamped.h",
     "gen/tests/golden/types/twist.h",
     "examples/cmake_minimal/lib/CMakeLists.txt",
     "examples/cmake_minimal/lib/r2s_generated.c",
@@ -31,6 +34,8 @@ STAMPED = [
     "ports/posix/src/r2s_generated.h",
     "cpp/include/builtin_interfaces/msg/time.hpp",
     "cpp/include/geometry_msgs/msg/quaternion.hpp",
+    "cpp/include/geometry_msgs/msg/transform.hpp",
+    "cpp/include/geometry_msgs/msg/transform_stamped.hpp",
     "cpp/include/geometry_msgs/msg/twist.hpp",
     "cpp/include/geometry_msgs/msg/vector3.hpp",
     "cpp/include/r2s_bundled.h",
@@ -43,6 +48,7 @@ STAMPED = [
     "cpp/include/std_msgs/msg/float32.hpp",
     "cpp/include/std_msgs/msg/header.hpp",
     "cpp/include/std_msgs/msg/string.hpp",
+    "cpp/include/tf2_msgs/msg/tf_message.hpp",
 ]
 
 
