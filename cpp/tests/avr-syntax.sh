@@ -175,6 +175,68 @@ for source in "${sources[@]}"; do
     status=1
   fi
 done
+# Services have no runtime until X6: a TU that advertises a service or
+# names a client must fail to compile with the X6 message. The check
+# fails when the TU compiles, or when the error names another cause.
+cat >"$build/check_ros_service_server.cpp" <<'EOF'
+#include <ros2serial/ros.h>
+#include <ros2serial/ros/service_server.h>
+struct AddTwoIntsReq {
+    int32_t a;
+    int32_t b;
+};
+struct AddTwoIntsRes {
+    int32_t sum;
+};
+void on_add(const AddTwoIntsReq &req, AddTwoIntsRes &res)
+{
+    (void)req;
+    res.sum = 0;
+}
+ros::NodeHandle nh;
+ros::ServiceServer<AddTwoIntsReq, AddTwoIntsRes> server("add_two_ints", &on_add);
+void setup()
+{
+    nh.initNode();
+    nh.advertiseService(server);
+}
+void loop()
+{
+    (void)nh.spinOnce();
+}
+EOF
+cat >"$build/check_ros_service_client.cpp" <<'EOF'
+#include <ros2serial/ros.h>
+#include <ros2serial/ros/service_client.h>
+struct AddTwoIntsReq {
+    int32_t a;
+    int32_t b;
+};
+struct AddTwoIntsRes {
+    int32_t sum;
+};
+ros::NodeHandle nh;
+ros::ServiceClient<AddTwoIntsReq, AddTwoIntsRes> client("add_two_ints");
+void setup()
+{
+    nh.initNode();
+    nh.serviceClient(client);
+}
+void loop()
+{
+    (void)nh.spinOnce();
+}
+EOF
+for source in "$build/check_ros_service_server.cpp" "$build/check_ros_service_client.cpp"; do
+  if avr-g++ "${flags[@]}" -fsyntax-only "$source" 2>"$build/service_err.log"; then
+    echo "avr-syntax: $source compiled, but services wait on X6"
+    status=1
+  elif ! grep -q "X6" "$build/service_err.log"; then
+    echo "avr-syntax: $source failed without naming X6"
+    cat "$build/service_err.log"
+    status=1
+  fi
+done
 # The runtime's own source, since a board compiles it as well. The AVR
 # toolchains carry no C++ standard library, so this catches a header the
 # host build accepts and the board does not.

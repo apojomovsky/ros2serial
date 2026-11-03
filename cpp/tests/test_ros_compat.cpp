@@ -20,6 +20,7 @@ extern "C" {
 #include "ros2serial/ros.h"
 #include "ros2serial/std_msgs/Float32.h"
 #include "ros2serial/std_msgs/String.h"
+#include "ros2serial/tf/transform_broadcaster.h"
 #include "unity.h"
 
 /* The compatibility aliases name the bundled types, so a sketch written
@@ -544,4 +545,75 @@ void test_ros_duration_arithmetic_matches_ros_lib(void)
     d *= 2.0;
     TEST_ASSERT_EQUAL_INT32(0, d.sec);
     TEST_ASSERT_EQUAL_INT32(500000000, d.nsec);
+}
+
+/* The TFMessage hash the announce must carry, as the bundle pins it: the
+ * bridge resolves the /tf topic against the installed tf2_msgs support. */
+static const uint8_t s_tf_message_hash[8] = {0xe3u, 0x69u, 0xd0u, 0xf0u, 0x5au, 0x23u, 0xaeu, 0x52u};
+
+/* init() announces the broadcaster's publisher on /tf, carrying the
+ * TFMessage type, as in ros_lib. */
+void test_ros_broadcaster_init_advertises_tf_topic(void)
+{
+    ros::NodeHandle nh;
+    tf::TransformBroadcaster broadcaster;
+
+    nh.initNode();
+    broadcaster.init(nh);
+    TEST_ASSERT_EQUAL_INT(ros::SPIN_OK, nh.spinOnce());
+    TEST_ASSERT_EQUAL_UINT8(1, r2s_topic_count());
+    TEST_ASSERT_EQUAL_STRING("tf", r2s_topic_get(0)->topic_name);
+    TEST_ASSERT_EQUAL_STRING("tf2_msgs/msg/TFMessage", r2s_topic_get(0)->type_name);
+    TEST_ASSERT_EQUAL_MEMORY(s_tf_message_hash, r2s_topic_get(0)->type_hash, 8u);
+    TEST_ASSERT_EQUAL_UINT8(0x00u, r2s_topic_get(0)->flags & 0x01u);
+}
+
+/* The TFMessage payload of one stamped transform, encoded the way the codec
+ * does. */
+static uint16_t tf_payload(uint8_t *out, const tf::tfMessage &msg, uint8_t narrow)
+{
+    r2s_codec_out_t sink = {out, R2S_MAX_FRAME, 0u, 0u};
+    uint8_t field = 0xFFu;
+
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_codec_encode(&r2s::r2s_bundled_table_tf2_msgs_TFMessage,
+                                                    (uint16_t)R2S_BUNDLED_INDEX_tf2_msgs_TFMessage, &msg,
+                                                    narrow, &sink, &field));
+    return sink.len;
+}
+
+/* sendTransform publishes the one stamped transform on /tf, as in ros_lib:
+ * the frame carries the TFMessage the bridge republishes. */
+void test_ros_broadcaster_send_transform_publishes_the_frame(void)
+{
+    ros::NodeHandle nh;
+    tf::TransformBroadcaster broadcaster;
+    static uint8_t payload[R2S_MAX_FRAME];
+    tf::tfMessage expect;
+    uint16_t len;
+
+    memset(&expect, 0, sizeof expect);
+    expect.transforms.size = 1u;
+    expect.transforms.data[0].header.stamp.sec = 7;
+    expect.transforms.data[0].header.stamp.nsec = 8u;
+    strcpy(expect.transforms.data[0].header.frame_id, "base");
+    strcpy(expect.transforms.data[0].child_frame_id, "gripper");
+    expect.transforms.data[0].transform.translation.x = 1.5;
+    expect.transforms.data[0].transform.translation.y = -2.0;
+    expect.transforms.data[0].transform.translation.z = 0.5;
+    expect.transforms.data[0].transform.rotation.x = 0.0;
+    expect.transforms.data[0].transform.rotation.y = 0.0;
+    expect.transforms.data[0].transform.rotation.z = 0.0;
+    expect.transforms.data[0].transform.rotation.w = 1.0;
+    nh.initNode();
+    broadcaster.init(nh);
+    nh.spinOnce();
+    handshake(1u);
+    fake_port_tx_clear();
+    {
+        geometry_msgs::TransformStamped transform = expect.transforms.data[0];
+
+        broadcaster.sendTransform(transform);
+    }
+    len = tf_payload(payload, expect, 0u);
+    assert_tx(0, 16u, 0u, payload, len);
 }
