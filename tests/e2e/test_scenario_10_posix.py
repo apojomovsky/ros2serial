@@ -183,11 +183,12 @@ class TestScenario10(unittest.TestCase):
                 fault_counts["mcu_to_host"].user_frames_touched - base_counts["mcu_to_host"].user_frames_touched
             )
             self.assertEqual(user_gaps, mcu_touched, "seq gaps do not match the injected faults")
+            battery_gaps = int(final["topic battery seq gaps"]) - int(base_values["topic battery seq gaps"])
             fault_values = battery[fault_start:fault_end]
-            checks.check_float_sequence(fault_values, FLOW_FLOOR, user_gaps + ROS_SLACK, "battery under faults")
+            checks.check_float_sequence(fault_values, FLOW_FLOOR, battery_gaps + ROS_SLACK, "battery under faults")
             span = int(fault_values[-1]) - int(fault_values[0]) + 1
             self.assertGreaterEqual(
-                span - len(fault_values), user_gaps, "stream lost fewer frames than the counters report"
+                span - len(fault_values), battery_gaps, "stream lost fewer frames than the counters report"
             )
             clean_values = battery[fault_end:]
             self.assertGreater(len(clean_values), RATE_HZ * CLEAN_WINDOW_S * 0.5, "clean flow stalled")
