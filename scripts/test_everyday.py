@@ -94,7 +94,7 @@ def test_valid_scope_names_match_the_suite():
     wants = set(re.findall(r"wants ([A-Z][A-Z0-9_]*)", (ROOT / "scripts/ci-test.sh").read_text()))
     assert scopes == wants | {"SCRIPTS_SHARD"}
     runner = (ROOT / "scripts/run-tasks.sh").read_text()
-    selected = set(re.findall(r"for scope in ([A-Z ]+);", runner)[0].split())
+    selected = set(re.findall(r"for scope in ([A-Z0-9 ]+);", runner)[0].split())
     assert selected == wants - {"E2E"}
     assert "e2e-posix" in runner and "e2e-avr" in runner
 
