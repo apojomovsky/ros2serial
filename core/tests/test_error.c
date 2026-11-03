@@ -120,9 +120,10 @@ void test_error_announce_failures_flush_on_connect(void)
     fake_port_tx_clear();
     handshake();
     /* The handshake answers with a HELLO and three TOPIC frames before the
-     * pending failure flushes on READY. */
+     * pending failure flushes on READY, with the report sequence restarted
+     * by the handshake. */
     TEST_ASSERT_EQUAL_UINT16(5, fake_port_tx_frame_count());
-    assert_error_report(4, 1, report);
+    assert_error_report(4, 0, report);
 }
 
 /* covers: ERR-2, ERR-3, ERR-6 */
@@ -190,9 +191,9 @@ void test_error_receive_overflow_reports_code_3(void)
 {
     /* code 3, no topic, one occurrence, no field. */
     const uint8_t report[] = {0x03u, 0xFFu, 0x01u, 0x00u, 0xFFu};
-    /* More encoded bytes than the framer holds, then the delimiter that
-     * drops them. */
-    static uint8_t flood[R2S_FRAMER_RX_CAPACITY + 1u];
+    /* More nonzero bytes than the framer holds, then the delimiter that
+     * drops them: the buffer fills while bytes are still coming. */
+    static uint8_t flood[R2S_FRAMER_RX_CAPACITY + 8u];
     uint16_t i;
 
     for (i = 0; i < sizeof flood; i++) {
@@ -211,11 +212,13 @@ void test_error_frame_too_large_reports_code_4_with_its_topic(void)
 {
     /* code 4, battery, one occurrence, no field. */
     const uint8_t report[] = {0x04u, R2S_HANDWRITTEN_BATTERY_ID, 0x01u, 0x00u, 0xFFu};
-    /* A decoded frame one byte past the limit the build accepts. */
+    /* A decoded frame one byte past the limit the build accepts. Zeros keep
+     * the encoded form inside the receive buffer, so the frame decodes and
+     * fails the size check instead of overflowing the buffer first. */
     static uint8_t big[R2S_MAX_FRAME];
     uint16_t wire_len;
 
-    memset(big, 0x22, sizeof big);
+    memset(big, 0x00, sizeof big);
     configure();
     handshake();
     fake_port_tx_clear();

@@ -426,7 +426,7 @@ void test_session_announcing_repeats_hello_every_second_without_host_traffic(voi
     assert_tx(1, 0, 1, expected, len);
 }
 
-/* covers: SYS-5, CTL-14, CTL-16, SES-10 */
+/* covers: SYS-5, CTL-14, CTL-16, SES-10, ERR-1, ERR-2, ERR-6 */
 void test_session_malformed_control_frames_are_refused(void)
 {
     const uint8_t ready_extra[] = {0x06u, 0x00u};
@@ -439,6 +439,12 @@ void test_session_malformed_control_frames_are_refused(void)
     const uint8_t status_unknown[] = {0x05u, 0x12u, 0x00u};
     const uint8_t topic_req_short[] = {0x03u};
     const uint8_t status_short[] = {0x05u, 0x10u};
+    /* code 2, the unknown 0x12 id, one occurrence, no field. */
+    const uint8_t report[] = {0x02u, 0x12u, 0x01u, 0x00u, 0xFFu};
+    static uint8_t expected[64];
+    uint16_t expected_len = r2s_test_frame(expected, 5u, 0, report, sizeof report);
+    uint16_t encoded_len;
+    const uint8_t *encoded;
 
     configure(one_topic, 1);
     feed_host(0, 0, ready_extra, sizeof ready_extra);
@@ -454,7 +460,11 @@ void test_session_malformed_control_frames_are_refused(void)
     feed_host(0, 9, status_short, sizeof status_short);
 
     TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
-    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    /* The boot HELLO plus the error report the unknown status id sends. */
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+    encoded = fake_port_tx_frame(1, &encoded_len);
+    TEST_ASSERT_NOT_NULL(encoded);
+    R2S_ASSERT_BYTES(expected, (uint16_t)(expected_len - 1u), encoded, encoded_len, "error report");
     TEST_ASSERT_EQUAL_UINT16(11, r2s_framer_counters()->dropped_frames);
 }
 

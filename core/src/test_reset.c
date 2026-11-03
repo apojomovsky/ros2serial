@@ -3,6 +3,7 @@
  * under R2S_TESTING next to it, and adds the call here when it lands. */
 #include "r2s/r2s.h"
 
+#include "r2s/r2s_error.h"
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_rx.h"
 #include "r2s/r2s_session.h"
@@ -17,6 +18,7 @@ void r2s_test_reset(void)
     r2s_framer_test_reset();
     r2s_rx_test_reset();
     r2s_tx_test_reset();
+    r2s_error_test_reset();
 #ifdef R2S_WITH_LOG
     r2s_log_test_reset();
 #endif

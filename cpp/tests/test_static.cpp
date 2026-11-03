@@ -170,15 +170,18 @@ void test_static_table_announces_the_type_name_and_hash(void)
     TEST_ASSERT_EQUAL_STRING("cmd_vel", r2s_topic_get(1)->topic_name);
 }
 
-/* covers: SES-4 */
-void test_static_publish_before_the_handshake_fails_and_sends_nothing(void)
+/* covers: SES-4, ERR-1, ERR-2, ERR-3, ERR-6 */
+void test_static_publish_before_the_handshake_reports_not_connected_once(void)
 {
     std_msgs::msg::Float32 battery = {1.5f};
+    /* code 5, battery, one occurrence, no field. */
+    const uint8_t report[] = {0x05u, 16u, 0x01u, 0x00u, 0xFFu};
 
     begin("base_controller");
     fake_port_tx_clear();
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_NOT_CONNECTED, battery_pub.publish(battery));
-    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    assert_tx(0, 5u, 0u, report, sizeof report);
 }
 
 /* covers: FRM-4, FRM-5 */

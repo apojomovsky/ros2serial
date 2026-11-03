@@ -5,6 +5,7 @@
 
 #include <stddef.h>
 
+#include "r2s/r2s_error.h"
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_tx.h"
 
@@ -22,6 +23,7 @@ static r2s_status_t publish(uint8_t id, uint8_t index, uint16_t type, const void
     int8_t rc;
 
     if (r2s_connected() == 0u) {
+        r2s_error_note(R2S_ERROR_NOT_CONNECTED, id, 0xFFu, 1u);
         return R2S_ERR_NOT_CONNECTED;
     }
     if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {
@@ -35,6 +37,9 @@ static r2s_status_t publish(uint8_t id, uint8_t index, uint16_t type, const void
     seq = r2s_session_tx_seq(index);
     rc = r2s_tx_begin(id, seq, out.len);
     if (rc != R2S_OK) {
+        if (rc == R2S_ERR_TX_BUSY) {
+            r2s_error_note(R2S_ERROR_TX_BUSY, id, 0xFFu, 1u);
+        }
         return rc;
     }
     r2s_session_advance_tx_seq(index);
@@ -64,6 +69,11 @@ void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, u
     uint8_t field = 0xFFu;
 
     if (topic_id != R2S_HANDWRITTEN_CMD_VEL_ID) {
+        /* A frame for no configured topic names an unknown id; one for a
+         * published topic is refused without a report. */
+        if (r2s_session_find_topic(topic_id) == 0xFFu) {
+            r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);
+        }
         r2s_framer_count_refused();
         return;
     }
@@ -74,8 +84,15 @@ void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, u
     }
     narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);
     (void)r2s_session_note_rx_seq(index, seq);
-    if (r2s_codec_decode(&R2S_HANDWRITTEN_TABLE, R2S_HANDWRITTEN_TWIST, payload, len, narrow,
-                         &r2s_handwritten_cmd_vel, &field) != R2S_OK) {
+    switch (r2s_codec_decode(&R2S_HANDWRITTEN_TABLE, R2S_HANDWRITTEN_TWIST, payload, len, narrow,
+                             &r2s_handwritten_cmd_vel, &field)) {
+    case R2S_OK:
+        break;
+    case R2S_ERR_BOUNDS:
+        r2s_error_note(R2S_ERROR_BOUND, topic_id, field, 1u);
+        r2s_framer_count_refused();
+        return;
+    default:
         r2s_framer_count_refused();
         return;
     }
