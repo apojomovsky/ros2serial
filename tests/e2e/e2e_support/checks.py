@@ -14,6 +14,11 @@ import time
 # past the handshake: scenarios wait it out here, not against their bounds.
 DISCOVERY_TIMEOUT = 20.0
 
+# The probe's pause between /diagnostics reads: the reading lands within
+# one short spin of the report's arrival instead of a 0.5 s poll quantum.
+# The remaining bias of up to one diagnostics period is accepted by decision.
+HANDSHAKE_SPIN = 0.05
+
 
 def check_float_sequence(values, expected_count, loss_budget, what):
     """A 50 Hz counter stream arrives nearly whole, ordered and integral.
@@ -58,6 +63,23 @@ def collect_until(values, count, deadline, what, spin):
     """
     while len(values) < count:
         assert time.monotonic() < deadline, f"{what}: only {len(values)} of {count} arrived"
+        spin()
+
+
+def wait_for_handshake(received, wanted, since, budget, what, spin):
+    """Block until the latest /diagnostics report shows the handshake done.
+
+    The latest report is read before spinning, so the time kept is the
+    arrival of the completing report, never a spin quantum later. spin is
+    a zero-argument callable that runs the node's callbacks once, pausing
+    HANDSHAKE_SPIN between reads. Returns the seconds from since.
+    """
+    while True:
+        missing = handshake_missing(received[-1], wanted) if received else ["link silent"]
+        took = time.monotonic() - since
+        if not missing:
+            return took
+        assert took < budget, f"{what} still missing {missing} after {took:.1f} s"
         spin()
 
 
