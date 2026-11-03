@@ -27,6 +27,11 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
     (void)msg;
 }
 
+void r2s_on_cmd_str(const std_msgs__msg__String *msg)
+{
+    (void)msg;
+}
+
 /* Queues bytes one at a time, spinning after each, as a slow link delivers
  * them. */
 static void feed_slow(const uint8_t *data, uint16_t len)
@@ -45,27 +50,31 @@ static void feed_host(uint8_t topic_id, uint8_t seq, const uint8_t *payload, uin
     feed_slow(wire, wire_len);
 }
 
-/* The full handshake for the three handwritten topics: two requests name the
- * topics this test drives, and every status accepts its topic. */
+/* The full handshake for the four handwritten topics: every request names
+ * its topic, and every status accepts it. */
 static void handshake(void)
 {
     const uint8_t hello_req[] = {0x01u, R2S_PROTOCOL_VERSION};
     const uint8_t topic_req0[] = {0x03u, 0x00u};
     const uint8_t topic_req1[] = {0x03u, 0x01u};
     const uint8_t topic_req2[] = {0x03u, 0x02u};
+    const uint8_t topic_req3[] = {0x03u, 0x03u};
     const uint8_t status_battery[] = {0x05u, R2S_HANDWRITTEN_BATTERY_ID, 0x00u};
     const uint8_t status_cmd_vel[] = {0x05u, R2S_HANDWRITTEN_CMD_VEL_ID, 0x00u};
     const uint8_t status_log_text[] = {0x05u, R2S_HANDWRITTEN_LOG_TEXT_ID, 0x00u};
+    const uint8_t status_cmd_str[] = {0x05u, R2S_HANDWRITTEN_CMD_STR_ID, 0x00u};
     const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
 
     feed_host(0, 0, hello_req, sizeof hello_req);
     feed_host(0, 1, topic_req0, sizeof topic_req0);
     feed_host(0, 2, topic_req1, sizeof topic_req1);
     feed_host(0, 3, topic_req2, sizeof topic_req2);
-    feed_host(0, 4, status_battery, sizeof status_battery);
-    feed_host(0, 5, status_cmd_vel, sizeof status_cmd_vel);
-    feed_host(0, 6, status_log_text, sizeof status_log_text);
-    feed_host(0, 7, ready, sizeof ready);
+    feed_host(0, 4, topic_req3, sizeof topic_req3);
+    feed_host(0, 5, status_battery, sizeof status_battery);
+    feed_host(0, 6, status_cmd_vel, sizeof status_cmd_vel);
+    feed_host(0, 7, status_log_text, sizeof status_log_text);
+    feed_host(0, 8, status_cmd_str, sizeof status_cmd_str);
+    feed_host(0, 9, ready, sizeof ready);
     TEST_ASSERT_EQUAL_UINT8(1, r2s_connected());
 }
 
@@ -119,11 +128,11 @@ void test_error_announce_failures_flush_on_connect(void)
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_NOT_CONNECTED, r2s_publish_battery(&battery));
     fake_port_tx_clear();
     handshake();
-    /* The handshake answers with a HELLO and three TOPIC frames before the
+    /* The handshake answers with a HELLO and four TOPIC frames before the
      * pending failure flushes on READY, with the report sequence restarted
      * by the handshake. */
-    TEST_ASSERT_EQUAL_UINT16(5, fake_port_tx_frame_count());
-    assert_error_report(4, 0, report);
+    TEST_ASSERT_EQUAL_UINT16(6, fake_port_tx_frame_count());
+    assert_error_report(5, 0, report);
 }
 
 /* covers: ERR-2, ERR-3, ERR-6 */
@@ -158,14 +167,15 @@ void test_error_busy_publish_reports_at_most_once_per_second(void)
 /* covers: ERR-1, ERR-2, ERR-6 */
 void test_error_unknown_topic_id_reports_code_2(void)
 {
-    /* code 2, the unknown id, one occurrence, no field. */
-    const uint8_t report[] = {0x02u, 0x13u, 0x01u, 0x00u, 0xFFu};
+    /* code 2, the unknown id, one occurrence, no field. 0x13 is cmd_str
+     * since the fourth topic landed, so the probe uses 0x14. */
+    const uint8_t report[] = {0x02u, 0x14u, 0x01u, 0x00u, 0xFFu};
     const uint8_t payload[] = {0x00u};
 
     configure();
     handshake();
     fake_port_tx_clear();
-    feed_host(0x13u, 0, payload, sizeof payload);
+    feed_host(0x14u, 0, payload, sizeof payload);
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
     assert_error_report(0, 0, report);
 }
@@ -238,6 +248,22 @@ void test_error_status_for_an_unknown_topic_reports_code_2(void)
     handshake();
     fake_port_tx_clear();
     feed_host(0, 9, status, sizeof status);
+    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    assert_error_report(0, 0, report);
+}
+
+/* covers: ERR-1, ERR-2, ERR-4, ERR-6 */
+void test_error_bound_violation_reports_code_1_with_its_field(void)
+{
+    /* code 1, cmd_str, one occurrence, field 0 names the string itself. */
+    const uint8_t report[] = {0x01u, R2S_HANDWRITTEN_CMD_STR_ID, 0x01u, 0x00u, 0x00u};
+    /* A string of nine bytes over the bound of 8. */
+    const uint8_t payload[] = {0x09u, 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'};
+
+    configure();
+    handshake();
+    fake_port_tx_clear();
+    feed_host(R2S_HANDWRITTEN_CMD_STR_ID, 0, payload, sizeof payload);
     TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
     assert_error_report(0, 0, report);
 }

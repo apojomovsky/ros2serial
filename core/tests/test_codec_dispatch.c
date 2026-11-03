@@ -29,6 +29,11 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
     got_calls++;
 }
 
+void r2s_on_cmd_str(const std_msgs__msg__String *msg)
+{
+    (void)msg;
+}
+
 /* The same announced topics with the narrow flag set, so the tests can use
  * the announced flags rather than the build's own ([CTL-5]). */
 static const r2s_topic_t narrow_topics[] = {
@@ -378,7 +383,8 @@ void test_codec_frame_on_unknown_or_publish_topic_is_refused(void)
 
     configure();
     handshake();
-    feed_host(19, 0, payload, len);
+    /* 19 is cmd_str since the fourth topic landed, so the probe uses 20. */
+    feed_host(20, 0, payload, len);
     feed_host(R2S_HANDWRITTEN_BATTERY_ID, 0, payload, len);
     TEST_ASSERT_EQUAL_UINT8(0, got_calls);
     TEST_ASSERT_EQUAL_UINT16((uint16_t)(drops_before + 2u), r2s_framer_counters()->dropped_frames);
