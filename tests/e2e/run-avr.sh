@@ -2,14 +2,11 @@
 # The avr end-to-end suite: scenarios 1 to 4 against the slice sketch and
 # scenario 12 against the flood sketch, on an emulated Uno and Mega, plus
 # the baud matrix (the scenario 2 flow gates per baud per board) under the
-# first RMW only. It stages the Arduino library at build time (the bundle
-# plus the core and the port glue, as scripts/build-examples.sh does),
-# compiles the sketches for both boards with burst-sized serial rings, and
-# runs every scenario under each RMW the design names, starting the Zenoh
-# router first for its leg. Builds go under R2S_BUILD_DIR, so the tree stays
-# clean; the suite runs this script for E2E=avr. R2S_RMWS narrows the RMW
-# loop, R2S_E2E_BOARDS the board loop and R2S_E2E_BAUDS the matrix, each for
-# a quicker iteration.
+# first RMW only. It stages the Arduino library at build time, compiles the
+# sketches for both boards with burst-sized serial rings, and runs every
+# scenario under each RMW. Builds go under R2S_BUILD_DIR, so the tree stays
+# clean; the suite runs this script for E2E=avr. R2S_RMWS, R2S_E2E_BOARDS
+# and R2S_E2E_BAUDS narrow their loops for a quicker iteration.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$root" || exit 2
