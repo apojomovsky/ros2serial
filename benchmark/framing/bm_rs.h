@@ -9,8 +9,7 @@
 /* The bytes on the wire. The version byte is required, not skipped. */
 #define BM_RS_SYNC 0xFFu
 #define BM_RS_VERSION 0x01u
-/* Header bytes before the body, and the longest body scanned. */
-#define BM_RS_HEAD 7u
+/* The longest body scanned: one wild length byte cannot claim the line. */
 #define BM_RS_BODY_MAX 256u
 
 /* Builds one frame from topic, seq and payload. Returns the wire bytes, or

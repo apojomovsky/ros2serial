@@ -202,7 +202,7 @@ int main(int argc, char **argv)
 {
     static uint8_t input[BM_WIRE_CAP];
     uint16_t in_len;
-    if (strcmp(argv[1], "crc") == 0 && (argc == 3 || argc == 4)) {
+    if (argc >= 2 && strcmp(argv[1], "crc") == 0 && (argc == 3 || argc == 4)) {
         const char *hex = (argc == 4) ? argv[3] : argv[2];
         uint16_t crc_len = unhex(hex, input, sizeof input);
         if (crc_len == 0xFFFFu) {

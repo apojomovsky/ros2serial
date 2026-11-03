@@ -107,7 +107,7 @@ static uint16_t do_encode(uint16_t topic, uint8_t seq, const uint8_t *payload, u
     crc = crc_of(bench_dec, raw_len);
     bench_dec[raw_len] = (uint8_t)crc;
     bench_dec[raw_len + 1u] = (uint8_t)(crc >> 8);
-#if BM_FRAMER == 0 || BM_FRAMER == 4
+#if BM_FRAMER == 0
     {
         r2s_rcobs_encoder_t enc;
         r2s_rcobs_encoder_init(&enc);
@@ -158,7 +158,7 @@ static uint8_t do_decode(uint8_t *wire, uint16_t wire_len, uint16_t topic, uint8
     uint16_t dec_len = 0u;
     int status = -1;
     uint16_t i;
-#if BM_FRAMER == 0 || BM_FRAMER == 4
+#if BM_FRAMER == 0
     status = r2s_rcobs_decode(wire, wire_len - 1u, (uint8_t **)&dec, &dec_len);
 #elif BM_FRAMER == 1
     status = bm_cobs_decode(wire, wire_len - 1u, &dec, &dec_len);
