@@ -82,11 +82,11 @@ def _wait_link_ready(node, received, since):
     runs from the later of the ready line and this return.
     """
     while True:
-        rclpy.spin_once(node, timeout_sec=0.2)
         if received and received[-1].status[0].message not in ("disconnected", "boot_wait"):
             return max(since, time.monotonic())
         took = time.monotonic() - since
         assert took < bridge_support.HANDSHAKE_TIMEOUT, f"link never left boot wait after {took:.1f} s"
+        rclpy.spin_once(node, timeout_sec=0.2)
 
 
 def _wait_connected(node, received, since, budget, what):
