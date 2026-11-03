@@ -55,6 +55,11 @@ GAP_SLACK = 2
 # In-flight frames land within a fraction of this after the faults stop,
 # so the loss slice ending past the drain holds every boundary loss.
 DRAIN_S = 1.0
+# Frames in flight when the faults turn on straddle the enable: published
+# clean but dropped faulty. The slice starts this many arrivals early so
+# it holds them; earlier flow is fault-free, so the cover arrivals are
+# all present and leave the span count exact.
+HEAD_COVER = 10
 
 _SCRATCH = None
 _FIRMWARE = None
@@ -169,7 +174,7 @@ class TestScenario10Framing(unittest.TestCase):
             base_counts = _PROXY.counts()
             base_values = _connected_values(_fresh_message(node, received, seen))
             seen = len(received)
-            fault_start = len(battery)
+            fault_start = max(0, len(battery) - HEAD_COVER)
             _PROXY.set_faults(framing_rate=FRAMING_RATE, seed=SEED)
             window_end = time.monotonic() + FAULT_WINDOW_S
             while time.monotonic() < window_end:
