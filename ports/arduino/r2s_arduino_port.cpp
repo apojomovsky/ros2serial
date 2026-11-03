@@ -44,8 +44,36 @@ uint16_t r2s_port_read(uint8_t *buf, uint16_t max)
     return count;
 }
 
+#ifdef R2S_TEST_TX_CAP
+/* Test-only saturation budget: at most R2S_TEST_TX_CAP bytes leave the port
+ * per tick, so a publish past the budget fails with TX_BUSY instead of
+ * blocking. Disarmed while the cap holds 0xFFFF, which is the default. */
+static uint16_t s_tx_cap = 0xFFFFu;
+static uint16_t s_tx_left = 0xFFFFu;
+static uint32_t s_tx_tick;
+
+/* Arms the test-only budget: cap bytes per tick, 0xFFFF to disarm back to
+ * the blocking report. Declared by test code only, never by the shipped
+ * port header, so the public API stays what it was. */
+extern "C" void r2s_test_set_tx_cap(uint16_t cap)
+{
+    s_tx_cap = cap;
+    s_tx_left = cap;
+    s_tx_tick = r2s_port_tick();
+}
+#endif
+
 void r2s_port_write(const uint8_t *buf, uint16_t len)
 {
+#ifdef R2S_TEST_TX_CAP
+    /* The core reserved these bytes from the budget at begin, so the
+     * budget still holds them; the floor below is belt and braces. */
+    if (s_tx_left >= len) {
+        s_tx_left = (uint16_t)(s_tx_left - len);
+    } else {
+        s_tx_left = 0u;
+    }
+#endif
     (void)selected().write(buf, (size_t)len);
 }
 
@@ -53,7 +81,23 @@ void r2s_port_write(const uint8_t *buf, uint16_t len)
  * 0xFFFF, and the Uno ring (16 bytes) never has to hold a whole frame. */
 uint16_t r2s_port_tx_free(void)
 {
+#ifdef R2S_TEST_TX_CAP
+    uint32_t now;
+
+    if (s_tx_cap == 0xFFFFu) {
+        return 0xFFFFu;
+    }
+    /* The budget refills when the tick moves, so one tick's flood cannot
+     * borrow the next tick's bytes. */
+    now = r2s_port_tick();
+    if (now != s_tx_tick) {
+        s_tx_tick = now;
+        s_tx_left = s_tx_cap;
+    }
+    return s_tx_left;
+#else
     return 0xFFFFu;
+#endif
 }
 
 /* micros() resolves 4 us, fine for the 1 ms tick the core announces. */
