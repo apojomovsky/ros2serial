@@ -4,6 +4,7 @@ Run directly: `python3 tests/e2e/test_avr_support.py`. The avr suite runs it
 before any scenario, so a broken launcher fails fast instead of mid-handshake.
 """
 
+import ast
 import json
 import os
 import tempfile
@@ -126,6 +127,34 @@ class TestStopRecordsPeak(unittest.TestCase):
                 self.assertEqual(spawned.stop(), 0)
             with open(path, encoding="utf-8") as handle:
                 self.assertEqual(json.load(handle), {"slice-atmega328p": 77})
+
+
+class TestScenariosStopInTest(unittest.TestCase):
+    def test_every_avr_scenario_stops_its_harness_in_test(self):
+        # launch_testing never calls tearDownModule, so a scenario that
+        # stops its harness only there leaks it and records no peak.
+        missing = []
+        for scenario in (1, 2, 3, 4, 12):
+            path = os.path.join(os.path.dirname(__file__), f"test_scenario_{scenario}_avr.py")
+            with open(path, encoding="utf-8") as handle:
+                tree = ast.parse(handle.read())
+            stopped = any(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "stop"
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "_SPAWNED"
+                for node in ast.walk(
+                    next(
+                        item
+                        for item in ast.walk(tree)
+                        if isinstance(item, ast.FunctionDef) and item.name.startswith("test_")
+                    )
+                )
+            )
+            if not stopped:
+                missing.append(path)
+        self.assertEqual(missing, [], f"scenarios stop their harness only in tearDownModule: {missing}")
 
 
 class TestStopSummary(unittest.TestCase):
