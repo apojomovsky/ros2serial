@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CPP_INCLUDE = ROOT / "cpp" / "include"
 CORE_INCLUDE = ROOT / "core" / "include"
 
-# The field kinds the nine bundled types use, each with the C++ member it maps
+# The field kinds the fourteen bundled types use, each with the C++ member it maps
 # to. The mapping mirrors the C emission, so the two layouts agree.
 FIELD_KINDS = [
     ("bool value", "    uint8_t value;"),

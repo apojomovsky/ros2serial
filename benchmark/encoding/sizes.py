@@ -83,6 +83,9 @@ LAYOUTS = {
         ("velocity", ("seq", F64)),
         ("effort", ("seq", F64)),
     ],
+    "std_msgs/msg/Bool": [
+        ("data", BOOL),
+    ],
     "geometry_msgs/msg/Transform": [
         ("translation", ("nest", "geometry_msgs/msg/Vector3")),
         ("rotation", ("nest", "geometry_msgs/msg/Quaternion")),
@@ -202,6 +205,10 @@ REPRESENTATIVE = {
     },
     "std_msgs/msg/String": {
         "wide": {"data": "hello"},
+        "narrow": None,
+    },
+    "std_msgs/msg/Bool": {
+        "wide": {"data": True},
         "narrow": None,
     },
     "geometry_msgs/msg/Transform": {

@@ -1,6 +1,6 @@
 """The `bundle` subcommand: the Arduino library with bundled common types.
 
-The library carries the descriptors for the nine bundled types with the
+The library carries the descriptors for the fourteen bundled types with the
 documented default bounds, plus the `ros2serial.h` header that expands a
 sketch's `R2S_TOPICS` X-macro list into the topic table, the typed publish
 functions and dispatch. The descriptors compile once in the library, so a
@@ -30,6 +30,7 @@ BUNDLED_TYPES = (
     "sensor_msgs/msg/Imu",
     "sensor_msgs/msg/JointState",
     "sensor_msgs/msg/Range",
+    "std_msgs/msg/Bool",
     "std_msgs/msg/Float32",
     "std_msgs/msg/Header",
     "std_msgs/msg/String",
