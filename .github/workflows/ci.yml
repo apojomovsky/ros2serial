@@ -38,7 +38,9 @@ jobs:
   # successful inputs from the latest master run and reports every section
   # whose inputs changed since. A cache miss runs everything; a task that
   # Task itself cannot check fails the plan safe to FULL. Pushes to master
-  # run every job forced and save the checksums the section jobs write.
+  # run every job forced and save the checksums: single-job sections save
+  # their own, and each matrix section saves through a final job needing
+  # every leg, so one passing leg never marks its section fresh.
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -244,8 +246,30 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test SCRIPTS=1 SCRIPTS_SHARD=${{ matrix.shard }}
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
+      # One upload per shard: the scripts-save job saves the checksum
+      # only when every shard passed.
+      - if: success() && github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: r2s-checksum-scripts-shard-${{ matrix.shard }}
+          path: .task/checksum/scripts
+          retention-days: 1
+
+  # The scripts checksum, saved only when every shard passed: this job
+  # needs the whole matrix, so a red shard skips the save and the
+  # section reruns on the next pull request.
+  scripts-save:
+    needs: [plan, scripts]
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v6.0.0
+        with:
+          pattern: r2s-checksum-scripts-*
+          merge-multiple: true
+          path: .task/checksum/scripts
+      - uses: actions/cache/save@v4.2.2
         with:
           path: .task/checksum/scripts
           key: r2s-task-scripts-refs/heads/master-${{ github.sha }}
@@ -420,8 +444,30 @@ jobs:
         env:
           R2S_IN_IMAGE: 1
           R2S_BUILD_DIR: /tmp/r2s-build
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
+      # One upload per distro: the bridge-save job saves the checksum
+      # only when every distro passed.
+      - if: success() && github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: r2s-checksum-bridge-${{ matrix.distro }}
+          path: .task/checksum/bridge
+          retention-days: 1
+
+  # The bridge checksum, saved only when every distro passed: this job
+  # needs the whole matrix, so a red distro skips the save and the
+  # section reruns on the next pull request.
+  bridge-save:
+    needs: [plan, bridge]
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v6.0.0
+        with:
+          pattern: r2s-checksum-bridge-*
+          merge-multiple: true
+          path: .task/checksum/bridge
+      - uses: actions/cache/save@v4.2.2
         with:
           path: .task/checksum/bridge
           key: r2s-task-bridge-refs/heads/master-${{ github.sha }}
@@ -458,8 +504,30 @@ jobs:
           R2S_RMWS: ${{ matrix.rmw }}
           # Scenario 8's median bound: the shared host needs headroom above the 1 ms default.
           R2S_SYNC_BOUND_NS: 5000000
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
+      # One upload per leg: the e2e-posix-save job saves the checksum
+      # only when every distro and RMW leg passed.
+      - if: success() && github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: r2s-checksum-e2e-posix-${{ matrix.distro }}-${{ matrix.rmw }}
+          path: .task/checksum/e2e-posix
+          retention-days: 1
+
+  # The e2e-posix checksum, saved only when every leg passed: this job
+  # needs the whole matrix, so a red leg skips the save and the section
+  # reruns on the next pull request.
+  e2e-posix-save:
+    needs: [plan, e2e-posix]
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v6.0.0
+        with:
+          pattern: r2s-checksum-e2e-posix-*
+          merge-multiple: true
+          path: .task/checksum/e2e-posix
+      - uses: actions/cache/save@v4.2.2
         with:
           path: .task/checksum/e2e-posix
           key: r2s-task-e2e-posix-refs/heads/master-${{ github.sha }}
