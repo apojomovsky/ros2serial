@@ -69,5 +69,8 @@ class TestScenario4(unittest.TestCase):
             names = {name for name, _ in node.get_topic_names_and_types()}
             for gone in GONE:
                 self.assertNotIn(gone, names, "unmapped name still announced: " + gone)
+            # launch_testing never calls tearDownModule, so the harness
+            # stops here: its stop summary carries the painted peak.
+            self.assertEqual(_SPAWNED.stop(), 0, "the harness stopped dirty")
         finally:
             node.destroy_node()

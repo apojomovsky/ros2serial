@@ -96,5 +96,8 @@ class TestScenario1(unittest.TestCase):
             bridge_support.wait_for_topics(
                 node, ANNOUNCED, handshake_done_at, checks.DISCOVERY_TIMEOUT, "announced topics"
             )
+            # launch_testing never calls tearDownModule, so the harness
+            # stops here: its stop summary carries the painted peak.
+            self.assertEqual(_SPAWNED.stop(), 0, "the harness stopped dirty")
         finally:
             node.destroy_node()
