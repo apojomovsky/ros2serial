@@ -1,0 +1,13 @@
+name: range_zero
+covers: [ENC-1, ENC-3]
+type: sensor_msgs/msg/Range
+profile: {narrow_float64: false}
+message:
+  header: {stamp: {sec: 0, nanosec: 0}, frame_id: ""}
+  radiation_type: 0
+  field_of_view: 0.0
+  min_range: 0.0
+  max_range: 0.0
+  range: 0.0
+  variance: 0.0
+payload: "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
