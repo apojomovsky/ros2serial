@@ -3,8 +3,8 @@
 The announced topics show up renamed and namespaced, and the original
 names stay silent. The bridge is up before the firmware boots, so the 3 s
 budget measures the handshake from the MCU's HELLO, not node startup.
-Graph discovery of the renamed topics waits on its own generous timeout,
-so a slow runner cannot fail a correct remapping.
+Graph discovery of the renamed topics waits on its own generous timeout
+from the handshake, so a slow runner cannot fail a correct remapping.
 """
 
 import os
@@ -98,7 +98,11 @@ class TestScenario4(unittest.TestCase):
                     break
                 self.assertLess(took, TOPIC_BUDGET, f"handshake still missing {missing} after {took:.1f} s")
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
-            bridge_support.wait_for_topics(node, WANTED, _SPAWNED.ready_at, checks.DISCOVERY_TIMEOUT, "remapped topics")
+            # Discovery starts when the bridge creates its endpoints at the
+            # handshake, so the generous timeout runs from there, not from
+            # the firmware spawn: a slow handshake must not spend it.
+            handshake_done_at = time.monotonic()
+            bridge_support.wait_for_topics(node, WANTED, handshake_done_at, checks.DISCOVERY_TIMEOUT, "remapped topics")
             names = {name for name, _ in node.get_topic_names_and_types()}
             for gone in GONE:
                 self.assertNotIn(gone, names, "unmapped name still announced: " + gone)

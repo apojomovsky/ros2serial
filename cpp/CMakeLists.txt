@@ -101,3 +101,7 @@ target_compile_options(r2s_bundled PRIVATE ${R2S_WARNINGS})
 target_link_libraries(r2s_bundled PUBLIC r2s_core)
 
 r2s_cpp_unit_test(tests/test_static.cpp r2s_bundled)
+
+# The rosserial-compatible API over the runtime registry and the bundled
+# tables, so the announce and the bytes are the ones a ported sketch sends.
+r2s_cpp_unit_test(tests/test_ros_compat.cpp r2s_runtime r2s_bundled)
