@@ -81,6 +81,8 @@ MAVLINK_HAND = {
     ("std_msgs/msg/Header", False, 2): 33,
     ("std_msgs/msg/String", False, 1): 24,
     ("std_msgs/msg/String", False, 2): 17,
+    ("std_msgs/msg/Bool", False, 1): 9,
+    ("std_msgs/msg/Bool", False, 2): 13,
 }
 
 

@@ -51,6 +51,7 @@ Method:
 | `geometry_msgs/msg/Quaternion` | wide | 32 | 36 | 40 | 44 |
 | `std_msgs/msg/Header` | wide | 13 | 21 | 32 | 33 |
 | `std_msgs/msg/String` | wide | 6 | 14 | 24 | 17 |
+| `std_msgs/msg/Bool` | wide | 1 | 5 | 9 | 13 |
 
 MAVLink figures are a model, not a real dialect: fields reordered
 largest first with the bundle's bounds, in a v1 or v2 envelope.

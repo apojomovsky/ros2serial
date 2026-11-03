@@ -83,6 +83,9 @@ LAYOUTS = {
         ("velocity", ("seq", F64)),
         ("effort", ("seq", F64)),
     ],
+    "std_msgs/msg/Bool": [
+        ("data", BOOL),
+    ],
 }
 
 # Fixed sizes a MAVLink-style dialect would use, from the bundle's
@@ -188,6 +191,10 @@ REPRESENTATIVE = {
     },
     "std_msgs/msg/String": {
         "wide": {"data": "hello"},
+        "narrow": None,
+    },
+    "std_msgs/msg/Bool": {
+        "wide": {"data": True},
         "narrow": None,
     },
 }
