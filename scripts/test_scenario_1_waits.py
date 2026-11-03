@@ -227,6 +227,25 @@ def _connected(names):
     return FakeDiagnostics("connected", [(f"topic {name} status", "ok") for name in names])
 
 
+def test_the_checks_helper_reads_the_world_clock():
+    """One clock for the driven run: the helper must read the fake one."""
+    saved = {name: sys.modules.get(name) for name in _STUB_NAMES}
+    real_checks = _install_stubs()
+    try:
+        world = World()
+        module = world.load("s1_single_clock_probe", POSIX_CASE)
+        assert module.time.monotonic() == world.clock.now
+        assert real_checks.time.monotonic() == world.clock.now
+        world.clock.advance(STEP)
+        assert real_checks.time.monotonic() == module.time.monotonic()
+    finally:
+        for name, stub in saved.items():
+            if stub is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = stub
+
+
 def _handshake_script(world):
     """Spins that connect the link slowly: silence, then handshake, then ok."""
 
