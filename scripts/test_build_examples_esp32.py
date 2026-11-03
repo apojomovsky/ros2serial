@@ -1,4 +1,4 @@
-"""The ESP32 example build: pinned core, scratch data dir, every sketch.
+"""The ESP32 example build: pinned core, cache data dir, every sketch.
 
 The ESP32 Arduino core lives outside the dev image: the build installs the
 version pinned in ci/versions.env into a cache directory (never /opt/arduino)
@@ -6,6 +6,7 @@ and compiles every Arduino sketch for the ESP32 Dev Module. The budgets gate
 measures the firmware from the same build tree as the AVR firmware.
 """
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -56,9 +57,16 @@ def test_the_data_dir_defaults_to_the_cache_never_the_image():
     assert "arduino-esp32" in text
 
 
+def test_the_toolchain_is_located_not_named():
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "xtensa-esp32-elf-size" in text
+    assert "xtensa-esp32-elf-gcc/" not in text
+
+
 def test_each_compile_keeps_its_own_build_path():
     text = SCRIPT.read_text(encoding="utf-8")
-    compiles = [line for line in text.splitlines() if "arduino-cli compile" in line]
+    joined = re.sub(r"\\\n", " ", text)
+    compiles = [line for line in joined.splitlines() if "arduino-cli compile" in line]
     assert compiles, "no arduino-cli compile line left to isolate"
     for line in compiles:
         assert "--build-path" in line, f"sketch build shares the arduino cache:\n{line.strip()}"

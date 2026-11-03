@@ -9,7 +9,7 @@ set -uo pipefail
 
 # The scopes ci-test.sh gates on, plus the shard selector it consumes, plus
 # the target parameters and suite knobs make passes through.
-scopes="LINT SCRIPTS SCRIPTS_SHARD COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES BUDGETS FUZZ README NIGHTLY SOAK"
+scopes="LINT SCRIPTS SCRIPTS_SHARD COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES ESP32 BUDGETS FUZZ README NIGHTLY SOAK"
 params="TEST TARGET CMD EXAMPLE BOARD ARGS IMAGE BUILD_ARGS BASE PR_BODY PR_TITLE COMMIT_RANGE"
 bad=()
 for name in "$@"; do

@@ -165,7 +165,18 @@ def stub_toolbox(path: Path) -> Path:
     """
     path.mkdir(parents=True, exist_ok=True)
     (path / "cmake").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-    (path / "arduino-cli").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    # The stubbed core install plants a stub Xtensa toolchain where the real
+    # install would put it, so the build finds its binutils on PATH.
+    (path / "arduino-cli").write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "${1:-}" = core ] && [ "${2:-}" = install ]; then\n'
+        '    bindir="$ARDUINO_DIRECTORIES_DATA/packages/esp32/tools/xtensa-esp32-elf-gcc/0.0.0/bin"\n'
+        '    mkdir -p "$bindir"\n'
+        '    ln -sf "$(command -v xtensa-esp32-elf-nm)" "$bindir/xtensa-esp32-elf-nm"\n'
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
     (path / "avr-size").write_text(
         "#!/usr/bin/env bash\n"
         "printf '   text\\t   data\\t    bss\\t    dec\\t    hex\\tfilename\\n"
@@ -230,14 +241,20 @@ def test_examples_scope_runs_its_section(tmp_path, monkeypatch):
     assert "== examples" in result.stdout
 
 
-def test_esp32_scope_runs_its_section(tmp_path):
+def test_esp32_scope_runs_its_section(tmp_path, monkeypatch):
+    # The stubbed core install plants its toolchain under the data dir, so
+    # the run keeps a scratch directory instead of the shared cache.
+    monkeypatch.setenv("R2S_ARDUINO_DATA_DIR", str(tmp_path / "arduino-data"))
     result = run_scope(copy_tree(tmp_path), "ESP32", stubs=stub_toolbox(tmp_path / "bin"), build_dir=tmp_path / "build")
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "== esp32" in result.stdout
 
 
-def test_budgets_scope_runs_its_section(tmp_path):
+def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):
+    # The budgets run builds the ESP32 firmware too, whose stubbed install
+    # plants its toolchain under the data dir: keep a scratch directory.
+    monkeypatch.setenv("R2S_ARDUINO_DATA_DIR", str(tmp_path / "arduino-data"))
     root = copy_tree(tmp_path)
     build = tmp_path / "build" / "examples"
     shipped = [

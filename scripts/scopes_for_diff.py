@@ -36,6 +36,7 @@ PREFIX_RULES = (
     ("scripts/coverage-gate.sh", {"COVERAGE": "1"}),
     ("scripts/coverage-filters.sh", {"COVERAGE": "1"}),
     ("scripts/build-examples.sh", {"EXAMPLES": "1", "BUDGETS": "1"}),
+    ("scripts/build-examples-esp32.sh", {"ESP32": "1", "BUDGETS": "1"}),
     ("scripts/budgets-check.sh", {"BUDGETS": "1"}),
     ("scripts/budgets_comment.py", {"SCRIPTS": "1", "BUDGETS": "1"}),
     # The C++ layer builds core sources into its host tests.

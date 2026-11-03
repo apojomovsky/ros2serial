@@ -44,6 +44,7 @@ jobs:
       bridge: ${{ steps.scopes.outputs.bridge }}
       cpp: ${{ steps.scopes.outputs.cpp }}
       e2e: ${{ steps.scopes.outputs.e2e }}
+      esp32: ${{ steps.scopes.outputs.esp32 }}
       coverage: ${{ steps.scopes.outputs.coverage }}
       docs: ${{ steps.scopes.outputs.docs }}
       mermaid: ${{ steps.scopes.outputs.mermaid }}
@@ -292,6 +293,27 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test EXAMPLES=1
+
+  # The ESP32 check: the example sketches and the staged Arduino library
+  # compile for the ESP32 Dev Module at the core version pinned in
+  # ci/versions.env. The core lives outside the dev image, so the check
+  # installs it into a cache directory the build script manages.
+  esp32:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.esp32 == '1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - uses: actions/cache@v4.2.2
+        with:
+          path: ~/.cache/ros2serial/arduino-esp32
+          key: esp32-core-${{ hashFiles('ci/versions.env') }}
+          restore-keys: |
+            esp32-core-
+      - run: make test ESP32=1
+
   budgets:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.budgets == '1'
@@ -306,6 +328,14 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dev-image
+      # The budgets build compiles the ESP32 firmware too, so it restores
+      # the same cached core the esp32 job installs.
+      - uses: actions/cache@v4.2.2
+        with:
+          path: ~/.cache/ros2serial/arduino-esp32
+          key: esp32-core-${{ hashFiles('ci/versions.env') }}
+          restore-keys: |
+            esp32-core-
       - run: |
           range="$(bash scripts/pr-title-range.sh)" || exit 1
           export BASE="${range%%..*}"

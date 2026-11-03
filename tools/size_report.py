@@ -2,8 +2,10 @@
 
 avr-size prints the Berkeley text/data/bss split. Flash holds the image
 (the code plus the initialized data image) and static RAM holds data plus
-bss. Firmware the budgets file does not name is reported, never judged, so
-a new example cannot fail the gate before its budget is set.
+bss. Xtensa firmware (the ESP32 builds) measures through the matching
+xtensa-esp32-elf-size, whose Berkeley table reads the same way. Firmware
+the budgets file does not name is reported, never judged, so a new example
+cannot fail the gate before its budget is set.
 """
 
 import argparse
@@ -18,6 +20,34 @@ import yaml
 
 AVRSIZE = os.environ.get("R2S_AVR_SIZE", "avr-size")
 AVRNM = os.environ.get("R2S_AVR_NM", "avr-nm")
+XTENSASIZE = os.environ.get("R2S_XTENSA_SIZE", "xtensa-esp32-elf-size")
+XTENSANM = os.environ.get("R2S_XTENSA_NM", "xtensa-esp32-elf-nm")
+
+# The Xtensa machine number: ESP32 firmware measures with the Xtensa tools,
+# every other (or unreadable) ELF with the AVR ones.
+EM_XTENSA = 0x5E
+
+
+def elf_machine(path) -> int | None:
+    """The ELF e_machine field of a firmware file, or None when unreadable.
+
+    Reads only the 20 bytes the header needs, so a stubbed or truncated
+    file reports None instead of failing the measurement.
+    """
+    try:
+        with open(path, "rb") as handle:
+            header = handle.read(20)
+    except OSError:
+        return None
+    if len(header) < 20 or header[0:4] != b"\x7fELF":
+        return None
+    if header[5] == 1:
+        order = "little"
+    elif header[5] == 2:
+        order = "big"
+    else:
+        return None
+    return int.from_bytes(header[18:20], order)
 
 
 class SizeError(Exception):
@@ -70,8 +100,12 @@ def measure(build_dir: Path) -> dict:
     measurements = {}
     for elf in sorted(elfs):
         name = elf.relative_to(build_dir).as_posix()
-        sizes = parse_avr_size(_run(AVRSIZE, str(elf)))
-        symbols = parse_nm_sizes(_run(AVRNM, "--print-size", str(elf)))
+        if elf_machine(elf) == EM_XTENSA:
+            sizes = parse_avr_size(_run(XTENSASIZE, str(elf)))
+            symbols = parse_nm_sizes(_run(XTENSANM, "--print-size", str(elf)))
+        else:
+            sizes = parse_avr_size(_run(AVRSIZE, str(elf)))
+            symbols = parse_nm_sizes(_run(AVRNM, "--print-size", str(elf)))
         if "r2s_runtime_topics" in symbols:
             sizes["topics_bytes"] = symbols["r2s_runtime_topics"]
         measurements[name] = sizes

@@ -17,6 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import size_report
+
 OBJDUMP = os.environ.get("R2S_AVR_OBJDUMP", "avr-objdump")
 CXXFILT = os.environ.get("R2S_AVR_CXXFILT", "avr-c++filt")
 
@@ -226,6 +228,10 @@ def collect(build_dir: Path) -> dict:
     stacks = {}
     for elf in sorted(elfs):
         name = elf.relative_to(build_dir).as_posix()
+        # The AVR call-graph analysis cannot read Xtensa firmware: the ESP32
+        # builds report flash and RAM only, so they skip the stack analysis.
+        if size_report.elf_machine(elf) == size_report.EM_XTENSA:
+            continue
         source = _stack_source(build_dir, name)
         if not source.is_file():
             raise StackError(f"no stack build for {name}")
