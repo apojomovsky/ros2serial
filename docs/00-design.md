@@ -484,7 +484,7 @@ ROS 2-style aliases (`std_msgs::msg::Float32`) are always provided; rosserial-st
 
 ### Services and actions (P1)
 
-The service and action APIs mirror `rclcpp` and `rclcpp_action`: the MCU runs a minimal action server and the bridge is the ROS 2 action server on its behalf. The exact shapes are left to S6.
+The service and action APIs mirror `rclcpp` and `rclcpp_action`: the MCU runs a minimal action server and the bridge is the ROS 2 action server on its behalf. The exact shapes are left to S8.
 
 ### Remapping from a launch file
 
@@ -1182,7 +1182,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | S3 | Vectors: CRC, rCOBS, varint | B4, S1 | Includes the published check value and the rCOBS edge cases (empty, all zeros, 254 and 255 non-zero bytes) |
 | S4 | Vectors: Float32, Twist (full and narrow) by hand first, then frames and a handshake transcript from the reference | S1, G4 | Hand vectors reviewed; reference reproduces them |
 | S5 | P1 spec: parameters (ID 3) and the reliable channel (ID 6) | S2 | Byte tables and state machines |
-| S6 | P1 spec: services and actions over the reliable channel, with a ROS 2-consistent board API | S5, R4, R14 | Byte tables and state machines; vectors for every new frame |
+| S8 | P1 spec: services and actions over the reliable channel, with a ROS 2-consistent board API | S5, R4, R14 | Byte tables and state machines; vectors for every new frame |
 | S6 | Descriptor format spec (type records, field entries, validation rules) | S1 | Reviewed; used by C9 and G7 |
 | S7 | Time vectors: wraparound, maximum drift, anchor expiry | S2 | Reference and C agree |
 
@@ -1265,7 +1265,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | P13 | Baud-rate matrix: 115200, 250000, 500000, 1000000 in simavr and on hardware | V4 | Results documented; default confirmed or changed |
 | P14 | PIC canary job with epic-cc (advisory) | C9, V5 | Core and static C++ compile for PIC16F1938 and PIC18F4550 |
 | P15 | Draft "port your rosserial sketch" guide | P11 | Reviewed by the maintainer |
-| P16 | Protocol spec v1.0 freeze | P1 to P5, P12, S6 | Tagged; vectors frozen |
+| P16 | Protocol spec v1.0 freeze | P1 to P5, P12, S8 | Tagged; vectors frozen |
 
 ### E7: 32-bit ports and P1 (Phase 3)
 
@@ -1280,10 +1280,10 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | X7 | PlatformIO layout | G10 | Install-and-build tests in CI |
 | X8 | rosidl plugin wrapper | G8 | Generation from `colcon build` in a test package |
 | X9 | Cross-board demo: same sketch on Uno, Mega and a 32-bit board | X1 or X2, V6 | Demo recording |
-| X10a | Generator support for `.action` types | S6 | Goal, Result and Feedback emitted with ROS 2-matching hashes; golden tests |
-| X10b | MCU action server with a ROS 2-consistent API | S6, X10a, X4 | S6 frames in the core and the C++ layer; unit tests and vectors; RAM per action reported |
-| X10c | Bridge as the ROS 2 action server for MCU actions | S6, R14, X10a, X4, X6 | Goals reach ROS clients on every distro; disconnect and reset end goals per S6 |
-| X10d | E2E scenario for actions on posix and avr | X10b, X10c | Goal, feedback and result end to end; second goal, cancel, disconnect and reset per S6 |
+| X10a | Generator support for `.action` types | S8 | Goal, Result and Feedback emitted with ROS 2-matching hashes; golden tests |
+| X10b | MCU action server with a ROS 2-consistent API | S8, X10a, X4 | S8 frames in the core and the C++ layer; unit tests and vectors; RAM per action reported |
+| X10c | Bridge as the ROS 2 action server for MCU actions | S8, R14, X10a, X4, X6 | Goals reach ROS clients on every distro; disconnect and reset end goals per S8 |
+| X10d | E2E scenario for actions on posix and avr | X10b, X10c | Goal, feedback and result end to end; second goal, cancel, disconnect and reset per S8 |
 
 ### E8: release (Phase 4)
 
