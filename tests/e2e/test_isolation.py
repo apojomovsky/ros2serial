@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import subprocess
+import unittest
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,19 @@ def port_of(output):
     match = re.search(r"e2e isolation: ROS_DOMAIN_ID=\d+ ZENOH_ROUTER_PORT=(\d+)", output)
     assert match is not None, "no leased zenoh port in the last 4000 bytes:\n" + output[-4000:]
     return int(match.group(1))
+
+
+class TestFailureLines(unittest.TestCase):
+    def test_names_each_failed_test(self):
+        output = "test_a ... ok\nFAIL: test_b (mod.TestB)\nERROR: test_c (mod.TestC)\n"
+        self.assertEqual(failure_lines(output), ["FAIL: test_b (mod.TestB)", "ERROR: test_c (mod.TestC)"])
+
+    def test_ignores_passing_sections(self):
+        self.assertEqual(failure_lines("test_a ... ok\nOK\n"), [])
+
+    def test_ignores_traceback_body(self):
+        output = 'FAIL: test_b (mod.TestB)\nTraceback:\n  File "x.py", line 1\nAssertionError\n'
+        self.assertEqual(failure_lines(output), ["FAIL: test_b (mod.TestB)"])
 
 
 def pair_build_dir(suffix):
