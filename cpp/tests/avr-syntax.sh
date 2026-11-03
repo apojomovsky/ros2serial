@@ -167,6 +167,68 @@ void loop()
     nh.loginfo(F("loop"));
 }
 EOF
+# The porting guide's one-line edits, compiling for the board: strings copy
+# into fixed buffers, bounded arrays set their size beside the elements, and
+# the header fills its stamp and frame id. The tf broadcaster keeps its
+# ros_lib shape, advertising /tf and sending the stamped transform.
+cat >"$build/check_ros_edits.cpp" <<'EOF'
+#include <ros2serial/ros.h>
+#include <ros2serial/geometry_msgs/TransformStamped.h>
+#include <ros2serial/sensor_msgs/Imu.h>
+#include <ros2serial/sensor_msgs/JointState.h>
+#include <ros2serial/std_msgs/Header.h>
+#include <ros2serial/std_msgs/String.h>
+#include <ros2serial/tf/transform_broadcaster.h>
+#include <stdio.h>
+ros::NodeHandle nh;
+tf::TransformBroadcaster broadcaster;
+sensor_msgs::JointState joints;
+std_msgs::String greeting;
+std_msgs::Header frame;
+sensor_msgs::Imu imu;
+void fill_greeting(std_msgs::String &msg, const char *text)
+{
+    (void)snprintf(msg.data, sizeof msg.data, "%s", text);
+}
+void fill_joints(sensor_msgs::JointState &msg)
+{
+    msg.position.size = 2u;
+    msg.position.data[0] = 1.5;
+    msg.position.data[1] = -0.5;
+    msg.name.size = 2u;
+    (void)snprintf(msg.name.data[0], sizeof msg.name.data[0], "%s", "left");
+    (void)snprintf(msg.name.data[1], sizeof msg.name.data[1], "%s", "right");
+}
+void fill_frame(std_msgs::Header &msg)
+{
+    msg.stamp.sec = 12;
+    msg.stamp.nanosec = 500000000u;
+    (void)snprintf(msg.frame_id, sizeof msg.frame_id, "%s", "base_link");
+}
+void setup()
+{
+    nh.initNode();
+    broadcaster.init(nh);
+    imu.orientation_covariance[0] = 0.0;
+    fill_greeting(greeting, "hello");
+    fill_joints(joints);
+    fill_frame(frame);
+}
+void loop()
+{
+    geometry_msgs::TransformStamped transform;
+
+    transform.header.stamp.sec = 1;
+    transform.header.stamp.nanosec = 0u;
+    (void)snprintf(transform.header.frame_id, sizeof transform.header.frame_id, "%s", "base");
+    (void)snprintf(transform.child_frame_id, sizeof transform.child_frame_id, "%s", "gripper");
+    transform.transform.translation.x = 1.0;
+    transform.transform.rotation.w = 1.0;
+    broadcaster.sendTransform(transform);
+    (void)nh.spinOnce();
+}
+EOF
+sources+=("$build/check_ros_edits.cpp")
 
 status=0
 for source in "${sources[@]}"; do
