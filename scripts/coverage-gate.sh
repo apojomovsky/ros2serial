@@ -70,8 +70,11 @@ gcovr_tree() {
   [ "${#wanted[@]}" -gt 0 ] || { echo "coverage: $filter_src defines no $array" >&2; return 1; }
   # --config /dev/null keeps gcovr from loading gcovr.cfg, gcovr.toml or a
   # [tool.gcovr] section out of the measured tree: only the pinned file rules.
+  # --exclude-throw-branches drops the compiler-generated exception edges of
+  # calls that never throw in tests, so core and bridge stay comparable. C has
+  # no throw edges, so the core figures do not move.
   ( cd "$tree" && gcovr --config /dev/null --root "$tree" "${wanted[@]}" --object-directory "$obj" \
-    --exclude-unreachable-branches --json-summary -o "$out" --print-summary "$obj" >&2 )
+    --exclude-unreachable-branches --exclude-throw-branches --json-summary -o "$out" --print-summary "$obj" >&2 )
 }
 
 measure_bridge() {
