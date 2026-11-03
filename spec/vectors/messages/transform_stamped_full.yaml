@@ -1,0 +1,11 @@
+name: transform_stamped_full
+covers: [ENC-1, ENC-2, ENC-4, ENC-7]
+type: geometry_msgs/msg/TransformStamped
+profile: {narrow_float64: false}
+message:
+  header: {stamp: {sec: 7, nanosec: 8}, frame_id: "base"}
+  child_frame_id: "gripper"
+  transform:
+    translation: {x: 1.5, y: -2.0, z: 0.5}
+    rotation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+payload: "07 00 00 00 08 00 00 00 04 62 61 73 65 07 67 72 69 70 70 65 72 00 00 00 00 00 00 f8 3f 00 00 00 00 00 00 00 c0 00 00 00 00 00 00 e0 3f 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 f0 3f"

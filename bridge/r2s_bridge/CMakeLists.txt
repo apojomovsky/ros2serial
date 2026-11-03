@@ -152,6 +152,7 @@ if(BUILD_TESTING)
   find_package(rcl_interfaces REQUIRED)
   find_package(sensor_msgs REQUIRED)
   find_package(std_msgs REQUIRED)
+  find_package(tf2_msgs REQUIRED)
   ament_add_gtest(test_converter test/test_converter.cpp)
   target_compile_definitions(test_converter PRIVATE
     R2S_MESSAGES_VECTOR_DIR="${R2S_CORE_DIR}/../spec/vectors/messages")
@@ -161,7 +162,8 @@ if(BUILD_TESTING)
     geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
     rcl_interfaces::rcl_interfaces__rosidl_typesupport_cpp
     sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
-    std_msgs::std_msgs__rosidl_typesupport_cpp)
+    std_msgs::std_msgs__rosidl_typesupport_cpp
+    tf2_msgs::tf2_msgs__rosidl_typesupport_cpp)
 
   # openpty comes from libutil; the pty test uses it instead of a device.
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
