@@ -64,7 +64,7 @@ def test_skip_switch_decides_per_file(runner, variables, skipped):
 
 def test_standalone_loop_keeps_scenario_8():
     """The pairs skip scenario 8; deleting it from run.sh would dodge it everywhere."""
-    assert "test_scenario_4_posix test_scenario_8_posix test_scenario_9_posix" in RUN_SH.read_text()
+    assert "test_scenario_7_posix test_scenario_8_posix test_scenario_9_posix" in RUN_SH.read_text()
 
 
 def test_pairs_skip_scenario_8():
