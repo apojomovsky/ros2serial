@@ -771,7 +771,7 @@ def test_flood_sheds_samples_with_busy_and_whole_frames():
                         parts = dict(part.split("=") for part in text.split()[2:])
                         busy = int(parts["busy"])
     assert all(value == int(value) for value in values), "a frame arrived corrupted"
-    assert all(later > earlier for earlier, later in zip(values, values[1:])), "values went back"
+    assert all(later > earlier for earlier, later in zip(values, values[1:], strict=False)), "values went back"
     ints = [int(value) for value in values]
     assert ints[-1] - ints[0] + 1 - len(ints) > 0, "no sample was shed on a saturated link"
     assert busy > 0, "no publish returned TX_BUSY on a saturated link"
