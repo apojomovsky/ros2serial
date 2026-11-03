@@ -140,22 +140,6 @@ def _wait_link_ready(node, received, seen, since):
         assert took < bridge_support.HANDSHAKE_TIMEOUT, f"link never left boot wait after {took:.1f} s"
 
 
-def _wait_connected(node, received, seen, since, budget, what):
-    """Spin until every handshake topic reads ok, within budget of since.
-
-    Each fresh report is read before waiting for the next, so the time
-    kept is the arrival of the completing report, never a wait later.
-    """
-    while True:
-        message = _fresh_message(node, received, seen)
-        seen = len(received)
-        missing = checks.handshake_missing(message, HANDSHAKE_TOPICS)
-        took = time.monotonic() - since
-        if not missing:
-            return took, seen
-        assert took < budget, f"{what} still missing {missing} after {took:.1f} s"
-
-
 class TestScenario10Framing(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -184,7 +168,15 @@ class TestScenario10Framing(unittest.TestCase):
             # budget runs from the later of the ready line and its end.
             seen = len(received)
             link_ready_at, seen = _wait_link_ready(node, received, seen, _SPAWNED.ready_at)
-            took, seen = _wait_connected(node, received, seen, link_ready_at, TOPIC_BUDGET, "handshake")
+            took = checks.wait_for_handshake(
+                received,
+                HANDSHAKE_TOPICS,
+                link_ready_at,
+                TOPIC_BUDGET,
+                "handshake",
+                lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
+            )
+            seen = len(received)
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
             # The battery flow needs its endpoint matched: the bridge's
             # endpoints appear on the graph once the handshake above completes,
