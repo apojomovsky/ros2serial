@@ -422,11 +422,14 @@ void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node
 
 **3. rosserial-compatible runtime registration** (gcc-class targets, Phase 2). Existing rosserial sketches port by changing the include:
 
-<!-- snippet: skip until #145 -->
 ```cpp
 #include <ros2serial/ros.h>
 #include <ros2serial/std_msgs/Float32.h>
 #include <ros2serial/geometry_msgs/Twist.h>
+
+/* The board hooks the sketch calls; a real firmware drives the hardware. */
+static void set_motors(double linear, double angular) { (void)linear; (void)angular; }
+static float read_battery(void) { return 0.0f; }
 
 ros::NodeHandle nh;
 std_msgs::Float32 battery;
