@@ -121,6 +121,7 @@ PREFIX_RULES = (
     ("tests/e2e/test_scenario_2_avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
     ("tests/e2e/test_scenario_3_avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
     ("tests/e2e/test_scenario_4_avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/test_scenario_12_avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
     ("tests/e2e/", {"E2E": "both", "BRIDGE": "1", "SCRIPTS": "1"}),
     ("tests/harness/", {"E2E": "avr"}),
     ("tests/", FULL),
