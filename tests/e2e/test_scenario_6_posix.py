@@ -20,6 +20,7 @@ from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
 from e2e_support import checks, firmware, teardown
 from e2e_support.relay import PtyRelay
+from rcl_interfaces.srv import GetParameters
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32
 
@@ -29,12 +30,6 @@ ANNOUNCED = ["/battery", "/cmd_vel", "/echo_vel", "/log_text", "/time_now"]
 # The bridge reports announced names without the graph's leading slash.
 HANDSHAKE_TOPICS = [name.removeprefix("/") for name in ANNOUNCED]
 TOPIC_BUDGET = 3.0
-# The boot wait of the example parameters: the bridge holds BOOT_WAIT this
-# long for an unsolicited HELLO before asking, so the reconnect bound carries
-# it on top of the handshake budget.
-BOOT_WAIT_S = 2.5
-RECONNECT_BUDGET = BOOT_WAIT_S + TOPIC_BUDGET
-BATTERY_TOPICS = ["/battery"]
 FLOW_COUNT = 15
 FLOW_TIMEOUT = 10.0
 FLOW_SLACK = 2
@@ -109,6 +104,25 @@ def _wait_connected(node, received, since, budget, what):
         assert took < budget, f"{what} still missing {missing} after {took:.1f} s"
 
 
+def _boot_wait_s(node):
+    """The bridge's boot_wait_ms parameter in seconds, read off the node.
+
+    The reconnect bound carries the boot wait on top of the handshake budget,
+    so it tracks the params file instead of hardcoding it.
+    """
+    client = node.create_client(GetParameters, "/r2s_bridge/get_parameters")
+    try:
+        assert client.wait_for_service(timeout_sec=bridge_support.HANDSHAKE_TIMEOUT), "no bridge parameter service"
+        future = client.call_async(GetParameters.Request(names=["boot_wait_ms"]))
+        rclpy.spin_until_future_complete(node, future, timeout_sec=bridge_support.HANDSHAKE_TIMEOUT)
+        assert future.done(), "bridge parameter call timed out"
+        values = future.result().values
+        assert len(values) == 1, "bridge returned no boot_wait_ms"
+        return values[0].integer_value / 1000.0
+    finally:
+        node.destroy_client(client)
+
+
 class TestScenario6(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -173,8 +187,9 @@ class TestScenario6(unittest.TestCase):
             _RELAY.start()
             os.symlink(_RELAY.host_port, _LINK)
             _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
-            took = _wait_connected(node, received, _SPAWNED.ready_at, RECONNECT_BUDGET, "reconnect")
-            self.assertLessEqual(took, RECONNECT_BUDGET, "reconnect took longer than boot wait plus 3 s")
+            reconnect_budget = _boot_wait_s(node) + TOPIC_BUDGET
+            took = _wait_connected(node, received, _SPAWNED.ready_at, reconnect_budget, "reconnect")
+            self.assertLessEqual(took, reconnect_budget, "reconnect took longer than boot wait plus 3 s")
             final = _connected_values(received[-1])
             self.assertEqual(final.get("resets"), "0", "a clean replug is not an MCU reset")
             handshake_done_at = time.monotonic()

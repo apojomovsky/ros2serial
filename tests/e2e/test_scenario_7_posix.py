@@ -23,7 +23,7 @@ from e2e_support.relay import PtyRelay
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32
 
-# covers: SES-10, SES-11, SES-19, SES-20, SES-21
+# covers: SES-10, SES-19, SES-20, SES-21
 
 ANNOUNCED = ["/battery", "/cmd_vel", "/echo_vel", "/log_text", "/time_now"]
 # The bridge reports announced names without the graph's leading slash.
@@ -34,7 +34,6 @@ TOPIC_BUDGET = 3.0
 # margin. The re-handshake then carries the scenario 1 budget from detection.
 DETECT_BOUND = 3.0
 REHANDSHAKE_BUDGET = 3.0
-BATTERY_TOPICS = ["/battery"]
 FLOW_COUNT = 15
 FLOW_TIMEOUT = 10.0
 FLOW_SLACK = 2
