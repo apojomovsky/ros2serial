@@ -2,9 +2,10 @@
 
 `scripts/run-tasks.sh` maps the ci-test.sh scope variables to Taskfile
 task names and runs the stale ones through `task`. `R2S_FULL=1` forces
-every task, and naming no scope runs the default task. `R2S_SUITE` points
-the runner at a recorder instead of `task`, so the selection is testable
-without running any section.
+every task, and naming no scope runs the default task. The runner prints
+the attempted tasks up front and the failed attempt with its exit code.
+`R2S_SUITE` points the runner at a recorder instead of `task`, so the
+selection is testable without running any section.
 """
 
 import os
@@ -15,11 +16,11 @@ ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "run-tasks.sh"
 
 
-def select(tmp_path, **env):
+def run(tmp_path, script='echo "$*" > {args}; env > {env}', **env):
     recorder = tmp_path / "record.sh"
     seen_args = tmp_path / "args.txt"
     seen_env = tmp_path / "env.txt"
-    recorder.write_text(f'#!/usr/bin/env bash\necho "$*" > {seen_args}\nenv > {seen_env}\n')
+    recorder.write_text("#!/usr/bin/env bash\n" + script.format(args=seen_args, env=seen_env) + "\n")
     recorder.chmod(0o755)
     merged = {k: v for k, v in os.environ.items() if k not in ("R2S_FULL",)}
     for scope in (
@@ -43,6 +44,11 @@ def select(tmp_path, **env):
     merged.update(R2S_SUITE=str(recorder))
     merged.update(env)
     proc = subprocess.run(["bash", str(SCRIPT)], capture_output=True, text=True, env=merged)
+    return proc, seen_args, seen_env
+
+
+def select(tmp_path, **env):
+    proc, seen_args, seen_env = run(tmp_path, **env)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     return seen_args.read_text().split(), seen_env.read_text()
 
@@ -93,3 +99,21 @@ def test_full_forces_the_selected_tasks(tmp_path):
 def test_full_without_scopes_forces_the_default_task(tmp_path):
     args, _ = select(tmp_path, R2S_FULL="1")
     assert args == ["--force"], args
+
+
+def test_the_runner_names_the_attempted_tasks(tmp_path):
+    proc, _, _ = run(tmp_path, CORE="1", GEN="1")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "run-tasks: running tasks [core gen]" in proc.stdout
+
+
+def test_the_runner_names_the_default_attempt(tmp_path):
+    proc, _, _ = run(tmp_path)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "run-tasks: running the default task" in proc.stdout
+
+
+def test_the_runner_reports_the_failed_attempt(tmp_path):
+    proc, _, _ = run(tmp_path, script="exit 3", CORE="1")
+    assert proc.returncode == 3, proc.stdout + proc.stderr
+    assert "run-tasks: FAILED tasks [core] (exit 3)" in proc.stderr

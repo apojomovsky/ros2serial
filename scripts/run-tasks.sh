@@ -23,16 +23,32 @@ esac
 args=()
 [ "${R2S_FULL:-}" = 1 ] && args+=(--force)
 args+=("${names[@]}")
+# Name the attempt up front: a bare task exit code says nothing about
+# which sections were even tried.
+forced=""
+[ "${R2S_FULL:-}" = 1 ] && forced=" --force"
+if [ ${#names[@]} -eq 0 ]; then
+  attempt="the default task$forced"
+else
+  attempt="tasks [${names[*]}]$forced"
+fi
+echo "run-tasks: running $attempt"
 if [ -n "${R2S_SUITE:-}" ]; then
   # A script path, run as the ritual always ran it: no executable bit needed.
   # shellcheck disable=SC2068 # each task name is one argument.
   bash "${R2S_SUITE}" ${args[@]+"${args[@]}"}
-  exit $?
+  rc=$?
+else
+  command -v task >/dev/null 2>&1 || {
+    echo "task not found: install the version pinned in ci/versions.env"
+    exit 1
+  }
+  # One task at a time: sections share the suite lock and the build tree.
+  # shellcheck disable=SC2068 # each task name is one argument.
+  task --concurrency 1 ${args[@]+"${args[@]}"}
+  rc=$?
 fi
-command -v task >/dev/null 2>&1 || {
-  echo "task not found: install the version pinned in ci/versions.env"
-  exit 1
-}
-# One task at a time: sections share the suite lock and the build tree.
-# shellcheck disable=SC2068 # each task name is one argument.
-exec task --concurrency 1 ${args[@]+"${args[@]}"}
+# Name the failed attempt: task's own line carries the section, this one
+# carries the attempt and the exit code, so a truncated log still acts.
+[ $rc -ne 0 ] && echo "run-tasks: FAILED $attempt (exit $rc)" >&2
+exit $rc
