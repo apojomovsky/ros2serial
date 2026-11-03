@@ -378,8 +378,10 @@ bash "$root/examples/tests/run.sh" || status=1
 # peripheral, so CI proves the link beyond the compile. Only the Uno image
 # runs to keep the added time small; the Mega firmware still builds above.
 # The budgets gate rebuilds everything with stack instrumentation, so it
-# skips this behavior leg and judges sizes only.
-if [ -z "${R2S_STACK_BUILD:-}" ]; then
+# skips this behavior leg and judges sizes only. R2S_EXAMPLES_NO_SIMAVR does
+# the same for the stubbed scope test, whose fake toolchain cannot produce
+# runnable firmware; real runs always prove the link.
+if [ -z "${R2S_STACK_BUILD:-}" ] && [ -z "${R2S_EXAMPLES_NO_SIMAVR:-}" ]; then
   # The harness builds in its own directory beside this one, so its firmware
   # never lands where the budget scanners walk; the renamed simavr inputs
   # stage outside both and are removed afterwards.
