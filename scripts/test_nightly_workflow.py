@@ -49,8 +49,26 @@ def test_the_scheduled_nightly_keeps_the_long_fuzzing():
             assert (job.get("with") or {}).get("fuzz", True) is True
 
 
-def test_the_reusable_workflow_holds_fuzzing_and_the_isolation_pairs():
-    assert set(workflow(JOBS)["jobs"]) == {"fuzz-long", "e2e-isolation"}
+def test_the_reusable_workflow_holds_fuzzing_isolation_and_soak():
+    assert set(workflow(JOBS)["jobs"]) == {"fuzz-long", "e2e-isolation", "soak"}
+
+
+def test_the_soak_runs_only_when_the_caller_asks_for_it():
+    doc = workflow(JOBS)
+    soak = triggers(doc)["workflow_call"]["inputs"]["soak"]
+    assert (soak["type"], soak["default"]) == ("boolean", False)
+    assert doc["jobs"]["soak"].get("if") == "${{ inputs.soak }}"
+
+
+def test_the_scheduled_nightly_runs_the_soak():
+    for job in workflow(NIGHTLY)["jobs"].values():
+        if "nightly-jobs.yml" in str(job.get("uses", "")):
+            assert (job.get("with") or {}).get("soak", False) is True
+
+
+def test_pr_ci_never_runs_the_soak():
+    job = ci_nightly_call()
+    assert (job.get("with") or {}).get("soak") is False
 
 
 def ci_nightly_call():
@@ -102,6 +120,20 @@ def test_the_isolation_job_runs_the_nightly_scope_with_both_envs():
 def test_make_forwards_the_nightly_scope_and_its_env():
     line = next(line for line in (ROOT / "Makefile").read_text().splitlines() if line.startswith("PASS_VARS"))
     for var in ("NIGHTLY", "R2S_E2E_SKIP", "R2S_SYNC_BOUND_NS"):
+        assert var in line.split(), f"make drops {var} before the container"
+
+
+def test_the_soak_job_runs_the_soak_scope_for_two_hours():
+    steps = steps_of(workflow(JOBS), "soak")
+    assert any("./.github/actions/dev-image" in str(step.get("uses", "")) for step in steps)
+    runs = [step for step in steps if "make test SOAK=1" in str(step.get("run", ""))]
+    assert len(runs) == 1
+    assert str(runs[0].get("env", {}).get("R2S_SOAK_SECONDS")) == "7200"
+
+
+def test_make_forwards_the_soak_scope_and_its_env():
+    line = next(line for line in (ROOT / "Makefile").read_text().splitlines() if line.startswith("PASS_VARS"))
+    for var in ("SOAK", "R2S_SOAK_SECONDS", "R2S_SOAK_BACKENDS"):
         assert var in line.split(), f"make drops {var} before the container"
 
 

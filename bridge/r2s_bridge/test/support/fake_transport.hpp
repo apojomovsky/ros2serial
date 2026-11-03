@@ -33,6 +33,12 @@ class FakeTransport final : public Transport
     // buffer is full. The default accepts every byte.
     void limit_write(std::size_t bytes);
 
+    // Queues one write outcome the following writes return in order: a short
+    // count models a port that takes some bytes and then reports WouldBlock,
+    // an error models a port failing mid-frame. When the script runs out,
+    // writes fall back to the limit above.
+    void script_write(IoResult outcome);
+
     // Discards the queued reads. Reads and writes afterwards report kClosed.
     void close() override;
 
@@ -54,6 +60,7 @@ class FakeTransport final : public Transport
     };
 
     std::deque<QueuedRead> script_;
+    std::deque<IoResult> write_script_;
     std::vector<std::vector<std::uint8_t>> writes_;
     std::size_t write_limit_ = std::numeric_limits<std::size_t>::max();
     bool closed_ = false;

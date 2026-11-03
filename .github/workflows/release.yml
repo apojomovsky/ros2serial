@@ -37,6 +37,7 @@ jobs:
     uses: ./.github/workflows/nightly-jobs.yml
     with:
       fuzz: false
+      soak: false
 
   release:
     needs: [nightly]

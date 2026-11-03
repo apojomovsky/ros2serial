@@ -167,6 +167,18 @@ if(BUILD_TESTING)
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
   target_link_libraries(test_termios_transport r2s_bridge_component util)
 
+  # The core port seam is header-private to the bridge sources, so its test
+  # includes them directly.
+  ament_add_gtest(test_core_port test/test_core_port.cpp)
+  target_include_directories(test_core_port PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${R2S_CORE_DIR}/include)
+  target_link_libraries(test_core_port r2s_bridge_component)
+
+  # The ROS clock is plain C++ over a callback, so its tests need no node.
+  ament_add_gtest(test_ros_clock test/test_ros_clock.cpp)
+  target_link_libraries(test_ros_clock r2s_bridge_component)
+
   # The router drives a real node with a scripted link and real type support,
   # covering remapping, QoS and both traffic directions end to end.
   ament_add_gtest(test_router test/test_router.cpp)

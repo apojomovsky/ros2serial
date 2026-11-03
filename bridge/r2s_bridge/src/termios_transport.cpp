@@ -10,13 +10,44 @@
 #include <stdexcept>
 #include <string>
 
+#include <sys/ioctl.h>
 #if defined(__linux__)
 #include <linux/serial.h>
-#include <sys/ioctl.h>
 #endif
 
 namespace r2s_bridge
 {
+
+int TermiosSyscalls::open_port(const char *path, int flags) const noexcept
+{
+    return ::open(path, flags);
+}
+
+int TermiosSyscalls::get_attributes(int fd, termios *attributes) const noexcept
+{
+    return ::tcgetattr(fd, attributes);
+}
+
+int TermiosSyscalls::set_attributes(int fd, int action, const termios *attributes) const noexcept
+{
+    return ::tcsetattr(fd, action, attributes);
+}
+
+ssize_t TermiosSyscalls::read_bytes(int fd, void *buffer, std::size_t capacity) const noexcept
+{
+    return ::read(fd, buffer, capacity);
+}
+
+ssize_t TermiosSyscalls::write_bytes(int fd, const void *data, std::size_t size) const noexcept
+{
+    return ::write(fd, data, size);
+}
+
+int TermiosSyscalls::serial_ioctl(int fd, unsigned long request, void *data) const noexcept
+{
+    return ::ioctl(fd, request, data);
+}
+
 namespace
 {
 
@@ -53,35 +84,46 @@ speed_t speed_for(int baud, const std::string &port)
 #if defined(__linux__)
 // Many USB adapters and every pty reject the request; the port still works at
 // ordinary latency, so a refused ioctl is not an error.
-void request_low_latency(int fd)
+void request_low_latency(int fd, const TermiosSyscalls &syscalls)
 {
     struct serial_struct settings {
     };
-    if (::ioctl(fd, TIOCGSERIAL, &settings) != 0) {
+    if (syscalls.serial_ioctl(fd, TIOCGSERIAL, &settings) != 0) {
         return;
     }
     settings.flags |= ASYNC_LOW_LATENCY;
-    (void)::ioctl(fd, TIOCSSERIAL, &settings);
+    (void)syscalls.serial_ioctl(fd, TIOCSSERIAL, &settings);
 }
 #else
-void request_low_latency(int)
+void request_low_latency(int, const TermiosSyscalls &)
 {
 }
 #endif
 
+const TermiosSyscalls &real_syscalls()
+{
+    static const TermiosSyscalls instance;
+    return instance;
+}
+
 } // namespace
 
-TermiosTransport::TermiosTransport(const TermiosOptions &options)
+TermiosTransport::TermiosTransport(const TermiosOptions &options) : TermiosTransport(options, real_syscalls())
+{
+}
+
+TermiosTransport::TermiosTransport(const TermiosOptions &options, const TermiosSyscalls &syscalls)
+    : syscalls_(syscalls)
 {
     const speed_t speed = speed_for(options.baud, options.port);
 
-    fd_ = ::open(options.port.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
+    fd_ = syscalls_.open_port(options.port.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
     if (fd_ < 0) {
         throw_system_error("cannot open", options.port);
     }
 
     termios attributes{};
-    if (tcgetattr(fd_, &attributes) != 0) {
+    if (syscalls_.get_attributes(fd_, &attributes) != 0) {
         const int error = errno;
         ::close(fd_);
         fd_ = -1;
@@ -110,7 +152,7 @@ TermiosTransport::TermiosTransport(const TermiosOptions &options)
     cfsetispeed(&attributes, speed);
     cfsetospeed(&attributes, speed);
 
-    if (tcsetattr(fd_, TCSANOW, &attributes) != 0) {
+    if (syscalls_.set_attributes(fd_, TCSANOW, &attributes) != 0) {
         const int error = errno;
         ::close(fd_);
         fd_ = -1;
@@ -119,7 +161,7 @@ TermiosTransport::TermiosTransport(const TermiosOptions &options)
     }
 
     if (options.low_latency) {
-        request_low_latency(fd_);
+        request_low_latency(fd_, syscalls_);
     }
 }
 
@@ -137,7 +179,7 @@ IoResult TermiosTransport::read(std::uint8_t *buffer, std::size_t capacity)
         throw std::invalid_argument("TermiosTransport::read needs a capacity of at least one");
     }
     for (;;) {
-        const ssize_t count = ::read(fd_, buffer, capacity);
+        const ssize_t count = syscalls_.read_bytes(fd_, buffer, capacity);
         if (count > 0) {
             return {static_cast<std::size_t>(count), IoStatus::kOk};
         }
@@ -169,7 +211,7 @@ IoResult TermiosTransport::write(const std::uint8_t *data, std::size_t size)
         throw std::invalid_argument("TermiosTransport::write needs at least one byte");
     }
     for (;;) {
-        const ssize_t count = ::write(fd_, data, size);
+        const ssize_t count = syscalls_.write_bytes(fd_, data, size);
         if (count > 0) {
             return {static_cast<std::size_t>(count), IoStatus::kOk};
         }
