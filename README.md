@@ -53,6 +53,7 @@ Planned work, each with its issue. The design marks these as P1, Phase 2+, or ou
 - Link saturation and `TX_BUSY` ([#146](https://github.com/apojomovsky/ros2serial/issues/146))
 - One live link per bridge process ([#122](https://github.com/apojomovsky/ros2serial/issues/122))
 - Compact handshake and PIC ports (Phase 5)
+- WiFi or other network transports: ros2serial stays serial-only; see [Vision and non-goals](docs/00-design.md#vision-and-non-goals)
 - Real-hardware checklist ([#95](https://github.com/apojomovsky/ros2serial/issues/95))
 
 ## Getting started
