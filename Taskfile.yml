@@ -1,16 +1,12 @@
 # One task per ci-test.sh section: a section reruns only when the files it
 # reads change. Task hashes each task's `sources:` with `method: checksum`
-# and skips a task whose inputs match its last successful run, locally and
-# in CI, where the plan job gates each section job on `task --status`.
-# `make test` runs the stale tasks through `scripts/run-tasks.sh`, and
-# `R2S_FULL=1` forces all of them.
-#
-# Lint and commits list no sources and always run: they are the standing
-# cheap gates, as CHEAP was under the retired scopes_for_diff.py. Mermaid
-# runs on the host through docker, never in the dev image, so it stays out
-# of the default task; the plan still gates its job on its status.
+# and skips a task whose inputs match its last successful run.
+# `make test` runs the stale tasks; `R2S_FULL=1` forces all of them.
 version: "3"
 method: checksum
+
+# Lint and commits always run, as CHEAP did. Mermaid stays out of the
+# default task (host-only) while the plan gates its job on its status.
 
 # Git-ignored build outputs never count as inputs, so a tree that just ran
 # its sections is fresh on the next status check.
