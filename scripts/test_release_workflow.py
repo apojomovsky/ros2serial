@@ -100,6 +100,13 @@ def test_release_skips_the_time_boxed_fuzzing():
     assert (caller.get("with") or {}).get("fuzz") is False
 
 
+def test_release_skips_the_time_boxed_soak():
+    """The two hour soak runs on the nightly schedule only."""
+    doc = workflow()
+    (caller,) = [job for job in doc["jobs"].values() if "nightly-jobs.yml" in str(job.get("uses", ""))]
+    assert (caller.get("with") or {}).get("soak") is False
+
+
 def test_release_publishes_only_after_the_nightly_jobs():
     doc = workflow()
     callers = [name for name, job in doc["jobs"].items() if "nightly-jobs.yml" in str(job.get("uses", ""))]
