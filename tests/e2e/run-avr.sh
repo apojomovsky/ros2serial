@@ -91,7 +91,14 @@ for baud in $bauds; do
 done
 serial_flags="-DSERIAL_RX_BUFFER_SIZE=256 -DSERIAL_TX_BUFFER_SIZE=256"
 mkdir -p "$build/fw" || exit 1
-for baud in $bauds; do
+# Scenarios 1 to 4 run the default baud under its legacy file name, so the
+# 115200 image builds even when the matrix narrows past it.
+build_bauds=$bauds
+case " $build_bauds " in
+  *" 115200 "*) ;;
+  *) build_bauds="115200 $build_bauds" ;;
+esac
+for baud in $build_bauds; do
   for board in uno mega; do
     mcu=atmega328p
     [ "$board" = mega ] && mcu=atmega2560
