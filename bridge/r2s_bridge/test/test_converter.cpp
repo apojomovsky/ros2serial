@@ -27,6 +27,7 @@
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <sensor_msgs/msg/nav_sat_fix.hpp>
+#include <sensor_msgs/msg/range.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/byte.hpp>
 #include <std_msgs/msg/char.hpp>
@@ -139,6 +140,25 @@ double yaml_double(const YAML::Node &node, bool narrow)
     return narrow ? narrow_to_host(value) : value;
 }
 
+float yaml_float(const YAML::Node &node)
+{
+    if (node.IsMap()) {
+        std::uint32_t raw =
+            static_cast<std::uint32_t>(std::stoul(node["bits"].as<std::string>(), nullptr, 16));
+        float value = 0;
+        std::memcpy(&value, &raw, sizeof value);
+        return value;
+    }
+    return node.as<float>();
+}
+
+void fill_header(std_msgs::msg::Header &header, const YAML::Node &node)
+{
+    header.stamp.sec = node["stamp"]["sec"].as<std::int32_t>();
+    header.stamp.nanosec = node["stamp"]["nanosec"].as<std::uint32_t>();
+    header.frame_id = node["frame_id"].as<std::string>();
+}
+
 void expect_cdr(Converter &converter, const std::string &type, bool narrow,
                 const std::vector<std::uint8_t> &payload, const std::vector<std::uint8_t> &want,
                 const std::string &trace)
@@ -194,6 +214,64 @@ TEST(ConverterVectors, MatchesRclcppSerializationForEveryVector)
             msg.angular.y = yaml_double(node["message"]["angular"]["y"], narrow);
             msg.angular.z = yaml_double(node["message"]["angular"]["z"], narrow);
             expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
+        } else if (type == "sensor_msgs/msg/Range") {
+            sensor_msgs::msg::Range msg;
+            const YAML::Node message = node["message"];
+            fill_header(msg.header, message["header"]);
+            msg.radiation_type = message["radiation_type"].as<std::uint8_t>();
+            msg.field_of_view = yaml_float(message["field_of_view"]);
+            msg.min_range = yaml_float(message["min_range"]);
+            msg.max_range = yaml_float(message["max_range"]);
+            msg.range = yaml_float(message["range"]);
+            msg.variance = yaml_float(message["variance"]);
+            expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
+        } else if (type == "sensor_msgs/msg/Imu") {
+            sensor_msgs::msg::Imu msg;
+            const YAML::Node message = node["message"];
+            fill_header(msg.header, message["header"]);
+            msg.orientation.x = yaml_double(message["orientation"]["x"], narrow);
+            msg.orientation.y = yaml_double(message["orientation"]["y"], narrow);
+            msg.orientation.z = yaml_double(message["orientation"]["z"], narrow);
+            msg.orientation.w = yaml_double(message["orientation"]["w"], narrow);
+            std::size_t covariance = 0;
+            for (const YAML::Node value : message["orientation_covariance"]) {
+                msg.orientation_covariance[covariance++] = yaml_double(value, narrow);
+            }
+            ASSERT_EQ(covariance, 9u) << name;
+            msg.angular_velocity.x = yaml_double(message["angular_velocity"]["x"], narrow);
+            msg.angular_velocity.y = yaml_double(message["angular_velocity"]["y"], narrow);
+            msg.angular_velocity.z = yaml_double(message["angular_velocity"]["z"], narrow);
+            covariance = 0;
+            for (const YAML::Node value : message["angular_velocity_covariance"]) {
+                msg.angular_velocity_covariance[covariance++] = yaml_double(value, narrow);
+            }
+            ASSERT_EQ(covariance, 9u) << name;
+            msg.linear_acceleration.x = yaml_double(message["linear_acceleration"]["x"], narrow);
+            msg.linear_acceleration.y = yaml_double(message["linear_acceleration"]["y"], narrow);
+            msg.linear_acceleration.z = yaml_double(message["linear_acceleration"]["z"], narrow);
+            covariance = 0;
+            for (const YAML::Node value : message["linear_acceleration_covariance"]) {
+                msg.linear_acceleration_covariance[covariance++] = yaml_double(value, narrow);
+            }
+            ASSERT_EQ(covariance, 9u) << name;
+            expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
+        } else if (type == "sensor_msgs/msg/JointState") {
+            sensor_msgs::msg::JointState msg;
+            const YAML::Node message = node["message"];
+            fill_header(msg.header, message["header"]);
+            for (const YAML::Node value : message["name"]) {
+                msg.name.push_back(value.as<std::string>());
+            }
+            for (const YAML::Node value : message["position"]) {
+                msg.position.push_back(yaml_double(value, narrow));
+            }
+            for (const YAML::Node value : message["velocity"]) {
+                msg.velocity.push_back(yaml_double(value, narrow));
+            }
+            for (const YAML::Node value : message["effort"]) {
+                msg.effort.push_back(yaml_double(value, narrow));
+            }
+            expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
         } else {
             FAIL() << "no reference for vector type " << type;
         }
@@ -247,6 +325,14 @@ TEST(ConverterErrors, ReportsTheDepthFirstFieldIndex)
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
     EXPECT_EQ(result.field, 0u);
 
+    // An empty JointState is 13 bytes; without its last byte the effort
+    // count is missing, and the converter names the effort field.
+    const std::vector<std::uint8_t> empty_joints(13, 0);
+    result = convert("sensor_msgs/msg/JointState", false,
+                     std::vector<std::uint8_t>(empty_joints.begin(), empty_joints.begin() + 12));
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 8u);
+
     result = convert("no_such_pkg/msg/Nope", false, twist);
     EXPECT_EQ(result.fail, ConvertFail::kUnknownType);
     EXPECT_EQ(result.field, 0xFFu);
@@ -279,6 +365,17 @@ TEST(ConverterFieldPath, NamesTheOffendingField)
     EXPECT_EQ(converter.field_path("sensor_msgs/msg/Imu", 10), "orientation_covariance");
     EXPECT_EQ(converter.field_path("sensor_msgs/msg/Imu", 11), "angular_velocity");
     EXPECT_EQ(converter.field_path("sensor_msgs/msg/Imu", 20), "linear_acceleration_covariance");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/Range", 0), "header");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/Range", 4), "header.frame_id");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/Range", 5), "radiation_type");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/Range", 10), "variance");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/Range", 11), "");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/JointState", 0), "header");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/JointState", 4), "header.frame_id");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/JointState", 5), "name");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/JointState", 6), "position");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/JointState", 8), "effort");
+    EXPECT_EQ(converter.field_path("sensor_msgs/msg/JointState", 9), "");
     EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 0), "header");
     EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 1), "header.stamp");
     EXPECT_EQ(converter.field_path("geometry_msgs/msg/PoseArray", 4), "header.frame_id");
