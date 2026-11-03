@@ -35,6 +35,7 @@ static const char *const kDefaultSub = "cmd_vel";
 static const char *const kDefaultEcho = "echo_vel";
 static const char *const kDefaultLogText = "log_text";
 static const char *const kDefaultTimeNow = "time_now";
+static const char *const kDefaultJoints = "joints";
 
 /* The skew range the wire correction carries (spec/protocol.md [TIM-4]):
  * past it the host must refuse the correction, so the knob stops here. */
@@ -49,6 +50,7 @@ struct options {
     const char *echo;
     const char *log_text;
     const char *time_now;
+    const char *joints;
     int32_t skew_ppm;
     unsigned rate;
     uint16_t tx_cap;
@@ -81,6 +83,10 @@ static const char *rename_for(const struct options *opts, const char *name, uint
         *drop = (opts->time_now == NULL);
         return opts->time_now;
     }
+    if (strcmp(name, kDefaultJoints) == 0) {
+        *drop = (opts->joints == NULL);
+        return opts->joints;
+    }
     *drop = 0u;
     return name;
 }
@@ -111,6 +117,7 @@ static void usage(FILE *out)
     fprintf(out, "Usage: r2s_posix_firmware PORT [--node NAME] [--rate HZ]\n"
                  "           [--pub NAME | --no-pub] [--sub NAME | --no-sub]\n"
                  "           [--echo NAME | --no-echo] [--time-now NAME | --no-time-now]\n"
+                 "           [--joints NAME | --no-joints]\n"
                  "           [--log-text NAME | --no-log-text] [--log-lines] [--tick-skew-ppm PPM]\n"
                  "           [--tx-free N] [--flood]\n");
 }
@@ -337,6 +344,7 @@ static void parse_options(int argc, char **argv, struct options *opts)
     opts->echo = kDefaultEcho;
     opts->log_text = kDefaultLogText;
     opts->time_now = kDefaultTimeNow;
+    opts->joints = kDefaultJoints;
     opts->skew_ppm = 0;
     opts->rate = 10u;
     opts->tx_cap = 0xFFFFu;
@@ -359,6 +367,8 @@ static void parse_options(int argc, char **argv, struct options *opts)
             opts->log_text = take_value(argc, argv, &i, arg);
         } else if (strcmp(arg, "--time-now") == 0) {
             opts->time_now = take_value(argc, argv, &i, arg);
+        } else if (strcmp(arg, "--joints") == 0) {
+            opts->joints = take_value(argc, argv, &i, arg);
         } else if (strcmp(arg, "--tick-skew-ppm") == 0) {
             opts->skew_ppm = take_skew(take_value(argc, argv, &i, arg));
         } else if (strcmp(arg, "--tx-free") == 0) {
@@ -375,6 +385,8 @@ static void parse_options(int argc, char **argv, struct options *opts)
             opts->log_text = NULL;
         } else if (strcmp(arg, "--no-time-now") == 0) {
             opts->time_now = NULL;
+        } else if (strcmp(arg, "--no-joints") == 0) {
+            opts->joints = NULL;
         } else if (strcmp(arg, "--log-lines") == 0) {
             opts->log_lines = 1u;
         } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
@@ -407,6 +419,9 @@ static void parse_options(int argc, char **argv, struct options *opts)
     if (opts->time_now != NULL) {
         check_renamed_name("--time-now", opts->time_now, kDefaultTimeNow);
     }
+    if (opts->joints != NULL) {
+        check_renamed_name("--joints", opts->joints, kDefaultJoints);
+    }
 }
 
 static uint32_t s_cmd_vel_count;
@@ -418,6 +433,15 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
     /* Best effort echo for scenario 3: five messages on an idle link never
      * fill the port, so the return carries no signal the test would use. */
     (void)r2s_publish_echo_vel(msg);
+}
+
+static uint32_t s_joints_count;
+
+void r2s_on_joints(const sensor_msgs__msg__JointState *msg)
+{
+    (void)msg;
+    s_joints_count++;
+    fprintf(stderr, "r2s_posix: joints n=%lu\n", (unsigned long)s_joints_count);
 }
 
 /* One log_text line: the value as 8 hex digits. Fixed width fits the
