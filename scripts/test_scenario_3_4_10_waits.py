@@ -204,6 +204,10 @@ def _install_stubs():
     real_checks = importlib.util.module_from_spec(spec)
     sys.modules["s3410_waits_real_checks"] = real_checks
     spec.loader.exec_module(real_checks)
+    # One clock for the driven run: the helper keeps its file, but reads
+    # the world's stepped clock instead of the host one, so the waits it
+    # shares with the scenario measure fake seconds on any host uptime.
+    real_checks.time = types.SimpleNamespace(monotonic=lambda: _clock().monotonic())
 
     launch_testing = types.ModuleType("launch_testing")
     markers = types.ModuleType("launch_testing.markers")
