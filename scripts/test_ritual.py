@@ -868,7 +868,7 @@ def test_strip_ambient_scopes_clears_the_master_force(monkeypatch):
 
 
 def test_takeoff_runs_the_suite_unscoped_for_task_selection(tmp_path, monkeypatch):
-    """The takeoff runs the suite with no selection: the tasks decide."""
+    """The takeoff runs the local task with no selection: the checksums decide."""
     strip_ambient_scopes(monkeypatch)
     main, wt = fixture(tmp_path)
     commit(wt, {"Makefile": "# machinery\n"}, "chore: touch the gate")
@@ -881,7 +881,7 @@ def test_takeoff_runs_the_suite_unscoped_for_task_selection(tmp_path, monkeypatc
     body.write_text(GOOD_BODY)
     result = ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="chore: touch the gate", R2S_SUITE=str(recorder))
     assert result.returncode == 0, result.stdout + result.stderr
-    assert seen_args.read_text().split() == [], "the takeoff selected tasks on its own"
+    assert seen_args.read_text().split() == ["local"], "the takeoff selected more than the local task"
 
 
 def test_takeoff_passes_an_explicit_scope_to_the_task_selection(tmp_path, monkeypatch):

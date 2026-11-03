@@ -119,7 +119,7 @@ def fixture(tmp_path):
     repo.mkdir()
     (repo / "Taskfile.yml").write_text(TASKFILE.read_text())
     for name, task in sorted(tasks().items()):
-        if name == "default":
+        if name in ("default", "local"):
             continue
         for pattern in includes(task):
             probed = probe_for(pattern)
@@ -203,7 +203,7 @@ def test_a_gen_test_edit_reruns_only_gen_besides_the_standing_gates(tmp_path):
     assert gen_tests, "the gen task lists no gen test inputs"
     edited = probe_for(gen_tests[0])
     for name, task in tasks().items():
-        if name in ("default", "gen", "lint", "commits"):
+        if name in ("default", "local", "gen", "lint", "commits"):
             continue
         assert not matches(task, edited), f"{edited} also matches {name}"
     (repo / edited).write_text("probe\nprobe again\n")
@@ -266,7 +266,7 @@ def test_lint_and_commits_list_no_sources():
 def test_every_conditional_task_lists_the_image_and_machinery():
     """The image definition and the suite machinery feed every section."""
     for name, task in tasks().items():
-        if name in ("default", "lint", "commits", "mermaid"):
+        if name in ("default", "local", "lint", "commits", "mermaid"):
             continue
         for path in ("Taskfile.yml", ".gitignore", "Dockerfile", "ci/versions.env", "scripts/ci-test.sh"):
             assert matches(task, path), f"{path} matches no {name} source"
@@ -317,3 +317,20 @@ def test_soak_runs_on_schedule_outside_the_default_task(tmp_path):
     run_task(repo)
     (repo / "ci" / "versions.env").write_text("TASK_VERSION=1\n")
     assert run_task(repo, "soak") == ["SOAK=1"]
+
+
+def test_the_local_task_is_the_default_set_without_the_end_to_end_sections():
+    """The pre-push hook and the takeoff run it; CI runs e2e on every PR."""
+    end_to_end = {"e2e-avr", "e2e-posix", "nightly"}
+    local = list(tasks()["local"]["deps"])
+    assert local == [name for name in default_tasks() if name not in end_to_end], local
+    assert not end_to_end & set(local), local
+
+
+def test_the_hook_and_the_takeoff_run_the_local_task():
+    hook = (ROOT / ".githooks" / "pre-push").read_text()
+    assert "R2S_LOCAL=1 make -s -C" in hook
+    takeoff = (ROOT / "scripts" / "pre-pr-check.sh").read_text()
+    assert 'R2S_LOCAL=1 bash "$root/scripts/run-tasks.sh"' in takeoff
+    makefile = (ROOT / "Makefile").read_text()
+    assert " R2S_LOCAL" in next(line for line in makefile.splitlines() if line.startswith("PASS_VARS :="))

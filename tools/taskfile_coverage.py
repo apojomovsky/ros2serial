@@ -43,6 +43,9 @@ UNLISTED = {
 }
 
 # Tasks the plan loop never checks, each with the reason it stays out.
+#: Tasks that only group other tasks: they read no sources and CI never plans them.
+AGGREGATES = {"default", "local"}
+
 PLANLESS = {
     # Schedule-only: the plan carries no soak output and CI restores no
     # soak checksum, so nothing selects it on a pull request.
@@ -80,7 +83,7 @@ def task_sources(taskfile):
     tasks = yaml.safe_load((taskfile).read_text())["tasks"]
     by_task = {}
     for name, task in tasks.items():
-        if name == "default":
+        if name in AGGREGATES:
             continue
         by_task[name] = task.get("sources", []) or []
     return by_task
@@ -108,7 +111,7 @@ def plan_tasks(workflow):
 
 def check_plan(task_names, planned):
     """Every task but default is planned or planless, and vice versa."""
-    missing = [name for name in task_names if name != "default" and name not in planned and name not in PLANLESS]
+    missing = [name for name in task_names if name not in AGGREGATES and name not in planned and name not in PLANLESS]
     stale = [name for name in PLANLESS if name not in task_names]
     return missing, stale
 
