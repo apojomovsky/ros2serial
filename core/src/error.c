@@ -51,9 +51,12 @@ static void send_one(uint8_t code, uint32_t now)
     (void)r2s_tx_byte((uint8_t)(error.pending[code] & 0xFFu));
     (void)r2s_tx_byte((uint8_t)((error.pending[code] >> 8u) & 0xFFu));
     (void)r2s_tx_byte(error.field[code]);
+    /* GCOVR_EXCL_START: the reservation holds all five bytes, so the end
+     * cannot fail for a short frame; the check stays as defense in depth. */
     if (r2s_tx_end() != R2S_OK) {
         return;
     }
+    /* GCOVR_EXCL_STOP */
     error.seq++;
     error.pending[code] = 0u;
     if (code == R2S_ERROR_NOT_CONNECTED) {

@@ -265,6 +265,39 @@ void test_error_frame_too_large_reports_code_4_with_its_topic(void)
 }
 
 /* covers: ERR-2 */
+void test_error_note_ignores_a_code_outside_1_to_6(void)
+{
+    configure();
+    handshake();
+    fake_port_tx_clear();
+    r2s_error_note(0u, R2S_HANDWRITTEN_BATTERY_ID, 0xFFu, 1u);
+    r2s_error_note(7u, R2S_HANDWRITTEN_BATTERY_ID, 0xFFu, 1u);
+    r2s_spin_some();
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+}
+
+/* covers: ERR-2, ERR-6 */
+void test_error_report_waits_for_transmitter_space(void)
+{
+    /* code 2, the unknown id, one occurrence, no field. */
+    const uint8_t report[] = {0x02u, 0x14u, 0x01u, 0x00u, 0xFFu};
+    const uint8_t payload[] = {0x00u};
+
+    configure();
+    handshake();
+    /* A cap below the report's wire bound refuses the send: the count
+     * stays pending instead of a half-sent frame going out. */
+    fake_port_set_tx_free(10u);
+    fake_port_tx_clear();
+    feed_host(0x14u, 0, payload, sizeof payload);
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    fake_port_set_tx_free(0xFFFFu);
+    r2s_spin_some();
+    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    assert_error_report(0, 0, report);
+}
+
+/* covers: ERR-2 */
 void test_error_status_for_an_unknown_topic_reports_code_2(void)
 {
     /* code 2, the unknown id, one occurrence, no field. */
