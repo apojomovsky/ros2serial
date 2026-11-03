@@ -30,6 +30,13 @@ PREFIX_RULES = (
     # Tests of the gate and the push helper run in the SCRIPTS scope.
     ("scripts/test_", {"SCRIPTS": "1"}),
     ("scripts/push.sh", {"SCRIPTS": "1"}),
+    # Mutation testing never runs in a pull request: its files only run the
+    # script tests that pin them. The nightly workflow runs the real thing.
+    ("scripts/mutation_triage.py", {"SCRIPTS": "1"}),
+    ("scripts/run-mutation.sh", {"SCRIPTS": "1"}),
+    ("docker/mutation/", {"SCRIPTS": "1"}),
+    ("mull.yml", {"SCRIPTS": "1"}),
+    ("mutation/", {"SCRIPTS": "1"}),
     # Each section script maps to the scope that calls it.
     ("scripts/core-test.sh", {"CORE": "1"}),
     ("scripts/bridge-test.sh", {"BRIDGE": "1"}),

@@ -20,10 +20,7 @@ TRIAGE = ROOT / "scripts" / "mutation_triage.py"
 def run_triage(directory, mull, mutmut, equivalent=()):
     (directory / "mull.json").write_text(json.dumps(mull), encoding="utf-8")
     (directory / "mutmut.json").write_text(json.dumps(mutmut), encoding="utf-8")
-    lines = ["- mutant: {!r}".format(item[0]) for item in equivalent]
-    body = ""
-    for (mutant, reason), line in zip(equivalent, lines):
-        body += "{}\n  reason: {}\n".format(line, reason)
+    body = "".join(f"- mutant: {mutant!r}\n  reason: {reason}\n" for mutant, reason in equivalent)
     (directory / "equivalent.yaml").write_text(body, encoding="utf-8")
     out = directory / "report.md"
     result = subprocess.run(

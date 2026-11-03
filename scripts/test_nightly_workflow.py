@@ -177,7 +177,7 @@ def mutation_job():
 def test_the_mutation_job_runs_unless_the_caller_turns_it_off():
     doc = workflow(JOBS)
     mutation = triggers(doc)["workflow_call"]["inputs"]["mutation"]
-    assert (mutation["type"], mutation["default"]) is (bool, True)
+    assert (mutation["type"], mutation["default"]) == ("boolean", True)
     assert doc["jobs"]["mutation"].get("if") == "${{ inputs.mutation }}"
 
 
@@ -199,7 +199,8 @@ def test_the_release_call_skips_the_mutation_job():
 
 
 def test_the_mutation_job_builds_its_own_image():
-    assert any("docker/mutation/Dockerfile" in str(step.get("run", "")) for step in mutation_job()["steps"])
+    steps = mutation_job()["steps"]
+    assert any(str(step.get("with", {}).get("file", "")) == "docker/mutation/Dockerfile" for step in steps)
 
 
 def test_the_mutation_job_runs_the_mutation_script_and_publishes_a_report():
@@ -210,5 +211,5 @@ def test_the_mutation_job_runs_the_mutation_script_and_publishes_a_report():
 
 
 def test_the_mutation_report_uses_the_triage_script():
-    runs = " ".join(str(step.get("run", "")) for step in mutation_job()["steps"])
-    assert "scripts/mutation_triage.py" in runs
+    runner = (ROOT / "scripts" / "run-mutation.sh").read_text(encoding="utf-8")
+    assert "scripts/mutation_triage.py" in runner

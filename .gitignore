@@ -9,3 +9,5 @@ __pycache__/
 .pytest_cache/
 
 node_modules/
+mutants/
+mutation-report/

@@ -176,7 +176,7 @@ def test_mutation_files_run_the_script_tests_but_never_a_suite_scope():
         "scripts/test_mutation_triage.py",
         "scripts/run-mutation.sh",
         "docker/mutation/Dockerfile",
-        "docker/mutation/mull.yml",
+        "mull.yml",
         "mutation/equivalent.yaml",
     ):
         assert scopes(path) == {**CHEAP, "SCRIPTS": "1"}, path

@@ -38,6 +38,8 @@ jobs:
     with:
       fuzz: false
       soak: false
+      # Mutation testing is nightly-only: it never gates a release either.
+      mutation: false
 
   release:
     needs: [nightly]
