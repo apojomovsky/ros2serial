@@ -20,7 +20,6 @@ covers: SES-1, SES-2, SES-5, SES-9
 
 import time
 
-import pytest
 import serial
 from r2s_gen.reference import frames
 from test_announce import read_string
