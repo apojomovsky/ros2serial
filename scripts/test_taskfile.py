@@ -257,3 +257,18 @@ def test_the_soak_checks_belong_to_soak_not_the_e2e_legs():
         assert matches(tasks()["soak"], path), path
         assert not matches(tasks()["e2e-avr"], path), path
         assert not matches(tasks()["e2e-posix"], path), path
+
+
+@needs_task
+def test_soak_runs_on_schedule_outside_the_default_task(tmp_path):
+    """The soak is schedule-only, so the default task leaves it out.
+
+    A cold tree's unscoped run would otherwise start the multi-hour
+    soak. Explicit runs still select it, and a versions edit stales it.
+    """
+    assert "soak" not in default_tasks()
+    assert matches(tasks()["soak"], "ci/versions.env")
+    repo = fixture(tmp_path)
+    run_task(repo)
+    (repo / "ci" / "versions.env").write_text("TASK_VERSION=1\n")
+    assert run_task(repo, "soak") == ["SOAK=1"]

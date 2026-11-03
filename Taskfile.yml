@@ -15,7 +15,7 @@ use_gitignore: true
 tasks:
   default:
     desc: Run every section whose inputs changed.
-    deps: [lint, commits, scripts, core, gen, bridge, cpp, coverage, docs, examples, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly, soak]
+    deps: [lint, commits, scripts, core, gen, bridge, cpp, coverage, docs, examples, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
 
   # The standing cheap gates: unlistable inputs must never skip them.
   lint:
@@ -471,7 +471,8 @@ tasks:
       # The soak driver, its helpers and its checks. The soak runs on
       # schedule only: ci.yml keeps it off on pull requests, so the plan
       # carries no soak output and nothing restores this checksum. The task
-      # exists so `make test SOAK=1` and the default task run it by status.
+      # stays out of the default task so an unscoped run never starts the
+      # multi-hour soak; `make test SOAK=1` runs it by name.
       - tests/e2e/run-soak.sh
       - tests/e2e/e2e_support/soak.py
       - tests/e2e/test_soak_avr.py
