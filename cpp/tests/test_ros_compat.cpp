@@ -92,7 +92,7 @@ static uint16_t twist_payload(uint8_t *out, const geometry_msgs::Twist &msg, uin
     r2s_codec_out_t sink = {out, R2S_MAX_FRAME, 0u, 0u};
     uint8_t field = 0xFFu;
 
-    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_codec_encode(&r2s_bundled_table_geometry_msgs_Twist,
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_codec_encode(&r2s::r2s_bundled_table_geometry_msgs_Twist,
                                                     (uint16_t)R2S_BUNDLED_INDEX_geometry_msgs_Twist, &msg,
                                                     narrow, &sink, &field));
     return sink.len;
@@ -177,22 +177,13 @@ void test_ros_publish_sends_the_frame_with_the_topic_sequence(void)
     sketch.nh.spinOnce();
     handshake(2u);
     fake_port_tx_clear();
-    {
-        r2s_codec_out_t sink = {payload, (uint16_t)sizeof payload, 0u, 0u};
-        uint8_t field = 0xFFu;
-
-        TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_codec_encode(&r2s_bundled_table_std_msgs_Float32,
-                                                        (uint16_t)R2S_BUNDLED_INDEX_std_msgs_Float32,
-                                                        &sketch.battery, 0u, &sink, &field));
-        len = sink.len;
-    }
     sketch.battery.data = 1.5f;
     TEST_ASSERT_EQUAL_INT(0, sketch.battery_pub.publish(&sketch.battery));
     {
         r2s_codec_out_t sink = {payload, (uint16_t)sizeof payload, 0u, 0u};
         uint8_t field = 0xFFu;
 
-        TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_codec_encode(&r2s_bundled_table_std_msgs_Float32,
+        TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_codec_encode(&r2s::r2s_bundled_table_std_msgs_Float32,
                                                         (uint16_t)R2S_BUNDLED_INDEX_std_msgs_Float32,
                                                         &sketch.battery, 0u, &sink, &field));
         len = sink.len;
