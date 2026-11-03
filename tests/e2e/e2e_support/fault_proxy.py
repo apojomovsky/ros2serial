@@ -9,8 +9,11 @@ frame's delimiter, since rCOBS carries each group's code after its data
 Scenario 10 uses corruption only: a single flipped bit in an encoded data
 byte always fails the receiver's CRC check, so every touched frame is
 dropped exactly once and the diagnostics counters match the proxy's
-touched-frame counts. Bytes leave the proxy at frame boundaries, so a
-trailing partial frame waits for its delimiter.
+touched-frame counts. The framing variant instead corrupts code bytes
+and delimiters: a shifted grouping fails the decode or the CRC, and a
+corrupted delimiter merges two frames into one undecodable blob. Bytes
+leave the proxy at frame boundaries, so a trailing partial frame waits
+for its delimiter.
 """
 
 import math
@@ -51,9 +54,13 @@ class _DirectionState:
     def __init__(self):
         self.counts = DirectionCounts()
         self.rng = random.Random()
-        # Post-drop [byte, duplicated] pairs of the frame in progress.
+        # Post-drop [byte, duplicated] pairs of the segment in progress,
+        # that is the bytes since the previous delimiter.
         self.pending = []
+        # Earlier merged segments with their replacement delimiters.
+        self.stashed = []
         self.delim_dup = False
+        self.framing_touched = False
 
 
 def _check_rate(name, value):
@@ -82,25 +89,30 @@ class FaultProxy:
         self._drop_rate = 0.0
         self._dup_rate = 0.0
         self._corrupt_rate = 0.0
+        self._framing_rate = 0.0
         self._seed = seed
         self._mcu_to_host = _DirectionState()
         self._host_to_mcu = _DirectionState()
         self._mcu_to_host.rng.seed(seed)
         self._host_to_mcu.rng.seed(seed)
 
-    def set_faults(self, *, drop_rate=0.0, dup_rate=0.0, corrupt_rate=0.0, seed=None):
+    def set_faults(self, *, drop_rate=0.0, dup_rate=0.0, corrupt_rate=0.0, framing_rate=0.0, seed=None):
         """Replace the fault rates for both directions.
 
         A seed restarts both streams deterministically; without one the
-        streams continue. Counts stay cumulative across calls.
+        streams continue. Counts stay cumulative across calls. framing_rate
+        corrupts code bytes and delimiters instead of data bytes, merging
+        frames whose delimiter is replaced by a nonzero byte.
         """
         _check_rate("drop_rate", drop_rate)
         _check_rate("dup_rate", dup_rate)
         _check_rate("corrupt_rate", corrupt_rate)
+        _check_rate("framing_rate", framing_rate)
         with self._lock:
             self._drop_rate = drop_rate
             self._dup_rate = dup_rate
             self._corrupt_rate = corrupt_rate
+            self._framing_rate = framing_rate
             if seed is not None:
                 self._seed = seed
                 self._mcu_to_host.rng.seed(seed)
@@ -139,33 +151,56 @@ class FaultProxy:
             end -= code
         return data
 
-    def _flush_frame(self, state, out):
+    def _corrupt_segment(self, state):
+        """Corrupt one delimiter-terminated segment in place.
+
+        Only the bytes since the previous delimiter are parsed, so a merge
+        never hides a segment's code bytes from the fault draw. The segment
+        carries no corruption when it is malformed: the receiver drops it
+        however it arrives, so the proxy must not invent a touched frame
+        the counters cannot match.
+        """
         counts = state.counts
         pending = state.pending
+        data = self._data_positions([byte for byte, _ in pending])
+        if data is None:
+            return
+        for i, (byte, _) in enumerate(pending):
+            if data[i]:
+                if state.rng.random() < self._corrupt_rate:
+                    # A one-bit flip outside 0x00: the grouping survives,
+                    # so the decoded frame differs in exactly this bit.
+                    flipped = byte ^ (0x02 if byte == 0x01 else 0x01)
+                    pending[i][0] = flipped
+                    counts.corrupted += 1
+                    state.framing_touched = True
+            elif self._framing_rate > 0.0 and state.rng.random() < self._framing_rate:
+                # A one-bit flip outside 0x00 shifts the grouping, so the
+                # decode fails or yields different bytes than the CRC covers.
+                flipped = byte ^ (0x02 if byte == 0x01 else 0x01)
+                pending[i][0] = flipped
+                counts.corrupted += 1
+                state.framing_touched = True
+
+    def _flush_frame(self, state, out):
+        counts = state.counts
+        full = state.stashed + state.pending
+        state.stashed = []
         state.pending = []
+        touched = state.framing_touched
+        state.framing_touched = False
         delim_dup = state.delim_dup
         state.delim_dup = False
-        if pending:
+        if full:
             counts.frames += 1
-            topic = pending[0][0]
-            data = self._data_positions([byte for byte, _ in pending])
-            touched = False
-            if data is not None:
-                for i, (byte, _) in enumerate(pending):
-                    if data[i] and state.rng.random() < self._corrupt_rate:
-                        # A one-bit flip outside 0x00: the grouping survives,
-                        # so the decoded frame differs in exactly this bit.
-                        flipped = byte ^ (0x02 if byte == 0x01 else 0x01)
-                        pending[i][0] = flipped
-                        counts.corrupted += 1
-                        touched = True
+            topic = full[0][0]
             if touched:
                 counts.frames_touched += 1
                 # The first group's data starts the frame, so its first byte
                 # is the topic id whatever groups follow.
                 if topic >= _FIRST_USER_TOPIC:
                     counts.user_frames_touched += 1
-            for byte, duplicated in pending:
+            for byte, duplicated in full:
                 out.append(byte)
                 counts.bytes_out += 1
                 if duplicated:
@@ -187,8 +222,19 @@ class FaultProxy:
             return
         duplicated = state.rng.random() < self._dup_rate
         if byte == 0x00:
-            state.delim_dup = duplicated
-            self._flush_frame(state, out)
+            self._corrupt_segment(state)
+            if self._framing_rate > 0.0 and state.rng.random() < self._framing_rate:
+                # A nonzero delimiter merges this segment with the next one
+                # instead of flushing it, desynchronising the receiver.
+                replacement = state.rng.randint(1, 0xFF)
+                state.stashed.extend(state.pending)
+                state.pending = []
+                state.stashed.append([replacement, duplicated])
+                counts.corrupted += 1
+                state.framing_touched = True
+            else:
+                state.delim_dup = duplicated
+                self._flush_frame(state, out)
         else:
             state.pending.append([byte, duplicated])
 

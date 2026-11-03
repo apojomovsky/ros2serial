@@ -290,7 +290,7 @@ class TestCorruption(unittest.TestCase):
 
 
 class TestFraming(unittest.TestCase):
-    def test_code_bytes_corrupt_while_data_survives(self):
+    def test_framing_rate_one_corrupts_codes_and_delimiter_not_data(self):
         encoded = rcobs_encode(bytes([16, 7]) + b"\x01AB")
         proxy = fault_proxy.FaultProxy(seed=61)
         proxy.set_faults(framing_rate=1.0)
@@ -299,13 +299,16 @@ class TestFraming(unittest.TestCase):
             mcu = open_raw(proxy.mcu_port)
             host = open_raw(proxy.host_port)
             try:
-                out = send_then_flush(proxy, mcu, host, encoded)
+                # The frame's own delimiter merges under the faults; the
+                # clean flush delimiter ends the blob.
+                out = send_then_flush(proxy, mcu, host, encoded + b"\x00")
             finally:
                 os.close(mcu)
                 os.close(host)
         finally:
             proxy.stop()
-        self.assertEqual(len(out), len(encoded) + 1)
+        self.assertEqual(len(out), len(encoded) + 1 + 1)
+        self.assertNotEqual(out[len(encoded)], 0x00)
         self.assertEqual(out[-1], 0x00)
         data = data_positions(encoded)
         for position, is_data in enumerate(data):
@@ -319,7 +322,7 @@ class TestFraming(unittest.TestCase):
         self.assertEqual(counts.frames, 1)
         self.assertEqual(counts.frames_touched, 1)
         self.assertEqual(counts.user_frames_touched, 1)
-        self.assertEqual(counts.corrupted, sum(not flag for flag in data))
+        self.assertEqual(counts.corrupted, sum(not flag for flag in data) + 1)
 
     def test_corrupted_delimiter_merges_two_frames(self):
         first = frame(16, 7, b"AB")
@@ -338,9 +341,11 @@ class TestFraming(unittest.TestCase):
         finally:
             proxy.stop()
         first_enc, second_enc = first[:-1], second[:-1]
-        self.assertEqual(len(out), len(first_enc) + 1 + len(second_enc) + 1)
+        # Both delimiters merge and the clean flush delimiter ends the blob.
+        self.assertEqual(len(out), len(first_enc) + 1 + len(second_enc) + 1 + 1)
         self.assertEqual(out[-1], 0x00)
         self.assertNotEqual(out[len(first_enc)], 0x00)
+        self.assertNotEqual(out[len(first_enc) + 1 + len(second_enc)], 0x00)
         self.assertNotIn(b"\x00", out[:-1])
         for offset, enc in ((0, first_enc), (len(first_enc) + 1, second_enc)):
             for position, is_data in enumerate(data_positions(enc)):
