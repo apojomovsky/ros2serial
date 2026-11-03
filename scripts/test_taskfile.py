@@ -311,7 +311,10 @@ def test_every_top_level_package_directory_is_an_input_of_its_section_task():
                 check=True,
             )
             tracked = proc.stdout.splitlines()
-            assert tracked, f"no tracked file under {child}"
+            if not tracked:
+                # Build output from a test earlier in this session lands
+                # untracked and ignored: no tracked file means no package.
+                continue
             for path in tracked:
                 assert matches(task, f"{root}/{path}"), f"{root}/{path} matches no {owner} source"
 
