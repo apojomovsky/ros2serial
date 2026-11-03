@@ -141,12 +141,12 @@ def test_make_help_lists_exactly_the_targets_in_agents_md():
     assert listed == agents_targets()
 
 
-def test_make_test_reaches_the_suite_script_in_and_out_of_the_image():
+def test_make_test_reaches_the_task_runner_in_and_out_of_the_image():
     inside = run(["make", "-n", "test", "R2S_IN_IMAGE=1"], check=True).stdout
-    assert "bash scripts/ci-test.sh" in inside
+    assert "bash scripts/run-tasks.sh" in inside
     assert "docker" not in inside
     outside = run(["make", "-n", "test", "R2S_IN_IMAGE="], check=True).stdout
-    assert re.search(r"docker run .* bash scripts/ci-test\.sh", outside), outside
+    assert re.search(r"docker run .* bash scripts/run-tasks\.sh", outside), outside
 
 
 def test_the_suite_refuses_a_second_run_on_the_same_tree(tmp_path):

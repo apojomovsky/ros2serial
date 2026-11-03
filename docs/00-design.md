@@ -502,7 +502,7 @@ Node(
 
 ## Code generator and packaging
 
-*Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling; planned: rosidl plugin wrapper and `.action` support in #317.*
+*Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling, plus the rosidl plugin wrapper (`gen/r2s_rosidl`); planned: `.action` support in #317.*
 
 `r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required). It parses the `.msg` grammar itself, since `rosidl_parser` ships only with a ROS installation and the bundled snapshots make the ROS-free path complete. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources, the optional C++ headers, and the compact-mode node map. It also builds the bundled Arduino library (common types with default bounds) that the X-macro path uses. Outputs are laid out to be usable as:
 
@@ -511,7 +511,7 @@ Node(
 - a CMake or Makefile include for bare-metal and vendor toolchains;
 - an epic-hal module (serial and tick) for PIC (Phase 5).
 
-The generator targets a ROS distro explicitly (`distro:` in the config, default `jazzy`), because type hashes can differ between distros. It bundles a `common_interfaces` snapshot per supported distro. A thin rosidl plugin wraps it later for users who want generation inside `colcon build`. The bridge, the generator and a bundle of the standard messages are released as ROS packages through the buildfarm.
+The generator targets a ROS distro explicitly (`distro:` in the config, default `jazzy`), because type hashes can differ between distros. It bundles a `common_interfaces` snapshot per supported distro. A thin rosidl plugin (`gen/r2s_rosidl`) wraps it for users who want generation inside `colcon build`: a firmware package calls `r2s_generate_firmware(CONFIG r2s.yaml)` and the build runs `r2s-gen generate --layout cmake`. The bridge, the generator and a bundle of the standard messages are released as ROS packages through the buildfarm.
 
 ## Host bridge
 
@@ -1112,7 +1112,7 @@ Scenario numbers in the tickets below refer to the key end-to-end scenarios in `
 
 | Workflow | Trigger | Jobs |
 | --- | --- | --- |
-| `ci.yml` | Push, PR and manual | `plan` (maps the diff to the scopes each section job gates on); `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component, fails on a drop); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `docs` (every code snippet in `README.md` and `docs/` extracted and compiled); `readme` (every Getting started command runs on simavr); `cpp`; `bridge` (colcon build and test in `ros:jazzy` and `ros:lyrical`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `esp32` (example sketches for the ESP32 Dev Module at the pinned core); `pic-canary` (advisory, from Phase 2); `budgets` (size table as a PR comment, fails on budget breach); `nightly` (calls `nightly-jobs.yml` when the plan selects `NIGHTLY`; the long fuzzing runs only when it also selects `FUZZ`) |
+| `ci.yml` | Push, PR and manual | `plan` (restores each task's checksums from the latest `master` run and reports the stale scopes each section job gates on); `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component, fails on a drop); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `docs` (every code snippet in `README.md` and `docs/` extracted and compiled); `readme` (every Getting started command runs on simavr); `cpp`; `bridge` (colcon build and test in `ros:jazzy` and `ros:lyrical`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `esp32` (example sketches for the ESP32 Dev Module at the pinned core); `pic-canary` (advisory, from Phase 2); `budgets` (size table as a PR comment, fails on budget breach); `nightly` (calls `nightly-jobs.yml` when the plan selects `NIGHTLY`; the long fuzzing runs only when it also selects `FUZZ`) |
 | `nightly.yml` | Schedule | Calls `nightly-jobs.yml`; files or comments on one `needs-triage` issue when the scheduled run fails |
 | `nightly-jobs.yml` | Reusable | `fuzz-long` (30 min per target); `e2e-isolation` (two e2e sections side by side) |
 | `release.yml` | Tag | Runs `nightly-jobs.yml` on a tag first, then the release with the Arduino library zip and the Python sdist and wheel attached: a full release marked Latest, or a pre-release when the tag carries a SemVer pre-release suffix; publishes nowhere else |

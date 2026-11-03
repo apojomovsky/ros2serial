@@ -128,6 +128,7 @@ if wants LINT; then scope_now=LINT
   section vectors python3 tools/vectors_check.py
   section spec-coverage spec_coverage
   section zone python3 tools/zone_check.py
+  section taskfile-coverage python3 tools/taskfile_coverage.py
 fi
 if wants COMMITS; then scope_now=COMMITS
   section commits check_commits

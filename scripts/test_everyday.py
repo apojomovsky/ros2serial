@@ -35,13 +35,12 @@ def test_each_alias_expands_to_its_scope():
         out = run_make("-n", alias)
         assert out.returncode == 0, alias + out.stderr
         assert scope in out.stdout, alias
-        assert "scripts/ci-test.sh" in out.stdout, alias
+        assert " test " in out.stdout, alias
 
 
 def test_test_all_expands_to_the_unscoped_suite():
     out = run_make("-n", "test-all")
     assert out.returncode == 0, out.stderr
-    assert "scripts/ci-test.sh" in out.stdout
     assert re.search(r"\b(CORE|GEN|BRIDGE|CPP|SCRIPTS|LINT|E2E)=", out.stdout) is None
 
 
@@ -94,6 +93,10 @@ def test_valid_scope_names_match_the_suite():
     scopes = set(re.search(r'^scopes="([^"]+)"', script, re.MULTILINE).group(1).split())
     wants = set(re.findall(r"wants ([A-Z][A-Z0-9_]*)", (ROOT / "scripts/ci-test.sh").read_text()))
     assert scopes == wants | {"SCRIPTS_SHARD"}
+    runner = (ROOT / "scripts/run-tasks.sh").read_text()
+    selected = set(re.findall(r"for scope in ([A-Z ]+);", runner)[0].split())
+    assert selected == wants - {"E2E"}
+    assert "e2e-posix" in runner and "e2e-avr" in runner
 
 
 def test_pytest_one_builds_the_host_lib_and_runs_pytest():
@@ -157,6 +160,7 @@ STRIPPED_SCOPES = (
     "FUZZ",
     "README",
     "NIGHTLY",
+    "SOAK",
     "FULL",
     "R2S_FULL",
     "SCRIPTS_SHARD",
@@ -165,7 +169,8 @@ STRIPPED_SCOPES = (
 
 def run_check(repo, out_file, **env):
     recorder = out_file.parent / "recorder.sh"
-    recorder.write_text(f'#!/usr/bin/env bash\nenv | sort > "{out_file}"\n')
+    args_file = out_file.parent / "args.txt"
+    recorder.write_text(f'#!/usr/bin/env bash\necho "$*" > "{args_file}"\nenv | sort > "{out_file}"\n')
     recorder.chmod(0o755)
     # One pass: the runner's own scopes must not leak in as caller scopes.
     clean = {k: v for k, v in os.environ.items() if k not in STRIPPED_SCOPES}
@@ -177,48 +182,41 @@ def run_check(repo, out_file, **env):
     recorded = dict(
         line.split("=", 1) for line in out_file.read_text().splitlines() if re.match(r"^[A-Z][A-Z0-9_]*=", line)
     )
-    return result.stdout, recorded
+    return result.stdout, recorded, args_file.read_text().split()
 
 
-def test_check_runs_the_scopes_of_a_core_diff(tmp_path):
+def test_check_selects_the_caller_tasks(tmp_path):
     repo = fixture_repo(tmp_path)
-    (repo / "core" / "b.c").write_text("int y;\n")
     out_file = tmp_path / "scopes.txt"
-    stdout, recorded = run_check(repo, out_file)
+    stdout, recorded, args = run_check(repo, out_file, CORE="1")
     assert recorded.get("CORE") == "1"
-    assert recorded.get("LINT") == "1"
-    assert recorded.get("COMMITS") == "1"
-    assert "CORE=1" in stdout
+    assert args == ["core"], args
+    assert "stale tasks" in stdout
 
 
-def test_check_runs_the_fast_gates_for_a_machinery_diff(tmp_path):
+def test_check_runs_unscoped_for_task_selection(tmp_path):
     repo = fixture_repo(tmp_path)
-    (repo / "Makefile").write_text("# machinery\n")
     out_file = tmp_path / "scopes.txt"
-    stdout, recorded = run_check(repo, out_file)
-    assert recorded.get("LINT") == "1"
-    assert recorded.get("COMMITS") == "1"
-    assert "CORE" not in recorded
-    assert "full suite to CI" in stdout
+    stdout, _, args = run_check(repo, out_file)
+    assert args == [], args
+    assert "stale tasks" in stdout
 
 
 def test_check_runs_everything_only_when_asked_for_full(tmp_path):
     repo = fixture_repo(tmp_path)
-    (repo / "Makefile").write_text("# machinery\n")
     out_file = tmp_path / "scopes.txt"
-    stdout, recorded = run_check(repo, out_file, R2S_FULL="1")
-    assert "CORE" not in recorded
-    assert "LINT" not in recorded
+    stdout, _, args = run_check(repo, out_file, R2S_FULL="1")
+    assert args == ["--force"], args
     assert "FULL" in stdout
 
 
-def test_check_merges_a_caller_e2e_with_the_computed_one(tmp_path):
+def test_check_maps_each_e2e_backend_to_its_legs(tmp_path):
     repo = fixture_repo(tmp_path)
-    (repo / "tests" / "e2e").mkdir(parents=True)
-    (repo / "tests" / "e2e" / "run-avr.sh").write_text("# avr only\n")
     out_file = tmp_path / "scopes.txt"
-    _, recorded = run_check(repo, out_file, E2E="posix")
-    assert recorded.get("E2E") == "both"
+    _, _, args = run_check(repo, out_file, E2E="posix")
+    assert args == ["e2e-posix"], args
+    _, _, args = run_check(repo, out_file, E2E="both")
+    assert args == ["e2e-avr", "e2e-posix"], args
 
 
 def test_make_forwards_the_e2e_loop_narrowers():

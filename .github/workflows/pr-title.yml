@@ -29,13 +29,15 @@ jobs:
       - uses: actions/setup-python@v5.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Task
+        run: sudo python3 scripts/install-task.py
       - name: PR title and commits
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           range="$(bash scripts/pr-title-range.sh)" || exit 1
-          COMMIT_RANGE="$range" COMMITS=1 bash scripts/ci-test.sh
+          COMMIT_RANGE="$range" task --concurrency 1 commits
       - name: The repository's merge settings
         # The rule is what the settings allow, so they are checked. The
         # default GITHUB_TOKEN cannot read them: the API hides the merge
