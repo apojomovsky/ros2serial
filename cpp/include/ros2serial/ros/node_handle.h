@@ -15,7 +15,7 @@ namespace ros
 {
 
 /* What one spinOnce() call reports. Only SPIN_OK occurs yet: the timeout
- * and the stop-request states land with setSpinTimeout and services. */
+ * lands with setSpinTimeout (#417) and the stop request with services. */
 const int SPIN_OK = 0;
 const int SPIN_ERR = -1;
 const int SPIN_TIMEOUT = -2;

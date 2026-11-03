@@ -23,8 +23,9 @@ template <typename MsgT, typename ObjT = void> class Subscriber
     MsgT msg;
 
     /* Keeps the topic and the callback. The endpoint rides along for
-     * sketches written against ros_lib and changes nothing announced. */
-    Subscriber(const char *topic, CallbackT cb, ObjT *obj, int endpoint = 0)
+     * sketches written against ros_lib and changes nothing announced; the
+     * default is ros_lib's subscriber endpoint. */
+    Subscriber(const char *topic, CallbackT cb, ObjT *obj, int endpoint = 1)
         : topic_(topic), id_(-1), m_callback(cb), m_object(obj), m_endpoint(endpoint)
     {
     }
@@ -69,8 +70,9 @@ template <typename MsgT> class Subscriber<MsgT, void>
     MsgT msg;
 
     /* Keeps the topic and the callback. The endpoint rides along for
-     * sketches written against ros_lib and changes nothing announced. */
-    Subscriber(const char *topic, CallbackT cb, int endpoint = 0)
+     * sketches written against ros_lib and changes nothing announced; the
+     * default is ros_lib's subscriber endpoint. */
+    Subscriber(const char *topic, CallbackT cb, int endpoint = 1)
         : topic_(topic), id_(-1), m_callback(cb), m_endpoint(endpoint)
     {
     }

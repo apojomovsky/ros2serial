@@ -28,6 +28,11 @@ static_assert(sizeof(geometry_msgs::Twist) == sizeof(geometry_msgs::msg::Twist),
 
 static uint8_t s_wire[R2S_FRAMER_RX_CAPACITY + 1u];
 
+/* The bundled type hashes the announce must carry, as the bundle pins
+ * them: comparing against the traits would re-derive a miscapture. */
+static const uint8_t s_float32_hash[8] = {0x71u, 0x70u, 0xd3u, 0xd8u, 0xf8u, 0x41u, 0xf7u, 0xbeu};
+static const uint8_t s_twist_hash[8] = {0x9cu, 0x45u, 0xbfu, 0x16u, 0xfeu, 0x09u, 0x83u, 0xd8u};
+
 static geometry_msgs::Twist s_got_twist;
 static uint8_t s_got_calls;
 
@@ -149,6 +154,12 @@ void test_ros_advertise_registers_topics_in_construction_order(void)
     TEST_ASSERT_EQUAL_STRING("cmd_vel", r2s_topic_get(1)->topic_name);
     TEST_ASSERT_EQUAL_STRING("std_msgs/msg/Float32", r2s_topic_get(0)->type_name);
     TEST_ASSERT_EQUAL_STRING("geometry_msgs/msg/Twist", r2s_topic_get(1)->type_name);
+    TEST_ASSERT_EQUAL_MEMORY(s_float32_hash, r2s_topic_get(0)->type_hash, 8u);
+    TEST_ASSERT_EQUAL_MEMORY(s_twist_hash, r2s_topic_get(1)->type_hash, 8u);
+    TEST_ASSERT_EQUAL_UINT8(0x00u, r2s_topic_get(0)->flags & 0x01u);
+    TEST_ASSERT_EQUAL_UINT8(0x01u, r2s_topic_get(1)->flags & 0x01u);
+    TEST_ASSERT_EQUAL_INT(0, sketch.battery_pub.getEndpointType());
+    TEST_ASSERT_EQUAL_INT(1, sketch.cmd_vel_sub.getEndpointType());
 }
 
 /* The size parameters ride along for sketches written against ros_lib and

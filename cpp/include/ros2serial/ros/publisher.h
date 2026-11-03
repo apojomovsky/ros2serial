@@ -21,7 +21,8 @@ class Publisher
 {
   public:
     /* Keeps the topic and the message's codec. The endpoint rides along for
-     * sketches written against ros_lib and changes nothing announced. */
+     * sketches written against ros_lib and changes nothing announced; the
+     * default is ros_lib's publisher endpoint. */
     template <typename MsgT>
     Publisher(const char *topic, MsgT *msg, int endpoint = 0)
         : topic_(topic), msg_(msg), id_(-1), m_endpoint(endpoint), m_table(r2s::msg_traits<MsgT>::table()),
