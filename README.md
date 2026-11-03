@@ -34,7 +34,7 @@ The generator runs once at build time and produces the firmware headers. At runt
 
 Tested on every PR in CI unless noted.
 
-- **APIs.** The C API (`r2s_publish_*`, `r2s_on_*`, `r2s_spin_some`), the runtime C++ API (`r2s::Node`, `r2s::Publisher`, `r2s::Subscription` with ROS 2 names), and the static C++ API over the `R2S_TOPICS` X-macro list. All three run the same end-to-end scenarios.
+- **APIs.** The C API (`r2s_publish_*`, `r2s_on_*`, `r2s_spin_some`), the runtime C++ API (`r2s::Node`, `r2s::Publisher`, `r2s::Subscription` with ROS 2 names), and the static C++ API over the `R2S_TOPICS` X-macro list. All three run the same end-to-end scenarios. Coming from rosserial? `ros::` compatibility aliases keep an existing sketch close to its original; see [Port your rosserial sketch](docs/03-port-rosserial-sketch.md).
 - **Boards and ports.** Arduino Uno (ATmega328P) and Mega (ATmega2560), in simavr; the Arduino port (`Serial`), AVR bare metal, and the posix virtual MCU over a pty. Real hardware is not verified yet ([#95](https://github.com/apojomovsky/ros2serial/issues/95)).
 - **Distros and RMWs.** The bridge builds and is tested on Jazzy and Lyrical; the generator bundles snapshots for Jazzy, Lyrical and Rolling. End to end runs under Fast DDS, Cyclone DDS and Zenoh.
 - **Message types.** The bundle ships eleven common types: `builtin_interfaces/msg/Time`, `geometry_msgs/msg/Quaternion`, `geometry_msgs/msg/Twist`, `geometry_msgs/msg/Vector3`, `sensor_msgs/msg/Imu`, `sensor_msgs/msg/JointState`, `sensor_msgs/msg/Range`, `std_msgs/msg/Bool`, `std_msgs/msg/Float32`, `std_msgs/msg/Header`, `std_msgs/msg/String`, with documented default bounds.
@@ -52,7 +52,6 @@ Planned work, each with its issue. The design marks these as P1, Phase 2+, or ou
 - Reconnect and reset handling ([#138](https://github.com/apojomovsky/ros2serial/issues/138))
 - Link saturation and `TX_BUSY` ([#146](https://github.com/apojomovsky/ros2serial/issues/146))
 - One live link per bridge process ([#122](https://github.com/apojomovsky/ros2serial/issues/122))
-- rosserial-compatible runtime aliases ([#145](https://github.com/apojomovsky/ros2serial/issues/145)) and the porting guide ([#149](https://github.com/apojomovsky/ros2serial/issues/149))
 - Compact handshake and PIC ports (Phase 5)
 - Real-hardware checklist ([#95](https://github.com/apojomovsky/ros2serial/issues/95))
 
