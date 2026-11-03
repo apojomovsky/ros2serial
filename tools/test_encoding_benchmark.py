@@ -8,6 +8,7 @@ the models render, pinned verbatim so numbers cannot drift from the code.
 """
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -272,3 +273,164 @@ def test_writeup_table_matches_the_model():
     writeup = ROOT / "docs" / "benchmarks" / "encoding-packed-vs-cdr-vs-mavlink.md"
     assert writeup.exists(), "missing docs/benchmarks/encoding-packed-vs-cdr-vs-mavlink.md"
     assert table in writeup.read_text()
+
+
+# Cycle timing on the MCU, measured in simavr cycles (the harness prints its
+# stop count, and the firmware times itself with Timer1 at one tick per
+# cycle). Caps are regression tripwires, not tuned budgets: a byte takes
+# about 1390 cycles to leave the wire at 115200 baud, so an encoder spending
+# a fraction of that stays out of the link's way.
+CYCLE_CASES = {
+    "float32": "std_msgs/msg/Float32",
+    "twist": "geometry_msgs/msg/Twist",
+    "range": "sensor_msgs/msg/Range",
+    "imu": "sensor_msgs/msg/Imu",
+    "joint_state": "sensor_msgs/msg/JointState",
+}
+
+CYCLE_BUDGET_PER_BYTE = 300
+
+
+def cycle_message(type_name):
+    profiles = sizes.REPRESENTATIVE[type_name]
+    return profiles["narrow"] if profiles["narrow"] is not None else profiles["wide"]
+
+
+def stage_bundle(stage):
+    import os
+
+    env = dict(os.environ, PYTHONPATH=str(ROOT / "gen"))
+    command = [sys.executable, "-m", "r2s_gen.cli", "bundle", "--distro", "jazzy", "--out", str(stage)]
+    subprocess.run(command, capture_output=True, text=True, check=True, env=env)
+
+
+def core_sources():
+    return sorted((ROOT / "core" / "src").glob("*.c"), key=lambda path: path.name)
+
+
+def build_firmware(stage, elf, mcu):
+    firmware = ENCODING / "fw_bench.c"
+    assert firmware.exists(), "missing benchmark/encoding/fw_bench.c"
+    command = (
+        [
+            "avr-gcc",
+            f"-mmcu={mcu}",
+            "-DF_CPU=16000000UL",
+            "-Os",
+            "-std=c99",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-Wl,--gc-sections",
+            "-DR2S_WITH_CODEC",
+            f"-I{stage / 'src'}",
+            f"-I{ROOT / 'core' / 'include'}",
+            str(firmware),
+            str(stage / "src" / "r2s_bundled.c"),
+        ]
+        + [str(path) for path in core_sources() if path.name != "test_reset.c"]
+        + ["-o", str(elf)]
+    )
+    subprocess.run(command, capture_output=True, text=True, check=True)
+
+
+@pytest.mark.parametrize("mcu", ("atmega328p", "atmega2560"))
+def test_benchmark_firmware_builds_for_mcu(tmp_path, mcu):
+    if shutil.which("avr-gcc") is None:
+        pytest.skip("avr-gcc not on PATH: run in the dev image")
+    stage = tmp_path / "stage"
+    stage_bundle(stage)
+    build_firmware(stage, tmp_path / f"fw-{mcu}.elf", mcu)
+
+
+def build_harness(path):
+    command = [
+        "cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-O2",
+        "-o",
+        str(path),
+        str(ROOT / "tests" / "harness" / "simavr" / "r2s_simavr.c"),
+        "-lsimavr",
+        "-lelf",
+    ]
+    proc = subprocess.run(command, capture_output=True, text=True)
+    if proc.returncode != 0:
+        pytest.skip(f"the simavr harness does not build here: {proc.stderr.strip().splitlines()[-1]}")
+    return str(path)
+
+
+def read_until_done(pty_path, deadline):
+    import os
+    import select
+    import time
+
+    lines = []
+    fd = os.open(pty_path, os.O_RDONLY | os.O_NOCTTY)
+    try:
+        tail = b""
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([fd], [], [], 5.0)
+            if not ready:
+                continue
+            chunk = os.read(fd, 256)
+            if not chunk:
+                break
+            tail += chunk
+            while b"\n" in tail:
+                raw, tail = tail.split(b"\n", 1)
+                line = raw.decode("ascii", "replace").strip()
+                lines.append(line)
+                if line == "BM DONE":
+                    return lines
+    finally:
+        os.close(fd)
+    return lines
+
+
+def test_encode_cycles_within_budget(tmp_path):
+    import time
+
+    if shutil.which("avr-gcc") is None:
+        pytest.skip("avr-gcc not on PATH: run in the dev image")
+    stage = tmp_path / "stage"
+    stage_bundle(stage)
+    elf = tmp_path / "fw-atmega328p.elf"
+    build_firmware(stage, elf, "atmega328p")
+    harness = build_harness(tmp_path / "r2s_simavr")
+    proc = subprocess.Popen(
+        [harness, "--mcu", "atmega328p", "--firmware", str(elf), "--run-ms", "60000"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        pty = None
+        for line in proc.stdout:
+            if line.startswith("r2s_simavr: pty="):
+                pty = line.split("=", 1)[1].strip()
+                break
+        assert pty is not None, "the harness announced no pty"
+        lines = read_until_done(pty, time.monotonic() + 90)
+    finally:
+        proc.terminate()
+        proc.wait(timeout=30)
+    assert "BM DONE" in lines, lines[-5:]
+    seen = {}
+    for line in lines:
+        if not line.startswith("BM ") or line == "BM DONE":
+            continue
+        _, name, numbers = line.split(" ", 2)
+        fields = dict(part.split("=") for part in numbers.split(" "))
+        seen[name] = {key: int(value) for key, value in fields.items()}
+    assert sorted(seen) == sorted(CYCLE_CASES), sorted(seen)
+    for name, type_name in CYCLE_CASES.items():
+        length = sizes.packed_size(type_name, cycle_message(type_name), True)
+        assert seen[name]["len"] == length, name
+        assert seen[name]["enc"] <= CYCLE_BUDGET_PER_BYTE * length, name
+        assert seen[name]["dec"] <= CYCLE_BUDGET_PER_BYTE * length, name
