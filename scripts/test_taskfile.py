@@ -139,13 +139,37 @@ def fixture(tmp_path):
     return repo
 
 
+# Scopes the ambient environment may set: a sharded CI job or an
+# explicit `make test SCRIPTS=1` exports its scope, and the fixture tasks
+# would inherit it on top of their own and record it too. Callers pass a
+# deliberate scope through env_extra instead.
+LEAKY_VARS = (
+    "LINT",
+    "SCRIPTS",
+    "COMMITS",
+    "CORE",
+    "GEN",
+    "BRIDGE",
+    "CPP",
+    "E2E",
+    "COVERAGE",
+    "DOCS",
+    "EXAMPLES",
+    "BUDGETS",
+    "FUZZ",
+    "README",
+    "NIGHTLY",
+    "SOAK",
+    "R2S_FULL",
+    "R2S_SUITE",
+)
+
+
 def run_task(repo, *args, env_extra=None):
     log = repo / "ran.log"
-    env = {
-        **os.environ,
-        "R2S_TASK_LOG": str(log),
-        **(env_extra or {}),
-    }
+    env = {key: value for key, value in os.environ.items() if key not in LEAKY_VARS}
+    env["R2S_TASK_LOG"] = str(log)
+    env.update(env_extra or {})
     proc = subprocess.run(
         ["task", "--concurrency", "1", *args],
         cwd=repo,
