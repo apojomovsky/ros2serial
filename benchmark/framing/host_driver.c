@@ -6,6 +6,7 @@
 
 #include "bm_api.h"
 #include "bm_cobs.h"
+#include "bm_crc_table.h"
 #include "bm_rs.h"
 #include "bm_slip.h"
 #include "r2s/r2s_crc.h"
@@ -201,6 +202,16 @@ int main(int argc, char **argv)
 {
     static uint8_t input[BM_WIRE_CAP];
     uint16_t in_len;
+    if (strcmp(argv[1], "crc") == 0 && (argc == 3 || argc == 4)) {
+        const char *hex = (argc == 4) ? argv[3] : argv[2];
+        uint16_t crc_len = unhex(hex, input, sizeof input);
+        if (crc_len == 0xFFFFu) {
+            fprintf(stderr, "bad hex input\n");
+            return 2;
+        }
+        printf("%04x\n", bm_crc16_table_update_buf(R2S_CRC16_INIT, input, crc_len));
+        return 0;
+    }
     if (argc != 4) {
         fprintf(stderr, "usage: host_driver <encode|decode|scan> <framer> <hex>\n");
         return 2;

@@ -152,10 +152,18 @@ def driver(tmp_path_factory):
 
 
 def run_driver(driver, op, framer, data):
-    proc = subprocess.run(
-        [driver, op, framer, bytes(data).hex()], capture_output=True, text=True, check=True
-    )
+    proc = subprocess.run([driver, op, framer, bytes(data).hex()], capture_output=True, text=True, check=True)
     return proc.stdout.splitlines()
+
+
+def test_c_table_crc_matches_bitwise(driver, payloads):
+    for payload in payloads.values():
+        raw = raw_frame(0x01, payload)
+        expected = f"{models.crc16_mcrf4xx_bitwise(raw):04x}"
+        proc = subprocess.run([driver, "crc", "table", bytes(raw).hex()], capture_output=True, text=True, check=True)
+        assert proc.stdout.splitlines() == [expected]
+    proc = subprocess.run([driver, "crc", "table", b"123456789".hex()], capture_output=True, text=True, check=True)
+    assert proc.stdout.splitlines() == ["6f91"]
 
 
 def test_crc_check_value_matches_the_spec():
@@ -202,12 +210,8 @@ def test_cobs_hand_vectors():
 def test_slip_hand_vectors():
     assert models.slip_encode(bytes((0xC0,))) == bytes((0xDB, 0xDC, 0xC0))
     assert models.slip_encode(bytes((0xDB,))) == bytes((0xDB, 0xDD, 0xC0))
-    assert models.slip_encode(bytes((0xC0, 0xDB, 0x00, 0x11))) == bytes(
-        (0xDB, 0xDC, 0xDB, 0xDD, 0x00, 0x11, 0xC0)
-    )
-    assert models.slip_decode(bytes((0xDB, 0xDC, 0xDB, 0xDD, 0x00, 0x11))) == bytes(
-        (0xC0, 0xDB, 0x00, 0x11)
-    )
+    assert models.slip_encode(bytes((0xC0, 0xDB, 0x00, 0x11))) == bytes((0xDB, 0xDC, 0xDB, 0xDD, 0x00, 0x11, 0xC0))
+    assert models.slip_decode(bytes((0xDB, 0xDC, 0xDB, 0xDD, 0x00, 0x11))) == bytes((0xC0, 0xDB, 0x00, 0x11))
     with pytest.raises(ValueError):
         models.slip_decode(bytes((0xDB,)))
     with pytest.raises(ValueError):
@@ -310,9 +314,7 @@ def test_c_decode_matches_the_model(driver, payloads):
     for framer in ("rcobs", "cobs", "slip"):
         for seq, payload in enumerate(payloads.values()):
             wire = model_wire(framer, seq, payload)
-            assert run_driver(driver, "decode", framer, wire[:-1]) == [
-                model_decode_line(framer, wire[:-1])
-            ]
+            assert run_driver(driver, "decode", framer, wire[:-1]) == [model_decode_line(framer, wire[:-1])]
     assert run_driver(driver, "decode", "rcobs", bytes((0x11, 0xFF))) == ["ERR"]
     assert run_driver(driver, "decode", "cobs", bytes((0xFF,))) == ["ERR"]
     assert run_driver(driver, "decode", "slip", bytes((0xDB,))) == ["ERR"]
@@ -350,22 +352,27 @@ def test_benchmark_firmware_builds_for_mcu(tmp_path, mcu):
     firmware = FRAMING / "fw_bench.c"
     assert firmware.exists(), "missing fw_bench.c"
     exe = tmp_path / f"fw-{mcu}.elf"
-    command = [
-        "avr-gcc",
-        f"-mmcu={mcu}",
-        "-DF_CPU=16000000UL",
-        "-Os",
-        "-std=c99",
-        "-Wall",
-        "-Wextra",
-        "-Werror",
-        "-DBM_FRAMER=0",
-        f"-I{FRAMING}",
-        f"-I{ROOT / 'core' / 'include'}",
-        str(firmware),
-        str(ROOT / "core" / "src" / "rcobs.c"),
-        str(ROOT / "core" / "src" / "crc.c"),
-        "-o",
-        str(exe),
-    ]
+    command = (
+        [
+            "avr-gcc",
+            f"-mmcu={mcu}",
+            "-DF_CPU=16000000UL",
+            "-Os",
+            "-std=c99",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-Wl,--gc-sections",
+            "-DBM_FRAMER=0",
+            "-DBM_CRC_TABLE=0",
+            f"-I{FRAMING}",
+            f"-I{ROOT / 'core' / 'include'}",
+            str(firmware),
+        ]
+        + [str(FRAMING / s) for s in ("bm_cobs.c", "bm_slip.c", "bm_rs.c", "bm_crc_table.c")]
+        + [str(ROOT / "core" / "src" / s) for s in ("rcobs.c", "crc.c")]
+        + ["-o", str(exe)]
+    )
     subprocess.run(command, capture_output=True, text=True, check=True)

@@ -21,7 +21,7 @@ uint16_t bm_rs_encode(uint16_t topic, uint8_t seq, const uint8_t *payload, uint1
 /* Finds the first frame at or after stream. On success returns 1 and sets
  * topic, seq, payload, payload_len and consumed, the frame's end offset
  * from stream. Returns 0 when no frame starts in the stream. */
-int bm_rs_find(const uint8_t *stream, uint16_t len, uint16_t *topic, uint8_t *seq,
-               const uint8_t **payload, uint16_t *payload_len, uint16_t *consumed);
+int bm_rs_find(const uint8_t *stream, uint16_t len, uint16_t *topic, uint8_t *seq, const uint8_t **payload,
+               uint16_t *payload_len, uint16_t *consumed);
 
 #endif

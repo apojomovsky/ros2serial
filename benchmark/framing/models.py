@@ -177,9 +177,7 @@ def rs_encode(topic: int, seq: int, payload: bytes) -> bytes:
     length_check = (-(length & 0xFF) - ((length >> 8) & 0xFF)) & 0xFF
     message_check = (-sum(body)) & 0xFF
     return (
-        bytes((RS_SYNC, RS_VERSION, length & 0xFF, (length >> 8) & 0xFF, length_check))
-        + body
-        + bytes((message_check,))
+        bytes((RS_SYNC, RS_VERSION, length & 0xFF, (length >> 8) & 0xFF, length_check)) + body + bytes((message_check,))
     )
 
 
