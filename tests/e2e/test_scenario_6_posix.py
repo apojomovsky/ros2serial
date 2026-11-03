@@ -112,21 +112,6 @@ def _wait_link_ready(node, received, since):
         rclpy.spin_once(node, timeout_sec=0.5)
 
 
-def _wait_connected(node, received, since, budget, what):
-    """Spin until every handshake topic reads ok, within budget of since.
-
-    The report is read before spinning, so the time kept is the arrival
-    of the completing report, never a spin quantum later.
-    """
-    while True:
-        missing = checks.handshake_missing(received[-1], HANDSHAKE_TOPICS) if received else ["link silent"]
-        took = time.monotonic() - since
-        if not missing:
-            return took
-        assert took < budget, f"{what} still missing {missing} after {took:.1f} s"
-        rclpy.spin_once(node, timeout_sec=0.5)
-
-
 def _boot_wait_s(node):
     """The bridge's boot_wait_ms parameter in seconds, read off the node.
 
@@ -174,7 +159,14 @@ class TestScenario6(unittest.TestCase):
             # starts, so it waits on the generous timeout and the 3 s
             # budget runs from the later of the ready line and its end.
             link_ready_at = _wait_link_ready(node, received, _SPAWNED.ready_at)
-            took = _wait_connected(node, received, link_ready_at, TOPIC_BUDGET, "handshake")
+            took = checks.wait_for_handshake(
+                received,
+                HANDSHAKE_TOPICS,
+                link_ready_at,
+                TOPIC_BUDGET,
+                "handshake",
+                lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
+            )
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
             # Discovery starts when the bridge creates its endpoints at the
             # handshake, so the generous timeout runs from there, not from
@@ -215,7 +207,14 @@ class TestScenario6(unittest.TestCase):
             os.symlink(_RELAY.host_port, _LINK)
             _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
             reconnect_budget = _boot_wait_s(node) + TOPIC_BUDGET
-            took = _wait_connected(node, received, _SPAWNED.ready_at, reconnect_budget, "reconnect")
+            took = checks.wait_for_handshake(
+                received,
+                HANDSHAKE_TOPICS,
+                _SPAWNED.ready_at,
+                reconnect_budget,
+                "reconnect",
+                lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
+            )
             self.assertLessEqual(took, reconnect_budget, "reconnect took longer than boot wait plus 3 s")
             final = _connected_values(received[-1])
             self.assertEqual(final.get("resets"), "0", "a clean replug is not an MCU reset")

@@ -89,21 +89,6 @@ def _wait_link_ready(node, received, since):
         rclpy.spin_once(node, timeout_sec=0.2)
 
 
-def _wait_connected(node, received, since, budget, what):
-    """Spin until every handshake topic reads ok, within budget of since.
-
-    The report is read before spinning, so the time kept is the arrival
-    of the completing report, never a spin quantum later.
-    """
-    while True:
-        missing = checks.handshake_missing(received[-1], HANDSHAKE_TOPICS) if received else ["link silent"]
-        took = time.monotonic() - since
-        if not missing:
-            return took
-        assert took < budget, f"{what} still missing {missing} after {took:.1f} s"
-        rclpy.spin_once(node, timeout_sec=0.2)
-
-
 class TestScenario7(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -132,7 +117,14 @@ class TestScenario7(unittest.TestCase):
             # starts, so it waits on the generous timeout and the 3 s
             # budget runs from the later of the ready line and its end.
             link_ready_at = _wait_link_ready(node, received, _SPAWNED.ready_at)
-            took = _wait_connected(node, received, link_ready_at, TOPIC_BUDGET, "handshake")
+            took = checks.wait_for_handshake(
+                received,
+                HANDSHAKE_TOPICS,
+                link_ready_at,
+                TOPIC_BUDGET,
+                "handshake",
+                lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
+            )
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
             # Discovery starts when the bridge creates its endpoints at the
             # handshake, so the generous timeout runs from there, not from
@@ -173,8 +165,9 @@ class TestScenario7(unittest.TestCase):
             detected_at = time.monotonic()
             # Re-handshake: the identical table keeps the endpoints, so the
             # battery publisher is present at every sample, never recreated.
+            # The latest report is read before spinning, so the time kept
+            # is the arrival of the completing report, never a spin later.
             while True:
-                rclpy.spin_once(node, timeout_sec=0.2)
                 self.assertTrue(
                     node.get_publishers_info_by_topic("/battery"),
                     "battery publisher lost across the reset handshake",
@@ -184,6 +177,7 @@ class TestScenario7(unittest.TestCase):
                 if not missing:
                     break
                 self.assertLess(took, REHANDSHAKE_BUDGET, f"re-handshake missing {missing} after {took:.1f} s")
+                rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN)
             self.assertLessEqual(took, REHANDSHAKE_BUDGET, "re-handshake took longer than 3 s")
             after = {value.key: value.value for value in received[-1].status[0].values}
             self.assertEqual(after.get("resets"), "1", "the reset was never counted")
