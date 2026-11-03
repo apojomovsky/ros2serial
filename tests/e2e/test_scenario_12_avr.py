@@ -22,8 +22,7 @@ from e2e_support import avr as avr_support
 from e2e_support import bridge as bridge_support
 from e2e_support import checks, teardown
 from rclpy.qos import QoSProfile, ReliabilityPolicy
-from std_msgs.msg import Float32
-from std_msgs.msg import String
+from std_msgs.msg import Float32, String
 
 # covers: FRM-5, FRM-15
 
