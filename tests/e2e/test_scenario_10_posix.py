@@ -42,6 +42,14 @@ FLOW_FLOOR = int(RATE_HZ * FAULT_WINDOW_S * 0.5)
 # DDS-side best-effort losses on top of the wire gaps, scenario 2 style.
 ROS_SLACK = 5
 CLEAN_SLACK = 2
+# In-flight frames land within a fraction of this after the faults stop,
+# so the loss slice ending past the drain holds every boundary gap.
+DRAIN_S = 1.0
+# Frames in flight when the faults turn on straddle the enable: published
+# clean but dropped faulty. The slice starts this many arrivals early so
+# it holds them; earlier flow is fault-free, so the cover arrivals are
+# all present and leave the span count exact.
+HEAD_COVER = 10
 
 _SCRATCH = None
 _FIRMWARE = None
@@ -156,13 +164,27 @@ class TestScenario10(unittest.TestCase):
             base_counts = _PROXY.counts()
             base_values = _connected_values(_fresh_message(node, received, seen))
             seen = len(received)
-            fault_start = len(battery)
+            fault_start = max(0, len(battery) - HEAD_COVER)
             _PROXY.set_faults(corrupt_rate=CORRUPT_RATE, seed=SEED)
             window_end = time.monotonic() + FAULT_WINDOW_S
             while time.monotonic() < window_end:
                 rclpy.spin_once(node, timeout_sec=0.5)
-            fault_end = len(battery)
             _PROXY.set_faults()
+            # A gap counts at the bridge when its revealing frame arrives,
+            # which can lag the window end through the proxy, the bridge
+            # and DDS. The slice ends past the proxy's first post-fault
+            # flush, which the frame counter proves, and past a drain for
+            # the lag, so every boundary gap and its revealing frame are
+            # inside the slice.
+            flushed = _PROXY.counts()["mcu_to_host"].frames
+            deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
+            while _PROXY.counts()["mcu_to_host"].frames <= flushed:
+                rclpy.spin_once(node, timeout_sec=0.5)
+                self.assertLess(time.monotonic(), deadline, "proxy never flushed past the faults")
+            drain_end = time.monotonic() + DRAIN_S
+            while time.monotonic() < drain_end:
+                rclpy.spin_once(node, timeout_sec=0.5)
+            fault_end = len(battery)
             disabled_at = time.monotonic()
             settled = None
             clean_end = disabled_at + CLEAN_WINDOW_S
