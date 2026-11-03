@@ -21,8 +21,11 @@ from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
 from e2e_support import checks, firmware, teardown
 from e2e_support.relay import PtyRelay
+from rcl_interfaces.msg import Log
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32
+
+# covers: ERR-3, ERR-6
 
 WINDOW_S = 10.0
 TX_FREE = "16"
@@ -128,6 +131,8 @@ class TestScenario12(unittest.TestCase):
             best_effort = QoSProfile(depth=100, reliability=ReliabilityPolicy.BEST_EFFORT)
             values = []
             node.create_subscription(Float32, "battery", lambda msg: values.append(msg.data), best_effort)
+            rosout = []
+            node.create_subscription(Log, "/rosout", rosout.append, best_effort)
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
             while not values:
                 rclpy.spin_once(node, timeout_sec=0.5)
@@ -150,5 +155,16 @@ class TestScenario12(unittest.TestCase):
             self.assertGreater(busy, 0, "no publish returned TX_BUSY on a saturated link")
             gaps = {value.key: value.value for value in received[-1].status[0].values}
             self.assertEqual(gaps.get("topic battery seq gaps"), "0", "shed samples took a seq")
+            reports = [
+                entry.msg
+                for entry in rosout
+                if entry.name == "r2s_bridge.mcu" and "error report" in entry.msg and "code 6" in entry.msg
+            ]
+            self.assertGreater(len(reports), 0, "no busy report reached the bridge")
+            self.assertLessEqual(
+                len(reports),
+                WINDOW_S + 5,
+                f"busy reports {len(reports)} exceed the once-per-second limit over {WINDOW_S} s",
+            )
         finally:
             node.destroy_node()
