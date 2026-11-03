@@ -27,7 +27,7 @@ permissions:
 # Master runs force their sections: the landed tree is fully validated and
 # its checksums saved. Pull requests run the stale tasks only.
 env:
-  R2S_FULL: ${{ github.event_name == 'pull_request' && '' || '1' }}
+  R2S_FULL: ${{ github.event_name != 'pull_request' && '1' || '' }}
 
 concurrency:
   group: ci-${{ github.ref }}

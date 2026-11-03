@@ -121,6 +121,36 @@ def running_jobs(event, outputs):
     return sorted(name for name, job in jobs.items() if "if" not in job or runs(job["if"], event, outputs))
 
 
+def github_value(operand, event):
+    operand = operand.strip()
+    for op in ("==", "!="):
+        if op in operand:
+            left, right = operand.split(op, 1)
+            left = resolve(left, event, {})
+            right = resolve(right, event, {})
+            return (left == right) == (op == "==")
+    return resolve(operand, event, {})
+
+
+def eval_env(expr, event):
+    expr = str(expr).removeprefix("${{").removesuffix("}}").strip()
+    for branch in expr.split("||"):
+        value = True
+        for operand in branch.split("&&"):
+            got = github_value(operand, event)
+            if got in (False, ""):
+                value = False
+                break
+            value = got
+        if value not in (False, ""):
+            return "" if value is True else value
+    return ""
+
+
+def workflow_env(event):
+    return {key: eval_env(value, event) for key, value in workflow().get("env", {}).items()}
+
+
 def plan_steps():
     return workflow()["jobs"]["plan"]["steps"]
 
@@ -320,3 +350,12 @@ def test_workflow_dispatch_runs_every_job(tmp_path):
     repo = test_taskfile.fixture(tmp_path)
     test_taskfile.run_task(repo)
     assert selected_jobs(repo, tmp_path, event="workflow_dispatch") == sorted(workflow()["jobs"])
+
+
+def test_pull_requests_do_not_force_the_suite():
+    assert workflow_env("pull_request").get("R2S_FULL", "") == ""
+
+
+def test_master_runs_force_the_suite():
+    for event in ("push", "schedule", "workflow_dispatch"):
+        assert workflow_env(event).get("R2S_FULL") == "1", event
