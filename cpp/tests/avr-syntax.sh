@@ -96,18 +96,30 @@ class Echo
 Echo echo;
 ros::Subscriber<geometry_msgs::Twist, Echo> echo_sub("echo_vel", &Echo::on_twist, &echo);
 ros::NodeHandle_<ros::ArduinoHardware, 1, 1, 64, 64> nh_small;
+ros::Time stamp;
+ros::Duration timeout(1, 0);
 void setup()
 {
     nh.initNode();
     nh.advertise(battery_pub);
     nh.subscribe(cmd_vel_sub);
     nh.subscribe(echo_sub);
+    nh.setSpinTimeout(100u);
+    (void)nh.getHardware();
 }
 void loop()
 {
     battery.data = 1.0f;
     battery_pub.publish(&battery);
-    nh.spinOnce();
+    (void)nh.spinOnce();
+    (void)nh.connected();
+    stamp = nh.now();
+    stamp += timeout;
+    nh.logdebug("dbg");
+    nh.loginfo("inf");
+    nh.logwarn("wrn");
+    nh.logerror("err");
+    nh.logfatal("ftl");
 }
 EOF
 sources+=("$build/check_ros_sketch.cpp")
@@ -129,6 +141,10 @@ class HardwareSerial : public Stream
     }
 };
 extern HardwareSerial Serial;
+// The flash-string helper and macro the core's F() sketches use, spelled
+// the way WString.h spells them, so the log overloads below resolve.
+class __FlashStringHelper;
+#define F(s) (reinterpret_cast<const __FlashStringHelper *>(s))
 #endif
 EOF
 cat >"$build/check_ros_arduino.cpp" <<'EOF'
@@ -142,11 +158,13 @@ void setup()
 {
     nh.initNode();
     nh.advertise(battery_pub);
+    nh.loginfo(F("boot"));
 }
 void loop()
 {
     battery_pub.publish(&battery);
     nh.spinOnce();
+    nh.loginfo(F("loop"));
 }
 EOF
 

@@ -191,7 +191,7 @@ def _install_stubs():
     firmware.spawn = spawn
 
     avr = types.ModuleType("e2e_support.avr")
-    avr.spawn = lambda board="uno": types.SimpleNamespace(pty="/dev/fake", ready_at=None)
+    avr.spawn = lambda board="uno": types.SimpleNamespace(pty="/dev/fake", ready_at=None, stop=lambda: 0)
 
     relay = types.ModuleType("e2e_support.relay")
     relay.PtyRelay = type("PtyRelay", (), {})

@@ -5,8 +5,8 @@ gives the call edges from rcall targets. The core allows no recursion and no
 indirect calls (the zone check enforces both), so the deepest path from an
 entry is the static worst case. Functions without .su data (precompiled
 Arduino core, libc) count as zero and are listed as unknown; dynamic frames
-are listed, not summed. Measured stack painting in simavr (P7) will stand
-next to this figure.
+are listed, not summed. The measured table below stands the painted simavr
+peak next to this figure; it is report-only and never judged.
 """
 
 import argparse
@@ -189,6 +189,16 @@ def _run(tool: str, *args: str) -> str:
     return proc.stdout
 
 
+def static_worst(elf: str, su_root: Path) -> dict:
+    """The worst static stack for one ELF with .su files under su_root."""
+    sizes: dict = {}
+    for path in sorted(su_root.rglob("*.su")):
+        sizes.update(parse_su(path.read_text(encoding="utf-8")))
+    if not sizes:
+        raise StackError(f"no .su files under {su_root}")
+    return worst_stack(sizes, parse_calls(_run(OBJDUMP, "-d", elf)), ["main"])
+
+
 def _stack_source(build_dir: Path, key: str) -> Path:
     """The ELF whose frames the stack number is computed from.
 
@@ -246,6 +256,26 @@ def check_stacks(stacks: dict, budgets: dict) -> list:
         if worst.get("total", 0) > limits["stack"]:
             problems.append(f"{name}: stack {worst['total']} exceeds budget {limits['stack']}")
     return problems
+
+
+STATIC_HEADER = "static stack (non-LTO -fstack-usage rebuild)"
+MEASURED_HEADER = "measured stack (shipped LTO firmware)"
+
+
+def measured_table(statics: dict, measured: dict) -> str:
+    """A report-only table: painted peaks next to the static worst case.
+
+    The headers name which binary each column comes from, since the static
+    figure is computed from a non-LTO rebuild while the peak is painted on
+    the shipped firmware. Firmware with no measurement reads n/a; nothing
+    here is ever judged, so a missing peak warns but never fails.
+    """
+    rows = [f"| firmware | {STATIC_HEADER} | {MEASURED_HEADER} |", "| --- | --- | --- |"]
+    for name in sorted(set(statics) | set(measured)):
+        static = str(statics[name]) if name in statics else "n/a"
+        peak = str(measured[name]) if name in measured else "n/a"
+        rows.append(f"| {name} | {static} | {peak} |")
+    return "\n".join(rows) + "\n"
 
 
 def markdown_table(stacks: dict, budgets: dict, base: dict | None = None) -> str:
