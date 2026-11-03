@@ -103,7 +103,7 @@ class TestSoak(unittest.TestCase):
             while not received:
                 rclpy.spin_once(node, timeout_sec=0.5)
                 self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
-            _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", str(RATE_HZ), "--no-log-text"))
+            _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", str(RATE_HZ)))
             seen = len(received)
             while True:
                 values = _fresh_values(node, received, seen)
