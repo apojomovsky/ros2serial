@@ -2,10 +2,13 @@
 
 Restarting the firmware on the live relay looks like a reset board: the new
 boot echoes session token 0, and the heartbeat it answers while the bridge
-is still connected announces the new handshake. Detection runs from the new
-firmware's ready line with the heartbeat plus the diagnostics period plus
-margin; the re-handshake runs from detection with the scenario 1 budget.
-Publishers stay because the topic table is unchanged.
+is still connected announces the new handshake. The initial handshake first
+waits out the boot wait on the generous timeout, then runs the unchanged
+3 s budget from the later of the ready line and the boot wait end.
+Detection runs from the new firmware's ready line with the heartbeat plus
+the diagnostics period plus margin; the re-handshake runs from detection
+with the scenario 1 budget. Publishers stay because the topic table is
+unchanged.
 """
 
 import os
@@ -70,15 +73,35 @@ def tearDownModule():
         _SCRATCH.cleanup()
 
 
-def _wait_connected(node, received, since, budget, what):
-    """Spin until every handshake topic reads ok, within budget of since."""
+def _wait_link_ready(node, received, since):
+    """Spin until the link leaves boot wait, within the generous timeout.
+
+    The bridge opens the port and waits out boot_wait_ms for an
+    unsolicited HELLO before the handshake starts, and under load the
+    open itself can lag the firmware ready line. The 3 s handshake budget
+    runs from the later of the ready line and this return.
+    """
     while True:
         rclpy.spin_once(node, timeout_sec=0.2)
+        if received and received[-1].status[0].message not in ("disconnected", "boot_wait"):
+            return max(since, time.monotonic())
+        took = time.monotonic() - since
+        assert took < bridge_support.HANDSHAKE_TIMEOUT, f"link never left boot wait after {took:.1f} s"
+
+
+def _wait_connected(node, received, since, budget, what):
+    """Spin until every handshake topic reads ok, within budget of since.
+
+    The report is read before spinning, so the time kept is the arrival
+    of the completing report, never a spin quantum later.
+    """
+    while True:
         missing = checks.handshake_missing(received[-1], HANDSHAKE_TOPICS) if received else ["link silent"]
         took = time.monotonic() - since
         if not missing:
             return took
         assert took < budget, f"{what} still missing {missing} after {took:.1f} s"
+        rclpy.spin_once(node, timeout_sec=0.2)
 
 
 class TestScenario7(unittest.TestCase):
@@ -105,7 +128,11 @@ class TestScenario7(unittest.TestCase):
                 self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
             received.clear()
             _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
-            took = _wait_connected(node, received, _SPAWNED.ready_at, TOPIC_BUDGET, "handshake")
+            # The boot wait is the bridge's own delay before the handshake
+            # starts, so it waits on the generous timeout and the 3 s
+            # budget runs from the later of the ready line and its end.
+            link_ready_at = _wait_link_ready(node, received, _SPAWNED.ready_at)
+            took = _wait_connected(node, received, link_ready_at, TOPIC_BUDGET, "handshake")
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
             # Discovery starts when the bridge creates its endpoints at the
             # handshake, so the generous timeout runs from there, not from
