@@ -20,12 +20,40 @@ import yaml
 
 AVRSIZE = os.environ.get("R2S_AVR_SIZE", "avr-size")
 AVRNM = os.environ.get("R2S_AVR_NM", "avr-nm")
-XTENSASIZE = os.environ.get("R2S_XTENSA_SIZE", "xtensa-esp32-elf-size")
-XTENSANM = os.environ.get("R2S_XTENSA_NM", "xtensa-esp32-elf-nm")
 
 # The Xtensa machine number: ESP32 firmware measures with the Xtensa tools,
 # every other (or unreadable) ELF with the AVR ones.
 EM_XTENSA = 0x5E
+
+
+def _arduino_data_dir() -> Path:
+    """Where the ESP32 core lives: the scratch directory the example build
+    manages, defaulting under the shared cache like the build script."""
+    cache = os.environ.get("R2S_CACHE_DIR", os.path.join(os.path.expanduser("~"), ".cache", "ros2serial"))
+    return Path(os.environ.get("R2S_ARDUINO_DATA_DIR", os.path.join(cache, "arduino-esp32")))
+
+
+def _xtensa_tool(filename: str, override_var: str) -> str:
+    """The Xtensa binutil for the installed core: an explicit override wins,
+    then the core's own toolchain, then the bare name, which fails loudly
+    when no toolchain is installed."""
+    override = os.environ.get(override_var)
+    if override:
+        return override
+    matches = sorted(_arduino_data_dir().rglob(filename))
+    if matches:
+        return str(matches[0])
+    return filename
+
+
+def xtensa_size() -> str:
+    """The size tool for ESP32 firmware (see _xtensa_tool)."""
+    return _xtensa_tool("xtensa-esp32-elf-size", "R2S_XTENSA_SIZE")
+
+
+def xtensa_nm() -> str:
+    """The nm tool for ESP32 firmware (see _xtensa_tool)."""
+    return _xtensa_tool("xtensa-esp32-elf-nm", "R2S_XTENSA_NM")
 
 
 def elf_machine(path) -> int | None:
@@ -101,11 +129,11 @@ def measure(build_dir: Path) -> dict:
     for elf in sorted(elfs):
         name = elf.relative_to(build_dir).as_posix()
         if elf_machine(elf) == EM_XTENSA:
-            sizes = parse_avr_size(_run(XTENSASIZE, str(elf)))
-            symbols = parse_nm_sizes(_run(XTENSANM, "--print-size", str(elf)))
+            size_tool, nm_tool = xtensa_size(), xtensa_nm()
         else:
-            sizes = parse_avr_size(_run(AVRSIZE, str(elf)))
-            symbols = parse_nm_sizes(_run(AVRNM, "--print-size", str(elf)))
+            size_tool, nm_tool = AVRSIZE, AVRNM
+        sizes = parse_avr_size(_run(size_tool, str(elf)))
+        symbols = parse_nm_sizes(_run(nm_tool, "--print-size", str(elf)))
         if "r2s_runtime_topics" in symbols:
             sizes["topics_bytes"] = symbols["r2s_runtime_topics"]
         measurements[name] = sizes

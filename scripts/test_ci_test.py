@@ -166,13 +166,17 @@ def stub_toolbox(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     (path / "cmake").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     # The stubbed core install plants a stub Xtensa toolchain where the real
-    # install would put it, so the build finds its binutils on PATH.
+    # install would put it, so the build finds its binutils. The size tool
+    # only needs to exist: the stubbed compiles produce no firmware for the
+    # budgets step to measure.
     (path / "arduino-cli").write_text(
         "#!/usr/bin/env bash\n"
         'if [ "${1:-}" = core ] && [ "${2:-}" = install ]; then\n'
         '    bindir="$ARDUINO_DIRECTORIES_DATA/packages/esp32/tools/xtensa-esp32-elf-gcc/0.0.0/bin"\n'
         '    mkdir -p "$bindir"\n'
         '    ln -sf "$(command -v xtensa-esp32-elf-nm)" "$bindir/xtensa-esp32-elf-nm"\n'
+        '    printf "#!/usr/bin/env bash\\nexit 0\\n" > "$bindir/xtensa-esp32-elf-size"\n'
+        '    chmod +x "$bindir/xtensa-esp32-elf-size"\n'
         "fi\n"
         "exit 0\n",
         encoding="utf-8",

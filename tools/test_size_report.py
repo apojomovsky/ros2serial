@@ -93,7 +93,15 @@ def fake_run(calls):
     return run
 
 
+def empty_data_dir(tmp_path, monkeypatch):
+    data = tmp_path / "arduino-data"
+    data.mkdir()
+    monkeypatch.setenv("R2S_ARDUINO_DATA_DIR", str(data))
+    return data
+
+
 def test_measure_uses_the_xtensa_tools_for_xtensa_firmware(tmp_path, monkeypatch):
+    empty_data_dir(tmp_path, monkeypatch)
     firmware = tmp_path / "arduino_minimal" / "esp32" / "arduino_minimal.ino.elf"
     firmware.parent.mkdir(parents=True)
     firmware.write_bytes(elf_bytes(0x5E))
@@ -106,6 +114,7 @@ def test_measure_uses_the_xtensa_tools_for_xtensa_firmware(tmp_path, monkeypatch
 
 
 def test_measure_keeps_the_avr_tools_for_avr_firmware(tmp_path, monkeypatch):
+    empty_data_dir(tmp_path, monkeypatch)
     firmware = tmp_path / "arduino_minimal" / "uno" / "arduino_minimal.ino.elf"
     firmware.parent.mkdir(parents=True)
     firmware.write_bytes(elf_bytes(83))
@@ -117,6 +126,7 @@ def test_measure_keeps_the_avr_tools_for_avr_firmware(tmp_path, monkeypatch):
 
 
 def test_measure_keeps_the_avr_tools_when_the_machine_is_unknown(tmp_path, monkeypatch):
+    empty_data_dir(tmp_path, monkeypatch)
     firmware = tmp_path / "stubbed" / "uno" / "stubbed.ino.elf"
     firmware.parent.mkdir(parents=True)
     firmware.write_bytes(b"")
@@ -125,3 +135,25 @@ def test_measure_keeps_the_avr_tools_when_the_machine_is_unknown(tmp_path, monke
     size_report.measure(tmp_path)
     assert "avr-size" in calls
     assert "xtensa-esp32-elf-size" not in calls
+
+
+def test_xtensa_tools_resolve_into_the_installed_core(tmp_path, monkeypatch):
+    data = empty_data_dir(tmp_path, monkeypatch)
+    tool = data / "packages" / "esp32" / "tools" / "esp-x32" / "2601" / "bin" / "xtensa-esp32-elf-size"
+    tool.parent.mkdir(parents=True)
+    tool.write_bytes(b"")
+    assert size_report.xtensa_size() == str(tool)
+
+
+def test_xtensa_tools_fall_back_to_the_bare_name(tmp_path, monkeypatch):
+    empty_data_dir(tmp_path, monkeypatch)
+    assert size_report.xtensa_size() == "xtensa-esp32-elf-size"
+    assert size_report.xtensa_nm() == "xtensa-esp32-elf-nm"
+
+
+def test_xtensa_tool_overrides_win(tmp_path, monkeypatch):
+    empty_data_dir(tmp_path, monkeypatch)
+    monkeypatch.setenv("R2S_XTENSA_SIZE", "custom-size")
+    monkeypatch.setenv("R2S_XTENSA_NM", "custom-nm")
+    assert size_report.xtensa_size() == "custom-size"
+    assert size_report.xtensa_nm() == "custom-nm"
