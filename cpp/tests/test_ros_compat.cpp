@@ -265,6 +265,42 @@ void test_ros_member_function_subscriber_dispatches_to_the_object(void)
     TEST_ASSERT_EQUAL_MEMORY(&sent, &echo.m_got, sizeof sent);
 }
 
+/* A member-function string subscriber for the bounds case. */
+class StringEcho
+{
+  public:
+    void on_string(const std_msgs::String &msg)
+    {
+        (void)msg;
+        m_calls++;
+    }
+    uint8_t m_calls = 0u;
+};
+
+/* covers: ERR-4 */
+void test_ros_member_dispatch_reports_a_bound_violation_with_its_field(void)
+{
+    ros::NodeHandle nh;
+    StringEcho echo;
+    ros::Subscriber<std_msgs::String, StringEcho> log_text_sub("log_text", &StringEcho::on_string, &echo);
+    /* Seventeen characters against the bundled bound of sixteen. */
+    const uint8_t overlong[] = {0x11u, '1', '2', '3', '4', '5', '6', '7', '8',
+                                '9',   'a', 'b', 'c', 'd', 'e', 'f', 'g'};
+    /* code 1, the subscribed topic, one occurrence, field 0. */
+    const uint8_t report[] = {0x01u, 16u, 0x01u, 0x00u, 0x00u};
+
+    echo.m_calls = 0u;
+    nh.initNode();
+    TEST_ASSERT_TRUE(nh.subscribe(log_text_sub));
+    nh.spinOnce();
+    handshake(1u);
+    fake_port_tx_clear();
+    feed_host(16u, 0u, overlong, sizeof overlong);
+    TEST_ASSERT_EQUAL_UINT8(0, echo.m_calls);
+    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    assert_tx(0, 5u, 0u, report, sizeof report);
+}
+
 /* covers: ERR-4 */
 void test_ros_dispatch_reports_a_bound_violation_with_its_field(void)
 {
