@@ -84,6 +84,7 @@ def test_the_sdist_carries_the_cpp_tree_inside_its_staging_dir(tmp_path):
     assert not (work / "gen" / "cpp").exists()
     with tarfile.open(tarball) as archive:
         names = archive.getnames()
+    assert not any(".." in entry for entry in names)
     for name in (
         "include/r2s/runtime.hpp",
         "include/r2s_bundled.h",
