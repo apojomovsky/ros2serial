@@ -551,5 +551,17 @@ TEST(TermiosTransport, ReportsAnUnknownWriteErrnoAsAnError)
     EXPECT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{0, IoStatus::kError}));
 }
 
+TEST(TermiosTransport, ReportsABrokenPipeWriteAsClosed)
+{
+    Pty pty;
+    FaultySyscalls syscalls;
+    syscalls.writes.emplace_back(-1, EPIPE);
+    TermiosTransport transport(OptionsFor(pty), syscalls);
+    const std::uint8_t outgoing[] = {0x11};
+
+    EXPECT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{0, IoStatus::kClosed}));
+    EXPECT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{0, IoStatus::kClosed}));
+}
+
 } // namespace
 } // namespace r2s_bridge
