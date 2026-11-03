@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -22,6 +23,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/float32.hpp>
+#include <std_msgs/msg/int32_multi_array.hpp>
 #include <std_msgs/msg/string.hpp>
 
 #include "frame_helpers.hpp"
@@ -60,7 +62,8 @@ class RouterFixture
 {
   public:
     RouterFixture(const std::string &name, rclcpp::NodeOptions options, RouterParams params,
-                  std::uint16_t max_frame = 512u, bool with_mcu_sink = true)
+                  std::uint16_t max_frame = 512u, bool with_mcu_sink = true,
+                  SessionConfig session_config = SessionConfig())
         : max_frame_(max_frame), node_(std::make_shared<rclcpp::Node>(name, "robot1", options))
     {
         LogSink mcu_sink;
@@ -71,7 +74,17 @@ class RouterFixture
             node_->get_node_topics_interface(),
             [this]() { return std::unique_ptr<Transport>(new HelperLink(transport_)); }, clock_, clock_,
             std::move(params), [this](SessionLog, const std::string &text) { logged_.push_back(text); },
-            SessionConfig{}, std::move(mcu_sink));
+            std::move(session_config), std::move(mcu_sink));
+    }
+
+    void block_link()
+    {
+        transport_.limit_write(0u);
+    }
+
+    void allow_link()
+    {
+        transport_.limit_write(1000000u);
     }
 
     void advance(std::uint32_t ms)
@@ -574,6 +587,19 @@ TEST_F(RouterNode, RejectsNonsenseParams)
     RouterParams no_override;
     no_override.rate_limits["cmd_vel"] = -2.0;
     EXPECT_THROW(RouterFixture("p5", remapped(), no_override), std::invalid_argument);
+    RouterParams negative_budget;
+    negative_budget.tx_budget_pct = -1;
+    EXPECT_THROW(RouterFixture("p6", remapped(), negative_budget), std::invalid_argument);
+    RouterParams infinite_default;
+    infinite_default.rate_default_hz = std::numeric_limits<double>::infinity();
+    EXPECT_THROW(RouterFixture("p7", remapped(), infinite_default), std::invalid_argument);
+    RouterParams infinite_override;
+    infinite_override.rate_limits["cmd_vel"] = std::numeric_limits<double>::infinity();
+    EXPECT_THROW(RouterFixture("p8", remapped(), infinite_override), std::invalid_argument);
+    SessionConfig bad_session;
+    bad_session.reconnect_period_ms = 0;
+    EXPECT_THROW(RouterFixture("p9", remapped(), RouterParams{}, 512u, true, bad_session),
+                 std::invalid_argument);
 }
 
 TEST_F(RouterNode, RejectsAnEmptySink)
@@ -638,12 +664,144 @@ TEST(RouterOverrides, SkipsMalformedEntries)
 {
     std::vector<std::string> logged;
     const std::map<std::string, double> rates =
-        parse_rate_overrides({"bogus", "cmd_vel=-1", "again=1=2", "x=="},
+        parse_rate_overrides({"bogus", "cmd_vel=-1", "again=1=2", "x==", "=5", "topic=", "fast=inf"},
                              [&logged](SessionLog, const std::string &text) { logged.push_back(text); });
     EXPECT_TRUE(rates.empty());
     EXPECT_TRUE(logged_has(logged, "bogus"));
     EXPECT_TRUE(logged_has(logged, "cmd_vel=-1"));
     EXPECT_TRUE(logged_has(logged, "x=="));
+    EXPECT_TRUE(logged_has(logged, "=5"));
+    EXPECT_TRUE(logged_has(logged, "topic="));
+    EXPECT_TRUE(logged_has(logged, "fast=inf"));
+}
+
+TEST(RouterOverrides, IgnoresOverridesWithoutASink)
+{
+    const std::map<std::string, double> rates = parse_rate_overrides({"cmd_vel=20"}, nullptr);
+    ASSERT_EQ(rates.size(), 1u);
+    EXPECT_DOUBLE_EQ(rates.at("cmd_vel"), 20.0);
+}
+
+TEST(RouterOverrides, DropsAGarbageOverrideWithoutASink)
+{
+    const std::map<std::string, double> rates = parse_rate_overrides({"cmd_vel="}, nullptr);
+    EXPECT_TRUE(rates.empty()) << "a garbage override is dropped even when no sink logs it";
+}
+
+TEST_F(RouterNode, MalformedLengthPrefixIsABadVarint)
+{
+    // A string length past the 16-bit wire limit is malformed, never a huge
+    // allocation: the drop names the varint instead of going out. The frame
+    // stays small, so the framer passes it to conversion.
+    RouterFixture fixture("badlength", remapped(), RouterParams{});
+    fixture.handshake(0x01u, 7u, true, 0x08u);
+    std::vector<std::uint8_t> payload{0xF0u, 0xA2u, 0x04u};
+    payload.insert(payload.end(), 10u, 0x78u);
+    fixture.deliver_frame(RouterFixture::kLogText, 0u, payload);
+    rclcpp::spin_some(fixture.node());
+    fixture.advance(1u);
+    EXPECT_TRUE(logged_has(fixture.logged(), "bad varint")) << "the drop names the varint";
+    EXPECT_TRUE(logged_has(fixture.logged(), "log_text")) << "the drop names the topic";
+}
+
+TEST_F(RouterNode, OverlongArrayFromRosNamesOverBound)
+{
+    // A ROS sequence past the 64 KiB wire limit cannot pack, so the drop
+    // names the bound instead of queueing.
+    constexpr std::uint8_t kBig = 19u;
+    RouterFixture fixture("bigarray", remapped(), RouterParams{});
+    fixture.deliver_frame(kHelperControl, 0u, helper_hello(9u, 2u, 512u));
+    fixture.expect_topic_req(0u);
+    const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
+    fixture.deliver_frame(
+        kHelperControl, 1u,
+        helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
+    fixture.expect_topic_req(1u);
+    const std::array<std::uint8_t, 8> array_hash = installed_hash("std_msgs/msg/Int32MultiArray");
+    fixture.deliver_frame(
+        kHelperControl, 2u,
+        helper_topic(1u, kBig, 0x09u, array_hash.data(), "std_msgs/msg/Int32MultiArray", "big"));
+    fixture.drain();
+    ASSERT_EQ(fixture.router().subscription_count(), 1u) << "the array topic is subscribed";
+    auto pub = fixture.node()->create_publisher<std_msgs::msg::Int32MultiArray>("big", 10);
+    std_msgs::msg::Int32MultiArray array;
+    array.data.assign(70000u, 1);
+    pub->publish(array);
+    rclcpp::spin_some(fixture.node());
+    fixture.advance(1u);
+    EXPECT_TRUE(logged_has(fixture.logged(), "over bound")) << "the drop names the bound";
+    EXPECT_TRUE(logged_has(fixture.logged(), "big")) << "the drop names the topic";
+}
+
+TEST_F(RouterNode, IdenticalEmptyHandshakeRebuilds)
+{
+    RouterFixture fixture("empty", remapped(), RouterParams{});
+    fixture.deliver_frame(kHelperControl, 0u, helper_hello(7u, 0u, 512u));
+    EXPECT_EQ(fixture.router().publisher_count(), 0u);
+    EXPECT_EQ(fixture.router().subscription_count(), 0u);
+    std::vector<std::uint8_t> ready = fixture.expect_one_frame();
+    ASSERT_GE(ready.size(), 4u);
+    EXPECT_EQ(ready[2], 0x06u) << "a READY";
+    fixture.deliver_frame(kHelperControl, 1u, helper_hello(7u, 0u, 512u));
+    EXPECT_EQ(fixture.router().publisher_count(), 0u);
+    EXPECT_EQ(fixture.router().subscription_count(), 0u);
+    ready = fixture.expect_one_frame();
+    ASSERT_GE(ready.size(), 4u);
+    EXPECT_EQ(ready[2], 0x06u) << "a second READY, not an early return";
+}
+
+TEST_F(RouterNode, DropsMcuFramesOnSubscriptionTopics)
+{
+    RouterFixture fixture("wrongdir", remapped(), RouterParams{});
+    fixture.handshake();
+    std::vector<geometry_msgs::msg::Twist> received;
+    auto sub = fixture.node()->create_subscription<geometry_msgs::msg::Twist>(
+        "cmd_vel", rclcpp::QoS(10),
+        [&received](const geometry_msgs::msg::Twist &msg) { received.push_back(msg); });
+    fixture.deliver_frame(kCmdVel, 0u, std::vector<std::uint8_t>(48u, 0x00u));
+    rclcpp::spin_some(fixture.node());
+    EXPECT_TRUE(received.empty()) << "a host-to-MCU topic never publishes";
+}
+
+TEST_F(RouterNode, HoldsBackpressureOnAWedgedLink)
+{
+    // A 256-byte frame cap holds one 200-byte string per unit, so units and
+    // frames stay one to one while the session saturates and refuses.
+    RouterFixture fixture("wedged", remapped(), RouterParams{}, 256u);
+    fixture.handshake(0x01u, 7u, true, 0x09u);
+    EXPECT_EQ(fixture.router().subscription_count(), 2u) << "cmd_vel and log_text subscribed";
+    fixture.block_link();
+    auto pub = fixture.node()->create_publisher<std_msgs::msg::String>("log_text", 10);
+    std_msgs::msg::String text;
+    text.data = std::string(200u, 'l');
+    for (int i = 0; i < 4; ++i) {
+        pub->publish(text);
+        rclcpp::spin_some(fixture.node());
+    }
+    // Each poll sends one frame into the blocked session; the first three
+    // fill its 515-byte MCU window and the fourth is refused, so the pass
+    // stops with that frame still queued. The steps are wide enough for the
+    // bandwidth budget to cover one frame each.
+    for (int i = 0; i < 10 && fixture.router().queued(RouterFixture::kLogText) > 1u; ++i) {
+        fixture.advance(100u);
+    }
+    EXPECT_EQ(fixture.router().queued(RouterFixture::kLogText), 1u) << "the refused frame stays queued";
+    EXPECT_EQ(fixture.router().dropped(RouterFixture::kLogText), 0u) << "the scheduler sheds nothing";
+    EXPECT_TRUE(fixture.drain().empty()) << "nothing leaves while wedged";
+    fixture.allow_link();
+    std::vector<std::vector<std::uint8_t>> user_units;
+    for (int i = 0; i < 20 && user_units.size() < 4u; ++i) {
+        fixture.advance(500u);
+        for (const std::vector<std::uint8_t> &unit : fixture.drain()) {
+            const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
+            if (decoded.size() >= 4u && decoded[0] == RouterFixture::kLogText) {
+                user_units.push_back(decoded);
+            }
+        }
+    }
+    ASSERT_EQ(user_units.size(), 4u) << "every queued frame flushes in order";
+    EXPECT_EQ(user_units.front()[1], 0u) << "the first frame on a topic carries seq 0";
+    EXPECT_EQ(user_units.back()[1], 3u) << "the refused frame goes out last with seq 3";
 }
 
 } // namespace

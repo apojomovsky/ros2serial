@@ -251,6 +251,43 @@ TEST(SchedulerConfig, RejectsANegativeBudget)
     EXPECT_THROW(scheduler.configure({queued_topic(16)}, -1.0), std::invalid_argument);
 }
 
+TEST(SchedulerConfig, RejectsANegativeBurstAlone)
+{
+    Scheduler scheduler;
+    EXPECT_THROW(scheduler.configure({queued_topic(16)}, 1e9, -1.0), std::invalid_argument);
+}
+
+TEST(SchedulerConfig, SendsNothingWithoutABudget)
+{
+    Scheduler scheduler;
+    scheduler.configure({queued_topic(16)}, 0.0, 30.0);
+    scheduler.submit(16, {0x01});
+    Capture capture;
+    scheduler.poll(ns(0), std::ref(capture));
+    EXPECT_TRUE(capture.sent.empty()) << "no budget means no frame";
+}
+
+TEST(SchedulerPoll, IdlesWithoutTopics)
+{
+    Scheduler scheduler;
+    Capture capture;
+    scheduler.poll(ns(0), std::ref(capture));
+    EXPECT_TRUE(capture.sent.empty());
+    EXPECT_TRUE(capture.attempted.empty());
+}
+
+TEST(SchedulerSubmit, TreatsAZeroBoundAsOne)
+{
+    Scheduler scheduler;
+    SchedulerTopic topic = queued_topic(16);
+    topic.queue_bound = 0;
+    scheduler.configure({topic}, 1e9);
+    scheduler.submit(16, {0x01});
+    scheduler.submit(16, {0x02});
+    EXPECT_EQ(scheduler.queued(16), 1u);
+    EXPECT_EQ(scheduler.dropped(16), 1u);
+}
+
 TEST(SchedulerSubmit, IgnoresAnUnknownTopic)
 {
     Scheduler scheduler;
@@ -259,6 +296,23 @@ TEST(SchedulerSubmit, IgnoresAnUnknownTopic)
     Capture capture;
     scheduler.poll(ns(0), std::ref(capture));
     EXPECT_TRUE(capture.sent.empty());
+}
+
+TEST(SchedulerSend, StopsThePassWhenTheLinkRefusesAFrame)
+{
+    Scheduler scheduler;
+    scheduler.configure({queued_topic(16)}, 1e9);
+    scheduler.submit(16, {0x01});
+    scheduler.submit(16, {0x02});
+    Capture wedged;
+    wedged.refuse = true;
+    scheduler.poll(ns(0), std::ref(wedged));
+    EXPECT_EQ(wedged.attempted.size(), 1u) << "the pass stops at the first refusal";
+    EXPECT_EQ(scheduler.queued(16), 2u) << "refused frames stay queued for the next pass";
+    Capture open;
+    scheduler.poll(ns(0), std::ref(open));
+    EXPECT_EQ(open.sent.size(), 1u) << "the next pass resends from the head";
+    EXPECT_EQ(scheduler.queued(16), 1u);
 }
 
 } // namespace

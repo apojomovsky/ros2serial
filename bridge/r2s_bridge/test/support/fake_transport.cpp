@@ -34,6 +34,14 @@ void FakeTransport::limit_write(std::size_t bytes)
     write_limit_ = bytes;
 }
 
+void FakeTransport::script_write(IoResult outcome)
+{
+    if (outcome.status == IoStatus::kOk && outcome.bytes == 0) {
+        throw std::invalid_argument("FakeTransport::script_write(kOk) needs bytes");
+    }
+    write_script_.push_back(outcome);
+}
+
 void FakeTransport::close()
 {
     closed_ = true;
@@ -80,6 +88,15 @@ IoResult FakeTransport::write(const std::uint8_t *data, std::size_t size)
     }
     if (size == 0) {
         throw std::invalid_argument("FakeTransport::write needs at least one byte");
+    }
+    if (!write_script_.empty()) {
+        const IoResult outcome = write_script_.front();
+        write_script_.pop_front();
+        const std::size_t count = std::min(outcome.bytes, size);
+        if (count > 0) {
+            writes_.emplace_back(data, data + count);
+        }
+        return {count, outcome.status};
     }
     const std::size_t count = std::min(size, write_limit_);
     if (count == 0) {
