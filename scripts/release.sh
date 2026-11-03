@@ -65,7 +65,7 @@ git add VERSION CHANGELOG.md gen/r2s_gen/version.py gen/package.xml bridge/r2s_b
   cpp/include/geometry_msgs/msg/twist.hpp cpp/include/geometry_msgs/msg/vector3.hpp \
   cpp/include/r2s_bundled.h cpp/include/ros2serial.h cpp/include/ros2serial.hpp cpp/include/sensor_msgs/msg/imu.hpp \
   cpp/include/sensor_msgs/msg/joint_state.hpp cpp/include/sensor_msgs/msg/range.hpp \
-  cpp/include/std_msgs/msg/float32.hpp \
+  cpp/include/std_msgs/msg/bool.hpp cpp/include/std_msgs/msg/float32.hpp \
   cpp/include/std_msgs/msg/header.hpp cpp/include/std_msgs/msg/string.hpp
 git commit -q -m "chore(release): v$next"
 echo "committed chore(release): v$next"

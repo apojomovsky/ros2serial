@@ -39,6 +39,7 @@ STAMPED = [
     "cpp/include/sensor_msgs/msg/imu.hpp",
     "cpp/include/sensor_msgs/msg/joint_state.hpp",
     "cpp/include/sensor_msgs/msg/range.hpp",
+    "cpp/include/std_msgs/msg/bool.hpp",
     "cpp/include/std_msgs/msg/float32.hpp",
     "cpp/include/std_msgs/msg/header.hpp",
     "cpp/include/std_msgs/msg/string.hpp",
