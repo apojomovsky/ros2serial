@@ -44,9 +44,7 @@ class TestHarnessArgv(unittest.TestCase):
         open(harness, "w").close()
         for image in ("slice-atmega328p.elf", "flood-atmega2560.elf"):
             open(os.path.join(fw, image), "w").close()
-        patcher = mock.patch.dict(
-            os.environ, {"R2S_SIMAVR_BIN": harness, "R2S_E2E_AVR_FW": fw}
-        )
+        patcher = mock.patch.dict(os.environ, {"R2S_SIMAVR_BIN": harness, "R2S_E2E_AVR_FW": fw})
         patcher.start()
         self.addCleanup(patcher.stop)
 
