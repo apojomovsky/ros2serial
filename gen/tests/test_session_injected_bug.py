@@ -17,10 +17,10 @@ from session_harness import TOPIC_IDS, Pair, wire
 def handshake_to_ready(pair: Pair, token: bytes) -> None:
     """Every step but the READY, compared; the caller sends the READY."""
     pair.feed_frame(0, 0, bytes((model.OP_HELLO_REQ, 2)))
-    for index in range(3):
+    for index in range(4):
         pair.feed_frame(0, 1 + index, bytes((model.OP_TOPIC_REQ, index)))
-        pair.feed_frame(0, 4 + index, bytes((model.OP_TOPIC_STATUS, TOPIC_IDS[index], 0)))
-    pair.host.feed(wire(0, 7, bytes((model.OP_READY,)) + token))
+        pair.feed_frame(0, 5 + index, bytes((model.OP_TOPIC_STATUS, TOPIC_IDS[index], 0)))
+    pair.host.feed(wire(0, 9, bytes((model.OP_READY,)) + token))
     pair.model.feed(wire(0, 7, bytes((model.OP_READY,)) + token))
     pair.model.spin()
 

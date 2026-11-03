@@ -140,10 +140,10 @@ def test_session_matches_model():
 def handshake(pair: Pair, token: int = 1) -> None:
     """The full handshake to CONNECTED, comparing after every step."""
     pair.feed_frame(0, 0, bytes((model.OP_HELLO_REQ, 2)))
-    for index in range(3):
+    for index in range(4):
         pair.feed_frame(0, 1 + index, bytes((model.OP_TOPIC_REQ, index)))
-        pair.feed_frame(0, 4 + index, bytes((model.OP_TOPIC_STATUS, TOPIC_IDS[index], 0)))
-    pair.feed_frame(0, 7, bytes((model.OP_READY,)) + token.to_bytes(4, "little"))
+        pair.feed_frame(0, 5 + index, bytes((model.OP_TOPIC_STATUS, TOPIC_IDS[index], 0)))
+    pair.feed_frame(0, 9, bytes((model.OP_READY,)) + token.to_bytes(4, "little"))
 
 
 # covers: SES-8, SES-9
@@ -170,7 +170,7 @@ def test_seq_restarts_after_rehandshake():
     pair = Pair()
     handshake(pair)
     pair.publish(1.5)
-    pair.feed_frame(0, 8, bytes((model.OP_HELLO_REQ, 2)))
+    pair.feed_frame(0, 10, bytes((model.OP_HELLO_REQ, 2)))
     pair.publish(1.5)
     pair.check("publish after re-handshake reuses seq 0")
 
@@ -185,11 +185,11 @@ def test_spin_limit_holds_backlog_frames():
     pair.host.spin_now()
     pair.model.spin()
     pair.check("eight of ten queued units processed")
-    assert pair.host.snapshot()["counters"][0] == 16
+    assert pair.host.snapshot()["counters"][0] == 18
     pair.host.spin_now()
     pair.model.spin()
     pair.check("the last two units processed")
-    assert pair.host.snapshot()["counters"][0] == 18
+    assert pair.host.snapshot()["counters"][0] == 20
 
 
 # covers: FRM-4, FRM-5
@@ -198,7 +198,7 @@ def test_tx_seq_wraps_at_256():
     handshake(pair)
     for _ in range(256):
         pair.publish(1.5)
-    assert pair.host.snapshot()["tx_seq"] == [0, 0, 0]
+    assert pair.host.snapshot()["tx_seq"] == [0, 0, 0, 0]
     pair.publish(1.5)
     pair.check("publish after the seq wraps reuses seq 0")
 
@@ -208,4 +208,4 @@ def test_spin_budget_skips_dropped_units():
     pair = Pair()
     handshake(pair)
     pair.feed_raw(b"\x00" * 8 + wire(4, 0, b""))
-    assert pair.host.snapshot()["counters"] == (9, 0, 0, 0)
+    assert pair.host.snapshot()["counters"] == (11, 0, 0, 0)
