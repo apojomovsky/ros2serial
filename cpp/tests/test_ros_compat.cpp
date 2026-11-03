@@ -562,7 +562,7 @@ void test_ros_broadcaster_init_advertises_tf_topic(void)
     broadcaster.init(nh);
     TEST_ASSERT_EQUAL_INT(ros::SPIN_OK, nh.spinOnce());
     TEST_ASSERT_EQUAL_UINT8(1, r2s_topic_count());
-    TEST_ASSERT_EQUAL_STRING("tf", r2s_topic_get(0)->topic_name);
+    TEST_ASSERT_EQUAL_STRING("/tf", r2s_topic_get(0)->topic_name);
     TEST_ASSERT_EQUAL_STRING("tf2_msgs/msg/TFMessage", r2s_topic_get(0)->type_name);
     TEST_ASSERT_EQUAL_MEMORY(s_tf_message_hash, r2s_topic_get(0)->type_hash, 8u);
     TEST_ASSERT_EQUAL_UINT8(0x00u, r2s_topic_get(0)->flags & 0x01u);
@@ -594,7 +594,7 @@ void test_ros_broadcaster_send_transform_publishes_the_frame(void)
     memset(&expect, 0, sizeof expect);
     expect.transforms.size = 1u;
     expect.transforms.data[0].header.stamp.sec = 7;
-    expect.transforms.data[0].header.stamp.nsec = 8u;
+    expect.transforms.data[0].header.stamp.nanosec = 8u;
     strcpy(expect.transforms.data[0].header.frame_id, "base");
     strcpy(expect.transforms.data[0].child_frame_id, "gripper");
     expect.transforms.data[0].transform.translation.x = 1.5;
