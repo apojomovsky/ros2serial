@@ -52,6 +52,19 @@ target_compile_definitions(r2s_core_session PRIVATE R2S_TICK_HZ=1000000)
 target_compile_options(r2s_core_session PRIVATE -UR2S_WITH_LOG -UR2S_WITH_TIME)
 r2s_support_lib(r2s_session_support r2s_core_session)
 
+# The message vectors nest three deep (a Time in a Header in Range, Imu and
+# JointState), past the R2S_MAX_NEST=2 every other test builds with, so their
+# runner links a core with room for one more level. The target definition
+# comes after the directory's, so it wins.
+file(GLOB_RECURSE R2S_NEST3_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../src/*.c")
+add_library(r2s_core_nest3 STATIC ${R2S_NEST3_SOURCES})
+target_include_directories(r2s_core_nest3 PUBLIC ../include)
+target_compile_options(r2s_core_nest3 PRIVATE ${R2S_WARNINGS})
+# The -U drops the directory's R2S_MAX_NEST=2 after its -D, and the -D after
+# it sets the deeper stack; a second -D would warn as a redefinition.
+target_compile_options(r2s_core_nest3 PRIVATE -UR2S_MAX_NEST -DR2S_MAX_NEST=3)
+r2s_support_lib(r2s_test_support_nest3 r2s_core_nest3)
+
 # The handwritten publish wrappers and dispatch, with the handler their tests
 # provide: only the link tests need them, so they stay out of the shared
 # support library.
@@ -184,8 +197,27 @@ r2s_vector_test(vectors_rcobs rcobs vectors/rcobs_check.c ${rcobs_vectors})
 file(GLOB frames_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/frames/*.yaml")
 r2s_vector_test(vectors_frames frames vectors/frames_check.c ${frames_vectors})
 
+# The messages runner builds its expected struct images for one ABI: the 32-bit
+# build packs doubles to 4 bytes, so its images differ from the host's.
+if(CMAKE_C_FLAGS MATCHES "-m32")
+  set(R2S_MESSAGE_ABI "m32")
+else()
+  set(R2S_MESSAGE_ABI "lp64")
+endif()
 file(GLOB messages_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/messages/*.yaml")
-r2s_vector_test(vectors_messages messages vectors/messages_check.c ${messages_vectors})
+set(messages_runner "${CMAKE_CURRENT_BINARY_DIR}/vectors_messages_runner.c")
+add_custom_command(
+  OUTPUT "${messages_runner}"
+  COMMAND ${CMAKE_COMMAND} -E env R2S_VECTOR_ABI=${R2S_MESSAGE_ABI} "${Python3_EXECUTABLE}"
+          "${R2S_RUNNER_TOOL}" vectors messages "${CMAKE_CURRENT_SOURCE_DIR}/vectors/messages_check.c"
+          "${messages_runner}" ${messages_vectors}
+  WORKING_DIRECTORY "${R2S_REPO_ROOT}"
+  DEPENDS ${messages_vectors} "${R2S_RUNNER_TOOL}"
+  VERBATIM)
+add_executable(vectors_messages vectors/messages_check.c "${messages_runner}")
+target_compile_options(vectors_messages PRIVATE ${R2S_TEST_WARNINGS})
+target_link_libraries(vectors_messages PRIVATE r2s_test_support_nest3)
+add_test(NAME vectors_messages COMMAND vectors_messages)
 
 file(GLOB time_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/time/*.yaml")
 r2s_vector_test(vectors_time time vectors/time_check.c ${time_vectors})

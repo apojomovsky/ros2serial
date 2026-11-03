@@ -13,7 +13,7 @@
 void r2s_vec_check_messages(const r2s_vec_messages_t *v)
 {
     char label[256];
-    uint8_t storage[sizeof(geometry_msgs__msg__Twist)];
+    uint8_t storage[sizeof(sensor_msgs__msg__JointState)];
     uint8_t out[R2S_MAX_FRAME];
     r2s_codec_out_t sink = {out, (uint16_t)sizeof out, 0u, 0u};
     uint8_t field = 0xFFu;
@@ -27,8 +27,17 @@ void r2s_vec_check_messages(const r2s_vec_messages_t *v)
     } else if (strcmp(v->type, "geometry_msgs/msg/Twist") == 0) {
         type = R2S_HANDWRITTEN_TWIST;
         size = (uint16_t)sizeof(geometry_msgs__msg__Twist);
+    } else if (strcmp(v->type, "sensor_msgs/msg/Range") == 0) {
+        type = R2S_HANDWRITTEN_RANGE;
+        size = (uint16_t)sizeof(sensor_msgs__msg__Range);
+    } else if (strcmp(v->type, "sensor_msgs/msg/Imu") == 0) {
+        type = R2S_HANDWRITTEN_IMU;
+        size = (uint16_t)sizeof(sensor_msgs__msg__Imu);
+    } else if (strcmp(v->type, "sensor_msgs/msg/JointState") == 0) {
+        type = R2S_HANDWRITTEN_JOINT_STATE;
+        size = (uint16_t)sizeof(sensor_msgs__msg__JointState);
     } else {
-        TEST_FAIL_MESSAGE("the C runner knows Float32 and Twist");
+        TEST_FAIL_MESSAGE("the C runner knows Float32, Twist, Range, Imu and JointState");
         return;
     }
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(size, v->encode_len, label);
