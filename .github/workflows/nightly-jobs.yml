@@ -36,10 +36,12 @@ jobs:
 
   # Two full e2e sections side by side on one host. The load-sensitive
   # scenario is skipped and the sync bound keeps headroom for the shared
-  # host, as the CI e2e jobs do.
+  # host, as the CI e2e jobs do. The bound is generous: master already
+  # varies ten to twenty-five minutes run to run, and every firmware leg
+  # (now four) multiplies both sections.
   e2e-isolation:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
