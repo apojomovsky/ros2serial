@@ -43,7 +43,7 @@ class TestHarnessArgv(unittest.TestCase):
         os.mkdir(fw)
         harness = os.path.join(self._scratch.name, "r2s_simavr")
         open(harness, "w").close()
-        for image in ("slice-atmega328p.elf", "flood-atmega2560.elf"):
+        for image in ("slice-atmega328p.elf", "flood-atmega2560.elf", "slice-atmega328p-500000.elf"):
             open(os.path.join(fw, image), "w").close()
         patcher = mock.patch.dict(os.environ, {"R2S_SIMAVR_BIN": harness, "R2S_E2E_AVR_FW": fw})
         patcher.start()
@@ -62,11 +62,25 @@ class TestHarnessArgv(unittest.TestCase):
         self.assertIn("atmega2560", argv)
         self.assertTrue(any(str(part).endswith("flood-atmega2560.elf") for part in argv))
 
+    def test_baud_names_the_matrix_firmware(self):
+        argv = avr.harness_argv("uno", baud="500000")
+        self.assertTrue(any(str(part).endswith("slice-atmega328p-500000.elf") for part in argv))
+
+    def test_default_baud_keeps_the_legacy_firmware_name(self):
+        argv = avr.harness_argv("uno", baud="115200")
+        self.assertTrue(any(str(part).endswith("slice-atmega328p.elf") for part in argv))
+
 
 class TestFirmwareLabel(unittest.TestCase):
     def test_label_names_flavor_and_mcu(self):
         self.assertEqual(avr.firmware_label("uno"), "slice-atmega328p")
         self.assertEqual(avr.firmware_label("mega", flavor="flood"), "flood-atmega2560")
+
+    def test_baud_label_names_the_matrix_rate(self):
+        self.assertEqual(avr.firmware_label("uno", baud="500000"), "slice-atmega328p-500000")
+
+    def test_default_baud_keeps_the_legacy_label(self):
+        self.assertEqual(avr.firmware_label("uno", baud="115200"), "slice-atmega328p")
 
 
 class TestRecordPeak(unittest.TestCase):
@@ -134,8 +148,10 @@ class TestScenariosStopInTest(unittest.TestCase):
         # launch_testing never calls tearDownModule, so a scenario that
         # stops its harness only there leaks it and records no peak.
         missing = []
-        for scenario in (1, 2, 3, 4, 12):
-            path = os.path.join(os.path.dirname(__file__), f"test_scenario_{scenario}_avr.py")
+        names = [f"test_scenario_{scenario}_avr.py" for scenario in (1, 2, 3, 4, 12)]
+        names.append("test_baud_matrix_avr.py")
+        for name in names:
+            path = os.path.join(os.path.dirname(__file__), name)
             with open(path, encoding="utf-8") as handle:
                 tree = ast.parse(handle.read())
             stopped = any(

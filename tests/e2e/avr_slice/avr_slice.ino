@@ -13,6 +13,12 @@
 
 #include <ros2serial.h>
 
+/* The baud the sketch serves. The e2e suite overrides it per build to walk
+ * the baud matrix; the default stays 115200. */
+#ifndef R2S_BAUD
+#define R2S_BAUD 115200
+#endif
+
 static uint32_t s_sent;
 static uint8_t s_log_booted;
 
@@ -42,7 +48,7 @@ static r2s_status_t publish_log_text(uint32_t value)
 
 void setup(void)
 {
-    Serial.begin(115200);
+    Serial.begin(R2S_BAUD);
     if (r2s_session_configure(R2S_NODE_NAME, r2s_topics, R2S_TOPIC_COUNT) != R2S_OK) {
         return;
     }
