@@ -53,3 +53,75 @@ def test_check_fails_on_a_breached_fixture():
     measurements = {"uno": {"flash": 8200, "ram": 800}}
     budgets = {"firmware": {"uno": {"flash": 1, "ram": 1}}}
     assert len(size_report.check_sizes(measurements, budgets)) == 2
+
+
+def elf_bytes(machine):
+    header = bytearray(64)
+    header[0:4] = b"\x7fELF"
+    header[4] = 1
+    header[5] = 1
+    header[18:20] = machine.to_bytes(2, "little")
+    return bytes(header)
+
+
+def test_elf_machine_reads_an_xtensa_header(tmp_path):
+    firmware = tmp_path / "esp32.elf"
+    firmware.write_bytes(elf_bytes(0x5E))
+    assert size_report.elf_machine(firmware) == 0x5E
+
+
+def test_elf_machine_reads_an_avr_header(tmp_path):
+    firmware = tmp_path / "uno.elf"
+    firmware.write_bytes(elf_bytes(83))
+    assert size_report.elf_machine(firmware) == 83
+
+
+def test_elf_machine_is_none_when_unreadable(tmp_path):
+    assert size_report.elf_machine(tmp_path / "missing.elf") is None
+    empty = tmp_path / "empty.elf"
+    empty.write_bytes(b"")
+    assert size_report.elf_machine(empty) is None
+
+
+def fake_run(calls):
+    def run(tool, *args):
+        calls.append(tool)
+        if "--print-size" in args:
+            return NM_SIZES
+        return AVR_SIZE
+
+    return run
+
+
+def test_measure_uses_the_xtensa_tools_for_xtensa_firmware(tmp_path, monkeypatch):
+    firmware = tmp_path / "arduino_minimal" / "esp32" / "arduino_minimal.ino.elf"
+    firmware.parent.mkdir(parents=True)
+    firmware.write_bytes(elf_bytes(0x5E))
+    calls = []
+    monkeypatch.setattr(size_report, "_run", fake_run(calls))
+    sizes = size_report.measure(tmp_path)["arduino_minimal/esp32/arduino_minimal.ino.elf"]
+    assert "xtensa-esp32-elf-size" in calls
+    assert "avr-size" not in calls
+    assert sizes["flash"] == 8200
+
+
+def test_measure_keeps_the_avr_tools_for_avr_firmware(tmp_path, monkeypatch):
+    firmware = tmp_path / "arduino_minimal" / "uno" / "arduino_minimal.ino.elf"
+    firmware.parent.mkdir(parents=True)
+    firmware.write_bytes(elf_bytes(83))
+    calls = []
+    monkeypatch.setattr(size_report, "_run", fake_run(calls))
+    size_report.measure(tmp_path)
+    assert "avr-size" in calls
+    assert "xtensa-esp32-elf-size" not in calls
+
+
+def test_measure_keeps_the_avr_tools_when_the_machine_is_unknown(tmp_path, monkeypatch):
+    firmware = tmp_path / "stubbed" / "uno" / "stubbed.ino.elf"
+    firmware.parent.mkdir(parents=True)
+    firmware.write_bytes(b"")
+    calls = []
+    monkeypatch.setattr(size_report, "_run", fake_run(calls))
+    size_report.measure(tmp_path)
+    assert "avr-size" in calls
+    assert "xtensa-esp32-elf-size" not in calls

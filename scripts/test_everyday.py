@@ -152,6 +152,7 @@ STRIPPED_SCOPES = (
     "COVERAGE",
     "DOCS",
     "EXAMPLES",
+    "ESP32",
     "BUDGETS",
     "FUZZ",
     "README",

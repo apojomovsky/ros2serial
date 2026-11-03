@@ -31,6 +31,7 @@ OUTPUTS = (
     "bridge",
     "cpp",
     "e2e",
+    "esp32",
     "coverage",
     "docs",
     "mermaid",
@@ -57,6 +58,7 @@ SECTION_SCOPE = {
     "bridge": "bridge",
     "fuzz-smoke": "fuzz",
     "build-matrix": "examples",
+    "esp32": "esp32",
     "budgets": "budgets",
     "nightly": "nightly",
     "e2e-avr": "e2e",
@@ -206,6 +208,16 @@ def test_isolation_diff_runs_the_nightly_job_not_the_e2e_legs():
         "nightly",
         "plan",
         "scripts",
+    ]
+
+
+def test_esp32_script_diff_runs_the_esp32_job_and_budgets():
+    assert running_jobs("pull_request", ["scripts/build-examples-esp32.sh"]) == [
+        "bridge-images",
+        "budgets",
+        "esp32",
+        "lint",
+        "plan",
     ]
 
 

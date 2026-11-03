@@ -914,6 +914,7 @@ def test_ci_runs_every_scope_on_pull_requests():
             "COVERAGE",
             "DOCS",
             "EXAMPLES",
+            "ESP32",
             "FUZZ",
         ):
             if scope in line:
@@ -933,6 +934,7 @@ def test_ci_runs_every_scope_on_pull_requests():
         "COVERAGE",
         "DOCS",
         "EXAMPLES",
+        "ESP32",
         "FUZZ",
         "E2E=avr",
         "E2E=posix",

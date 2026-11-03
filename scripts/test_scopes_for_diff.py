@@ -160,6 +160,7 @@ def test_section_scripts_map_to_their_section():
     assert scopes("scripts/bridge-test.sh") == {**CHEAP, "BRIDGE": "1"}
     assert scopes("scripts/coverage-gate.sh") == {**CHEAP, "COVERAGE": "1"}
     assert scopes("scripts/build-examples.sh") == {**CHEAP, "EXAMPLES": "1", "BUDGETS": "1"}
+    assert scopes("scripts/build-examples-esp32.sh") == {**CHEAP, "ESP32": "1", "BUDGETS": "1"}
     assert scopes("scripts/budgets-check.sh") == {**CHEAP, "BUDGETS": "1"}
     assert scopes("scripts/budgets_comment.py") == {**CHEAP, "SCRIPTS": "1", "BUDGETS": "1"}
     assert scopes("scripts/check-readme.sh") == {**CHEAP, "README": "1"}

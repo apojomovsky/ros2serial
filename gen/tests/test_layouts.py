@@ -284,6 +284,12 @@ def test_the_arduino_properties_name_the_node_and_the_toolchain(tmp_path):
     assert "architectures=avr" in properties.splitlines()
 
 
+def test_the_arduino_properties_claim_the_esp32_core(tmp_path):
+    _, files = generated("arduino", tmp_path)
+
+    assert "architectures=avr,esp32" in files["library.properties"].splitlines()
+
+
 @pytest.mark.parametrize("layout", ["cmake", "arduino"])
 def test_an_empty_topic_list_is_an_error_in_every_layout(tmp_path, layout):
     loaded = Config(node="r2s_posix", topics=(), bounds={})

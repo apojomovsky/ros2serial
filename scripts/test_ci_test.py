@@ -47,6 +47,7 @@ SCOPES = (
     "COVERAGE",
     "DOCS",
     "EXAMPLES",
+    "ESP32",
     "BUDGETS",
     "FUZZ",
     "README",
@@ -193,7 +194,19 @@ def stub_toolbox(path: Path) -> Path:
         "esac\n",
         encoding="utf-8",
     )
-    for tool in ("cmake", "arduino-cli", "avr-size", "avr-objdump", "avr-nm"):
+    (path / "xtensa-esp32-elf-nm").write_text(
+        "#!/usr/bin/env bash\n"
+        "echo '008001eb b r2s_rx_buf'\n"
+        'case "$*" in\n'
+        "    *arduino_minimal*|*arduino_hello*|*arduino_blink*|*arduino_button*|*arduino_servo*|*arduino_range*)\n"
+        "        echo '00800460 000000e0 b r2s_runtime_topics'\n"
+        "        echo '00800410 00000050 b r2s_runtime_subscribers'\n"
+        "        echo '00800540 00000050 b r2s_runtime_publishers'\n"
+        "        ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    for tool in ("cmake", "arduino-cli", "avr-size", "avr-objdump", "avr-nm", "xtensa-esp32-elf-nm"):
         (path / tool).chmod(0o755)
     return path
 
@@ -215,6 +228,13 @@ def test_examples_scope_runs_its_section(tmp_path, monkeypatch):
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "== examples" in result.stdout
+
+
+def test_esp32_scope_runs_its_section(tmp_path):
+    result = run_scope(copy_tree(tmp_path), "ESP32", stubs=stub_toolbox(tmp_path / "bin"), build_dir=tmp_path / "build")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "== esp32" in result.stdout
 
 
 def test_budgets_scope_runs_its_section(tmp_path):
