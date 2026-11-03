@@ -164,8 +164,8 @@ Run that target inside the image and you see the same failure CI saw:
 | `budgets` | `make test BUDGETS=1` |
 
 Two jobs have no local twin. `bridge-images` is CI setup: it only reads
-`ci/versions.env` to pick the bridge images. `plan` only computes the
-scope map; `make check` shows you its answer.
+`ci/versions.env` to pick the bridge images. `plan` only reports which
+tasks are stale; `make check` shows you its answer.
 
 Read the failure in the job log: open the failed job in the Actions tab,
 or run `gh run view <run-id> --log-failed`. Fix the cause, not the

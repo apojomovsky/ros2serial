@@ -29,6 +29,8 @@ ARG PYSERIAL_VERSION
 ARG GCOVR_VERSION
 ARG ARDUINO_CLI_VERSION
 ARG ARDUINO_AVR_CORE_VERSION
+ARG TASK_VERSION
+ARG TASK_SHA256
 # System site packages stay visible so the ROS Python packages (rclpy) work too.
 RUN python3 -m venv --system-site-packages /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir \
@@ -43,6 +45,13 @@ RUN curl -fsSL "https://github.com/arduino/arduino-cli/releases/download/v${ARDU
     && arduino-cli core update-index \
     && arduino-cli core install "arduino:avr@${ARDUINO_AVR_CORE_VERSION}" \
     && chmod -R a+rX /opt/arduino
+# The suite runner. The tarball is checked against its pinned hash before
+# anything is extracted, never piped from curl into a shell.
+RUN curl -fsSL -o /tmp/task.tar.gz "https://github.com/go-task/task/releases/download/v${TASK_VERSION}/task_linux_amd64.tar.gz" \
+    && echo "${TASK_SHA256}  /tmp/task.tar.gz" | sha256sum -c - \
+    && tar -xz -C /usr/local/bin -f /tmp/task.tar.gz task \
+    && rm /tmp/task.tar.gz \
+    && task --version
 # The container runs as the caller's uid, which has no home directory here.
 RUN mkdir -p /tmp/home && chmod 1777 /tmp/home
 ENV PATH=/opt/venv/bin:${PATH} \
