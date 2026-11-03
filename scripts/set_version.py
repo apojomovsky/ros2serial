@@ -17,6 +17,7 @@ from pathlib import Path
 VERSION_FILE = "VERSION"
 PACKAGE_VERSION = Path("gen") / "r2s_gen" / "version.py"
 GEN_MANIFEST = Path("gen") / "package.xml"
+ROSIDL_MANIFEST = Path("gen") / "r2s_rosidl" / "package.xml"
 BRIDGE_MANIFEST = Path("bridge") / "r2s_bridge" / "package.xml"
 BRIDGE_TESTS_MANIFEST = Path("bridge") / "r2s_bridge_tests" / "package.xml"
 
@@ -57,6 +58,7 @@ def set_version(root: Path, version: str) -> None:
     """Write the version into VERSION, the generator package and every ROS manifest."""
     package = _updated_text(root / PACKAGE_VERSION, PACKAGE_VERSION_LINE, f'__version__ = "{version}"')
     gen = _updated_text(root / GEN_MANIFEST, ROS_MANIFEST_TAG, f"<version>{version}</version>")
+    rosidl = _updated_text(root / ROSIDL_MANIFEST, ROS_MANIFEST_TAG, f"<version>{version}</version>")
     bridge = _updated_text(root / BRIDGE_MANIFEST, ROS_MANIFEST_TAG, f"<version>{version}</version>")
     bridge_tests = _updated_text(root / BRIDGE_TESTS_MANIFEST, ROS_MANIFEST_TAG, f"<version>{version}</version>")
     _write_all(
@@ -64,6 +66,7 @@ def set_version(root: Path, version: str) -> None:
             root / VERSION_FILE: version + "\n",
             root / PACKAGE_VERSION: package,
             root / GEN_MANIFEST: gen,
+            root / ROSIDL_MANIFEST: rosidl,
             root / BRIDGE_MANIFEST: bridge,
             root / BRIDGE_TESTS_MANIFEST: bridge_tests,
         }

@@ -502,7 +502,7 @@ Node(
 
 ## Code generator and packaging
 
-*Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling; planned: rosidl plugin wrapper and `.action` support in #317.*
+*Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling, plus the rosidl plugin wrapper (`gen/r2s_rosidl`); planned: `.action` support in #317.*
 
 `r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required). It parses the `.msg` grammar itself, since `rosidl_parser` ships only with a ROS installation and the bundled snapshots make the ROS-free path complete. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources, the optional C++ headers, and the compact-mode node map. It also builds the bundled Arduino library (common types with default bounds) that the X-macro path uses. Outputs are laid out to be usable as:
 
@@ -511,7 +511,7 @@ Node(
 - a CMake or Makefile include for bare-metal and vendor toolchains;
 - an epic-hal module (serial and tick) for PIC (Phase 5).
 
-The generator targets a ROS distro explicitly (`distro:` in the config, default `jazzy`), because type hashes can differ between distros. It bundles a `common_interfaces` snapshot per supported distro. A thin rosidl plugin wraps it later for users who want generation inside `colcon build`. The bridge, the generator and a bundle of the standard messages are released as ROS packages through the buildfarm.
+The generator targets a ROS distro explicitly (`distro:` in the config, default `jazzy`), because type hashes can differ between distros. It bundles a `common_interfaces` snapshot per supported distro. A thin rosidl plugin (`gen/r2s_rosidl`) wraps it for users who want generation inside `colcon build`: a firmware package calls `r2s_generate_firmware(CONFIG r2s.yaml)` and the build runs `r2s-gen generate --layout cmake`. The bridge, the generator and a bundle of the standard messages are released as ROS packages through the buildfarm.
 
 ## Host bridge
 

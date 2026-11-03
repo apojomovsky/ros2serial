@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>r2s_rosidl</name>
+  <version>0.1.0</version>
+  <description>The ros2serial firmware generator as a CMake helper: colcon builds run r2s-gen.</description>
+  <maintainer email="apojomovsky@gmail.com">Alexis Pojomovsky</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>r2s_gen</buildtool_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
