@@ -72,11 +72,20 @@ def test_bundle_returns_exactly_the_named_files():
     assert sorted(files()) == sorted(bundle.files_for())
 
 
-def test_every_file_carries_the_version_distro_and_digest():
+def test_every_file_carries_the_version_and_distro_but_no_digest():
     for name, text in files().items():
         assert __version__ in text, name
         assert "distro jazzy" in text, name
-        assert re.search(r"bundle [0-9a-f]{16}", text), name
+        assert not re.search(r"bundle [0-9a-f]{16}", text), name
+
+
+def test_the_digest_lives_only_in_the_bundled_header():
+    digest = bundle._digest("jazzy")
+    for name, text in files().items():
+        if name == "src/r2s_bundled.h":
+            assert f'#define R2S_BUNDLE_HASH "{digest}"' in text, name
+        else:
+            assert "R2S_BUNDLE_HASH" not in text, name
 
 
 def test_bundle_is_byte_identical_run_to_run():
