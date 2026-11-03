@@ -40,6 +40,11 @@ UNLISTED = {
     "LICENSE": "content pinned by the standing lint gate, which always runs",
     # Read by git at checkout; no section parses it.
     ".gitattributes": "read by git at checkout, no section parses it",
+    # Nightly-only mutation testing runs outside Task, in the mutation job
+    # of .github/workflows/nightly-jobs.yml, so no task lists its inputs.
+    "docker/mutation": "nightly-only image, built by the mutation job",
+    "mull.yml": "nightly-only Mull config, read by run-mutation.sh",
+    "mutation": "nightly-only triage inputs, read by run-mutation.sh",
 }
 
 # Tasks the plan loop never checks, each with the reason it stays out.

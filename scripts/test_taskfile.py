@@ -214,6 +214,16 @@ def test_a_gen_test_edit_reruns_only_gen_besides_the_standing_gates(tmp_path):
     assert sorted(reran) == ["COMMITS=1", "GEN=1", "LINT=1"], reran
 
 
+def test_a_mutation_script_edit_reruns_scripts_but_no_suite_task():
+    """Mutation testing never runs in a pull request: its scripts only wake the scripts task."""
+    for path in ("scripts/mutation_triage.py", "scripts/run-mutation.sh"):
+        assert matches(tasks()["scripts"], path), path
+        for name, task in tasks().items():
+            if name in ("default", "scripts"):
+                continue
+            assert not matches(task, path), f"{path} also matches {name}"
+
+
 @needs_task
 def test_a_versions_env_edit_reruns_every_task(tmp_path):
     """The image definition feeds every task, so pinning a version reruns all."""
