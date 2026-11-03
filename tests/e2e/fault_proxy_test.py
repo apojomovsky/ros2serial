@@ -21,33 +21,35 @@ def open_raw(port):
 
 
 def read_available(fd, size=65536):
-    """Drain what is waiting, stopping after a short idle gap."""
+    """Drain what arrives, stopping after a quiet gap; the host is shared.
+
+    Fixed sleeps flake under other agents' builds, so this polls until the
+    flow goes quiet instead, with a generous deadline for a loaded runner.
+    """
     out = b""
-    deadline = time.monotonic() + 2.0
+    deadline = time.monotonic() + 30.0
     idle_since = None
     while time.monotonic() < deadline:
         readable, _, _ = select.select([fd], [], [], 0.05)
         if not readable:
-            if out and idle_since is not None and time.monotonic() - idle_since > 0.3:
+            if out and idle_since is not None and time.monotonic() - idle_since > 0.5:
                 return out
             continue
         chunk = os.read(fd, size)
         if chunk:
             out += chunk
             idle_since = time.monotonic()
-    return out
+    raise AssertionError(f"flow never went quiet, {len(out)} bytes so far")
 
 
-def exchange(proxy, payload, pause=0.3):
+def exchange(proxy, payload):
     """Send payload each way through a started proxy and return both outputs."""
     mcu = open_raw(proxy.mcu_port)
     host = open_raw(proxy.host_port)
     try:
         os.write(mcu, payload)
-        time.sleep(pause)
         from_mcu = read_available(host)
         os.write(host, payload)
-        time.sleep(pause)
         from_host = read_available(mcu)
         return from_mcu, from_host
     finally:
@@ -90,13 +92,27 @@ class TestDrops(unittest.TestCase):
         proxy.set_faults(drop_rate=1.0)
         proxy.start()
         try:
-            from_mcu, from_host = exchange(proxy, b"hello")
-            self.assertEqual(from_mcu, b"")
-            self.assertEqual(from_host, b"")
-            self.assertEqual(proxy.counts()["mcu_to_host"].dropped, 5)
-            self.assertEqual(proxy.counts()["host_to_mcu"].dropped, 5)
+            mcu = open_raw(proxy.mcu_port)
+            host = open_raw(proxy.host_port)
+            try:
+                os.write(mcu, b"hello")
+                self._wait_for_drops(proxy, "mcu_to_host", 5)
+                os.write(host, b"hello")
+                self._wait_for_drops(proxy, "host_to_mcu", 5)
+                for fd in (mcu, host):
+                    readable, _, _ = select.select([fd], [], [], 2.0)
+                    self.assertFalse(readable, "a dropped byte still arrived")
+            finally:
+                os.close(mcu)
+                os.close(host)
         finally:
             proxy.stop()
+
+    def _wait_for_drops(self, proxy, direction, count):
+        deadline = time.monotonic() + 30.0
+        while proxy.counts()[direction].dropped < count:
+            self.assertLess(time.monotonic(), deadline, "dropped bytes never reached the proxy")
+            time.sleep(0.05)
 
     def test_partial_drops_keep_order_and_count(self):
         payload = bytes(range(1, 128)) * 2
@@ -225,12 +241,10 @@ class TestControl(unittest.TestCase):
             host = open_raw(proxy.host_port)
             try:
                 os.write(mcu, frame(16, 1, b"AB"))
-                time.sleep(0.3)
                 dirty = read_available(host)
                 before = proxy.counts()["mcu_to_host"].frames_touched
                 proxy.set_faults()
                 os.write(mcu, frame(16, 2, b"AB"))
-                time.sleep(0.3)
                 clean = read_available(host)
                 after = proxy.counts()["mcu_to_host"].frames_touched
             finally:

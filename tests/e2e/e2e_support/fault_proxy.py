@@ -71,6 +71,11 @@ class FaultProxy:
         self.host_port = os.ttyname(host_slave)
         os.close(mcu_slave)
         os.close(host_slave)
+        # Non-blocking masters: select can report a master readable while its
+        # slave is still closed, and a slave opened between select and read
+        # would turn that blocking read into a wait for data that never comes.
+        os.set_blocking(self._mcu_master, False)
+        os.set_blocking(self._host_master, False)
         self._lock = threading.Lock()
         self._drop_rate = 0.0
         self._dup_rate = 0.0
@@ -159,9 +164,10 @@ class FaultProxy:
         state.offset += 1
 
     def _forward(self, source, target, state):
-        # A master reads EIO until its slave is open and after it closes, so
-        # a failure here only skips one turn: both processes open their slaves
-        # just after this thread starts.
+        # A master reads EIO until its slave is open and after it closes, and
+        # the non-blocking read raises when select raced reality, so a failure
+        # here only skips one turn: both processes open their slaves just
+        # after this thread starts.
         try:
             chunk = os.read(source, 4096)
         except OSError:
