@@ -76,6 +76,8 @@ tasks:
       - core/tests/CMakeLists.txt
       - core/fuzz/corpus/**
       - ports/arduino/**
+      # The benchmark test compiles and runs the framing benchmark.
+      - benchmark/**
       # The release tests pin the checked-in generated outputs.
       - examples/cmake_minimal/lib/**
       - examples/cmake_minimal/r2s.yaml
