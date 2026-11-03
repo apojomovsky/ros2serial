@@ -1,10 +1,12 @@
 """Scenario 3: the host publishes Twist and the MCU echoes it back.
 
 Five distinct Twists go out on cmd_vel; the firmware republishes each on
-echo_vel, and every echoed field matches what was sent. The handshake is
-observed on bridge state and discovery waits on its own generous timeout
-from the handshake, so a slow runner cannot fail a correct echo path on
-the priming budget.
+echo_vel, and every echoed field matches what was sent. The handshake first
+waits out the boot wait on the generous timeout, then runs the unchanged
+3 s budget from the later of the ready line and the boot wait end, so a
+slow bridge open cannot spend the handshake budget. Discovery waits on its
+own generous timeout from the handshake, so a slow runner cannot fail a
+correct echo path on the priming budget.
 """
 
 import os
@@ -100,6 +102,37 @@ def tearDownModule():
         _SCRATCH.cleanup()
 
 
+def _wait_link_ready(node, received, since):
+    """Spin until the link leaves boot wait, within the generous timeout.
+
+    The bridge opens the port and waits out boot_wait_ms for an
+    unsolicited HELLO before the handshake starts, and under load the
+    open itself can lag the firmware ready line. The 3 s handshake budget
+    runs from the later of the ready line and this return.
+    """
+    while True:
+        if received and received[-1].status[0].message not in ("disconnected", "boot_wait"):
+            return max(since, time.monotonic())
+        took = time.monotonic() - since
+        assert took < bridge_support.HANDSHAKE_TIMEOUT, f"link never left boot wait after {took:.1f} s"
+        rclpy.spin_once(node, timeout_sec=0.5)
+
+
+def _wait_connected(node, received, since, budget, what):
+    """Spin until every handshake topic reads ok, within budget of since.
+
+    The report is read before spinning, so the time kept is the arrival
+    of the completing report, never a spin quantum later.
+    """
+    while True:
+        missing = checks.handshake_missing(received[-1], HANDSHAKE_TOPICS) if received else ["link silent"]
+        took = time.monotonic() - since
+        if not missing:
+            return took
+        assert took < budget, f"{what} still missing {missing} after {took:.1f} s"
+        rclpy.spin_once(node, timeout_sec=0.5)
+
+
 class TestScenario3(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -125,16 +158,11 @@ class TestScenario3(unittest.TestCase):
                 self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
             received.clear()
             _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
-            # /diagnostics publishes at 1 Hz, so the observed time can lag the
-            # real handshake by one period; the bound still holds because the
-            # handshake traffic itself is tens of milliseconds.
-            while True:
-                rclpy.spin_once(node, timeout_sec=0.5)
-                missing = checks.handshake_missing(received[-1], HANDSHAKE_TOPICS) if received else ["link silent"]
-                took = time.monotonic() - _SPAWNED.ready_at
-                if not missing:
-                    break
-                self.assertLess(took, TOPIC_BUDGET, f"handshake still missing {missing} after {took:.1f} s")
+            # The boot wait is the bridge's own delay before the handshake
+            # starts, so it waits on the generous timeout and the 3 s
+            # budget runs from the later of the ready line and its end.
+            link_ready_at = _wait_link_ready(node, received, _SPAWNED.ready_at)
+            took = _wait_connected(node, received, link_ready_at, TOPIC_BUDGET, "handshake")
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
             # The echo path needs both directions matched: the bridge's
             # endpoints appear on the graph once the handshake above completes,

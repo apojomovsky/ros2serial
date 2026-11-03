@@ -37,6 +37,34 @@ def failure_lines(output):
     return [line for line in output.splitlines() if re.match(r"(FAIL|ERROR): ", line)]
 
 
+def summary_lines(output):
+    """run.sh per-failure summary lines, naming every failed scenario file."""
+    return [line for line in output.splitlines() if line.startswith("e2e-failure: ")]
+
+
+def section_report(output):
+    """The failure report for one isolation section.
+
+    The summary lines name the cause whatever the output length, then the
+    launch_test FAIL and ERROR lines, then the tail for context.
+    """
+    return "\n".join(summary_lines(output) + failure_lines(output) + [output[-4000:]])
+
+
+class TestSectionReport(unittest.TestCase):
+    def test_names_a_failure_outside_the_tail(self):
+        failure = "e2e-failure: test_scenario_9_posix leg=static rmw=rmw_fastrtps_cpp exit=1"
+        output = failure + "\n" + "test_x ... ok\n" * 2000
+        self.assertIn("test_scenario_9_posix", section_report(output))
+
+    def test_names_a_timeout_kill_outside_the_tail(self):
+        failure = "e2e-failure: test_scenario_10_posix leg=runtime rmw=rmw_zenoh_cpp exit=124 (timeout)"
+        output = failure + "\n" + "test_x ... ok\n" * 2000
+        report = section_report(output)
+        self.assertIn("test_scenario_10_posix", report)
+        self.assertIn("timeout", report)
+
+
 class TestFailureLines(unittest.TestCase):
     def test_names_each_failed_test(self):
         output = "test_a ... ok\nFAIL: test_b (mod.TestB)\nERROR: test_c (mod.TestC)\n"
@@ -81,8 +109,8 @@ def test_two_concurrent_e2e_sections_pass_without_crosstalk():
     )
     out1, _ = first.communicate()
     out2, _ = second.communicate()
-    assert first.returncode == 0, "first section failed:\n" + "\n".join(failure_lines(out1) + [out1[-4000:]])
-    assert second.returncode == 0, "second section failed:\n" + "\n".join(failure_lines(out2) + [out2[-4000:]])
+    assert first.returncode == 0, "first section failed:\n" + section_report(out1)
+    assert second.returncode == 0, "second section failed:\n" + section_report(out2)
     assert domain_of(out1) != domain_of(out2), "both sections ran on one domain"
 
 
@@ -102,7 +130,7 @@ def test_avr_and_posix_sections_pass_side_by_side():
     )
     out_avr, _ = avr.communicate()
     out_posix, _ = posix.communicate()
-    assert avr.returncode == 0, "avr section failed:\n" + "\n".join(failure_lines(out_avr) + [out_avr[-4000:]])
-    assert posix.returncode == 0, "posix section failed:\n" + "\n".join(failure_lines(out_posix) + [out_posix[-4000:]])
+    assert avr.returncode == 0, "avr section failed:\n" + section_report(out_avr)
+    assert posix.returncode == 0, "posix section failed:\n" + section_report(out_posix)
     assert domain_of(out_avr) != domain_of(out_posix), "both sections ran on one domain"
     assert port_of(out_avr) != port_of(out_posix), "both sections share a zenoh port"

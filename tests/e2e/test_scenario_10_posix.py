@@ -4,7 +4,10 @@ The proxy corrupts both directions while the firmware publishes battery at
 50 Hz. Every touched frame is dropped exactly once by its receiver, so the
 MCU's dropped-frames counter matches the proxy's host-to-MCU touched count
 and the device-to-host seq gaps match its touched user frames. Afterwards
-the fault-free flow loses nothing, proving delivery recovers.
+the fault-free flow loses nothing, proving delivery recovers. The initial
+handshake first waits out the boot wait on the generous timeout, then runs
+the unchanged 3 s budget from the later of the ready line and the boot
+wait end, so a slow bridge open cannot spend the handshake budget.
 """
 
 import os
@@ -109,6 +112,40 @@ def _user_gaps(values):
     return total
 
 
+def _wait_link_ready(node, received, seen, since):
+    """Spin until the link leaves boot wait, within the generous timeout.
+
+    The bridge opens the port and waits out boot_wait_ms for an
+    unsolicited HELLO before the handshake starts, and under load the
+    open itself can lag the firmware ready line. The 3 s handshake budget
+    runs from the later of the ready line and this return, so the fresh
+    report count travels with it.
+    """
+    while True:
+        message = _fresh_message(node, received, seen)
+        seen = len(received)
+        if message.status[0].message not in ("disconnected", "boot_wait"):
+            return max(since, time.monotonic()), seen
+        took = time.monotonic() - since
+        assert took < bridge_support.HANDSHAKE_TIMEOUT, f"link never left boot wait after {took:.1f} s"
+
+
+def _wait_connected(node, received, seen, since, budget, what):
+    """Spin until every handshake topic reads ok, within budget of since.
+
+    Each fresh report is read before waiting for the next, so the time
+    kept is the arrival of the completing report, never a wait later.
+    """
+    while True:
+        message = _fresh_message(node, received, seen)
+        seen = len(received)
+        missing = checks.handshake_missing(message, HANDSHAKE_TOPICS)
+        took = time.monotonic() - since
+        if not missing:
+            return took, seen
+        assert took < budget, f"{what} still missing {missing} after {took:.1f} s"
+
+
 class TestScenario10(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -132,18 +169,12 @@ class TestScenario10(unittest.TestCase):
                 rclpy.spin_once(node, timeout_sec=0.5)
                 self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
             _SPAWNED = firmware.spawn(_FIRMWARE, _PROXY.mcu_port, ("--rate", str(RATE_HZ)))
-            # /diagnostics publishes at 1 Hz, so the observed time can lag the
-            # real handshake by one period; the bound still holds because the
-            # handshake traffic itself is tens of milliseconds.
+            # The boot wait is the bridge's own delay before the handshake
+            # starts, so it waits on the generous timeout and the 3 s
+            # budget runs from the later of the ready line and its end.
             seen = len(received)
-            while True:
-                message = _fresh_message(node, received, seen)
-                seen = len(received)
-                missing = checks.handshake_missing(message, HANDSHAKE_TOPICS)
-                took = time.monotonic() - _SPAWNED.ready_at
-                if not missing:
-                    break
-                self.assertLess(took, TOPIC_BUDGET, f"handshake still missing {missing} after {took:.1f} s")
+            link_ready_at, seen = _wait_link_ready(node, received, seen, _SPAWNED.ready_at)
+            took, seen = _wait_connected(node, received, seen, link_ready_at, TOPIC_BUDGET, "handshake")
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
             # The battery flow needs its endpoint matched: the bridge's
             # endpoints appear on the graph once the handshake above completes,
