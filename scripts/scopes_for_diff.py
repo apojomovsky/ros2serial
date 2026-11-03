@@ -113,6 +113,7 @@ PREFIX_RULES = (
     # also runs SCRIPTS.
     ("tests/e2e/test_isolation.py", {"NIGHTLY": "1", "SCRIPTS": "1"}),
     ("tests/e2e/avr_slice/", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/avr_flood/", {"E2E": "avr", "SCRIPTS": "1"}),
     ("tests/e2e/run-avr.sh", {"E2E": "avr", "SCRIPTS": "1"}),
     ("tests/e2e/e2e_support/avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
     ("tests/e2e/test_avr_support.py", {"E2E": "avr", "SCRIPTS": "1"}),

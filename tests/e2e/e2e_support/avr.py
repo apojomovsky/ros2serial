@@ -48,11 +48,15 @@ def harness_binary():
     return Path(given)
 
 
-def firmware_image(board):
-    """The board's slice ELF, built by tests/e2e/run-avr.sh."""
+def firmware_image(board, flavor="slice"):
+    """The board's ELF of one flavor, built by tests/e2e/run-avr.sh.
+
+    The slice carries scenarios 1 to 4; the flood feeds scenario 12.
+    """
     given = os.environ.get("R2S_E2E_AVR_FW", "")
     assert given, "R2S_E2E_AVR_FW is unset: run tests/e2e/run-avr.sh, which builds the firmware"
-    path = Path(given) / f"slice-{board_mcu(board)}.elf"
+    assert flavor in ("slice", "flood"), f"unknown firmware flavor {flavor!r}: want slice or flood"
+    path = Path(given) / f"{flavor}-{board_mcu(board)}.elf"
     assert path.is_file(), "no firmware at " + str(path) + ": run tests/e2e/run-avr.sh"
     return path
 
@@ -116,10 +120,10 @@ def _await_pty(proc, deadline):
     raise AssertionError(f"the harness announced no pty within {READY_TIMEOUT:.0f} s")
 
 
-def spawn(board):
+def spawn(board, flavor="slice"):
     """Start the board's firmware under simavr and return it once booted."""
     proc = subprocess.Popen(
-        [str(harness_binary()), "--mcu", board_mcu(board), "--firmware", str(firmware_image(board)), *RUN_MS],
+        [str(harness_binary()), "--mcu", board_mcu(board), "--firmware", str(firmware_image(board, flavor)), *RUN_MS],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         bufsize=0,

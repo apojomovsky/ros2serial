@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# The avr end-to-end suite: scenarios 1 to 4 against the slice sketch on an
-# emulated Uno and Mega. It stages the Arduino library at build time (the
-# bundle plus the core and the port glue, as scripts/build-examples.sh does),
-# compiles the sketch for both boards with burst-sized serial rings, and runs
+# The avr end-to-end suite: scenarios 1 to 4 against the slice sketch and
+# scenario 12 against the flood sketch, on an emulated Uno and Mega. It
+# stages the Arduino library at build time (the bundle plus the core and
+# the port glue, as scripts/build-examples.sh does), compiles the sketches
+# for both boards with burst-sized serial rings, and runs
 # every scenario under each RMW the design names, starting the Zenoh router
 # first for its leg. Builds go under R2S_BUILD_DIR, so the tree stays clean;
 # the suite runs this script for E2E=avr. R2S_RMWS narrows the RMW loop and
@@ -90,6 +91,20 @@ for board in uno mega; do
   avr-size "$out/avr_slice.ino.elf" || exit 1
   mv "$out/avr_slice.ino.elf" "$build/fw/slice-$mcu.elf" || exit 1
 done
+# The flood sketch is scenario 12's alone: its per-tick TX budget lives in
+# the test-only port hook, armed by the sketch, so the slice build above
+# stays exactly what scenarios 1 to 11 run.
+for board in uno mega; do
+  mcu=atmega328p
+  [ "$board" = mega ] && mcu=atmega2560
+  out="$build/fw/$board-flood"
+  arduino-cli compile --fqbn "arduino:avr:$board" \
+    --build-property "compiler.c.extra_flags=$extras" \
+    --build-property "compiler.cpp.extra_flags=$serial_flags -DR2S_TEST_TX_CAP=16" \
+    --library "$stage" --output-dir "$out" tests/e2e/avr_flood || exit 1
+  avr-size "$out/avr_flood.ino.elf" || exit 1
+  mv "$out/avr_flood.ino.elf" "$build/fw/flood-$mcu.elf" || exit 1
+done
 export R2S_E2E_AVR_FW=$build/fw
 [ "$build_only" = 1 ] && exit 0
 
@@ -152,7 +167,7 @@ for rmw in $rmws; do
   fi
   for board in $boards; do
     export R2S_E2E_BOARD=$board
-    for scenario in 1 2 3 4; do
+    for scenario in 1 2 3 4 12; do
       # Same R2S_E2E_SKIP contract as run.sh, matched on the avr file name.
       case " ${R2S_E2E_SKIP:-} " in
         *" test_scenario_${scenario}_avr "*) echo "skip test_scenario_${scenario}_avr (R2S_E2E_SKIP)" ;;
