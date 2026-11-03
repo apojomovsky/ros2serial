@@ -58,6 +58,7 @@ def test_files_for_names_the_exact_bundle_set():
         "src/sensor_msgs/msg/imu.hpp",
         "src/sensor_msgs/msg/joint_state.hpp",
         "src/sensor_msgs/msg/range.hpp",
+        "src/std_msgs/msg/bool.hpp",
         "src/std_msgs/msg/float32.hpp",
         "src/std_msgs/msg/header.hpp",
         "src/std_msgs/msg/string.hpp",
