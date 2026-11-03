@@ -1,7 +1,8 @@
 /* Handwritten message code for the codec tests: C structs, descriptor tables
- * and the topic configuration for Float32, Twist and a bounded String. It
- * stands in for the files G7 and G8 will generate, with the same bytes
- * (spec/protocol.md, section 9), until G8 replaces it in its own firmware. */
+ * and the topic configuration for Float32, Twist, a bounded String, Range,
+ * Imu and JointState. It stands in for the files G7 and G8 will generate,
+ * with the same bytes (spec/protocol.md, section 9), until G8 replaces it
+ * in its own firmware. */
 #ifndef R2S_TEST_HANDWRITTEN_H
 #define R2S_TEST_HANDWRITTEN_H
 
@@ -34,12 +35,75 @@ typedef struct {
     char data[9];
 } std_msgs__msg__String;
 
+typedef struct {
+    int32_t sec;
+    uint32_t nanosec;
+} builtin_interfaces__msg__Time;
+
+typedef struct {
+    builtin_interfaces__msg__Time stamp;
+    char frame_id[25];
+} std_msgs__msg__Header;
+
+typedef struct {
+    double x;
+    double y;
+    double z;
+    double w;
+} geometry_msgs__msg__Quaternion;
+
+typedef struct {
+    std_msgs__msg__Header header;
+    uint8_t radiation_type;
+    float field_of_view;
+    float min_range;
+    float max_range;
+    float range;
+    float variance;
+} sensor_msgs__msg__Range;
+
+typedef struct {
+    std_msgs__msg__Header header;
+    geometry_msgs__msg__Quaternion orientation;
+    double orientation_covariance[9];
+    geometry_msgs__msg__Vector3 angular_velocity;
+    double angular_velocity_covariance[9];
+    geometry_msgs__msg__Vector3 linear_acceleration;
+    double linear_acceleration_covariance[9];
+} sensor_msgs__msg__Imu;
+
+typedef struct {
+    std_msgs__msg__Header header;
+    struct {
+        char data[4][13];
+        uint8_t size;
+    } name;
+    struct {
+        double data[4];
+        uint8_t size;
+    } position;
+    struct {
+        double data[4];
+        uint8_t size;
+    } velocity;
+    struct {
+        double data[4];
+        uint8_t size;
+    } effort;
+} sensor_msgs__msg__JointState;
+
 /* Type indices in the handwritten table, in the depth-first order [DSC-11]
  * fixes: each nested type is numbered before the type that names it. */
 #define R2S_HANDWRITTEN_FLOAT32 0u
 #define R2S_HANDWRITTEN_VECTOR3 1u
 #define R2S_HANDWRITTEN_TWIST 2u
 #define R2S_HANDWRITTEN_STRING 3u
+#define R2S_HANDWRITTEN_TIME 4u
+#define R2S_HANDWRITTEN_HEADER 5u
+#define R2S_HANDWRITTEN_RANGE 6u
+#define R2S_HANDWRITTEN_QUATERNION 7u
+#define R2S_HANDWRITTEN_IMU 8u
+#define R2S_HANDWRITTEN_JOINT_STATE 9u
 
 /* The user topic IDs of the test firmware. */
 #define R2S_HANDWRITTEN_BATTERY_ID 16u

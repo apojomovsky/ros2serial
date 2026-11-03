@@ -23,7 +23,7 @@ struct publisher_record {
 /* One subscriber's storage and the typed dispatch that reaches it. */
 struct subscriber_record {
     void *record;
-    void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t);
+    void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t, uint8_t);
     uint8_t topic_id;
 };
 
@@ -134,7 +134,8 @@ r2s_status_t register_publisher(const char *topic, const r2s_codec_table_t *tabl
 }
 
 r2s_status_t register_subscriber(const char *topic, const char *type_name, const uint8_t *type_hash,
-                                 void *record, void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t),
+                                 void *record,
+                                 void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t, uint8_t),
                                  uint8_t *topic_id)
 {
     uint8_t id = 0xFFu;
@@ -277,7 +278,7 @@ r2s_status_t Node::register_publisher(const char *topic, const r2s_codec_table_t
 
 r2s_status_t Node::register_subscriber(const char *topic, const char *type_name, const uint8_t *type_hash,
                                        void *record,
-                                       void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t),
+                                       void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t, uint8_t),
                                        uint8_t *topic_id)
 {
     if (!m_owned) {
@@ -313,7 +314,8 @@ extern "C" __attribute__((weak)) void r2s_codec_dispatch(uint8_t topic_id, uint8
     }
     narrow = (uint8_t)(r2s_session_topic_flags(table_index) & 0x02u);
     (void)r2s_session_note_rx_seq(table_index, seq);
-    r2s_runtime_subscribers[index].dispatch(r2s_runtime_subscribers[index].record, payload, len, narrow);
+    r2s_runtime_subscribers[index].dispatch(r2s_runtime_subscribers[index].record, payload, len, narrow,
+                                            topic_id);
 }
 
 #ifdef R2S_TESTING

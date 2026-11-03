@@ -24,7 +24,13 @@ TARGETS = ("rcobs_decode", "framer", "session", "codec")
 
 # The codec target's type indices, in the order fuzz_codec_table.h numbers
 # them: the generator heads each payload with the index its seeds decode as.
-CODEC_TYPE = {"std_msgs/msg/Float32": 11, "geometry_msgs/msg/Twist": 10}
+CODEC_TYPE = {
+    "std_msgs/msg/Float32": 11,
+    "geometry_msgs/msg/Twist": 10,
+    "sensor_msgs/msg/Range": 15,
+    "sensor_msgs/msg/Imu": 17,
+    "sensor_msgs/msg/JointState": 18,
+}
 
 
 def _hex(text):

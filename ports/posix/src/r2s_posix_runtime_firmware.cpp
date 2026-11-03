@@ -16,6 +16,7 @@
 #include "ros2serial.h"
 
 #include <builtin_interfaces/msg/time.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/string.hpp>
 
@@ -41,6 +42,7 @@ static const char *const kDefaultSub = "cmd_vel";
 static const char *const kDefaultEcho = "echo_vel";
 static const char *const kDefaultLogText = "log_text";
 static const char *const kDefaultTimeNow = "time_now";
+static const char *const kDefaultJoints = "joints";
 
 /* The skew range the wire correction carries (spec/protocol.md [TIM-4]):
  * past it the host must refuse the correction, so the knob stops here. */
@@ -55,6 +57,7 @@ struct options {
     const char *echo;
     const char *log_text;
     const char *time_now;
+    const char *joints;
     int32_t skew_ppm;
     unsigned rate;
     uint16_t tx_cap;
@@ -79,11 +82,21 @@ void on_cmd_vel(const geometry_msgs::msg::Twist &msg)
     }
 }
 
+static uint32_t s_joints_count;
+
+void on_joints(const sensor_msgs::msg::JointState &msg)
+{
+    (void)msg;
+    s_joints_count++;
+    fprintf(stderr, "r2s_posix: joints n=%lu\n", (unsigned long)s_joints_count);
+}
+
 static void usage(FILE *out)
 {
     fprintf(out, "Usage: r2s_posix_runtime_firmware PORT [--node NAME] [--rate HZ]\n"
                  "           [--pub NAME | --no-pub] [--sub NAME | --no-sub]\n"
                  "           [--echo NAME | --no-echo] [--time-now NAME | --no-time-now]\n"
+                 "           [--joints NAME | --no-joints]\n"
                  "           [--log-text NAME | --no-log-text] [--log-lines] [--tick-skew-ppm PPM]\n"
                  "           [--tx-free N] [--flood]\n");
 }
@@ -206,6 +219,7 @@ static void parse_options(int argc, char **argv, struct options *opts)
     opts->echo = kDefaultEcho;
     opts->log_text = kDefaultLogText;
     opts->time_now = kDefaultTimeNow;
+    opts->joints = kDefaultJoints;
     opts->skew_ppm = 0;
     opts->rate = 10u;
     opts->tx_cap = 0xFFFFu;
@@ -233,6 +247,9 @@ static void parse_options(int argc, char **argv, struct options *opts)
         } else if (strcmp(arg, "--time-now") == 0) {
             opts->time_now = take_value(argc, argv, &i, arg);
             check_name(arg, opts->time_now);
+        } else if (strcmp(arg, "--joints") == 0) {
+            opts->joints = take_value(argc, argv, &i, arg);
+            check_name(arg, opts->joints);
         } else if (strcmp(arg, "--tick-skew-ppm") == 0) {
             opts->skew_ppm = take_skew(take_value(argc, argv, &i, arg));
         } else if (strcmp(arg, "--tx-free") == 0) {
@@ -249,6 +266,8 @@ static void parse_options(int argc, char **argv, struct options *opts)
             opts->log_text = NULL;
         } else if (strcmp(arg, "--no-time-now") == 0) {
             opts->time_now = NULL;
+        } else if (strcmp(arg, "--no-joints") == 0) {
+            opts->joints = NULL;
         } else if (strcmp(arg, "--log-lines") == 0) {
             opts->log_lines = 1u;
         } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
@@ -320,6 +339,9 @@ int main(int argc, char **argv)
     if (opts.time_now != NULL) {
         static r2s::Publisher<builtin_interfaces::msg::Time> time_now(node, opts.time_now);
         time_pub = &time_now;
+    }
+    if (opts.joints != NULL) {
+        static r2s::Subscription<sensor_msgs::msg::JointState> joints(node, opts.joints, on_joints);
     }
     /* The first spin binds the table the objects registered: a name the
      * announce cannot hold refuses here, before the ready line, instead of
