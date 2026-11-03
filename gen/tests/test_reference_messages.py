@@ -17,6 +17,7 @@ BUNDLED = (
     "sensor_msgs/msg/Imu",
     "sensor_msgs/msg/JointState",
     "sensor_msgs/msg/Range",
+    "std_msgs/msg/Bool",
     "std_msgs/msg/Float32",
     "std_msgs/msg/Header",
     "std_msgs/msg/String",
