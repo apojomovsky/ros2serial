@@ -35,7 +35,25 @@ def copy_tree(dest: Path) -> Path:
     return dest
 
 
-SCOPES = ("LINT", "SCRIPTS", "COMMITS", "CORE", "GEN", "BRIDGE", "CPP", "E2E", "COVERAGE", "DOCS", "EXAMPLES", "FUZZ")
+SCOPES = (
+    "LINT",
+    "SCRIPTS",
+    "COMMITS",
+    "CORE",
+    "GEN",
+    "BRIDGE",
+    "CPP",
+    "E2E",
+    "COVERAGE",
+    "DOCS",
+    "EXAMPLES",
+    "BUDGETS",
+    "FUZZ",
+    "README",
+    "NIGHTLY",
+    "SOAK",
+    "SCRIPTS_SHARD",
+)
 
 
 def run_lint(root: Path) -> subprocess.CompletedProcess:
@@ -94,6 +112,17 @@ def test_the_suite_does_not_pass_test_down_to_its_own_tests(tmp_path):
     assert seen.read_text() == "", "TEST reached the script tests"
 
 
+def test_the_suite_consumes_the_shard_before_starting_pytest():
+    """SCRIPTS_SHARD selects the outer run's own shard, and the script tests
+    start nested suite runs. The suite consumes the variable up front, the way
+    it unsets TEST, so a nested run inherits only what its caller sets."""
+    lines = (ROOT / "scripts" / "ci-test.sh").read_text().splitlines()
+    capture_at = next(i for i, line in enumerate(lines) if line.startswith("scripts_shard="))
+    unset_at = next(i for i, line in enumerate(lines) if line == "unset SCRIPTS_SHARD")
+    pytest_at = next(i for i, line in enumerate(lines) if "python3 -m pytest scripts tools" in line)
+    assert capture_at < unset_at < pytest_at, "the shard must be captured and unset before pytest starts"
+
+
 def test_lint_fails_on_a_python_lint_error(tmp_path):
     root = copy_tree(tmp_path)
     (root / "scripts" / "broken.py").write_text("import os\n")
@@ -127,21 +156,36 @@ def run_scope(
 def stub_toolbox(path: Path) -> Path:
     """Fake the example toolchain: every build step succeeds and the ELF carries its symbols.
 
-    The runtime sketch's firmware is checked for the runtime topic table and
+    The runtime sketches' firmware is checked for the runtime topic table and
     the subscriber records, and the static ones for the generated receive
     buffer, so the stub's nm prints the receive buffer always and the runtime
-    symbols only for the runtime sketch (whose path names it): the static
+    symbols only for the runtime sketches (whose paths name them): the static
     firmware must not link the runtime table.
     """
     path.mkdir(parents=True, exist_ok=True)
     (path / "cmake").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     (path / "arduino-cli").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-    (path / "avr-size").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    (path / "avr-size").write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '   text\\t   data\\t    bss\\t    dec\\t    hex\\tfilename\\n"
+        "   8000\\t    100\\t    200\\t   8300\\t   206c\\tfirmware.elf\\n'\n",
+        encoding="utf-8",
+    )
+    (path / "avr-objdump").write_text(
+        "#!/usr/bin/env bash\n"
+        "echo '00000100 <main>:'\n"
+        "echo ' 100:\t1c d1 \trcall\t.+56\t; 0x13a <setup>'\n"
+        "echo '0000013a <setup>:'\n"
+        "echo ' 13a:\t2a d1 \trcall\t.+84\t; 0x190 <r2s_spin>'\n"
+        "echo '00000190 <r2s_spin>:'\n"
+        "echo ' 190:\t08 95 \tret'\n",
+        encoding="utf-8",
+    )
     (path / "avr-nm").write_text(
         "#!/usr/bin/env bash\n"
         "echo '008001eb b r2s_rx_buf'\n"
         'case "$*" in\n'
-        "    *arduino_minimal*)\n"
+        "    *arduino_minimal*|*arduino_hello*|*arduino_blink*|*arduino_button*|*arduino_servo*|*arduino_range*)\n"
         "        echo '00800460 000000e0 b r2s_runtime_topics'\n"
         "        echo '00800410 00000050 b r2s_runtime_subscribers'\n"
         "        echo '00800540 00000050 b r2s_runtime_publishers'\n"
@@ -149,7 +193,7 @@ def stub_toolbox(path: Path) -> Path:
         "esac\n",
         encoding="utf-8",
     )
-    for tool in ("cmake", "arduino-cli", "avr-size", "avr-nm"):
+    for tool in ("cmake", "arduino-cli", "avr-size", "avr-objdump", "avr-nm"):
         (path / tool).chmod(0o755)
     return path
 
@@ -161,13 +205,58 @@ def test_docs_scope_runs_its_section(tmp_path):
     assert "== docs" in result.stdout
 
 
-def test_examples_scope_runs_its_section(tmp_path):
+def test_examples_scope_runs_its_section(tmp_path, monkeypatch):
+    # The stubbed toolchain cannot produce runnable firmware, so the simavr
+    # behavior leg stays off here; the real EXAMPLES run always proves it.
+    monkeypatch.setenv("R2S_EXAMPLES_NO_SIMAVR", "1")
     result = run_scope(
         copy_tree(tmp_path), "EXAMPLES", stubs=stub_toolbox(tmp_path / "bin"), build_dir=tmp_path / "build"
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "== examples" in result.stdout
+
+
+def test_budgets_scope_runs_its_section(tmp_path):
+    root = copy_tree(tmp_path)
+    build = tmp_path / "build" / "examples"
+    shipped = [
+        "cmake_minimal/hello_cmake",
+        "arduino_minimal/uno/arduino_minimal.ino.elf",
+        "arduino_minimal/mega/arduino_minimal.ino.elf",
+        "arduino_xmacro/uno/arduino_xmacro.ino.elf",
+        "arduino_xmacro/mega/arduino_xmacro.ino.elf",
+        "arduino_static/uno/arduino_static.ino.elf",
+        "arduino_static/mega/arduino_static.ino.elf",
+    ]
+    for rel in shipped:
+        fake = build / rel
+        fake.parent.mkdir(parents=True, exist_ok=True)
+        fake.write_bytes(b"")
+    (build / "cmake_minimal" / "hello_cmake").chmod(0o755)
+    su = "main:32:static\nsetup:16:static\nr2s_spin:64:static\n"
+    (build / "cmake_minimal" / "firmware.su").write_text(su)
+    for rel in shipped:
+        if not rel.startswith("cmake"):
+            source = build / "stack" / rel
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(b"")
+            (source.parent / "firmware.su").write_text(su)
+    result = run_scope(root, "BUDGETS", stubs=stub_toolbox(tmp_path / "bin"), build_dir=tmp_path / "build")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "== budgets" in result.stdout
+
+
+def test_examples_builds_isolate_their_build_paths():
+    """Every sketch build keeps its own arduino build path: the shared cache
+    once leaked the e2e slice serial flags into a sketch without one."""
+    text = (ROOT / "scripts" / "build-examples.sh").read_text()
+    joined = re.sub(r"\\\n", " ", text)
+    compiles = [line for line in joined.splitlines() if "arduino-cli compile" in line]
+    assert compiles, "no arduino-cli compile line left to isolate"
+    for line in compiles:
+        assert "--build-path" in line, f"sketch build shares the arduino cache:\n{line.strip()}"
 
 
 def test_fuzz_scope_runs_its_section(tmp_path, monkeypatch):
@@ -247,6 +336,13 @@ def test_every_header_scope_runs_a_section():
     assert scopes, "no scopes found in the header comment"
     missing = [scope for scope in scopes if f"wants {scope}" not in text]
     assert not missing, f"header scopes with no section: {missing}"
+
+
+def test_nightly_scope_names_its_section():
+    """NIGHTLY runs the isolation pairs file as its own section, not a suite."""
+    text = (ROOT / "scripts" / "ci-test.sh").read_text()
+    assert "wants NIGHTLY" in text
+    assert "tests/e2e/test_isolation.py" in text
 
 
 def test_e2e_both_backend_runs_all_three_suites(tmp_path):

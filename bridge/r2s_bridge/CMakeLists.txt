@@ -152,6 +152,7 @@ if(BUILD_TESTING)
   find_package(rcl_interfaces REQUIRED)
   find_package(sensor_msgs REQUIRED)
   find_package(std_msgs REQUIRED)
+  find_package(tf2_msgs REQUIRED)
   ament_add_gtest(test_converter test/test_converter.cpp)
   target_compile_definitions(test_converter PRIVATE
     R2S_MESSAGES_VECTOR_DIR="${R2S_CORE_DIR}/../spec/vectors/messages")
@@ -161,11 +162,24 @@ if(BUILD_TESTING)
     geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
     rcl_interfaces::rcl_interfaces__rosidl_typesupport_cpp
     sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
-    std_msgs::std_msgs__rosidl_typesupport_cpp)
+    std_msgs::std_msgs__rosidl_typesupport_cpp
+    tf2_msgs::tf2_msgs__rosidl_typesupport_cpp)
 
   # openpty comes from libutil; the pty test uses it instead of a device.
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
   target_link_libraries(test_termios_transport r2s_bridge_component util)
+
+  # The core port seam is header-private to the bridge sources, so its test
+  # includes them directly.
+  ament_add_gtest(test_core_port test/test_core_port.cpp)
+  target_include_directories(test_core_port PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${R2S_CORE_DIR}/include)
+  target_link_libraries(test_core_port r2s_bridge_component)
+
+  # The ROS clock is plain C++ over a callback, so its tests need no node.
+  ament_add_gtest(test_ros_clock test/test_ros_clock.cpp)
+  target_link_libraries(test_ros_clock r2s_bridge_component)
 
   # The router drives a real node with a scripted link and real type support,
   # covering remapping, QoS and both traffic directions end to end.
@@ -176,6 +190,15 @@ if(BUILD_TESTING)
     r2s_bridge_test_support
     geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
     sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
+    std_msgs::std_msgs__rosidl_typesupport_cpp)
+
+  # A publish that fails on the ROS graph (a context shutting down under
+  # the poll loop) is logged, counted and survived, never an abort.
+  ament_add_gtest(test_router_publish_failure test/test_router_publish_failure.cpp)
+  target_include_directories(test_router_publish_failure PRIVATE ${R2S_CORE_DIR}/include)
+  target_link_libraries(test_router_publish_failure
+    r2s_bridge_component
+    r2s_bridge_test_support
     std_msgs::std_msgs__rosidl_typesupport_cpp)
 
   # The diagnostics snapshot reports the same scripted link through the

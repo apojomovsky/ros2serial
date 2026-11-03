@@ -35,7 +35,9 @@ PREFIX_RULES = (
     ("scripts/bridge-test.sh", {"BRIDGE": "1"}),
     ("scripts/coverage-gate.sh", {"COVERAGE": "1"}),
     ("scripts/coverage-filters.sh", {"COVERAGE": "1"}),
-    ("scripts/build-examples.sh", {"EXAMPLES": "1"}),
+    ("scripts/build-examples.sh", {"EXAMPLES": "1", "BUDGETS": "1"}),
+    ("scripts/budgets-check.sh", {"BUDGETS": "1"}),
+    ("scripts/budgets_comment.py", {"SCRIPTS": "1", "BUDGETS": "1"}),
     # The C++ layer builds core sources into its host tests.
     ("scripts/cpp-test.sh", {"CPP": "1"}),
     ("scripts/fuzz.sh", {"FUZZ": "1"}),
@@ -50,13 +52,18 @@ PREFIX_RULES = (
     ("scripts/pr_body_check.py", {"COMMITS": "1"}),
     ("scripts/pr-title-range.sh", {"COMMITS": "1"}),
     ("scripts/prose_check.py", {"COMMITS": "1"}),
-    # Any other suite script may change what a section does: run all of it.
+    # The README walkthrough check runs the Getting started commands on simavr.
+    ("scripts/check-readme.sh", {"README": "1"}),
     ("scripts/", FULL),
     # Every tool is exercised by the SCRIPTS scope; the LINT sections that
     # consume most tools always run as cheap checks.
+    ("tools/mermaid-check/", {"SCRIPTS": "1", "MERMAID": "1"}),
     ("tools/snippets_check.py", {"SCRIPTS": "1", "DOCS": "1"}),
     ("tools/coverage_gate.py", {"SCRIPTS": "1", "COVERAGE": "1"}),
     ("tools/fuzz_corpus.py", {"SCRIPTS": "1", "FUZZ": "1"}),
+    ("tools/budgets", {"SCRIPTS": "1", "BUDGETS": "1"}),
+    ("tools/size_report.py", {"SCRIPTS": "1", "BUDGETS": "1"}),
+    ("tools/stack_report.py", {"SCRIPTS": "1", "BUDGETS": "1"}),
     ("tools/", {"SCRIPTS": "1"}),
     # Core is built by CORE, measured by COVERAGE, linked by FUZZ and the
     # examples, compiled into the GEN host library, the DOCS snippets, the
@@ -100,19 +107,38 @@ PREFIX_RULES = (
     # The avr backend compiles the slice sketch and runs its scenarios, so
     # avr-only files map to the avr leg. The rest of the tree is shared by
     # both backends, and the BRIDGE launch test loads the relay from its file.
-    ("tests/e2e/avr_slice/", {"E2E": "avr"}),
-    ("tests/e2e/run-avr.sh", {"E2E": "avr"}),
-    ("tests/e2e/e2e_support/avr.py", {"E2E": "avr"}),
-    ("tests/e2e/test_avr_support.py", {"E2E": "avr"}),
-    ("tests/e2e/test_scenario_1_avr.py", {"E2E": "avr"}),
-    ("tests/e2e/test_scenario_2_avr.py", {"E2E": "avr"}),
-    ("tests/e2e/test_scenario_3_avr.py", {"E2E": "avr"}),
-    ("tests/e2e/test_scenario_4_avr.py", {"E2E": "avr"}),
-    ("tests/e2e/", {"E2E": "both", "BRIDGE": "1"}),
+    # The isolation pairs run in the nightly workflow, on a PR only through
+    # the ci.yml nightly job when the plan selects NIGHTLY. The
+    # scripts/test_e2e_* tests load files from tests/e2e/, so every e2e path
+    # also runs SCRIPTS.
+    ("tests/e2e/test_isolation.py", {"NIGHTLY": "1", "SCRIPTS": "1"}),
+    ("tests/e2e/avr_slice/", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/avr_flood/", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/run-avr.sh", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/e2e_support/avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/test_avr_support.py", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/test_scenario_1_avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/test_scenario_2_avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/test_scenario_3_avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/test_scenario_4_avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/test_scenario_12_avr.py", {"E2E": "avr", "SCRIPTS": "1"}),
+    ("tests/e2e/", {"E2E": "both", "BRIDGE": "1", "SCRIPTS": "1"}),
     ("tests/harness/", {"E2E": "avr"}),
     ("tests/", FULL),
-    ("docs/", {"DOCS": "1"}),
+    # The walkthrough check reads the README and runs its commands on simavr.
+    # Markdown also feeds the mermaid job, which parses every mermaid block.
+    ("README.md", {"DOCS": "1", "README": "1", "MERMAID": "1"}),
+    ("docs/", {"DOCS": "1", "MERMAID": "1"}),
 )
+
+
+def _merge(found, scopes):
+    for scope, value in scopes.items():
+        if scope == "E2E" and found.get("E2E") not in (None, value):
+            found["E2E"] = "both"
+        else:
+            found[scope] = value
+    return found
 
 
 def scopes_for_paths(paths):
@@ -123,11 +149,7 @@ def scopes_for_paths(paths):
         scopes = _scopes_for_path(path.strip())
         if scopes is FULL:
             return dict(FULL)
-        for scope, value in scopes.items():
-            if scope == "E2E" and found.get("E2E") not in (None, value):
-                found["E2E"] = "both"
-            else:
-                found[scope] = value
+        _merge(found, scopes)
     return found
 
 
@@ -137,7 +159,7 @@ def _scopes_for_path(path):
             return scopes
     name = path.rsplit("/", 1)[-1]
     if name in DOC_NAMES or name.endswith(".md"):
-        return {"DOCS": "1"}
+        return {"DOCS": "1", "MERMAID": "1"}
     if path in ("Makefile", "VERSION"):
         return FULL
     return FULL
@@ -166,15 +188,26 @@ def main(argv=None):
     if os.environ.get("R2S_FULL") == "1":
         print("FULL=1")
         return 0
-    try:
-        paths = changed_paths(args.base)
-    except (RuntimeError, IndexError) as exc:
-        print(f"scopes_for_diff: {exc}; running the full suite", file=sys.stderr)
-        print("FULL=1")
+    if os.environ.get("GITHUB_ACTIONS"):
+        try:
+            paths = changed_paths(args.base)
+        except (RuntimeError, IndexError) as exc:
+            print(f"scopes_for_diff: {exc}; running the full suite", file=sys.stderr)
+            print("FULL=1")
+            return 0
+        result = scopes_for_paths(paths)
+        for scope in sorted(result):
+            print(f"{scope}={result[scope]}")
         return 0
-    result = scopes_for_paths(paths)
-    for scope in sorted(result):
-        print(f"{scope}={result[scope]}")
+    # Every local diff runs the cheap scopes: the workstation gate stays
+    # fast, and CI runs the mapped scopes on the merge with the base.
+    for scope in sorted(CHEAP):
+        print(f"{scope}={CHEAP[scope]}")
+    print(
+        "scopes_for_diff: this run covers the cheap scopes,",
+        "leaving the full suite to CI",
+        file=sys.stderr,
+    )
     return 0
 
 

@@ -21,7 +21,7 @@ if [ "${1:-}" = --build-only ]; then build_only=1; shift; fi
 
 cxx=${CXX:-g++}
 "$cxx" -std=c++17 -Werror -Wall -Wextra -Wconversion -Wshadow \
-  -DR2S_TESTING \
+  -DR2S_TESTING -DR2S_TEST_TX_CAP=16 \
   -I"$root/ports/arduino/tests/stubs" \
   -I"$root/ports/arduino" \
   -I"$root/core/include" \

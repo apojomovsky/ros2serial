@@ -1,12 +1,15 @@
 """The versions r2s-gen reports: the repository's, and the one the wire speaks."""
 
 import re
+import sys
 from pathlib import Path
 
+import pytest
 from r2s_gen import bundle
 from r2s_gen.version import PROTOCOL_VERSION, __version__
 
 ROOT = Path(__file__).resolve().parents[2]
+SPEC = ROOT / "spec" / "protocol.md"
 
 
 def _capture(pattern: str, text: str) -> str:
@@ -20,7 +23,11 @@ def test_the_generator_version_is_the_repository_version():
 
 
 def test_every_ros_manifest_carries_the_repository_version():
-    manifests = sorted(ROOT.rglob("package.xml"))
+    # Installed copies are build outputs, not sources: the walkthrough builds
+    # in-tree, so its install tree carries manifests with older versions.
+    manifests = sorted(
+        path for path in ROOT.rglob("package.xml") if path.relative_to(ROOT).parts[0] not in ("build", "install", "log")
+    )
     assert len(manifests) >= 3, manifests
     for manifest in manifests:
         assert _capture(r"<version>([^<]+)</version>", manifest.read_text(encoding="utf-8")) == __version__, manifest
@@ -42,6 +49,20 @@ def test_the_protocol_version_is_the_one_the_core_announces():
 
 
 # covers: GEN-2
+def _spec_text() -> str:
+    try:
+        return SPEC.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        pytest.fail(f"spec/protocol.md: unreadable ({str(e).splitlines()[0]})")
+
+
 def test_the_protocol_version_is_the_one_the_spec_describes():
-    spec = (ROOT / "spec" / "protocol.md").read_text(encoding="utf-8")
-    assert str(PROTOCOL_VERSION) == _capture(r"The protocol version described here is (\d+)", spec)
+    assert str(PROTOCOL_VERSION) == _capture(r"The protocol version described here is (\d+)", _spec_text())
+
+
+def test_a_spec_that_is_not_utf8_fails(tmp_path, monkeypatch):
+    bad = tmp_path / "protocol.md"
+    bad.write_bytes(b"The protocol version described here is 1\n\xff")
+    monkeypatch.setattr(sys.modules[__name__], "SPEC", bad)
+    with pytest.raises(pytest.fail.Exception, match=r"spec/protocol\.md"):
+        test_the_protocol_version_is_the_one_the_spec_describes()

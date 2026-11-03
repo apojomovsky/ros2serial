@@ -4,11 +4,13 @@ Run directly: `python3 tests/e2e/checks_test.py`. The launch suite runs it
 before any scenario, so a broken helper fails fast instead of mid-handshake.
 """
 
+import contextlib
+import io
 import struct
 import time
 import unittest
 
-from e2e_support import checks
+from e2e_support import checks, teardown
 
 
 class Twist:
@@ -127,9 +129,82 @@ class TestHandshakeReady(unittest.TestCase):
         self.assertEqual(checks.handshake_missing(message, self.WANTED), ["topic cmd_vel"])
 
 
+class TestWaitForHandshake(unittest.TestCase):
+    WANTED = ["battery", "cmd_vel"]
+
+    def _ready(self):
+        return FakeDiagnostics("connected", [("topic battery status", "ok"), ("topic cmd_vel status", "ok")])
+
+    def test_ready_report_returns_without_spinning(self):
+        spins = []
+        took = checks.wait_for_handshake(
+            [self._ready()], self.WANTED, time.monotonic(), 3.0, "handshake", lambda: spins.append(1)
+        )
+        self.assertEqual(spins, [])
+        self.assertLess(took, 1.0)
+
+    def test_pumps_spin_until_report_completes(self):
+        received = [FakeDiagnostics("handshaking", [])]
+        ready = self._ready()
+        spins = []
+
+        def spin():
+            spins.append(1)
+            received.append(ready)
+
+        took = checks.wait_for_handshake(received, self.WANTED, time.monotonic(), 3.0, "handshake", spin)
+        self.assertEqual(len(spins), 1)
+        self.assertGreaterEqual(took, 0.0)
+
+    def test_silent_link_times_out_naming_the_link(self):
+        with self.assertRaises(AssertionError) as failure:
+            checks.wait_for_handshake([], self.WANTED, time.monotonic() - 10.0, 3.0, "handshake", lambda: None)
+        self.assertIn("link silent", str(failure.exception))
+
+    def test_incomplete_handshake_times_out_naming_it(self):
+        with self.assertRaises(AssertionError) as failure:
+            checks.wait_for_handshake(
+                [FakeDiagnostics("handshaking", [])],
+                self.WANTED,
+                time.monotonic() - 10.0,
+                3.0,
+                "handshake",
+                lambda: None,
+            )
+        self.assertIn("handshaking", str(failure.exception))
+
+    def test_spin_quantum_stays_short(self):
+        self.assertLessEqual(checks.HANDSHAKE_SPIN, 0.05)
+
+
 class TestDiscoveryTimeout(unittest.TestCase):
     def test_stays_generous_against_the_handshake_bound(self):
         self.assertGreaterEqual(checks.DISCOVERY_TIMEOUT, 10.0)
+
+
+class TestTeardownShutdown(unittest.TestCase):
+    CLOSE_TIMEOUT = "Failed to close the session(Error code: -128)"
+
+    def test_clean_shutdown_calls_through(self):
+        called = []
+        teardown.shutdown(lambda: called.append(True))
+        self.assertEqual(called, [True])
+
+    def test_session_close_timeout_logs_instead_of_raising(self):
+        def closing():
+            raise RuntimeError(self.CLOSE_TIMEOUT)
+
+        logged = io.StringIO()
+        with contextlib.redirect_stderr(logged):
+            teardown.shutdown(closing)
+        self.assertIn(self.CLOSE_TIMEOUT, logged.getvalue())
+
+    def test_other_shutdown_failure_still_raises(self):
+        def failing():
+            raise RuntimeError("failed to shutdown: some other cause")
+
+        with self.assertRaises(RuntimeError):
+            teardown.shutdown(failing)
 
 
 if __name__ == "__main__":

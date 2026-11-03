@@ -7,6 +7,18 @@
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root" || exit 2
+# One isolation slot per run: a leased DDS domain, so concurrent suites never
+# see each other's bridge nodes. Held for the whole run, into both the head
+# and the base measurements below. The pool base is 0, the domain a lone
+# coverage run always used.
+if [ -z "${R2S_E2E_LEASED:-}" ]; then
+  exec env R2S_E2E_LEASED=1 R2S_E2E_DOMAIN_BASE=${R2S_E2E_DOMAIN_BASE:-0} \
+    bash "$root/scripts/e2e-lease.sh" bash "$root/scripts/coverage-gate.sh" "$@"
+fi
+# One DDS domain per suite run, so parallel runs on the shared host never see
+# each other's nodes: every process below inherits the same domain.
+export ROS_DOMAIN_ID=${R2S_E2E_DOMAIN_ID:?e2e-lease.sh provides it}
+echo "== coverage isolation: ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
 
 base_ref=${COMMIT_RANGE:-origin/master..HEAD}
 base_ref=${base_ref%%..*}
@@ -58,8 +70,11 @@ gcovr_tree() {
   [ "${#wanted[@]}" -gt 0 ] || { echo "coverage: $filter_src defines no $array" >&2; return 1; }
   # --config /dev/null keeps gcovr from loading gcovr.cfg, gcovr.toml or a
   # [tool.gcovr] section out of the measured tree: only the pinned file rules.
+  # --exclude-throw-branches drops the compiler-generated exception edges of
+  # calls that never throw in tests, so core and bridge stay comparable. C has
+  # no throw edges, so the core figures do not move.
   ( cd "$tree" && gcovr --config /dev/null --root "$tree" "${wanted[@]}" --object-directory "$obj" \
-    --exclude-unreachable-branches --json-summary -o "$out" --print-summary "$obj" >&2 )
+    --exclude-unreachable-branches --exclude-throw-branches --json-summary -o "$out" --print-summary "$obj" >&2 )
 }
 
 measure_bridge() {
@@ -97,10 +112,8 @@ measure_bridge() {
 
 gate_component() {
   local component=$1 head_out=$2 base_out=$3
-  # The bridge sits below its section 6 floors (see #169), so its floors
-  # report without failing. A drop against base always fails, for both.
+  # A drop against base always fails, for both components.
   local advisory=()
-  [ "$component" = bridge ] && advisory=(--advisory-floor bridge)
   if [ -n "$base" ]; then
     python3 tools/coverage_gate.py --component "$component" "${advisory[@]}" --head "$head_out" --base "$base_out"
   else

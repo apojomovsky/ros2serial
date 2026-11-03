@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CPP_INCLUDE = ROOT / "cpp" / "include"
 CORE_INCLUDE = ROOT / "core" / "include"
 
-# The field kinds the nine bundled types use, each with the C++ member it maps
+# The field kinds the fourteen bundled types use, each with the C++ member it maps
 # to. The mapping mirrors the C emission, so the two layouts agree.
 FIELD_KINDS = [
     ("bool value", "    uint8_t value;"),
@@ -383,6 +383,7 @@ def test_the_message_header_path_follows_the_rclcpp_convention():
     assert cpp.message_path("std_msgs/msg/Float32") == "std_msgs/msg/float32.hpp"
     assert cpp.message_path("sensor_msgs/msg/JointState") == "sensor_msgs/msg/joint_state.hpp"
     assert cpp.message_path("builtin_interfaces/msg/Time") == "builtin_interfaces/msg/time.hpp"
+    assert cpp.message_path("tf2_msgs/msg/TFMessage") == "tf2_msgs/msg/tf_message.hpp"
 
 
 def test_the_cpp_type_follows_the_ros_2_naming():

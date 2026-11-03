@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # The single suite script: CI runs exactly this, and so does `make test`.
 # Scope with one or more of LINT=1 SCRIPTS=1 COMMITS=1 CORE=1 GEN=1 BRIDGE=1
-# CPP=1 E2E=<backend> COVERAGE=1 DOCS=1 EXAMPLES=1 FUZZ=1; no scope runs everything.
+# CPP=1 E2E=<backend> COVERAGE=1 DOCS=1 EXAMPLES=1 BUDGETS=1 FUZZ=1 README=1
+# NIGHTLY=1 SOAK=1; no scope runs everything.
 # E2E takes posix, avr, or both; both runs each backend once in one scope.
+# SCRIPTS_SHARD=N runs one CI shard of the SCRIPTS scope; unset runs it whole.
 # COMMITS checks COMMIT_RANGE (default origin/master..HEAD) and PR_TITLE when set,
 # then runs the prose gate on the same range. Exits non-zero if any section fails.
 set -uo pipefail
@@ -14,6 +16,12 @@ cd "$root" || exit 2
 # TEST goes here and not further down: the script tests call the ritual, and a
 # ritual that sees TEST=1 runs the suite again, so the pair would fork.
 unset TEST
+
+# SCRIPTS_SHARD is consumed here too: the section reads the copy below, and
+# the inherited variable is unset so nested suite runs the script tests start
+# select only what their own caller sets.
+scripts_shard=${SCRIPTS_SHARD:-}
+unset SCRIPTS_SHARD
 
 # One suite at a time per tree. A second run would wait on the same lock and
 # then test a tree the first run had already changed, so it says so and stops
@@ -56,7 +64,7 @@ else
 fi
 
 scoped=0
-for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES FUZZ; do [ -n "${!v:-}" ] && scoped=1; done
+for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES BUDGETS FUZZ README NIGHTLY SOAK; do [ -n "${!v:-}" ] && scoped=1; done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }
 
 failed=()
@@ -125,8 +133,19 @@ if wants COMMITS; then scope_now=COMMITS
   section commits check_commits
   section prose check_prose
 fi
+scripts_tests() {
+  # scripts_shard selects one CI shard (0 to N-1) of the collected node ids;
+  # empty runs the whole scope, exactly as before. A stuck test dumps every
+  # thread's stack past the timeout, and the slowest tests are always listed,
+  # so the next hang names its test instead of going silent.
+  if [ -n "$scripts_shard" ]; then
+    python3 -m pytest scripts tools --shard="$scripts_shard" -o faulthandler_timeout=300 --durations=10
+  else
+    python3 -m pytest scripts tools -o faulthandler_timeout=300 --durations=10
+  fi
+}
 if wants SCRIPTS; then scope_now=SCRIPTS
-  section scripts-tests python3 -m pytest scripts tools
+  section scripts-tests scripts_tests
 fi
 if wants CORE; then scope_now=CORE; section core bash scripts/core-test.sh; fi
 gen_tests() {
@@ -139,7 +158,11 @@ if wants CPP; then scope_now=CPP; section cpp bash scripts/cpp-test.sh; fi
 if wants COVERAGE; then scope_now=COVERAGE; section coverage bash scripts/coverage-gate.sh; fi
 if wants DOCS; then scope_now=DOCS; section docs python3 tools/snippets_check.py; fi
 if wants EXAMPLES; then scope_now=EXAMPLES; section examples bash scripts/build-examples.sh; fi
+if wants BUDGETS; then scope_now=BUDGETS; section budgets bash scripts/budgets-check.sh; fi
 if wants FUZZ; then scope_now=FUZZ; section fuzz bash scripts/fuzz.sh; fi
+if wants README; then scope_now=README; section readme bash scripts/check-readme.sh; fi
+if wants NIGHTLY; then scope_now=NIGHTLY; section e2e-isolation python3 -m pytest tests/e2e/test_isolation.py; fi
+if wants SOAK; then scope_now=SOAK; section soak bash tests/e2e/run-soak.sh; fi
 if wants E2E; then scope_now=E2E
   case "${E2E:-}" in
     "") section e2e-avr-harness bash tests/harness/simavr/run.sh
@@ -160,7 +183,7 @@ fi
 
 empty=""
 if [ "$scoped" = 1 ]; then
-  for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES FUZZ; do
+  for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES BUDGETS FUZZ README NIGHTLY SOAK; do
     if [ -n "${!v:-}" ]; then
       case " $ran_scopes " in *" $v "*) ;; *) empty="$empty $v" ;; esac
     fi

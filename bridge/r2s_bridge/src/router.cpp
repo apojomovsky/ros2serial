@@ -239,7 +239,23 @@ struct Router::Impl {
         rcl_serialized_message_t &rcl = out.get_rcl_serialized_message();
         std::memcpy(rcl.buffer, cdr.data(), cdr.size());
         rcl.buffer_length = cdr.size();
-        route.pub->publish(out);
+        try {
+            route.pub->publish(out);
+            // GCOVR_EXCL_BR_START: a unit test cannot throw out of the logging,
+            // locking, or counting calls below, nor inject a foreign exception
+            // type, so the unwind edges never run.
+        } catch (const std::exception &error) {
+            // A failed publish (a context shutting down under the poll loop)
+            // is a dropped frame, never an abort: it names its topic and counts.
+            emit(SessionLog::kWarning,
+                 "topic '" + route.info.topic_name + "': failed to publish (" + error.what() + ")");
+            // The route exists: only the poll thread mutates the table, so
+            // the entry looked up above is still there.
+            std::lock_guard<std::mutex> guard(mutex);
+            ++routes[topic_id].publish_failures;
+            return;
+            // GCOVR_EXCL_BR_STOP
+        }
     }
 
     void on_ros_message(std::uint8_t topic_id, std::shared_ptr<rclcpp::SerializedMessage> msg)
@@ -284,6 +300,7 @@ struct Router::Impl {
         TopicInfo info;
         rclcpp::GenericPublisher::SharedPtr pub;
         rclcpp::GenericSubscription::SharedPtr sub;
+        std::size_t publish_failures = 0;
     };
 
     rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics;
@@ -390,6 +407,8 @@ Router::Diagnostics Router::diagnostics() const
         topic.status = info.status;
         topic.seq_gaps = impl_->session_.seq_gaps(info.topic_id);
         topic.dropped = impl_->scheduler_.dropped(info.topic_id);
+        const auto route = impl_->routes.find(info.topic_id);
+        topic.publish_failures = route == impl_->routes.end() ? 0u : route->second.publish_failures;
         out.topics.push_back(topic);
     }
     out.time_sync_available = impl_->session_.time_available();

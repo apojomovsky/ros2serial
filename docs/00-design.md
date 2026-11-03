@@ -3,6 +3,8 @@
 Oct 20, 2026 · @Alexis Pojomovsky · from the kickoff proposal v3, which superseded v2 (Oct 3, 2026); both are in the git history
 
 > **How to use this document.** Part I is the design: what we build and why. Part II is the implementation specification: repository layout, exact protocol details, APIs, test strategy, CI, research tickets and the seed backlog. An agent creating tickets should start from Part II, section "Epics and seed tickets", and follow the links back into Part I for rationale. Where something is still unknown, Part II names a research ticket and a default to use until it is answered, so no ticket is blocked on a decision. Everything is built test-first, and every test runs on GitHub Actions.
+>
+> **New here?** Start with the [architecture page](02-architecture.md): five diagrams from the sketch to the ROS 2 graph. To change X, read Y: firmware behavior, Part I from Architecture through User API; wire bytes, Part II Protocol details plus `spec/protocol.md`; code layout and test scopes, the architecture Containers section plus Part II Repository layout; generator output, Part II Code generator specification; bridge internals, Part II Bridge specification.
 
 # Part I: Design
 
@@ -25,12 +27,16 @@ The intended user experience is a hobbyist's: install a library, declare a few t
 
 - Interoperability with MAVLink or other ecosystems.
 - Competing with micro-ROS on 32-bit MCUs with an RTOS.
-- Actions, full QoS, and taking part in DDS discovery from the MCU.
-- Transports other than serial (UART, USB CDC) in the first version.
+- Full QoS and taking part in DDS discovery from the MCU.
+- Transports other than serial (UART, USB CDC).
 - ROS 1 or ROS 2 distros older than Jazzy.
 - Windows hosts in v1 (Linux first, macOS best effort).
 
+ros2serial stays serial-only: the design targets serial-attached, memory-constrained boards, and a network link needs authentication that the protocol does not have. For WiFi-capable boards, see [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico) or [micro-ROS](https://micro.ros.org).
+
 ## Hardware tiers
+
+*Status (0.1.0): built: tier M on Uno and Mega in simavr; planned: 32-bit ports in Phase 3, PIC in Phase 5.*
 
 Tiers are defined by resources, not ISA bitness: a 32-bit core is not automatically big.
 
@@ -51,6 +57,8 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 
 ## Scope: parity with rosserial
 
+*Status (0.1.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++; planned: parameters, services, actions and the reliable channel in #133, #154, #155, #156 and #315 to #320, rosserial compatibility in #145 and #149.*
+
 | Feature | Priority | Notes |
 | --- | --- | --- |
 | Publish and subscribe | P0 | Float32 and Twist first, then Range, Imu and JointState |
@@ -64,11 +72,13 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 | Parameters | P1 | Declared by the MCU, exposed as ROS 2 parameters of the bridge node |
 | Services (server and client) | P1 | Need the reliable channel |
 | TF and diagnostics | P2 | Probably better handled on the host |
-| Actions | Out of scope | |
+| Actions | P1 | Minimal action server on the MCU (one active goal per action), bridge as the ROS 2 action server; needs services and the reliable channel |
 
 The list is still based on prior knowledge of rosserial; the Phase 0 archaeology validated it against the source code.
 
 ## Architecture
+
+*Status (0.1.0): built: one bridge per serial port; planned: one live link per process until the framer gains per-instance state in #122.*
 
 ```
  build time                                        runtime
@@ -109,6 +119,8 @@ PIC-enabling rules that apply from day one, even though PIC work comes last:
 - every buffer small enough to fit one bank where the target banks RAM.
 
 ## Declaring topics
+
+*Status (0.1.0): built: runtime registration, X-macro list, and `r2s.yaml` with the generator; planned: rosserial-compatible runtime registration in Phase 2.*
 
 There are three ways to declare topics. All three produce the same wire behavior and run the same conformance and end-to-end tests.
 
@@ -226,6 +238,8 @@ Lengths are varints (LEB128): 1 byte for values under 128, which covers almost a
 
 ## Protocol draft (v1)
 
+*Status (0.1.0): built: full-mode handshake, time, log, heartbeat and error channels; planned: parameters and reliable channel in #133 and #154, services and actions in #316; compact mode lands with tier S in Phase 5.*
+
 ```
 frame = rCOBS( topic_id[1] | seq[1] | payload[N] | crc16[2] ) + 0x00
 ```
@@ -252,7 +266,7 @@ The bridge loads the type support for each type name and compares the hash with 
 
 **Session, reset and reconnection.** Heartbeats run in both directions. The host treats any of these as an MCU reset and redoes the handshake and the time sync: a `HELLO` carrying no token or a different token than the one recorded, an unsolicited `HELLO` while connected, or a `HELLO` sent in reply to a heartbeat. An MCU that is not connected answers any non-handshake host frame with a rate-limited `HELLO`, so a reset is detected within one heartbeat period, without entropy. If the MCU stops seeing host traffic, it stops publishing and returns to announcing.
 
-**Losses and errors.** User topics are best effort. A gap in `seq` increments a counter that the bridge publishes as diagnostics. Parameters, services and the handshake use a small reliable channel (stop-and-wait with ack on ID 6, one outstanding message per direction).
+**Losses and errors.** User topics are best effort. A gap in `seq` increments a counter that the bridge publishes as diagnostics. A serialized publish that fails on the ROS graph is dropped the same way: the bridge logs the topic and counts the failure per topic instead of aborting. Parameters, services, actions and the handshake use a small reliable channel (stop-and-wait with ack on ID 6, one outstanding message per direction); action feedback stays best effort.
 
 **Flow control.** The MCU announces its RX capacity (the size of its frame buffer). The bridge rate-limits host-to-MCU traffic per topic, caps its total host-to-MCU bandwidth to a fraction of the link, and, for keep-latest topics such as `cmd_vel`, keeps only the most recent message instead of queueing. Topics are serviced round-robin, so one busy topic cannot starve the others. Pending control frames coalesce while the link is wedged ([SES-33]): one per control kind and one TOPIC_STATUS per topic id, dropped on re-handshake, with the replaced count in `/diagnostics`.
 
@@ -289,6 +303,8 @@ rCOBS decoding runs backwards in place in the frame buffer once the delimiter ar
 
 ## Time
 
+*Status (0.1.0): built: PONG with delimiter tick, CORRECTION and `r2s_now()` with the host estimator; planned: the measured accuracy figure in #348.*
+
 **What rosserial did.** Right after connecting, and then every few seconds, the MCU asked the host for the current time. When the reply came, the MCU stored an offset from its own `millis()`, correcting for the round trip. From then on `nh.now()` was that offset plus `millis()`, with millisecond resolution. That is how sketches stamped their messages.
 
 **Why it matters for IMUs.** A 150-byte Imu frame takes about 13 ms to send at 115200 baud. USB-serial adapters add jitter on top: an FTDI adapter's default latency timer is 16 ms, and the Uno's ATmega16U2 and CH340 clones behave differently again. If the bridge stamped messages on arrival, the stamps would be late and irregular. Stamping at the moment of sampling needs `now()` on the MCU.
@@ -305,6 +321,8 @@ The drift term matters: the Uno's ATmega328P runs from a ceramic resonator that 
 The tick comes from the port: `micros()` on Arduino (1 MHz nominal, 4 µs resolution), a 1 ms tick from epic-hal on PIC, a hardware timer elsewhere. The tick rate is announced in the handshake. The bridge also sets the serial port to low latency where the OS supports it. Target accuracy: about 1 ms, bounded by the tick resolution. Phase 2 measures the real figure.
 
 ## User API
+
+*Status (0.1.0): built: C, runtime C++ and static C++ APIs; planned: rosserial-compatible runtime registration in #145 and the porting guide in #149.*
 
 ### C (P0)
 
@@ -406,11 +424,14 @@ void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node
 
 **3. rosserial-compatible runtime registration** (gcc-class targets, Phase 2). Existing rosserial sketches port by changing the include:
 
-<!-- snippet: skip until #145 -->
 ```cpp
 #include <ros2serial/ros.h>
 #include <ros2serial/std_msgs/Float32.h>
 #include <ros2serial/geometry_msgs/Twist.h>
+
+/* The board hooks the sketch calls; a real firmware drives the hardware. */
+static void set_motors(double linear, double angular) { (void)linear; (void)angular; }
+static float read_battery(void) { return 0.0f; }
 
 ros::NodeHandle nh;
 std_msgs::Float32 battery;
@@ -461,6 +482,10 @@ The C++ objects are globals, as in rosserial sketches, which relies on static co
 
 ROS 2-style aliases (`std_msgs::msg::Float32`) are always provided; rosserial-style aliases (`std_msgs::Float32`) come with the compatibility headers.
 
+### Services and actions (P1)
+
+The service and action APIs mirror `rclcpp` and `rclcpp_action`: the MCU runs a minimal action server and the bridge is the ROS 2 action server on its behalf. The exact shapes are left to S8.
+
 ### Remapping from a launch file
 
 The bridge creates its publishers and subscriptions under the names the MCU announces. ROS 2 applies remapping and namespace rules when a node creates a topic, so the standard launch syntax works with no extra code:
@@ -477,6 +502,8 @@ Node(
 
 ## Code generator and packaging
 
+*Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling; planned: rosidl plugin wrapper and `.action` support in #317.*
+
 `r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required). It parses the `.msg` grammar itself, since `rosidl_parser` ships only with a ROS installation and the bundled snapshots make the ROS-free path complete. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources, the optional C++ headers, and the compact-mode node map. It also builds the bundled Arduino library (common types with default bounds) that the X-macro path uses. Outputs are laid out to be usable as:
 
 - an Arduino library (Library Manager), the default path;
@@ -488,6 +515,8 @@ The generator targets a ROS distro explicitly (`distro:` in the config, default 
 
 ## Host bridge
 
+*Status (0.1.0): built: full-mode handshake, generic pub/sub, packed-to-CDR conversion, Uno boot handling, log forwarding, time-sync estimation, rate limiting; planned: parameters and services in #155 and #156, launch remapping arguments in #235.*
+
 - C++ (rclcpp), packaged as a component so several bridges (one per serial port) can share a process. The framing allows one live link per process until the framer gains a per-instance state (#122).
 - Generic publishers and subscriptions, plus introspection-based conversion from packed to CDR.
 - Serial I/O behind a small interface; termios first (research ticket R8).
@@ -496,8 +525,11 @@ The generator targets a ROS distro explicitly (`distro:` in the config, default 
 - Compact mode: loads the node map generated with the firmware.
 - P1 parameters: the MCU declares name, type and default in the handshake. The bridge declares them as ROS parameters on its own node, so `ros2 param set` works, and pushes changes to the MCU over the reliable channel.
 - P1 services: generic client and service APIs differ by distro (research ticket R4). If they are missing on a supported distro, fall back to introspection-based typed services there.
+- P1 actions: generic action server and client APIs differ by distro (research ticket R14). If they are missing on a supported distro, fall back to assembling from generic services and topics or the rcl action API there.
 
 ## Portability notes (AVR now, PIC last)
+
+*Status (0.1.0): built: AVR Uno and Mega; planned: 32-bit ports in Phase 3, PIC on epic-hal in Phase 5.*
 
 Validation is Arduino Uno + Mega (AVR) with open-source tools for the first phases. PIC work comes in the last phase, built with epic-cc on epic-hal, but the PIC16 constraints shape the portable core now (see "Two zones").
 
@@ -518,6 +550,8 @@ Constraints that shape the core. Most of them also make it leaner on AVR.
 **Testing.** The conformance vectors run on host builds and on simavr for AVR (328P/2560). PIC end-to-end tests run under MPLAB SIM through epic-hal's mdb gate in Phase 5; until then, an advisory CI job compiles the core with epic-cc so PIC-hostile code is caught early.
 
 ## Quality bar
+
+*Status (0.1.0): built: spec with vectors, conformance suite, fuzzing, budgets and stack tracking in CI; planned: the hardware-in-the-loop checklist in #95.*
 
 What "professional" means in concrete terms:
 
@@ -547,6 +581,8 @@ The tier M budget is 2 KB of RAM (ATmega328P; Mega gives headroom at 8 KB).
 
 ## Plan
 
+*Status (0.1.0): built: Phase 1 vertical slice on AVR; planned: Phases 2 to 5.*
+
 Each phase ends in a decision gate and a publishable artifact.
 
 **Phase 0: research and spike (in parallel)**
@@ -574,7 +610,7 @@ Each phase ends in a decision gate and a publishable artifact.
 
 **Phase 3: 32-bit ports and P1**
 - 32-bit ports: CH32V00x (tier M proof on a modern toolchain) + one small STM32 for tier M/L; RP2040 for tier L; ESP32 build-only via the Arduino layout (no WiFi transport in v1).
-- Parameters, services, the reliable channel, PlatformIO packaging, rosidl plugin wrapper.
+- Parameters, services, actions, the reliable channel, PlatformIO packaging, rosidl plugin wrapper.
 - *Demo:* the same sketch on Uno, Mega and a 32-bit board, all publishing into the same ROS 2 graph.
 - *Gate:* release candidate.
 
@@ -612,6 +648,7 @@ Each open decision has a default. Tickets use the default until the decision is 
 | Narrow per field or per topic (64-bit-`double` targets only) | Per topic | Maintainer, after the Phase 2 encoding benchmark |
 | Serial library for the bridge | Plain POSIX `termios` behind a small interface | Research ticket R8 |
 | Generic service support per distro | Use generic APIs where present, introspection-based typed services elsewhere | Research ticket R4 |
+| Generic action support per distro | Use generic action APIs where present, assembled from generic services and topics or the rcl action API elsewhere | Research ticket R14 |
 | Bounds of bundled Arduino types | Strings 16, `frame_id` 16, JointState up to 6 joints | Maintainer, after R1 and the Phase 2 benchmarks |
 | Default baud rate | 115200 | Maintainer, after the Phase 2 baud matrix |
 
@@ -644,14 +681,14 @@ ros2serial/
 ├── Makefile                  only entry point: bootstrap, image, shell, test, pre-pr-check, help
 ├── Dockerfile                base/dev/ci(=dev)/release stages; versions pinned via ci/versions.env
 ├── .githooks/                pre-commit, commit-msg, pre-push (installed by make setup-hooks)
-├── scripts/                  ci-test.sh, pre-pr-check.sh, prose-diff.sh, lint-python.sh, helpers + test_*.py
+├── scripts/                  ci-test.sh, pre-pr-check.sh, prose_check.py, lint-python.sh, helpers + test_*.py
 ├── LICENSE                   MIT
 ├── spec/
 │   ├── protocol.md           the normative protocol specification (grows from Part I + this Part II)
 │   └── vectors/              conformance vectors (YAML), the single source of truth for every codec test
 │       ├── crc/  rcobs/  varint/  frames/  messages/  session/  time/
 ├── core/                     C99 MCU core (no ROS, no hardware)
-│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h; r2s_crc.h, r2s_rcobs.h, r2s_varint.h, r2s_framer.h and r2s_tx.h, shared with the bridge
+│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h, r2s_varint.h and r2s_tx.h; r2s_crc.h, r2s_rcobs.h and r2s_framer.h, shared with the bridge
 │   ├── src/                  crc.c, rcobs.c, varint.c, framer.c, tx.c, session.c, time.c, log.c, ring.c, codec.c, topics.c
 │   ├── tests/                Unity unit tests, vector runner, CMakeLists.txt
 │   └── fuzz/                 libFuzzer targets and seed corpora
@@ -679,7 +716,7 @@ ros2serial/
 └── .github/workflows/
 ```
 
-**Code reuse between MCU and host.** The bridge links `core/src/crc.c`, `rcobs.c`, `varint.c` and `framer.c` compiled for the host. Framing, CRC and lengths therefore have a single implementation. The host session logic is separate C++.
+**Code reuse between MCU and host.** The bridge links `core/src/crc.c`, `framer.c` and `rcobs.c` compiled for the host, the three sources named in `bridge/r2s_bridge/CMakeLists.txt`. Framing, rCOBS and CRC therefore have a single implementation. Lengths stay on each side: the MCU codec and the bridge converter each decode varints. The host session logic is separate C++.
 
 **The rCOBS encoder is a stream.** `r2s_rcobs_encode_byte()` takes one byte and writes the bytes it produces, at most two, so the MCU serializes, computes the CRC and encodes in one pass with no TX buffer. `r2s_rcobs_encode_end()` writes the last code byte; the delimiter is the framer's. The decoder takes the encoded frame in a buffer and writes the decoded frame over it, right aligned, so it needs no second copy.
 
@@ -825,7 +862,7 @@ DISCONNECTED ──port open──► BOOT_WAIT ──HELLO or boot_wait_ms─�
 The generator emits, for each message type used, a type record and a list of field entries, as constant data in flash. One interpreter in `core/src/codec.c` encodes and decodes any type from them. It is iterative, keeps an explicit nesting stack of `R2S_MAX_NEST` frames (generated: the deepest nesting among the types used), and reads descriptors through `R2S_FLASH_READ_BYTE()`.
 
 Sizes and offsets stay `sizeof` and `offsetof` expressions over the generated structs, so one file describes every build's own structs. The tables carry `R2S_FLASH`, and the generated header carries `R2S_MAX_NEST` for the firmware build that compiles the core with the header visible.
-Padding is target-specific, so the loader rejects only what its padding-blind lower bound proves over 65535 bytes; anything subtler fails the emitted per-type check at the firmware build.
+Padding is target-specific, so the loader rejects only what its padding-blind lower bound proves over 65535 bytes; anything subtler fails the emitted per-type check at the firmware build. The generator emits one file for every build and takes no target option, so the loader cannot know any target's alignment without guessing its ABI, and a worst-case padded bound would reject configurations that still fit on low-alignment targets. The exact size is known only where the structs are compiled, so the emitted `R2S_SIZE_CHECK` per type is the rejection for the padding remainder, and its symbol names DSC-22.
 
 **Type record (5 bytes):** `size u16` (`sizeof` of the C struct, for array strides), `first_field u16`, `field_count u8`.
 
@@ -889,8 +926,8 @@ typedef const char *r2s_fstr_t;
 ```c
 #include <stdint.h>
 /* r2s_varint.h: lengths as unsigned LEB128 (spec/protocol.md, section 5).
-   Not part of the firmware API: the codec uses it, and so does the bridge,
-   which reads and writes the lengths of a packed payload. */
+   Not part of the firmware API: the codec uses it. The bridge reads and
+   writes packed lengths with its own converter code. */
 #define R2S_VARINT_MAX 0xFFFFu
 #define R2S_VARINT_MAX_BYTES 3u
 
@@ -932,7 +969,7 @@ Each port implements these as ordinary functions, resolved at link time:
 uint16_t r2s_port_read(uint8_t *buf, uint16_t max);       /* non-blocking; returns bytes read (core provides it with R2S_WITH_RX_RING) */
 void     r2s_port_write(const uint8_t *buf, uint16_t len); /* must accept len bytes when tx_free said so */
 uint16_t r2s_port_tx_free(void);                          /* bytes writable without blocking; 0xFFFF if blocking is acceptable */
-uint32_t r2s_port_tick(void);                             /* monotonic, wraps; rate = R2S_TICK_HZ */
+uint32_t r2s_port_tick(void);                             /* monotonic, wraps; rate = R2S_TICK_HZ; the posix port reads CLOCK_MONOTONIC */
 ```
 
 The core calls `r2s_port_read` with `max = 1` while it assembles a frame, so it never consumes bytes beyond the current delimiter.
@@ -1049,7 +1086,7 @@ by `launch/r2s_bridge.launch.py` with `port` and `params_file` arguments.
 
 - `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, sequence gaps per topic and the host's verdict per topic (`topic <name> status`), time sync offset in nanoseconds, drift in ppm and round trip in nanoseconds.
 - The MCU's topics, under the names it announced, after remapping and namespacing.
-- MCU log messages through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`.
+- MCU log messages and error reports through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`; a report names its code, topic, count since the previous report, and the field path for a bound violation.
 
 ### Implementation pointers
 
@@ -1075,9 +1112,10 @@ Scenario numbers in the tickets below refer to the key end-to-end scenarios in `
 
 | Workflow | Trigger | Jobs |
 | --- | --- | --- |
-| `ci.yml` | Push and PR | `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component, fails on a drop); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `docs` (every code snippet in `README.md` and `docs/` extracted and compiled); `cpp`; `bridge` (colcon build and test in `ros:jazzy` and `ros:lyrical`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `pic-canary` (advisory, from Phase 2); `budgets` (size table as a PR comment, fails on budget breach) |
-| `nightly.yml` | Schedule | Long fuzzing, long fault injection, big-endian qemu, extended hypothesis runs, Rolling distro |
-| `release.yml` | Tag | Pre-release with the Arduino library zip and the Python sdist and wheel attached; publishes nowhere else |
+| `ci.yml` | Push, PR and manual | `plan` (maps the diff to the scopes each section job gates on); `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component, fails on a drop); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `docs` (every code snippet in `README.md` and `docs/` extracted and compiled); `readme` (every Getting started command runs on simavr); `cpp`; `bridge` (colcon build and test in `ros:jazzy` and `ros:lyrical`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `pic-canary` (advisory, from Phase 2); `budgets` (size table as a PR comment, fails on budget breach); `nightly` (calls `nightly-jobs.yml` when the plan selects `NIGHTLY`; the long fuzzing runs only when it also selects `FUZZ`) |
+| `nightly.yml` | Schedule | Calls `nightly-jobs.yml`; files or comments on one `needs-triage` issue when the scheduled run fails |
+| `nightly-jobs.yml` | Reusable | `fuzz-long` (30 min per target); `e2e-isolation` (two e2e sections side by side) |
+| `release.yml` | Tag | Runs `nightly-jobs.yml` on a tag first, then the release with the Arduino library zip and the Python sdist and wheel attached: a full release marked Latest, or a pre-release when the tag carries a SemVer pre-release suffix; publishes nowhere else |
 
 Rules:
 - Every job runs in a pinned container image or pinned action versions. Toolchain versions (avr-gcc, arduino-cli core, ROS images, epic-cc bundle) are pinned in one file, `ci/versions.env`. A required check's image is pinned by digest as well as tag: the bridge job's per-distro images (`ROS_<distro>_IMAGE`) carry both, so an upstream rebuild cannot change that job's toolchain without a commit here.
@@ -1096,6 +1134,7 @@ Each one ends as an issue comment whose first line starts with `Findings` and, w
 | R2 | Prior art: rosserial-like projects for ROS 2, micro-ROS on small parts, zenoh-pico over serial, ROS 2 hosts for the original rosserial protocol | Annotated list and a go/no-go recommendation | Proceed |
 | R3 | Can `rosidl_parser` and the RIHS01 algorithm be used without a ROS install (pip), or must they be vendored | Working proof inside `gen/` with a hash test | Decided in #71: compute in `gen/r2s_gen/typehash.py` with the standard library only; no pip package, no vendored modules |
 | R4 | Generic service and client APIs per supported distro | API inventory with versions | Generic where present, introspection-based typed services elsewhere |
+| R14 | Generic action server and client APIs per supported distro | API inventory with versions | Generic where present, assembled from generic services and topics or the rcl action API elsewhere |
 | R5 | simavr: UART-to-pty bridging for ATmega328P/2560, tick source, EEPROM, stack painting, run in CI | `tests/harness/simavr/` running echo firmware (Uno + Mega) in CI | None needed: blocks only the e2e-avr job |
 | R6 | PIC end-to-end under MPLAB SIM through epic-hal's mdb gate: UART input and output, tick, EEPROM (Phase 5) | Working echo test in CI | Build-only PIC canary |
 | R7 | CRC choice: Hamming distance of CRC-16/MCRF4XX and alternatives at our frame sizes (Koopman tables), cost on AVR | Table and recommendation | CRC-16/MCRF4XX, bitwise |
@@ -1130,7 +1169,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | B3 | Conventional commits check and git-cliff config | B1 | PR title check enforced in CI |
 | B4 | Vector schema and `tools/vectors_check.py` | B1 | Invalid vector files fail CI |
 | B5 | Makefile entry points + Docker dev/ci/release images + `make bootstrap`/`doctor` | B1 | Clean clone to `make test` per AGENTS.md; `dev` and `ci` identical |
-| B6 | Git hooks + `make pre-pr-check` (takeoff) + `scripts/prose-diff.sh` + `scripts/lint-python.sh` + `scripts/push.sh` | B5 | Ritual fails a deliberately dirty PR in a test run |
+| B6 | Git hooks + `make pre-pr-check` (takeoff) + `scripts/prose_check.py` + `scripts/lint-python.sh` + `scripts/push.sh` | B5 | Ritual fails a deliberately dirty PR in a test run |
 | B8 | `pr-body.yml`, `cut-release.yml` | B2 | The release dry run is green |
 | B7 | `tools/zone_check.py` | B2 | Fails on a deliberate function pointer and a deliberate float operation in `core/` |
 
@@ -1143,6 +1182,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | S3 | Vectors: CRC, rCOBS, varint | B4, S1 | Includes the published check value and the rCOBS edge cases (empty, all zeros, 254 and 255 non-zero bytes) |
 | S4 | Vectors: Float32, Twist (full and narrow) by hand first, then frames and a handshake transcript from the reference | S1, G4 | Hand vectors reviewed; reference reproduces them |
 | S5 | P1 spec: parameters (ID 3) and the reliable channel (ID 6) | S2 | Byte tables and state machines |
+| S8 | P1 spec: services and actions over the reliable channel, with a ROS 2-consistent board API | S5, R4, R14 | Byte tables and state machines; vectors for every new frame |
 | S6 | Descriptor format spec (type records, field entries, validation rules) | S1 | Reviewed; used by C9 and G7 |
 | S7 | Time vectors: wraparound, maximum drift, anchor expiry | S2 | Reference and C agree |
 
@@ -1215,7 +1255,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | P3 | Time: host estimator and scheduling | H4 | Simulated drift tests; scenario 8 |
 | P4 | Reconnect and reset handling | V1 | Scenarios 6 and 7 |
 | P5 | Range, Imu, JointState with bounds; error reports with field index | G8, H6 | Vectors; scenario 11 |
-| P6 | Budgets: `tools/size_report.py`, `tools/stack_report.py`, `budgets.yaml`, PR comment | V4 | Job fails on a deliberate breach in a test PR |
+| P6 | Budgets: `tools/size_report.py`, `tools/stack_report.py`, `tools/budgets.yaml`, PR comment | V4 | Job fails on a deliberate breach in a test PR |
 | P7 | Stack painting in simavr during the e2e scenarios | V4, R5 | Measured worst case reported next to the static figure |
 | P8 | Big-endian qemu job | C1 | Nightly green |
 | P9 | Framing and CRC benchmark (AVR Uno/Mega): rCOBS, COBS, SLIP, rosserial style | V4, R7 | Write-up in `docs/benchmarks/` |
@@ -1225,7 +1265,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | P13 | Baud-rate matrix: 115200, 250000, 500000, 1000000 in simavr and on hardware | V4 | Results documented; default confirmed or changed |
 | P14 | PIC canary job with epic-cc (advisory) | C9, V5 | Core and static C++ compile for PIC16F1938 and PIC18F4550 |
 | P15 | Draft "port your rosserial sketch" guide | P11 | Reviewed by the maintainer |
-| P16 | Protocol spec v1.0 freeze | P1 to P5, P12 | Tagged; vectors frozen |
+| P16 | Protocol spec v1.0 freeze | P1 to P5, P12, S8 | Tagged; vectors frozen |
 
 ### E7: 32-bit ports and P1 (Phase 3)
 
@@ -1240,6 +1280,10 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | X7 | PlatformIO layout | G10 | Install-and-build tests in CI |
 | X8 | rosidl plugin wrapper | G8 | Generation from `colcon build` in a test package |
 | X9 | Cross-board demo: same sketch on Uno, Mega and a 32-bit board | X1 or X2, V6 | Demo recording |
+| X10a | Generator support for `.action` types | S8 | Goal, Result and Feedback emitted with ROS 2-matching hashes; golden tests |
+| X10b | MCU action server with a ROS 2-consistent API | S8, X10a, X4 | S8 frames in the core and the C++ layer; unit tests and vectors; RAM per action reported |
+| X10c | Bridge as the ROS 2 action server for MCU actions | S8, R14, X10a, X4, X6 | Goals reach ROS clients on every distro; disconnect and reset end goals per S8 |
+| X10d | E2E scenario for actions on posix and avr | X10b, X10c | Goal, feedback and result end to end; second goal, cancel, disconnect and reset per S8 |
 
 ### E8: release (Phase 4)
 

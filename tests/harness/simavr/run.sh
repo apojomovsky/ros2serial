@@ -36,6 +36,11 @@ for mcu in atmega328p atmega2560; do
   avr-gcc -mmcu="$mcu" -DF_CPU=16000000UL -Os -Wall -Wextra -Werror -DR2S_ANNOUNCE_RAM_TABLE \
     -I "$root/core/include" -o "$build/announce-ram-$mcu.elf" tests/harness/simavr/announce_firmware.c \
     "${core_sources[@]}" || status=1
+  # The rebind firmware links the same core, with the codec on so a host
+  # frame on the trigger subscription reaches the dispatch that rebinds.
+  avr-gcc -mmcu="$mcu" -DF_CPU=16000000UL -Os -Wall -Wextra -Werror -DR2S_WITH_CODEC \
+    -I "$root/core/include" -o "$build/rebind-$mcu.elf" tests/harness/simavr/rebind_firmware.c \
+    "${core_sources[@]}" || status=1
 done
 # The runtime firmware uses the C++ runtime API, so it needs the bundle's
 # message headers, the runtime layer and the core. The bundle is staged
@@ -65,6 +70,31 @@ for mcu in atmega328p atmega2560; do
   avr-g++ -mmcu="$mcu" "${runtime_flags[@]}" -std=gnu++11 -c "$rstage/runtime.cpp" -o "$objdir/runtime.o" || status=1
   avr-g++ -mmcu="$mcu" "${runtime_flags[@]}" -std=gnu++11 \
     -o "$build/runtime-$mcu.elf" tests/harness/simavr/runtime_firmware.cpp \
+    "$objdir/"*.o || status=1
+done
+# The static firmware uses the static C++ API over an R2S_TOPICS list: the
+# rows expand to the global objects, so no runtime registration links in.
+# The bundle is staged the same way, so the message headers and the bundled
+# tables match the runtime image's, and the same flags build the objects.
+sstage="$build/static"
+rm -rf "$sstage"
+mkdir -p "$sstage/src/r2s" "$sstage/obj" || status=1
+PYTHONPATH="$root/gen" python3 -m r2s_gen.cli bundle --distro jazzy --out "$sstage" || status=1
+cp "$root"/core/include/r2s/*.h "$sstage/src/r2s/" || status=1
+mapfile -t core_sources < <(ls "$root"/core/src/*.c | grep -v test_reset.c)
+static_flags=(-DF_CPU=16000000UL -Os -Wall -Wextra -Werror
+  -DR2S_WITH_CODEC -DR2S_MAX_FRAME=325 -DR2S_MAX_NEST=3
+  -I "$sstage/src" -I "$root/core/include")
+# The objects are built per MCU: the two chips have different architectures,
+# so one set cannot serve both links.
+for mcu in atmega328p atmega2560; do
+  objdir="$sstage/obj-$mcu"
+  mkdir -p "$objdir" || status=1
+  for source in "${core_sources[@]}" "$sstage/src/r2s_bundled.c"; do
+    avr-gcc -mmcu="$mcu" "${static_flags[@]}" -c "$source" -o "$objdir/$(basename "$source" .c).o" || status=1
+  done
+  avr-g++ -mmcu="$mcu" "${static_flags[@]}" -std=gnu++11 \
+    -o "$build/static-$mcu.elf" tests/harness/simavr/static_firmware.cpp \
     "$objdir/"*.o || status=1
 done
 if [ "$status" -ne 0 ]; then

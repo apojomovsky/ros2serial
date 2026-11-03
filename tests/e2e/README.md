@@ -5,23 +5,34 @@ firmware and the real bridge over a serial line.
 
 - `run.sh` is the posix entry point: it builds the bridge workspace and the
   posix firmwares, checks the helper assertions, then runs scenarios 1 to 4
-  and 9 plus the publish catch-up test under each RMW the design names, once
-  per registration path. The static leg uses the generated C firmware and the
-  runtime leg the C++ runtime firmware; both announce the same topics, so the
+  and 8 to 10 plus the publish catch-up test under each RMW the design names,
+  once per registration path. The static leg uses the generated C firmware, the
+  runtime leg the C++ runtime firmware and the static C++ leg the static C++
+  firmware on scenarios 1 to 4; all three announce the same topics, so the
   scenario files stay shared and read the firmware from `R2S_E2E_FW`. The
   suite runs it for `E2E=posix`; `R2S_RMWS` narrows the RMW loop for a
   quicker iteration.
 - `run-avr.sh` is the avr entry point: it builds the simavr harness and the
   slice sketch for Uno and Mega, checks the helper assertions, then runs
-  scenarios 1 to 4 on both boards under each RMW. The suite runs it for
-  `E2E=avr`; `R2S_RMWS` and `R2S_E2E_BOARDS` narrow the loops.
-- `e2e_support/` is the framework: the pty relay, the posix firmware
-  launcher, the simavr launcher, the bridge launch through its own launch
-  file, and the checks every backend shares.
+  scenarios 1 to 4 on both boards under each RMW, plus the baud matrix (the
+  scenario 2 flow gates per baud per board) under the first RMW only. The
+  suite runs it for `E2E=avr`; `R2S_RMWS`, `R2S_E2E_BOARDS` and
+  `R2S_E2E_BAUDS` narrow the loops.
+- `run-soak.sh` is the nightly soak entry point: it builds the same binaries
+  and runs `test_soak_posix.py` then `test_soak_avr.py` on the Uno, one
+  `R2S_SOAK_SECONDS` window per backend with a single RMW. Each leg asserts
+  exactly consistent wire counters and plateaued bridge memory through
+  `e2e_support/soak.py`, which `soak_check_test.py` unit-tests with no ROS
+  in the loop.
+- `e2e_support/` is the framework: the pty relay, the fault-injecting pty
+  proxy, the posix firmware launcher, the simavr launcher, the bridge launch
+  through its own launch file, and the checks every backend shares.
+  `fault_proxy_test.py` unit-tests the proxy with no ROS in the loop.
 - `test_scenario_N_posix.py` is one launch_testing test per scenario on the
   posix backend. Each file launches only the bridge; the firmware spawns
   inside the test once the bridge answers, so timing budgets measure the
-  handshake, not node startup. `test_publish_catchup_posix.py` stalls the
+  handshake, not node startup. Scenario 10 swaps the relay for the
+  fault-injecting proxy. `test_publish_catchup_posix.py` stalls the
   firmware mid-window and holds the 50 Hz count to the scenario 2 floor.
 - `test_scenario_N_avr.py` is the same scenario on the simavr backend. Each
   file spawns the board's firmware first and launches the bridge on the
@@ -40,3 +51,6 @@ bridge installs, point `R2S_E2E_FW` at a firmware binary (either leg's), and
 run `launch_test` with `PYTHONPATH=tests/e2e`. An avr scenario file needs the
 harness and the board firmware built: set `R2S_SIMAVR_BIN`,
 `R2S_E2E_AVR_FW` and `R2S_E2E_BOARD`, then run `launch_test` the same way.
+`test_baud_matrix_avr.py` also needs `R2S_E2E_BAUD` naming one built matrix
+rate, and the sketch baud for that image travels as `R2S_BAUD` at compile
+time (default 115200).

@@ -13,8 +13,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_compile_definitions(R2S_TESTING)
 # The same feature set the core's host tests use, so the runtime speaks the
-# same protocol there as on a board.
-add_compile_definitions(R2S_WITH_CODEC R2S_MAX_NEST=2 R2S_WITH_LOG)
+# same protocol there as on a board. The stack holds the deepest bundled
+# closure: a stamp in a header in a stamped transform in a TFMessage.
+add_compile_definitions(R2S_WITH_CODEC R2S_MAX_NEST=4 R2S_WITH_LOG R2S_WITH_TIME)
 set(R2S_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 set(R2S_WARNINGS -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow -Wundef)
@@ -101,3 +102,7 @@ target_compile_options(r2s_bundled PRIVATE ${R2S_WARNINGS})
 target_link_libraries(r2s_bundled PUBLIC r2s_core)
 
 r2s_cpp_unit_test(tests/test_static.cpp r2s_bundled)
+
+# The rosserial-compatible API over the runtime registry and the bundled
+# tables, so the announce and the bytes are the ones a ported sketch sends.
+r2s_cpp_unit_test(tests/test_ros_compat.cpp r2s_runtime r2s_bundled)

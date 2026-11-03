@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the release artifacts: the Arduino library zip from the G11 bundle and
 # the Python sdist and wheel. The release workflow runs this in the dev image
-# and attaches what it prints to the pre-release; a maintainer runs the same
+# and attaches what it prints to the GitHub release; a maintainer runs the same
 # command locally for the dry run. Nothing here publishes anywhere.
 # The Python build runs from a throwaway copy of gen/, so its staging never
 # lands in the tree. Usage: build-release-artifacts.sh [--distro <name>] [--out <dir>]
@@ -66,10 +66,9 @@ with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(info, (Path(out) / name).read_bytes())
 print(zip_path.name)
 EOF
-# The r2s_gen.cpp package lives out of tree, so an in-tree setup.py run
-# stages a copy at gen/cpp that sdist never removes. Build from a throwaway
-# copy instead, the way the packaging test does, keeping the cpp tree beside
-# it where setup.py looks for it.
+# setup.py writes egg-info and build directories next to its sources, so
+# build from a throwaway copy instead, keeping the cpp tree beside it
+# where setup.py stages it from.
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 python3 - "$root" "$stage" <<'EOF'

@@ -103,6 +103,14 @@ def test_tolerated_non_code_tag_is_skipped_by_tag(tmp_path, capsys, tag):
     assert f"({tag})" in out and "skipped by tag" in out
 
 
+def test_mermaid_fence_is_skipped_by_tag(tmp_path, capsys):
+    text = "# T\n\n```mermaid\nflowchart LR\n    A --> B\n```\n"
+    root = write_tree(tmp_path, {"README.md": text})
+    assert snippets_check.check_tree(root) == []
+    out = capsys.readouterr().out
+    assert "(mermaid)" in out and "skipped by tag" in out
+
+
 def test_html_tag_stays_a_hard_error(tmp_path):
     text = "# T\n\n```html\n<b>hi</b>\n```\n"
     root = write_tree(tmp_path, {"README.md": text})

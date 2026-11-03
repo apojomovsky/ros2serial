@@ -20,6 +20,9 @@ static struct {
     const uint8_t *ready_data;
     uint16_t ready_len;
     uint32_t ready_tick;
+    uint16_t rep_overflow; /* receive overflows since the last take */
+    uint16_t rep_toolarge; /* frames past the limit since the last take */
+    uint8_t rep_topic;     /* the topic of the last frame past the limit */
     r2s_framer_counters_t counters;
 } framer;
 
@@ -41,10 +44,23 @@ void r2s_framer_init(void)
     framer.ready_data = NULL;
     framer.ready_len = 0u;
     framer.ready_tick = 0u;
+    framer.rep_overflow = 0u;
+    framer.rep_toolarge = 0u;
+    framer.rep_topic = 0xFFu;
     framer.counters.rx_frames = 0u;
     framer.counters.crc_errors = 0u;
     framer.counters.rx_overflows = 0u;
     framer.counters.dropped_frames = 0u;
+}
+
+void r2s_framer_take_error_reports(uint16_t *overflow, uint16_t *too_large, uint8_t *topic)
+{
+    *overflow = framer.rep_overflow;
+    *too_large = framer.rep_toolarge;
+    *topic = framer.rep_topic;
+    framer.rep_overflow = 0u;
+    framer.rep_toolarge = 0u;
+    framer.rep_topic = 0xFFu;
 }
 
 #ifdef R2S_TESTING
@@ -89,6 +105,8 @@ uint8_t r2s_framer_poll(r2s_frame_t *frame)
             framer.overflow = 0u;
             framer.len = 0u;
             framer.counters.rx_overflows++;
+            /* The bytes never decode, so no topic is named ([ERR-4]). */
+            framer.rep_overflow++;
             drop();
             continue;
         }
@@ -104,6 +122,12 @@ uint8_t r2s_framer_poll(r2s_frame_t *frame)
             continue;
         }
         if (decoded_len < FRAME_MIN || decoded_len > R2S_MAX_FRAME) {
+            /* Short frames carry no topic byte; a long one decoded its
+             * topic, so it names the frame its report carries. */
+            if (decoded_len > R2S_MAX_FRAME) {
+                framer.rep_toolarge++;
+                framer.rep_topic = decoded[0];
+            }
             drop();
             continue;
         }

@@ -1,10 +1,12 @@
 """Scenario 4: namespace and remappings apply to the MCU's topics.
 
 The announced topics show up renamed and namespaced, and the original
-names stay silent. The bridge is up before the firmware boots, so the 3 s
-budget measures the handshake from the MCU's HELLO, not node startup.
-Graph discovery of the renamed topics waits on its own generous timeout,
-so a slow runner cannot fail a correct remapping.
+names stay silent. The bridge is up before the firmware boots. The
+handshake first waits out the boot wait on the generous timeout, then runs
+the unchanged 3 s budget from the later of the MCU's HELLO and the boot
+wait end, so a slow bridge open cannot spend the handshake budget. Graph
+discovery of the renamed topics waits on its own generous timeout from the
+handshake, so a slow runner cannot fail a correct remapping.
 """
 
 import os
@@ -17,7 +19,7 @@ import launch_testing.markers
 import rclpy
 from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, firmware
+from e2e_support import checks, firmware, teardown
 from e2e_support.relay import PtyRelay
 
 # covers: SES-16, SES-27
@@ -28,7 +30,7 @@ REMAPPINGS = (("battery", "cell_voltage"), ("cmd_vel", "steer"))
 WANTED = ["/" + NAMESPACE + "/cell_voltage", "/" + NAMESPACE + "/steer"]
 GONE = ["/battery", "/cmd_vel", "/" + NAMESPACE + "/battery", "/" + NAMESPACE + "/cmd_vel"]
 # The bridge reports announced names without remapping or namespace.
-HANDSHAKE_TOPICS = ["battery", "cmd_vel", "echo_vel", "log_text"]
+HANDSHAKE_TOPICS = ["battery", "cmd_vel", "echo_vel", "log_text", "time_now"]
 TOPIC_BUDGET = 3.0
 
 _SCRATCH = None
@@ -63,6 +65,22 @@ def tearDownModule():
         _SCRATCH.cleanup()
 
 
+def _wait_link_ready(node, received, since):
+    """Spin until the link leaves boot wait, within the generous timeout.
+
+    The bridge opens the port and waits out boot_wait_ms for an
+    unsolicited HELLO before the handshake starts, and under load the
+    open itself can lag the firmware ready line. The 3 s handshake budget
+    runs from the later of the ready line and this return.
+    """
+    while True:
+        if received and received[-1].status[0].message not in ("disconnected", "boot_wait"):
+            return max(since, time.monotonic())
+        took = time.monotonic() - since
+        assert took < bridge_support.HANDSHAKE_TIMEOUT, f"link never left boot wait after {took:.1f} s"
+        rclpy.spin_once(node, timeout_sec=0.5)
+
+
 class TestScenario4(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -70,7 +88,7 @@ class TestScenario4(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        rclpy.shutdown()
+        teardown.shutdown()
 
     def test_remapping_and_namespace_apply_to_mcu_topics(self):
         global _SPAWNED
@@ -87,18 +105,24 @@ class TestScenario4(unittest.TestCase):
                 self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
             received.clear()
             _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
-            # /diagnostics publishes at 1 Hz, so the observed time can lag the
-            # real handshake by one period; the bound still holds because the
-            # handshake traffic itself is tens of milliseconds.
-            while True:
-                rclpy.spin_once(node, timeout_sec=0.5)
-                missing = checks.handshake_missing(received[-1], HANDSHAKE_TOPICS) if received else ["link silent"]
-                took = time.monotonic() - _SPAWNED.ready_at
-                if not missing:
-                    break
-                self.assertLess(took, TOPIC_BUDGET, f"handshake still missing {missing} after {took:.1f} s")
+            # The boot wait is the bridge's own delay before the handshake
+            # starts, so it waits on the generous timeout and the 3 s
+            # budget runs from the later of the ready line and its end.
+            link_ready_at = _wait_link_ready(node, received, _SPAWNED.ready_at)
+            took = checks.wait_for_handshake(
+                received,
+                HANDSHAKE_TOPICS,
+                link_ready_at,
+                TOPIC_BUDGET,
+                "handshake",
+                lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
+            )
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
-            bridge_support.wait_for_topics(node, WANTED, _SPAWNED.ready_at, checks.DISCOVERY_TIMEOUT, "remapped topics")
+            # Discovery starts when the bridge creates its endpoints at the
+            # handshake, so the generous timeout runs from there, not from
+            # the firmware spawn: a slow handshake must not spend it.
+            handshake_done_at = time.monotonic()
+            bridge_support.wait_for_topics(node, WANTED, handshake_done_at, checks.DISCOVERY_TIMEOUT, "remapped topics")
             names = {name for name, _ in node.get_topic_names_and_types()}
             for gone in GONE:
                 self.assertNotIn(gone, names, "unmapped name still announced: " + gone)

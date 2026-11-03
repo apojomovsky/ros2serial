@@ -24,10 +24,18 @@ POSIX = ROOT / "ports" / "posix"
 CPP = ROOT / "cpp"
 
 HEADER_BOUNDS = {"std_msgs/msg/Header.frame_id": 24}
+TF_BOUNDS = {
+    **HEADER_BOUNDS,
+    "geometry_msgs/msg/TransformStamped.child_frame_id": 24,
+    "tf2_msgs/msg/TFMessage.transforms": 4,
+}
 TYPES_CASES = [
     ("std_msgs/msg/Float32", {}, "float32.h"),
+    ("geometry_msgs/msg/Transform", {}, "transform.h"),
+    ("geometry_msgs/msg/TransformStamped", TF_BOUNDS, "transform_stamped.h"),
     ("geometry_msgs/msg/Twist", {}, "twist.h"),
     ("std_msgs/msg/Header", HEADER_BOUNDS, "header.h"),
+    ("tf2_msgs/msg/TFMessage", TF_BOUNDS, "tf_message.h"),
     (
         "sensor_msgs/msg/JointState",
         {
@@ -39,6 +47,8 @@ TYPES_CASES = [
         },
         "joint_state.h",
     ),
+    ("sensor_msgs/msg/Imu", HEADER_BOUNDS, "imu.h"),
+    ("sensor_msgs/msg/Range", HEADER_BOUNDS, "range.h"),
 ]
 DESCRIPTOR_ROOTS = ["std_msgs/msg/Float32", "geometry_msgs/msg/Twist"]
 
@@ -102,7 +112,9 @@ def _refresh_bundle() -> None:
             if name != "src/r2s_bundled.c":
                 (CPP / "include" / Path(name).name).write_text(text, encoding="utf-8")
         else:
-            (CPP / "include" / Path(name).relative_to("src")).write_text(text, encoding="utf-8")
+            target = CPP / "include" / Path(name).relative_to("src")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text, encoding="utf-8")
 
 
 def _refresh_layouts() -> None:

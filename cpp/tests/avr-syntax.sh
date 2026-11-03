@@ -69,6 +69,166 @@ sources+=("$build/check_static_sketch.cpp")
 printf '#include <std_msgs/msg/float32.hpp>\n#include <geometry_msgs/msg/twist.hpp>\n' \
   >"$build/check_sketch.cpp"
 sources+=("$build/check_sketch.cpp")
+# A rosserial-style sketch over the compatibility headers, proving the
+# spelling a ported sketch uses, with the size parameters ros_lib sketches
+# carry. The member-function arity rides along, so both subscribe forms
+# compile for the board.
+cat >"$build/check_ros_sketch.cpp" <<'EOF'
+#include <ros2serial/ros.h>
+#include <ros2serial/std_msgs/Float32.h>
+#include <ros2serial/geometry_msgs/Twist.h>
+ros::NodeHandle nh;
+std_msgs::Float32 battery;
+ros::Publisher battery_pub("battery", &battery);
+void on_cmd_vel(const geometry_msgs::Twist &msg)
+{
+    (void)msg;
+}
+ros::Subscriber<geometry_msgs::Twist> cmd_vel_sub("cmd_vel", &on_cmd_vel);
+class Echo
+{
+  public:
+    void on_twist(const geometry_msgs::Twist &msg)
+    {
+        (void)msg;
+    }
+};
+Echo echo;
+ros::Subscriber<geometry_msgs::Twist, Echo> echo_sub("echo_vel", &Echo::on_twist, &echo);
+ros::NodeHandle_<ros::ArduinoHardware, 1, 1, 64, 64> nh_small;
+ros::Time stamp;
+ros::Duration timeout(1, 0);
+void setup()
+{
+    nh.initNode();
+    nh.advertise(battery_pub);
+    nh.subscribe(cmd_vel_sub);
+    nh.subscribe(echo_sub);
+    nh.setSpinTimeout(100u);
+    (void)nh.getHardware();
+}
+void loop()
+{
+    battery.data = 1.0f;
+    battery_pub.publish(&battery);
+    (void)nh.spinOnce();
+    (void)nh.connected();
+    stamp = nh.now();
+    stamp += timeout;
+    nh.logdebug("dbg");
+    nh.loginfo("inf");
+    nh.logwarn("wrn");
+    nh.logerror("err");
+    nh.logfatal("ftl");
+}
+EOF
+sources+=("$build/check_ros_sketch.cpp")
+# The same sketch for the Arduino build, so initNode's Serial branch
+# compiles too. The stub stands in for the core's stream type, and the
+# syntax check needs no link.
+cat >"$stage/Arduino.h" <<'EOF'
+#ifndef R2S_AVR_SYNTAX_ARDUINO_H
+#define R2S_AVR_SYNTAX_ARDUINO_H
+class Stream
+{
+};
+class HardwareSerial : public Stream
+{
+  public:
+    void begin(unsigned long baud)
+    {
+        (void)baud;
+    }
+};
+extern HardwareSerial Serial;
+// The flash-string helper and macro the core's F() sketches use, spelled
+// the way WString.h spells them, so the log overloads below resolve.
+class __FlashStringHelper;
+#define F(s) (reinterpret_cast<const __FlashStringHelper *>(s))
+#endif
+EOF
+cat >"$build/check_ros_arduino.cpp" <<'EOF'
+#include <Arduino.h>
+#include <ros2serial/ros.h>
+#include <ros2serial/std_msgs/Float32.h>
+ros::NodeHandle nh;
+std_msgs::Float32 battery;
+ros::Publisher battery_pub("battery", &battery);
+void setup()
+{
+    nh.initNode();
+    nh.advertise(battery_pub);
+    nh.loginfo(F("boot"));
+}
+void loop()
+{
+    battery_pub.publish(&battery);
+    nh.spinOnce();
+    nh.loginfo(F("loop"));
+}
+EOF
+# The porting guide's one-line edits, compiling for the board: strings copy
+# into fixed buffers, bounded arrays set their size beside the elements, and
+# the header fills its stamp and frame id. The tf broadcaster keeps its
+# ros_lib shape, advertising /tf and sending the stamped transform.
+cat >"$build/check_ros_edits.cpp" <<'EOF'
+#include <ros2serial/ros.h>
+#include <ros2serial/geometry_msgs/TransformStamped.h>
+#include <ros2serial/sensor_msgs/Imu.h>
+#include <ros2serial/sensor_msgs/JointState.h>
+#include <ros2serial/std_msgs/Header.h>
+#include <ros2serial/std_msgs/String.h>
+#include <ros2serial/tf/transform_broadcaster.h>
+#include <stdio.h>
+ros::NodeHandle nh;
+tf::TransformBroadcaster broadcaster;
+sensor_msgs::JointState joints;
+std_msgs::String greeting;
+std_msgs::Header frame;
+sensor_msgs::Imu imu;
+void fill_greeting(std_msgs::String &msg, const char *text)
+{
+    (void)snprintf(msg.data, sizeof msg.data, "%s", text);
+}
+void fill_joints(sensor_msgs::JointState &msg)
+{
+    msg.position.size = 2u;
+    msg.position.data[0] = 1.5;
+    msg.position.data[1] = -0.5;
+    msg.name.size = 2u;
+    (void)snprintf(msg.name.data[0], sizeof msg.name.data[0], "%s", "left");
+    (void)snprintf(msg.name.data[1], sizeof msg.name.data[1], "%s", "right");
+}
+void fill_frame(std_msgs::Header &msg)
+{
+    msg.stamp.sec = 12;
+    msg.stamp.nanosec = 500000000u;
+    (void)snprintf(msg.frame_id, sizeof msg.frame_id, "%s", "base_link");
+}
+void setup()
+{
+    nh.initNode();
+    broadcaster.init(nh);
+    imu.orientation_covariance[0] = 0.0;
+    fill_greeting(greeting, "hello");
+    fill_joints(joints);
+    fill_frame(frame);
+}
+void loop()
+{
+    geometry_msgs::TransformStamped transform;
+
+    transform.header.stamp.sec = 1;
+    transform.header.stamp.nanosec = 0u;
+    (void)snprintf(transform.header.frame_id, sizeof transform.header.frame_id, "%s", "base");
+    (void)snprintf(transform.child_frame_id, sizeof transform.child_frame_id, "%s", "gripper");
+    transform.transform.translation.x = 1.0;
+    transform.transform.rotation.w = 1.0;
+    broadcaster.sendTransform(transform);
+    (void)nh.spinOnce();
+}
+EOF
+sources+=("$build/check_ros_edits.cpp")
 
 status=0
 for source in "${sources[@]}"; do
@@ -77,11 +237,80 @@ for source in "${sources[@]}"; do
     status=1
   fi
 done
+# Services have no runtime until X6: a TU that advertises a service or
+# names a client must fail to compile with the X6 message. The check
+# fails when the TU compiles, or when the error names another cause.
+cat >"$build/check_ros_service_server.cpp" <<'EOF'
+#include <ros2serial/ros.h>
+#include <ros2serial/ros/service_server.h>
+struct AddTwoIntsReq {
+    int32_t a;
+    int32_t b;
+};
+struct AddTwoIntsRes {
+    int32_t sum;
+};
+void on_add(const AddTwoIntsReq &req, AddTwoIntsRes &res)
+{
+    (void)req;
+    res.sum = 0;
+}
+ros::NodeHandle nh;
+ros::ServiceServer<AddTwoIntsReq, AddTwoIntsRes> server("add_two_ints", &on_add);
+void setup()
+{
+    nh.initNode();
+    nh.advertiseService(server);
+}
+void loop()
+{
+    (void)nh.spinOnce();
+}
+EOF
+cat >"$build/check_ros_service_client.cpp" <<'EOF'
+#include <ros2serial/ros.h>
+#include <ros2serial/ros/service_client.h>
+struct AddTwoIntsReq {
+    int32_t a;
+    int32_t b;
+};
+struct AddTwoIntsRes {
+    int32_t sum;
+};
+ros::NodeHandle nh;
+ros::ServiceClient<AddTwoIntsReq, AddTwoIntsRes> client("add_two_ints");
+void setup()
+{
+    nh.initNode();
+    nh.serviceClient(client);
+}
+void loop()
+{
+    (void)nh.spinOnce();
+}
+EOF
+for source in "$build/check_ros_service_server.cpp" "$build/check_ros_service_client.cpp"; do
+  if avr-g++ "${flags[@]}" -fsyntax-only "$source" 2>"$build/service_err.log"; then
+    echo "avr-syntax: $source compiled, but services wait on X6"
+    status=1
+  elif ! grep -q "X6" "$build/service_err.log"; then
+    echo "avr-syntax: $source failed without naming X6"
+    cat "$build/service_err.log"
+    status=1
+  fi
+done
 # The runtime's own source, since a board compiles it as well. The AVR
 # toolchains carry no C++ standard library, so this catches a header the
 # host build accepts and the board does not.
 if ! avr-g++ "${flags[@]}" -fsyntax-only "$root/cpp/src/runtime.cpp"; then
   echo "avr-syntax: cpp/src/runtime.cpp did not compile"
+  status=1
+fi
+# The Arduino build of the rosserial sketch, so initNode's Serial branch
+# compiles against the same stub the TU above stages. The port glue lives
+# beside the sketch on a board, so its directory rides along here.
+if ! avr-g++ "${flags[@]}" -fsyntax-only -DARDUINO -I "$root/ports/arduino" "$build/check_ros_arduino.cpp"; then
+  echo "avr-syntax: $build/check_ros_arduino.cpp did not compile"
   status=1
 fi
 [ "$status" = 0 ] || exit 1

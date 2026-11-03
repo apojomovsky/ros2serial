@@ -25,6 +25,7 @@ TEXT = """\
 
 #include "r2s/r2s.h"
 #include "r2s/r2s_codec.h"
+#include "r2s/r2s_error.h"
 #include "r2s/r2s_port.h"
 #include "r2s/r2s_session.h"
 #include "r2s/r2s_topics.h"
@@ -57,6 +58,7 @@ static inline r2s_status_t publish_one(uint8_t topic_id, const void *msg, const 
     int8_t rc;
 
     if (r2s_connected() == 0u) {
+        r2s_error_note(R2S_ERROR_NOT_CONNECTED, topic_id, 0xFFu, 1u);
         return R2S_ERR_NOT_CONNECTED;
     }
     if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {
@@ -70,6 +72,9 @@ static inline r2s_status_t publish_one(uint8_t topic_id, const void *msg, const 
     seq = r2s_session_tx_seq(index);
     rc = r2s_tx_begin(topic_id, seq, out.len);
     if (rc != R2S_OK) {
+        if (rc == R2S_ERR_TX_BUSY) {
+            r2s_error_note(R2S_ERROR_TX_BUSY, topic_id, 0xFFu, 1u);
+        }
         return rc;
     }
     r2s_session_advance_tx_seq(index);

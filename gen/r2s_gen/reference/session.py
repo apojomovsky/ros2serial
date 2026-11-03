@@ -1,12 +1,12 @@
-"""A model of the MCU session: states, timers and counters.
+"""A model of the MCU session: states, timers, counters and error reports.
 
 The oracle the model-based tests compare the real C core against
 (docs/01-testing.md, section 5.4). It is written from spec/protocol.md
-sections 7.1, 7.4 and 8.1, not from the C code, so a mismatch names a bug
-in one of the two. It covers what the core implements now: the control
-channel, the heartbeat and user dispatch. The time, log, parameters, error
-report and reliable-ack channels are accepted and ignored here, as in the
-core; P1, P2 and P5 specify their behavior.
+sections 7.1, 7.4, 7.5 and 8.1, not from the C code, so a mismatch names a
+bug in one of the two. It covers what the core implements now: the control
+channel, the heartbeat, user dispatch and the error report channel. The
+time, log, parameters and reliable-ack channels are accepted and ignored
+here, as in the core; P1, P2 and P5 specify their behavior.
 """
 
 from __future__ import annotations
@@ -48,10 +48,25 @@ ERR_TOPIC_REJECTED = -4
 STATUS_OK = 0
 STATUS_UNKNOWN = 0xFF
 
+ERROR_TOPIC = 5
+
+ERR_BOUND = 1
+ERR_UNKNOWN_TOPIC = 2
+ERR_RX_OVERFLOW = 3
+ERR_FRAME_TOO_LARGE = 4
+ERR_NOT_CONNECTED_CODE = 5
+ERR_TX_BUSY = 6
+
+BUSY_WINDOW_MS = 1000
+
 
 @dataclass
 class Topic:
-    """One announced topic: the CTL-4 flags are the truth for the wire."""
+    """One announced topic: the CTL-4 flags are the truth for the wire.
+
+    A nonzero bound marks a bounded-string subscription, whose payloads
+    the model checks against the bound instead of a fixed width.
+    """
 
     topic_id: int
     flags: int
@@ -60,6 +75,7 @@ class Topic:
     topic_name: str
     direction: str = "pub"
     codec_len: int = 0
+    bound: int = 0
 
 
 def encode_frame(topic_id: int, seq: int, payload: bytes) -> bytes:
@@ -97,6 +113,12 @@ class McuSession:
         self.ctrl_seq = 0
         self.hb_seq = 0
         self.counters = {"rx_frames": 0, "crc_errors": 0, "rx_overflows": 0, "dropped": 0}
+        self.err_pending = [0] * 7
+        self.err_topic = [0xFF] * 7
+        self.err_field = [0xFF] * 7
+        self.err_conn_reported = False
+        self.err_busy_last = 0
+        self.err_seq = 0
         self.last_host = 0
         self.last_hello = 0
         self.last_hb = 0
@@ -119,6 +141,12 @@ class McuSession:
         self.ctrl_seq = 0
         self.hb_seq = 0
         self.counters = {"rx_frames": 0, "crc_errors": 0, "rx_overflows": 0, "dropped": 0}
+        self.err_pending = [0] * 7
+        self.err_topic = [0xFF] * 7
+        self.err_field = [0xFF] * 7
+        self.err_conn_reported = False
+        self.err_busy_last = 0
+        self.err_seq = 0
         self.last_host = 0
         self.last_hello = self.tick
         self.last_hb = 0
@@ -142,13 +170,43 @@ class McuSession:
                 self.rx_buf.append(byte)
 
     def spin(self) -> None:
-        """Up to SPIN_MAX_FRAMES delivered frames, then the timers."""
+        """Up to SPIN_MAX_FRAMES delivered frames, then the error flush and timers."""
         delivered = 0
+        refused: list[bytes] = []
         while delivered < SPIN_MAX_FRAMES and self.pending:
             encoded, at = self.pending.pop(0)
             if self._accept(encoded, at):
                 delivered += 1
+            else:
+                refused.append(encoded)
+        self._note_framer_errors(refused)
+        self._flush_errors()
         self._timers()
+
+    def _note_framer_errors(self, refused: list[bytes]) -> None:
+        """Note the refused units the framer reports at the end of a spin.
+
+        An oversized unit never decodes, so it names no topic; a decoded
+        unit past the frame limit names its topic, last one wins.
+        """
+        overflow = 0
+        too_large = 0
+        too_large_topic = 0xFF
+        for encoded in refused:
+            if len(encoded) > self.rx_capacity:
+                overflow += 1
+                continue
+            try:
+                decoded = rcobs_mod.decode(encoded)
+            except Rejected:
+                continue
+            if len(decoded) > self.max_frame:
+                too_large += 1
+                too_large_topic = decoded[0]
+        if overflow:
+            self._note_error(ERR_RX_OVERFLOW, 0xFF, 0xFF, overflow)
+        if too_large:
+            self._note_error(ERR_FRAME_TOO_LARGE, too_large_topic, 0xFF, too_large)
 
     def advance_to(self, tick: int) -> None:
         """Move the clock, then spin once, as the fake port advance does."""
@@ -158,6 +216,7 @@ class McuSession:
     def publish(self, topic_id: int, payload: bytes) -> int:
         """A publish wrapper: status and connection gate it (SES-4, SES-9)."""
         if self.state != CONNECTED:
+            self._note_error(ERR_NOT_CONNECTED_CODE, topic_id, 0xFF, 1)
             return ERR_NOT_CONNECTED
         index = next((i for i, t in enumerate(self.topics) if t.topic_id == topic_id), -1)
         if index < 0 or self.status[index] != STATUS_OK:
@@ -165,6 +224,52 @@ class McuSession:
         self.tx.append(encode_frame(topic_id, self.tx_seq[index], payload))
         self.tx_seq[index] = (self.tx_seq[index] + 1) & MASK_8
         return 0
+
+    def _note_error(self, code: int, topic: int, field: int, count: int) -> None:
+        """Count an error, then send what is due (spec/protocol.md, ERR-6)."""
+        if not 1 <= code <= 6:
+            return
+        self.err_pending[code] = (self.err_pending[code] + count) & MASK_16
+        self.err_topic[code] = topic
+        self.err_field[code] = field
+        self._flush_errors()
+
+    def _flush_errors(self) -> None:
+        """Send every pending report the rate limits allow (ERR-3)."""
+        for code in range(1, 7):
+            if not self.err_pending[code] or not self._error_due(code):
+                continue
+            payload = bytes(
+                (
+                    code,
+                    self.err_topic[code],
+                    self.err_pending[code] & 0xFF,
+                    self.err_pending[code] >> 8,
+                    self.err_field[code],
+                )
+            )
+            self.tx.append(encode_frame(ERROR_TOPIC, self.err_seq, payload))
+            self.err_seq = (self.err_seq + 1) & MASK_8
+            self.err_pending[code] = 0
+            if code == ERR_NOT_CONNECTED_CODE:
+                self.err_conn_reported = True
+            if code == ERR_TX_BUSY:
+                self.err_busy_last = self.tick
+
+    def _error_due(self, code: int) -> bool:
+        """Whether a pending report for `code` may go out now (ERR-3)."""
+        if code == ERR_TX_BUSY:
+            window = BUSY_WINDOW_MS * self.tick_hz // 1000
+            return (self.tick - self.err_busy_last) & MASK_32 >= window
+        if code == ERR_NOT_CONNECTED_CODE:
+            return not self.err_conn_reported
+        return True
+
+    def _note_connected(self) -> None:
+        """Restart the report sequence; a new connection may report code 5 again."""
+        self.err_seq = 0
+        self.err_conn_reported = False
+        self._flush_errors()
 
     def snapshot(self) -> dict[str, object]:
         """Every observable the tests compare after a step."""
@@ -249,6 +354,7 @@ class McuSession:
             index = next((i for i, t in enumerate(self.topics) if t.topic_id == payload[1]), -1)
             if index < 0:
                 self._refuse()
+                self._note_error(ERR_UNKNOWN_TOPIC, payload[1], 0xFF, 1)
                 return
             self.status[index] = payload[2]
         elif op == OP_READY:
@@ -268,6 +374,8 @@ class McuSession:
     def _dispatch(self, topic_id: int, seq: int, payload: bytes) -> None:
         sub = next((t for t in self.topics if t.topic_id == topic_id and t.direction == "sub"), None)
         if sub is None:
+            if not any(t.topic_id == topic_id for t in self.topics):
+                self._note_error(ERR_UNKNOWN_TOPIC, topic_id, 0xFF, 1)
             self._refuse()
             return
         index = self.topics.index(sub)
@@ -276,7 +384,29 @@ class McuSession:
             return
         self.rx_lost[index] += (seq - self.rx_expected[index]) & MASK_8
         self.rx_expected[index] = (seq + 1) & MASK_8
-        if len(payload) != sub.codec_len:
+        if sub.bound:
+            self._dispatch_string(topic_id, sub.bound, payload)
+        elif len(payload) != sub.codec_len:
+            self._refuse()
+
+    def _dispatch_string(self, topic_id: int, bound: int, payload: bytes) -> None:
+        """Check a bounded-string payload: over the bound reports, else accepts.
+
+        A length the varint cannot carry, short bytes or a zero byte breaks
+        an encoding rule and refuses silently; only a length past the bound
+        is a bound violation (ERR-1) with the string as field 0.
+        """
+        try:
+            length, used = varint_mod.decode(payload)
+        except Rejected:
+            self._refuse()
+            return
+        if length > bound:
+            self._note_error(ERR_BOUND, topic_id, 0, 1)
+            self._refuse()
+            return
+        rest = payload[used:]
+        if len(rest) != length or any(byte == 0 for byte in rest):
             self._refuse()
 
     def _enter_announcing(self) -> None:
@@ -294,6 +424,7 @@ class McuSession:
         self.ctrl_seq = 0
         self.hb_seq = 0
         self.last_hb = self.tick
+        self._note_connected()
 
     def _answer_with_hello(self) -> None:
         if (self.tick - self.last_nack) & MASK_32 >= HELLO_NACK_MS:

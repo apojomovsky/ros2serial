@@ -4,10 +4,11 @@
 A fenced block tagged c, cpp or python is a snippet and must compile with
 the toolchains already pinned in ci/versions.env: gcc and g++ from the dev
 image, the standard library for the rest. A plain fence is prose or a
-diagram and is ignored. A fence tagged sh, console, text, json or yaml
-shows usage or data, so it is skipped and listed as skipped by tag.
-Any other tag is an error, so a new language either extends this tool
-or loses its tag.
+diagram and is ignored. A fence tagged sh, console, text, json, yaml or
+mermaid shows usage, data or a diagram, so it is skipped and listed as
+skipped by tag. Mermaid blocks are parsed by tools/mermaid-check, which
+fails on a block mermaid itself cannot parse. Any other tag is an error,
+so a new language either extends this tool or loses its tag.
 
 A snippet that cannot compile yet carries the ticket that will make it do so
 alone on the line above the fence:
@@ -70,7 +71,7 @@ STAGED_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]\s*(r2s_generated\.h|r2s_bun
 
 LANGUAGES = ("c", "cpp", "python")
 EXTENSION = {"c": ".c", "cpp": ".cpp", "python": ".py"}
-SKIPPED_TAGS = ("console", "json", "sh", "text", "yaml")
+SKIPPED_TAGS = ("console", "json", "mermaid", "sh", "text", "yaml")
 
 
 @dataclass

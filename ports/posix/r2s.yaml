@@ -1,7 +1,8 @@
 # Test firmware configuration: the topics the posix virtual MCU announces
 # (docs/00-design.md, C10). The names are the launch-time defaults; the
 # firmware renames them from its command line. bounds gives the String field
-# its 8-byte capacity.
+# its 8-byte capacity; the JointState bounds match the bundle's, so every
+# firmware shape drops the same oversized subscription (scenario 11).
 node: r2s_posix
 topics:
   - name: battery
@@ -16,5 +17,16 @@ topics:
   - name: log_text
     type: std_msgs/msg/String
     direction: pub
+  - name: time_now
+    type: builtin_interfaces/msg/Time
+    direction: pub
+  - name: joints
+    type: sensor_msgs/msg/JointState
+    direction: sub
 bounds:
   std_msgs/msg/String.data: 8
+  std_msgs/msg/Header.frame_id: 16
+  sensor_msgs/msg/JointState.name: [6, 16]
+  sensor_msgs/msg/JointState.position: 6
+  sensor_msgs/msg/JointState.velocity: 6
+  sensor_msgs/msg/JointState.effort: 6

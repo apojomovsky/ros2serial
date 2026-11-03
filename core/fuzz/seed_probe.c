@@ -53,8 +53,8 @@ static int check_table(void)
         }
         first += count;
     }
-    if (first != 29u) {
-        fprintf(stderr, "seed_probe: %u entries, not 29\n", first);
+    if (first != 70u) {
+        fprintf(stderr, "seed_probe: %u entries, not 70\n", first);
         return 1;
     }
     return 0;

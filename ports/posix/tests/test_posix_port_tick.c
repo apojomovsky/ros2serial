@@ -10,6 +10,7 @@
 #include <time.h>
 
 #include "r2s/r2s_port.h"
+#include "r2s_posix_port.h"
 
 /* Counts of the clock IDs the port requested, through the link-time wrap
  * (LINKER:--wrap=clock_gettime in CMakeLists). The helpers below call the
@@ -22,12 +23,68 @@ int __wrap_clock_gettime(clockid_t clk_id, struct timespec *tp);
 
 int __wrap_clock_gettime(clockid_t clk_id, struct timespec *tp)
 {
+    /* A test-controlled offset in milliseconds: the skew check below moves
+     * the clock by exact amounts instead of sleeping through real time. */
+    extern long r2s_test_clock_offset_ms;
+    long carry;
+
     if (clk_id == CLOCK_MONOTONIC) {
         s_monotonic_calls++;
     } else {
         s_other_calls++;
     }
-    return __real_clock_gettime(clk_id, tp);
+    if (__real_clock_gettime(clk_id, tp) != 0) {
+        return -1;
+    }
+    if (r2s_test_clock_offset_ms == 0L) {
+        return 0;
+    }
+    tp->tv_sec += r2s_test_clock_offset_ms / 1000L;
+    carry = r2s_test_clock_offset_ms % 1000L;
+    tp->tv_nsec += carry * 1000000L;
+    if (tp->tv_nsec >= 1000000000L) {
+        tp->tv_sec += 1;
+        tp->tv_nsec -= 1000000000L;
+    }
+    if (tp->tv_nsec < 0L) {
+        tp->tv_sec -= 1;
+        tp->tv_nsec += 1000000000L;
+    }
+    return 0;
+}
+
+/* The wrap's offset, moved by exact amounts so the skew check below never
+ * sleeps and never depends on scheduling. */
+long r2s_test_clock_offset_ms;
+
+/* A skewed tick still advances monotonically, scaled by the skew: a fake
+ * second reads 1010 ticks at +10000 ppm and 980 at -20000 ppm, each within
+ * one tick of real time passing between the two reads. */
+static int check_skew(void)
+{
+    static const struct {
+        int32_t ppm;
+        uint32_t want;
+    } cases[] = {{10000, 1010u}, {-20000, 980u}, {0, 1000u}};
+    size_t i;
+
+    for (i = 0u; i < sizeof cases / sizeof cases[0]; i++) {
+        uint32_t before;
+        uint32_t after;
+        uint32_t span;
+
+        r2s_posix_set_tick_skew_ppm(cases[i].ppm);
+        before = r2s_port_tick();
+        r2s_test_clock_offset_ms += 1000L;
+        after = r2s_port_tick();
+        span = after - before;
+        if (span < cases[i].want - 1u || span > cases[i].want + 2u) {
+            fprintf(stderr, "skew %ld ppm moved %lu ticks in one fake second, want %lu\n", (long)cases[i].ppm,
+                    (unsigned long)span, (unsigned long)cases[i].want);
+            return 1;
+        }
+    }
+    return 0;
 }
 
 #define SAMPLES 100000u
@@ -116,6 +173,9 @@ int main(void)
     if (span * 5u < elapsed * 4u || span * 5u > elapsed * 6u) {
         fprintf(stderr, "tick moved %lu in %lu ms, want a 1:1 ratio\n", (unsigned long)span,
                 (unsigned long)elapsed);
+        return 1;
+    }
+    if (check_skew() != 0) {
         return 1;
     }
     if (check_clock_source(mono_base, other_base) != 0) {

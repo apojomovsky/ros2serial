@@ -17,11 +17,22 @@ JOINT_STATE_BOUNDS = {
     "sensor_msgs/msg/JointState.effort": 4,
 }
 
+TF_BOUNDS = {
+    **HEADER_BOUNDS,
+    "geometry_msgs/msg/TransformStamped.child_frame_id": 24,
+    "tf2_msgs/msg/TFMessage.transforms": 4,
+}
+
 GOLDEN_CASES = [
     pytest.param("std_msgs/msg/Float32", {}, "float32.h", id="float32"),
+    pytest.param("geometry_msgs/msg/Transform", {}, "transform.h", id="transform"),
+    pytest.param("geometry_msgs/msg/TransformStamped", TF_BOUNDS, "transform_stamped.h", id="transform_stamped"),
     pytest.param("geometry_msgs/msg/Twist", {}, "twist.h", id="twist"),
     pytest.param("std_msgs/msg/Header", HEADER_BOUNDS, "header.h", id="header"),
+    pytest.param("tf2_msgs/msg/TFMessage", TF_BOUNDS, "tf_message.h", id="tf_message"),
     pytest.param("sensor_msgs/msg/JointState", JOINT_STATE_BOUNDS, "joint_state.h", id="joint_state"),
+    pytest.param("sensor_msgs/msg/Imu", HEADER_BOUNDS, "imu.h", id="imu"),
+    pytest.param("sensor_msgs/msg/Range", HEADER_BOUNDS, "range.h", id="range"),
 ]
 
 

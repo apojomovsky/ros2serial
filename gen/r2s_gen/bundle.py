@@ -1,6 +1,6 @@
 """The `bundle` subcommand: the Arduino library with bundled common types.
 
-The library carries the descriptors for the nine bundled types with the
+The library carries the descriptors for the fourteen bundled types with the
 documented default bounds, plus the `ros2serial.h` header that expands a
 sketch's `R2S_TOPICS` X-macro list into the topic table, the typed publish
 functions and dispatch. The descriptors compile once in the library, so a
@@ -23,21 +23,28 @@ from r2s_gen.version import __version__
 BUNDLED_TYPES = (
     "builtin_interfaces/msg/Time",
     "geometry_msgs/msg/Quaternion",
+    "geometry_msgs/msg/Transform",
+    "geometry_msgs/msg/TransformStamped",
     "geometry_msgs/msg/Twist",
     "geometry_msgs/msg/Vector3",
     "sensor_msgs/msg/Imu",
     "sensor_msgs/msg/JointState",
+    "sensor_msgs/msg/Range",
+    "std_msgs/msg/Bool",
     "std_msgs/msg/Float32",
     "std_msgs/msg/Header",
     "std_msgs/msg/String",
+    "tf2_msgs/msg/TFMessage",
 )
 
 BUNDLE_BOUNDS = {
     "std_msgs/msg/Header.frame_id": 16,
+    "geometry_msgs/msg/TransformStamped.child_frame_id": 16,
     "sensor_msgs/msg/JointState.name": [6, 16],
     "sensor_msgs/msg/JointState.position": 6,
     "sensor_msgs/msg/JointState.velocity": 6,
     "sensor_msgs/msg/JointState.effort": 6,
+    "tf2_msgs/msg/TFMessage.transforms": 1,
 }
 DEFAULT_STRING_BOUND = 16
 DISTROS = ("jazzy", "lyrical", "rolling")
@@ -265,6 +272,14 @@ def _cont(line: str) -> str:
     return line.ljust(109) + "\\"
 
 
+def _wrapped_define(head: str, value: str) -> list[str]:
+    """A #define clang-format keeps: one line within 110 columns, otherwise
+    the name padded to the backslash column with the value on its own line."""
+    if len(f"{head} {value}") <= 110:
+        return [f"{head} {value}"]
+    return [_cont(head), f"    {value}"]
+
+
 def _scope_maps(
     tables: Mapping[str, descriptors.DescriptorTable],
     repository: msgs.MessageRepository,
@@ -319,10 +334,10 @@ def _c_type_aliases(
         cname = _cname(name)
         index = tables[name].index_of[name]
         lines.append(f"/* {ctype}: hash, table, index and wire name. */")
-        lines.append(f"#define R2S_CTYPE_HASH_{ctype} {_hash_bytes(repository, name)}")
-        lines.append(f"#define R2S_CTYPE_TABLE_{ctype} (&r2s_bundled_table_{cname})")
-        lines.append(f"#define R2S_CTYPE_INDEX_{ctype} {index}u")
-        lines.append(f'#define R2S_CTYPE_NAME_{ctype} "{name}"')
+        lines.extend(_wrapped_define(f"#define R2S_CTYPE_HASH_{ctype}", _hash_bytes(repository, name)))
+        lines.extend(_wrapped_define(f"#define R2S_CTYPE_TABLE_{ctype}", f"(&r2s_bundled_table_{cname})"))
+        lines.extend(_wrapped_define(f"#define R2S_CTYPE_INDEX_{ctype}", f"{index}u"))
+        lines.extend(_wrapped_define(f"#define R2S_CTYPE_NAME_{ctype}", f'"{name}"'))
     return lines
 
 
@@ -358,7 +373,11 @@ def _cxx_spelling_traps() -> list[str]:
         package, _, short = name.partition("/msg/")
         key = f"{package}__msg__{short}"
         for entity in [f"hash_{byte}" for byte in range(8)] + ["table", "index", "name"]:
-            lines.append(f"#define R2S_MAP_{key}_{entity} R2S_error_cxx_rows_use_double_colon_not_underscores")
+            lines.extend(
+                _wrapped_define(
+                    f"#define R2S_MAP_{key}_{entity}", "R2S_error_cxx_rows_use_double_colon_not_underscores"
+                )
+            )
     return lines
 
 
@@ -442,6 +461,7 @@ def _sketch_h_c(
         "    int8_t rc;",
         "",
         "    if (r2s_connected() == 0u) {",
+        "        r2s_error_note(R2S_ERROR_NOT_CONNECTED, topic_id, 0xFFu, 1u);",
         "        return R2S_ERR_NOT_CONNECTED;",
         "    }",
         "    if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {",
@@ -455,6 +475,9 @@ def _sketch_h_c(
         "    seq = r2s_session_tx_seq(index);",
         "    rc = r2s_tx_begin(topic_id, seq, out.len);",
         "    if (rc != R2S_OK) {",
+        "        if (rc == R2S_ERR_TX_BUSY) {",
+        "            r2s_error_note(R2S_ERROR_TX_BUSY, topic_id, 0xFFu, 1u);",
+        "        }",
         "        return rc;",
         "    }",
         "    r2s_session_advance_tx_seq(index);",
@@ -513,8 +536,15 @@ def _sketch_h_c(
         p("        }"),
         p("        narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);"),
         p("        (void)r2s_session_note_rx_seq(index, seq);"),
-        p("        if (r2s_codec_decode(R2S_CTYPE_TABLE_##CTYPE, (uint16_t)R2S_CTYPE_INDEX_##CTYPE, payload, len,"),
-        p("                             narrow, &r2s_rx_buf.ONAME, &field) != R2S_OK) {"),
+        p("        switch (r2s_codec_decode(R2S_CTYPE_TABLE_##CTYPE, (uint16_t)R2S_CTYPE_INDEX_##CTYPE, payload, len,"),
+        p("                                 narrow, &r2s_rx_buf.ONAME, &field)) {"),
+        p("        case R2S_OK:"),
+        p("            break;"),
+        p("        case R2S_ERR_BOUNDS:"),
+        p("            r2s_error_note(R2S_ERROR_BOUND, topic_id, field, 1u);"),
+        p("            r2s_framer_count_refused();"),
+        p("            return;"),
+        p("        default:"),
         p("            r2s_framer_count_refused();"),
         p("            return;"),
         p("        }"),
@@ -545,6 +575,9 @@ def _sketch_h_c(
         "    switch (topic_id) {",
         "        R2S_TOPICS(R2S_X_DISPATCH)",
         "    default: {",
+        "        if (r2s_session_find_topic(topic_id) == 0xFFu) {",
+        "            r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);",
+        "        }",
         "        r2s_framer_count_refused();",
         "        return;",
         "    }",
@@ -576,6 +609,7 @@ def _sketch_h(
         '#include "r2s_bundled.h"',
         "",
         '#include "r2s/r2s_codec.h"',
+        '#include "r2s/r2s_error.h"',
         '#include "r2s/r2s_framer.h"',
         '#include "r2s/r2s_port.h"',
         '#include "r2s/r2s_session.h"',
@@ -717,6 +751,7 @@ def _sketch_h(
         "    int8_t rc;",
         "",
         "    if (r2s_connected() == 0u) {",
+        "        r2s_error_note(R2S_ERROR_NOT_CONNECTED, topic_id, 0xFFu, 1u);",
         "        return R2S_ERR_NOT_CONNECTED;",
         "    }",
         "    if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {",
@@ -730,6 +765,9 @@ def _sketch_h(
         "    seq = r2s_session_tx_seq(index);",
         "    rc = r2s_tx_begin(topic_id, seq, out.len);",
         "    if (rc != R2S_OK) {",
+        "        if (rc == R2S_ERR_TX_BUSY) {",
+        "            r2s_error_note(R2S_ERROR_TX_BUSY, topic_id, 0xFFu, 1u);",
+        "        }",
         "        return rc;",
         "    }",
         "    r2s_session_advance_tx_seq(index);",
@@ -789,8 +827,15 @@ def _sketch_h(
         p("        }"),
         p("        narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);"),
         p("        (void)r2s_session_note_rx_seq(index, seq);"),
-        p("        if (r2s_codec_decode(R2S_TABLE_OF(CTYPE), (uint16_t)R2S_INDEX_OF(CTYPE), payload, len, narrow,"),
-        p("                             &r2s_rx_buf.ONAME, &field) != R2S_OK) {"),
+        p("        switch (r2s_codec_decode(R2S_TABLE_OF(CTYPE), (uint16_t)R2S_INDEX_OF(CTYPE), payload, len, narrow,"),
+        p("                                 &r2s_rx_buf.ONAME, &field)) {"),
+        p("        case R2S_OK:"),
+        p("            break;"),
+        p("        case R2S_ERR_BOUNDS:"),
+        p("            r2s_error_note(R2S_ERROR_BOUND, topic_id, field, 1u);"),
+        p("            r2s_framer_count_refused();"),
+        p("            return;"),
+        p("        default:"),
         p("            r2s_framer_count_refused();"),
         p("            return;"),
         p("        }"),
@@ -821,6 +866,9 @@ def _sketch_h(
         "    switch (topic_id) {",
         "        R2S_TOPICS(R2S_X_DISPATCH)",
         "    default: {",
+        "        if (r2s_session_find_topic(topic_id) == 0xFFu) {",
+        "            r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);",
+        "        }",
         "        r2s_framer_count_refused();",
         "        return;",
         "    }",

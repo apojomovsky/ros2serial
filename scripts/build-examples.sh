@@ -64,7 +64,10 @@ report_runtime_ram() {
 }
 
 status=0
-for sketch in examples/arduino_minimal/arduino_minimal.ino examples/arduino_xmacro/arduino_xmacro.ino; do
+for sketch in examples/arduino_minimal/arduino_minimal.ino examples/arduino_xmacro/arduino_xmacro.ino \
+  examples/arduino_hello/arduino_hello.ino examples/arduino_blink/arduino_blink.ino \
+  examples/arduino_button/arduino_button.ino examples/arduino_servo/arduino_servo.ino \
+  examples/arduino_range/arduino_range.ino; do
   # The port glue lives in the library now: a sketch defining a port function
   # or opening its own linkage block would shadow or split it, so it fails.
   # Calls and comments still name the port API, so only a definition counts:
@@ -75,7 +78,8 @@ for sketch in examples/arduino_minimal/arduino_minimal.ino examples/arduino_xmac
   fi
 done
 cmake -S examples/cmake_minimal -B "$build/cmake_minimal" \
-  --toolchain "$root/examples/cmake_minimal/avr-toolchain.cmake" || status=1
+  --toolchain "$root/examples/cmake_minimal/avr-toolchain.cmake" \
+  -DCMAKE_C_FLAGS="-fstack-usage" || status=1
 cmake --build "$build/cmake_minimal" || status=1
 if [ "$status" -eq 0 ]; then
   avr-size "$build/cmake_minimal/hello_cmake" || status=1
@@ -107,7 +111,7 @@ from r2s_gen.msgs import MessageError
 
 try:
     defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
-except (MessageError, OSError) as error:
+except (MessageError, OSError, UnicodeDecodeError) as error:
     print(f"r2s-gen: error: {error}", file=sys.stderr)
     raise SystemExit(1)
 print(" ".join("-D" + define for define in defines))
@@ -140,9 +144,9 @@ elf_has_symbol() {
 for board in uno mega; do
   out="$build/arduino_minimal/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" \
-    --build-property "compiler.c.extra_flags=$extras" \
-    --build-property "compiler.cpp.extra_flags=$extras" \
-    --library "$stage" --output-dir "$out" examples/arduino_minimal || status=1
+    --build-property "compiler.c.extra_flags=$extras -fstack-usage" \
+    --build-property "compiler.cpp.extra_flags=$extras -fstack-usage" \
+    --library "$stage" --build-path "$out/build" --output-dir "$out" examples/arduino_minimal || status=1
   # The subscriber records prove the codec flag reached the core. The
   # runtime path has no generated receive buffer like the static one, but
   # the records are only reachable through the dispatch hook, and the
@@ -152,6 +156,24 @@ for board in uno mega; do
     status=1
   fi
   report_runtime_ram "$out/arduino_minimal.ino.elf" "$board" examples/arduino_minimal/arduino_minimal.ino "$extras"
+done
+
+# The task sketches build against the same runtime library: they register
+# their topics while they run, so the staged bundle above serves them all
+# with no new stage. Each firmware links the runtime topic table, which a
+# static sketch would not.
+for sketch in arduino_hello arduino_blink arduino_button arduino_servo arduino_range; do
+  for board in uno mega; do
+    out="$build/$sketch/$board"
+    arduino-cli compile --fqbn "arduino:avr:$board" \
+      --build-property "compiler.c.extra_flags=$extras -fstack-usage" \
+      --build-property "compiler.cpp.extra_flags=$extras -fstack-usage" \
+      --library "$stage" --build-path "$out/build" --output-dir "$out" "examples/$sketch" || status=1
+    if ! elf_has_symbol "$out/$sketch.ino.elf" r2s_runtime_topics; then
+      echo "$sketch ($board): the firmware links no runtime topic table" >&2
+      status=1
+    fi
+  done
 done
 
 # The X-macro sketch builds against the bundled library: r2s-gen emits the
@@ -175,7 +197,7 @@ from r2s_gen.msgs import MessageError
 
 try:
     defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
-except (MessageError, OSError) as error:
+except (MessageError, OSError, UnicodeDecodeError) as error:
     print(f"r2s-gen: error: {error}", file=sys.stderr)
     raise SystemExit(1)
 print(" ".join("-D" + define for define in defines))
@@ -190,8 +212,9 @@ case "$xextras" in
 esac
 for board in uno mega; do
   out="$build/arduino_xmacro/$board"
-  arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$xextras" \
-    --library "$xstage" --output-dir "$out" examples/arduino_xmacro || status=1
+  arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$xextras -fstack-usage" \
+    --build-property "compiler.cpp.extra_flags=$xextras -fstack-usage" \
+    --library "$xstage" --build-path "$out/build" --output-dir "$out" examples/arduino_xmacro || status=1
   if ! elf_has_symbol "$out/arduino_xmacro.ino.elf" r2s_rx_buf; then
     echo "arduino_xmacro ($board): the firmware links no receive buffer" >&2
     status=1
@@ -224,7 +247,7 @@ from r2s_gen.msgs import MessageError
 
 try:
     defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
-except (MessageError, OSError) as error:
+except (MessageError, OSError, UnicodeDecodeError) as error:
     print(f"r2s-gen: error: {error}", file=sys.stderr)
     raise SystemExit(1)
 print(" ".join("-D" + define for define in defines))
@@ -240,7 +263,8 @@ esac
 for board in uno mega; do
   out="$build/arduino_static/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$sextras" \
-    --library "$sstage" --output-dir "$out" examples/arduino_static || status=1
+    --build-property "compiler.cpp.extra_flags=$sextras" \
+    --library "$sstage" --build-path "$out/build" --output-dir "$out" examples/arduino_static || status=1
   if ! elf_has_symbol "$out/arduino_static.ino.elf" r2s_rx_buf; then
     echo "arduino_static ($board): the firmware links no receive buffer" >&2
     status=1
@@ -276,7 +300,7 @@ from r2s_gen.msgs import MessageError
 
 try:
     defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
-except (MessageError, OSError) as error:
+except (MessageError, OSError, UnicodeDecodeError) as error:
     print(f"r2s-gen: error: {error}", file=sys.stderr)
     raise SystemExit(1)
 print(" ".join("-D" + define for define in defines))
@@ -292,7 +316,7 @@ esac
 for board in uno mega; do
   out="$build/arduino_xmacro_c/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$cextras" \
-    --library "$cstage" --output-dir "$out" examples/arduino_xmacro_c || status=1
+    --library "$cstage" --build-path "$out/build" --output-dir "$out" examples/arduino_xmacro_c || status=1
   if ! elf_has_symbol "$out/arduino_xmacro_c.ino.elf" r2s_rx_buf; then
     echo "arduino_xmacro_c ($board): the firmware links no receive buffer" >&2
     status=1
@@ -309,8 +333,66 @@ for board in uno mega; do
   done
 done
 
+# The stack budgets need .su files, which avr-gcc does not write under the
+# shipped link-time optimized flags, so the budget gate rebuilds each sketch
+# without LTO under stack/. Same sources and defines, only the optimizer
+# differs, and the deeper non-LTO paths overestimate rather than hide.
+if [ -n "${R2S_STACK_BUILD:-}" ]; then
+  for sketch in arduino_minimal arduino_hello arduino_blink arduino_button arduino_servo arduino_range \
+    arduino_xmacro arduino_static arduino_xmacro_c; do
+    # The runtime sketches share the minimal stage; the static C++ and C
+    # sketches keep their own.
+    case "$sketch" in
+    arduino_xmacro)
+      sstage_lib=$xstage
+      sflags=$xextras
+      ;;
+    arduino_xmacro_c)
+      sstage_lib=$cstage
+      sflags=$cextras
+      ;;
+    arduino_static)
+      sstage_lib=$sstage
+      sflags=$sextras
+      ;;
+    *)
+      sstage_lib=$stage
+      sflags=$extras
+      ;;
+    esac
+    for board in uno mega; do
+      sout="$build/stack/$sketch/$board"
+      arduino-cli compile --fqbn "arduino:avr:$board" \
+        --build-property "compiler.c.extra_flags=$sflags -fno-lto -fstack-usage" \
+        --build-property "compiler.cpp.extra_flags=$sflags -fno-lto -fstack-usage" \
+        --build-property "compiler.c.elf.extra_flags=-fno-lto" \
+        --library "$sstage_lib" --build-path "$sout" "examples/$sketch" || status=1
+    done
+  done
+fi
 # The example timing tests drive each loop on the host against a scripted
 # tick: resync for the examples, catch-up for the slice. No DDS is involved.
 bash "$root/examples/tests/run.sh" || status=1
+
+# Hello and blink run on an emulated Uno: the two sketches need no
+# peripheral, so CI proves the link beyond the compile. Only the Uno image
+# runs to keep the added time small; the Mega firmware still builds above.
+# The budgets gate rebuilds everything with stack instrumentation, so it
+# skips this behavior leg and judges sizes only. R2S_EXAMPLES_NO_SIMAVR does
+# the same for the stubbed scope test, whose fake toolchain cannot produce
+# runnable firmware; real runs always prove the link.
+if [ -z "${R2S_STACK_BUILD:-}" ] && [ -z "${R2S_EXAMPLES_NO_SIMAVR:-}" ]; then
+  # The harness builds in its own directory beside this one, so its firmware
+  # never lands where the budget scanners walk; the renamed simavr inputs
+  # stage outside both and are removed afterwards.
+  bash "$root/tests/harness/simavr/run.sh" --build-only || status=1
+  sim_harness=$(dirname "$build")/harness/simavr
+  sim_fw=$(mktemp -d "${TMPDIR:-/tmp}/r2s-examples-simavr.XXXXXX") || status=1
+  cp "$build/arduino_hello/uno/arduino_hello.ino.elf" "$sim_fw/hello-atmega328p.elf" || status=1
+  cp "$build/arduino_blink/uno/arduino_blink.ino.elf" "$sim_fw/blink-atmega328p.elf" || status=1
+  R2S_SIMAVR_BIN="$sim_harness/r2s_simavr" R2S_SIMAVR_FW="$sim_fw" \
+    python3 -m pytest "$root/examples/tests/test_examples_simavr.py" -q || status=1
+  rm -rf "$sim_fw" || status=1
+fi
 
 exit "$status"

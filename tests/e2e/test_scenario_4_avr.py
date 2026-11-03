@@ -14,6 +14,7 @@ import launch_testing.markers
 import rclpy
 from e2e_support import avr as avr_support
 from e2e_support import bridge as bridge_support
+from e2e_support import teardown
 
 # covers: SES-16, SES-27
 
@@ -55,7 +56,7 @@ class TestScenario4(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        rclpy.shutdown()
+        teardown.shutdown()
 
     def test_remapping_and_namespace_apply_to_mcu_topics(self):
         node = rclpy.create_node("e2e_s4_avr_probe")
@@ -68,5 +69,8 @@ class TestScenario4(unittest.TestCase):
             names = {name for name, _ in node.get_topic_names_and_types()}
             for gone in GONE:
                 self.assertNotIn(gone, names, "unmapped name still announced: " + gone)
+            # launch_testing never calls tearDownModule, so the harness
+            # stops here: its stop summary carries the painted peak.
+            self.assertEqual(_SPAWNED.stop(), 0, "the harness stopped dirty")
         finally:
             node.destroy_node()

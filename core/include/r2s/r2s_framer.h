@@ -77,6 +77,12 @@ const r2s_framer_counters_t *r2s_framer_counters(void);
  * dropped_frames. */
 void r2s_framer_count_refused(void);
 
+/* Takes the drops the session reports on the error channel since the last
+ * take: receive overflows, whose bytes never decode, and frames past the
+ * limit with the last one's topic. The take clears both, so each occurrence
+ * reports once. The bridge links the framer but never takes. */
+void r2s_framer_take_error_reports(uint16_t *overflow, uint16_t *too_large, uint8_t *topic);
+
 #ifdef __cplusplus
 }
 #endif

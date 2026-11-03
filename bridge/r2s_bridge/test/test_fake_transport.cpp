@@ -146,6 +146,13 @@ TEST(FakeTransport, RejectsAZeroLengthWrite)
     EXPECT_THROW(transport.write(&byte, 0), std::invalid_argument);
 }
 
+TEST(IoResult, InequalityComparesBytesThenStatus)
+{
+    EXPECT_FALSE((IoResult{1, IoStatus::kOk}) == (IoResult{2, IoStatus::kOk}));
+    EXPECT_FALSE((IoResult{1, IoStatus::kOk}) == (IoResult{1, IoStatus::kError}));
+    EXPECT_TRUE((IoResult{1, IoStatus::kOk}) == (IoResult{1, IoStatus::kOk}));
+}
+
 TEST(FakeTransport, RejectsReadsAndWritesAfterClose)
 {
     FakeTransport transport;

@@ -34,15 +34,27 @@ tracked files.
 | `doctor` | Report what setup is missing, change nothing |
 | `image` | Build the dev image (content-addressed tag, idempotent) |
 | `shell` / `exec CMD='...'` | Interactive shell / one-off command inside the image |
-| `test` (`CORE=1`, `GEN=1`, `BRIDGE=1`, `E2E=posix`, `E2E=avr`, `COVERAGE=1`, `DOCS=1`, `EXAMPLES=1`) | Runs `scripts/ci-test.sh`, the exact script CI runs, optionally scoped |
+| `test` (`CORE=1`, `GEN=1`, `BRIDGE=1`, `CPP=1`, `SCRIPTS=1`, `E2E=posix`, `E2E=avr`, `COVERAGE=1`, `DOCS=1`, `EXAMPLES=1`, `BUDGETS=1`, `FUZZ=1`, `README=1`, ...) | Runs `scripts/ci-test.sh`, the exact script CI runs, optionally scoped |
+| `check` | Runs the scopes the diff needs, plus the fast gates |
+| `test-core` | Same as `make test CORE=1` |
+| `test-gen` | Same as `make test GEN=1` |
+| `test-bridge` | Same as `make test BRIDGE=1` |
+| `test-cpp` | Same as `make test CPP=1` |
+| `test-scripts` | Same as `make test SCRIPTS=1` |
+| `test-all` | Runs the whole suite, unscoped |
+| `e2e-posix` | Same as `make test E2E=posix` |
+| `e2e-avr` | Same as `make test E2E=avr` |
+| `pytest` ARGS=`...` | Runs one pytest file or node in the image |
+| `ctest` ARGS=`...` | Reruns core unit tests by name in the image |
 | `ci-local` | The exact CI run, unscoped, in the `ci` image |
-| `compile EXAMPLE=<name> BOARD=<uno\|mega\|...>` | Build an example firmware and print flash, RAM and stack |
+| `compile EXAMPLE=<name> BOARD=<uno\|mega\|...>` | Not built yet (pending G10 and V4): will build an example firmware and print flash, RAM and stack |
 | `fuzz TARGET=<name>` | Run one libFuzzer target for 60 s |
 | `size-report` | Regenerate the flash, RAM and stack report |
 | `vectors` | Validate every vector file |
 | `regen` | Regenerate every version-stamped generated file (goldens, example and cpp libraries, posix sources) |
-| `docs-gen` | Regenerate reference docs (CLI, vectors, bridge parameters) |
+| `docs-gen` | Not built yet (pending G1 and H1): will regenerate reference docs (CLI, vectors, bridge parameters) |
 | `fmt` / `lint` / `check-warnings` | Formatting, linters (advisory), warnings (hard gate) |
+| `lint-docs` | Check mermaid blocks in the docs with mermaid's own parser (needs host docker) |
 | `setup-hooks` / `pre-pr-check` | Install hooks / run the takeoff ritual |
 | `help` | List all targets |
 
@@ -65,7 +77,7 @@ Work is plain GitHub issues.
 
 ## Development cycle
 
-- Inner loop in the container: `make shell`, then `make test CORE=1` (or `GEN=1`, `BRIDGE=1`, `E2E=posix`) and `make compile EXAMPLE=<name>`.
+- Inner loop in the container: `make shell`, then `make test CORE=1` (or `GEN=1`, `BRIDGE=1`, `E2E=posix`). `make compile` is pending (see above); compile examples as the README walkthrough does until it lands.
 - **Tests first.** The first commit of a PR adds tests, vectors or fuzz corpus entries that fail. Bugs are fixed by first reproducing them in a test.
 - **`docs/01-testing.md` is normative:** how code must be written to be testable, what to test at which level, coverage, mutation and spec-coverage gates, and the rules for the tests themselves. Read it before writing any code.
 - Behavior that crosses the wire is specified by a conformance vector before any code is written. The first message vectors are computed by hand; the Python reference must reproduce them before it generates any further vector.
@@ -87,11 +99,11 @@ Work is plain GitHub issues.
 6. Lint: ruff, clang-format, ament linters.
 7. Zone check: `tools/zone_check.py` (no function pointers, float operations or C++ includes in `core/`).
 8. Spec sync: if `spec/protocol.md` changed, vectors changed in the same PR. A vectors-only PR passes when every rule ID its vectors cover is already defined there; a vector naming an unknown rule fails.
-9. Prose: `scripts/prose-diff.sh` lists every added comment block; the mechanical rules (8-line cap, no decoration, no narrative, no em-dashes) fail the ritual. Content judgment stays with the author.
+9. Prose: `scripts/prose_check.py` lists every added comment block; the mechanical rules (8-line cap, no decoration, no narrative, no em-dashes) fail the ritual. Content judgment stays with the author.
 10. PR body: real newlines, `Closes #N`, a `## Review` section.
 11. Hooks installed.
 12. README and docs freshness: user-visible changes update `README.md` or `docs/` in the same PR, or the PR body says `README: n/a` (advisory).
-13. `make pre-pr-check TEST=1` runs the suite scopes the diff touches (`scripts/scopes_for_diff.py`), plus the cheap checks, and records the pass under the same stamp the pre-push hook checks, so pushing that tree runs nothing twice. `R2S_FULL=1` runs the full suite. CI still runs everything on the merge with master, and a PR merges only on green CI.
+13. `make pre-pr-check TEST=1` runs only the cheap checks locally, leaving the suite to CI, and records the pass under the same stamp the pre-push hook checks, so pushing that tree runs nothing twice. Scopes named on the command line and `R2S_FULL=1` still run locally. CI is where the suite runs: it still runs everything on the merge with master, and a PR merges only on green CI.
 
 Write PR bodies to a unique file under the cache, which the dev image can see (`mktemp "$HOME/.cache/ros2serial/pr-<issue>-XXXXXX.md"`), and pass it as `make pre-pr-check PR_BODY=<file>`. Never use an inline `\n` string, and never a shared fixed path such as `/tmp/pr_body.md`, which another agent can overwrite.
 
@@ -110,7 +122,7 @@ Pass the title the PR will carry as `make pre-pr-check PR_TITLE="<title>"`, so t
 - `commit-msg`: Conventional Commits, no trailers, no em-dashes. Every commit is checked, except that git's own `Merge ...` message is accepted while a merge is in progress, which is how a branch catches up with `master`.
 - Every hook and the suite run tests without the repository-local git variables git exports to hooks (`scripts/clean-git-env.sh`, `conftest.py`), so a test's throwaway repository never writes to the real one.
 - `pre-commit`: format check on staged files (clang-format, ruff), warning check on touched C and C++, trailing whitespace.
-- `pre-push`: refuse force pushes unless approved, run the prose verify, then the suite scopes the diff touches. A suite stamp records the tree, the suite definition and the scope set that already passed, so pushing the same tree twice does not run the suite twice.
+- `pre-push`: refuse force pushes unless approved, run the prose verify, then the cheap checks, leaving the suite to CI. A suite stamp records the tree, the suite definition and the scope set that already passed, so pushing the same tree twice does not run the suite twice.
 
 ## Ground rules
 
@@ -164,7 +176,7 @@ Pass the title the PR will carry as `make pre-pr-check PR_TITLE="<title>"`, so t
 
 | Workflow | Trigger | Role |
 | --- | --- | --- |
-| `ci.yml` | Push and PR | The suite (jobs listed in `docs/00-design.md`, Part II) |
+| `ci.yml` | Push, PR and manual | The suite (jobs listed in `docs/00-design.md`, Part II) |
 | `pr-body.yml` | PR opened or edited | Fails on literal `\n` or `\r` in the body |
 | `nightly.yml` | Schedule | Long fuzzing and fault injection, big-endian, Rolling |
 | `cut-release.yml` | Manual | Next version from commits (git-cliff), changelog, release PR, auto-merge, tag |

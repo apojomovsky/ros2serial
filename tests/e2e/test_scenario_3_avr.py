@@ -2,7 +2,9 @@
 
 Five distinct Twists go out on cmd_vel; the firmware republishes each on
 echo_vel, and every echoed field matches what was sent within the float32
-round trip the 8-bit MCU keeps.
+round trip the 8-bit MCU keeps. Discovery of the echo topics waits on its
+own budget, so a slow runner cannot fail a correct echo path on the
+priming budget.
 """
 
 import os
@@ -14,7 +16,7 @@ import launch_testing.markers
 import rclpy
 from e2e_support import avr as avr_support
 from e2e_support import bridge as bridge_support
-from e2e_support import checks
+from e2e_support import checks, teardown
 from geometry_msgs.msg import Twist
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
@@ -25,6 +27,9 @@ FLOW_TIMEOUT = 20.0
 # The MCU holds float32: the widest relative error the round trip keeps.
 REL_TOL = 1e-6
 ABS_TOL = 1e-9
+# Both directions of the echo path, as the graph names them.
+ECHO_TOPICS = ["/cmd_vel", "/echo_vel"]
+TOPIC_BUDGET = 3.0
 
 _SCRATCH = None
 _SPAWNED = None
@@ -94,13 +99,19 @@ class TestScenario3(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        rclpy.shutdown()
+        teardown.shutdown()
 
     def test_published_twists_come_back_on_the_echo_topic(self):
         self.assertTrue(all(not _is_prime(msg) for msg in SENT), "prime collides with the sequence")
         node = rclpy.create_node("e2e_s3_avr_probe")
         try:
             bridge_support.wait_for_bridge(node)
+            # The boot HELLO predates the bridge, so the budget runs from
+            # bridge-up, when the parameter service answers. The graph shows
+            # the echo topics once the handshake completes, so this waits out
+            # DDS discovery instead of spending the priming budget on it.
+            _SPAWNED.ready_at = time.monotonic()
+            bridge_support.wait_for_topics(node, ECHO_TOPICS, _SPAWNED.ready_at, TOPIC_BUDGET, "echo topics")
             # The bridge forwards MCU traffic best effort in both directions,
             # so both ends of the probe match that; reliable ends never match.
             best_effort = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
@@ -122,5 +133,8 @@ class TestScenario3(unittest.TestCase):
                 rclpy.spin_once(node, timeout_sec=0.2)
                 sequence = [msg for msg in arrived if not _is_prime(msg)]
             checks.check_twist_echo(SENT, sequence[:ECHO_COUNT], "echo_vel", rel_tol=REL_TOL, abs_tol=ABS_TOL)
+            # launch_testing never calls tearDownModule, so the harness
+            # stops here: its stop summary carries the painted peak.
+            self.assertEqual(_SPAWNED.stop(), 0, "the harness stopped dirty")
         finally:
             node.destroy_node()

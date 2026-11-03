@@ -24,9 +24,11 @@ extern "C" {
  * vectors pin. */
 typedef std_msgs__msg__Float32 Float32;
 typedef geometry_msgs__msg__Twist Twist;
+typedef std_msgs__msg__String String;
 
 static const uint8_t s_float32_hash[8] = {0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u};
 static const uint8_t s_twist_hash[8] = {0x10u, 0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u};
+static const uint8_t s_string_hash[8] = {0x20u, 0x21u, 0x22u, 0x23u, 0x24u, 0x25u, 0x26u, 0x27u};
 
 namespace r2s
 {
@@ -67,6 +69,25 @@ template <> struct msg_traits<Twist> {
         return s_twist_hash;
     }
 };
+
+template <> struct msg_traits<String> {
+    static const r2s_codec_table_t *table()
+    {
+        return &R2S_HANDWRITTEN_TABLE;
+    }
+    static uint16_t type_index()
+    {
+        return R2S_HANDWRITTEN_STRING;
+    }
+    static const char *type_name()
+    {
+        return "std_msgs/msg/String";
+    }
+    static const uint8_t *type_hash()
+    {
+        return s_string_hash;
+    }
+};
 } // namespace r2s
 
 /* The narrow flag a build with 32-bit doubles carries on every topic
@@ -91,6 +112,15 @@ static void on_twist(const Twist &msg)
 {
     s_got_twist = msg;
     s_got_calls++;
+}
+
+static String s_got_string;
+static uint8_t s_got_string_calls;
+
+static void on_string(const String &msg)
+{
+    s_got_string = msg;
+    s_got_string_calls++;
 }
 
 /* Queues bytes one at a time, spinning after each, as a slow link
@@ -195,17 +225,20 @@ void test_runtime_table_announces_the_type_name_and_hash(void)
     TEST_ASSERT_EQUAL_MEMORY(s_float32_hash, r2s_topic_get(0)->type_hash, 8u);
 }
 
-/* covers: SES-4 */
-void test_runtime_publish_before_the_handshake_fails_and_sends_nothing(void)
+/* covers: SES-4, ERR-1, ERR-2, ERR-3, ERR-6 */
+void test_runtime_publish_before_the_handshake_reports_not_connected_once(void)
 {
     r2s::Node node("base_controller");
     r2s::Publisher<Float32> battery_pub(node, "battery");
     Float32 battery = {1.5f};
+    /* code 5, battery, one occurrence, no field. */
+    const uint8_t report[] = {0x05u, FIRST_TOPIC_ID, 0x01u, 0x00u, 0xFFu};
 
     node.spin_some();
     fake_port_tx_clear();
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_NOT_CONNECTED, battery_pub.publish(battery));
-    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    assert_tx(0, 5u, 0u, report, sizeof report);
 }
 
 /* covers: FRM-4, FRM-5 */
@@ -321,6 +354,28 @@ void test_runtime_dispatch_counts_the_lost_frames_of_a_gap(void)
     feed_host(FIRST_TOPIC_ID, 3u, payload, len);
     TEST_ASSERT_EQUAL_UINT8(3, s_got_calls);
     TEST_ASSERT_EQUAL_UINT16(1, r2s_session_rx_lost(index));
+}
+
+/* covers: ERR-4 */
+void test_runtime_dispatch_reports_a_bound_violation_with_its_field(void)
+{
+    r2s::Node node("base_controller");
+    r2s::Subscription<String> log_text_sub(node, "log_text", on_string);
+    /* Nine characters against the handwritten bound of eight. */
+    const uint8_t overlong[] = {0x09u, '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+    /* code 1, the subscribed topic, one occurrence, field 0. */
+    const uint8_t report[] = {0x01u, FIRST_TOPIC_ID, 0x01u, 0x00u, 0x00u};
+    const uint16_t drops_before = r2s_framer_counters()->dropped_frames;
+
+    s_got_string_calls = 0u;
+    node.spin_some();
+    handshake(1u);
+    fake_port_tx_clear();
+    feed_host(FIRST_TOPIC_ID, 0u, overlong, sizeof overlong);
+    TEST_ASSERT_EQUAL_UINT8(0, s_got_string_calls);
+    TEST_ASSERT_EQUAL_UINT16(drops_before + 1u, r2s_framer_counters()->dropped_frames);
+    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    assert_tx(0, 5u, 0u, report, sizeof report);
 }
 
 void test_runtime_topic_declared_after_the_first_spin_sets_the_error(void)

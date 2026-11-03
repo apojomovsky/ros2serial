@@ -47,6 +47,7 @@ Router::Diagnostics connected_snapshot()
     battery.device_to_host = true;
     battery.seq_gaps = 4u;
     battery.dropped = 0u;
+    battery.publish_failures = 1u;
     snapshot.topics.push_back(battery);
     Router::TopicDiagnostics cmd_vel;
     cmd_vel.topic_id = 17u;
@@ -79,6 +80,7 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(values.at("topic battery direction"), "device to host");
     EXPECT_EQ(values.at("topic battery seq gaps"), "4");
     EXPECT_EQ(values.at("topic battery dropped"), "0");
+    EXPECT_EQ(values.at("topic battery publish failures"), "1");
     EXPECT_EQ(values.at("topic cmd_vel direction"), "host to device");
     EXPECT_EQ(values.at("topic cmd_vel seq gaps"), "0");
     EXPECT_EQ(values.at("topic cmd_vel dropped"), "5");
@@ -107,6 +109,31 @@ TEST(DiagnosticsMessage, ReportsPerTopicStatus)
     EXPECT_EQ(values.at("topic unknown_topic status"), "unknown type");
     EXPECT_EQ(values.at("topic mismatch_topic status"), "hash mismatch");
     EXPECT_EQ(values.at("topic dup status"), "name conflict");
+}
+
+TEST(DiagnosticsMessage, RendersHugeTimeSyncValues)
+{
+    Router::Diagnostics snapshot = connected_snapshot();
+    snapshot.time_offset_ns = -9223372036854775807LL;
+    snapshot.time_drift_ppm = -12345;
+    snapshot.time_round_trip_ns = 9223372036854775807LL;
+    const std::map<std::string, std::string> values =
+        values_of(diagnostics_message(snapshot, "test_node", "").status[0]);
+    EXPECT_EQ(values.at("time sync offset"), "-9223372036854775807");
+    EXPECT_EQ(values.at("time sync drift"), "-12345");
+    EXPECT_EQ(values.at("time sync round trip"), "9223372036854775807");
+}
+
+TEST(DiagnosticsMessage, NamesTimeSyncKeysBeforeTheFirstCorrection)
+{
+    Router::Diagnostics snapshot;
+    snapshot.link_state = "connected";
+    snapshot.time_sync_available = false;
+    const std::map<std::string, std::string> values =
+        values_of(diagnostics_message(snapshot, "test_node", "").status[0]);
+    EXPECT_EQ(values.at("time sync offset"), "not available");
+    EXPECT_EQ(values.at("time sync drift"), "not available");
+    EXPECT_EQ(values.at("time sync round trip"), "not available");
 }
 
 TEST(DiagnosticsMessage, MapsLinkStateToLevel)

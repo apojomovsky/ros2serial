@@ -14,6 +14,7 @@
 
 #include "r2s/r2s.h"
 #include "r2s/r2s_codec.h"
+#include "r2s/r2s_error.h"
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_port.h"
 #include "r2s/r2s_session.h"
@@ -52,12 +53,19 @@ template <typename T> struct subscriber {
  * The registry stores this per subscriber, so the dispatch stays typed
  * while the core sees only a plain function. */
 template <typename T>
-void dispatch_subscriber(void *record, const uint8_t *payload, uint16_t len, uint8_t narrow)
+void dispatch_subscriber(void *record, const uint8_t *payload, uint16_t len, uint8_t narrow, uint8_t topic)
 {
     subscriber<T> *sub = static_cast<subscriber<T> *>(record);
     uint8_t field = 0xFFu;
 
-    if (r2s_codec_decode(sub->table, sub->type_index, payload, len, narrow, sub->storage, &field) != R2S_OK) {
+    switch (r2s_codec_decode(sub->table, sub->type_index, payload, len, narrow, sub->storage, &field)) {
+    case R2S_OK:
+        break;
+    case R2S_ERR_BOUNDS:
+        r2s_error_note(R2S_ERROR_BOUND, topic, field, 1u);
+        r2s_framer_count_refused();
+        return;
+    default:
         r2s_framer_count_refused();
         return;
     }
@@ -71,7 +79,8 @@ r2s_status_t register_publisher(const char *topic, const r2s_codec_table_t *tabl
 /* A subscriber's table and type index live in its own typed record, so the
  * registry needs only the record and the dispatch that reaches it. */
 r2s_status_t register_subscriber(const char *topic, const char *type_name, const uint8_t *type_hash,
-                                 void *record, void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t),
+                                 void *record,
+                                 void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t, uint8_t),
                                  uint8_t *topic_id);
 r2s_status_t publish(uint8_t topic_id, const void *msg);
 void spin(void);
@@ -123,7 +132,7 @@ class Node
                                     const char *type_name, const uint8_t *type_hash, uint8_t *topic_id);
     r2s_status_t register_subscriber(const char *topic, const char *type_name, const uint8_t *type_hash,
                                      void *record,
-                                     void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t),
+                                     void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t, uint8_t),
                                      uint8_t *topic_id);
 
   private:

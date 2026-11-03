@@ -1,12 +1,14 @@
 """The coverage gate judges a fixture PR: fail on a drop, pass on equal figures.
 
-The fixture repo carries the real scripts/coverage-gate.sh, the real
+The fixture repo carries the real scripts/coverage-gate.sh with the real
+scripts/e2e-lease.sh behind its isolation lease, the real
 scripts/coverage-filters.sh and the real tools/coverage_gate.py, with stub
 builds (core-test.sh, colcon) and a stub gcovr that reports the figures its
 environment names. Nothing here compiles or measures real code.
 """
 
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -19,6 +21,7 @@ set -uo pipefail
 root=""
 out=""
 gotfilter=0
+all_args="$*"
 while [ $# -gt 0 ]; do
   case "$1" in
     --root) root="$2"; shift 2 ;;
@@ -28,6 +31,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ "$gotfilter" = 1 ] || exit 3
+if [ -n "${R2S_GCOVR_LOG:-}" ]; then printf '%s\n' "$all_args" >>"$R2S_GCOVR_LOG"; fi
 if [[ "$root" == */base ]]; then figs=$R2S_FIG_BASE; else figs=$R2S_FIG_HEAD; fi
 set -- $figs
 python3 -c "import json; json.dump({'line_covered': $1, 'line_total': 100, \
@@ -51,11 +55,12 @@ def fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     (repo / "tools").mkdir()
     (repo / "bridge").mkdir()
     shutil.copy(ROOT / "scripts" / "coverage-gate.sh", repo / "scripts" / "coverage-gate.sh")
+    shutil.copy(ROOT / "scripts" / "e2e-lease.sh", repo / "scripts" / "e2e-lease.sh")
     shutil.copy(ROOT / "scripts" / "coverage-filters.sh", repo / "scripts" / "coverage-filters.sh")
     shutil.copy(ROOT / "tools" / "coverage_gate.py", repo / "tools" / "coverage_gate.py")
     (repo / "scripts" / "core-test.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
     (repo / "bridge" / "dummy.txt").write_text("bridge sources live here on a real tree\n")
-    for name in ("scripts/coverage-gate.sh", "scripts/core-test.sh"):
+    for name in ("scripts/coverage-gate.sh", "scripts/e2e-lease.sh", "scripts/core-test.sh"):
         path = repo / name
         path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     bindir = tmp_path / "bin"
@@ -76,7 +81,9 @@ def fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     return repo, run_env
 
 
-def run_gate(repo: Path, run_env: dict[str, str], head: str, base: str) -> subprocess.CompletedProcess:
+def run_gate(
+    repo: Path, run_env: dict[str, str], head: str, base: str, extra: dict[str, str] | None = None
+) -> subprocess.CompletedProcess:
     env = {
         **os.environ,
         "PATH": f"{run_env['PATH']}{os.pathsep}{os.environ.get('PATH', '/usr/bin:/bin')}",
@@ -86,6 +93,7 @@ def run_gate(repo: Path, run_env: dict[str, str], head: str, base: str) -> subpr
         "COMMIT_RANGE": "master..HEAD",
         "R2S_FIG_HEAD": head,
         "R2S_FIG_BASE": base,
+        **(extra or {}),
     }
     return subprocess.run(["bash", "scripts/coverage-gate.sh"], cwd=repo, env=env, capture_output=True, text=True)
 
@@ -116,3 +124,31 @@ def test_the_gate_uses_the_base_filters_on_head(tmp_path):
     commit_on_head(repo, run_env, "scripts/coverage-filters.sh", "this is not bash\n")
     result = run_gate(repo, run_env, "96 91", "96 91")
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_the_gate_excludes_throw_branches_from_every_measurement(tmp_path):
+    repo, run_env = fixture(tmp_path)
+    log = tmp_path / "gcovr-args.log"
+    result = run_gate(repo, run_env, "96 91", "96 91", {"R2S_GCOVR_LOG": str(log)})
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = log.read_text().splitlines()
+    assert len(calls) == 4, "one gcovr call per measurement:\n" + "\n".join(calls)
+    for call in calls:
+        assert "--exclude-throw-branches" in call.split(), "throw edges measured:\n" + call
+
+
+def test_the_gate_requires_the_bridge_floors(tmp_path):
+    repo, run_env = fixture(tmp_path)
+    result = run_gate(repo, run_env, "71 51", "71 51")
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "coverage: bridge branch 51.00% is below the floor 80%" in result.stdout
+    assert "(advisory)" not in result.stdout
+
+
+def test_the_gate_runs_the_bridge_tests_under_a_lease(tmp_path):
+    repo, run_env = fixture(tmp_path)
+    result = run_gate(repo, run_env, "96 91", "96 91")
+    assert result.returncode == 0, result.stdout + result.stderr
+    match = re.search(r"coverage isolation: ROS_DOMAIN_ID=(\d+)", result.stdout)
+    assert match is not None, "the gate ran with no leased domain:\n" + result.stdout
+    assert 0 <= int(match.group(1)) <= 31, "the domain is outside the bridge pool range"

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# The avr end-to-end suite: scenarios 1 to 4 against the slice sketch on an
-# emulated Uno and Mega. It stages the Arduino library at build time (the
-# bundle plus the core and the port glue, as scripts/build-examples.sh does),
-# compiles the sketch for both boards with burst-sized serial rings, and runs
-# every scenario under each RMW the design names, starting the Zenoh router
-# first for its leg. Builds go under R2S_BUILD_DIR, so the tree stays clean;
-# the suite runs this script for E2E=avr. R2S_RMWS narrows the RMW loop and
-# R2S_E2E_BOARDS the board loop for a quicker iteration.
+# The avr end-to-end suite: scenarios 1 to 4 against the slice sketch and
+# scenario 12 against the flood sketch, on an emulated Uno and Mega, plus
+# the baud matrix (the scenario 2 flow gates per baud per board) under the
+# first RMW only. It stages the Arduino library at build time, compiles the
+# sketches for both boards with burst-sized serial rings, and runs every
+# scenario under each RMW. Builds go under R2S_BUILD_DIR, so the tree stays
+# clean; the suite runs this script for E2E=avr. R2S_RMWS, R2S_E2E_BOARDS
+# and R2S_E2E_BAUDS narrow their loops for a quicker iteration.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$root" || exit 2
@@ -77,21 +77,112 @@ esac
 # Burst-sized rings (R10): 256 bytes is the practical choice, holding
 # several slice frames in each direction, so a burst the slice can send
 # neither overruns the RX ring nor stalls the loop on a full TX ring.
+# One slice image per matrix baud: the sketch baud travels as R2S_BAUD, and
+# 250000 stays out because the bridge has no termios constant for it (#426).
+bauds=${R2S_E2E_BAUDS:-"115200 500000 1000000"}
+for baud in $bauds; do
+  case "$baud" in
+    115200 | 500000 | 1000000) ;;
+    *)
+      echo "run-avr: unsupported baud $baud (want 115200, 500000 or 1000000)" >&2
+      exit 1
+      ;;
+  esac
+done
 serial_flags="-DSERIAL_RX_BUFFER_SIZE=256 -DSERIAL_TX_BUFFER_SIZE=256"
 mkdir -p "$build/fw" || exit 1
+# Scenarios 1 to 4 run the default baud under its legacy file name, so the
+# 115200 image builds even when the matrix narrows past it.
+build_bauds=$bauds
+case " $build_bauds " in
+  *" 115200 "*) ;;
+  *) build_bauds="115200 $build_bauds" ;;
+esac
+for baud in $build_bauds; do
+  for board in uno mega; do
+    mcu=atmega328p
+    [ "$board" = mega ] && mcu=atmega2560
+    out="$build/fw/$board-$baud"
+    arduino-cli compile --fqbn "arduino:avr:$board" \
+      --build-property "compiler.c.extra_flags=$extras" \
+      --build-property "compiler.cpp.extra_flags=$serial_flags -DR2S_BAUD=$baud" \
+      --library "$stage" --output-dir "$out" tests/e2e/avr_slice || exit 1
+    avr-size "$out/avr_slice.ino.elf" || exit 1
+    mv "$out/avr_slice.ino.elf" "$build/fw/slice-$mcu-$baud.elf" || exit 1
+    # Scenarios 1 to 4 run the default baud under its legacy file name.
+    if [ "$baud" = 115200 ]; then
+      cp "$build/fw/slice-$mcu-$baud.elf" "$build/fw/slice-$mcu.elf" || exit 1
+    fi
+  done
+done
+# The flood sketch is scenario 12's alone: its per-tick TX budget lives in
+# the test-only port hook, armed by the sketch, so the slice build above
+# stays exactly what scenarios 1 to 11 run.
 for board in uno mega; do
   mcu=atmega328p
   [ "$board" = mega ] && mcu=atmega2560
-  out="$build/fw/$board"
+  out="$build/fw/$board-flood"
   arduino-cli compile --fqbn "arduino:avr:$board" \
     --build-property "compiler.c.extra_flags=$extras" \
-    --build-property "compiler.cpp.extra_flags=$serial_flags" \
-    --library "$stage" --output-dir "$out" tests/e2e/avr_slice || exit 1
-  avr-size "$out/avr_slice.ino.elf" || exit 1
-  mv "$out/avr_slice.ino.elf" "$build/fw/slice-$mcu.elf" || exit 1
+    --build-property "compiler.cpp.extra_flags=$serial_flags -DR2S_TEST_TX_CAP=16" \
+    --library "$stage" --output-dir "$out" tests/e2e/avr_flood || exit 1
+  avr-size "$out/avr_flood.ino.elf" || exit 1
+  mv "$out/avr_flood.ino.elf" "$build/fw/flood-$mcu.elf" || exit 1
 done
 export R2S_E2E_AVR_FW=$build/fw
 [ "$build_only" = 1 ] && exit 0
+
+# The painted peaks the scenarios record, one entry per firmware image,
+# merged to the max across scenarios and RMW legs. Reset every run, so a
+# stale peak from an older firmware can never leak into the table.
+export R2S_E2E_AVR_STACK_OUT=$build/measured-stack.json
+echo '{}' >"$R2S_E2E_AVR_STACK_OUT" || exit 1
+
+# The static figures beside the peaks need .su files, which avr-gcc does
+# not write under the shipped link-time optimized flags, so each e2e
+# firmware is rebuilt without LTO under stack-fw/, the same pattern
+# scripts/build-examples.sh uses for its stack/ dir. Same sources and
+# flags, only the optimizer differs, and the table names which binary
+# each column comes from.
+for flavor in slice flood; do
+  sketch=avr_slice
+  [ "$flavor" = flood ] && sketch=avr_flood
+  for board in uno mega; do
+    mcu=atmega328p
+    [ "$board" = mega ] && mcu=atmega2560
+    label="$flavor-$mcu"
+    sw="$build/stack-fw/$label"
+    rm -rf "$sw"
+    mkdir -p "$sw" || exit 1
+    cppflags="$serial_flags -fno-lto -fstack-usage"
+    [ "$flavor" = flood ] && cppflags="$cppflags -DR2S_TEST_TX_CAP=16"
+    arduino-cli compile --fqbn "arduino:avr:$board" \
+      --build-property "compiler.c.extra_flags=$extras -fno-lto -fstack-usage" \
+      --build-property "compiler.cpp.extra_flags=$cppflags" \
+      --build-property "compiler.c.elf.extra_flags=-fno-lto" \
+      --library "$stage" --build-path "$sw" "tests/e2e/$sketch" || exit 1
+    mv "$sw/$sketch.ino.elf" "$sw/$label.elf" || exit 1
+  done
+done
+PYTHONPATH="$root/tools" python3 - "$build/stack-fw" "$build/static-stack.json" <<'EOF' || exit 1
+import json
+import sys
+from pathlib import Path
+
+import stack_report
+
+root, out = Path(sys.argv[1]), Path(sys.argv[2])
+statics = {}
+for entry in sorted(root.iterdir()):
+    if not entry.is_dir():
+        continue
+    elfs = sorted(entry.glob("*.elf"))
+    if len(elfs) != 1:
+        print(f"run-avr: {entry} holds no single firmware ELF", file=sys.stderr)
+        raise SystemExit(1)
+    statics[entry.name] = stack_report.static_worst(str(elfs[0]), entry)["total"]
+out.write_text(json.dumps(statics, indent=2) + "\n", encoding="utf-8")
+EOF
 
 command -v colcon >/dev/null 2>&1 || { echo "colcon not found: run it in a ROS container"; exit 1; }
 : "${ROS_DISTRO:?ROS_DISTRO is not set: run it in a ROS container}"
@@ -127,6 +218,7 @@ boards=${R2S_E2E_BOARDS:-"uno mega"}
 rmws=${R2S_RMWS:-rmw_fastrtps_cpp rmw_cyclonedds_cpp rmw_zenoh_cpp}
 
 status=0
+matrix_done=0
 for rmw in $rmws; do
   echo "== e2e-avr: $rmw"
   export RMW_IMPLEMENTATION=$rmw
@@ -152,10 +244,68 @@ for rmw in $rmws; do
   fi
   for board in $boards; do
     export R2S_E2E_BOARD=$board
-    for scenario in 1 2 3 4; do
-      timeout 300 launch_test "tests/e2e/test_scenario_${scenario}_avr.py" || status=1
+    for scenario in 1 2 3 4 12; do
+      # Same R2S_E2E_SKIP contract as run.sh, matched on the avr file name.
+      case " ${R2S_E2E_SKIP:-} " in
+        *" test_scenario_${scenario}_avr "*) echo "skip test_scenario_${scenario}_avr (R2S_E2E_SKIP)" ;;
+        *) timeout 300 launch_test "tests/e2e/test_scenario_${scenario}_avr.py" || status=1 ;;
+      esac
     done
   done
+  # The baud matrix runs once, under the first RMW of the loop: one
+  # representative flow per baud per board keeps the e2e-avr job small.
+  if [ "$matrix_done" = 0 ]; then
+    matrix_done=1
+    for board in $boards; do
+      export R2S_E2E_BOARD=$board
+      for baud in $bauds; do
+        export R2S_E2E_BAUD=$baud
+        case " ${R2S_E2E_SKIP:-} " in
+          *" test_baud_matrix_avr "*) echo "skip test_baud_matrix_avr (R2S_E2E_SKIP)" ;;
+          *) timeout 300 launch_test "tests/e2e/test_baud_matrix_avr.py" || status=1 ;;
+        esac
+      done
+    done
+  fi
   if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
 done
+
+# The report-only stack table: painted peaks next to the static figures.
+# Never judged, so firmware without a measurement (a skipped scenario)
+# warns here and reads n/a instead of failing the run.
+PYTHONPATH="$root/tools" python3 - "$build/static-stack.json" "$R2S_E2E_AVR_STACK_OUT" \
+  "$build/stack-paint-table.md" <<'EOF'
+import json
+import sys
+from pathlib import Path
+
+import stack_report
+
+statics = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+try:
+    measured = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+except (OSError, ValueError):
+    measured = {}
+if not isinstance(measured, dict):
+    measured = {}
+for name in sorted(statics):
+    if name not in measured:
+        print(f"run-avr: no measured stack for {name}", file=sys.stderr)
+Path(sys.argv[3]).write_text(stack_report.measured_table(statics, measured), encoding="utf-8")
+EOF
+table_status=$?
+if [ "$table_status" -ne 0 ]; then
+  echo "run-avr: the stack table failed" >&2
+  status=1
+else
+  echo "== stack paint vs static"
+  cat "$build/stack-paint-table.md"
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    {
+      echo "### Stack paint vs static"
+      echo
+      cat "$build/stack-paint-table.md"
+    } >>"$GITHUB_STEP_SUMMARY"
+  fi
+fi
 exit $status

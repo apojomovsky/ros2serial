@@ -53,13 +53,18 @@ def test_files_for_names_the_exact_bundle_set():
         "src/r2s_bundled.c",
         "src/builtin_interfaces/msg/time.hpp",
         "src/geometry_msgs/msg/quaternion.hpp",
+        "src/geometry_msgs/msg/transform.hpp",
+        "src/geometry_msgs/msg/transform_stamped.hpp",
         "src/geometry_msgs/msg/twist.hpp",
         "src/geometry_msgs/msg/vector3.hpp",
         "src/sensor_msgs/msg/imu.hpp",
         "src/sensor_msgs/msg/joint_state.hpp",
+        "src/sensor_msgs/msg/range.hpp",
+        "src/std_msgs/msg/bool.hpp",
         "src/std_msgs/msg/float32.hpp",
         "src/std_msgs/msg/header.hpp",
         "src/std_msgs/msg/string.hpp",
+        "src/tf2_msgs/msg/tf_message.hpp",
     )
 
 
@@ -308,6 +313,10 @@ static uint8_t got_joints_calls;
 extern uint8_t stub_tx_payload[2048];
 extern uint16_t stub_tx_len;
 extern uint8_t stub_refused;
+extern uint8_t stub_error_code;
+extern uint8_t stub_error_topic;
+extern uint8_t stub_error_field;
+extern uint16_t stub_error_count;
 
 void on_cmd_vel(const geometry_msgs::msg::Twist &msg)
 {
@@ -392,10 +401,16 @@ int main(void)
     CHECK(got_joints.position.data[1] == 2.0);
     CHECK(stub_refused == 0u);
 
+    CHECK(stub_error_count == 0u);
     r2s_codec_dispatch(200u, 0u, twist_payload, (uint16_t)sizeof twist_payload);
     CHECK(stub_refused == 1u);
+    CHECK(stub_error_code == 2u);
+    CHECK(stub_error_topic == 200u);
+    CHECK(stub_error_field == 0xFFu);
+    CHECK(stub_error_count == 1u);
     r2s_codec_dispatch(18u, 8u, twist_payload, 1u);
     CHECK(stub_refused == 2u);
+    CHECK(stub_error_count == 1u);
 
     memset(&joints, 0, sizeof joints);
     joints.header.stamp.sec = 1;
@@ -465,6 +480,10 @@ STUBS = """\
 uint8_t stub_tx_payload[2048];
 uint16_t stub_tx_len;
 uint8_t stub_refused;
+uint8_t stub_error_code;
+uint8_t stub_error_topic;
+uint8_t stub_error_field;
+uint16_t stub_error_count;
 
 uint8_t r2s_connected(void)
 {
@@ -473,7 +492,18 @@ uint8_t r2s_connected(void)
 
 uint8_t r2s_session_find_topic(uint8_t topic_id)
 {
+    if (topic_id < 16u || topic_id > 19u) {
+        return 0xFFu;
+    }
     return (uint8_t)(topic_id - 16u);
+}
+
+void r2s_error_note(uint8_t code, uint8_t topic_id, uint8_t field, uint16_t count)
+{
+    stub_error_code = code;
+    stub_error_topic = topic_id;
+    stub_error_field = field;
+    stub_error_count = count;
 }
 
 uint8_t r2s_session_topic_flags(uint8_t index)
@@ -587,6 +617,10 @@ static uint8_t got_joints_calls;
 extern uint8_t stub_tx_payload[2048];
 extern uint16_t stub_tx_len;
 extern uint8_t stub_refused;
+extern uint8_t stub_error_code;
+extern uint8_t stub_error_topic;
+extern uint8_t stub_error_field;
+extern uint16_t stub_error_count;
 
 void on_cmd_vel(const geometry_msgs__msg__Twist *msg)
 {
@@ -671,10 +705,16 @@ int main(void)
     CHECK(got_joints.position.data[1] == 2.0);
     CHECK(stub_refused == 0u);
 
+    CHECK(stub_error_count == 0u);
     r2s_codec_dispatch(200u, 0u, twist_payload, (uint16_t)sizeof twist_payload);
     CHECK(stub_refused == 1u);
+    CHECK(stub_error_code == 2u);
+    CHECK(stub_error_topic == 200u);
+    CHECK(stub_error_field == 0xFFu);
+    CHECK(stub_error_count == 1u);
     r2s_codec_dispatch(18u, 8u, twist_payload, 1u);
     CHECK(stub_refused == 2u);
+    CHECK(stub_error_count == 1u);
 
     memset(&joints, 0, sizeof joints);
     joints.header.stamp.sec = 1;

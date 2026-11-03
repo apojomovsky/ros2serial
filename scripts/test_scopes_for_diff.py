@@ -97,11 +97,20 @@ def test_other_ports_fail_safe_to_full():
     assert scopes("ports/stm32/src/port.c") == {"FULL": "1"}
 
 
-def test_e2e_tests_map_to_both_backends_and_bridge():
-    assert scopes("tests/e2e/test_scenario_1_posix.py") == {**CHEAP, "E2E": "both", "BRIDGE": "1"}
-    assert scopes("tests/e2e/e2e_support/relay.py") == {**CHEAP, "E2E": "both", "BRIDGE": "1"}
-    assert scopes("tests/e2e/run.sh") == {**CHEAP, "E2E": "both", "BRIDGE": "1"}
+# scripts/test_e2e_* load files from tests/e2e/, so every e2e path also runs SCRIPTS.
+E2E_SHARED = {**CHEAP, "E2E": "both", "BRIDGE": "1", "SCRIPTS": "1"}
+
+
+def test_e2e_tests_map_to_both_backends_bridge_and_scripts():
+    assert scopes("tests/e2e/test_scenario_1_posix.py") == E2E_SHARED
+    assert scopes("tests/e2e/e2e_support/relay.py") == E2E_SHARED
+    assert scopes("tests/e2e/e2e_support/teardown.py") == E2E_SHARED
+    assert scopes("tests/e2e/run.sh") == E2E_SHARED
     assert scopes("tests/harness/simavr/run.sh") == {**CHEAP, "E2E": "avr"}
+
+
+def test_nightly_isolation_pair_runs_outside_the_pr_scopes():
+    assert scopes("tests/e2e/test_isolation.py") == {**CHEAP, "NIGHTLY": "1", "SCRIPTS": "1"}
 
 
 def test_avr_only_e2e_paths_map_to_the_avr_leg():
@@ -114,19 +123,34 @@ def test_avr_only_e2e_paths_map_to_the_avr_leg():
         "tests/e2e/test_scenario_2_avr.py",
         "tests/e2e/test_scenario_3_avr.py",
         "tests/e2e/test_scenario_4_avr.py",
+        "tests/e2e/test_scenario_12_avr.py",
+        "tests/e2e/avr_flood/avr_flood.ino",
     ):
-        assert scopes(path) == {**CHEAP, "E2E": "avr"}, path
+        assert scopes(path) == {**CHEAP, "E2E": "avr", "SCRIPTS": "1"}, path
 
 
-def test_docs_map_to_docs():
-    assert scopes("docs/01-testing.md") == {**CHEAP, "DOCS": "1"}
-    assert scopes("README.md") == {**CHEAP, "DOCS": "1"}
+def test_docs_map_to_docs_and_mermaid():
+    assert scopes("docs/01-testing.md") == {**CHEAP, "DOCS": "1", "MERMAID": "1"}
+    assert scopes("README.md") == {**CHEAP, "DOCS": "1", "README": "1", "MERMAID": "1"}
+
+
+def test_any_markdown_maps_to_docs_and_mermaid():
+    assert scopes("CHANGELOG.md") == {**CHEAP, "DOCS": "1", "MERMAID": "1"}
+    assert scopes("CONTRIBUTING.md") == {**CHEAP, "DOCS": "1", "MERMAID": "1"}
+
+
+def test_mermaid_check_tool_maps_to_scripts_and_mermaid():
+    assert scopes("tools/mermaid-check/check.mjs") == {**CHEAP, "SCRIPTS": "1", "MERMAID": "1"}
+    assert scopes("tools/mermaid-check/package.json") == {**CHEAP, "SCRIPTS": "1", "MERMAID": "1"}
 
 
 def test_tools_map_to_scripts_and_the_section_each_serves():
     assert scopes("tools/snippets_check.py") == {**CHEAP, "SCRIPTS": "1", "DOCS": "1"}
     assert scopes("tools/coverage_gate.py") == {**CHEAP, "SCRIPTS": "1", "COVERAGE": "1"}
     assert scopes("tools/fuzz_corpus.py") == {**CHEAP, "SCRIPTS": "1", "FUZZ": "1"}
+    assert scopes("tools/size_report.py") == {**CHEAP, "SCRIPTS": "1", "BUDGETS": "1"}
+    assert scopes("tools/stack_report.py") == {**CHEAP, "SCRIPTS": "1", "BUDGETS": "1"}
+    assert scopes("tools/budgets.yaml") == {**CHEAP, "SCRIPTS": "1", "BUDGETS": "1"}
     assert scopes("tools/vectors_check.py") == {**CHEAP, "SCRIPTS": "1"}
     assert scopes("tools/test_zone_check.py") == {**CHEAP, "SCRIPTS": "1"}
 
@@ -135,7 +159,10 @@ def test_section_scripts_map_to_their_section():
     assert scopes("scripts/core-test.sh") == {**CHEAP, "CORE": "1"}
     assert scopes("scripts/bridge-test.sh") == {**CHEAP, "BRIDGE": "1"}
     assert scopes("scripts/coverage-gate.sh") == {**CHEAP, "COVERAGE": "1"}
-    assert scopes("scripts/build-examples.sh") == {**CHEAP, "EXAMPLES": "1"}
+    assert scopes("scripts/build-examples.sh") == {**CHEAP, "EXAMPLES": "1", "BUDGETS": "1"}
+    assert scopes("scripts/budgets-check.sh") == {**CHEAP, "BUDGETS": "1"}
+    assert scopes("scripts/budgets_comment.py") == {**CHEAP, "SCRIPTS": "1", "BUDGETS": "1"}
+    assert scopes("scripts/check-readme.sh") == {**CHEAP, "README": "1"}
     assert scopes("scripts/cpp-test.sh") == {**CHEAP, "CPP": "1"}
     assert scopes("scripts/fuzz.sh") == {**CHEAP, "FUZZ": "1"}
     assert scopes("scripts/build-host-lib.sh") == {**CHEAP, "CORE": "1", "GEN": "1"}
@@ -194,6 +221,7 @@ def test_e2e_backends_merge_to_both():
         **CHEAP,
         "BRIDGE": "1",
         "E2E": "both",
+        "SCRIPTS": "1",
     }
 
 
@@ -203,6 +231,7 @@ def test_bridge_and_avr_only_paths_merge_to_both():
         "BRIDGE": "1",
         "COVERAGE": "1",
         "E2E": "both",
+        "SCRIPTS": "1",
     }
 
 
@@ -235,7 +264,8 @@ def run_scopes(repo: Path, **env) -> subprocess.CompletedProcess:
     )
 
 
-def test_cli_lists_assignments_for_committed_and_untracked_changes(tmp_path):
+def test_cli_lists_assignments_for_committed_and_untracked_changes(tmp_path, monkeypatch):
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
     repo = tiny_repo(tmp_path)
     (repo / "core" / "b.c").write_text("int y;\n")
     out = run_scopes(repo)
@@ -256,3 +286,66 @@ def test_cli_full_env_forces_the_full_suite(tmp_path):
     out = run_scopes(repo, R2S_FULL="1")
     assert out.returncode == 0, out.stdout + out.stderr
     assert out.stdout.split() == ["FULL=1"]
+
+
+def test_cli_machinery_only_diff_runs_the_cheap_scopes_locally(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    repo = tiny_repo(tmp_path)
+    (repo / "Makefile").write_text("# machinery\n")
+    out = run_scopes(repo)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert sorted(out.stdout.split()) == ["COMMITS=1", "LINT=1"]
+    assert "leaving the full suite to CI" in out.stderr
+
+
+def test_cli_bridge_diff_runs_the_cheap_scopes_locally(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    repo = tiny_repo(tmp_path)
+    (repo / "bridge").mkdir()
+    (repo / "bridge" / "node.cpp").write_text("// bridge\n")
+    out = run_scopes(repo)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert sorted(out.stdout.split()) == ["COMMITS=1", "LINT=1"]
+    assert "leaving the full suite to CI" in out.stderr
+
+
+def test_cli_core_diff_runs_the_cheap_scopes_locally(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    repo = tiny_repo(tmp_path)
+    (repo / "core" / "b.c").write_text("int y;\n")
+    out = run_scopes(repo)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert sorted(out.stdout.split()) == ["COMMITS=1", "LINT=1"]
+    assert "leaving the full suite to CI" in out.stderr
+
+
+def test_cli_machinery_plus_bridge_diff_runs_the_cheap_scopes(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    repo = tiny_repo(tmp_path)
+    (repo / "Makefile").write_text("# machinery\n")
+    (repo / "bridge").mkdir()
+    (repo / "bridge" / "node.cpp").write_text("// bridge\n")
+    out = run_scopes(repo)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert sorted(out.stdout.split()) == ["COMMITS=1", "LINT=1"]
+    assert "leaving the full suite to CI" in out.stderr
+
+
+def test_cli_full_env_still_runs_the_full_suite_for_machinery(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    repo = tiny_repo(tmp_path)
+    (repo / "Makefile").write_text("# machinery\n")
+    out = run_scopes(repo, R2S_FULL="1")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert out.stdout.split() == ["FULL=1"]
+    assert "leaving the full suite to CI" not in out.stderr
+
+
+def test_cli_ci_runs_the_full_suite_for_machinery(tmp_path, monkeypatch):
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    repo = tiny_repo(tmp_path)
+    (repo / "Makefile").write_text("# machinery\n")
+    out = run_scopes(repo)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert out.stdout.split() == ["FULL=1"]
+    assert "leaving the full suite to CI" not in (out.stdout + out.stderr)

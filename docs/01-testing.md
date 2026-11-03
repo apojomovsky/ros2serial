@@ -4,6 +4,69 @@ Oct 20, 2026 · @Alexis Pojomovsky · part of the design series after `docs/00-d
 
 > **What this is.** The testing strategy: the principles, how code must be written so it can be tested, what is tested at which level, when each test runs, how much is enough, and how the tests themselves are kept honest. It is normative: a ticket that adds code follows it, and a reviewer rejects code that breaks it. `docs/00-design.md` Part II summarizes it and links here.
 
+## Testing in practice
+
+Start here when something fails. The sections below stay normative; this one maps them to commands. For where each part lives in the tree and how a message travels through the running system, see `docs/02-architecture.md`.
+
+### Test levels
+
+Each level with the tree it lives in and the target that runs it:
+
+```mermaid
+flowchart TB
+    unit["Unit, component and bridge<br/>core/tests, gen/tests, bridge tests with fakes<br/>make test-core, test-gen, test-bridge, test-cpp"]
+    contract["Contract and golden<br/>spec/vectors, gen/tests snapshots<br/>same scopes as unit"]
+    posix["Integration<br/>tests/e2e with ports/posix over a pty<br/>make e2e-posix"]
+    avr["System<br/>tests/e2e with tests/harness in simavr<br/>make e2e-avr"]
+    fuzz["Fuzz<br/>core/fuzz corpus<br/>FUZZ scope"]
+
+    unit --> contract --> posix --> avr
+    unit --> fuzz
+```
+
+### CI flow
+
+The `plan` job maps the pull request diff to the scopes each section job gates on; pushes to `master` and manual runs select every scope. The SCRIPTS scope runs as one job per shard; the `nightly` job calls the shared nightly jobs on pull requests that select them. A version tag runs the same nightly jobs with the long fuzzing off, and they gate the publish.
+
+```mermaid
+flowchart TB
+    diff["Pull request diff"]
+    plan["plan: scopes_for_diff.py maps changed paths to scopes; unknown paths select FULL"]
+    subgraph jobs["Section jobs, each running only when its scope is selected"]
+        lint["lint"]
+        shards["scripts, one job per shard"]
+        backends["core, gen, bridge, cpp"]
+        e2e["e2e-posix matrix, e2e-avr"]
+        gates["coverage, docs, readme, examples, budgets, fuzz-smoke"]
+        cinight["nightly: nightly-jobs.yml when NIGHTLY is selected; fuzz-long only with FUZZ"]
+    end
+    full["FULL: a push to master or a manual run selects every scope"]
+    shared["nightly-jobs.yml: fuzz-long plus e2e-isolation"]
+    sched["nightly.yml on schedule"]
+    rel["release.yml on a version tag: nightly jobs with fuzz off gate the publish; a plain tag ships Latest, an -rc tag ships a pre-release"]
+
+    diff --> plan --> jobs
+    full --> jobs
+    cinight --> shared
+    sched --> shared
+    rel --> shared
+```
+
+### Rerunning one failure
+
+`make check` runs the scopes CI would run for the current diff against `origin/master`, plus the fast gates, and prints which scopes it chose. A diff that maps to FULL runs only the fast gates locally and leaves the full suite to CI. From there, narrow down:
+
+- One scope: `make test-core`, `test-gen`, `test-bridge`, `test-cpp`, `test-scripts`, `make e2e-posix`, `make e2e-avr`. `make test-all` runs the whole suite unscoped.
+- One pytest file or node: `make pytest ARGS='<path>[::name] [-k expr]'`.
+- One core unit test: `make ctest ARGS='<regex>'`, which builds the gcc config only and keeps the random order.
+- A misspelled scope variable fails with the list of valid scopes instead of running the wrong set.
+
+### Flakes
+
+The likely flakes live at the upper levels, where timing is real. The time sync scenario judges stamps within a bound, and the shared CI host needs headroom above the default (the CI e2e jobs set a wider bound, and the isolation pairs skip that scenario). simavr runs at its own pace, so wall-clock sleeps never appear in tests. A timing-sensitive e2e scenario that passes locally and fails on CI is the classic signature.
+
+Rerun exactly the failing scope locally first. If it passes, rerun the failed CI job once. A second failure is a real bug: file it as an issue. Flaky tests are bugs, fixed at the root cause, never retried automatically, quarantined, or loosened.
+
 ## 1. Principles
 
 1. **Tests are the specification's executable form.** The spec says what must happen on the wire; the vectors and tests prove each implementation does it. A behavior without a test is not guaranteed.
@@ -218,7 +281,8 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 - **Error-path coverage is 100%:** every `R2S_ERR_*` code and every counter is triggered by at least one test.
 - **Mutation testing** runs nightly with Mull (C and C++, LLVM-based) and mutmut (Python); research ticket R13 confirms the tools. Surviving mutants are triaged: either a test is added, or the mutant is recorded as equivalent with a one-line reason.
 - Lines excluded from coverage carry an exclusion comment with a reason, and the exclusions are counted in the report.
-- The bridge floors report as advisory until its tests catch up (#169); a drop against base still fails for the bridge. Core and bridge are measured head-vs-base, and core's floors fail the gate; the generator gate is #168, and the `cpp/` and `scripts/`/`tools/` floors are not gated yet.
+- Branch coverage excludes compiler-generated exception edges: every gcovr measurement passes `--exclude-throw-branches`, so the arcs of calls that never throw in tests never enter the denominator.
+- Core and bridge are measured head-vs-base, and their floors fail the gate; the generator gate is #168, and the `cpp/` and `scripts/`/`tools/` floors are not gated yet.
 - The floors start at these values from the first ticket of each component, rather than being raised later: tests are written first, so there is no untested backlog to catch up on.
 
 ## 7. When tests run
@@ -227,15 +291,19 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 | --- | --- | --- |
 | While editing | `make test CORE=1` (or the component being changed) | Seconds |
 | `pre-commit` hook | Format, warnings, unit tests of the touched component | Under 30 s |
-| `pre-push` hook | The suite scopes the diff touches (`scripts/scopes_for_diff.py`), plus the cheap checks, skipped when the stamp shows this tree already passed | Same as PR CI |
-| Takeoff (`make pre-pr-check TEST=1`) | The same scoped run, recording the stamp the push checks; `R2S_FULL=1` runs the full suite | Scoped, minutes |
+| `pre-push` hook | The cheap checks locally, leaving the suite to CI; skipped when the stamp shows this tree already passed | Cheap, minutes |
+| Takeoff (`make pre-pr-check TEST=1`) | The same cheap run as the hook, recording the stamp the push checks; scopes named on the command line and `R2S_FULL=1` still run locally | Cheap, minutes |
 | Every PR | Unit, component, contract, integration on posix, simavr scenarios, fuzz smoke (60 s per target), sanitizers, coverage, spec coverage, budgets, build matrix, golden, docs snippets | Under 15 min wall clock, in parallel jobs |
-| Nightly | Long fuzzing (30 min per target), mutation testing, extended property and model-based runs, long fault injection, soak (2 h), big-endian, Rolling | Hours |
-| Release | Everything above, the hardware checklist on a Uno and a Mega, the full distro and RMW matrix, frozen-vector check | |
+| Nightly | Long fuzzing (30 min per target), mutation testing, extended property and model-based runs, long fault injection, soak (2 h), big-endian, Rolling, e2e isolation pairs | Hours |
+| Release | Everything above; on a tag the nightly jobs run first and gate the publish, then the hardware checklist on a Uno and a Mega, the full distro and RMW matrix, frozen-vector check | |
 
 When the PR suite exceeds its budget, the slowest tests are made faster or moved down a level; the budget is not raised without the maintainer's approval.
 
-The local gate runs what the diff touches: each top-level tree maps to the sections that test it and the sections that consume it, and the cheap checks always run. Changes to the gate machinery itself, and paths the mapping does not know, run the full suite: unknown means full, never less. CI still runs everything on the merge with master, and a PR merges only on green CI.
+Each top-level tree maps to the sections that test it and the sections that consume it (`scripts/scopes_for_diff.py`), and the cheap checks always run. Changes to the gate machinery itself, and paths the mapping does not know, map to the full suite: unknown means full, never less. Outside CI every diff runs only the cheap scopes instead, with one line saying the full suite is left to CI. Scopes named on the command line still run, and `R2S_FULL=1` still runs everything locally. CI is where the suite runs: it still runs everything on the merge with master, and a PR merges only on green CI.
+
+Suites share nothing: every section that starts ROS nodes (bridge, coverage, e2e) leases its own DDS domain from one slot pool (`scripts/e2e-lease.sh`), and the e2e legs take a Zenoh router port from the same slot, so two suites on one host never see each other's topics. Slot 0 maps to the domain and port each leg always used (89 for the e2e legs, 0 for bridge and coverage), so a lone run and CI keep their domains. An explicit `R2S_E2E_DOMAIN_ID` skips allocation; `R2S_E2E_DOMAIN_BASE` shifts the pool and defaults to 89.
+
+The SCRIPTS scope runs in CI as one job per shard over the collected node ids, spread round-robin in sorted order (`scripts/shard_nodes.py`, selected with `pytest --shard`), so the split is deterministic and every test runs in exactly one shard. `make test SCRIPTS=1` still runs the whole scope locally unless `SCRIPTS_SHARD` names a shard. The e2e isolation pairs (`tests/e2e/test_isolation.py`) run in the nightly workflow instead (`make test NIGHTLY=1` locally); PR CI no longer runs them.
 
 ## 8. Keeping the tests honest
 
@@ -309,12 +377,12 @@ In `tests/e2e/`, each a launch_testing test parameterized by MCU backend (posix,
 
 1. Handshake completes within 3 s of the MCU's HELLO, as the bridge reports it; `ros2 topic list` shows the announced topics within a further generous timeout.
 2. MCU publishes Float32 at 50 Hz for 10 s; the host receives at least 99% with correct values.
-3. Host publishes Twist; the MCU echoes it on a test topic; values match after the narrow round trip.
+3. Host publishes Twist; the MCU echoes it on a test topic; values match after the narrow round trip. The handshake reads from bridge state within 3 s and the echo topics wait on the graph within a further generous timeout, so discovery never spends the echo budget.
 4. Launch remapping and namespace apply to the MCU's topics.
 5. A type hash mismatch rejects only that topic, with an error naming the type.
 6. Unplug (close the pty) and replug: CONNECTED again within `boot_wait_ms` + 3 s without restarting the bridge.
 7. MCU reset: detected within 500 ms (HELLO in reply to a heartbeat), re-handshake follows; publishers are kept when the table is unchanged.
-8. Time sync: with a simulated MCU clock off by 5000 ppm, stamps stay within 1 ms of host time after the initial burst.
+8. Time sync: with a simulated MCU clock off by 5000 ppm, stamps stay within R2S_SYNC_BOUND_NS nanoseconds of host time after the initial burst. The bound defaults to 1000000; the CI e2e jobs set 5000000 for the shared host. The concurrent isolation pairs skip this scenario through R2S_E2E_SKIP; the standalone legs keep judging it.
 9. Log messages at each level appear on `/rosout` with the right severity and logger name.
 10. Fault injection at 1% byte corruption: no crash, the counters match the injected faults, and delivery recovers on the next frame.
 11. A subscribed message that exceeds a bound is dropped, and the bridge logs the topic and the field path.

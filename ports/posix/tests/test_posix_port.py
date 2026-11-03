@@ -235,6 +235,14 @@ class Host:
         self.send(0, b"\x06" + struct.pack("<I", token))
         return token
 
+    def ping(self, ping_id):
+        """One PING carrying the id its PONG answers with ([TIM-2])."""
+        self.send(1, bytes((0x01, ping_id)))
+
+    def correction(self, tick0, sec, nanosec, drift_ppm=0):
+        """One CORRECTION anchoring tick0 to the given ROS time ([TIM-3])."""
+        self.send(1, b"\x03" + struct.pack("<IiIh", tick0, sec, nanosec, drift_ppm))
+
 
 def do_handshake(fw, host=None):
     """HELLO_REQ, one TOPIC_REQ per announced topic with an ok status each,
@@ -269,15 +277,15 @@ def test_hello_announces_firmware(tmp_path):
     assert hello["version"] == 3
     assert hello["mode"] == 0
     assert hello["token"] == 0, "no token before the first READY"
-    assert hello["max_frame"] == 52
-    assert hello["rx_capacity"] == 52 + 52 // 254 + 1
+    assert hello["max_frame"] == 279
+    assert hello["rx_capacity"] == 279 + 279 // 254 + 1
     # covers: CTL-8
     assert hello["tick_hz"] == 1000
     # covers: CTL-10
     assert hello["max_frame"] <= 65277
     # covers: CTL-2
     assert hello["features"] & 0xC0 == 0
-    assert hello["count"] == 4
+    assert hello["count"] == 6
     assert hello["node"] == "r2s_posix"
 
 
@@ -285,18 +293,20 @@ def test_hello_announces_firmware(tmp_path):
 def test_handshake_reaches_connected(tmp_path):
     with Firmware("--rate", "10") as fw:
         hello, topics, _host = do_handshake(fw)
-        assert [t["topic"] for t in topics] == ["battery", "cmd_vel", "echo_vel", "log_text"]
+        assert [t["topic"] for t in topics] == ["battery", "cmd_vel", "echo_vel", "log_text", "time_now", "joints"]
         assert [(t["type"], t["id"]) for t in topics] == [
             ("std_msgs/msg/Float32", 16),
             ("geometry_msgs/msg/Twist", 17),
             ("geometry_msgs/msg/Twist", 18),
             ("std_msgs/msg/String", 19),
+            ("builtin_interfaces/msg/Time", 20),
+            ("sensor_msgs/msg/JointState", 21),
         ]
         # covers: FRM-3
         assert all(16 <= t["id"] <= 255 for t in topics)
         # covers: CTL-4
         assert all(t["flags"] & 0xF0 == 0 for t in topics)
-        assert [t["flags"] & 0x01 for t in topics] == [0, 1, 0, 0]
+        assert [t["flags"] & 0x01 for t in topics] == [0, 1, 0, 0, 0, 1]
         _, _, payload = read_frame(fw.master, want=4, timeout=2.0)
         assert len(payload) == 8, "the heartbeat carries four u16 counters"
     assert hello["node"] == "r2s_posix"
@@ -327,8 +337,14 @@ def test_configured_topics(tmp_path):
     with Firmware(*args) as fw:
         hello, topics, _host = do_handshake(fw)
         assert hello["node"] == "custom"
-        assert hello["count"] == 3
-        assert [(t["id"], t["topic"]) for t in topics] == [(16, "volt"), (17, "drive"), (18, "echo_vel")]
+        assert hello["count"] == 5
+        assert [(t["id"], t["topic"]) for t in topics] == [
+            (16, "volt"),
+            (17, "drive"),
+            (18, "echo_vel"),
+            (20, "time_now"),
+            (21, "joints"),
+        ]
 
 
 # covers: FRM-4, FRM-5
@@ -431,11 +447,48 @@ def test_bad_rate_fails(tmp_path):
     assert "--rate" in error
 
 
+def test_bad_tick_skew_fails(tmp_path):
+    for bad in ("abc", "20001", "-20001"):
+        code, error = run_once(["--tick-skew-ppm", bad])
+        assert code == 2
+        assert "--tick-skew-ppm" in error
+
+
+# covers: TIM-1, TIM-2, TIM-3, TIM-6
+def test_time_now_tracks_correction(tmp_path):
+    """time_now stays silent until a correction anchors the clock, then
+    publishes the anchored time: the PONG tick stands in for the publish
+    tick, so a zero-drift correction pins the first stamp near its time."""
+    with Firmware("--rate", "20", "--no-log-text") as fw:
+        _hello, _topics, host = do_handshake(fw)
+        for _ in range(8):
+            topic, _seq, _payload = read_frame(fw.master)
+            assert topic != 20, "time_now published while unsynced"
+        host.ping(7)
+        _topic, _seq, payload = read_frame(fw.master, want=1)
+        assert payload[0] == 0x02, "the MCU answers a PING with a PONG"
+        assert payload[1] == 7, "the PONG carries the PING id"
+        tick0 = int.from_bytes(payload[2:6], "little")
+        host.correction(tick0, 1700000000, 0)
+        stamps = []
+        for _ in range(3):
+            _topic, _seq, payload = read_frame(fw.master, want=20)
+            assert len(payload) == 8, "a Time payload carries sec and nanosec"
+            sec, nanosec = struct.unpack("<iI", payload)
+            stamps.append(sec * 1_000_000_000 + nanosec)
+        anchored = 1700000000 * 1_000_000_000
+        assert abs(stamps[0] - anchored) < 2_000_000_000, "the first stamp left its correction"
+        assert stamps[0] < stamps[1] < stamps[2], "the stamps stand still"
+        assert stamps[2] - stamps[0] < 2_000_000_000, "the stamps ran past their interval"
+
+
 LAUNCH_NAME_TYPES = [
     ("--pub", "std_msgs/msg/Float32"),
     ("--sub", "geometry_msgs/msg/Twist"),
     ("--echo", "geometry_msgs/msg/Twist"),
     ("--log-text", "std_msgs/msg/String"),
+    ("--time-now", "builtin_interfaces/msg/Time"),
+    ("--joints", "sensor_msgs/msg/JointState"),
 ]
 
 
@@ -602,6 +655,7 @@ def build_firmware_without_cmd_vel(tmp_path):
         "-I",
         str(root / "ports" / "posix" / "src"),
         "-DR2S_WITH_CODEC",
+        "-DR2S_WITH_TIME",
         *(["-include", str(gen_dir / "twist_shim.h")] if needs_shim else []),
         *[str(p) for p in sources],
         "-o",
@@ -671,3 +725,56 @@ def test_help_names_options():
     assert proc.returncode == 0
     assert "--node" in proc.stdout.decode()
     assert "--echo" in proc.stdout.decode()
+
+
+def test_bad_tx_free_fails():
+    for bad in ("0", "65535", "abc"):
+        code, error = run_once(["--tx-free", bad])
+        assert code == 2
+        assert "--tx-free" in error
+
+
+def test_flood_without_tx_free_fails():
+    code, error = run_once(["--flood"])
+    assert code == 2
+    assert "--flood" in error
+
+
+# covers: FRM-4, FRM-5, FRM-15
+def test_flood_sheds_samples_with_busy_and_whole_frames():
+    """--flood with --tx-free publishes until the port refuses: a refused
+    sample never takes a seq, so the shed samples show as gaps in the
+    values while the wire frames stay whole and ordered. The loop drains
+    the pty and stderr together, since an unread pty wedges the flooding
+    firmware in its blocking write."""
+    args = ("--no-sub", "--no-echo", "--no-log-text", "--no-time-now", "--tx-free", "16", "--flood")
+    with Firmware(*args) as fw:
+        _hello, _topics, _host = do_handshake(fw)
+        values = []
+        busy = 0
+        err = bytearray()
+        efd = fw._proc.stderr.fileno()
+        deadline = time.monotonic() + 30.0
+        while len(values) < 60 or busy == 0:
+            assert time.monotonic() < deadline, "the flood left no flow or no busy count"
+            ready, _, _ = select.select([fw.master, efd], [], [], 5.0)
+            assert ready, "the firmware went quiet mid-flood"
+            if fw.master in ready:
+                _topic, _seq, payload = read_frame(fw.master, want=16, timeout=5.0)
+                assert len(payload) == 4
+                values.append(struct.unpack("<f", payload)[0])
+            if efd in ready:
+                chunk = os.read(efd, 4096)
+                assert chunk, "the firmware closed stderr mid-flood"
+                err += chunk
+                while b"\n" in err:
+                    line, _, err = err.partition(b"\n")
+                    text = line.decode()
+                    if text.startswith("r2s_posix: flood sent="):
+                        parts = dict(part.split("=") for part in text.split()[2:])
+                        busy = int(parts["busy"])
+    assert all(value == int(value) for value in values), "a frame arrived corrupted"
+    assert all(later > earlier for earlier, later in zip(values, values[1:], strict=False)), "values went back"
+    ints = [int(value) for value in values]
+    assert ints[-1] - ints[0] + 1 - len(ints) > 0, "no sample was shed on a saturated link"
+    assert busy > 0, "no publish returned TX_BUSY on a saturated link"

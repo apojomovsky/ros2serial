@@ -3,11 +3,23 @@ name: ci
 # Every job runs `make test` with a scope inside the dev image, exactly as a
 # contributor does locally. Placeholder jobs mark where each test layer lands;
 # each names the ticket that fills it in.
+#
+# The plan job maps the pull request's diff to the ci-test.sh scopes that
+# read it and exposes one output per scope. Each section job needs the plan
+# and runs only when its scope is selected; pushes to master and
+# workflow_dispatch run every job, and a FULL result runs every job. A job
+# skipped by its if still satisfies branch protection, so skipping is safe.
+#
+# Timeouts: every job that builds or pulls an image carries at least 30
+# minutes. On a cold GHA cache the image step is slow, and its cache is
+# written only when the job completes, so a shorter bound would cut off the
+# very run that fills it. plan and bridge-images build nothing and stay at 5.
 
 on:
   push:
     branches: [master]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,8 +29,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
+  # The diff to the scope map. Stdlib-only, so it needs no dev image, and
+  # Actions sets GITHUB_ACTIONS so it reports the real scopes, not the
+  # cheap local ones.
+  plan:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      lint: ${{ steps.scopes.outputs.lint }}
+      scripts: ${{ steps.scopes.outputs.scripts }}
+      commits: ${{ steps.scopes.outputs.commits }}
+      core: ${{ steps.scopes.outputs.core }}
+      gen: ${{ steps.scopes.outputs.gen }}
+      bridge: ${{ steps.scopes.outputs.bridge }}
+      cpp: ${{ steps.scopes.outputs.cpp }}
+      e2e: ${{ steps.scopes.outputs.e2e }}
+      coverage: ${{ steps.scopes.outputs.coverage }}
+      docs: ${{ steps.scopes.outputs.docs }}
+      mermaid: ${{ steps.scopes.outputs.mermaid }}
+      examples: ${{ steps.scopes.outputs.examples }}
+      budgets: ${{ steps.scopes.outputs.budgets }}
+      fuzz: ${{ steps.scopes.outputs.fuzz }}
+      nightly: ${{ steps.scopes.outputs.nightly }}
+      readme: ${{ steps.scopes.outputs.readme }}
+      full: ${{ steps.scopes.outputs.full }}
+    steps:
+      # Full history: the script diffs against the merge base with the base.
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - id: scopes
+        run: |
+          base="origin/${{ github.event.pull_request.base.ref }}"
+          if [ "$base" = "origin/" ]; then base="origin/master"; fi
+          # Outside the checkout: an untracked file in it counts as a changed
+          # path, and an unknown path maps to FULL.
+          scopes="$RUNNER_TEMP/scopes.env"
+          python3 scripts/scopes_for_diff.py --base "$base" > "$scopes"
+          cat "$scopes"
+          while IFS='=' read -r key value; do
+            echo "$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')=$value" >> "$GITHUB_OUTPUT"
+          done < "$scopes"
+
+  lint:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.lint == '1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       # Full history: the spec coverage check compares the pending list with the PR's base.
       - uses: actions/checkout@v4.2.2
@@ -31,40 +88,91 @@ jobs:
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
 
+  # The SCRIPTS scope runs as one job per shard over the collected node
+  # ids, spread round-robin in sorted order (scripts/shard_nodes.py). The
+  # e2e isolation pairs run in the nightly workflow instead.
   scripts:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.scripts == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
-      - run: make test SCRIPTS=1
+      - run: make test SCRIPTS=1 SCRIPTS_SHARD=${{ matrix.shard }}
 
   core:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.core == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test CORE=1
 
   gen:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.gen == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test GEN=1
   cpp:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.cpp == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test CPP=1
   docs:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.docs == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test DOCS=1
-  coverage:
+  # Mermaid blocks, parsed by mermaid itself under the pinned node image
+  # (never the dev image, which gains no Node). Runs when markdown or the
+  # tool changes; make lint-docs runs the same command locally.
+  mermaid:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.mermaid == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/cache@v4.2.2
+        with:
+          path: ~/.cache/ros2serial/npm
+          key: mermaid-npm-${{ hashFiles('tools/mermaid-check/package-lock.json') }}
+          restore-keys: |
+            mermaid-npm-
+      - run: make lint-docs
+  readme:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.readme == '1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test README=1
+  coverage:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.coverage == '1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       # Full history: the gate measures the base commit in the same run.
       - uses: actions/checkout@v4.2.2
@@ -78,7 +186,10 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
 
   e2e-avr:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.e2e == 'avr' || needs.plan.outputs.e2e == 'both'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
@@ -86,9 +197,10 @@ jobs:
 
   # The bridge job's distro images, resolved from ci/versions.env before it
   # starts: a job's container is fixed before any step runs, so the bridge job
-  # cannot read the file itself.
+  # cannot read the file itself. Always runs: it is setup, not a section.
   bridge-images:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       matrix: ${{ steps.pins.outputs.matrix }}
       images: ${{ steps.pins.outputs.images }}
@@ -101,8 +213,10 @@ jobs:
   # own pinned image. The dev image is the jazzy one, so the local run and the
   # jazzy job share a toolchain.
   bridge:
-    needs: bridge-images
+    needs: [plan, bridge-images]
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.bridge == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.bridge-images.outputs.matrix) }}
@@ -119,8 +233,10 @@ jobs:
   # design names, with the Zenoh router started first on its leg. The suite
   # runs the same run.sh locally, so each leg matches `make test E2E=posix`.
   e2e-posix:
-    needs: bridge-images
+    needs: [plan, bridge-images]
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.e2e == 'posix' || needs.plan.outputs.e2e == 'both'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -140,24 +256,98 @@ jobs:
           R2S_IN_IMAGE: 1
           R2S_BUILD_DIR: /tmp/r2s-build
           R2S_RMWS: ${{ matrix.rmw }}
+          # Scenario 8's median bound: the shared host needs headroom above the 1 ms default.
+          R2S_SYNC_BOUND_NS: 5000000
 
   # Placeholders. Each becomes a real job in the ticket it names, and stays
   # out of the required checks until then.
   fuzz-smoke:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.fuzz == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test FUZZ=1
+  # The nightly jobs on a pull request that touches them: the plan selects
+  # NIGHTLY for the isolation pairs, and the long fuzzing stays off unless
+  # the same plan also selects FUZZ. The soak never runs here: two hours is
+  # a schedule-only wait. A reusable workflow call takes no timeout-minutes;
+  # the called jobs carry theirs.
+  nightly:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.nightly == '1'
+    uses: ./.github/workflows/nightly-jobs.yml
+    with:
+      fuzz: ${{ needs.plan.outputs.fuzz == '1' }}
+      soak: false
   build-matrix:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.examples == '1'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test EXAMPLES=1
   budgets:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.budgets == '1'
     runs-on: ubuntu-24.04
-    continue-on-error: true
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - run: echo "pending P6, see docs/00-design.md"
+      # Full history: the head numbers are judged by the base commit's tools.
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/dev-image
+      - run: |
+          range="$(bash scripts/pr-title-range.sh)" || exit 1
+          export BASE="${range%%..*}"
+          set +e
+          make test BUDGETS=1 | tee budgets.log
+          status=${PIPESTATUS[0]}
+          grep '^TABLE ' budgets.log | tail -1 | cut -d' ' -f2 > budgets-table.path
+          exit "$status"
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+      # The table is one click from the run on every push, whether or not the
+      # gate passes: an empty path means the builds failed before any table.
+      - if: always()
+        run: |
+          if [ -s budgets-table.path ]; then
+            cat "$(cat budgets-table.path)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: always() && github.event_name == 'pull_request'
+        # Best effort: a fork token cannot comment, and that must not fail the gate.
+        continue-on-error: true
+        run: |
+          [ -s budgets-table.path ] || exit 0
+          table="$(cat budgets-table.path)"
+          dir="$(dirname "$table")"
+          args=(--measurements "$dir/measurements.json" --stack "$dir/stack.json"
+            --budgets tools/budgets.yaml --table "$table")
+          if [ -f "$dir/base-measurements.json" ] && [ -f "$dir/base-stack.json" ]; then
+            args+=(--base-measurements "$dir/base-measurements.json" --base-stack "$dir/base-stack.json")
+          fi
+          if [ -f "$dir/base-budgets.yaml" ]; then
+            args+=(--base-budgets "$dir/base-budgets.yaml")
+          fi
+          marker='<!-- r2s-budgets -->'
+          existing=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            --paginate -q '[.[] | select(.body | contains("'"$marker"'")) | .id] | last // empty' || true)
+          if [ -n "$existing" ]; then args+=(--has-comment 1); else args+=(--has-comment 0); fi
+          action=$(python3 scripts/budgets_comment.py "${args[@]}" --out budgets-comment.md) || exit 0
+          [ "$action" = skip ] && exit 0
+          if [ -n "$existing" ]; then
+            gh api "repos/${{ github.repository }}/issues/comments/$existing" -X PATCH -F "body=@budgets-comment.md"
+          else
+            gh pr comment "${{ github.event.pull_request.number }}" --body-file budgets-comment.md
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

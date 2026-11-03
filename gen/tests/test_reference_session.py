@@ -12,14 +12,14 @@ from r2s_gen.reference import frames as frames_mod
 from r2s_gen.reference import session as model
 from session_harness import TOPIC_IDS, model_topics, wire
 
-FLAGS = [0x00, 0x01, 0x00]
+FLAGS = [0x00, 0x01, 0x00, 0x01]
 TOPICS = model_topics(FLAGS)
 
-# The boot HELLO for node "node" with the three topics above, written by
+# The boot HELLO for node "node" with the four topics above, written by
 # hand from section 7.1: opcode 02, version 3, full mode, zero token,
-# max_frame 512, rx_capacity 515, tick_hz 1000, features 0x02, count 3,
+# max_frame 512, rx_capacity 515, tick_hz 1000, features 0x02, count 4,
 # then the varint length and "node".
-HELLO_PAYLOAD = bytes.fromhex("02 03 00 00 00 00 00 00 02 03 02 e8 03 00 00 02 03 04 6e 6f 64 65")
+HELLO_PAYLOAD = bytes.fromhex("02 03 00 00 00 00 00 00 02 03 02 e8 03 00 00 02 04 04 6e 6f 64 65")
 
 
 def fresh() -> model.McuSession:
@@ -35,14 +35,14 @@ def connect(session: model.McuSession, token: int = 0xAABBCCDD) -> None:
     session.feed(wire(0, 0, bytes((model.OP_HELLO_REQ, model.PROTOCOL_VERSION))))
     session.spin()
     session.take_tx()
-    for index in range(3):
+    for index in range(4):
         session.feed(wire(0, 1 + index, bytes((model.OP_TOPIC_REQ, index))))
         session.spin()
         session.take_tx()
-        session.feed(wire(0, 4 + index, bytes((model.OP_TOPIC_STATUS, TOPIC_IDS[index], 0))))
+        session.feed(wire(0, 5 + index, bytes((model.OP_TOPIC_STATUS, TOPIC_IDS[index], 0))))
         session.spin()
         assert session.take_tx() == []
-    session.feed(wire(0, 7, bytes((model.OP_READY,)) + token.to_bytes(4, "little")))
+    session.feed(wire(0, 9, bytes((model.OP_READY,)) + token.to_bytes(4, "little")))
     session.spin()
     session.take_tx()
 
@@ -58,7 +58,7 @@ def test_handshake_reaches_connected_with_token():
     connect(session)
     assert session.snapshot()["connected"] == model.CONNECTED
     assert session.snapshot()["token"] == 0xAABBCCDD
-    assert session.snapshot()["status"] == [0, 0, 0]
+    assert session.snapshot()["status"] == [0, 0, 0, 0]
 
 
 # covers: SES-10
@@ -85,11 +85,11 @@ def test_hello_echoes_the_last_ready_token():
     assert hello[0][5:9] == bytes.fromhex("04 03 02 01")
 
 
-# covers: SES-4
+# covers: SES-4, ERR-2, ERR-3
 def test_publish_while_announcing_fails():
     session = fresh()
     assert session.publish(16, struct.pack("<f", 1.5)) == model.ERR_NOT_CONNECTED
-    assert session.take_tx() == []
+    assert session.take_tx() == [model.encode_frame(5, 0, bytes((5, 16, 1, 0, 0xFF)))]
 
 
 # covers: SES-9
@@ -99,7 +99,7 @@ def test_publish_after_connect_sends_a_frame():
     payload = struct.pack("<f", 1.5)
     assert session.publish(16, payload) == 0
     assert session.take_tx() == [model.encode_frame(16, 0, payload)]
-    assert session.snapshot()["tx_seq"] == [1, 0, 0]
+    assert session.snapshot()["tx_seq"] == [1, 0, 0, 0]
 
 
 # covers: SES-7, SES-8
@@ -110,7 +110,7 @@ def test_link_timeout_returns_to_announcing():
     assert session.snapshot()["connected"] == model.CONNECTED
     session.advance_to(2000)
     assert session.snapshot()["connected"] == model.ANNOUNCING
-    assert session.snapshot()["status"] == [model.STATUS_UNKNOWN] * 3
+    assert session.snapshot()["status"] == [model.STATUS_UNKNOWN] * 4
 
 
 # covers: SES-9, SES-18, HB-2, HB-4
@@ -120,7 +120,7 @@ def test_heartbeat_carries_the_counters():
     session.advance_to(499)
     assert session.take_tx() == []
     session.advance_to(500)
-    counters = struct.pack("<HHHH", 8, 0, 0, 0)
+    counters = struct.pack("<HHHH", 10, 0, 0, 0)
     assert session.take_tx() == [model.encode_frame(4, 0, counters)]
 
 
@@ -155,12 +155,13 @@ def test_bad_crc_counts_a_crc_error():
     assert session.snapshot()["counters"] == (0, 1, 0, 1)
 
 
-# covers: FRM-12, HB-6
+# covers: FRM-12, HB-6, ERR-2, ERR-6
 def test_oversized_unit_counts_an_overflow():
     session = fresh()
     session.feed(bytes([0x41]) * 516 + b"\x00")
     session.spin()
     assert session.snapshot()["counters"] == (0, 0, 1, 1)
+    assert session.take_tx() == [model.encode_frame(5, 0, bytes((3, 0xFF, 1, 0, 0xFF)))]
 
 
 # covers: FRM-14
@@ -178,10 +179,71 @@ def test_seq_gap_counts_lost_frames():
     connect(session)
     session.feed(wire(17, 5, bytes(48)))
     session.spin()
-    assert session.snapshot()["rx_lost"] == [0, 5, 0]
+    assert session.snapshot()["rx_lost"] == [0, 5, 0, 0]
     session.feed(wire(17, 6, bytes(48)))
     session.spin()
-    assert session.snapshot()["rx_lost"] == [0, 5, 0]
+    assert session.snapshot()["rx_lost"] == [0, 5, 0, 0]
+
+
+# covers: ERR-2, ERR-6
+def test_unknown_topic_dispatch_reports_code_2():
+    session = fresh()
+    connect(session)
+    session.feed(wire(20, 0, b"\x00"))
+    session.spin()
+    assert session.take_tx() == [model.encode_frame(5, 0, bytes((2, 20, 1, 0, 0xFF)))]
+
+
+# covers: ERR-2
+def test_published_topic_frame_is_refused_without_a_report():
+    session = fresh()
+    connect(session)
+    session.feed(wire(16, 0, bytes(8)))
+    session.spin()
+    assert session.snapshot()["counters"] == (11, 0, 0, 1)
+    assert session.take_tx() == []
+
+
+# covers: ERR-1, ERR-2, ERR-4, ERR-6
+def test_bound_violation_reports_code_1_with_its_field():
+    session = fresh()
+    connect(session)
+    session.feed(wire(19, 0, bytes((9,)) + b"abcdefghi"))
+    session.spin()
+    assert session.take_tx() == [model.encode_frame(5, 0, bytes((1, 19, 1, 0, 0)))]
+
+
+# covers: ERR-3, ERR-6
+def test_not_connected_reports_once_per_connection():
+    session = fresh()
+    payload = struct.pack("<f", 1.5)
+    assert session.publish(16, payload) == model.ERR_NOT_CONNECTED
+    assert session.take_tx() == [model.encode_frame(5, 0, bytes((5, 16, 1, 0, 0xFF)))]
+    assert session.publish(16, payload) == model.ERR_NOT_CONNECTED
+    assert session.take_tx() == []
+    session.feed(wire(0, 10, bytes((model.OP_HELLO_REQ, 2))))
+    session.spin()
+    session.take_tx()
+    for index in range(4):
+        session.feed(wire(0, 11 + index, bytes((model.OP_TOPIC_REQ, index))))
+        session.spin()
+        session.take_tx()
+        session.feed(wire(0, 15 + index, bytes((model.OP_TOPIC_STATUS, TOPIC_IDS[index], 0))))
+        session.spin()
+        session.take_tx()
+    session.feed(wire(0, 19, bytes((model.OP_READY,)) + (0xAABBCCDD).to_bytes(4, "little")))
+    session.spin()
+    assert session.take_tx() == [model.encode_frame(5, 0, bytes((5, 16, 1, 0, 0xFF)))]
+
+
+# covers: ERR-2, ERR-6
+def test_frame_too_large_reports_code_4_with_its_topic():
+    session = fresh()
+    connect(session)
+    session.feed(wire(17, 0, bytes(509)))
+    session.spin()
+    assert session.snapshot()["counters"] == (10, 0, 0, 1)
+    assert session.take_tx() == [model.encode_frame(5, 0, bytes((4, 17, 1, 0, 0xFF)))]
 
 
 # covers: SES-8
