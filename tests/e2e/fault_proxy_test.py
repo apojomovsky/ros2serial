@@ -289,6 +289,109 @@ class TestCorruption(unittest.TestCase):
         self.assertEqual(len(out), len(payload) + 1 - counts.dropped + counts.duplicated)
 
 
+class TestFraming(unittest.TestCase):
+    def test_framing_rate_one_corrupts_codes_and_delimiter_not_data(self):
+        encoded = rcobs_encode(bytes([16, 7]) + b"\x01AB")
+        proxy = fault_proxy.FaultProxy(seed=61)
+        proxy.set_faults(framing_rate=1.0)
+        proxy.start()
+        try:
+            mcu = open_raw(proxy.mcu_port)
+            host = open_raw(proxy.host_port)
+            try:
+                # The frame's own delimiter merges under the faults; the
+                # clean flush delimiter ends the blob.
+                out = send_then_flush(proxy, mcu, host, encoded + b"\x00")
+            finally:
+                os.close(mcu)
+                os.close(host)
+        finally:
+            proxy.stop()
+        self.assertEqual(len(out), len(encoded) + 1 + 1)
+        self.assertNotEqual(out[len(encoded)], 0x00)
+        self.assertEqual(out[-1], 0x00)
+        data = data_positions(encoded)
+        for position, is_data in enumerate(data):
+            if is_data:
+                self.assertEqual(out[position], encoded[position], f"data byte {position}")
+            else:
+                xor = encoded[position] ^ out[position]
+                self.assertTrue(xor != 0 and xor & (xor - 1) == 0, f"code byte {position}")
+                self.assertNotEqual(out[position], 0x00)
+        counts = proxy.counts()["mcu_to_host"]
+        self.assertEqual(counts.frames, 1)
+        self.assertEqual(counts.frames_touched, 1)
+        self.assertEqual(counts.user_frames_touched, 1)
+        self.assertEqual(counts.corrupted, sum(not flag for flag in data) + 1)
+
+    def test_corrupted_delimiter_merges_two_frames(self):
+        first = frame(16, 7, b"AB")
+        second = frame(4, 9, b"CD")
+        proxy = fault_proxy.FaultProxy(seed=62)
+        proxy.set_faults(framing_rate=1.0)
+        proxy.start()
+        try:
+            mcu = open_raw(proxy.mcu_port)
+            host = open_raw(proxy.host_port)
+            try:
+                out = send_then_flush(proxy, mcu, host, first + second)
+            finally:
+                os.close(mcu)
+                os.close(host)
+        finally:
+            proxy.stop()
+        first_enc, second_enc = first[:-1], second[:-1]
+        # Both delimiters merge and the clean flush delimiter ends the blob.
+        self.assertEqual(len(out), len(first_enc) + 1 + len(second_enc) + 1 + 1)
+        self.assertEqual(out[-1], 0x00)
+        self.assertNotEqual(out[len(first_enc)], 0x00)
+        self.assertNotEqual(out[len(first_enc) + 1 + len(second_enc)], 0x00)
+        self.assertNotIn(b"\x00", out[:-1])
+        for offset, enc in ((0, first_enc), (len(first_enc) + 1, second_enc)):
+            for position, is_data in enumerate(data_positions(enc)):
+                if is_data:
+                    self.assertEqual(out[offset + position], enc[position])
+                else:
+                    xor = enc[position] ^ out[offset + position]
+                    self.assertTrue(xor != 0 and xor & (xor - 1) == 0)
+                    self.assertNotEqual(out[offset + position], 0x00)
+        counts = proxy.counts()["mcu_to_host"]
+        self.assertEqual(counts.frames, 1)
+        self.assertEqual(counts.frames_touched, 1)
+        self.assertEqual(counts.user_frames_touched, 1)
+        codes = sum(not flag for flag in data_positions(first_enc))
+        codes += sum(not flag for flag in data_positions(second_enc))
+        self.assertEqual(counts.corrupted, codes + 2)
+
+    def test_same_seed_replays_framing_faults(self):
+        wire = frame(16, 7, b"\x01AB") + frame(20, 3, b"x\x00y") + frame(17, 4, b"zz")
+        outs = []
+        for _ in range(2):
+            proxy = fault_proxy.FaultProxy(seed=63)
+            proxy.set_faults(framing_rate=0.5, corrupt_rate=0.1)
+            proxy.start()
+            try:
+                mcu = open_raw(proxy.mcu_port)
+                host = open_raw(proxy.host_port)
+                try:
+                    outs.append((send_then_flush(proxy, mcu, host, wire), proxy.counts()))
+                finally:
+                    os.close(mcu)
+                    os.close(host)
+            finally:
+                proxy.stop()
+        self.assertEqual(outs[0][0], outs[1][0])
+        self.assertEqual(outs[0][1]["mcu_to_host"].__dict__, outs[1][1]["mcu_to_host"].__dict__)
+        faults = outs[0][1]["mcu_to_host"].corrupted
+        self.assertGreater(faults, 0)
+
+    def test_bad_framing_rate_is_rejected(self):
+        proxy = fault_proxy.FaultProxy(seed=64)
+        for bad in (-0.1, 1.1, float("nan")):
+            with self.assertRaises(ValueError, msg=str(bad)):
+                proxy.set_faults(framing_rate=bad)
+
+
 class TestControl(unittest.TestCase):
     def test_bad_rates_are_rejected(self):
         proxy = fault_proxy.FaultProxy(seed=51)

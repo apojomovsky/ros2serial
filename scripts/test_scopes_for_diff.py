@@ -123,6 +123,8 @@ def test_avr_only_e2e_paths_map_to_the_avr_leg():
         "tests/e2e/test_scenario_2_avr.py",
         "tests/e2e/test_scenario_3_avr.py",
         "tests/e2e/test_scenario_4_avr.py",
+        "tests/e2e/test_scenario_12_avr.py",
+        "tests/e2e/avr_flood/avr_flood.ino",
     ):
         assert scopes(path) == {**CHEAP, "E2E": "avr", "SCRIPTS": "1"}, path
 
