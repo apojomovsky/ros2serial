@@ -133,5 +133,8 @@ class TestScenario3(unittest.TestCase):
                 rclpy.spin_once(node, timeout_sec=0.2)
                 sequence = [msg for msg in arrived if not _is_prime(msg)]
             checks.check_twist_echo(SENT, sequence[:ECHO_COUNT], "echo_vel", rel_tol=REL_TOL, abs_tol=ABS_TOL)
+            # launch_testing never calls tearDownModule, so the harness
+            # stops here: its stop summary carries the painted peak.
+            self.assertEqual(_SPAWNED.stop(), 0, "the harness stopped dirty")
         finally:
             node.destroy_node()

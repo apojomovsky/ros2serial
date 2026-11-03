@@ -108,6 +108,35 @@ def test_check_fails_on_a_call_cycle():
     assert stack_report.check_stacks(data, budgets) != []
 
 
+def test_measured_table_reports_measured_next_to_static():
+    table = stack_report.measured_table({"slice-atmega328p": 144}, {"slice-atmega328p": 100})
+    assert table.splitlines()[:2] == [
+        "| firmware | static stack (non-LTO -fstack-usage rebuild) | measured stack (shipped LTO firmware) |",
+        "| --- | --- | --- |",
+    ]
+    assert "| slice-atmega328p | 144 | 100 |" in table.splitlines()
+
+
+def test_measured_table_marks_missing_measured_as_not_available():
+    table = stack_report.measured_table({"slice-atmega328p": 144, "flood-atmega328p": 160}, {})
+    assert "| flood-atmega328p | 160 | n/a |" in table.splitlines()
+    assert "| slice-atmega328p | 144 | n/a |" in table.splitlines()
+
+
+def test_static_worst_sums_the_deepest_chain_from_su_files(tmp_path, monkeypatch):
+    (tmp_path / "firmware.su").write_text(SU)
+    monkeypatch.setattr(stack_report, "_run", lambda *args: OBJDUMP)
+    worst = stack_report.static_worst(str(tmp_path / "firmware.elf"), tmp_path)
+    assert worst["total"] == 144
+    assert worst["path"] == ["main", "setup", "r2s_spin"]
+
+
+def test_static_worst_rejects_a_build_without_su_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(stack_report, "_run", lambda *args: OBJDUMP)
+    with pytest.raises(stack_report.StackError):
+        stack_report.static_worst(str(tmp_path / "firmware.elf"), tmp_path)
+
+
 def test_collect_skips_cmake_compiler_id_frames(tmp_path, monkeypatch):
     fw = tmp_path / "fw"
     fw.mkdir()

@@ -26,9 +26,9 @@ static const uint8_t R2S_FLASH r2s_handwritten_fields[] = {
 
 const r2s_codec_table_t R2S_HANDWRITTEN_TABLE = {r2s_handwritten_types, 4u, r2s_handwritten_fields, 7u};
 
-/* The announced topics: battery publishes Float32, cmd_vel subscribes Twist
- * and log_text publishes the bounded String. The hashes stand in for the
- * RIHS01 bytes G8 will emit. */
+/* The announced topics: battery publishes Float32, cmd_vel subscribes Twist,
+ * log_text publishes the bounded String, and cmd_str subscribes it. The
+ * hashes stand in for the RIHS01 bytes G8 will emit. */
 static const r2s_topic_t R2S_FLASH r2s_handwritten_topics[] = {
     {R2S_HANDWRITTEN_BATTERY_ID,
      R2S_HANDWRITTEN_NARROW,
@@ -45,9 +45,14 @@ static const r2s_topic_t R2S_FLASH r2s_handwritten_topics[] = {
      {0x20u, 0x21u, 0x22u, 0x23u, 0x24u, 0x25u, 0x26u, 0x27u},
      "std_msgs/msg/String",
      "log_text"},
+    {R2S_HANDWRITTEN_CMD_STR_ID,
+     (uint8_t)(0x01u | R2S_HANDWRITTEN_NARROW),
+     {0x30u, 0x31u, 0x32u, 0x33u, 0x34u, 0x35u, 0x36u, 0x37u},
+     "std_msgs/msg/String",
+     "cmd_str"},
 };
 
 r2s_status_t r2s_handwritten_configure(void)
 {
-    return r2s_session_configure("node", r2s_handwritten_topics, 3u);
+    return r2s_session_configure("node", r2s_handwritten_topics, 4u);
 }

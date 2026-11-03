@@ -195,17 +195,20 @@ void test_runtime_table_announces_the_type_name_and_hash(void)
     TEST_ASSERT_EQUAL_MEMORY(s_float32_hash, r2s_topic_get(0)->type_hash, 8u);
 }
 
-/* covers: SES-4 */
-void test_runtime_publish_before_the_handshake_fails_and_sends_nothing(void)
+/* covers: SES-4, ERR-1, ERR-2, ERR-3, ERR-6 */
+void test_runtime_publish_before_the_handshake_reports_not_connected_once(void)
 {
     r2s::Node node("base_controller");
     r2s::Publisher<Float32> battery_pub(node, "battery");
     Float32 battery = {1.5f};
+    /* code 5, battery, one occurrence, no field. */
+    const uint8_t report[] = {0x05u, FIRST_TOPIC_ID, 0x01u, 0x00u, 0xFFu};
 
     node.spin_some();
     fake_port_tx_clear();
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_NOT_CONNECTED, battery_pub.publish(battery));
-    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    assert_tx(0, 5u, 0u, report, sizeof report);
 }
 
 /* covers: FRM-4, FRM-5 */

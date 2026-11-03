@@ -18,24 +18,35 @@ from r2s_gen.reference import session as model
 BATTERY_ID = host_mod.BATTERY_ID
 CMD_VEL_ID = host_mod.CMD_VEL_ID
 
-TOPIC_IDS = (BATTERY_ID, CMD_VEL_ID, 18)
-TOPIC_NAMES = ("battery", "cmd_vel", "log_text")
-TYPE_NAMES = ("std_msgs/msg/Float32", "geometry_msgs/msg/Twist", "std_msgs/msg/String")
-TYPE_HASHES = (bytes(range(8)), bytes(range(0x10, 0x18)), bytes(range(0x20, 0x28)))
-DIRECTIONS = ("pub", "sub", "pub")
+TOPIC_IDS = (BATTERY_ID, CMD_VEL_ID, 18, 19)
+TOPIC_NAMES = ("battery", "cmd_vel", "log_text", "cmd_str")
+TYPE_NAMES = (
+    "std_msgs/msg/Float32",
+    "geometry_msgs/msg/Twist",
+    "std_msgs/msg/String",
+    "std_msgs/msg/String",
+)
+TYPE_HASHES = (bytes(range(8)), bytes(range(0x10, 0x18)), bytes(range(0x20, 0x28)), bytes(range(0x30, 0x38)))
+DIRECTIONS = ("pub", "sub", "pub", "sub")
 
 
 def model_topics(flags: list[int]) -> list[model.Topic]:
     """The handwritten table with the C build's own flags and widths."""
     # The IDs, names and hashes repeat core/tests/support/handwritten.c, and
-    # the Twist width is its six float64 fields, halved when narrow.
+    # the Twist width is its six float64 fields, halved when narrow. The
+    # cmd_str bound repeats the handwritten codec table: a String has no
+    # fixed width, so its entry carries the bound instead.
     topics = []
     for topic_id, flag, type_hash, type_name, topic_name, direction in zip(
         TOPIC_IDS, flags, TYPE_HASHES, TYPE_NAMES, TOPIC_NAMES, DIRECTIONS, strict=True
     ):
         narrow = bool(flag & 0x02)
-        codec_len = 24 if narrow and direction == "sub" else 48 if direction == "sub" else 0
-        topics.append(model.Topic(topic_id, flag, type_hash, type_name, topic_name, direction, codec_len))
+        if direction == "sub" and type_name == "std_msgs/msg/String":
+            bound, codec_len = 8, 0
+        else:
+            bound = 0
+            codec_len = 24 if narrow and direction == "sub" else 48 if direction == "sub" else 0
+        topics.append(model.Topic(topic_id, flag, type_hash, type_name, topic_name, direction, codec_len, bound))
     return topics
 
 
@@ -55,7 +66,7 @@ class Pair:
     def __init__(self, lib_path: Path | None = None) -> None:
         self.host = host_mod.HostSession(lib_path)
         self.host.reset()
-        flags = [self.host.topic_flags(i) for i in range(3)]
+        flags = [self.host.topic_flags(i) for i in range(4)]
         self.model = model.McuSession(topics=model_topics(flags))
         self.model.reset(0)
         self.tick = 0

@@ -158,9 +158,11 @@ class TestScenario10Framing(unittest.TestCase):
             # The battery flow needs its endpoint matched: the bridge's
             # endpoints appear on the graph once the handshake above completes,
             # so this waits out DDS discovery instead of spending the flow
-            # budget on it.
+            # budget on it. The generous timeout runs from the handshake, not
+            # from the firmware spawn: a slow handshake must not spend it.
+            handshake_done_at = time.monotonic()
             bridge_support.wait_for_topics(
-                node, BATTERY_TOPICS, _SPAWNED.ready_at, checks.DISCOVERY_TIMEOUT, "battery topic"
+                node, BATTERY_TOPICS, handshake_done_at, checks.DISCOVERY_TIMEOUT, "battery topic"
             )
             # The bridge forwards MCU traffic best effort, so the probe
             # matches that; a reliable probe would never match.

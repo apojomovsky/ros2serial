@@ -69,6 +69,104 @@ sources+=("$build/check_static_sketch.cpp")
 printf '#include <std_msgs/msg/float32.hpp>\n#include <geometry_msgs/msg/twist.hpp>\n' \
   >"$build/check_sketch.cpp"
 sources+=("$build/check_sketch.cpp")
+# A rosserial-style sketch over the compatibility headers, proving the
+# spelling a ported sketch uses, with the size parameters ros_lib sketches
+# carry. The member-function arity rides along, so both subscribe forms
+# compile for the board.
+cat >"$build/check_ros_sketch.cpp" <<'EOF'
+#include <ros2serial/ros.h>
+#include <ros2serial/std_msgs/Float32.h>
+#include <ros2serial/geometry_msgs/Twist.h>
+ros::NodeHandle nh;
+std_msgs::Float32 battery;
+ros::Publisher battery_pub("battery", &battery);
+void on_cmd_vel(const geometry_msgs::Twist &msg)
+{
+    (void)msg;
+}
+ros::Subscriber<geometry_msgs::Twist> cmd_vel_sub("cmd_vel", &on_cmd_vel);
+class Echo
+{
+  public:
+    void on_twist(const geometry_msgs::Twist &msg)
+    {
+        (void)msg;
+    }
+};
+Echo echo;
+ros::Subscriber<geometry_msgs::Twist, Echo> echo_sub("echo_vel", &Echo::on_twist, &echo);
+ros::NodeHandle_<ros::ArduinoHardware, 1, 1, 64, 64> nh_small;
+ros::Time stamp;
+ros::Duration timeout(1, 0);
+void setup()
+{
+    nh.initNode();
+    nh.advertise(battery_pub);
+    nh.subscribe(cmd_vel_sub);
+    nh.subscribe(echo_sub);
+    nh.setSpinTimeout(100u);
+    (void)nh.getHardware();
+}
+void loop()
+{
+    battery.data = 1.0f;
+    battery_pub.publish(&battery);
+    (void)nh.spinOnce();
+    (void)nh.connected();
+    stamp = nh.now();
+    stamp += timeout;
+    nh.logdebug("dbg");
+    nh.loginfo("inf");
+    nh.logwarn("wrn");
+    nh.logerror("err");
+    nh.logfatal("ftl");
+}
+EOF
+sources+=("$build/check_ros_sketch.cpp")
+# The same sketch for the Arduino build, so initNode's Serial branch
+# compiles too. The stub stands in for the core's stream type, and the
+# syntax check needs no link.
+cat >"$stage/Arduino.h" <<'EOF'
+#ifndef R2S_AVR_SYNTAX_ARDUINO_H
+#define R2S_AVR_SYNTAX_ARDUINO_H
+class Stream
+{
+};
+class HardwareSerial : public Stream
+{
+  public:
+    void begin(unsigned long baud)
+    {
+        (void)baud;
+    }
+};
+extern HardwareSerial Serial;
+// The flash-string helper and macro the core's F() sketches use, spelled
+// the way WString.h spells them, so the log overloads below resolve.
+class __FlashStringHelper;
+#define F(s) (reinterpret_cast<const __FlashStringHelper *>(s))
+#endif
+EOF
+cat >"$build/check_ros_arduino.cpp" <<'EOF'
+#include <Arduino.h>
+#include <ros2serial/ros.h>
+#include <ros2serial/std_msgs/Float32.h>
+ros::NodeHandle nh;
+std_msgs::Float32 battery;
+ros::Publisher battery_pub("battery", &battery);
+void setup()
+{
+    nh.initNode();
+    nh.advertise(battery_pub);
+    nh.loginfo(F("boot"));
+}
+void loop()
+{
+    battery_pub.publish(&battery);
+    nh.spinOnce();
+    nh.loginfo(F("loop"));
+}
+EOF
 
 status=0
 for source in "${sources[@]}"; do
@@ -82,6 +180,13 @@ done
 # host build accepts and the board does not.
 if ! avr-g++ "${flags[@]}" -fsyntax-only "$root/cpp/src/runtime.cpp"; then
   echo "avr-syntax: cpp/src/runtime.cpp did not compile"
+  status=1
+fi
+# The Arduino build of the rosserial sketch, so initNode's Serial branch
+# compiles against the same stub the TU above stages. The port glue lives
+# beside the sketch on a board, so its directory rides along here.
+if ! avr-g++ "${flags[@]}" -fsyntax-only -DARDUINO -I "$root/ports/arduino" "$build/check_ros_arduino.cpp"; then
+  echo "avr-syntax: $build/check_ros_arduino.cpp did not compile"
   status=1
 fi
 [ "$status" = 0 ] || exit 1

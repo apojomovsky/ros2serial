@@ -108,6 +108,58 @@ done
 export R2S_E2E_AVR_FW=$build/fw
 [ "$build_only" = 1 ] && exit 0
 
+# The painted peaks the scenarios record, one entry per firmware image,
+# merged to the max across scenarios and RMW legs. Reset every run, so a
+# stale peak from an older firmware can never leak into the table.
+export R2S_E2E_AVR_STACK_OUT=$build/measured-stack.json
+echo '{}' >"$R2S_E2E_AVR_STACK_OUT" || exit 1
+
+# The static figures beside the peaks need .su files, which avr-gcc does
+# not write under the shipped link-time optimized flags, so each e2e
+# firmware is rebuilt without LTO under stack-fw/, the same pattern
+# scripts/build-examples.sh uses for its stack/ dir. Same sources and
+# flags, only the optimizer differs, and the table names which binary
+# each column comes from.
+for flavor in slice flood; do
+  sketch=avr_slice
+  [ "$flavor" = flood ] && sketch=avr_flood
+  for board in uno mega; do
+    mcu=atmega328p
+    [ "$board" = mega ] && mcu=atmega2560
+    label="$flavor-$mcu"
+    sw="$build/stack-fw/$label"
+    rm -rf "$sw"
+    mkdir -p "$sw" || exit 1
+    cppflags="$serial_flags -fno-lto -fstack-usage"
+    [ "$flavor" = flood ] && cppflags="$cppflags -DR2S_TEST_TX_CAP=16"
+    arduino-cli compile --fqbn "arduino:avr:$board" \
+      --build-property "compiler.c.extra_flags=$extras -fno-lto -fstack-usage" \
+      --build-property "compiler.cpp.extra_flags=$cppflags" \
+      --build-property "compiler.c.elf.extra_flags=-fno-lto" \
+      --library "$stage" --build-path "$sw" "tests/e2e/$sketch" || exit 1
+    mv "$sw/$sketch.ino.elf" "$sw/$label.elf" || exit 1
+  done
+done
+PYTHONPATH="$root/tools" python3 - "$build/stack-fw" "$build/static-stack.json" <<'EOF' || exit 1
+import json
+import sys
+from pathlib import Path
+
+import stack_report
+
+root, out = Path(sys.argv[1]), Path(sys.argv[2])
+statics = {}
+for entry in sorted(root.iterdir()):
+    if not entry.is_dir():
+        continue
+    elfs = sorted(entry.glob("*.elf"))
+    if len(elfs) != 1:
+        print(f"run-avr: {entry} holds no single firmware ELF", file=sys.stderr)
+        raise SystemExit(1)
+    statics[entry.name] = stack_report.static_worst(str(elfs[0]), entry)["total"]
+out.write_text(json.dumps(statics, indent=2) + "\n", encoding="utf-8")
+EOF
+
 command -v colcon >/dev/null 2>&1 || { echo "colcon not found: run it in a ROS container"; exit 1; }
 : "${ROS_DISTRO:?ROS_DISTRO is not set: run it in a ROS container}"
 if [ -z "${AMENT_PREFIX_PATH:-}" ] && [ -f "/opt/ros/$ROS_DISTRO/setup.bash" ]; then
@@ -177,4 +229,43 @@ for rmw in $rmws; do
   done
   if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
 done
+
+# The report-only stack table: painted peaks next to the static figures.
+# Never judged, so firmware without a measurement (a skipped scenario)
+# warns here and reads n/a instead of failing the run.
+PYTHONPATH="$root/tools" python3 - "$build/static-stack.json" "$R2S_E2E_AVR_STACK_OUT" \
+  "$build/stack-paint-table.md" <<'EOF'
+import json
+import sys
+from pathlib import Path
+
+import stack_report
+
+statics = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+try:
+    measured = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+except (OSError, ValueError):
+    measured = {}
+if not isinstance(measured, dict):
+    measured = {}
+for name in sorted(statics):
+    if name not in measured:
+        print(f"run-avr: no measured stack for {name}", file=sys.stderr)
+Path(sys.argv[3]).write_text(stack_report.measured_table(statics, measured), encoding="utf-8")
+EOF
+table_status=$?
+if [ "$table_status" -ne 0 ]; then
+  echo "run-avr: the stack table failed" >&2
+  status=1
+else
+  echo "== stack paint vs static"
+  cat "$build/stack-paint-table.md"
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    {
+      echo "### Stack paint vs static"
+      echo
+      cat "$build/stack-paint-table.md"
+    } >>"$GITHUB_STEP_SUMMARY"
+  fi
+fi
 exit $status

@@ -422,11 +422,14 @@ void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node
 
 **3. rosserial-compatible runtime registration** (gcc-class targets, Phase 2). Existing rosserial sketches port by changing the include:
 
-<!-- snippet: skip until #145 -->
 ```cpp
 #include <ros2serial/ros.h>
 #include <ros2serial/std_msgs/Float32.h>
 #include <ros2serial/geometry_msgs/Twist.h>
+
+/* The board hooks the sketch calls; a real firmware drives the hardware. */
+static void set_motors(double linear, double angular) { (void)linear; (void)angular; }
+static float read_battery(void) { return 0.0f; }
 
 ros::NodeHandle nh;
 std_msgs::Float32 battery;
@@ -1075,7 +1078,7 @@ by `launch/r2s_bridge.launch.py` with `port` and `params_file` arguments.
 
 - `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, sequence gaps per topic and the host's verdict per topic (`topic <name> status`), time sync offset in nanoseconds, drift in ppm and round trip in nanoseconds.
 - The MCU's topics, under the names it announced, after remapping and namespacing.
-- MCU log messages through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`.
+- MCU log messages and error reports through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`; a report names its code, topic, count since the previous report, and the field path for a bound violation.
 
 ### Implementation pointers
 

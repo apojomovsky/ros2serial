@@ -32,3 +32,10 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
 {
     (void)msg;
 }
+
+/* Dispatch calls the handler on every valid cmd_str frame; like cmd_vel it
+ * keeps nothing the model tests would observe. */
+void r2s_on_cmd_str(const std_msgs__msg__String *msg)
+{
+    (void)msg;
+}

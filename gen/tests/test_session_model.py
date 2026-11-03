@@ -2,12 +2,14 @@
 
 Each rule feeds one event to the C core and to the Python model and compares
 every observable after it. The event set covers the implemented session: the
-handshake, heartbeats, user traffic, corrupted input, the timers and publish
-calls. Time, log, parameters, error report and reliable-ack traffic stays
-out: P1, P2 and P5 specify that behavior when they land.
+handshake, heartbeats, user traffic, corrupted input, the timers, publish
+calls and the error reports they can trigger. Time, log, parameters and
+reliable-ack traffic stays out: P1, P2 and P5 specify that behavior when
+they land.
 """
 
 import os
+import struct
 
 from hypothesis import HealthCheck, settings
 from hypothesis import strategies as st
@@ -140,10 +142,10 @@ def test_session_matches_model():
 def handshake(pair: Pair, token: int = 1) -> None:
     """The full handshake to CONNECTED, comparing after every step."""
     pair.feed_frame(0, 0, bytes((model.OP_HELLO_REQ, 2)))
-    for index in range(3):
+    for index in range(4):
         pair.feed_frame(0, 1 + index, bytes((model.OP_TOPIC_REQ, index)))
-        pair.feed_frame(0, 4 + index, bytes((model.OP_TOPIC_STATUS, TOPIC_IDS[index], 0)))
-    pair.feed_frame(0, 7, bytes((model.OP_READY,)) + token.to_bytes(4, "little"))
+        pair.feed_frame(0, 5 + index, bytes((model.OP_TOPIC_STATUS, TOPIC_IDS[index], 0)))
+    pair.feed_frame(0, 9, bytes((model.OP_READY,)) + token.to_bytes(4, "little"))
 
 
 # covers: SES-8, SES-9
@@ -170,9 +172,32 @@ def test_seq_restarts_after_rehandshake():
     pair = Pair()
     handshake(pair)
     pair.publish(1.5)
-    pair.feed_frame(0, 8, bytes((model.OP_HELLO_REQ, 2)))
+    pair.feed_frame(0, 10, bytes((model.OP_HELLO_REQ, 2)))
     pair.publish(1.5)
     pair.check("publish after re-handshake reuses seq 0")
+
+
+# covers: ERR-3, ERR-6
+def test_not_connected_count_wraps_past_65535():
+    pair = Pair()
+    payload = struct.pack("<f", 1.5)
+    for _ in range(70000):
+        assert pair.host.publish_battery(1.5) == model.ERR_NOT_CONNECTED
+        assert pair.model.publish(16, payload) == model.ERR_NOT_CONNECTED
+    # The first failure sends count 1; the other 69999 wait, and 69999
+    # past the wrap reads back as 4463 in the next connection.
+    pair.feed_frame(0, 0, bytes((model.OP_HELLO_REQ, 2)))
+    for index in range(4):
+        pair.feed_frame(0, 1 + index, bytes((model.OP_TOPIC_REQ, index)))
+        pair.feed_frame(0, 5 + index, bytes((model.OP_TOPIC_STATUS, TOPIC_IDS[index], 0)))
+    pair.host.feed(wire(0, 9, bytes((model.OP_READY,)) + (1).to_bytes(4, "little")))
+    pair.model.feed(wire(0, 9, bytes((model.OP_READY,)) + (1).to_bytes(4, "little")))
+    pair.host.spin_now()
+    pair.model.spin()
+    expected = [model.encode_frame(5, 0, bytes((5, 16, 0x6F, 0x11, 0xFF)))]
+    assert pair.host.take_tx() == expected
+    assert pair.model.take_tx() == expected
+    pair.check("wrapped count flushes on READY")
 
 
 # covers: SES-1
@@ -185,11 +210,11 @@ def test_spin_limit_holds_backlog_frames():
     pair.host.spin_now()
     pair.model.spin()
     pair.check("eight of ten queued units processed")
-    assert pair.host.snapshot()["counters"][0] == 16
+    assert pair.host.snapshot()["counters"][0] == 18
     pair.host.spin_now()
     pair.model.spin()
     pair.check("the last two units processed")
-    assert pair.host.snapshot()["counters"][0] == 18
+    assert pair.host.snapshot()["counters"][0] == 20
 
 
 # covers: FRM-4, FRM-5
@@ -198,7 +223,7 @@ def test_tx_seq_wraps_at_256():
     handshake(pair)
     for _ in range(256):
         pair.publish(1.5)
-    assert pair.host.snapshot()["tx_seq"] == [0, 0, 0]
+    assert pair.host.snapshot()["tx_seq"] == [0, 0, 0, 0]
     pair.publish(1.5)
     pair.check("publish after the seq wraps reuses seq 0")
 
@@ -208,4 +233,4 @@ def test_spin_budget_skips_dropped_units():
     pair = Pair()
     handshake(pair)
     pair.feed_raw(b"\x00" * 8 + wire(4, 0, b""))
-    assert pair.host.snapshot()["counters"] == (9, 0, 0, 0)
+    assert pair.host.snapshot()["counters"] == (11, 0, 0, 0)
