@@ -18,9 +18,8 @@ import launch_testing.markers
 import rclpy
 from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, firmware
+from e2e_support import checks, firmware, teardown
 from e2e_support import soak as soak_gate
-from e2e_support import teardown
 from e2e_support.relay import PtyRelay
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32
@@ -147,7 +146,7 @@ class TestSoak(unittest.TestCase):
             soak_gate.check_wire_counters(base, final)
             stamps = [stamp for stamp, _ in flow]
             self.assertLessEqual(
-                max([b - a for a, b in zip(stamps, stamps[1:])] + [0.0]),
+                max([b - a for a, b in zip(stamps, stamps[1:], strict=False)] + [0.0]),
                 GAP_BUDGET_S,
                 "battery flow stalled mid-soak",
             )
