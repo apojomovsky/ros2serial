@@ -52,6 +52,9 @@ CLEAN_SLACK = 2
 # A touched frame escapes its drop only when the shifted decode still
 # passes the CRC, so the gap bound below holds up to stray escapes.
 GAP_SLACK = 2
+# In-flight frames land within a fraction of this after the faults stop,
+# so the loss slice ending past the drain holds every boundary loss.
+DRAIN_S = 1.0
 
 _SCRATCH = None
 _FIRMWARE = None
@@ -175,14 +178,19 @@ class TestScenario10Framing(unittest.TestCase):
                     self.assertEqual(message.status[0].message, "connected", "link left connected state")
                 seen = len(received)
             _PROXY.set_faults()
-            # The first clean frame after a pending merge is lost with it,
-            # so the slice ends at the first arrival past the faults: from
-            # there on every frame proves the boundary resolved.
-            straggler_end = len(battery)
+            # A merge pending at the boundary swallows the first frame
+            # flushed past it. The slice ends past the proxy's first
+            # post-fault flush, which the frame counter proves, and past a
+            # drain for frames still in flight, so every boundary loss and
+            # its successor are inside the slice.
+            flushed = _PROXY.counts()["mcu_to_host"].frames
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
-            while len(battery) == straggler_end:
+            while _PROXY.counts()["mcu_to_host"].frames <= flushed:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                self.assertLess(time.monotonic(), deadline, "no battery flow after the faults stopped")
+                self.assertLess(time.monotonic(), deadline, "proxy never flushed past the faults")
+            drain_end = time.monotonic() + DRAIN_S
+            while time.monotonic() < drain_end:
+                rclpy.spin_once(node, timeout_sec=0.5)
             fault_end = len(battery)
             disabled_at = time.monotonic()
             settled = None
