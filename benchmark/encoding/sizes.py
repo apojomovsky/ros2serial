@@ -83,6 +83,18 @@ LAYOUTS = {
         ("velocity", ("seq", F64)),
         ("effort", ("seq", F64)),
     ],
+    "geometry_msgs/msg/Transform": [
+        ("translation", ("nest", "geometry_msgs/msg/Vector3")),
+        ("rotation", ("nest", "geometry_msgs/msg/Quaternion")),
+    ],
+    "geometry_msgs/msg/TransformStamped": [
+        ("header", ("nest", "std_msgs/msg/Header")),
+        ("child_frame_id", STR),
+        ("transform", ("nest", "geometry_msgs/msg/Transform")),
+    ],
+    "tf2_msgs/msg/TFMessage": [
+        ("transforms", ("seq", ("nest", "geometry_msgs/msg/TransformStamped"))),
+    ],
 }
 
 # Fixed sizes a MAVLink-style dialect would use, from the bundle's
@@ -91,10 +103,12 @@ LAYOUTS = {
 MAVLINK_BOUNDS = {
     "std_msgs/msg/Header.frame_id": 16,
     "std_msgs/msg/String.data": 16,
+    "geometry_msgs/msg/TransformStamped.child_frame_id": 16,
     "sensor_msgs/msg/JointState.name": [6, 16],
     "sensor_msgs/msg/JointState.position": 6,
     "sensor_msgs/msg/JointState.velocity": 6,
     "sensor_msgs/msg/JointState.effort": 6,
+    "tf2_msgs/msg/TFMessage.transforms": 1,
 }
 
 # Representative payloads, mirroring the spec vectors: the wide message and
@@ -190,6 +204,60 @@ REPRESENTATIVE = {
         "wide": {"data": "hello"},
         "narrow": None,
     },
+    "geometry_msgs/msg/Transform": {
+        "wide": {
+            "translation": {"x": 1.5, "y": -2.0, "z": 0.5},
+            "rotation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+        },
+        "narrow": {
+            "translation": {"x": 1.5, "y": -2.0, "z": 0.5},
+            "rotation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+        },
+    },
+    "geometry_msgs/msg/TransformStamped": {
+        "wide": {
+            "header": {"stamp": {"sec": 7, "nanosec": 8}, "frame_id": "base"},
+            "child_frame_id": "gripper",
+            "transform": {
+                "translation": {"x": 1.5, "y": -2.0, "z": 0.5},
+                "rotation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+            },
+        },
+        "narrow": {
+            "header": {"stamp": {"sec": 7, "nanosec": 8}, "frame_id": "base"},
+            "child_frame_id": "gripper",
+            "transform": {
+                "translation": {"x": 1.5, "y": -2.0, "z": 0.5},
+                "rotation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+            },
+        },
+    },
+    "tf2_msgs/msg/TFMessage": {
+        "wide": {
+            "transforms": [
+                {
+                    "header": {"stamp": {"sec": 7, "nanosec": 8}, "frame_id": "base"},
+                    "child_frame_id": "gripper",
+                    "transform": {
+                        "translation": {"x": 1.5, "y": -2.0, "z": 0.5},
+                        "rotation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+                    },
+                }
+            ]
+        },
+        "narrow": {
+            "transforms": [
+                {
+                    "header": {"stamp": {"sec": 7, "nanosec": 8}, "frame_id": "base"},
+                    "child_frame_id": "gripper",
+                    "transform": {
+                        "translation": {"x": 1.5, "y": -2.0, "z": 0.5},
+                        "rotation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+                    },
+                }
+            ]
+        },
+    },
 }
 
 _TOKEN = {
@@ -239,6 +307,8 @@ def _leaf_tokens(node, name):
     if kind == "fixed":
         return [(f"{_TOKEN[node[1][0]]}[{node[2]}]", name)]
     if kind == "seq":
+        if node[1][0] == "nest":
+            return leaf_fields(node[1][1])
         return [(f"{_TOKEN[node[1][0]]}[]", name)]
     return [(_TOKEN[kind], name)]
 
@@ -330,10 +400,33 @@ def _cdr(node, value, parts, offset):
     raise ValueError(f"unknown layout node {node!r}")
 
 
+def _align_of(type_name):
+    """CDR alignment of a nested message: the widest leaf member."""
+    widest = 1
+    for _, node in LAYOUTS[type_name]:
+        widest = max(widest, _align_node(node))
+    return widest
+
+
+def _align_node(node):
+    kind = node[0]
+    if kind == "nest":
+        return _align_of(node[1])
+    if kind in ("fixed", "seq"):
+        return _align_node(node[1])
+    if kind == "str":
+        return 1
+    if kind in _SIZE:
+        return _SIZE[kind]
+    raise ValueError(f"unknown layout node {node!r}")
+
+
 def _elem_size(node):
     kind = node[0]
     if kind == "str":
         return 1
+    if kind == "nest":
+        return _align_of(node[1])
     if kind in _SIZE:
         return _SIZE[kind]
     raise ValueError(f"no element size for {node!r}")
@@ -355,6 +448,39 @@ def _mavlink_leaves(type_name, message, prefix, narrow):
     for name, node in LAYOUTS[type_name]:
         leaves.extend(_mavlink_node(type_name, name, node, message[name], narrow))
     return leaves
+
+
+def _mavlink_width(type_name, narrow):
+    """Fixed MAVLink-style width of one nested message from the bounds."""
+    total = 0
+    for name, node in LAYOUTS[type_name]:
+        total += _mavlink_node_width(type_name, name, node, narrow)
+    return total
+
+
+def _mavlink_node_width(type_name, name, node, narrow):
+    kind = node[0]
+    if kind == "f64":
+        return 4 if narrow else 8
+    if kind in _SIZE:
+        return _SIZE[kind]
+    if kind == "str":
+        return MAVLINK_BOUNDS[f"{type_name}.{name}"]
+    if kind == "nest":
+        return _mavlink_width(node[1], narrow)
+    if kind == "fixed":
+        width = 4 if (narrow and node[1][0] == "f64") else _SIZE[node[1][0]]
+        return width * node[2]
+    if kind == "seq":
+        bound = MAVLINK_BOUNDS[f"{type_name}.{name}"]
+        if node[1][0] == "str":
+            count, width = bound
+            return count * width
+        if node[1][0] == "nest":
+            return bound * _mavlink_width(node[1][1], narrow)
+        width = 4 if (narrow and node[1][0] == "f64") else _SIZE[node[1][0]]
+        return bound * width
+    raise ValueError(f"unknown layout node {node!r}")
 
 
 def _mavlink_node(type_name, name, node, value, narrow):
@@ -388,6 +514,18 @@ def _mavlink_node(type_name, name, node, value, narrow):
             slots = [slot.encode("utf-8") + bytes(width - len(slot.encode("utf-8"))) for slot in value]
             slots += [bytes(width)] * (count - len(value))
             return [(count * width, b"".join(slots))]
+        if node[1][0] == "nest":
+            elem = node[1][1]
+            width = _mavlink_width(elem, narrow)
+            if len(value) > bound:
+                raise ValueError(f"{type_name}.{name} exceeds its MAVLink bound")
+            parts = []
+            for item in value:
+                leaves = _mavlink_leaves(elem, item, name, narrow)
+                leaves.sort(key=lambda leaf: -leaf[0])
+                parts.append(b"".join(chunk for _, chunk in leaves))
+            raw = b"".join(parts)
+            return [(bound * width, raw + bytes(bound * width - len(raw)))]
         if len(value) > bound:
             raise ValueError(f"{type_name}.{name} exceeds its MAVLink bound")
         width = 4 if (narrow and node[1][0] == "f64") else _SIZE[node[1][0]]
