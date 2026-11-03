@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # The avr end-to-end suite: scenarios 1 to 4 against the slice sketch and
-# scenario 12 against the flood sketch, on an emulated Uno and Mega. It
-# stages the Arduino library at build time (the bundle plus the core and
-# the port glue, as scripts/build-examples.sh does), compiles the sketches
-# for both boards with burst-sized serial rings, and runs
-# every scenario under each RMW the design names, starting the Zenoh router
-# first for its leg. Builds go under R2S_BUILD_DIR, so the tree stays clean;
-# the suite runs this script for E2E=avr. R2S_RMWS narrows the RMW loop and
-# R2S_E2E_BOARDS the board loop for a quicker iteration.
+# scenario 12 against the flood sketch, on an emulated Uno and Mega, plus
+# the baud matrix (the scenario 2 flow gates per baud per board) under the
+# first RMW only. It stages the Arduino library at build time (the bundle
+# plus the core and the port glue, as scripts/build-examples.sh does),
+# compiles the sketches for both boards with burst-sized serial rings, and
+# runs every scenario under each RMW the design names, starting the Zenoh
+# router first for its leg. Builds go under R2S_BUILD_DIR, so the tree stays
+# clean; the suite runs this script for E2E=avr. R2S_RMWS narrows the RMW
+# loop, R2S_E2E_BOARDS the board loop and R2S_E2E_BAUDS the matrix, each for
+# a quicker iteration.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$root" || exit 2
@@ -78,18 +80,36 @@ esac
 # Burst-sized rings (R10): 256 bytes is the practical choice, holding
 # several slice frames in each direction, so a burst the slice can send
 # neither overruns the RX ring nor stalls the loop on a full TX ring.
+# One slice image per matrix baud: the sketch baud travels as R2S_BAUD, and
+# 250000 stays out because the bridge has no termios constant for it (#426).
+bauds=${R2S_E2E_BAUDS:-"115200 500000 1000000"}
+for baud in $bauds; do
+  case "$baud" in
+    115200 | 500000 | 1000000) ;;
+    *)
+      echo "run-avr: unsupported baud $baud (want 115200, 500000 or 1000000)" >&2
+      exit 1
+      ;;
+  esac
+done
 serial_flags="-DSERIAL_RX_BUFFER_SIZE=256 -DSERIAL_TX_BUFFER_SIZE=256"
 mkdir -p "$build/fw" || exit 1
-for board in uno mega; do
-  mcu=atmega328p
-  [ "$board" = mega ] && mcu=atmega2560
-  out="$build/fw/$board"
-  arduino-cli compile --fqbn "arduino:avr:$board" \
-    --build-property "compiler.c.extra_flags=$extras" \
-    --build-property "compiler.cpp.extra_flags=$serial_flags" \
-    --library "$stage" --output-dir "$out" tests/e2e/avr_slice || exit 1
-  avr-size "$out/avr_slice.ino.elf" || exit 1
-  mv "$out/avr_slice.ino.elf" "$build/fw/slice-$mcu.elf" || exit 1
+for baud in $bauds; do
+  for board in uno mega; do
+    mcu=atmega328p
+    [ "$board" = mega ] && mcu=atmega2560
+    out="$build/fw/$board-$baud"
+    arduino-cli compile --fqbn "arduino:avr:$board" \
+      --build-property "compiler.c.extra_flags=$extras" \
+      --build-property "compiler.cpp.extra_flags=$serial_flags -DR2S_BAUD=$baud" \
+      --library "$stage" --output-dir "$out" tests/e2e/avr_slice || exit 1
+    avr-size "$out/avr_slice.ino.elf" || exit 1
+    mv "$out/avr_slice.ino.elf" "$build/fw/slice-$mcu-$baud.elf" || exit 1
+    # Scenarios 1 to 4 run the default baud under its legacy file name.
+    if [ "$baud" = 115200 ]; then
+      cp "$build/fw/slice-$mcu-$baud.elf" "$build/fw/slice-$mcu.elf" || exit 1
+    fi
+  done
 done
 # The flood sketch is scenario 12's alone: its per-tick TX budget lives in
 # the test-only port hook, armed by the sketch, so the slice build above
@@ -194,6 +214,7 @@ boards=${R2S_E2E_BOARDS:-"uno mega"}
 rmws=${R2S_RMWS:-rmw_fastrtps_cpp rmw_cyclonedds_cpp rmw_zenoh_cpp}
 
 status=0
+matrix_done=0
 for rmw in $rmws; do
   echo "== e2e-avr: $rmw"
   export RMW_IMPLEMENTATION=$rmw
@@ -227,6 +248,21 @@ for rmw in $rmws; do
       esac
     done
   done
+  # The baud matrix runs once, under the first RMW of the loop: one
+  # representative flow per baud per board keeps the e2e-avr job small.
+  if [ "$matrix_done" = 0 ]; then
+    matrix_done=1
+    for board in $boards; do
+      export R2S_E2E_BOARD=$board
+      for baud in $bauds; do
+        export R2S_E2E_BAUD=$baud
+        case " ${R2S_E2E_SKIP:-} " in
+          *" test_baud_matrix_avr "*) echo "skip test_baud_matrix_avr (R2S_E2E_SKIP)" ;;
+          *) timeout 300 launch_test "tests/e2e/test_baud_matrix_avr.py" || status=1 ;;
+        esac
+      done
+    done
+  fi
   if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
 done
 
