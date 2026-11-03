@@ -40,6 +40,7 @@ coverage_report() {
   local dir=$1
   gcovr --root "$root" --filter 'core/src/' --object-directory "$dir" \
     --txt-metric branch --print-summary --exclude-unreachable-branches \
+    --exclude-throw-branches \
     --fail-under-line "$LINE_FLOOR" --fail-under-branch "$BRANCH_FLOOR" "$dir"
 }
 

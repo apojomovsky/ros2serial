@@ -21,6 +21,7 @@ set -uo pipefail
 root=""
 out=""
 gotfilter=0
+all_args="$*"
 while [ $# -gt 0 ]; do
   case "$1" in
     --root) root="$2"; shift 2 ;;
@@ -30,6 +31,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ "$gotfilter" = 1 ] || exit 3
+if [ -n "${R2S_GCOVR_LOG:-}" ]; then printf '%s\n' "$all_args" >>"$R2S_GCOVR_LOG"; fi
 if [[ "$root" == */base ]]; then figs=$R2S_FIG_BASE; else figs=$R2S_FIG_HEAD; fi
 set -- $figs
 python3 -c "import json; json.dump({'line_covered': $1, 'line_total': 100, \
@@ -79,7 +81,9 @@ def fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     return repo, run_env
 
 
-def run_gate(repo: Path, run_env: dict[str, str], head: str, base: str) -> subprocess.CompletedProcess:
+def run_gate(
+    repo: Path, run_env: dict[str, str], head: str, base: str, extra: dict[str, str] | None = None
+) -> subprocess.CompletedProcess:
     env = {
         **os.environ,
         "PATH": f"{run_env['PATH']}{os.pathsep}{os.environ.get('PATH', '/usr/bin:/bin')}",
@@ -89,6 +93,7 @@ def run_gate(repo: Path, run_env: dict[str, str], head: str, base: str) -> subpr
         "COMMIT_RANGE": "master..HEAD",
         "R2S_FIG_HEAD": head,
         "R2S_FIG_BASE": base,
+        **(extra or {}),
     }
     return subprocess.run(["bash", "scripts/coverage-gate.sh"], cwd=repo, env=env, capture_output=True, text=True)
 
@@ -119,6 +124,25 @@ def test_the_gate_uses_the_base_filters_on_head(tmp_path):
     commit_on_head(repo, run_env, "scripts/coverage-filters.sh", "this is not bash\n")
     result = run_gate(repo, run_env, "96 91", "96 91")
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_the_gate_excludes_throw_branches_from_every_measurement(tmp_path):
+    repo, run_env = fixture(tmp_path)
+    log = tmp_path / "gcovr-args.log"
+    result = run_gate(repo, run_env, "96 91", "96 91", {"R2S_GCOVR_LOG": str(log)})
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = log.read_text().splitlines()
+    assert len(calls) == 4, "one gcovr call per measurement:\n" + "\n".join(calls)
+    for call in calls:
+        assert "--exclude-throw-branches" in call.split(), "throw edges measured:\n" + call
+
+
+def test_the_gate_requires_the_bridge_floors(tmp_path):
+    repo, run_env = fixture(tmp_path)
+    result = run_gate(repo, run_env, "71 51", "71 51")
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "coverage: bridge branch 51.00% is below the floor 80%" in result.stdout
+    assert "(advisory)" not in result.stdout
 
 
 def test_the_gate_runs_the_bridge_tests_under_a_lease(tmp_path):
