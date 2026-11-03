@@ -2,8 +2,8 @@
 
 The bridge is up before the firmware boots, so the 3 s budget measures the
 handshake from the MCU's HELLO, not node startup. Graph discovery of the new
-topics waits on its own generous timeout, so a slow runner cannot fail a
-correct handshake.
+topics waits on its own generous timeout from the handshake, so a slow runner
+cannot fail a correct handshake.
 """
 
 import os
@@ -93,8 +93,12 @@ class TestScenario1(unittest.TestCase):
                     break
                 self.assertLess(took, TOPIC_BUDGET, f"handshake still missing {missing} after {took:.1f} s")
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
+            # Discovery starts when the bridge creates its endpoints at the
+            # handshake, so the generous timeout runs from there, not from
+            # the firmware spawn: a slow handshake must not spend it.
+            handshake_done_at = time.monotonic()
             bridge_support.wait_for_topics(
-                node, ANNOUNCED, _SPAWNED.ready_at, checks.DISCOVERY_TIMEOUT, "announced topics"
+                node, ANNOUNCED, handshake_done_at, checks.DISCOVERY_TIMEOUT, "announced topics"
             )
         finally:
             node.destroy_node()
