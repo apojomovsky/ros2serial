@@ -62,6 +62,7 @@ export ROS_DOMAIN_ID=${R2S_E2E_DOMAIN_ID:?e2e-lease.sh provides it}
 echo "== e2e isolation: ROS_DOMAIN_ID=$ROS_DOMAIN_ID ZENOH_ROUTER_PORT=$R2S_ZENOH_ROUTER_PORT"
 
 status=0
+failures=""
 for leg in static runtime static_cpp; do
   case $leg in
     static) export R2S_E2E_FW=$build/ports/posix/r2s_posix_firmware ;;
@@ -102,10 +103,29 @@ for leg in static runtime static_cpp; do
       # assumes a lone suite and cannot survive two suites on one host.
       case " ${R2S_E2E_SKIP:-} " in
         *" $test_file "*) echo "skip $test_file (R2S_E2E_SKIP)" ;;
-        *) timeout 300 launch_test "tests/e2e/${test_file}.py" || status=1 ;;
+        *)
+          timeout 300 launch_test "tests/e2e/${test_file}.py"
+          code=$?
+          # One line per failed scenario file, so a nonzero exit always
+          # names its cause even when the failure scrolled out of the tail.
+          if [ "$code" -ne 0 ]; then
+            status=1
+            line="e2e-failure: $test_file leg=$leg rmw=$rmw exit=$code"
+            [ "$code" -eq 124 ] && line="$line (timeout)"
+            echo "$line"
+            failures="$failures$line
+"
+          fi
+          ;;
       esac
     done
     if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
   done
 done
+# A final list of every failure, so the report names each one whatever
+# the output length.
+if [ -n "$failures" ]; then
+  echo "== e2e failures:"
+  printf '%s' "$failures"
+fi
 exit $status
