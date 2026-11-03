@@ -272,14 +272,16 @@ jobs:
       - run: make test FUZZ=1
   # The nightly jobs on a pull request that touches them: the plan selects
   # NIGHTLY for the isolation pairs, and the long fuzzing stays off unless
-  # the same plan also selects FUZZ. A reusable workflow call takes no
-  # timeout-minutes; the called jobs carry theirs.
+  # the same plan also selects FUZZ. The soak never runs here: two hours is
+  # a schedule-only wait. A reusable workflow call takes no timeout-minutes;
+  # the called jobs carry theirs.
   nightly:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.nightly == '1'
     uses: ./.github/workflows/nightly-jobs.yml
     with:
       fuzz: ${{ needs.plan.outputs.fuzz == '1' }}
+      soak: false
   build-matrix:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.examples == '1'
