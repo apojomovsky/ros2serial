@@ -334,6 +334,43 @@ def test_a_struct_over_65535_bytes_has_no_descriptor_form(tmp_path):
         build(["test_msgs/msg/Huge"], repository=repository)
 
 
+def test_a_struct_only_padding_over_65535_fails_its_emitted_size_check(tmp_path):
+    # covers: DSC-22, DSC-5
+    # 1 + 8191 * 8 is 65529, so the padding-blind bound passes the loader, but
+    # the target aligns the array past the leading byte and the struct no
+    # longer holds in 16 bits. Only the build compiling the struct sees that,
+    # so the emitted per-type check is the rejection.
+    repository = repository_for(tmp_path, {"test_msgs/msg/Gap": "uint8 lead\nuint64[8191] values"})
+    resolved = resolve(repository, ["test_msgs/msg/Gap"])
+    table = descriptors.build(resolved, ["test_msgs/msg/Gap"])
+    text = descriptors.emit_c(table)
+
+    assert "R2S_SIZE_CHECK(test_msgs__msg__Gap);" in text
+    (tmp_path / "r2s_generated.h").write_text(emit.emit_types(resolved, max_nest=table.max_nest), encoding="utf-8")
+    source = tmp_path / "r2s_descriptors.c"
+    source.write_text(text, encoding="utf-8")
+    compiled = subprocess.run(
+        [
+            "cc",
+            "-std=c99",
+            "-pedantic",
+            "-Werror",
+            "-I",
+            str(tmp_path),
+            "-I",
+            str(CORE_INCLUDE),
+            "-c",
+            str(source),
+            "-o",
+            str(tmp_path / "r2s_descriptors.o"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert compiled.returncode != 0
+    assert "r2s_dsc22_size_check_test_msgs__msg__Gap" in compiled.stderr
+
+
 def test_a_scalar_with_a_bound_has_no_descriptor_form():
     # covers: DSC-44, DSC-41
     resolved = {
