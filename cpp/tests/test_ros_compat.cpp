@@ -270,3 +270,210 @@ void test_ros_advertise_after_the_first_spin_is_refused(void)
     TEST_ASSERT_FALSE(sketch.nh.advertise(late_pub));
     TEST_ASSERT_EQUAL_UINT8(2, r2s_topic_count());
 }
+
+/* connected() tracks the handshake: false after the first spin, true once
+ * the ready frame completes it. */
+void test_ros_connected_tracks_the_handshake(void)
+{
+    Sketch sketch;
+
+    sketch.setup();
+    sketch.nh.spinOnce();
+    TEST_ASSERT_FALSE(sketch.nh.connected());
+    handshake(2u);
+    TEST_ASSERT_TRUE(sketch.nh.connected());
+}
+
+/* now() reads the shared clock, so it is {0, 0} while no correction
+ * anchors it. */
+void test_ros_now_is_zero_while_time_is_unsynced(void)
+{
+    ros::NodeHandle nh;
+    ros::Time t = nh.now();
+
+    TEST_ASSERT_EQUAL_UINT32(0u, t.sec);
+    TEST_ASSERT_EQUAL_UINT32(0u, t.nsec);
+}
+
+/* A host correction anchors the clock, and now() is the anchor plus the
+ * ticks since it, through the same arithmetic r2s_now() speaks. */
+void test_ros_now_follows_the_shared_clock(void)
+{
+    ros::NodeHandle nh;
+    ros::Time t;
+
+    nh.initNode();
+    r2s_time_note_correction(1000u, 1700000000, 500000000u, 0);
+    fake_port_set_tick(1250u);
+    t = nh.now();
+    TEST_ASSERT_EQUAL_UINT32(1700000000u, t.sec);
+    TEST_ASSERT_EQUAL_UINT32(750000000u, t.nsec);
+}
+
+/* A spin that stays inside the timeout reports SPIN_OK. Zero disables the
+ * bound, as in ros_lib. */
+void test_ros_spin_without_timeout_serves_the_link(void)
+{
+    Sketch sketch;
+    const geometry_msgs::Twist sent = {{1.5, -2.0, 0.5}, {1.0, -0.0, 3.0}};
+    static uint8_t payload[R2S_MAX_FRAME];
+    uint16_t len;
+
+    s_got_calls = 0u;
+    sketch.setup();
+    sketch.nh.spinOnce();
+    handshake(2u);
+    sketch.nh.setSpinTimeout(0u);
+    len = twist_payload(payload, sent, 0u);
+    feed_host(17u, 0u, payload, len);
+    TEST_ASSERT_EQUAL_INT(ros::SPIN_OK, sketch.nh.spinOnce());
+    TEST_ASSERT_EQUAL_UINT8(1, s_got_calls);
+}
+
+/* A callback that spends time: it moves the fake clock past the spin
+ * timeout, so the spin that dispatches it overruns deterministically. */
+static void on_slow_twist(const geometry_msgs::Twist &msg)
+{
+    (void)msg;
+    fake_port_advance(100u);
+    s_got_calls++;
+}
+
+/* A spin that runs past its timeout reports SPIN_TIMEOUT, after serving
+ * the frame that spent the time. */
+void test_ros_spin_past_the_timeout_reports_the_overrun(void)
+{
+    ros::NodeHandle nh;
+    ros::Subscriber<geometry_msgs::Twist> cmd_vel_sub("cmd_vel", &on_slow_twist);
+    const geometry_msgs::Twist sent = {{1.5, -2.0, 0.5}, {1.0, -0.0, 3.0}};
+    static uint8_t payload[R2S_MAX_FRAME];
+    static uint8_t wire[R2S_FRAMER_RX_CAPACITY + 1u];
+    uint16_t len;
+    uint16_t wire_len;
+
+    s_got_calls = 0u;
+    nh.initNode();
+    TEST_ASSERT_TRUE(nh.subscribe(cmd_vel_sub));
+    nh.spinOnce();
+    handshake(1u);
+    len = twist_payload(payload, sent, 0u);
+    wire_len = r2s_test_frame(wire, 16u, 0u, payload, len);
+    fake_port_queue_rx(wire, wire_len);
+    nh.setSpinTimeout(10u);
+    TEST_ASSERT_EQUAL_INT(ros::SPIN_TIMEOUT, nh.spinOnce());
+    TEST_ASSERT_EQUAL_UINT8(1, s_got_calls);
+}
+
+/* getHardware() exposes the node's own hardware instance, of the template
+ * type the sketch names. */
+struct StubHardware {
+    uint8_t tag = 7u;
+};
+
+void test_ros_get_hardware_returns_the_template_hardware(void)
+{
+    ros::NodeHandle_<StubHardware> nh;
+
+    TEST_ASSERT_EQUAL_UINT8(7u, nh.getHardware()->tag);
+    TEST_ASSERT_EQUAL_PTR(nh.getHardware(), nh.getHardware());
+}
+
+/* Each log call sends one frame on the log channel with its level, the
+ * text and no value. */
+void test_ros_log_routes_each_level_to_the_log_channel(void)
+{
+    typedef void (ros::NodeHandle::*log_fn)(const char *);
+    static const log_fn calls[] = {&ros::NodeHandle::logdebug, &ros::NodeHandle::loginfo,
+                                   &ros::NodeHandle::logwarn, &ros::NodeHandle::logerror,
+                                   &ros::NodeHandle::logfatal};
+    static const uint8_t levels[] = {10u, 20u, 30u, 40u, 50u};
+    Sketch sketch;
+    uint8_t i;
+
+    sketch.setup();
+    sketch.nh.spinOnce();
+    fake_port_tx_clear();
+    for (i = 0u; i < 5u; i++) {
+        (sketch.nh.*calls[i])("hi");
+    }
+    for (i = 0u; i < 5u; i++) {
+        const uint8_t payload[] = {levels[i], 0x02u, 'h', 'i', 0x00u};
+
+        assert_tx(i, 2u, i, payload, sizeof payload);
+    }
+}
+
+/* ros::Time carries sec and nsec and normalizes, as in ros_lib. */
+void test_ros_time_normalizes_nanoseconds_in_the_constructor(void)
+{
+    ros::Time t(1u, 2500000000u);
+
+    TEST_ASSERT_EQUAL_UINT32(3u, t.sec);
+    TEST_ASSERT_EQUAL_UINT32(500000000u, t.nsec);
+}
+
+/* toSec and fromSec convert through seconds, as in ros_lib. */
+void test_ros_time_converts_seconds(void)
+{
+    ros::Time t;
+
+    t.fromSec(1.5);
+    TEST_ASSERT_EQUAL_UINT32(1u, t.sec);
+    TEST_ASSERT_EQUAL_UINT32(500000000u, t.nsec);
+    TEST_ASSERT_FLOAT_WITHIN(0.000001f, 1.5f, (float)t.toSec());
+}
+
+/* toNsec and fromNSec convert through nanoseconds, as in ros_lib. */
+void test_ros_time_converts_nanoseconds(void)
+{
+    ros::Time t;
+    ros::Time fixed(1u, 500000000u);
+
+    t.fromNSec(1500000000);
+    TEST_ASSERT_EQUAL_UINT32(1u, t.sec);
+    TEST_ASSERT_EQUAL_UINT32(500000000u, t.nsec);
+    TEST_ASSERT_EQUAL_UINT32(1500000000u, fixed.toNsec());
+}
+
+/* Time gains and loses whole durations, as in ros_lib. */
+void test_ros_time_adds_and_subtracts_durations(void)
+{
+    ros::Time t(10u, 800000000u);
+
+    t += ros::Duration(5, 500000000);
+    TEST_ASSERT_EQUAL_UINT32(16u, t.sec);
+    TEST_ASSERT_EQUAL_UINT32(300000000u, t.nsec);
+    t -= ros::Duration(5, 500000000);
+    TEST_ASSERT_EQUAL_UINT32(10u, t.sec);
+    TEST_ASSERT_EQUAL_UINT32(800000000u, t.nsec);
+}
+
+/* The difference of two times is the signed duration between them. */
+void test_ros_time_difference_is_a_duration(void)
+{
+    ros::Time then(10u, 200000000u);
+    ros::Time now(7u, 800000000u);
+    ros::Duration d = then - now;
+
+    TEST_ASSERT_EQUAL_INT32(2, d.sec);
+    TEST_ASSERT_EQUAL_INT32(400000000, d.nsec);
+}
+
+/* Durations add, subtract and scale, as in ros_lib. */
+void test_ros_duration_arithmetic_matches_ros_lib(void)
+{
+    ros::Duration d(1, 900000000);
+
+    d += ros::Duration(0, 200000000);
+    TEST_ASSERT_EQUAL_INT32(2, d.sec);
+    TEST_ASSERT_EQUAL_INT32(100000000, d.nsec);
+    d -= ros::Duration(2, 50000000);
+    TEST_ASSERT_EQUAL_INT32(0, d.sec);
+    TEST_ASSERT_EQUAL_INT32(50000000, d.nsec);
+    d.fromSec(0.25);
+    TEST_ASSERT_EQUAL_INT32(0, d.sec);
+    TEST_ASSERT_EQUAL_INT32(250000000, d.nsec);
+    d *= 2.0;
+    TEST_ASSERT_EQUAL_INT32(0, d.sec);
+    TEST_ASSERT_EQUAL_INT32(500000000, d.nsec);
+}
