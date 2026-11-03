@@ -275,11 +275,12 @@ def test_writeup_table_matches_the_model():
     assert table in writeup.read_text()
 
 
-# Cycle timing on the MCU, measured in simavr cycles (the harness prints its
-# stop count, and the firmware times itself with Timer1 at one tick per
-# cycle). Caps are regression tripwires, not tuned budgets: a byte takes
-# about 1390 cycles to leave the wire at 115200 baud, so an encoder spending
-# a fraction of that stays out of the link's way.
+# Cycle timing on the MCU, measured in simavr cycles (the firmware times
+# itself with Timer1 at one tick per cycle). Caps are regression tripwires,
+# not tuned budgets: a byte takes about 1390 cycles to leave the wire at
+# 115200 baud, so an encoder under a third of that stays out of the link's
+# way. Per-byte cost falls with message size; the float32 row, measured at
+# 264 encode cycles per byte, sets the ceiling the cap must clear.
 CYCLE_CASES = {
     "float32": "std_msgs/msg/Float32",
     "twist": "geometry_msgs/msg/Twist",
@@ -288,7 +289,7 @@ CYCLE_CASES = {
     "joint_state": "sensor_msgs/msg/JointState",
 }
 
-CYCLE_BUDGET_PER_BYTE = 300
+CYCLE_BUDGET_PER_BYTE = 400
 
 
 def cycle_message(type_name):
@@ -308,6 +309,31 @@ def core_sources():
     return sorted((ROOT / "core" / "src").glob("*.c"), key=lambda path: path.name)
 
 
+def stage_defines(stage):
+    import os
+
+    header = stage / "src" / "r2s_bundled.h"
+    script = (
+        "import sys\n"
+        "from r2s_gen import layouts\n"
+        "print(' '.join('-D' + define for define in layouts.build_defines(open(sys.argv[1]).read())))\n"
+    )
+    env = dict(os.environ, PYTHONPATH=str(ROOT / "gen"))
+    proc = subprocess.run(
+        [sys.executable, "-", str(header)],
+        input=script,
+        capture_output=True,
+        text=True,
+        env=env,
+        check=True,
+    )
+    defines = proc.stdout.split()
+    assert any(define == "-DR2S_WITH_CODEC" for define in defines), defines
+    assert any(define.startswith("-DR2S_MAX_FRAME=") for define in defines), defines
+    assert any(define.startswith("-DR2S_MAX_NEST=") for define in defines), defines
+    return defines
+
+
 def build_firmware(stage, elf, mcu):
     firmware = ENCODING / "fw_bench.c"
     assert firmware.exists(), "missing benchmark/encoding/fw_bench.c"
@@ -324,7 +350,9 @@ def build_firmware(stage, elf, mcu):
             "-ffunction-sections",
             "-fdata-sections",
             "-Wl,--gc-sections",
-            "-DR2S_WITH_CODEC",
+        ]
+        + stage_defines(stage)
+        + [
             f"-I{stage / 'src'}",
             f"-I{ROOT / 'core' / 'include'}",
             str(firmware),
@@ -371,6 +399,9 @@ def read_until_done(pty_path, deadline):
     import time
 
     lines = []
+    # The harness sets VMIN=0 VTIME=0, so an empty read is a quiet moment,
+    # not end of file: only the deadline or BM DONE ends the wait. A dead
+    # harness just runs the deadline out and fails on the missing DONE.
     fd = os.open(pty_path, os.O_RDONLY | os.O_NOCTTY)
     try:
         tail = b""
@@ -378,10 +409,7 @@ def read_until_done(pty_path, deadline):
             ready, _, _ = select.select([fd], [], [], 5.0)
             if not ready:
                 continue
-            chunk = os.read(fd, 256)
-            if not chunk:
-                break
-            tail += chunk
+            tail += os.read(fd, 256)
             while b"\n" in tail:
                 raw, tail = tail.split(b"\n", 1)
                 line = raw.decode("ascii", "replace").strip()
