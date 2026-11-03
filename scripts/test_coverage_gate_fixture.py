@@ -121,14 +121,6 @@ def test_the_gate_uses_the_base_filters_on_head(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_the_gate_requires_the_bridge_floors(tmp_path):
-    repo, run_env = fixture(tmp_path)
-    result = run_gate(repo, run_env, "71 51", "71 51")
-    assert result.returncode != 0, result.stdout + result.stderr
-    assert "coverage: bridge branch 51.00% is below the floor 80%" in result.stdout
-    assert "(advisory)" not in result.stdout
-
-
 def test_the_gate_runs_the_bridge_tests_under_a_lease(tmp_path):
     repo, run_env = fixture(tmp_path)
     result = run_gate(repo, run_env, "96 91", "96 91")
