@@ -21,12 +21,12 @@ tasks:
   lint:
     desc: The LINT section, always.
     cmds:
-      - bash scripts/ci-test.sh LINT=1
+      - LINT=1 bash scripts/ci-test.sh
 
   commits:
     desc: Always checks the commit range, which no file lists.
     cmds:
-      - bash scripts/ci-test.sh COMMITS=1
+      - COMMITS=1 bash scripts/ci-test.sh
 
   # Every section runs through this machinery and image, so every section
   # lists it: the runner and its locks, the shared plumbing the sections
@@ -82,7 +82,7 @@ tasks:
       - ports/posix/src/**
       - ports/posix/r2s.yaml
     cmds:
-      - bash scripts/ci-test.sh SCRIPTS=1
+      - SCRIPTS=1 bash scripts/ci-test.sh
 
   core:
     desc: Runs the host unit, contract and port tests.
@@ -109,7 +109,7 @@ tasks:
       - ports/posix/**
       - ports/arduino/**
     cmds:
-      - bash scripts/ci-test.sh CORE=1
+      - CORE=1 bash scripts/ci-test.sh
 
   gen:
     desc: Runs the generator unit, golden and model tests.
@@ -142,7 +142,7 @@ tasks:
       # The golden tests compare the checked-in generated outputs.
       - examples/cmake_minimal/lib/**
     cmds:
-      - bash scripts/ci-test.sh GEN=1
+      - GEN=1 bash scripts/ci-test.sh
 
   bridge:
     desc: Runs the colcon build and test per distro.
@@ -172,7 +172,7 @@ tasks:
       - tests/e2e/**
       - exclude: tests/e2e/test_isolation.py
     cmds:
-      - bash scripts/ci-test.sh BRIDGE=1
+      - BRIDGE=1 bash scripts/ci-test.sh
 
   cpp:
     desc: Runs the host builds and avr compile tests.
@@ -194,7 +194,7 @@ tasks:
       # The host tests build the core sources in.
       - core/**
     cmds:
-      - bash scripts/ci-test.sh CPP=1
+      - CPP=1 bash scripts/ci-test.sh
 
   coverage:
     desc: Runs the head-vs-base gates per component.
@@ -218,7 +218,7 @@ tasks:
       - core/**
       - bridge/**
     cmds:
-      - bash scripts/ci-test.sh COVERAGE=1
+      - COVERAGE=1 bash scripts/ci-test.sh
 
   docs:
     desc: Extracts and compiles every snippet.
@@ -245,7 +245,7 @@ tasks:
       - gen/**
       - exclude: gen/tests/**
     cmds:
-      - bash scripts/ci-test.sh DOCS=1
+      - DOCS=1 bash scripts/ci-test.sh
 
   examples:
     desc: Builds the firmware and sketches per board.
@@ -272,7 +272,7 @@ tasks:
       - cpp/**
       - ports/arduino/**
     cmds:
-      - bash scripts/ci-test.sh EXAMPLES=1
+      - EXAMPLES=1 bash scripts/ci-test.sh
 
   budgets:
     desc: Measures flash, RAM and stack against the floors.
@@ -302,7 +302,7 @@ tasks:
       - cpp/**
       - ports/arduino/**
     cmds:
-      - bash scripts/ci-test.sh BUDGETS=1
+      - BUDGETS=1 bash scripts/ci-test.sh
 
   readme:
     desc: Runs the walkthrough on simavr.
@@ -333,7 +333,7 @@ tasks:
       - bridge/**
       - tests/harness/**
     cmds:
-      - bash scripts/ci-test.sh README=1
+      - README=1 bash scripts/ci-test.sh
 
   fuzz:
     desc: Runs the libFuzzer targets over the seed corpus.
@@ -356,7 +356,7 @@ tasks:
       - core/**
       - spec/**
     cmds:
-      - bash scripts/ci-test.sh FUZZ=1
+      - FUZZ=1 bash scripts/ci-test.sh
 
   e2e-avr:
     desc: Runs the avr scenarios on simavr firmware.
@@ -394,7 +394,7 @@ tasks:
       - exclude: tests/e2e/soak_check_test.py
       - tests/harness/**
     cmds:
-      - bash scripts/ci-test.sh E2E=avr
+      - E2E=avr bash scripts/ci-test.sh
 
   e2e-posix:
     desc: Runs the posix scenarios on the virtual MCU.
@@ -430,7 +430,7 @@ tasks:
       - exclude: tests/e2e/test_soak_posix.py
       - exclude: tests/e2e/soak_check_test.py
     cmds:
-      - bash scripts/ci-test.sh E2E=posix
+      - E2E=posix bash scripts/ci-test.sh
 
   nightly:
     desc: Runs the e2e isolation pairs side by side.
@@ -451,7 +451,7 @@ tasks:
       # file itself selects this task on a pull request.
       - tests/e2e/test_isolation.py
     cmds:
-      - bash scripts/ci-test.sh NIGHTLY=1
+      - NIGHTLY=1 bash scripts/ci-test.sh
 
   soak:
     desc: Runs the two hour soak on posix and simavr.
@@ -487,7 +487,7 @@ tasks:
       - tests/harness/**
       - tests/e2e/e2e_support/**
     cmds:
-      - bash scripts/ci-test.sh SOAK=1
+      - SOAK=1 bash scripts/ci-test.sh
 
   # Host-only: needs docker, so the dev image cannot run it. No image task
   # depends on it; the plan gates the mermaid job on its status, and the job

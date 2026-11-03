@@ -7,9 +7,10 @@ run, locally and in CI. Lint and commits are the standing cheap gates, so
 their tasks list no sources and always run, as CHEAP did before them.
 
 These tests run the real Taskfile in a throwaway repository whose section
-runner is a stub: every task command is `bash scripts/ci-test.sh <scope>`,
-and the stub records each invocation. Editing a probe file then proves
-which tasks go stale, without running any real section.
+runner is a stub: every task command exports its scope
+(`<SCOPE>=1 bash scripts/ci-test.sh`), and the stub records the scope it
+sees in its environment. Editing a probe file then proves which tasks go
+stale, without running any real section.
 """
 
 import os
@@ -84,8 +85,28 @@ def probe_for(pattern):
     return path
 
 
-STUB_RUNNER = """#!/usr/bin/env bash
-echo "stub $*" >> "$R2S_TASK_LOG"
+STUB_RUNNER = """#!/bin/sh
+# Mirrors ci-test.sh: the scope arrives by environment, never as an
+# argument, so a task that passes it as $1 records nothing here. Plain
+# sh: Task runs each command with sh, not bash.
+log="$R2S_TASK_LOG"
+[ -n "${LINT:-}" ] && echo "stub LINT=$LINT" >> "$log"
+[ -n "${SCRIPTS:-}" ] && echo "stub SCRIPTS=$SCRIPTS" >> "$log"
+[ -n "${COMMITS:-}" ] && echo "stub COMMITS=$COMMITS" >> "$log"
+[ -n "${CORE:-}" ] && echo "stub CORE=$CORE" >> "$log"
+[ -n "${GEN:-}" ] && echo "stub GEN=$GEN" >> "$log"
+[ -n "${BRIDGE:-}" ] && echo "stub BRIDGE=$BRIDGE" >> "$log"
+[ -n "${CPP:-}" ] && echo "stub CPP=$CPP" >> "$log"
+[ -n "${E2E:-}" ] && echo "stub E2E=$E2E" >> "$log"
+[ -n "${COVERAGE:-}" ] && echo "stub COVERAGE=$COVERAGE" >> "$log"
+[ -n "${DOCS:-}" ] && echo "stub DOCS=$DOCS" >> "$log"
+[ -n "${EXAMPLES:-}" ] && echo "stub EXAMPLES=$EXAMPLES" >> "$log"
+[ -n "${BUDGETS:-}" ] && echo "stub BUDGETS=$BUDGETS" >> "$log"
+[ -n "${FUZZ:-}" ] && echo "stub FUZZ=$FUZZ" >> "$log"
+[ -n "${README:-}" ] && echo "stub README=$README" >> "$log"
+[ -n "${NIGHTLY:-}" ] && echo "stub NIGHTLY=$NIGHTLY" >> "$log"
+[ -n "${SOAK:-}" ] && echo "stub SOAK=$SOAK" >> "$log"
+exit 0
 """
 
 # Files the fixture writes by hand: the Taskfile itself, the stub section
