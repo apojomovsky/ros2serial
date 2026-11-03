@@ -9,6 +9,7 @@ valid message still arrives, so a dead link cannot fake the drop.
 """
 
 import os
+import re
 import select
 import tempfile
 import time
@@ -30,6 +31,7 @@ from sensor_msgs.msg import JointState
 LOGGER_NAME = "r2s_bridge.mcu"
 ROSOUT_BUDGET = 30.0
 PHASE_BUDGET = 30.0
+QUIESCE_S = 2.0
 
 _SCRATCH = None
 _FIRMWARE = None
@@ -84,6 +86,11 @@ def _firmware_lines(proc):
     return chunk.decode("utf-8", "replace")
 
 
+def _joint_counts(text):
+    """Every joints arrival count the firmware has printed in text."""
+    return [int(m.group(1)) for m in re.finditer(r"r2s_posix: joints n=(\d+)", text)]
+
+
 class TestScenario11(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -119,12 +126,19 @@ class TestScenario11(unittest.TestCase):
             _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
             log = []
             deadline = time.monotonic() + PHASE_BUDGET
-            while "r2s_posix: joints n=1" not in "".join(log):
+            while not _joint_counts("".join(log)):
                 joints.publish(VALID)
                 rclpy.spin_once(node, timeout_sec=0.5)
                 log.append(_firmware_lines(_SPAWNED.proc))
                 self.assertLess(time.monotonic(), deadline, "valid JointState never arrived")
-            self.assertNotIn("r2s_posix: joints n=2", "".join(log))
+            # Quiesce: valid messages already in flight still land after the
+            # first count, so drain them before fixing the baseline; under
+            # load several arrive here, and none may leak into the drop phase.
+            stop = time.monotonic() + QUIESCE_S
+            while time.monotonic() < stop:
+                rclpy.spin_once(node, timeout_sec=0.5)
+                log.append(_firmware_lines(_SPAWNED.proc))
+            baseline = max(_joint_counts("".join(log)))
             logs.clear()
             deadline = time.monotonic() + PHASE_BUDGET
             report = None
@@ -138,9 +152,9 @@ class TestScenario11(unittest.TestCase):
                 self.assertLess(time.monotonic(), deadline, "no code 1 report on /rosout")
             self.assertIn("at field 'name'", report.msg)
             self.assertEqual(report.level, 30)
-            self.assertNotIn("r2s_posix: joints n=2", "".join(log))
+            self.assertEqual(max(_joint_counts("".join(log))), baseline, "oversized JointState reached the firmware")
             deadline = time.monotonic() + PHASE_BUDGET
-            while "r2s_posix: joints n=2" not in "".join(log):
+            while max(_joint_counts("".join(log))) <= baseline:
                 joints.publish(VALID)
                 rclpy.spin_once(node, timeout_sec=0.5)
                 log.append(_firmware_lines(_SPAWNED.proc))
