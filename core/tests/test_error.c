@@ -11,6 +11,7 @@
 #include "handwritten.h"
 #include "r2s/r2s.h"
 #include "r2s/r2s_codec.h"
+#include "r2s/r2s_error.h"
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_session.h"
 #include "r2s/r2s_tx.h"
@@ -133,6 +134,32 @@ void test_error_announce_failures_flush_on_connect(void)
      * by the handshake. */
     TEST_ASSERT_EQUAL_UINT16(6, fake_port_tx_frame_count());
     assert_error_report(5, 0, report);
+}
+
+/* covers: ERR-3, ERR-6 */
+void test_error_not_connected_count_wraps_past_65535(void)
+{
+    /* code 5, battery, 40000 occurrences, no field. */
+    const uint8_t first[] = {0x05u, R2S_HANDWRITTEN_BATTERY_ID, 0x40u, 0x9Cu, 0xFFu};
+    /* 30000 + 40000 more while the next report waits: 70000 past the wrap
+     * reads back as 4464 in the next connection. */
+    const uint8_t wrapped[] = {0x05u, R2S_HANDWRITTEN_BATTERY_ID, 0x70u, 0x11u, 0xFFu};
+
+    configure();
+    handshake();
+    fake_port_tx_clear();
+    r2s_error_note(R2S_ERROR_NOT_CONNECTED, R2S_HANDWRITTEN_BATTERY_ID, 0xFFu, 40000u);
+    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    assert_error_report(0, 0, first);
+    r2s_error_note(R2S_ERROR_NOT_CONNECTED, R2S_HANDWRITTEN_BATTERY_ID, 0xFFu, 30000u);
+    r2s_error_note(R2S_ERROR_NOT_CONNECTED, R2S_HANDWRITTEN_BATTERY_ID, 0xFFu, 40000u);
+    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    handshake();
+    /* The handshake answers with a HELLO and four TOPIC frames before the
+     * wrapped count flushes on READY, with the report sequence restarted
+     * by the handshake. */
+    TEST_ASSERT_EQUAL_UINT16(7, fake_port_tx_frame_count());
+    assert_error_report(6, 0, wrapped);
 }
 
 /* covers: ERR-2, ERR-3, ERR-6 */
