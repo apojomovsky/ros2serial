@@ -25,6 +25,15 @@ class Bridge : public rclcpp::Node
     explicit Bridge(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
     ~Bridge() override;
 
+    // The poll entry the wall timer calls: polls the router and emits one
+    // /diagnostics message when the period elapses. Public so tests drive it
+    // without waiting on the timer.
+    void poll();
+
+  protected:
+    // Publishes one /diagnostics message. Virtual so tests inject a failure.
+    virtual void publish_diagnostics(const diagnostic_msgs::msg::DiagnosticArray &message);
+
   private:
     SteadyClock clock_;
     RosClock ros_clock_;

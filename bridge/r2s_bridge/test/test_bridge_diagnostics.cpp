@@ -10,6 +10,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <pty.h>
@@ -144,6 +145,60 @@ TEST_F(BridgeDiagnostics, PublishesBootWaitThenHandshaking)
     EXPECT_EQ(values.at("session token"), "7") << "the MCU echo is reported until READY assigns one";
     EXPECT_EQ(values.at("resets"), "0");
     EXPECT_EQ(received.back().status[0].hardware_id, pty.path());
+}
+
+// A Bridge whose /diagnostics publish throws on demand, standing in for the
+// teardown race that takes the typed publish down on a later rclcpp.
+class ThrowingBridge : public r2s_bridge::Bridge
+{
+  public:
+    explicit ThrowingBridge(const rclcpp::NodeOptions &options) : Bridge(options)
+    {
+    }
+    bool fail_publish = false;
+
+  protected:
+    void publish_diagnostics(const diagnostic_msgs::msg::DiagnosticArray &message) override
+    {
+        if (fail_publish) {
+            throw std::runtime_error("injected diagnostics failure");
+        }
+        Bridge::publish_diagnostics(message);
+    }
+};
+
+TEST_F(BridgeDiagnostics, ThrowingDiagnosticsPublishIsSurvived)
+{
+    Pty pty;
+    rclcpp::NodeOptions options;
+    options.parameter_overrides({rclcpp::Parameter("port", pty.path())});
+    auto bridge = std::make_shared<ThrowingBridge>(options);
+    auto probe = std::make_shared<rclcpp::Node>("diag_fail_probe");
+    std::vector<diagnostic_msgs::msg::DiagnosticArray> received;
+    auto sub = probe->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
+        "/diagnostics", 10,
+        [&received](diagnostic_msgs::msg::DiagnosticArray msg) { received.push_back(std::move(msg)); });
+    bridge->poll();
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (received.empty() && std::chrono::steady_clock::now() < deadline) {
+        rclcpp::spin_some(probe);
+    }
+    ASSERT_FALSE(received.empty()) << "the bridge publishes /diagnostics while healthy";
+    // The injected failure stands in for the teardown race: the poll entry
+    // must swallow it instead of aborting.
+    bridge->fail_publish = true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    EXPECT_NO_THROW(bridge->poll()) << "a failed /diagnostics publish never aborts the bridge";
+    // The bridge keeps polling: the next period publishes again.
+    bridge->fail_publish = false;
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    const std::size_t before = received.size();
+    bridge->poll();
+    const auto again = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (received.size() == before && std::chrono::steady_clock::now() < again) {
+        rclcpp::spin_some(probe);
+    }
+    EXPECT_GT(received.size(), before) << "the bridge keeps reporting after the failure";
 }
 
 } // namespace
