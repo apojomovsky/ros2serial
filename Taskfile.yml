@@ -64,7 +64,7 @@ tasks:
       - tests/e2e/**
       # The release tests stage the generator package and the C++ layer,
       # and the extractor tests run the package. The generator's own tests
-      # stay with the gen task, as the scope map had it.
+      # stay with the gen task: they exercise the package, not its outputs.
       - gen/**
       - exclude: gen/tests/**
       - cpp/include/**

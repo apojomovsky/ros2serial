@@ -4,9 +4,9 @@ name: ci
 # contributor does locally. Placeholder jobs mark where each test layer lands;
 # each names the ticket that fills it in.
 #
-# The plan job maps the pull request's diff to the ci-test.sh scopes that
-# read it and exposes one output per scope. Each section job needs the plan
-# and runs only when its scope is selected; pushes to master and
+# The plan job asks Task which ci-test.sh sections are stale and exposes
+# one output per section. Each section job needs the plan and runs only
+# when its task is stale; pushes to master and
 # workflow_dispatch run every job, and a FULL result runs every job. A job
 # skipped by its if still satisfies branch protection, so skipping is safe.
 #

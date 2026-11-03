@@ -4,7 +4,7 @@
 #   BASE     ref the PR targets (default origin/master; a PR is never stacked)
 #   PR_BODY  file holding the PR body, to check it too
 #   PR_TITLE the title the PR will carry, to check it against the commits
-#   TEST=1   also run the cheap scopes locally (R2S_FULL=1 runs all)
+#   TEST=1   also run the stale tasks locally (R2S_FULL=1 runs all)
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 base=${BASE:-origin/master}
