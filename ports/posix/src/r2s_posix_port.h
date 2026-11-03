@@ -19,6 +19,12 @@ int r2s_posix_open(const char *path);
  * values past +-20000 ppm leave the correction range the wire allows. */
 void r2s_posix_set_tick_skew_ppm(int32_t ppm);
 
+/* Test-only saturation knob: at most cap bytes per tick leave the port, so
+ * a publish past the budget fails with TX_BUSY instead of blocking. 0xFFFF
+ * disables the cap, which is the default. The firmware arms it once the
+ * link connects, so the handshake always runs uncapped. */
+void r2s_posix_set_tx_cap(uint16_t cap);
+
 #ifdef __cplusplus
 }
 #endif
