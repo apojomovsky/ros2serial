@@ -32,6 +32,11 @@ def port_of(output):
     return int(match.group(1))
 
 
+def failure_lines(output):
+    """FAIL: and ERROR: lines, naming every test the section lost."""
+    return [line for line in output.splitlines() if re.match(r"(FAIL|ERROR): ", line)]
+
+
 class TestFailureLines(unittest.TestCase):
     def test_names_each_failed_test(self):
         output = "test_a ... ok\nFAIL: test_b (mod.TestB)\nERROR: test_c (mod.TestC)\n"
@@ -76,8 +81,8 @@ def test_two_concurrent_e2e_sections_pass_without_crosstalk():
     )
     out1, _ = first.communicate()
     out2, _ = second.communicate()
-    assert first.returncode == 0, "first section failed:\n" + out1[-4000:]
-    assert second.returncode == 0, "second section failed:\n" + out2[-4000:]
+    assert first.returncode == 0, "first section failed:\n" + "\n".join(failure_lines(out1) + [out1[-4000:]])
+    assert second.returncode == 0, "second section failed:\n" + "\n".join(failure_lines(out2) + [out2[-4000:]])
     assert domain_of(out1) != domain_of(out2), "both sections ran on one domain"
 
 
@@ -97,7 +102,7 @@ def test_avr_and_posix_sections_pass_side_by_side():
     )
     out_avr, _ = avr.communicate()
     out_posix, _ = posix.communicate()
-    assert avr.returncode == 0, "avr section failed:\n" + out_avr[-4000:]
-    assert posix.returncode == 0, "posix section failed:\n" + out_posix[-4000:]
+    assert avr.returncode == 0, "avr section failed:\n" + "\n".join(failure_lines(out_avr) + [out_avr[-4000:]])
+    assert posix.returncode == 0, "posix section failed:\n" + "\n".join(failure_lines(out_posix) + [out_posix[-4000:]])
     assert domain_of(out_avr) != domain_of(out_posix), "both sections ran on one domain"
     assert port_of(out_avr) != port_of(out_posix), "both sections share a zenoh port"
