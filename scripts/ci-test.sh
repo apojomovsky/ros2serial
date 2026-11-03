@@ -2,7 +2,7 @@
 # The single suite script: CI runs exactly this, and so does `make test`.
 # Scope with one or more of LINT=1 SCRIPTS=1 COMMITS=1 CORE=1 GEN=1 BRIDGE=1
 # CPP=1 E2E=<backend> COVERAGE=1 DOCS=1 EXAMPLES=1 BUDGETS=1 FUZZ=1 README=1
-# NIGHTLY=1; no scope runs everything.
+# NIGHTLY=1 SOAK=1; no scope runs everything.
 # E2E takes posix, avr, or both; both runs each backend once in one scope.
 # SCRIPTS_SHARD=N runs one CI shard of the SCRIPTS scope; unset runs it whole.
 # COMMITS checks COMMIT_RANGE (default origin/master..HEAD) and PR_TITLE when set,
@@ -64,7 +64,7 @@ else
 fi
 
 scoped=0
-for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES BUDGETS FUZZ README NIGHTLY; do [ -n "${!v:-}" ] && scoped=1; done
+for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES BUDGETS FUZZ README NIGHTLY SOAK; do [ -n "${!v:-}" ] && scoped=1; done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }
 
 failed=()
@@ -163,6 +163,7 @@ if wants BUDGETS; then scope_now=BUDGETS; section budgets bash scripts/budgets-c
 if wants FUZZ; then scope_now=FUZZ; section fuzz bash scripts/fuzz.sh; fi
 if wants README; then scope_now=README; section readme bash scripts/check-readme.sh; fi
 if wants NIGHTLY; then scope_now=NIGHTLY; section e2e-isolation python3 -m pytest tests/e2e/test_isolation.py; fi
+if wants SOAK; then scope_now=SOAK; section soak bash tests/e2e/run-soak.sh; fi
 if wants E2E; then scope_now=E2E
   case "${E2E:-}" in
     "") section e2e-avr-harness bash tests/harness/simavr/run.sh
@@ -183,7 +184,7 @@ fi
 
 empty=""
 if [ "$scoped" = 1 ]; then
-  for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES BUDGETS FUZZ README NIGHTLY; do
+  for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES BUDGETS FUZZ README NIGHTLY SOAK; do
     if [ -n "${!v:-}" ]; then
       case " $ran_scopes " in *" $v "*) ;; *) empty="$empty $v" ;; esac
     fi

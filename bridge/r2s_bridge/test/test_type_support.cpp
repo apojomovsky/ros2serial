@@ -58,6 +58,32 @@ TEST(TypeSupport, RejectsAMalformedTypeName)
     EXPECT_EQ(resolve_topic_type(announced("Float32", kFloat32Hash)), kTopicStatusUnknownType);
 }
 
+TEST(TopicInfo, InequalityNamesEachField)
+{
+    TopicInfo base;
+    base.topic_id = 0x10u;
+    base.flags = 0x01u;
+    base.type_hash = kFloat32Hash;
+    base.type_name = "std_msgs/msg/Float32";
+    base.topic_name = "battery";
+    EXPECT_TRUE(base == base);
+    TopicInfo changed = base;
+    changed.topic_id = 0x11u;
+    EXPECT_FALSE(base == changed);
+    changed = base;
+    changed.flags = 0x02u;
+    EXPECT_FALSE(base == changed);
+    changed = base;
+    changed.type_hash[0] ^= 0x01u;
+    EXPECT_FALSE(base == changed);
+    changed = base;
+    changed.type_name = "std_msgs/msg/Int32";
+    EXPECT_FALSE(base == changed);
+    changed = base;
+    changed.topic_name = "cell";
+    EXPECT_FALSE(base == changed);
+}
+
 TEST(TopicStatus, CodesMatchTheSpec)
 {
     EXPECT_EQ(kTopicStatusOk, 0u);

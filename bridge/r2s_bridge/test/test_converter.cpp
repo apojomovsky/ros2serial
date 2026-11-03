@@ -34,6 +34,7 @@
 #include <std_msgs/msg/float64.hpp>
 #include <std_msgs/msg/int16.hpp>
 #include <std_msgs/msg/int32.hpp>
+#include <std_msgs/msg/int32_multi_array.hpp>
 #include <std_msgs/msg/int64.hpp>
 #include <std_msgs/msg/int8.hpp>
 #include <std_msgs/msg/string.hpp>
@@ -498,6 +499,31 @@ TEST(ConverterSequences, ConvertsPoseArray)
     expect_cdr(converter, "geometry_msgs/msg/PoseArray", false, payload, serialize_ref(msg), "pose array");
 }
 
+TEST(ConverterSequences, RejectsAMalformedSequenceCount)
+{
+    Converter converter;
+    std::vector<std::uint8_t> cdr;
+    std::vector<std::uint8_t> payload(9, 0x00);
+    payload.insert(payload.end(), {0xF0u, 0xA2u, 0x04u});
+    payload.insert(payload.end(), 10, 0x00);
+    const ConvertResult result =
+        converter.to_cdr("geometry_msgs/msg/PoseArray", false, payload.data(), payload.size(), cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kBadVarint);
+    EXPECT_EQ(result.field, 5u);
+}
+
+TEST(ConverterSequences, RefusesAnEncodeOverBoundSequence)
+{
+    Converter converter;
+    std_msgs::msg::Int32MultiArray msg;
+    msg.data.assign(70000u, 1);
+    const std::vector<std::uint8_t> cdr = serialize_ref(msg);
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+        converter.from_cdr("std_msgs/msg/Int32MultiArray", false, cdr.data(), cdr.size(), packed);
+    EXPECT_EQ(result.fail, ConvertFail::kOverBound);
+}
+
 TEST(ConverterSequences, NumbersNestedArrayElementsDynamically)
 {
     Converter converter;
@@ -682,6 +708,35 @@ TEST(ConverterPlans, RefusesDeepNesting)
     EXPECT_FALSE(converter.install_plan_for_test("fake/msg/Deep", &nested[0]));
 }
 
+TEST(ConverterPlans, InstallsPlansWithLongNestedNames)
+{
+    Converter converter;
+    MessageMember inner_field{};
+    inner_field.name_ = "averylongfieldname2";
+    inner_field.type_id_ = ROS_TYPE_UINT8;
+    MessageMembers inner{};
+    inner.message_namespace_ = "fake";
+    inner.message_name_ = "InnerWithALongName";
+    inner.member_count_ = 1;
+    inner.size_of_ = 1;
+    inner.members_ = &inner_field;
+    rosidl_message_type_support_t inner_handle = fake_ts_for(&inner);
+    MessageMember outer_field{};
+    outer_field.name_ = "averylongfieldname1";
+    outer_field.type_id_ = ROS_TYPE_MESSAGE;
+    outer_field.members_ = &inner_handle;
+    MessageMembers outer{};
+    outer.message_namespace_ = "fake";
+    outer.message_name_ = "OuterWithALongName";
+    outer.member_count_ = 1;
+    outer.size_of_ = 1;
+    outer.members_ = &outer_field;
+    outer.init_function = fake_noop_init;
+    outer.fini_function = fake_noop_fini;
+    const rosidl_message_type_support_t outer_handle = fake_ts_for(&outer);
+    EXPECT_TRUE(converter.install_plan_for_test("fake/msg/Longs", &outer_handle));
+}
+
 TEST(ConverterPlans, RefusesMissingArrayAccessors)
 {
     Converter converter;
@@ -717,6 +772,55 @@ TEST(ConverterPlans, RefusesMissingArrayAccessors)
     bounded_members.fini_function = fake_noop_fini;
     const rosidl_message_type_support_t bounded_handle = fake_ts_for(&bounded_members);
     EXPECT_FALSE(converter.install_plan_for_test("fake/msg/NoResize", &bounded_handle));
+}
+
+TEST(ConverterPlans, RefusesMissingNestedData)
+{
+    Converter converter;
+    MessageMembers nested{};
+    nested.message_namespace_ = "fake";
+    nested.message_name_ = "NoData";
+    nested.member_count_ = 0;
+    nested.members_ = nullptr;
+    nested.init_function = fake_noop_init;
+    nested.fini_function = fake_noop_fini;
+    rosidl_message_type_support_t nested_handle = fake_ts_for(&nested);
+    nested_handle.data = nullptr;
+    MessageMember member{};
+    member.name_ = "child";
+    member.type_id_ = ROS_TYPE_MESSAGE;
+    member.members_ = &nested_handle;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "NoNestedData";
+    members.member_count_ = 1;
+    members.size_of_ = 1;
+    members.members_ = &member;
+    members.init_function = fake_noop_init;
+    members.fini_function = fake_noop_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    EXPECT_FALSE(converter.install_plan_for_test("fake/msg/NoNestedData", &handle));
+}
+
+TEST(ConverterPlans, RefusesABooleanSequenceWithoutAssign)
+{
+    Converter converter;
+    MessageMember member{};
+    member.name_ = "data";
+    member.type_id_ = ROS_TYPE_BOOLEAN;
+    member.is_array_ = true;
+    member.is_upper_bound_ = true;
+    member.array_size_ = 5;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "NoAssign";
+    members.member_count_ = 1;
+    members.size_of_ = 1;
+    members.members_ = &member;
+    members.init_function = fake_noop_init;
+    members.fini_function = fake_noop_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    EXPECT_FALSE(converter.install_plan_for_test("fake/msg/NoAssign", &handle));
 }
 
 TEST(ConverterPlans, RefusesMissingNestedMembers)
@@ -1284,6 +1388,35 @@ TEST(ConverterFromCdr, RejectsAnOverlongElement)
     EXPECT_EQ(result.fail, ConvertFail::kOverBound);
     EXPECT_EQ(result.field, 5u) << "the name field in depth-first order";
     EXPECT_TRUE(packed.empty()) << "no partial payload escapes";
+}
+
+TEST(ConverterFromCdr, ConvertsPoseArray)
+{
+    Converter converter;
+    geometry_msgs::msg::PoseArray msg;
+    msg.poses.resize(1);
+    msg.poses[0].position.x = 1.0;
+    msg.poses[0].position.y = 2.0;
+    msg.poses[0].position.z = 3.0;
+    msg.poses[0].orientation.x = 4.0;
+    msg.poses[0].orientation.y = 5.0;
+    msg.poses[0].orientation.z = 6.0;
+    msg.poses[0].orientation.w = 7.0;
+    const std::vector<std::uint8_t> cdr = serialize_ref(msg);
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+        converter.from_cdr("geometry_msgs/msg/PoseArray", false, cdr.data(), cdr.size(), packed);
+    ASSERT_EQ(result.fail, ConvertFail::kNone) << "field " << static_cast<int>(result.field);
+    ASSERT_EQ(packed.size(), 66u);
+    std::vector<std::uint8_t> want(9, 0x00);
+    want.push_back(0x01);
+    for (double value : {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0}) {
+        const std::vector<std::uint8_t> raw = le_double(value);
+        want.insert(want.end(), raw.begin(), raw.end());
+    }
+    if (packed != want) {
+        ADD_FAILURE() << "packed differs\n got: " << hex_of(packed) << "\nwant: " << hex_of(want);
+    }
 }
 
 TEST(ConverterFromCdr, RefusesAnOverlongSequence)

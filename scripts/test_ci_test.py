@@ -57,6 +57,7 @@ SCOPES = (
     "FUZZ",
     "README",
     "NIGHTLY",
+    "SOAK",
     "SCRIPTS_SHARD",
 )
 

@@ -53,6 +53,7 @@ export PYTHONPATH=$root/tests/e2e${PYTHONPATH:+:$PYTHONPATH}
 # import path when Python runs the file directly.
 python3 tests/e2e/checks_test.py || exit 1
 python3 tests/e2e/fault_proxy_test.py || exit 1
+python3 tests/e2e/soak_check_test.py || exit 1
 
 
 # One DDS domain per suite run, so parallel runs on the shared host never see

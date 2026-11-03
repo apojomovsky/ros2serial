@@ -35,9 +35,9 @@ def test_every_job_sets_a_timeout():
     assert not missing, "jobs without timeout-minutes: " + ", ".join(missing)
 
 
-# The long fuzzing is the one job whose length is chosen, not observed:
-# its bound comes from its targets and seconds (see below).
-LONG_JOBS = {("nightly-jobs.yml", "fuzz-long")}
+# The long fuzzing and the soak are the jobs whose length is chosen, not
+# observed: their bounds come from their targets or backends and seconds.
+LONG_JOBS = {("nightly-jobs.yml", "fuzz-long"), ("nightly-jobs.yml", "soak")}
 
 
 def test_reusable_workflow_calls_carry_no_timeout():
@@ -98,3 +98,20 @@ def test_fuzz_long_outlasts_its_targets_plus_the_image_floor():
     assert len(seconds) == 1
     need = len(fuzz_targets()) * seconds[0] // 60 + 30
     assert job["timeout-minutes"] >= need, f"fuzz-long needs {need} minutes, has {job['timeout-minutes']}"
+
+
+def soak_backends():
+    script = (ROOT / "tests" / "e2e" / "run-soak.sh").read_text(encoding="utf-8")
+    match = re.search(r"backends=\$\{R2S_SOAK_BACKENDS:-([^}]*)\}", script)
+    assert match, "run-soak.sh no longer lists its default backends"
+    return match.group(1).split()
+
+
+def test_soak_outlasts_its_backends_plus_the_image_floor():
+    job = jobs_of(ROOT / ".github" / "workflows" / "nightly-jobs.yml")["soak"]
+    seconds = [
+        int(step["env"]["R2S_SOAK_SECONDS"]) for step in job["steps"] if "R2S_SOAK_SECONDS" in step.get("env", {})
+    ]
+    assert len(seconds) == 1
+    need = len(soak_backends()) * seconds[0] // 60 + 30
+    assert job["timeout-minutes"] >= need, f"soak needs {need} minutes, has {job['timeout-minutes']}"

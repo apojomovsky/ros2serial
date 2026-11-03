@@ -111,6 +111,31 @@ TEST(DiagnosticsMessage, ReportsPerTopicStatus)
     EXPECT_EQ(values.at("topic dup status"), "name conflict");
 }
 
+TEST(DiagnosticsMessage, RendersHugeTimeSyncValues)
+{
+    Router::Diagnostics snapshot = connected_snapshot();
+    snapshot.time_offset_ns = -9223372036854775807LL;
+    snapshot.time_drift_ppm = -12345;
+    snapshot.time_round_trip_ns = 9223372036854775807LL;
+    const std::map<std::string, std::string> values =
+        values_of(diagnostics_message(snapshot, "test_node", "").status[0]);
+    EXPECT_EQ(values.at("time sync offset"), "-9223372036854775807");
+    EXPECT_EQ(values.at("time sync drift"), "-12345");
+    EXPECT_EQ(values.at("time sync round trip"), "9223372036854775807");
+}
+
+TEST(DiagnosticsMessage, NamesTimeSyncKeysBeforeTheFirstCorrection)
+{
+    Router::Diagnostics snapshot;
+    snapshot.link_state = "connected";
+    snapshot.time_sync_available = false;
+    const std::map<std::string, std::string> values =
+        values_of(diagnostics_message(snapshot, "test_node", "").status[0]);
+    EXPECT_EQ(values.at("time sync offset"), "not available");
+    EXPECT_EQ(values.at("time sync drift"), "not available");
+    EXPECT_EQ(values.at("time sync round trip"), "not available");
+}
+
 TEST(DiagnosticsMessage, MapsLinkStateToLevel)
 {
     Router::Diagnostics down;

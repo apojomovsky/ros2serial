@@ -6,7 +6,7 @@ set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 caller=""
-for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP COVERAGE DOCS EXAMPLES BUDGETS FUZZ README NIGHTLY; do
+for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP COVERAGE DOCS EXAMPLES BUDGETS FUZZ README NIGHTLY SOAK; do
   [ -n "${!v:-}" ] && caller="$caller $v=1"
 done
 [ -n "${E2E:-}" ] && caller="$caller E2E=$E2E"

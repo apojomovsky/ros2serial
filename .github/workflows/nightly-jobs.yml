@@ -1,9 +1,10 @@
 name: nightly-jobs
 
-# The runs too long or too exhaustive for a PR: the long fuzzing and the e2e
-# isolation pairs. nightly.yml calls this on schedule; release.yml calls it
-# on a tag before anything is published, without the long fuzzing: fuzzing
-# for a fixed time is exploration, and CI already replays the seed corpus.
+# The runs too long or too exhaustive for a PR: the long fuzzing, the e2e
+# isolation pairs and the soak. nightly.yml calls this on schedule;
+# release.yml calls it on a tag before anything is published, without the
+# long fuzzing: fuzzing for a fixed time is exploration, and CI already
+# replays the seed corpus. The soak stays off there too, and on PRs.
 # Timeout floor (see the rule comment in ci.yml): image jobs carry 30 or more.
 on:
   workflow_call:
@@ -12,6 +13,10 @@ on:
         description: Run the long fuzzing
         type: boolean
         default: true
+      soak:
+        description: Run the two hour soak on posix and simavr
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -56,3 +61,18 @@ jobs:
         with:
           path: .task/checksum/nightly
           key: r2s-task-nightly-refs/heads/master-${{ github.sha }}
+
+  # Two hours of clean-link traffic on each soak backend. The wire counters
+  # must stay exactly consistent and the bridge memory must plateau, as the
+  # soak scope checks; a short R2S_SOAK_SECONDS keeps local runs in minutes.
+  soak:
+    if: ${{ inputs.soak }}
+    runs-on: ubuntu-24.04
+    # One R2S_SOAK_SECONDS window per backend in run-soak.sh, plus the floor.
+    timeout-minutes: 270
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test SOAK=1
+        env:
+          R2S_SOAK_SECONDS: 7200
