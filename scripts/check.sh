@@ -36,7 +36,7 @@ fi
 # The caller's own scopes stay, so check also runs what it was asked to run.
 # shellcheck disable=SC2086 # each scope is one assignment per word.
 caller=""
-for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP COVERAGE DOCS EXAMPLES BUDGETS FUZZ README NIGHTLY; do
+for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP COVERAGE DOCS EXAMPLES BUDGETS FUZZ README NIGHTLY SOAK; do
   [ -n "${!v:-}" ] && caller="$caller $v=1"
 done
 [ -n "${E2E:-}" ] && [ -z "$computed_e2e" ] && caller="$caller E2E=$E2E"

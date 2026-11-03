@@ -14,7 +14,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 READY_TIMEOUT = 20.0
-RUN_MS = ("--run-ms", "300000")
+# The harness stops the firmware past this simulated budget; the soak raises
+# it past its wall window, since simulated time can run hot. Short runs keep
+# the five minute default.
+RUN_MS = ("--run-ms", os.environ.get("R2S_SIMAVR_RUN_MS", "300000"))
 
 _BOARDS = {
     "uno": ("atmega328p", "arduino:avr:uno"),

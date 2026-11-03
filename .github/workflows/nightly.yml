@@ -14,6 +14,10 @@ permissions:
 jobs:
   nightly:
     uses: ./.github/workflows/nightly-jobs.yml
+    # The soak is the only caller that waits two hours; releases and PRs
+    # keep the default off.
+    with:
+      soak: true
 
   report-failure:
     needs: [nightly]
