@@ -92,10 +92,10 @@ for leg in static runtime ros static_cpp; do
       sleep 2
       kill -0 "$router" 2>/dev/null || { echo "rmw_zenohd on port $R2S_ZENOH_ROUTER_PORT died"; status=1; break; }
     fi
-    # The static C++ leg covers scenarios 1 to 4, the ticket's scope; the
+    # The static C++ and ros compat legs cover scenarios 1 to 4; the
     # other legs run the whole file list.
     case $leg in
-      static_cpp) files="test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix" ;;
+      static_cpp|ros) files="test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix" ;;
       *) files="test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_6_posix test_scenario_7_posix test_scenario_8_posix test_scenario_9_posix test_scenario_10_posix test_scenario_10_framing_posix test_publish_catchup_posix test_scenario_11_posix test_scenario_12_posix" ;;
     esac
     for test_file in $files; do
