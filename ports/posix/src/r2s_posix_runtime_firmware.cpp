@@ -30,6 +30,11 @@
 #define RATE_MIN 1u
 #define RATE_MAX 100u
 
+/* A flood pass publishes at most this many samples before returning to the
+ * tick, and reports its cumulative totals at most this often in ms. */
+#define FLOOD_MAX_PER_PASS 64u
+#define FLOOD_REPORT_MS 2000u
+
 /* Default topic names the command-line flags rename. */
 static const char *const kDefaultPub = "battery";
 static const char *const kDefaultSub = "cmd_vel";
@@ -52,7 +57,9 @@ struct options {
     const char *time_now;
     int32_t skew_ppm;
     unsigned rate;
+    uint16_t tx_cap;
     uint8_t log_lines;
+    uint8_t flood;
 };
 
 /* The echo publisher the callback reaches: set once the topics register, so
@@ -77,7 +84,8 @@ static void usage(FILE *out)
     fprintf(out, "Usage: r2s_posix_runtime_firmware PORT [--node NAME] [--rate HZ]\n"
                  "           [--pub NAME | --no-pub] [--sub NAME | --no-sub]\n"
                  "           [--echo NAME | --no-echo] [--time-now NAME | --no-time-now]\n"
-                 "           [--log-text NAME | --no-log-text] [--log-lines] [--tick-skew-ppm PPM]\n");
+                 "           [--log-text NAME | --no-log-text] [--log-lines] [--tick-skew-ppm PPM]\n"
+                 "           [--tx-free N] [--flood]\n");
 }
 
 static const char *take_value(int argc, char **argv, int *i, const char *flag)
@@ -132,6 +140,23 @@ static void check_name(const char *flag, const char *name)
     }
 }
 
+/* The per-tick byte budget: 1 to 65534, since 0 would wedge the link and
+ * 0xFFFF is the uncapped value the flag's absence keeps. */
+static uint16_t take_tx_cap(const char *text)
+{
+    char *end;
+    long cap;
+
+    errno = 0;
+    cap = strtol(text, &end, 10);
+    if (end == text || *end != '\0' || errno == ERANGE || cap < 1L || cap > 65534L) {
+        fprintf(stderr, "r2s_posix: --tx-free needs 1..65534, got '%s'\n", text);
+        usage(stderr);
+        exit(2);
+    }
+    return static_cast<uint16_t>(cap);
+}
+
 /* One log_text line: the value as 8 hex digits. The bundled String bound
  * holds 16 characters, so the 8 digits fit with room to spare. */
 static bool publish_log_text(r2s::Publisher<std_msgs::msg::String> *pub, uint32_t value)
@@ -183,7 +208,9 @@ static void parse_options(int argc, char **argv, struct options *opts)
     opts->time_now = kDefaultTimeNow;
     opts->skew_ppm = 0;
     opts->rate = 10u;
+    opts->tx_cap = 0xFFFFu;
     opts->log_lines = 0u;
+    opts->flood = 0u;
     for (i = 2; i < argc; i++) {
         const char *arg = argv[i];
 
@@ -208,6 +235,10 @@ static void parse_options(int argc, char **argv, struct options *opts)
             check_name(arg, opts->time_now);
         } else if (strcmp(arg, "--tick-skew-ppm") == 0) {
             opts->skew_ppm = take_skew(take_value(argc, argv, &i, arg));
+        } else if (strcmp(arg, "--tx-free") == 0) {
+            opts->tx_cap = take_tx_cap(take_value(argc, argv, &i, arg));
+        } else if (strcmp(arg, "--flood") == 0) {
+            opts->flood = 1u;
         } else if (strcmp(arg, "--no-pub") == 0) {
             opts->pub = NULL;
         } else if (strcmp(arg, "--no-sub") == 0) {
@@ -229,6 +260,11 @@ static void parse_options(int argc, char **argv, struct options *opts)
             exit(2);
         }
     }
+    if (opts->flood != 0u && opts->tx_cap == 0xFFFFu) {
+        fprintf(stderr, "r2s_posix: --flood needs --tx-free\n");
+        usage(stderr);
+        exit(2);
+    }
     check_name("--node", opts->node);
 }
 
@@ -239,8 +275,11 @@ int main(int argc, char **argv)
     uint32_t last_pub;
     uint32_t last_time;
     uint32_t last_log = 0u;
+    uint32_t last_flood = 0u;
     uint32_t sent = 0u;
+    uint32_t busy = 0u;
     uint8_t log_booted = 0u;
+    uint8_t cap_armed = 0u;
 
     setvbuf(stderr, NULL, _IONBF, 0);
     if (argc < 2) {
@@ -304,8 +343,18 @@ int main(int argc, char **argv)
              * queueing a burst for the reconnect. */
             last_pub = now;
             last_time = now;
+            if (cap_armed != 0u) {
+                cap_armed = 0u;
+                r2s_posix_set_tx_cap(0xFFFFu);
+            }
             sleep_1ms();
             continue;
+        }
+        if (opts.tx_cap != 0xFFFFu && cap_armed == 0u) {
+            /* The cap shapes steady-state traffic only: the handshake above
+             * ran uncapped, so its longer frames always fit. */
+            r2s_posix_set_tx_cap(opts.tx_cap);
+            cap_armed = 1u;
         }
         if (opts.log_lines != 0u && (uint32_t)(now - last_log) >= LOG_PERIOD_MS) {
             emit_log_lines();
@@ -320,19 +369,48 @@ int main(int argc, char **argv)
             }
         }
         if (opts.pub != NULL) {
-            /* Every missed tick is still owed: one frame per missed interval
-             * keeps the count whole when the host steals the firmware tick. */
-            while ((uint32_t)(now - last_pub) >= interval) {
-                std_msgs::msg::Float32 msg;
+            if (opts.flood != 0u) {
+                /* Saturate the link: publish until the port refuses, one
+                 * sample per attempt so the shed samples show as gaps in
+                 * the received values. Bounded per pass, so a build that
+                 * never refuses still returns to its tick. */
+                uint16_t n;
 
-                msg.data = (float)sent;
-                if (battery_pub->publish(msg) != R2S_OK) {
+                for (n = 0u; n < FLOOD_MAX_PER_PASS; n++) {
+                    std_msgs::msg::Float32 msg;
+                    r2s_status_t status;
+
+                    msg.data = static_cast<float>(sent);
+                    sent++;
+                    status = battery_pub->publish(msg);
+                    if (status == R2S_OK) {
+                        continue;
+                    }
+                    if (status == R2S_ERR_TX_BUSY) {
+                        busy++;
+                    }
                     break;
                 }
-                sent++;
-                last_pub += interval;
-                if (opts.log_text != NULL && sent % 10u == 0u) {
-                    (void)publish_log_text(log_pub, sent);
+                if ((now - last_flood) >= FLOOD_REPORT_MS) {
+                    fprintf(stderr, "r2s_posix: flood sent=%lu busy=%lu\n", static_cast<unsigned long>(sent),
+                            static_cast<unsigned long>(busy));
+                    last_flood = now;
+                }
+            } else {
+                /* Every missed tick is still owed: one frame per missed interval
+                 * keeps the count whole when the host steals the firmware tick. */
+                while ((uint32_t)(now - last_pub) >= interval) {
+                    std_msgs::msg::Float32 msg;
+
+                    msg.data = static_cast<float>(sent);
+                    if (battery_pub->publish(msg) != R2S_OK) {
+                        break;
+                    }
+                    sent++;
+                    last_pub += interval;
+                    if (opts.log_text != NULL && sent % 10u == 0u) {
+                        (void)publish_log_text(log_pub, sent);
+                    }
                 }
             }
         } else {
