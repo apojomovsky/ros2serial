@@ -1,6 +1,7 @@
 scratch/
 .worktrees/
 build/
+gen/cpp_stage/
 log/
 *.egg-info/
 __pycache__/

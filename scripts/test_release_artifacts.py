@@ -2,6 +2,8 @@
 
 import shutil
 import subprocess
+import sys
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -9,16 +11,30 @@ ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "build-release-artifacts.sh"
 
 
+def sdist_from_clean_copy(tmp_path: Path) -> tuple[Path, Path]:
+    """An sdist built from a clean copy of the tree, as the ticket reproduces it."""
+    work = tmp_path / "work"
+    shutil.copytree(
+        ROOT / "gen", work / "gen", ignore=shutil.ignore_patterns("__pycache__", "*.egg-info", "build", "dist")
+    )
+    shutil.copytree(ROOT / "cpp", work / "cpp", ignore=shutil.ignore_patterns("__pycache__"))
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    result = subprocess.run(
+        ["python3", "setup.py", "-q", "sdist", "--dist-dir", str(dist)],
+        cwd=work / "gen",
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    (tarball,) = sorted(dist.glob("r2s_gen-*.tar.gz"))
+    return work, tarball
+
+
 def build(tmp_path: Path, *args: str) -> tuple[Path, subprocess.CompletedProcess]:
     out = tmp_path / "dist"
-    try:
-        result = subprocess.run(["bash", str(SCRIPT), "--out", str(out), *args], capture_output=True, text=True)
-        return out, result
-    finally:
-        # setup.py sdist materializes the out-of-tree cpp package dir as
-        # gen/cpp, so a suite run would leave the tree dirty and the takeoff
-        # stamp disengaged. The build outputs already went to the tmp out.
-        shutil.rmtree(ROOT / "gen" / "cpp", ignore_errors=True)
+    result = subprocess.run(["bash", str(SCRIPT), "--out", str(out), *args], capture_output=True, text=True)
+    return out, result
 
 
 def test_the_arduino_zip_stages_the_bundle_and_the_core(tmp_path):
@@ -60,3 +76,48 @@ def test_the_python_build_leaves_the_tree_alone(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert sorted(out.glob("r2s_gen-*.tar.gz")) and sorted(out.glob("r2s_gen-*.whl"))
     assert not (ROOT / "gen" / "cpp").exists()
+
+
+def test_the_sdist_carries_the_cpp_tree_inside_its_staging_dir(tmp_path):
+    """The sdist holds the C++ layer inside its own root and leaves the tree alone."""
+    work, tarball = sdist_from_clean_copy(tmp_path)
+    assert not (work / "gen" / "cpp").exists()
+    with tarfile.open(tarball) as archive:
+        names = archive.getnames()
+    assert not any(".." in entry for entry in names)
+    for name in (
+        "include/r2s/runtime.hpp",
+        "include/r2s_bundled.h",
+        "src/runtime.cpp",
+    ):
+        assert any(entry.endswith(name) for entry in names), name
+
+
+def test_installing_the_sdist_ships_the_cpp_tree(tmp_path):
+    """An install from the sdist hands the C++ layer to a build without a checkout."""
+    _, tarball = sdist_from_clean_copy(tmp_path)
+    venv = tmp_path / "venv"
+    created = subprocess.run(
+        [sys.executable, "-m", "venv", "--system-site-packages", str(venv)],
+        capture_output=True,
+        text=True,
+    )
+    assert created.returncode == 0, created.stderr
+    installed = subprocess.run(
+        [
+            str(venv / "bin" / "pip"),
+            "install",
+            "--no-index",
+            "--no-build-isolation",
+            "--disable-pip-version-check",
+            str(tarball),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+    site_packages = next((venv / "lib").glob("python*/site-packages"))
+    cpp_tree = site_packages / "r2s_gen" / "cpp"
+    assert (cpp_tree / "include" / "r2s" / "runtime.hpp").is_file()
+    assert (cpp_tree / "include" / "r2s_bundled.h").is_file()
+    assert (cpp_tree / "src" / "runtime.cpp").is_file()
