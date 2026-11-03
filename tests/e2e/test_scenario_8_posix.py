@@ -134,15 +134,17 @@ class TestScenario8(unittest.TestCase):
             )
             _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10", "--tick-skew-ppm", str(SKEW_PPM)))
             # /diagnostics publishes at 1 Hz, so the observed time can lag the
-            # real handshake by one period; the bound still holds because the
-            # handshake traffic itself is tens of milliseconds.
-            while True:
-                rclpy.spin_once(node, timeout_sec=0.5)
-                missing = checks.handshake_missing(received[-1], HANDSHAKE_TOPICS) if received else ["link silent"]
-                took = time.monotonic() - _SPAWNED.ready_at
-                if not missing:
-                    break
-                self.assertLess(took, TOPIC_BUDGET, f"handshake still missing {missing} after {took:.1f} s")
+            # real handshake by up to one period; the bound still holds because
+            # the handshake traffic itself is tens of milliseconds. The latest
+            # report is read before spinning, so no spin quantum adds to that.
+            took = checks.wait_for_handshake(
+                received,
+                HANDSHAKE_TOPICS,
+                _SPAWNED.ready_at,
+                TOPIC_BUDGET,
+                "handshake",
+                lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
+            )
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
             deadline = time.monotonic() + SYNC_TIMEOUT
             while True:
