@@ -1,8 +1,8 @@
 /* Handwritten message code for the codec tests: C structs, descriptor tables
  * and the topic configuration for Float32, Twist, a bounded String, Range,
- * Imu and JointState. It stands in for the files G7 and G8 will generate,
- * with the same bytes (spec/protocol.md, section 9), until G8 replaces it
- * in its own firmware. */
+ * Imu, JointState and the tf closure. It stands in for the files G7 and G8
+ * will generate, with the same bytes (spec/protocol.md, section 9), until
+ * G8 replaces it in its own firmware. */
 #ifndef R2S_TEST_HANDWRITTEN_H
 #define R2S_TEST_HANDWRITTEN_H
 
@@ -92,6 +92,24 @@ typedef struct {
     } effort;
 } sensor_msgs__msg__JointState;
 
+typedef struct {
+    geometry_msgs__msg__Vector3 translation;
+    geometry_msgs__msg__Quaternion rotation;
+} geometry_msgs__msg__Transform;
+
+typedef struct {
+    std_msgs__msg__Header header;
+    char child_frame_id[25];
+    geometry_msgs__msg__Transform transform;
+} geometry_msgs__msg__TransformStamped;
+
+typedef struct {
+    struct {
+        geometry_msgs__msg__TransformStamped data[4];
+        uint8_t size;
+    } transforms;
+} tf2_msgs__msg__TFMessage;
+
 /* Type indices in the handwritten table, in the depth-first order [DSC-11]
  * fixes: each nested type is numbered before the type that names it. */
 #define R2S_HANDWRITTEN_FLOAT32 0u
@@ -104,6 +122,9 @@ typedef struct {
 #define R2S_HANDWRITTEN_QUATERNION 7u
 #define R2S_HANDWRITTEN_IMU 8u
 #define R2S_HANDWRITTEN_JOINT_STATE 9u
+#define R2S_HANDWRITTEN_TRANSFORM 10u
+#define R2S_HANDWRITTEN_TRANSFORM_STAMPED 11u
+#define R2S_HANDWRITTEN_TF_MESSAGE 12u
 
 /* The user topic IDs of the test firmware. */
 #define R2S_HANDWRITTEN_BATTERY_ID 16u

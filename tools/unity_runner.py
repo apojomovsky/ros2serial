@@ -125,6 +125,8 @@ KNOWN_MESSAGE_TYPES = (
     "sensor_msgs/msg/Range",
     "sensor_msgs/msg/Imu",
     "sensor_msgs/msg/JointState",
+    "geometry_msgs/msg/TransformStamped",
+    "tf2_msgs/msg/TFMessage",
 )
 
 # The struct sizes of the test build the images below must match, padding
@@ -138,6 +140,8 @@ if _VECTOR_ABI == "lp64":
     RANGE_STRUCT_SIZE = 60
     IMU_STRUCT_SIZE = 336
     JOINT_STATE_STRUCT_SIZE = 216
+    TRANSFORM_STAMPED_STRUCT_SIZE = 120
+    TF_MESSAGE_STRUCT_SIZE = 488
     IMU_ORIENTATION = 40
     IMU_ORI_COV = 72
     IMU_ANG_VEL = 144
@@ -156,6 +160,8 @@ elif _VECTOR_ABI == "m32":
     RANGE_STRUCT_SIZE = 60
     IMU_STRUCT_SIZE = 332
     JOINT_STATE_STRUCT_SIZE = 200
+    TRANSFORM_STAMPED_STRUCT_SIZE = 120
+    TF_MESSAGE_STRUCT_SIZE = 484
     IMU_ORIENTATION = 36
     IMU_ORI_COV = 68
     IMU_ANG_VEL = 140
@@ -179,6 +185,18 @@ FRAME_ID_BOUND = 24
 NAME_COUNT_BOUND = 4
 NAME_STRING_BOUND = 12
 ARRAY_BOUND = 4
+
+# The tf closure lays out the same on both ABIs: the header ends at 36, the
+# child frame id runs 36 to 60, and the transform follows at 64 with its
+# rotation 24 past it. Only the TFMessage tail padding differs, which the
+# per-ABI sizes above carry.
+STAMPED_CHILD = 36
+STAMPED_TRANSFORM = 64
+TRANSFORM_ROTATION = 24
+STAMPED_STRIDE = 120
+TF_TRANSFORMS_N = 480
+CHILD_FRAME_ID_BOUND = 24
+TRANSFORMS_COUNT_BOUND = 4
 
 
 def _pack_int(where: str, value: object, width: int, signed: bool) -> bytes:
@@ -335,6 +353,30 @@ def _struct_imu(where: str, message: dict, image: bytearray, narrow_decode: bool
     )
 
 
+def _put_transform(image: bytearray, offset: int, where: str, message: dict, narrow_decode: bool) -> None:
+    _put_vector3(image, offset, f"{where}.translation", message["translation"], narrow_decode)
+    _put_quaternion(image, offset + TRANSFORM_ROTATION, f"{where}.rotation", message["rotation"], narrow_decode)
+
+
+def _put_transform_stamped(image: bytearray, offset: int, where: str, message: dict, narrow_decode: bool) -> None:
+    _put_header(image, offset, f"{where}.header", message["header"])
+    _put_string(
+        image, offset + STAMPED_CHILD, f"{where}.child_frame_id", message["child_frame_id"], CHILD_FRAME_ID_BOUND
+    )
+    _put_transform(image, offset + STAMPED_TRANSFORM, f"{where}.transform", message["transform"], narrow_decode)
+
+
+def _struct_tf_message(where: str, message: dict, image: bytearray, narrow_decode: bool) -> None:
+    transforms = message["transforms"]
+    if not isinstance(transforms, list):
+        raise VectorError(f"{where}: transforms is a list, not {transforms!r}")
+    if len(transforms) > TRANSFORMS_COUNT_BOUND:
+        raise VectorError(f"{where}: {len(transforms)} transforms exceed the bound of {TRANSFORMS_COUNT_BOUND}")
+    for index, stamped in enumerate(transforms):
+        _put_transform_stamped(image, index * STAMPED_STRIDE, f"{where}.transforms[{index}]", stamped, narrow_decode)
+    _put_int(image, TF_TRANSFORMS_N, where, len(transforms), 1, False)
+
+
 def _struct_joint_state(where: str, message: dict, image: bytearray, narrow_decode: bool) -> None:
     _put_header(image, 0, f"{where}.header", message["header"])
     _put_string_array(
@@ -388,6 +430,12 @@ def _struct_image(where: str, type_name: str, message: dict, narrow_decode: bool
     elif type_name == "sensor_msgs/msg/JointState":
         image = bytearray([fill]) * JOINT_STATE_STRUCT_SIZE
         _struct_joint_state(where, message, image, narrow_decode)
+    elif type_name == "geometry_msgs/msg/TransformStamped":
+        image = bytearray([fill]) * TRANSFORM_STAMPED_STRUCT_SIZE
+        _put_transform_stamped(image, 0, where, message, narrow_decode)
+    elif type_name == "tf2_msgs/msg/TFMessage":
+        image = bytearray([fill]) * TF_MESSAGE_STRUCT_SIZE
+        _struct_tf_message(where, message, image, narrow_decode)
     else:
         raise VectorError(f"{where}: no struct layout for {type_name}")
     return bytes(image)

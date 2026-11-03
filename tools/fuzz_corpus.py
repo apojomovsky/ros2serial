@@ -30,6 +30,8 @@ CODEC_TYPE = {
     "sensor_msgs/msg/Range": 15,
     "sensor_msgs/msg/Imu": 17,
     "sensor_msgs/msg/JointState": 18,
+    "geometry_msgs/msg/TransformStamped": 19,
+    "tf2_msgs/msg/TFMessage": 20,
 }
 
 

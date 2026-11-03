@@ -15,7 +15,7 @@ void r2s_vec_check_messages(const r2s_vec_messages_t *v)
     char label[256];
     /* Sized by the largest handwritten struct, so every vector image fits;
      * the assert below turns a future larger type into a clean failure. */
-    uint8_t storage[sizeof(sensor_msgs__msg__Imu)];
+    uint8_t storage[sizeof(tf2_msgs__msg__TFMessage)];
     uint8_t out[R2S_MAX_FRAME];
     r2s_codec_out_t sink = {out, (uint16_t)sizeof out, 0u, 0u};
     uint8_t field = 0xFFu;
@@ -38,8 +38,15 @@ void r2s_vec_check_messages(const r2s_vec_messages_t *v)
     } else if (strcmp(v->type, "sensor_msgs/msg/JointState") == 0) {
         type = R2S_HANDWRITTEN_JOINT_STATE;
         size = (uint16_t)sizeof(sensor_msgs__msg__JointState);
+    } else if (strcmp(v->type, "geometry_msgs/msg/TransformStamped") == 0) {
+        type = R2S_HANDWRITTEN_TRANSFORM_STAMPED;
+        size = (uint16_t)sizeof(geometry_msgs__msg__TransformStamped);
+    } else if (strcmp(v->type, "tf2_msgs/msg/TFMessage") == 0) {
+        type = R2S_HANDWRITTEN_TF_MESSAGE;
+        size = (uint16_t)sizeof(tf2_msgs__msg__TFMessage);
     } else {
-        TEST_FAIL_MESSAGE("the C runner knows Float32, Twist, Range, Imu and JointState");
+        TEST_FAIL_MESSAGE("the C runner knows Float32, Twist, Range, Imu, JointState, "
+                          "TransformStamped and TFMessage");
         return;
     }
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(size, v->encode_len, label);

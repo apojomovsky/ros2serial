@@ -383,6 +383,7 @@ def test_the_message_header_path_follows_the_rclcpp_convention():
     assert cpp.message_path("std_msgs/msg/Float32") == "std_msgs/msg/float32.hpp"
     assert cpp.message_path("sensor_msgs/msg/JointState") == "sensor_msgs/msg/joint_state.hpp"
     assert cpp.message_path("builtin_interfaces/msg/Time") == "builtin_interfaces/msg/time.hpp"
+    assert cpp.message_path("tf2_msgs/msg/TFMessage") == "tf2_msgs/msg/tf_message.hpp"
 
 
 def test_the_cpp_type_follows_the_ros_2_naming():

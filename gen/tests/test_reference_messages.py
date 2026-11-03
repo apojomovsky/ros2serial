@@ -12,6 +12,8 @@ from support import SEED, h, matches, random_message, vector_files, write_messag
 BUNDLED = (
     "builtin_interfaces/msg/Time",
     "geometry_msgs/msg/Quaternion",
+    "geometry_msgs/msg/Transform",
+    "geometry_msgs/msg/TransformStamped",
     "geometry_msgs/msg/Twist",
     "geometry_msgs/msg/Vector3",
     "sensor_msgs/msg/Imu",
@@ -20,6 +22,7 @@ BUNDLED = (
     "std_msgs/msg/Float32",
     "std_msgs/msg/Header",
     "std_msgs/msg/String",
+    "tf2_msgs/msg/TFMessage",
 )
 DISTROS = ("jazzy", "lyrical", "rolling")
 

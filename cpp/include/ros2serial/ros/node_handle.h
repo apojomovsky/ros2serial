@@ -9,6 +9,8 @@
 #include "r2s/runtime.hpp"
 
 #include "ros2serial/ros/publisher.h"
+#include "ros2serial/ros/service_client.h"
+#include "ros2serial/ros/service_server.h"
 #include "ros2serial/ros/subscriber.h"
 #include "ros2serial/ros/time.h"
 
@@ -83,6 +85,25 @@ class NodeHandle_
         }
         s.id_ = (int)id;
         return true;
+    }
+
+    /* Services land in X6, so naming one fails to compile with a message
+     * saying so, instead of linking a half present runtime. */
+    template <typename MReq, typename MRes, typename ObjT>
+    bool advertiseService(ServiceServer<MReq, MRes, ObjT> &srv)
+    {
+        (void)srv;
+        static_assert(!sizeof(MReq *), "service servers land in X6: advertiseService cannot announce one");
+        return false;
+    }
+
+    /* Services land in X6, so naming one fails to compile with a message
+     * saying so, instead of linking a half present runtime. */
+    template <typename MReq, typename MRes> bool serviceClient(ServiceClient<MReq, MRes> &srv)
+    {
+        (void)srv;
+        static_assert(!sizeof(MReq *), "service clients land in X6: serviceClient cannot name one");
+        return false;
     }
 
     /* Serves the link once: the first call binds the table and starts the

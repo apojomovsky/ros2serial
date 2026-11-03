@@ -13,7 +13,8 @@
 
 /* Type records ([DSC-2]): size, first field, field count. The topics name
  * their types depth-first ([DSC-11]): Float32, Vector3 and Twist for cmd_vel,
- * then String, then Time, Header, Range, Quaternion, Imu and JointState. */
+ * then String, then Time, Header, Range, Quaternion, Imu, JointState,
+ * Transform, TransformStamped and TFMessage. */
 static const uint8_t R2S_FLASH r2s_handwritten_types[] = {
     0x04u,
     0x00u,
@@ -53,6 +54,15 @@ static const uint8_t R2S_FLASH r2s_handwritten_types[] = {
     R2S_HAND_U16(sizeof(sensor_msgs__msg__JointState)),
     R2S_HAND_U16(29u),
     0x05u,
+    R2S_HAND_U16(sizeof(geometry_msgs__msg__Transform)),
+    R2S_HAND_U16(34u),
+    0x02u,
+    R2S_HAND_U16(sizeof(geometry_msgs__msg__TransformStamped)),
+    R2S_HAND_U16(36u),
+    0x03u,
+    R2S_HAND_U16(sizeof(tf2_msgs__msg__TFMessage)),
+    R2S_HAND_U16(39u),
+    0x01u,
 };
 
 /* Field entries ([DSC-3]): kind, mode, offset, count, aux. The float data is
@@ -63,7 +73,9 @@ static const uint8_t R2S_FLASH r2s_handwritten_types[] = {
  * Imu nests the header, a quaternion, fixed covariance arrays of nine
  * doubles and Vector3 pairs, reusing the Vector3 record. JointState nests
  * the header, four strings of up to 12 characters and three bounded runs of
- * four doubles. */
+ * four doubles. Transform nests a Vector3 and a quaternion; TransformStamped
+ * nests the header, a child frame id of up to 24 characters and a Transform;
+ * TFMessage is a bounded run of four TransformStamped. */
 static const uint8_t R2S_FLASH r2s_handwritten_fields[] = {
     0x09u,
     0x00u,
@@ -256,14 +268,44 @@ static const uint8_t R2S_FLASH r2s_handwritten_fields[] = {
     R2S_HAND_U16(offsetof(sensor_msgs__msg__JointState, effort)),
     R2S_HAND_U16(4u),
     R2S_HAND_U16(0u),
+    0x0Cu,
+    0x00u,
+    R2S_HAND_U16(offsetof(geometry_msgs__msg__Transform, translation)),
+    R2S_HAND_U16(0u),
+    R2S_HAND_U16(1u),
+    0x0Cu,
+    0x00u,
+    R2S_HAND_U16(offsetof(geometry_msgs__msg__Transform, rotation)),
+    R2S_HAND_U16(0u),
+    R2S_HAND_U16(7u),
+    0x0Cu,
+    0x00u,
+    R2S_HAND_U16(offsetof(geometry_msgs__msg__TransformStamped, header)),
+    R2S_HAND_U16(0u),
+    R2S_HAND_U16(5u),
+    0x0Bu,
+    0x00u,
+    R2S_HAND_U16(offsetof(geometry_msgs__msg__TransformStamped, child_frame_id)),
+    R2S_HAND_U16(0u),
+    R2S_HAND_U16(24u),
+    0x0Cu,
+    0x00u,
+    R2S_HAND_U16(offsetof(geometry_msgs__msg__TransformStamped, transform)),
+    R2S_HAND_U16(0u),
+    R2S_HAND_U16(10u),
+    0x0Cu,
+    0x02u,
+    R2S_HAND_U16(offsetof(tf2_msgs__msg__TFMessage, transforms)),
+    R2S_HAND_U16(4u),
+    R2S_HAND_U16(11u),
 };
 
-const r2s_codec_table_t R2S_HANDWRITTEN_TABLE = {r2s_handwritten_types, 10u, r2s_handwritten_fields, 34u};
+const r2s_codec_table_t R2S_HANDWRITTEN_TABLE = {r2s_handwritten_types, 13u, r2s_handwritten_fields, 40u};
 
 /* The sizes pin the entry counts: a missing or extra byte would shift every
  * later entry, so the build fails here instead of in a codec test. */
-typedef char r2s_handwritten_check_types[sizeof(r2s_handwritten_types) == 10u * 5u ? 1 : -1];
-typedef char r2s_handwritten_check_fields[sizeof(r2s_handwritten_fields) == 34u * 8u ? 1 : -1];
+typedef char r2s_handwritten_check_types[sizeof(r2s_handwritten_types) == 13u * 5u ? 1 : -1];
+typedef char r2s_handwritten_check_fields[sizeof(r2s_handwritten_fields) == 40u * 8u ? 1 : -1];
 
 /* The announced topics: battery publishes Float32, cmd_vel subscribes Twist,
  * log_text publishes the bounded String, and cmd_str subscribes it. The
