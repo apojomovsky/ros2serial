@@ -263,7 +263,7 @@ def _install_stubs():
     firmware.spawn = spawn
 
     avr = types.ModuleType("e2e_support.avr")
-    avr.spawn = lambda board="uno": types.SimpleNamespace(pty="/dev/fake", ready_at=None, stop=lambda: None)
+    avr.spawn = lambda board="uno": types.SimpleNamespace(pty="/dev/fake", ready_at=None, stop=lambda: 0)
 
     fault_proxy = types.ModuleType("e2e_support.fault_proxy")
     fault_proxy.FaultProxy = type("FaultProxy", (), {})
