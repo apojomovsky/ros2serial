@@ -63,7 +63,9 @@ echo "== e2e isolation: ROS_DOMAIN_ID=$ROS_DOMAIN_ID ZENOH_ROUTER_PORT=$R2S_ZENO
 
 status=0
 failures=""
-for leg in static runtime ros static_cpp; do
+# shellcheck disable=SC2086 # splitting the list into legs is intended.
+legs=$(grep -v '^#' "$root/tests/e2e/legs.list" | tr '\n' ' ')
+for leg in $legs; do
   case $leg in
     static) export R2S_E2E_FW=$build/ports/posix/r2s_posix_firmware ;;
     runtime) export R2S_E2E_FW=$build/ports/posix/r2s_posix_runtime_firmware ;;
@@ -94,11 +96,14 @@ for leg in static runtime ros static_cpp; do
       kill -0 "$router" 2>/dev/null || { echo "rmw_zenohd on port $R2S_ZENOH_ROUTER_PORT died"; status=1; break; }
     fi
     # The static C++ and ros compat legs cover scenarios 1 to 4; the
-    # other legs run the whole file list.
+    # other legs run the whole file list. Each list file holds one scenario
+    # per line, so concurrent branches appending different scenarios keep both.
     case $leg in
-      static_cpp|ros) files="test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix" ;;
-      *) files="test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_6_posix test_scenario_7_posix test_scenario_8_posix test_scenario_9_posix test_scenario_10_posix test_scenario_10_framing_posix test_publish_catchup_posix test_scenario_11_posix test_scenario_12_posix" ;;
+      static_cpp|ros) list=scenarios-compat.list ;;
+      *) list=scenarios.list ;;
     esac
+    # shellcheck disable=SC2086 # splitting the list into files is intended.
+    files=$(grep -v '^#' "$root/tests/e2e/$list" | tr '\n' ' ')
     for test_file in $files; do
       # The isolation pairs skip scenario 8 through R2S_E2E_SKIP: its bound
       # assumes a lone suite and cannot survive two suites on one host.

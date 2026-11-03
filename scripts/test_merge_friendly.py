@@ -9,7 +9,6 @@ hash lives in one file instead of every banner. These tests pin the
 
 import os
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -99,7 +98,7 @@ def test_generated_paths_take_one_side_and_mark_generated():
     assert check_attr("linguist-generated", GENERATED_CASES) == ["set"] * len(GENERATED_CASES)
     assert check_attr("merge", GENERATED_CASES) == ["ours"] * len(GENERATED_CASES)
     assert check_attr("linguist-generated", HANDWRITTEN_CASES) == ["unspecified"] * len(HANDWRITTEN_CASES)
-    assert check_attr("merge", HANDWRITTEN_CASES) == ["unspecified"] * len(HANDWRITTEN_CASES)
+    assert check_attr("merge", HANDWRITTEN_CASES) == ["mergiraf"] * len(HANDWRITTEN_CASES)
 
 
 def list_items(path):
@@ -147,7 +146,7 @@ def test_the_bundle_hash_lives_in_the_bundled_header_only():
         for path in generated_texts()
         if "R2S_BUNDLE_HASH" in path.read_text(encoding="utf-8")
     ]
-    assert holders == ["cpp/include/r2s_bundled.h", "gen/tests/golden/bundle/r2s_bundled.h"]
+    assert sorted(holders) == ["cpp/include/r2s_bundled.h", "gen/tests/golden/bundle/r2s_bundled.h"]
 
 
 WORDS = {
@@ -184,11 +183,13 @@ def test_readme_bundled_types_match_the_bundle():
 
 
 def _path_without_mergiraf():
-    """This PATH minus the directory holding mergiraf, when one is installed."""
-    found = shutil.which("mergiraf")
-    if found is None:
-        return os.environ.get("PATH", "")
-    keep = [entry for entry in os.environ.get("PATH", "").split(os.pathsep) if entry != str(Path(found).parent)]
+    """This PATH minus every directory holding a mergiraf executable."""
+    keep = []
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        candidate = Path(entry or ".", "mergiraf")
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            continue
+        keep.append(entry)
     return os.pathsep.join(keep) or os.pathsep.join(["/usr/bin", "/bin"])
 
 
@@ -197,7 +198,7 @@ def test_setup_hooks_registers_the_merge_drivers(tmp_path):
     repo.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "master"], cwd=repo, check=True)
     env = {**os.environ, "PATH": _path_without_mergiraf()}
-    subprocess.run(["bash", str(ROOT / "scripts/setup-hooks.sh")], cwd=repo, check=True, env=env)
+    subprocess.run(["bash", str(ROOT / "scripts/setup-hooks.sh"), str(repo)], check=True, env=env)
     local = ["git", "config", "--local"]
     assert subprocess.run([*local, "core.hooksPath"], cwd=repo, capture_output=True, text=True).stdout.strip()
     assert (
@@ -217,7 +218,7 @@ def test_setup_hooks_registers_mergiraf_when_it_is_on_path(tmp_path):
     (bindir / "mergiraf").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     (bindir / "mergiraf").chmod(0o755)
     env = {**os.environ, "PATH": os.pathsep.join([str(bindir), os.environ.get("PATH", "")])}
-    subprocess.run(["bash", str(ROOT / "scripts/setup-hooks.sh")], cwd=repo, check=True, env=env)
+    subprocess.run(["bash", str(ROOT / "scripts/setup-hooks.sh"), str(repo)], check=True, env=env)
     out = subprocess.run(
         ["git", "config", "--local", "merge.mergiraf.driver"],
         cwd=repo,

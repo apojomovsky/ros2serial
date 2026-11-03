@@ -218,9 +218,13 @@ def test_check_maps_each_e2e_backend_to_its_legs(tmp_path):
     assert args == ["e2e-avr", "e2e-posix"], args
 
 
+def pass_vars():
+    """The variables make forwards into the dev image, one per list line."""
+    return (ROOT / "scripts" / "pass-vars.list").read_text().split()
+
+
 def test_make_forwards_the_e2e_loop_narrowers():
     # tests/e2e/README.md documents both for a quicker local loop; make
     # must hand them into the dev image or they are silently ignored.
-    line = next(line for line in (ROOT / "Makefile").read_text().splitlines() if line.startswith("PASS_VARS"))
     for var in ("R2S_RMWS", "R2S_E2E_BOARDS", "R2S_E2E_BAUDS"):
-        assert var in line.split(), f"make drops {var} before the container"
+        assert var in pass_vars(), f"make drops {var} before the container"
