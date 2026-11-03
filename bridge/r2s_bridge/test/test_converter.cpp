@@ -22,6 +22,7 @@
 #include <rclcpp/serialized_message.hpp>
 
 #include <geometry_msgs/msg/pose_array.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <rcl_interfaces/msg/parameter_value.hpp>
 #include <sensor_msgs/msg/imu.hpp>
@@ -43,6 +44,7 @@
 #include <std_msgs/msg/u_int32.hpp>
 #include <std_msgs/msg/u_int64.hpp>
 #include <std_msgs/msg/u_int8.hpp>
+#include <tf2_msgs/msg/tf_message.hpp>
 
 #include "r2s_bridge/converter.hpp"
 #include "rosidl_typesupport_introspection_cpp/field_types.hpp"
@@ -159,6 +161,25 @@ void fill_header(std_msgs::msg::Header &header, const YAML::Node &node)
     header.frame_id = node["frame_id"].as<std::string>();
 }
 
+void fill_transform(geometry_msgs::msg::Transform &transform, const YAML::Node &node, bool narrow)
+{
+    transform.translation.x = yaml_double(node["translation"]["x"], narrow);
+    transform.translation.y = yaml_double(node["translation"]["y"], narrow);
+    transform.translation.z = yaml_double(node["translation"]["z"], narrow);
+    transform.rotation.x = yaml_double(node["rotation"]["x"], narrow);
+    transform.rotation.y = yaml_double(node["rotation"]["y"], narrow);
+    transform.rotation.z = yaml_double(node["rotation"]["z"], narrow);
+    transform.rotation.w = yaml_double(node["rotation"]["w"], narrow);
+}
+
+void fill_transform_stamped(geometry_msgs::msg::TransformStamped &stamped, const YAML::Node &node,
+                            bool narrow)
+{
+    fill_header(stamped.header, node["header"]);
+    stamped.child_frame_id = node["child_frame_id"].as<std::string>();
+    fill_transform(stamped.transform, node["transform"], narrow);
+}
+
 void expect_cdr(Converter &converter, const std::string &type, bool narrow,
                 const std::vector<std::uint8_t> &payload, const std::vector<std::uint8_t> &want,
                 const std::string &trace)
@@ -270,6 +291,18 @@ TEST(ConverterVectors, MatchesRclcppSerializationForEveryVector)
             }
             for (const YAML::Node value : message["effort"]) {
                 msg.effort.push_back(yaml_double(value, narrow));
+            }
+            expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
+        } else if (type == "geometry_msgs/msg/TransformStamped") {
+            geometry_msgs::msg::TransformStamped msg;
+            fill_transform_stamped(msg, node["message"], narrow);
+            expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
+        } else if (type == "tf2_msgs/msg/TFMessage") {
+            tf2_msgs::msg::TFMessage msg;
+            for (const YAML::Node stamped : node["message"]["transforms"]) {
+                geometry_msgs::msg::TransformStamped entry;
+                fill_transform_stamped(entry, stamped, narrow);
+                msg.transforms.push_back(entry);
             }
             expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
         } else {

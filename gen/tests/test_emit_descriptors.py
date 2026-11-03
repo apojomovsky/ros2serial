@@ -30,6 +30,16 @@ ROUND_TRIP_BOUNDS = {
     VECTOR3: {},
     "builtin_interfaces/msg/Time": {},
     "geometry_msgs/msg/Quaternion": {},
+    "geometry_msgs/msg/Transform": {},
+    "geometry_msgs/msg/TransformStamped": {
+        **HEADER_BOUNDS,
+        "geometry_msgs/msg/TransformStamped.child_frame_id": 130,
+    },
+    "tf2_msgs/msg/TFMessage": {
+        **HEADER_BOUNDS,
+        "geometry_msgs/msg/TransformStamped.child_frame_id": 130,
+        "tf2_msgs/msg/TFMessage.transforms": 130,
+    },
     "sensor_msgs/msg/Imu": dict(HEADER_BOUNDS),
     "std_msgs/msg/Header": HEADER_BOUNDS,
     "sensor_msgs/msg/JointState": JOINT_STATE_BOUNDS,
@@ -618,6 +628,8 @@ def test_generated_tables_match_c9_handwritten_tables(tmp_path):
         "sensor_msgs/msg/JointState.position": 4,
         "sensor_msgs/msg/JointState.velocity": 4,
         "sensor_msgs/msg/JointState.effort": 4,
+        "geometry_msgs/msg/TransformStamped.child_frame_id": 24,
+        "tf2_msgs/msg/TFMessage.transforms": 4,
     }
     resolved = resolve(
         msgs.MessageRepository(),
@@ -629,6 +641,9 @@ def test_generated_tables_match_c9_handwritten_tables(tmp_path):
             "sensor_msgs/msg/Range",
             "sensor_msgs/msg/Imu",
             "sensor_msgs/msg/JointState",
+            "geometry_msgs/msg/Transform",
+            "geometry_msgs/msg/TransformStamped",
+            "tf2_msgs/msg/TFMessage",
         ],
         bounds,
     )
@@ -642,6 +657,9 @@ def test_generated_tables_match_c9_handwritten_tables(tmp_path):
         "sensor_msgs/msg/Range",
         "sensor_msgs/msg/Imu",
         "sensor_msgs/msg/JointState",
+        "geometry_msgs/msg/Transform",
+        "geometry_msgs/msg/TransformStamped",
+        "tf2_msgs/msg/TFMessage",
     ]
     table = descriptors.build(resolved, roots)
     assert [record.type_name for record in table.records] == [
@@ -655,6 +673,9 @@ def test_generated_tables_match_c9_handwritten_tables(tmp_path):
         "geometry_msgs/msg/Quaternion",
         "sensor_msgs/msg/Imu",
         "sensor_msgs/msg/JointState",
+        "geometry_msgs/msg/Transform",
+        "geometry_msgs/msg/TransformStamped",
+        "tf2_msgs/msg/TFMessage",
     ]
     (tmp_path / "r2s_generated.h").write_text(emit.emit_types(resolved, max_nest=table.max_nest), encoding="utf-8")
     (tmp_path / "r2s_descriptors.c").write_text(descriptors.emit_c(table), encoding="utf-8")
@@ -674,13 +695,13 @@ def test_generated_tables_match_c9_handwritten_tables(tmp_path):
                 "                                   uint8_t topic_count) { return R2S_OK; }",
                 "int main(void)",
                 "{",
-                "    if (R2S_HANDWRITTEN_TABLE.type_count != 10u || R2S_HANDWRITTEN_TABLE.field_count != 34u) {",
+                "    if (R2S_HANDWRITTEN_TABLE.type_count != 13u || R2S_HANDWRITTEN_TABLE.field_count != 40u) {",
                 "        return 1;",
                 "    }",
-                "    if (memcmp(R2S_HANDWRITTEN_TABLE.types, r2s_type_records, 10u * 5u) != 0) {",
+                "    if (memcmp(R2S_HANDWRITTEN_TABLE.types, r2s_type_records, 13u * 5u) != 0) {",
                 "        return 1;",
                 "    }",
-                "    if (memcmp(R2S_HANDWRITTEN_TABLE.fields, r2s_field_entries, 34u * 8u) != 0) {",
+                "    if (memcmp(R2S_HANDWRITTEN_TABLE.fields, r2s_field_entries, 40u * 8u) != 0) {",
                 "        return 1;",
                 "    }",
                 '    printf("match\\n");',

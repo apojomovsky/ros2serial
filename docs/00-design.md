@@ -28,9 +28,11 @@ The intended user experience is a hobbyist's: install a library, declare a few t
 - Interoperability with MAVLink or other ecosystems.
 - Competing with micro-ROS on 32-bit MCUs with an RTOS.
 - Full QoS and taking part in DDS discovery from the MCU.
-- Transports other than serial (UART, USB CDC) in the first version.
+- Transports other than serial (UART, USB CDC).
 - ROS 1 or ROS 2 distros older than Jazzy.
 - Windows hosts in v1 (Linux first, macOS best effort).
+
+ros2serial stays serial-only: the design targets serial-attached, memory-constrained boards, and a network link needs authentication that the protocol does not have. For WiFi-capable boards, see [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico) or [micro-ROS](https://micro.ros.org).
 
 ## Hardware tiers
 

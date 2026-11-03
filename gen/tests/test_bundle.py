@@ -53,14 +53,18 @@ def test_files_for_names_the_exact_bundle_set():
         "src/r2s_bundled.c",
         "src/builtin_interfaces/msg/time.hpp",
         "src/geometry_msgs/msg/quaternion.hpp",
+        "src/geometry_msgs/msg/transform.hpp",
+        "src/geometry_msgs/msg/transform_stamped.hpp",
         "src/geometry_msgs/msg/twist.hpp",
         "src/geometry_msgs/msg/vector3.hpp",
         "src/sensor_msgs/msg/imu.hpp",
         "src/sensor_msgs/msg/joint_state.hpp",
         "src/sensor_msgs/msg/range.hpp",
+        "src/std_msgs/msg/bool.hpp",
         "src/std_msgs/msg/float32.hpp",
         "src/std_msgs/msg/header.hpp",
         "src/std_msgs/msg/string.hpp",
+        "src/tf2_msgs/msg/tf_message.hpp",
     )
 
 

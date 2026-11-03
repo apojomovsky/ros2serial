@@ -33,6 +33,9 @@ VECTORS = (
     ("imu_spin_narrow.yaml", True),
     ("joint_state_two_joints.yaml", False),
     ("joint_state_two_joints_narrow.yaml", True),
+    ("transform_stamped_full.yaml", False),
+    ("tf_message_one.yaml", False),
+    ("tf_message_one_narrow.yaml", True),
 )
 
 SINGLETONS = {
@@ -41,6 +44,10 @@ SINGLETONS = {
     "geometry_msgs/msg/Quaternion": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
     "std_msgs/msg/Header": {"stamp": {"sec": 100, "nanosec": 200}, "frame_id": "imu0"},
     "std_msgs/msg/String": {"data": "hello"},
+    "geometry_msgs/msg/Transform": {
+        "translation": {"x": 1.5, "y": -2.0, "z": 0.5},
+        "rotation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+    },
 }
 
 SINGLETON_PACKED = {
@@ -49,6 +56,7 @@ SINGLETON_PACKED = {
     "geometry_msgs/msg/Quaternion": 32,
     "std_msgs/msg/Header": 13,
     "std_msgs/msg/String": 6,
+    "geometry_msgs/msg/Transform": 56,
 }
 
 MAVLINK_HAND = {
@@ -81,6 +89,16 @@ MAVLINK_HAND = {
     ("std_msgs/msg/Header", False, 2): 33,
     ("std_msgs/msg/String", False, 1): 24,
     ("std_msgs/msg/String", False, 2): 17,
+    ("std_msgs/msg/Bool", False, 1): 9,
+    ("std_msgs/msg/Bool", False, 2): 13,
+    ("geometry_msgs/msg/Transform", False, 1): 64,
+    ("geometry_msgs/msg/Transform", False, 2): 68,
+    ("geometry_msgs/msg/TransformStamped", False, 1): 104,
+    ("geometry_msgs/msg/TransformStamped", False, 2): 105,
+    ("tf2_msgs/msg/TFMessage", False, 1): 104,
+    ("tf2_msgs/msg/TFMessage", False, 2): 105,
+    ("tf2_msgs/msg/TFMessage", True, 1): 76,
+    ("tf2_msgs/msg/TFMessage", True, 2): 80,
 }
 
 
@@ -221,6 +239,8 @@ NESTED = {
     "Header": "std_msgs/msg/Header",
     "Vector3": "geometry_msgs/msg/Vector3",
     "Quaternion": "geometry_msgs/msg/Quaternion",
+    "Transform": "geometry_msgs/msg/Transform",
+    "TransformStamped": "geometry_msgs/msg/TransformStamped",
 }
 
 
@@ -231,7 +251,7 @@ def flattened_layout(type_name):
             fields.extend(flattened_layout(field_type))
         elif "/" in field_type:
             package, name = field_type.split("/")
-            fields.extend(flattened_layout(f"{package}/msg/{name}"))
+            fields.extend(flattened_layout(f"{package}/msg/{name.removesuffix('[]')}"))
         elif field_type in NESTED:
             fields.extend(flattened_layout(NESTED[field_type]))
         else:

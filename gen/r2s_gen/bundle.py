@@ -1,6 +1,6 @@
 """The `bundle` subcommand: the Arduino library with bundled common types.
 
-The library carries the descriptors for the nine bundled types with the
+The library carries the descriptors for the fourteen bundled types with the
 documented default bounds, plus the `ros2serial.h` header that expands a
 sketch's `R2S_TOPICS` X-macro list into the topic table, the typed publish
 functions and dispatch. The descriptors compile once in the library, so a
@@ -23,22 +23,28 @@ from r2s_gen.version import __version__
 BUNDLED_TYPES = (
     "builtin_interfaces/msg/Time",
     "geometry_msgs/msg/Quaternion",
+    "geometry_msgs/msg/Transform",
+    "geometry_msgs/msg/TransformStamped",
     "geometry_msgs/msg/Twist",
     "geometry_msgs/msg/Vector3",
     "sensor_msgs/msg/Imu",
     "sensor_msgs/msg/JointState",
     "sensor_msgs/msg/Range",
+    "std_msgs/msg/Bool",
     "std_msgs/msg/Float32",
     "std_msgs/msg/Header",
     "std_msgs/msg/String",
+    "tf2_msgs/msg/TFMessage",
 )
 
 BUNDLE_BOUNDS = {
     "std_msgs/msg/Header.frame_id": 16,
+    "geometry_msgs/msg/TransformStamped.child_frame_id": 16,
     "sensor_msgs/msg/JointState.name": [6, 16],
     "sensor_msgs/msg/JointState.position": 6,
     "sensor_msgs/msg/JointState.velocity": 6,
     "sensor_msgs/msg/JointState.effort": 6,
+    "tf2_msgs/msg/TFMessage.transforms": 1,
 }
 DEFAULT_STRING_BOUND = 16
 DISTROS = ("jazzy", "lyrical", "rolling")
@@ -266,6 +272,14 @@ def _cont(line: str) -> str:
     return line.ljust(109) + "\\"
 
 
+def _wrapped_define(head: str, value: str) -> list[str]:
+    """A #define clang-format keeps: one line within 110 columns, otherwise
+    the name padded to the backslash column with the value on its own line."""
+    if len(f"{head} {value}") <= 110:
+        return [f"{head} {value}"]
+    return [_cont(head), f"    {value}"]
+
+
 def _scope_maps(
     tables: Mapping[str, descriptors.DescriptorTable],
     repository: msgs.MessageRepository,
@@ -320,10 +334,10 @@ def _c_type_aliases(
         cname = _cname(name)
         index = tables[name].index_of[name]
         lines.append(f"/* {ctype}: hash, table, index and wire name. */")
-        lines.append(f"#define R2S_CTYPE_HASH_{ctype} {_hash_bytes(repository, name)}")
-        lines.append(f"#define R2S_CTYPE_TABLE_{ctype} (&r2s_bundled_table_{cname})")
-        lines.append(f"#define R2S_CTYPE_INDEX_{ctype} {index}u")
-        lines.append(f'#define R2S_CTYPE_NAME_{ctype} "{name}"')
+        lines.extend(_wrapped_define(f"#define R2S_CTYPE_HASH_{ctype}", _hash_bytes(repository, name)))
+        lines.extend(_wrapped_define(f"#define R2S_CTYPE_TABLE_{ctype}", f"(&r2s_bundled_table_{cname})"))
+        lines.extend(_wrapped_define(f"#define R2S_CTYPE_INDEX_{ctype}", f"{index}u"))
+        lines.extend(_wrapped_define(f"#define R2S_CTYPE_NAME_{ctype}", f'"{name}"'))
     return lines
 
 
@@ -359,7 +373,11 @@ def _cxx_spelling_traps() -> list[str]:
         package, _, short = name.partition("/msg/")
         key = f"{package}__msg__{short}"
         for entity in [f"hash_{byte}" for byte in range(8)] + ["table", "index", "name"]:
-            lines.append(f"#define R2S_MAP_{key}_{entity} R2S_error_cxx_rows_use_double_colon_not_underscores")
+            lines.extend(
+                _wrapped_define(
+                    f"#define R2S_MAP_{key}_{entity}", "R2S_error_cxx_rows_use_double_colon_not_underscores"
+                )
+            )
     return lines
 
 

@@ -29,3 +29,43 @@ firmware:
     flash: 11200
     ram: 400
     stack: 224
+  arduino_hello/uno/arduino_hello.ino.elf:
+    flash: 11800
+    ram: 1320
+    stack: 192
+  arduino_hello/mega/arduino_hello.ino.elf:
+    flash: 12200
+    ram: 1320
+    stack: 208
+  arduino_blink/uno/arduino_blink.ino.elf:
+    flash: 9900
+    ram: 1300
+    stack: 32
+  arduino_blink/mega/arduino_blink.ino.elf:
+    flash: 10800
+    ram: 1300
+    stack: 32
+  arduino_button/uno/arduino_button.ino.elf:
+    flash: 10300
+    ram: 1300
+    stack: 208
+  arduino_button/mega/arduino_button.ino.elf:
+    flash: 11200
+    ram: 1300
+    stack: 216
+  arduino_servo/uno/arduino_servo.ino.elf:
+    flash: 10900
+    ram: 1320
+    stack: 32
+  arduino_servo/mega/arduino_servo.ino.elf:
+    flash: 11400
+    ram: 1320
+    stack: 32
+  arduino_range/uno/arduino_range.ino.elf:
+    flash: 9950
+    ram: 1290
+    stack: 256
+  arduino_range/mega/arduino_range.ino.elf:
+    flash: 10400
+    ram: 1290
+    stack: 264

@@ -37,7 +37,7 @@ Tested on every PR in CI unless noted.
 - **APIs.** The C API (`r2s_publish_*`, `r2s_on_*`, `r2s_spin_some`), the runtime C++ API (`r2s::Node`, `r2s::Publisher`, `r2s::Subscription` with ROS 2 names), and the static C++ API over the `R2S_TOPICS` X-macro list. All three run the same end-to-end scenarios. Coming from rosserial? `ros::` compatibility aliases keep an existing sketch close to its original; see [Port your rosserial sketch](docs/03-port-rosserial-sketch.md).
 - **Boards and ports.** Arduino Uno (ATmega328P) and Mega (ATmega2560), in simavr; the Arduino port (`Serial`), AVR bare metal, and the posix virtual MCU over a pty. Real hardware is not verified yet ([#95](https://github.com/apojomovsky/ros2serial/issues/95)).
 - **Distros and RMWs.** The bridge builds and is tested on Jazzy and Lyrical; the generator bundles snapshots for Jazzy, Lyrical and Rolling. End to end runs under Fast DDS, Cyclone DDS and Zenoh.
-- **Message types.** The bundle ships ten common types: `builtin_interfaces/msg/Time`, `geometry_msgs/msg/Quaternion`, `geometry_msgs/msg/Twist`, `geometry_msgs/msg/Vector3`, `sensor_msgs/msg/Imu`, `sensor_msgs/msg/JointState`, `sensor_msgs/msg/Range`, `std_msgs/msg/Float32`, `std_msgs/msg/Header`, `std_msgs/msg/String`, with documented default bounds.
+- **Message types.** The bundle ships fourteen common types: `builtin_interfaces/msg/Time`, `geometry_msgs/msg/Quaternion`, `geometry_msgs/msg/Transform`, `geometry_msgs/msg/TransformStamped`, `geometry_msgs/msg/Twist`, `geometry_msgs/msg/Vector3`, `sensor_msgs/msg/Imu`, `sensor_msgs/msg/JointState`, `sensor_msgs/msg/Range`, `std_msgs/msg/Bool`, `std_msgs/msg/Float32`, `std_msgs/msg/Header`, `std_msgs/msg/String`, `tf2_msgs/msg/TFMessage`, with documented default bounds.
 - **Bridge features.** Full-mode handshake with hash check and `TOPIC_STATUS`, generic publishers and subscriptions with remapping, introspection-based packed-to-CDR conversion, Uno reset handling (`boot_wait_ms`, default 2500 ms), MCU log and error report forwarding to `/rosout`, host time-sync estimation, and per-topic rate limits with a host-to-MCU bandwidth cap.
 - **How it is tested.** Core unit, component, contract (every `spec/vectors/` file), and model-based tests; scenarios 1 to 4 end to end on the posix virtual MCU and on simavr for both chips and both C++ registration paths; the walkthrough below runs green in CI on simavr (`scripts/check-readme.sh`).
 
@@ -53,6 +53,7 @@ Planned work, each with its issue. The design marks these as P1, Phase 2+, or ou
 - Link saturation and `TX_BUSY` ([#146](https://github.com/apojomovsky/ros2serial/issues/146))
 - One live link per bridge process ([#122](https://github.com/apojomovsky/ros2serial/issues/122))
 - Compact handshake and PIC ports (Phase 5)
+- WiFi or other network transports: ros2serial stays serial-only; see [Vision and non-goals](docs/00-design.md#vision-and-non-goals)
 - Real-hardware checklist ([#95](https://github.com/apojomovsky/ros2serial/issues/95))
 
 ## Getting started
@@ -69,6 +70,13 @@ r2s::Node node("base_controller");
 r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
 void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node.spin_some(); }
 ```
+
+Task-shaped sketches with the same API live beside it: `arduino_hello`
+(`chatter` publisher), `arduino_blink` (`led` subscription driving the LED),
+`arduino_button` (debounced `button` publisher), `arduino_servo` (`servo`
+subscription setting the angle), and `arduino_range` (`range` publisher).
+Each header names the host commands to try it, and each builds for Uno and
+Mega in CI.
 
 You need ROS 2 Jazzy with `colcon` (the bridge is also tested on Lyrical),
 `arduino-cli` with the AVR core and `avr-gcc`, Python 3.10 or newer with

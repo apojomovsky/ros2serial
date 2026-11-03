@@ -162,10 +162,10 @@ def run_scope(
 def stub_toolbox(path: Path) -> Path:
     """Fake the example toolchain: every build step succeeds and the ELF carries its symbols.
 
-    The runtime sketch's firmware is checked for the runtime topic table and
+    The runtime sketches' firmware is checked for the runtime topic table and
     the subscriber records, and the static ones for the generated receive
     buffer, so the stub's nm prints the receive buffer always and the runtime
-    symbols only for the runtime sketch (whose path names it): the static
+    symbols only for the runtime sketches (whose paths name them): the static
     firmware must not link the runtime table.
     """
     path.mkdir(parents=True, exist_ok=True)
@@ -191,7 +191,7 @@ def stub_toolbox(path: Path) -> Path:
         "#!/usr/bin/env bash\n"
         "echo '008001eb b r2s_rx_buf'\n"
         'case "$*" in\n'
-        "    *arduino_minimal*)\n"
+        "    *arduino_minimal*|*arduino_hello*|*arduino_blink*|*arduino_button*|*arduino_servo*|*arduino_range*)\n"
         "        echo '00800460 000000e0 b r2s_runtime_topics'\n"
         "        echo '00800410 00000050 b r2s_runtime_subscribers'\n"
         "        echo '00800540 00000050 b r2s_runtime_publishers'\n"
@@ -211,7 +211,10 @@ def test_docs_scope_runs_its_section(tmp_path):
     assert "== docs" in result.stdout
 
 
-def test_examples_scope_runs_its_section(tmp_path):
+def test_examples_scope_runs_its_section(tmp_path, monkeypatch):
+    # The stubbed toolchain cannot produce runnable firmware, so the simavr
+    # behavior leg stays off here; the real EXAMPLES run always proves it.
+    monkeypatch.setenv("R2S_EXAMPLES_NO_SIMAVR", "1")
     result = run_scope(
         copy_tree(tmp_path), "EXAMPLES", stubs=stub_toolbox(tmp_path / "bin"), build_dir=tmp_path / "build"
     )
