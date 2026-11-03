@@ -14,6 +14,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "r2s_bridge/termios_transport.hpp"
@@ -93,6 +94,80 @@ termios AttributesOf(int fd)
     }
     return attributes;
 }
+
+// A TermiosSyscalls that fails scripted calls with a scripted errno and
+// runs the real syscall for everything else, so the transport still opens a
+// real pty while chosen calls fail on demand.
+class FaultySyscalls : public TermiosSyscalls
+{
+  public:
+    int get_attributes_errno = 0;
+    int set_attributes_errno = 0;
+    bool serial_get_ok = false;
+    mutable unsigned int serial_set_flags = 0;
+    mutable int serial_set_count = 0;
+    mutable std::size_t read_at = 0;
+    std::vector<std::pair<ssize_t, int>> reads;
+    mutable std::size_t write_at = 0;
+    std::vector<std::pair<ssize_t, int>> writes;
+
+    int get_attributes(int fd, termios *attributes) const noexcept override
+    {
+        if (get_attributes_errno != 0) {
+            errno = get_attributes_errno;
+            return -1;
+        }
+        return TermiosSyscalls::get_attributes(fd, attributes);
+    }
+
+    int set_attributes(int fd, int action, const termios *attributes) const noexcept override
+    {
+        if (set_attributes_errno != 0) {
+            errno = set_attributes_errno;
+            return -1;
+        }
+        return TermiosSyscalls::set_attributes(fd, action, attributes);
+    }
+
+    int serial_ioctl(int fd, unsigned long request, void *data) const noexcept override
+    {
+#if defined(__linux__)
+        if (request == TIOCGSERIAL && serial_get_ok) {
+            return 0;
+        }
+        if (request == TIOCSSERIAL) {
+            ++serial_set_count;
+            serial_set_flags = static_cast<struct serial_struct *>(data)->flags;
+            return 0;
+        }
+#endif
+        return TermiosSyscalls::serial_ioctl(fd, request, data);
+    }
+
+    ssize_t read_bytes(int fd, void *buffer, std::size_t capacity) const noexcept override
+    {
+        if (read_at < reads.size()) {
+            const std::pair<ssize_t, int> outcome = reads[read_at++];
+            if (outcome.first < 0) {
+                errno = outcome.second;
+            }
+            return outcome.first;
+        }
+        return TermiosSyscalls::read_bytes(fd, buffer, capacity);
+    }
+
+    ssize_t write_bytes(int fd, const void *data, std::size_t size) const noexcept override
+    {
+        if (write_at < writes.size()) {
+            const std::pair<ssize_t, int> outcome = writes[write_at++];
+            if (outcome.first < 0) {
+                errno = outcome.second;
+            }
+            return outcome.first;
+        }
+        return TermiosSyscalls::write_bytes(fd, data, size);
+    }
+};
 
 TEST(TermiosTransport, ConfiguresThePortForRawNonBlockingIo)
 {
@@ -313,6 +388,167 @@ TEST(TermiosTransport, KeepsAPortWithLowLatencyDisabledUsable)
     std::uint8_t received[1]{};
     ASSERT_EQ(::read(pty.master(), received, sizeof received), 1);
     EXPECT_EQ(received[0], 0x5a);
+}
+
+TEST(TermiosTransport, ReportsUnreadablePortSettings)
+{
+    Pty pty;
+    FaultySyscalls syscalls;
+    syscalls.get_attributes_errno = ENOTTY;
+    TermiosOptions options = OptionsFor(pty);
+
+    try {
+        TermiosTransport transport(options, syscalls);
+        FAIL() << "settings that cannot be read must be reported";
+    } catch (const std::runtime_error &error) {
+        EXPECT_NE(std::string(error.what()).find("cannot read the settings of"), std::string::npos);
+        EXPECT_NE(std::string(error.what()).find(options.port), std::string::npos);
+    }
+}
+
+TEST(TermiosTransport, ReadsSettingsFromACharacterDevice)
+{
+    TermiosOptions options;
+    options.port = "/dev/null";
+
+    try {
+        TermiosTransport transport(options);
+        FAIL() << "a device without settings must be reported";
+    } catch (const std::runtime_error &error) {
+        EXPECT_NE(std::string(error.what()).find("cannot read the settings of"), std::string::npos);
+    }
+}
+
+TEST(TermiosTransport, RejectsAnUnconfigurablePort)
+{
+    Pty pty;
+    FaultySyscalls syscalls;
+    syscalls.set_attributes_errno = EINVAL;
+    TermiosOptions options = OptionsFor(pty);
+
+    try {
+        TermiosTransport transport(options, syscalls);
+        FAIL() << "settings that cannot be applied must be reported";
+    } catch (const std::runtime_error &error) {
+        EXPECT_NE(std::string(error.what()).find("cannot configure"), std::string::npos);
+        EXPECT_NE(std::string(error.what()).find(options.port), std::string::npos);
+    }
+}
+
+#if defined(__linux__)
+TEST(TermiosTransport, RequestsLowLatencyWhenTheDriverOffersIt)
+{
+    Pty pty;
+    FaultySyscalls syscalls;
+    syscalls.serial_get_ok = true;
+    TermiosOptions options = OptionsFor(pty);
+    TermiosTransport transport(options, syscalls);
+
+    EXPECT_EQ(syscalls.serial_set_count, 1);
+    EXPECT_NE(syscalls.serial_set_flags & static_cast<unsigned int>(ASYNC_LOW_LATENCY), 0u);
+
+    const std::uint8_t outgoing[] = {0x5a};
+    EXPECT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{1, IoStatus::kOk}));
+}
+#endif
+
+TEST(TermiosTransport, ReadRetriesAfterAnInterruptedRead)
+{
+    Pty pty;
+    FaultySyscalls syscalls;
+    syscalls.reads.emplace_back(-1, EINTR);
+    TermiosTransport transport(OptionsFor(pty), syscalls);
+    const std::uint8_t outgoing[] = {0x01, 0x02};
+    ASSERT_EQ(::write(pty.master(), outgoing, sizeof outgoing), static_cast<ssize_t>(sizeof outgoing));
+    std::uint8_t buffer[8]{};
+
+    EXPECT_EQ(transport.read(buffer, sizeof buffer), (IoResult{2, IoStatus::kOk}));
+    EXPECT_EQ(buffer[0], 0x01);
+    EXPECT_EQ(buffer[1], 0x02);
+}
+
+TEST(TermiosTransport, ReportsAnIoErrorReadAsClosed)
+{
+    Pty pty;
+    FaultySyscalls syscalls;
+    syscalls.reads.emplace_back(-1, EIO);
+    TermiosTransport transport(OptionsFor(pty), syscalls);
+    std::uint8_t buffer[4]{};
+
+    EXPECT_EQ(transport.read(buffer, sizeof buffer), (IoResult{0, IoStatus::kClosed}));
+    EXPECT_EQ(transport.read(buffer, sizeof buffer), (IoResult{0, IoStatus::kClosed}));
+}
+
+TEST(TermiosTransport, ReportsAnUnknownReadErrnoAsAnError)
+{
+    Pty pty;
+    FaultySyscalls syscalls;
+    syscalls.reads.emplace_back(-1, EBADF);
+    TermiosTransport transport(OptionsFor(pty), syscalls);
+    std::uint8_t buffer[4]{};
+
+    EXPECT_EQ(transport.read(buffer, sizeof buffer), (IoResult{0, IoStatus::kError}));
+}
+
+TEST(TermiosTransport, WriteRetriesAfterAnInterruptedWrite)
+{
+    Pty pty;
+    FaultySyscalls syscalls;
+    syscalls.writes.emplace_back(-1, EINTR);
+    TermiosTransport transport(OptionsFor(pty), syscalls);
+    const std::uint8_t outgoing[] = {0x11, 0x22};
+
+    EXPECT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{2, IoStatus::kOk}));
+
+    std::uint8_t received[8]{};
+    ASSERT_EQ(::read(pty.master(), received, sizeof received), static_cast<ssize_t>(sizeof outgoing));
+    EXPECT_EQ(received[0], 0x11);
+    EXPECT_EQ(received[1], 0x22);
+}
+
+TEST(TermiosTransport, ReturnsWouldBlockWhenTheWriteAcceptsNothing)
+{
+    Pty pty;
+    FaultySyscalls syscalls;
+    syscalls.writes.emplace_back(0, 0);
+    TermiosTransport transport(OptionsFor(pty), syscalls);
+    const std::uint8_t outgoing[] = {0x11};
+
+    EXPECT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{0, IoStatus::kWouldBlock}));
+}
+
+TEST(TermiosTransport, ReturnsWouldBlockOnALinkWithNoRoom)
+{
+    Pty pty;
+    FaultySyscalls syscalls;
+    syscalls.writes.emplace_back(-1, EAGAIN);
+    TermiosTransport transport(OptionsFor(pty), syscalls);
+    const std::uint8_t outgoing[] = {0x11};
+
+    EXPECT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{0, IoStatus::kWouldBlock}));
+}
+
+TEST(TermiosTransport, ReportsAnIoErrorWriteAsClosed)
+{
+    Pty pty;
+    FaultySyscalls syscalls;
+    syscalls.writes.emplace_back(-1, EIO);
+    TermiosTransport transport(OptionsFor(pty), syscalls);
+    const std::uint8_t outgoing[] = {0x11};
+
+    EXPECT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{0, IoStatus::kClosed}));
+    EXPECT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{0, IoStatus::kClosed}));
+}
+
+TEST(TermiosTransport, ReportsAnUnknownWriteErrnoAsAnError)
+{
+    Pty pty;
+    FaultySyscalls syscalls;
+    syscalls.writes.emplace_back(-1, EBADF);
+    TermiosTransport transport(OptionsFor(pty), syscalls);
+    const std::uint8_t outgoing[] = {0x11};
+
+    EXPECT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{0, IoStatus::kError}));
 }
 
 } // namespace
