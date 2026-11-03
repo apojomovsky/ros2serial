@@ -375,6 +375,21 @@ def _discovery(world):
     return next(event for event in world.events if event[0] == "wait_for_topics")
 
 
+def test_the_checks_helper_reads_the_world_clock():
+    """One clock for the driven run: the helper must read the fake one."""
+    saved = _save_stubs()
+    real_checks = _install_stubs()
+    try:
+        world = World()
+        module = world.load("s3410_single_clock_probe", POSIX_4)
+        assert module.time.monotonic() == world.clock.now
+        assert real_checks.time.monotonic() == world.clock.now
+        world.clock.advance(STEP)
+        assert real_checks.time.monotonic() == module.time.monotonic()
+    finally:
+        _restore_stubs(saved)
+
+
 def test_posix_3_discovers_on_its_own_budget_after_the_handshake():
     saved = _save_stubs()
     real_checks = _install_stubs()
