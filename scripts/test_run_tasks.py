@@ -80,6 +80,11 @@ def test_the_caller_environment_reaches_the_runner(tmp_path):
     assert "COMMIT_RANGE=origin/master..HEAD" in seen.splitlines()
 
 
-def test_full_forces_every_task(tmp_path):
+def test_full_forces_the_selected_tasks(tmp_path):
     args, _ = select(tmp_path, CORE="1", R2S_FULL="1")
+    assert args == ["--force", "core"], args
+
+
+def test_full_without_scopes_forces_the_default_task(tmp_path):
+    args, _ = select(tmp_path, R2S_FULL="1")
     assert args == ["--force"], args

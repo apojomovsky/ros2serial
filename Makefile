@@ -50,11 +50,11 @@ bootstrap: ## First-time setup: host deps check, git hooks, dev image
 doctor: ## Report what setup is missing, change nothing
 	@bash scripts/doctor.sh
 
-check: guard-main-clone cache-dir ## Run the scopes your diff needs, plus the fast gates
+check: guard-main-clone cache-dir ## Run the stale tasks for the current tree
 	@$(call in_image,bash scripts/check.sh)
 
-test: guard-main-clone cache-dir ## Run scripts/ci-test.sh, the exact suite CI runs (scope: LINT=1 SCRIPTS=1 COMMITS=1 ...)
-	@$(call in_image,bash scripts/ci-test.sh)
+test: guard-main-clone cache-dir ## Run the stale suite tasks (scope: LINT=1 SCRIPTS=1 COMMITS=1 ...; R2S_FULL=1 forces all)
+	@$(call in_image,bash scripts/run-tasks.sh)
 
 test-core: guard-main-clone cache-dir ## Run the CORE scope: same as make test CORE=1
 	@$(MAKE) --no-print-directory test CORE=1
@@ -105,7 +105,7 @@ exec: guard-main-clone cache-dir ## One-off command inside the image: make exec 
 	@$(call in_image,bash -c '$(CMD)')
 
 ci-local: guard-main-clone cache-dir image ## The exact CI run, unscoped, in the ci image
-	@$(DOCKER_BASE) $(IMAGE) bash scripts/ci-test.sh
+	@$(DOCKER_BASE) -e R2S_FULL=1 $(IMAGE) bash scripts/run-tasks.sh
 
 compile: ## Not built yet (pending G10 and V4): will build an example firmware
 	@$(call pending,compile,G10 and V4 in docs/00-design.md)
@@ -127,7 +127,7 @@ docs-gen: ## Not built yet (pending G1 and H1): will regenerate reference docs
 	@$(call pending,docs-gen,G1 and H1 in docs/00-design.md)
 
 lint: guard-main-clone cache-dir ## Linters: the LINT section of the suite
-	@$(call in_image,env LINT=1 bash scripts/ci-test.sh)
+	@$(MAKE) --no-print-directory test LINT=1
 
 lint-docs: guard-main-clone cache-dir ## Check mermaid blocks in the docs with mermaid's own parser (needs host docker)
 	@bash scripts/lint-docs.sh

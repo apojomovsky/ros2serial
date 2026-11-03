@@ -32,6 +32,12 @@ def copy_tree(dest: Path) -> Path:
         elif src.is_file():
             (dest / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dest / name)
+    # A repository, not loose files: the taskfile-coverage gate reads the
+    # tracked set, as it does on the real tree.
+    identity = ["-c", "user.email=t@example.com", "-c", "user.name=t"]
+    subprocess.run(["git", "init", "-q", "-b", "master"], cwd=dest, check=True)
+    subprocess.run(["git", *identity, "add", "-A"], cwd=dest, check=True)
+    subprocess.run(["git", *identity, "commit", "-qm", "tree"], cwd=dest, check=True)
     return dest
 
 

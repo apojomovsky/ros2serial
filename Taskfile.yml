@@ -1,0 +1,461 @@
+# One task per ci-test.sh section: a section reruns only when the files it
+# reads change. Task hashes each task's `sources:` with `method: checksum`
+# and skips a task whose inputs match its last successful run, locally and
+# in CI, where the plan job gates each section job on `task --status`.
+# `make test` runs the stale tasks through `scripts/run-tasks.sh`, and
+# `R2S_FULL=1` forces all of them.
+#
+# Lint and commits list no sources and always run: they are the standing
+# cheap gates, as CHEAP was under the retired scopes_for_diff.py. Mermaid
+# runs on the host through docker, never in the dev image, so it stays out
+# of the default task; the plan still gates its job on its status.
+version: "3"
+method: checksum
+
+# Git-ignored build outputs never count as inputs, so a tree that just ran
+# its sections is fresh on the next status check.
+use_gitignore: true
+
+tasks:
+  default:
+    desc: Run every section whose inputs changed.
+    deps: [lint, commits, scripts, core, gen, bridge, cpp, coverage, docs, examples, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
+
+  # The standing cheap gates: unlistable inputs must never skip them.
+  lint:
+    desc: The LINT section, always.
+    cmds:
+      - bash scripts/ci-test.sh LINT=1
+
+  commits:
+    desc: Always checks the commit range, which no file lists.
+    cmds:
+      - bash scripts/ci-test.sh COMMITS=1
+
+  # Every section runs through this machinery and image, so every section
+  # lists it: the runner and its locks, the shared plumbing the sections
+  # execute, and the image definition. Each task repeats the block so the
+  # PR lists every section with its full sources in one place.
+  scripts:
+    desc: Runs pytest over scripts/ and tools/.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      # The scope itself: its tests, the tools they exercise, the hooks and
+      # workflows they run, and the repo metadata they assert on.
+      - scripts/**
+      - tools/**
+      - .githooks/**
+      - .github/**
+      - pyproject.toml
+      - conftest.py
+      - cliff.toml
+      - AGENTS.md
+      - VERSION
+      # Conformance vectors and the fuzzer seeds generated from them.
+      - spec/**
+      # The overlap, skip and bound tests load the legs they gate.
+      - tests/e2e/**
+      # The release tests stage the generator package and the C++ layer,
+      # and the extractor tests run the package. The generator's own tests
+      # stay with the gen task, as the scope map had it.
+      - gen/**
+      - exclude: gen/tests/**
+      - cpp/include/**
+      - cpp/src/**
+      - cpp/CMakeLists.txt
+      # The Arduino zip stages the core and the port glue and compiles them.
+      - core/include/**
+      - core/src/**
+      - core/tests/CMakeLists.txt
+      - core/fuzz/corpus/**
+      - ports/arduino/**
+      # The release tests pin the checked-in generated outputs.
+      - examples/cmake_minimal/lib/**
+      - examples/cmake_minimal/r2s.yaml
+      - ports/posix/src/**
+      - ports/posix/r2s.yaml
+    cmds:
+      - bash scripts/ci-test.sh SCRIPTS=1
+
+  core:
+    desc: Runs the host unit, contract and port tests.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - scripts/core-test.sh
+      # The host library builds the core for the generator model tests.
+      - scripts/build-host-lib.sh
+      - core/**
+      # Vectors replay through the conformance runners.
+      - spec/**
+      # The scope runs the posix and arduino port contract tests.
+      - ports/posix/**
+      - ports/arduino/**
+    cmds:
+      - bash scripts/ci-test.sh CORE=1
+
+  gen:
+    desc: Runs the generator unit, golden and model tests.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - scripts/build-host-lib.sh
+      # The package, its tests and its goldens, listed separately so the
+      # tests stay with this task only: nothing else reads them.
+      - gen/r2s_gen/**
+      - gen/tests/**
+      - gen/pyproject.toml
+      - gen/setup.py
+      - gen/setup.cfg
+      - gen/package.xml
+      - gen/resource/**
+      - spec/**
+      # The model tests drive the real core through the host library.
+      - core/**
+      # The golden tests compare the checked-in generated outputs.
+      - examples/cmake_minimal/lib/**
+    cmds:
+      - bash scripts/ci-test.sh GEN=1
+
+  bridge:
+    desc: Runs the colcon build and test per distro.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - scripts/bridge-test.sh
+      - bridge/**
+      # The framing library links the core.
+      - core/**
+      # The hash test takes its type hashes from the generator package.
+      - gen/**
+      - exclude: gen/tests/**
+      - spec/**
+      # The launch test rebuilds the posix firmware and loads the relay.
+      - ports/posix/**
+      - tests/e2e/**
+      - exclude: tests/e2e/test_isolation.py
+    cmds:
+      - bash scripts/ci-test.sh BRIDGE=1
+
+  cpp:
+    desc: Runs the host builds and avr compile tests.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - scripts/cpp-test.sh
+      - cpp/**
+      # The host tests build the core sources in.
+      - core/**
+    cmds:
+      - bash scripts/ci-test.sh CPP=1
+
+  coverage:
+    desc: Runs the head-vs-base gates per component.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - scripts/coverage-gate.sh
+      - scripts/coverage-filters.sh
+      - tools/coverage_gate.py
+      # The gate measures the core and the bridge builds.
+      - core/**
+      - bridge/**
+    cmds:
+      - bash scripts/ci-test.sh COVERAGE=1
+
+  docs:
+    desc: Extracts and compiles every snippet.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - tools/snippets_check.py
+      - README.md
+      - docs/**
+      # Snippets compile against the core and the C++ layer, and the
+      # reference runs the generator package.
+      - core/**
+      - cpp/**
+      - gen/**
+      - exclude: gen/tests/**
+    cmds:
+      - bash scripts/ci-test.sh DOCS=1
+
+  examples:
+    desc: Builds the firmware and sketches per board.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - scripts/build-examples.sh
+      - examples/**
+      # The bundle is emitted at build time; the core, the runtime layer
+      # and the port glue are staged into it.
+      - gen/**
+      - exclude: gen/tests/**
+      - core/**
+      - cpp/**
+      - ports/arduino/**
+    cmds:
+      - bash scripts/ci-test.sh EXAMPLES=1
+
+  budgets:
+    desc: Measures flash, RAM and stack against the floors.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - scripts/budgets-check.sh
+      - scripts/build-examples.sh
+      - tools/budgets.yaml
+      - tools/size_report.py
+      - tools/stack_report.py
+      # The gate rebuilds the example sketches, so it reads what they build.
+      - examples/**
+      - gen/**
+      - exclude: gen/tests/**
+      - core/**
+      - cpp/**
+      - ports/arduino/**
+    cmds:
+      - bash scripts/ci-test.sh BUDGETS=1
+
+  readme:
+    desc: Runs the walkthrough on simavr.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - scripts/check-readme.sh
+      - README.md
+      # The walkthrough installs the generator, stages the library from the
+      # core, the runtime layer and the port glue, compiles the minimal
+      # sketch, then runs it on the harness against a built bridge.
+      - gen/**
+      - exclude: gen/tests/**
+      - core/**
+      - cpp/**
+      - ports/arduino/**
+      - examples/arduino_minimal/**
+      - bridge/**
+      - tests/harness/**
+    cmds:
+      - bash scripts/ci-test.sh README=1
+
+  fuzz:
+    desc: Runs the libFuzzer targets over the seed corpus.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - scripts/fuzz.sh
+      - tools/fuzz_corpus.py
+      # Every target parses the core; the seeds come from the vectors.
+      - core/**
+      - spec/**
+    cmds:
+      - bash scripts/ci-test.sh FUZZ=1
+
+  e2e-avr:
+    desc: Runs the avr scenarios on simavr firmware.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      # The legs launch the bridge against firmware built from the core,
+      # the runtime layer and the arduino port glue.
+      - core/**
+      - cpp/**
+      - bridge/**
+      - ports/arduino/**
+      # The shared leg files. The posix runner, the posix scenarios and the
+      # posix firmware helper stay with the posix leg; the isolation pairs
+      # run in the nightly workflow instead.
+      - tests/e2e/**
+      - exclude: tests/e2e/run.sh
+      - exclude: tests/e2e/test_*_posix.py
+      - exclude: tests/e2e/e2e_support/firmware.py
+      - exclude: tests/e2e/test_isolation.py
+      - tests/harness/**
+    cmds:
+      - bash scripts/ci-test.sh E2E=avr
+
+  e2e-posix:
+    desc: Runs the posix scenarios on the virtual MCU.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - core/**
+      - bridge/**
+      # The leg builds and launches the posix firmware shapes.
+      - ports/posix/**
+      - tests/e2e/**
+      - exclude: tests/e2e/run-avr.sh
+      - exclude: tests/e2e/test_*_avr.py
+      - exclude: tests/e2e/e2e_support/avr.py
+      - exclude: tests/e2e/avr_slice/**
+      - exclude: tests/e2e/avr_flood/**
+      - exclude: tests/e2e/test_isolation.py
+    cmds:
+      - bash scripts/ci-test.sh E2E=posix
+
+  nightly:
+    desc: Runs the e2e isolation pairs side by side.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      # The pairs exercise the legs the e2e tasks cover; only the pair
+      # file itself selects this task on a pull request.
+      - tests/e2e/test_isolation.py
+    cmds:
+      - bash scripts/ci-test.sh NIGHTLY=1
+
+  # Host-only: needs docker, so the dev image cannot run it. No image task
+  # depends on it; the plan gates the mermaid job on its status, and the job
+  # runs `make lint-docs`, the same command below.
+  mermaid:
+    desc: The mermaid blocks, parsed by mermaid itself on the host.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - ci/versions.env
+      - scripts/lint-docs.sh
+      - tools/mermaid-check/**
+      - "**/*.md"
+    cmds:
+      - bash scripts/lint-docs.sh

@@ -136,7 +136,7 @@ if grep -qE '^(core/include/|cpp/|gen/r2s_gen/cli.py|bridge/r2s_bridge/config/)'
   note "user-visible files changed without README.md or docs/: update them or write README: n/a in the PR body"
 fi
 
-# 14. The cheap scopes locally, then the stamp the push checks.
+# 14. The stale tasks locally: what the tree owes, the checksums decide.
 if [ "${TEST:-}" = 1 ]; then
   # The suite's own tests call this ritual, and a ritual that sees TEST=1
   # runs the suite again, so TEST does not go down with it. The scopes do:
@@ -145,38 +145,13 @@ if [ "${TEST:-}" = 1 ]; then
   # rather than the outer ones. The title goes with them: the suite's own
   # tests call the ritual, and a title meant for this branch would be
   # checked against their fixture commits. R2S_SUITE names the script to
-  # run, so a test can see what the suite was given. R2S_FULL=1 runs the
-  # suite unscoped instead.
-  suite=${R2S_SUITE:-$root/scripts/ci-test.sh}
-  if [ "${R2S_FULL:-}" = 1 ]; then scopes="FULL=1"; else
-    # Every diff runs the cheap scopes outside CI. The notice goes to the
-    # ritual output, and the stamp below keys the cheap set, so the push
-    # that follows skips on it.
-    scopes_err=$(mktemp "${TMPDIR:-/tmp}/r2s-scopes.XXXXXX")
-    scopes=$(python3 "$root/scripts/scopes_for_diff.py" --base "$base" 2>"$scopes_err") || scopes="FULL=1"
-    grep "leaving the full suite to CI" "$scopes_err" 2>/dev/null || true
-    rm -f "$scopes_err"
-  fi
-  # Caller scopes stay, so the child does what this run was asked to do; the
-  # computed scopes add. A caller E2E and a computed E2E merge to both, so
-  # neither backend is dropped.
-  computed_e2e=""
-  computed_rest=""
-  for s in $scopes; do
-    case $s in E2E=*) computed_e2e=$s ;; *) computed_rest="$computed_rest $s" ;; esac
-  done
-  if [ -n "$computed_e2e" ]; then
-    if [ -z "${E2E:-}" ] || [ "E2E=$E2E" = "$computed_e2e" ]; then
-      computed_rest="$computed_rest $computed_e2e"
-    else
-      computed_rest="$computed_rest E2E=both"
-    fi
-  fi
+  # run, so a test can see what the suite was given. R2S_FULL=1 forces all
+  # the tasks instead. A fresh tree is a fast no-op once every task is up
+  # to date, which is what the retired suite stamp recorded explicitly.
   # The output is kept, so a failure can be shown without running the suite
   # again: a second run would be refused by the lock the first one holds.
   suite_log=$(mktemp "${TMPDIR:-/tmp}/r2s-suite.XXXXXX")
-  # shellcheck disable=SC2086 # the scopes are one assignment per word.
-  if ! env -u TEST -u BASE -u PR_BODY -u PR_TITLE $computed_rest bash "$suite" >"$suite_log" 2>&1; then
+  if ! env -u TEST -u BASE -u PR_BODY -u PR_TITLE bash "$root/scripts/run-tasks.sh" >"$suite_log" 2>&1; then
     # The failed sections are the point, so they are shown. The suite names
     # them on its last line; a section that is not named falls back to the
     # last lines of the log.
@@ -189,21 +164,9 @@ if [ "${TEST:-}" = 1 ]; then
     done
     [ "$shown" = 1 ] || tail -5 "$suite_log"
     rm -f "$suite_log"
-    fix "the suite fails: bash scripts/ci-test.sh"
+    fix "the suite fails: bash scripts/run-tasks.sh"
   else
     rm -f "$suite_log"
-    # The pass is recorded under the same key the pre-push hook checks, so
-    # pushing the tree that just passed runs nothing twice. The stamp keys
-    # the committed tree, while the suite runs over the working tree, so a
-    # dirty tree runs the suite but records nothing: uncommitted edits never
-    # land on the remote, and stamping them would skip testing the push.
-    if [ -z "$(git status --porcelain)" ]; then
-      stamp="$(git rev-parse --absolute-git-dir)/r2s-pre-push-stamp"
-      bash "$root/scripts/suite-stamp.sh" key "$scopes" >"$stamp" 2>/dev/null || \
-        note "the suite stamp was not recorded ($stamp)"
-    else
-      note "the suite passed on a dirty tree: commit it and rerun TEST=1 to record the stamp"
-    fi
   fi
 fi
 

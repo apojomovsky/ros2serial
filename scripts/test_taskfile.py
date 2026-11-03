@@ -48,7 +48,10 @@ def glob_match(pattern, path):
     while i < len(pattern):
         char = pattern[i]
         if char == "*":
-            if pattern[i : i + 2] == "**":
+            if pattern[i : i + 3] == "**/":
+                out.append("(.*/)?")
+                i += 3
+            elif pattern[i : i + 2] == "**":
                 out.append(".*")
                 i += 2
             else:
@@ -107,6 +110,7 @@ def fixture(tmp_path):
                 target.write_text("probe\n")
     (repo / "scripts").mkdir(exist_ok=True)
     (repo / "scripts" / "ci-test.sh").write_text(STUB_RUNNER)
+    (repo / "scripts" / "lint-docs.sh").write_text('#!/usr/bin/env bash\necho "stub mermaid" >> "$R2S_TASK_LOG"\n')
     (repo / "Dockerfile").write_text("FROM scratch\n")
     versions = repo / "ci" / "versions.env"
     versions.parent.mkdir(exist_ok=True)
@@ -175,6 +179,9 @@ def test_a_versions_env_edit_reruns_every_task(tmp_path):
     for name in default_tasks():
         task = tasks()[name]
         scope = {"e2e-avr": "E2E=avr", "e2e-posix": "E2E=posix"}.get(name, f"{name.upper()}=1")
+        if task.get("sources") is None:
+            assert scope in reran, f"standing {scope} did not rerun: {reran}"
+            continue
         assert matches(task, "ci/versions.env"), f"ci/versions.env matches no {name} source"
         assert scope in reran, f"{scope} did not rerun: {reran}"
 
@@ -190,8 +197,8 @@ def test_a_second_run_skips_everything_but_the_standing_gates(tmp_path):
 
 
 @needs_task
-def test_a_core_edit_does_not_rerun_gen_or_bridge(tmp_path):
-    """Sections whose inputs did not change stay quiet while core reruns."""
+def test_a_core_edit_reruns_its_consumers_but_not_scripts_or_nightly(tmp_path):
+    """Sections that read the core rerun; the rest stay quiet with core."""
     repo = fixture(tmp_path)
     run_task(repo)
     core_sources = [p for p in includes(tasks()["core"]) if p.startswith("core/")]
@@ -199,8 +206,10 @@ def test_a_core_edit_does_not_rerun_gen_or_bridge(tmp_path):
     (repo / probe_for(core_sources[0])).write_text("probe\nprobe again\n")
     reran = run_task(repo)
     assert "CORE=1" in reran, reran
-    assert "GEN=1" not in reran, reran
-    assert "BRIDGE=1" not in reran, reran
+    assert "GEN=1" in reran, reran
+    assert "BRIDGE=1" in reran, reran
+    assert "SCRIPTS=1" not in reran, reran
+    assert "NIGHTLY=1" not in reran, reran
 
 
 def test_lint_and_commits_list_no_sources():
@@ -212,18 +221,21 @@ def test_lint_and_commits_list_no_sources():
 def test_every_conditional_task_lists_the_image_and_machinery():
     """The image definition and the suite machinery feed every section."""
     for name, task in tasks().items():
-        if name in ("default", "lint", "commits"):
+        if name in ("default", "lint", "commits", "mermaid"):
             continue
-        for path in ("Taskfile.yml", "Dockerfile", "ci/versions.env", "scripts/ci-test.sh"):
+        for path in ("Taskfile.yml", ".gitignore", "Dockerfile", "ci/versions.env", "scripts/ci-test.sh"):
             assert matches(task, path), f"{path} matches no {name} source"
 
 
 def test_mermaid_runs_on_the_host_outside_the_default_task():
     """The mermaid check needs host docker, so no image task may pull it in."""
     assert "mermaid" not in default_tasks()
+    assert matches(tasks()["mermaid"], "Taskfile.yml")
+    assert matches(tasks()["mermaid"], "ci/versions.env")
     assert matches(tasks()["mermaid"], "README.md")
     assert matches(tasks()["mermaid"], "docs/01-testing.md")
     assert matches(tasks()["mermaid"], "tools/mermaid-check/check.mjs")
+    assert not matches(tasks()["mermaid"], "scripts/ci-test.sh")
 
 
 def test_the_isolation_pairs_belong_to_nightly_not_the_e2e_legs():

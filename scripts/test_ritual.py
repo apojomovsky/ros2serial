@@ -244,7 +244,8 @@ def test_pre_push_refuses_a_force_push_unless_approved(tmp_path):
     assert pre_push(wt, line, R2S_PRE_PUSH_SUITE="true", R2S_FORCE_PUSH_APPROVED="1").returncode == 0
 
 
-def test_pre_push_runs_the_suite_once_per_tree(tmp_path):
+def test_pre_push_runs_the_suite_on_every_push(tmp_path):
+    """The hook never skips: the checksums make a fresh tree a fast no-op."""
     _, wt = fixture(tmp_path)
     commit(wt, {"a.txt": "a\n"}, "feat(core): a")
     head = git(wt, "rev-parse", "HEAD").stdout.strip()
@@ -253,7 +254,7 @@ def test_pre_push_runs_the_suite_once_per_tree(tmp_path):
     suite = f"echo ran >> {log}"
     assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=suite).returncode == 0
     assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=suite).returncode == 0
-    assert log.read_text().split() == ["ran"]
+    assert log.read_text().split() == ["ran", "ran"]
 
 
 def test_push_helper_verifies_the_remote_ref(tmp_path):
@@ -753,8 +754,8 @@ def test_a_branch_behind_with_conflict_merges_first(tmp_path):
     assert "merge origin/master" in out, out
 
 
-def test_a_takeoff_pass_makes_the_push_skip_the_suite(tmp_path):
-    """The takeoff records the pre-push stamp, so the push runs nothing twice."""
+def test_takeoff_and_push_both_run_the_suite(tmp_path):
+    """The hook never skips: the checksums make a fresh tree a fast no-op."""
     main, wt = fixture(tmp_path)
     commit(wt, {"a.txt": "a\n"}, "feat(core): a")
     git(main, "config", "core.hooksPath", ".githooks")
@@ -769,7 +770,7 @@ def test_a_takeoff_pass_makes_the_push_skip_the_suite(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert suite_log.read_text().split() == ["ran"]
     assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=f"bash {recorder}").returncode == 0
-    assert suite_log.read_text().split() == ["ran"], "the push reran the suite"
+    assert suite_log.read_text().split() == ["ran", "ran"]
 
 
 def test_full_env_runs_the_suite_unscoped(tmp_path):
@@ -790,12 +791,8 @@ def test_full_env_runs_the_suite_unscoped(tmp_path):
     assert added == set(), f"the hook scoped a full run: {sorted(added)}"
 
 
-def test_pre_push_leaves_the_full_suite_to_ci(tmp_path, monkeypatch):
-    """A machinery-only diff runs the cheap scopes locally and says CI runs the rest."""
-    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    # The suite itself may run scoped: drop any ambient scope so the suite
-    # only sees what the hook computes.
-    monkeypatch.delenv("SCRIPTS", raising=False)
+def test_pre_push_runs_the_suite_unscoped_for_task_selection(tmp_path):
+    """The hook adds no scopes of its own: the checksums decide what runs."""
     _, wt = fixture(tmp_path)
     commit(wt, {"Makefile": "# machinery\n"}, "chore: touch the gate")
     head = git(wt, "rev-parse", "HEAD").stdout.strip()
@@ -804,17 +801,11 @@ def test_pre_push_leaves_the_full_suite_to_ci(tmp_path, monkeypatch):
     suite = f"env > {seen}"
     result = pre_push(wt, line, R2S_PRE_PUSH_SUITE=suite)
     assert result.returncode == 0, result.stdout + result.stderr
-    text = seen.read_text()
-    assert "LINT=1" in text
-    assert "COMMITS=1" in text
-    assert "SCRIPTS=1" not in text
-    assert "FULL=1" not in text
-    assert "leaving the full suite to CI" in result.stdout
+    assert seen.exists(), "the hook never ran the suite"
 
 
-def test_pre_push_explicit_scope_still_runs(tmp_path, monkeypatch):
-    """A scope named on the command line still runs when the suite is left to CI."""
-    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+def test_pre_push_passes_caller_scopes_through(tmp_path):
+    """A scope in the hook's environment reaches the suite untouched."""
     _, wt = fixture(tmp_path)
     commit(wt, {"Makefile": "# machinery\n"}, "chore: touch the gate")
     head = git(wt, "rev-parse", "HEAD").stdout.strip()
@@ -825,11 +816,10 @@ def test_pre_push_explicit_scope_still_runs(tmp_path, monkeypatch):
     assert result.returncode == 0, result.stdout + result.stderr
     text = seen.read_text()
     assert "CORE=1" in text
-    assert "leaving the full suite to CI" in result.stdout
 
 
-def test_ci_pre_push_runs_the_full_suite_for_machinery(tmp_path, monkeypatch):
-    """In CI the same machinery-only diff still runs everything."""
+def test_pre_push_runs_the_same_suite_in_ci(tmp_path, monkeypatch):
+    """There is no CI/local split anymore: the hook always runs the suite."""
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     _, wt = fixture(tmp_path)
     commit(wt, {"Makefile": "# machinery\n"}, "chore: touch the gate")
@@ -839,65 +829,76 @@ def test_ci_pre_push_runs_the_full_suite_for_machinery(tmp_path, monkeypatch):
     suite = f"env > {seen}"
     result = pre_push(wt, line, R2S_PRE_PUSH_SUITE=suite)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "leaving the full suite to CI" not in (result.stdout + result.stderr)
+    assert seen.exists(), "the hook never ran the suite"
 
 
-def test_takeoff_leaves_the_full_suite_to_ci(tmp_path, monkeypatch):
-    """The takeoff runs the cheap scopes for machinery and the push skips on its stamp."""
-    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    # The suite itself may run scoped: drop any ambient scope so the suite
-    # only sees what the ritual computes.
-    monkeypatch.delenv("SCRIPTS", raising=False)
+def strip_ambient_scopes(monkeypatch):
+    """The runner's own scopes must not leak in as caller scopes."""
+    for scope in (
+        "LINT",
+        "SCRIPTS",
+        "COMMITS",
+        "CORE",
+        "GEN",
+        "BRIDGE",
+        "CPP",
+        "E2E",
+        "COVERAGE",
+        "DOCS",
+        "EXAMPLES",
+        "BUDGETS",
+        "FUZZ",
+        "README",
+        "NIGHTLY",
+    ):
+        monkeypatch.delenv(scope, raising=False)
+
+
+def test_takeoff_runs_the_suite_unscoped_for_task_selection(tmp_path, monkeypatch):
+    """The takeoff runs the suite with no selection: the tasks decide."""
+    strip_ambient_scopes(monkeypatch)
     main, wt = fixture(tmp_path)
     commit(wt, {"Makefile": "# machinery\n"}, "chore: touch the gate")
     git(main, "config", "core.hooksPath", ".githooks")
-    head = git(wt, "rev-parse", "HEAD").stdout.strip()
-    line = f"refs/heads/feat/1-thing {head} refs/heads/feat/1-thing {'0' * 40}\n"
+    seen_args = tmp_path / "args.txt"
     seen = tmp_path / "env.txt"
-    log = tmp_path / "suite.log"
     recorder = tmp_path / "record-suite.sh"
-    recorder.write_text(f"#!/usr/bin/env bash\necho ran >> {log}\nenv > {seen}\n")
+    recorder.write_text(f'#!/usr/bin/env bash\necho "$*" > {seen_args}\nenv > {seen}\n')
     body = tmp_path / "body.md"
     body.write_text(GOOD_BODY)
     result = ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="chore: touch the gate", R2S_SUITE=str(recorder))
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "leaving the full suite to CI" in result.stdout
-    text = seen.read_text()
-    assert "LINT=1" in text
-    assert "COMMITS=1" in text
-    assert "SCRIPTS=1" not in text
-    assert "FULL=1" not in text
-    assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=f"bash {recorder}").returncode == 0
-    assert log.read_text().split() == ["ran"], "the push reran the suite"
+    assert seen_args.read_text().split() == [], "the takeoff selected tasks on its own"
 
 
-def test_takeoff_explicit_scope_still_runs(tmp_path, monkeypatch):
-    """A scope named on the command line still runs when the suite is left to CI."""
-    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+def test_takeoff_passes_an_explicit_scope_to_the_task_selection(tmp_path, monkeypatch):
+    """A scope named on the command line selects its task, nothing else."""
+    strip_ambient_scopes(monkeypatch)
     main, wt = fixture(tmp_path)
     commit(wt, {"Makefile": "# machinery\n"}, "chore: touch the gate")
     git(main, "config", "core.hooksPath", ".githooks")
-    seen = tmp_path / "env.txt"
+    seen_args = tmp_path / "args.txt"
     recorder = tmp_path / "record-suite.sh"
-    recorder.write_text(f"#!/usr/bin/env bash\nenv > {seen}\n")
+    recorder.write_text(f'#!/usr/bin/env bash\necho "$*" > {seen_args}\n')
     body = tmp_path / "body.md"
     body.write_text(GOOD_BODY)
     result = ritual(
         wt, TEST="1", CORE="1", PR_BODY=str(body), PR_TITLE="chore: touch the gate", R2S_SUITE=str(recorder)
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "CORE=1" in seen.read_text()
-    assert "leaving the full suite to CI" in result.stdout
+    assert seen_args.read_text().split() == ["core"]
 
 
 def test_ci_runs_every_scope_on_pull_requests():
-    """The local gate is scoped; CI still runs the full suite on the merge."""
+    """Every section command stays reachable in CI: the plan gates, never drops."""
     workflows = ROOT / ".github/workflows"
     assert (workflows / "ci.yml").read_text().count("pull_request") >= 1
     runs = []
     for workflow in sorted(workflows.glob("*.yml")):
         runs += [
-            line.strip() for line in workflow.read_text().splitlines() if "make test" in line or "ci-test.sh" in line
+            line.strip()
+            for line in workflow.read_text().splitlines()
+            if "make test" in line or "task " in line or "make lint-docs" in line
         ]
     assert runs, "CI runs no suite at all"
     assert not any("R2S_FULL" in line for line in runs), "CI must not narrow the suite"
@@ -906,7 +907,6 @@ def test_ci_runs_every_scope_on_pull_requests():
         for scope in (
             "LINT",
             "SCRIPTS",
-            "COMMITS",
             "CORE",
             "GEN",
             "BRIDGE",
@@ -914,10 +914,18 @@ def test_ci_runs_every_scope_on_pull_requests():
             "COVERAGE",
             "DOCS",
             "EXAMPLES",
+            "BUDGETS",
+            "README",
             "FUZZ",
         ):
             if scope in line:
                 mentioned.add(scope)
+        if "task " in line and line.rstrip().endswith("commits"):
+            mentioned.add("COMMITS")
+        if "make lint-docs" in line or ("task " in line and line.rstrip().endswith("mermaid")):
+            mentioned.add("MERMAID")
+        if "NIGHTLY=1" in line:
+            mentioned.add("NIGHTLY")
         if "E2E=avr" in line:
             mentioned.add("E2E=avr")
         if "E2E=posix" in line:
@@ -933,15 +941,19 @@ def test_ci_runs_every_scope_on_pull_requests():
         "COVERAGE",
         "DOCS",
         "EXAMPLES",
+        "BUDGETS",
+        "README",
         "FUZZ",
+        "MERMAID",
+        "NIGHTLY",
         "E2E=avr",
         "E2E=posix",
     } - mentioned
     assert not missing, f"CI no longer runs every scope: {sorted(missing)}"
 
 
-def test_a_dirty_takeoff_runs_the_suite_but_records_no_stamp(tmp_path):
-    """The stamp keys the committed tree, so a dirty tree records nothing."""
+def test_a_dirty_takeoff_runs_the_suite_and_reports_clean(tmp_path):
+    """Uncommitted edits never land on the remote, but the suite still runs."""
     main, wt = fixture(tmp_path)
     commit(wt, {"a.txt": "a\n"}, "feat(core): a")
     git(main, "config", "core.hooksPath", ".githooks")
@@ -954,8 +966,6 @@ def test_a_dirty_takeoff_runs_the_suite_but_records_no_stamp(tmp_path):
     result = ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="feat(core): a", R2S_SUITE=str(recorder))
     assert suite_log.read_text().split() == ["ran"]
     assert "not clean" in result.stdout, result.stdout
-    stamp = Path(git(wt, "rev-parse", "--absolute-git-dir").stdout.strip()) / "r2s-pre-push-stamp"
-    assert not stamp.exists(), "a dirty tree recorded a stamp for uncommitted edits"
 
 
 def test_a_dirty_push_reruns_the_suite(tmp_path):
@@ -973,4 +983,4 @@ def test_a_dirty_push_reruns_the_suite(tmp_path):
     head = git(wt, "rev-parse", "HEAD").stdout.strip()
     line = f"refs/heads/feat/1-thing {head} refs/heads/feat/1-thing {'0' * 40}\n"
     assert pre_push(wt, line, R2S_PRE_PUSH_SUITE=f"bash {recorder}").returncode == 0
-    assert suite_log.read_text().split() == ["ran", "ran"], "a dirty push skipped the suite on a stale stamp"
+    assert suite_log.read_text().split() == ["ran", "ran"], "a dirty push skipped the suite"
