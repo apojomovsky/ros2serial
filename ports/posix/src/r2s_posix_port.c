@@ -67,10 +67,34 @@ uint16_t r2s_port_read(uint8_t *buf, uint16_t max)
     return (uint16_t)n;
 }
 
+/* What r2s_port_tx_free() reports when no cap applies. */
+#define TX_FREE_UNCAPPED 0xFFFFu
+
+/* The saturation budget: bytes still writable before the tick moves. */
+static uint16_t s_tx_cap = TX_FREE_UNCAPPED;
+static uint16_t s_tx_left;
+static uint32_t s_tx_tick;
+
+void r2s_posix_set_tx_cap(uint16_t cap)
+{
+    s_tx_cap = cap;
+    s_tx_left = cap;
+    s_tx_tick = r2s_port_tick();
+}
+
 void r2s_port_write(const uint8_t *buf, uint16_t len)
 {
     uint16_t done = 0u;
 
+    if (s_tx_cap != TX_FREE_UNCAPPED) {
+        /* The core reserved these bytes from the budget at begin, so the
+         * budget still holds them; the floor below is belt and braces. */
+        if (s_tx_left >= len) {
+            s_tx_left = (uint16_t)(s_tx_left - len);
+        } else {
+            s_tx_left = 0u;
+        }
+    }
     /* The port reports 0xFFFF free, so it may block: a full pty waits for the
      * reader instead of dropping the frame. */
     while (done < len) {
@@ -95,9 +119,22 @@ void r2s_port_write(const uint8_t *buf, uint16_t len)
 
 uint16_t r2s_port_tx_free(void)
 {
-    /* A blocking write accepts anything the core hands it (TX_FREE_BLOCKING),
-     * so the core never sees TX_BUSY for lack of space on this port. */
-    return 0xFFFFu;
+    uint32_t now;
+
+    if (s_tx_cap == TX_FREE_UNCAPPED) {
+        /* A blocking write accepts anything the core hands it
+         * (TX_FREE_BLOCKING), so the core never sees TX_BUSY for lack of
+         * space on this port. */
+        return TX_FREE_UNCAPPED;
+    }
+    /* The budget refills when the tick moves, so one tick's flood cannot
+     * borrow the next tick's bytes. */
+    now = r2s_port_tick();
+    if (now != s_tx_tick) {
+        s_tx_tick = now;
+        s_tx_left = s_tx_cap;
+    }
+    return s_tx_left;
 }
 
 /* The tick skew in parts per million, set once before the port opens. */
