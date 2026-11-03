@@ -5,8 +5,8 @@ firmware and the real bridge over a serial line.
 
 - `run.sh` is the posix entry point: it builds the bridge workspace and the
   posix firmwares, checks the helper assertions, then runs scenarios 1 to 4
-  and 9 plus the publish catch-up test under each RMW the design names, once
-  per registration path. The static leg uses the generated C firmware, the
+  and 8 to 10 plus the publish catch-up test under each RMW the design names,
+  once per registration path. The static leg uses the generated C firmware, the
   runtime leg the C++ runtime firmware and the static C++ leg the static C++
   firmware on scenarios 1 to 4; all three announce the same topics, so the
   scenario files stay shared and read the firmware from `R2S_E2E_FW`. The
@@ -16,13 +16,15 @@ firmware and the real bridge over a serial line.
   slice sketch for Uno and Mega, checks the helper assertions, then runs
   scenarios 1 to 4 on both boards under each RMW. The suite runs it for
   `E2E=avr`; `R2S_RMWS` and `R2S_E2E_BOARDS` narrow the loops.
-- `e2e_support/` is the framework: the pty relay, the posix firmware
-  launcher, the simavr launcher, the bridge launch through its own launch
-  file, and the checks every backend shares.
+- `e2e_support/` is the framework: the pty relay, the fault-injecting pty
+  proxy, the posix firmware launcher, the simavr launcher, the bridge launch
+  through its own launch file, and the checks every backend shares.
+  `fault_proxy_test.py` unit-tests the proxy with no ROS in the loop.
 - `test_scenario_N_posix.py` is one launch_testing test per scenario on the
   posix backend. Each file launches only the bridge; the firmware spawns
   inside the test once the bridge answers, so timing budgets measure the
-  handshake, not node startup. `test_publish_catchup_posix.py` stalls the
+  handshake, not node startup. Scenario 10 swaps the relay for the
+  fault-injecting proxy. `test_publish_catchup_posix.py` stalls the
   firmware mid-window and holds the 50 Hz count to the scenario 2 floor.
 - `test_scenario_N_avr.py` is the same scenario on the simavr backend. Each
   file spawns the board's firmware first and launches the bridge on the
