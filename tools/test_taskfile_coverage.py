@@ -24,7 +24,10 @@ def tiny_repo(tmp_path, files):
     git(repo, "config", "user.email", "t@example.com")
     git(repo, "config", "user.name", "t")
     (repo / "Taskfile.yml").write_text(
-        "version: '3'\ntasks:\n  gen:\n    sources:\n      - Taskfile.yml\n      - gen/**\n    cmds:\n      - true\n  soak:\n    cmds:\n      - true\n"
+        "version: '3'\ntasks:\n"
+        "  gen:\n    sources:\n      - Taskfile.yml\n      - gen/**\n"
+        "    cmds:\n      - true\n"
+        "  soak:\n    cmds:\n      - true\n"
     )
     for name, text in files.items():
         target = repo / name
