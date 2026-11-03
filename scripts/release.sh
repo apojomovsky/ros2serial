@@ -49,8 +49,8 @@ fi
 python3 "$root/scripts/set_version.py" "$next" "$PWD"
 make -C "$PWD" regen
 "${cliff[@]}" --tag "v$next" -o CHANGELOG.md
-git add VERSION CHANGELOG.md gen/r2s_gen/version.py gen/package.xml bridge/r2s_bridge/package.xml \
-  bridge/r2s_bridge_tests/package.xml \
+git add VERSION CHANGELOG.md gen/r2s_gen/version.py gen/package.xml gen/r2s_rosidl/package.xml \
+  bridge/r2s_bridge/package.xml bridge/r2s_bridge_tests/package.xml \
   gen/tests/golden/bundle/library.properties gen/tests/golden/bundle/r2s_bundled.c \
   gen/tests/golden/bundle/r2s_bundled.h gen/tests/golden/bundle/ros2serial.h \
   gen/tests/golden/bundle/ros2serial.hpp \

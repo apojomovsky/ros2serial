@@ -27,6 +27,10 @@ def tree(tmp_path: Path) -> Path:
     (root / "gen" / "package.xml").write_text(
         '<package format="3">\n  <name>r2s_gen</name>\n  <version>0.1.0</version>\n</package>\n'
     )
+    (root / "gen" / "r2s_rosidl").mkdir(parents=True)
+    (root / "gen" / "r2s_rosidl" / "package.xml").write_text(
+        '<package format="3">\n  <name>r2s_rosidl</name>\n  <version>0.1.0</version>\n</package>\n'
+    )
     (root / "bridge" / "r2s_bridge" / "package.xml").write_text(
         '<package format="3">\n  <name>r2s_bridge</name>\n  <version>0.1.0</version>\n</package>\n'
     )
@@ -47,6 +51,7 @@ def test_every_carrier_gets_the_version(tmp_path):
     assert (root / "VERSION").read_text() == "0.2.0\n"
     assert '__version__ = "0.2.0"' in (root / "gen" / "r2s_gen" / "version.py").read_text()
     assert "<version>0.2.0</version>" in (root / "gen" / "package.xml").read_text()
+    assert "<version>0.2.0</version>" in (root / "gen" / "r2s_rosidl" / "package.xml").read_text()
     assert "<version>0.2.0</version>" in (root / "bridge" / "r2s_bridge" / "package.xml").read_text()
     assert "<version>0.2.0</version>" in (root / "bridge" / "r2s_bridge_tests" / "package.xml").read_text()
 
