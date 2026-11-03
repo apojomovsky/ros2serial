@@ -722,3 +722,56 @@ def test_help_names_options():
     assert proc.returncode == 0
     assert "--node" in proc.stdout.decode()
     assert "--echo" in proc.stdout.decode()
+
+
+def test_bad_tx_free_fails():
+    for bad in ("0", "65535", "abc"):
+        code, error = run_once(["--tx-free", bad])
+        assert code == 2
+        assert "--tx-free" in error
+
+
+def test_flood_without_tx_free_fails():
+    code, error = run_once(["--flood"])
+    assert code == 2
+    assert "--flood" in error
+
+
+# covers: FRM-4, FRM-5, FRM-15
+def test_flood_sheds_samples_with_busy_and_whole_frames():
+    """--flood with --tx-free publishes until the port refuses: a refused
+    sample never takes a seq, so the shed samples show as gaps in the
+    values while the wire frames stay whole and ordered. The loop drains
+    the pty and stderr together, since an unread pty wedges the flooding
+    firmware in its blocking write."""
+    args = ("--no-sub", "--no-echo", "--no-log-text", "--no-time-now", "--tx-free", "16", "--flood")
+    with Firmware(*args) as fw:
+        _hello, _topics, _host = do_handshake(fw)
+        values = []
+        busy = 0
+        err = bytearray()
+        efd = fw._proc.stderr.fileno()
+        deadline = time.monotonic() + 30.0
+        while len(values) < 60 or busy == 0:
+            assert time.monotonic() < deadline, "the flood left no flow or no busy count"
+            ready, _, _ = select.select([fw.master, efd], [], [], 5.0)
+            assert ready, "the firmware went quiet mid-flood"
+            if fw.master in ready:
+                _topic, _seq, payload = read_frame(fw.master, want=16, timeout=5.0)
+                assert len(payload) == 4
+                values.append(struct.unpack("<f", payload)[0])
+            if efd in ready:
+                chunk = os.read(efd, 4096)
+                assert chunk, "the firmware closed stderr mid-flood"
+                err += chunk
+                while b"\n" in err:
+                    line, _, err = err.partition(b"\n")
+                    text = line.decode()
+                    if text.startswith("r2s_posix: flood sent="):
+                        parts = dict(part.split("=") for part in text.split()[2:])
+                        busy = int(parts["busy"])
+    assert all(value == int(value) for value in values), "a frame arrived corrupted"
+    assert all(later > earlier for earlier, later in zip(values, values[1:])), "values went back"
+    ints = [int(value) for value in values]
+    assert ints[-1] - ints[0] + 1 - len(ints) > 0, "no sample was shed on a saturated link"
+    assert busy > 0, "no publish returned TX_BUSY on a saturated link"

@@ -25,7 +25,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32
 
 WINDOW_S = 10.0
-TX_FREE = "24"
+TX_FREE = "16"
 # The flood moves thousands of samples; this floor only proves the flow
 # is alive, since shed samples are the point of the scenario.
 RECEIVE_FLOOR = 100
