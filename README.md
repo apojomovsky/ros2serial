@@ -71,6 +71,13 @@ r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
 void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node.spin_some(); }
 ```
 
+Task-shaped sketches with the same API live beside it: `arduino_hello`
+(`chatter` publisher), `arduino_blink` (`led` subscription driving the LED),
+`arduino_button` (debounced `button` publisher), `arduino_servo` (`servo`
+subscription setting the angle), and `arduino_range` (`range` publisher).
+Each header names the host commands to try it, and each builds for Uno and
+Mega in CI.
+
 You need ROS 2 Jazzy with `colcon` (the bridge is also tested on Lyrical),
 `arduino-cli` with the AVR core and `avr-gcc`, Python 3.10 or newer with
 `pip`, and libsimavr for the emulated run. Every command below also runs in
