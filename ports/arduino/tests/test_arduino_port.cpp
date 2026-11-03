@@ -8,6 +8,12 @@
 #include "r2s/r2s_port.h"
 #include "r2s_arduino_port.h"
 
+#ifdef R2S_TEST_TX_CAP
+// Test-only saturation knob, declared here so the shipped port header
+// stays untouched; the symbol exists only in test builds of the glue.
+extern "C" void r2s_test_set_tx_cap(uint16_t cap);
+#endif
+
 #define CHECK(cond)                                                                                          \
     do {                                                                                                     \
         if (!(cond)) {                                                                                       \
@@ -105,6 +111,36 @@ static int check_another_port_is_selectable_without_port_code(void)
     return 0;
 }
 
+/* Armed, the port budgets bytes per tick: writes spend the budget and the
+ * tick refills it, so a flood past the budget finds the port dry instead
+ * of blocking. 0xFFFF disarms back to the blocking report. */
+#ifdef R2S_TEST_TX_CAP
+static int check_tx_cap_starts_disarmed(void)
+{
+    reset_all();
+    CHECK(r2s_port_tx_free() == 0xFFFFu);
+    return 0;
+}
+
+static int check_tx_cap_budgets_writes_per_tick(void)
+{
+    const uint8_t out[] = {'o', 'k'};
+
+    reset_all();
+    r2s_test_set_tx_cap(16);
+    CHECK(r2s_port_tx_free() == 16u);
+    r2s_port_write(out, sizeof out);
+    CHECK(r2s_port_tx_free() == 14u);
+    set_stub_micros(999);
+    CHECK(r2s_port_tx_free() == 14u);
+    set_stub_micros(1000);
+    CHECK(r2s_port_tx_free() == 16u);
+    r2s_test_set_tx_cap(0xFFFFu);
+    CHECK(r2s_port_tx_free() == 0xFFFFu);
+    return 0;
+}
+#endif
+
 int main(void)
 {
     CHECK(check_default_port_is_serial() == 0);
@@ -113,6 +149,10 @@ int main(void)
     CHECK(check_tx_free_reports_blocking() == 0);
     CHECK(check_tick_is_micros_in_milliseconds() == 0);
     CHECK(check_another_port_is_selectable_without_port_code() == 0);
+#ifdef R2S_TEST_TX_CAP
+    CHECK(check_tx_cap_starts_disarmed() == 0);
+    CHECK(check_tx_cap_budgets_writes_per_tick() == 0);
+#endif
     printf("arduino port ok\n");
     return 0;
 }
