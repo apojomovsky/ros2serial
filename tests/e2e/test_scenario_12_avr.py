@@ -25,7 +25,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32
 from std_msgs.msg import String
 
-# covers: SES-12, FRM-5
+# covers: FRM-5, FRM-15
 
 # Count based gates: simavr runs unpaced, so the same publishes take a
 # wall time the host load decides. The flood moves thousands of samples;

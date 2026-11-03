@@ -66,8 +66,8 @@ extern "C" void r2s_test_set_tx_cap(uint16_t cap)
 void r2s_port_write(const uint8_t *buf, uint16_t len)
 {
 #ifdef R2S_TEST_TX_CAP
-    /* The core reserved these bytes from the budget at begin, so the
-     * budget still holds them; the floor below is belt and braces. */
+    /* Spend the budget the last tx_free report promised; the floor keeps
+     * a short write from wrapping the count. */
     if (s_tx_left >= len) {
         s_tx_left = (uint16_t)(s_tx_left - len);
     } else {
@@ -110,5 +110,10 @@ uint32_t r2s_port_tick(void)
 void r2s_arduino_port_test_reset(void)
 {
     s_selected = nullptr;
+#ifdef R2S_TEST_TX_CAP
+    s_tx_cap = 0xFFFFu;
+    s_tx_left = 0xFFFFu;
+    s_tx_tick = 0u;
+#endif
 }
 #endif
