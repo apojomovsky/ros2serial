@@ -66,10 +66,9 @@ with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(info, (Path(out) / name).read_bytes())
 print(zip_path.name)
 EOF
-# The r2s_gen.cpp package lives out of tree, so an in-tree setup.py run
-# stages a copy at gen/cpp that sdist never removes. Build from a throwaway
-# copy instead, the way the packaging test does, keeping the cpp tree beside
-# it where setup.py looks for it.
+# setup.py writes egg-info and build directories next to its sources, so
+# build from a throwaway copy instead, keeping the cpp tree beside it
+# where setup.py stages it from.
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 python3 - "$root" "$stage" <<'EOF'

@@ -33,14 +33,8 @@ def sdist_from_clean_copy(tmp_path: Path) -> tuple[Path, Path]:
 
 def build(tmp_path: Path, *args: str) -> tuple[Path, subprocess.CompletedProcess]:
     out = tmp_path / "dist"
-    try:
-        result = subprocess.run(["bash", str(SCRIPT), "--out", str(out), *args], capture_output=True, text=True)
-        return out, result
-    finally:
-        # setup.py sdist materializes the out-of-tree cpp package dir as
-        # gen/cpp, so a suite run would leave the tree dirty and the takeoff
-        # stamp disengaged. The build outputs already went to the tmp out.
-        shutil.rmtree(ROOT / "gen" / "cpp", ignore_errors=True)
+    result = subprocess.run(["bash", str(SCRIPT), "--out", str(out), *args], capture_output=True, text=True)
+    return out, result
 
 
 def test_the_arduino_zip_stages_the_bundle_and_the_core(tmp_path):
