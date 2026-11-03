@@ -218,3 +218,11 @@ def test_check_merges_a_caller_e2e_with_the_computed_one(tmp_path):
     out_file = tmp_path / "scopes.txt"
     _, recorded = run_check(repo, out_file, E2E="posix")
     assert recorded.get("E2E") == "both"
+
+
+def test_make_forwards_the_e2e_loop_narrowers():
+    # tests/e2e/README.md documents both for a quicker local loop; make
+    # must hand them into the dev image or they are silently ignored.
+    line = next(line for line in (ROOT / "Makefile").read_text().splitlines() if line.startswith("PASS_VARS"))
+    for var in ("R2S_RMWS", "R2S_E2E_BOARDS"):
+        assert var in line.split(), f"make drops {var} before the container"
