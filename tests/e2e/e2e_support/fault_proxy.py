@@ -2,12 +2,15 @@
 
 Bytes written on one slave come out of the other, as with the plain relay,
 but each direction first passes a fault stage: per-byte drops, duplications
-and corruption, driven by a seeded generator so runs replay. Scenario 10
-uses corruption only: a single flipped bit in an encoded data byte always
-fails the receiver's CRC check, so every touched frame is dropped exactly
-once and the diagnostics counters match the proxy's touched-frame counts.
-Delimiters and rCOBS code bytes pass through untouched for the same reason:
-changing the frame count would break that exact match.
+and corruption, driven by a seeded generator so runs replay. Drops and
+duplications apply to the byte stream at once; corruption waits for the
+frame's delimiter, since rCOBS carries each group's code after its data
+(spec/protocol.md, COB-4) and only the whole frame tells code from data.
+Scenario 10 uses corruption only: a single flipped bit in an encoded data
+byte always fails the receiver's CRC check, so every touched frame is
+dropped exactly once and the diagnostics counters match the proxy's
+touched-frame counts. Bytes leave the proxy at frame boundaries, so a
+trailing partial frame waits for its delimiter.
 """
 
 import math
@@ -43,15 +46,14 @@ class DirectionCounts:
 
 
 class _DirectionState:
-    """One direction's counters plus its incremental frame parse."""
+    """One direction's counters plus its buffered frame in progress."""
 
     def __init__(self):
         self.counts = DirectionCounts()
         self.rng = random.Random()
-        self.offset = 0
-        self.next_code = 0
-        self.first_data = 0
-        self.touched = False
+        # Post-drop [byte, duplicated] pairs of the frame in progress.
+        self.pending = []
+        self.delim_dup = False
 
 
 def _check_rate(name, value):
@@ -118,50 +120,77 @@ class FaultProxy:
         self._thread = threading.Thread(target=self._run, name="fault-proxy", daemon=True)
         self._thread.start()
 
-    def _fault_byte(self, state, byte):
+    @staticmethod
+    def _data_positions(frame):
+        """Encoded offsets holding data, parsed back to front per COB-4.
+
+        Returns None for a malformed frame, which carries no corruption: the
+        receiver drops it however it arrives, so the proxy must not invent a
+        touched frame the counters cannot match.
+        """
+        data = [False] * len(frame)
+        end = len(frame)
+        while end > 0:
+            code = frame[end - 1]
+            if code == 0 or code > end:
+                return None
+            for i in range(end - code, end - 1):
+                data[i] = True
+            end -= code
+        return data
+
+    def _flush_frame(self, state, out):
+        counts = state.counts
+        pending = state.pending
+        state.pending = []
+        delim_dup = state.delim_dup
+        state.delim_dup = False
+        if pending:
+            counts.frames += 1
+            topic = pending[0][0]
+            data = self._data_positions([byte for byte, _ in pending])
+            touched = False
+            if data is not None:
+                for i, (byte, _) in enumerate(pending):
+                    if data[i] and state.rng.random() < self._corrupt_rate:
+                        # A one-bit flip outside 0x00: the grouping survives,
+                        # so the decoded frame differs in exactly this bit.
+                        flipped = byte ^ (0x02 if byte == 0x01 else 0x01)
+                        pending[i][0] = flipped
+                        counts.corrupted += 1
+                        touched = True
+            if touched:
+                counts.frames_touched += 1
+                # The first group's data starts the frame, so its first byte
+                # is the topic id whatever groups follow.
+                if topic >= _FIRST_USER_TOPIC:
+                    counts.user_frames_touched += 1
+            for byte, duplicated in pending:
+                out.append(byte)
+                counts.bytes_out += 1
+                if duplicated:
+                    out.append(byte)
+                    counts.bytes_out += 1
+                    counts.duplicated += 1
+        out.append(0x00)
+        counts.bytes_out += 1
+        if delim_dup:
+            out.append(0x00)
+            counts.bytes_out += 1
+            counts.duplicated += 1
+
+    def _fault_byte(self, state, byte, out):
         counts = state.counts
         counts.bytes_in += 1
         if state.rng.random() < self._drop_rate:
             counts.dropped += 1
-            self._track_input(state, byte)
-            return None
-        out = byte
-        if byte != 0x00 and state.offset != state.next_code:
-            if state.rng.random() < self._corrupt_rate:
-                out = byte ^ (0x02 if byte == 0x01 else 0x01)
-                counts.corrupted += 1
-                state.touched = True
-        self._track_input(state, byte)
-        copies = 1
-        if state.rng.random() < self._dup_rate:
-            copies = 2
-            counts.duplicated += 1
-        counts.bytes_out += copies
-        return bytes([out]) * copies
-
-    @staticmethod
-    def _track_input(state, byte):
-        # Forward parse of the rCOBS framing (spec/protocol.md, COB-1): the
-        # byte at a group start is a code, the rest is data. Pure arithmetic,
-        # so malformed input only misclassifies, never crashes.
-        if byte == 0x00:
-            counts = state.counts
-            if state.offset > 0:
-                counts.frames += 1
-                if state.touched:
-                    counts.frames_touched += 1
-                    if state.offset >= 2 and state.first_data >= _FIRST_USER_TOPIC:
-                        counts.user_frames_touched += 1
-            state.offset = 0
-            state.next_code = 0
-            state.first_data = 0
-            state.touched = False
             return
-        if state.offset == state.next_code:
-            state.next_code = state.offset + byte
-        if state.offset == 1:
-            state.first_data = byte
-        state.offset += 1
+        duplicated = state.rng.random() < self._dup_rate
+        if byte == 0x00:
+            state.delim_dup = duplicated
+            self._flush_frame(state, out)
+        else:
+            state.pending.append([byte, duplicated])
 
     def _forward(self, source, target, state):
         # A master reads EIO until its slave is open and after it closes, and
@@ -178,9 +207,7 @@ class FaultProxy:
         out = bytearray()
         with self._lock:
             for byte in chunk:
-                piece = self._fault_byte(state, byte)
-                if piece is not None:
-                    out += piece
+                self._fault_byte(state, byte, out)
         view = memoryview(bytes(out))
         while view:
             try:

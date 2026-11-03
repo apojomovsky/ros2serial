@@ -43,7 +43,11 @@ def read_available(fd, size=65536):
 
 
 def exchange(proxy, payload):
-    """Send payload each way through a started proxy and return both outputs."""
+    """Send payload each way through a started proxy and return both outputs.
+
+    Only for fault modes that never drop the delimiters: a dropped final
+    delimiter would leave the frame buffered, so drop tests flush below.
+    """
     mcu = open_raw(proxy.mcu_port)
     host = open_raw(proxy.host_port)
     try:
@@ -57,15 +61,51 @@ def exchange(proxy, payload):
         os.close(host)
 
 
-def frame(topic, seq, payload):
-    """One wire frame without a valid CRC: the proxy never checks it.
+def send_then_flush(proxy, source, target, payload):
+    """Send payload under faults, then a clean delimiter that flushes it.
 
-    The payload must hold no zero bytes, so the encoding is one group and
-    the first byte is its code.
+    A faulty final delimiter might itself drop and leave the frame buffered,
+    so the flush delimiter waits until every payload byte is processed and
+    goes out after disabling the faults.
     """
-    body = bytes([topic, seq]) + payload
-    assert 0 not in body
-    return bytes([len(body) + 1]) + body + b"\x00"
+    os.write(source, payload)
+    deadline = time.monotonic() + 30.0
+    while proxy.counts()["mcu_to_host"].bytes_in < len(payload):
+        assert time.monotonic() < deadline, "payload never reached the proxy"
+        time.sleep(0.05)
+    proxy.set_faults()
+    os.write(source, b"\x00")
+    return read_available(target)
+
+
+def rcobs_encode(body):
+    """Encode per spec/protocol.md COB-1: each group's code ends its data."""
+    out = bytearray()
+    n = 1
+    for b in body:
+        if b == 0:
+            out.append(n)
+            n = 1
+        else:
+            out.append(b)
+            n += 1
+            if n == 0xFF:
+                out.append(0xFF)
+                n = 1
+    out.append(n)
+    return bytes(out)
+
+
+def frame(topic, seq, payload):
+    """One wire frame without a valid CRC: the proxy never checks it."""
+    return rcobs_encode(bytes([topic, seq]) + payload) + b"\x00"
+
+
+def data_positions(encoded):
+    """Data offsets of one frame, through the proxy's own classifier."""
+    positions = fault_proxy.FaultProxy._data_positions(list(encoded))
+    assert positions is not None, "test frame is malformed"
+    return positions
 
 
 class TestCleanRelay(unittest.TestCase):
@@ -73,7 +113,8 @@ class TestCleanRelay(unittest.TestCase):
         proxy = fault_proxy.FaultProxy(seed=11)
         proxy.start()
         try:
-            payload = bytes(range(1, 256)) * 4
+            # The trailing delimiter flushes the buffered frame whole.
+            payload = bytes(range(1, 256)) * 4 + b"\x00"
             from_mcu, from_host = exchange(proxy, payload)
             self.assertEqual(from_mcu, payload)
             self.assertEqual(from_host, payload)
@@ -115,31 +156,37 @@ class TestDrops(unittest.TestCase):
             time.sleep(0.05)
 
     def test_partial_drops_keep_order_and_count(self):
-        payload = bytes(range(1, 128)) * 2
-        first = fault_proxy.FaultProxy(seed=22)
-        first.set_faults(drop_rate=0.5)
-        first.start()
-        try:
-            out, _ = exchange(first, payload)
-        finally:
-            first.stop()
-        second = fault_proxy.FaultProxy(seed=22)
-        second.set_faults(drop_rate=0.5)
-        second.start()
-        try:
-            repeat, _ = exchange(second, payload)
-        finally:
-            second.stop()
+        payload = bytes(range(1, 128)) * 2 + b"\x00"
+        outs = []
+        for _ in range(2):
+            proxy = fault_proxy.FaultProxy(seed=22)
+            proxy.set_faults(drop_rate=0.5)
+            proxy.start()
+            try:
+                mcu = open_raw(proxy.mcu_port)
+                host = open_raw(proxy.host_port)
+                try:
+                    outs.append((send_then_flush(proxy, mcu, host, payload), proxy.counts()))
+                finally:
+                    os.close(mcu)
+                    os.close(host)
+            finally:
+                proxy.stop()
+        (out, counts), (repeat, _) = outs
         self.assertEqual(out, repeat)
-        self.assertLess(len(out), len(payload))
+        self.assertLess(len(out), len(payload) + 1)
         self.assertGreater(len(out), 0)
+        # The last byte is the clean flush delimiter; the rest kept order.
         it = iter(payload)
-        for byte in out:
+        for byte in out[:-1]:
             for candidate in it:
                 if candidate == byte:
                     break
-        counts = second.counts()["mcu_to_host"]
-        self.assertEqual(counts.dropped, len(payload) - len(out))
+            else:
+                self.fail(f"byte {byte} out of order")
+        counts = counts["mcu_to_host"]
+        self.assertEqual(counts.dropped, len(payload) + 1 - len(out))
+        self.assertEqual(len(out), len(payload) + 1 - counts.dropped + counts.duplicated)
 
 
 class TestDuplicates(unittest.TestCase):
@@ -148,16 +195,16 @@ class TestDuplicates(unittest.TestCase):
         proxy.set_faults(dup_rate=1.0)
         proxy.start()
         try:
-            from_mcu, _ = exchange(proxy, b"\x01\x02\x00\x03")
-            self.assertEqual(from_mcu, b"\x01\x01\x02\x02\x00\x00\x03\x03")
-            self.assertEqual(proxy.counts()["mcu_to_host"].duplicated, 4)
+            from_mcu, _ = exchange(proxy, b"\x01\x02\x00\x03\x00")
+            self.assertEqual(from_mcu, b"\x01\x01\x02\x02\x00\x00\x03\x03\x00\x00")
+            self.assertEqual(proxy.counts()["mcu_to_host"].duplicated, 5)
         finally:
             proxy.stop()
 
 
 class TestCorruption(unittest.TestCase):
     def test_corrupt_rate_one_flips_one_bit_per_data_byte(self):
-        wire = frame(16, 7, b"\x01AB") + frame(4, 9, b"xy")
+        wire = frame(16, 7, b"\x01AB") + frame(4, 9, b"x\x00y")
         proxy = fault_proxy.FaultProxy(seed=41)
         proxy.set_faults(corrupt_rate=1.0)
         proxy.start()
@@ -166,23 +213,27 @@ class TestCorruption(unittest.TestCase):
         finally:
             proxy.stop()
         self.assertEqual(len(out), len(wire))
-        for before, after in zip(wire, out):
+        for before, after in zip(wire, out, strict=True):
             if before == 0x00:
                 self.assertEqual(after, 0x00)
-        first, second = wire.split(b"\x00")[0], wire.split(b"\x00")[1]
-        got_first, got_second = out.split(b"\x00")[0], out.split(b"\x00")[1]
-        self.assertEqual(got_first[0], first[0])
-        self.assertEqual(got_second[0], second[0])
-        for frame_index, (plain, got) in enumerate(((first, got_first), (second, got_second))):
-            for position in range(1, len(plain)):
-                xor = plain[position] ^ got[position]
-                self.assertTrue(xor != 0 and xor & (xor - 1) == 0, f"frame {frame_index} byte {position}")
-                self.assertNotEqual(got[position], 0x00)
+        plain_frames = wire.split(b"\x00")[:2]
+        got_frames = out.split(b"\x00")[:2]
+        total_data = 0
+        for frame_index, (plain, got) in enumerate(zip(plain_frames, got_frames, strict=True)):
+            data = data_positions(plain)
+            total_data += sum(data)
+            for position, is_data in enumerate(data):
+                if is_data:
+                    xor = plain[position] ^ got[position]
+                    self.assertTrue(xor != 0 and xor & (xor - 1) == 0, f"frame {frame_index} byte {position}")
+                    self.assertNotEqual(got[position], 0x00)
+                else:
+                    self.assertEqual(got[position], plain[position], f"frame {frame_index} code {position}")
         counts = proxy.counts()["mcu_to_host"]
         self.assertEqual(counts.frames, 2)
         self.assertEqual(counts.frames_touched, 2)
         self.assertEqual(counts.user_frames_touched, 1)
-        self.assertEqual(counts.corrupted, len(first) + len(second) - 2)
+        self.assertEqual(counts.corrupted, total_data)
 
     def test_user_boundary_at_topic_16(self):
         wire = frame(15, 3, b"q") + frame(16, 3, b"q")
@@ -198,31 +249,44 @@ class TestCorruption(unittest.TestCase):
         self.assertEqual(counts.user_frames_touched, 1)
 
     def test_same_seed_replays_same_faults(self):
-        payload = bytes(range(1, 200))
+        payload = bytes(range(1, 200)) + b"\x00"
         outs = []
         for _ in range(2):
             proxy = fault_proxy.FaultProxy(seed=43)
             proxy.set_faults(corrupt_rate=0.3, drop_rate=0.1)
             proxy.start()
             try:
-                out, _ = exchange(proxy, payload)
-                outs.append(out)
+                mcu = open_raw(proxy.mcu_port)
+                host = open_raw(proxy.host_port)
+                try:
+                    outs.append((send_then_flush(proxy, mcu, host, payload), proxy.counts()))
+                finally:
+                    os.close(mcu)
+                    os.close(host)
             finally:
                 proxy.stop()
-        self.assertEqual(outs[0], outs[1])
-        self.assertNotEqual(outs[0], payload)
+        self.assertEqual(outs[0][0], outs[1][0])
+        self.assertEqual(outs[0][1]["mcu_to_host"].__dict__, outs[1][1]["mcu_to_host"].__dict__)
+        faults = outs[0][1]["mcu_to_host"].dropped + outs[0][1]["mcu_to_host"].corrupted
+        self.assertGreater(faults, 0)
 
     def test_garbage_never_crashes_and_balances(self):
-        payload = bytes((n * 37 + 11) % 256 for n in range(600))
+        payload = bytes((n * 37 + 11) % 256 for n in range(600)) + b"\x00"
         proxy = fault_proxy.FaultProxy(seed=44)
         proxy.set_faults(corrupt_rate=0.2, drop_rate=0.2, dup_rate=0.2)
         proxy.start()
         try:
-            out, _ = exchange(proxy, payload)
+            mcu = open_raw(proxy.mcu_port)
+            host = open_raw(proxy.host_port)
+            try:
+                out = send_then_flush(proxy, mcu, host, payload)
+            finally:
+                os.close(mcu)
+                os.close(host)
         finally:
             proxy.stop()
         counts = proxy.counts()["mcu_to_host"]
-        self.assertEqual(len(out), len(payload) - counts.dropped + counts.duplicated)
+        self.assertEqual(len(out), len(payload) + 1 - counts.dropped + counts.duplicated)
 
 
 class TestControl(unittest.TestCase):
