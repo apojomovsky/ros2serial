@@ -117,3 +117,9 @@ def test_the_runner_reports_the_failed_attempt(tmp_path):
     proc, _, _ = run(tmp_path, script="exit 3", CORE="1")
     assert proc.returncode == 3, proc.stdout + proc.stderr
     assert "run-tasks: FAILED tasks [core] (exit 3)" in proc.stderr
+
+
+def test_the_runner_marks_a_forced_attempt(tmp_path):
+    proc, _, _ = run(tmp_path, CORE="1", R2S_FULL="1")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "run-tasks: running tasks [core] --force" in proc.stdout
