@@ -4,6 +4,7 @@
 // covers: SES-12, SES-13, SES-14, SES-15, SES-16, SES-17, SES-18, SES-19, SES-20, SES-21, CTL-3, CTL-9
 // covers: CTL-13, SES-32, SES-33
 // covers: LOG-1, LOG-2, LOG-3, LOG-4, ENC-14
+// covers: ERR-1, ERR-2, ERR-5, ERR-6
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -1698,6 +1699,103 @@ TEST(SessionLog, DropsALogTextWithAnEmbeddedNul)
     LogFixture fixture;
     fixture.deliver_log(log_payload(20u, std::string("a\0b", 3u)));
     EXPECT_TRUE(fixture.lines().empty()) << "a NUL byte refuses the line";
+}
+
+// An MCU error report ([ERR-1]): the code, the topic, the count and the
+// field, decoded in any state like a log line.
+// covers: ERR-1, ERR-2, ERR-6
+class ErrorFixture
+{
+  public:
+    ErrorFixture()
+    {
+        SessionEvents events;
+        events.mcu_log = [this](SessionLog level, const std::string &text) {
+            lines_.emplace_back(level, text);
+        };
+        session_ = std::make_unique<Session>(
+            SessionConfig{}, clock_, clock_,
+            [this]() { return std::unique_ptr<Transport>(new Link(transport_)); },
+            [](const TopicInfo &) { return std::uint8_t{0}; }, events);
+    }
+
+    void deliver_report(const std::vector<std::uint8_t> &payload)
+    {
+        std::vector<std::uint8_t> frame{kErrorTopic, 0u};
+        frame.insert(frame.end(), payload.begin(), payload.end());
+        transport_.script_read(wire_of(with_check(frame)));
+        session_->poll();
+    }
+
+    const std::vector<std::pair<SessionLog, std::string>> &lines() const
+    {
+        return lines_;
+    }
+
+  private:
+    static constexpr std::uint8_t kErrorTopic = 5u;
+    ManualClock clock_;
+    FakeTransport transport_;
+    std::unique_ptr<Session> session_;
+    std::vector<std::pair<SessionLog, std::string>> lines_;
+};
+
+TEST(SessionError, ForwardsACodeWithItsTopicAndCount)
+{
+    ErrorFixture fixture;
+    fixture.deliver_report({6u, 16u, 42u, 0u, 0xFFu});
+    ASSERT_EQ(fixture.lines().size(), 1u) << "one report forwards one line";
+    EXPECT_EQ(fixture.lines()[0].first, SessionLog::kWarning);
+    const std::string &line = fixture.lines()[0].second;
+    EXPECT_NE(line.find("code 6"), std::string::npos) << line;
+    EXPECT_NE(line.find("16"), std::string::npos) << line;
+    EXPECT_NE(line.find("42"), std::string::npos) << line;
+}
+
+TEST(SessionError, DropsAShortReport)
+{
+    ErrorFixture fixture;
+    fixture.deliver_report({6u, 16u, 42u, 0u});
+    EXPECT_TRUE(fixture.lines().empty()) << "a short payload forwards nothing";
+}
+
+TEST(SessionError, DropsAReportWithAnUnknownCode)
+{
+    for (const std::uint8_t code : {0u, 7u, 0xFFu}) {
+        ErrorFixture fixture;
+        fixture.deliver_report({code, 16u, 1u, 0u, 0xFFu});
+        EXPECT_TRUE(fixture.lines().empty()) << "code " << static_cast<int>(code) << " forwards nothing";
+    }
+}
+
+// covers: ERR-5
+TEST(SessionError, NamesTheTopicAndFieldPathWhenTheyResolve)
+{
+    std::vector<std::pair<SessionLog, std::string>> lines;
+    SessionEvents events;
+    events.mcu_log = [&lines](SessionLog level, const std::string &text) { lines.emplace_back(level, text); };
+    ManualClock clock;
+    FakeTransport transport;
+    Session session(
+        SessionConfig{}, clock, clock,
+        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
+        [](const TopicInfo &) { return std::uint8_t{0}; }, events);
+    const auto deliver = [&transport, &session](std::uint8_t topic_id, std::uint8_t seq,
+                                                const std::vector<std::uint8_t> &payload) {
+        std::vector<std::uint8_t> decoded{topic_id, seq};
+        decoded.insert(decoded.end(), payload.begin(), payload.end());
+        transport.script_read(wire_of(with_check(decoded)));
+        session.poll();
+    };
+    deliver(0u, 0u, hello_payload(0x1000u, 1u));
+    deliver(0u, 1u, topic_payload(0u, 0x10u, "battery"));
+    ASSERT_EQ(session.state(), SessionState::kConnected) << "one ok topic connects at once";
+    std::vector<std::uint8_t> report{1u, 0x10u, 7u, 0u, 0u};
+    deliver(5u, 0u, report);
+    ASSERT_EQ(lines.size(), 1u) << "one report forwards one line";
+    EXPECT_NE(lines[0].second.find("code 1"), std::string::npos) << lines[0].second;
+    EXPECT_NE(lines[0].second.find("battery"), std::string::npos) << lines[0].second;
+    EXPECT_NE(lines[0].second.find("data"), std::string::npos) << lines[0].second;
 }
 
 } // namespace
