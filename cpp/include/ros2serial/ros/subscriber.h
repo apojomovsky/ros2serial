@@ -41,14 +41,22 @@ template <typename MsgT, typename ObjT = void> class Subscriber
 
     /* Decodes the frame into the subscriber's store and calls it. Passed to
      * the registry, which keeps the subscriber's address as the record, so
-     * the subscriber must outlive the spinning node. */
-    static void dispatch(void *record, const uint8_t *payload, uint16_t len, uint8_t narrow)
+     * the subscriber must outlive the spinning node. A bound violation
+     * reports the field like the runtime path, then drops the message. */
+    static void dispatch(void *record, const uint8_t *payload, uint16_t len, uint8_t narrow, uint8_t topic)
     {
         Subscriber *self = static_cast<Subscriber *>(record);
         uint8_t field = 0xFFu;
 
-        if (r2s_codec_decode(r2s::msg_traits<MsgT>::table(), r2s::msg_traits<MsgT>::type_index(), payload,
-                             len, narrow, &self->msg, &field) != R2S_OK) {
+        switch (r2s_codec_decode(r2s::msg_traits<MsgT>::table(), r2s::msg_traits<MsgT>::type_index(), payload,
+                                 len, narrow, &self->msg, &field)) {
+        case R2S_OK:
+            break;
+        case R2S_ERR_BOUNDS:
+            r2s_error_note(R2S_ERROR_BOUND, topic, field, 1u);
+            r2s_framer_count_refused();
+            return;
+        default:
             r2s_framer_count_refused();
             return;
         }
@@ -88,14 +96,22 @@ template <typename MsgT> class Subscriber<MsgT, void>
 
     /* Decodes the frame into the subscriber's store and calls it. Passed to
      * the registry, which keeps the subscriber's address as the record, so
-     * the subscriber must outlive the spinning node. */
-    static void dispatch(void *record, const uint8_t *payload, uint16_t len, uint8_t narrow)
+     * the subscriber must outlive the spinning node. A bound violation
+     * reports the field like the runtime path, then drops the message. */
+    static void dispatch(void *record, const uint8_t *payload, uint16_t len, uint8_t narrow, uint8_t topic)
     {
         Subscriber *self = static_cast<Subscriber *>(record);
         uint8_t field = 0xFFu;
 
-        if (r2s_codec_decode(r2s::msg_traits<MsgT>::table(), r2s::msg_traits<MsgT>::type_index(), payload,
-                             len, narrow, &self->msg, &field) != R2S_OK) {
+        switch (r2s_codec_decode(r2s::msg_traits<MsgT>::table(), r2s::msg_traits<MsgT>::type_index(), payload,
+                                 len, narrow, &self->msg, &field)) {
+        case R2S_OK:
+            break;
+        case R2S_ERR_BOUNDS:
+            r2s_error_note(R2S_ERROR_BOUND, topic, field, 1u);
+            r2s_framer_count_refused();
+            return;
+        default:
             r2s_framer_count_refused();
             return;
         }
