@@ -39,6 +39,8 @@ TYPES_CASES = [
         },
         "joint_state.h",
     ),
+    ("sensor_msgs/msg/Imu", HEADER_BOUNDS, "imu.h"),
+    ("sensor_msgs/msg/Range", HEADER_BOUNDS, "range.h"),
 ]
 DESCRIPTOR_ROOTS = ["std_msgs/msg/Float32", "geometry_msgs/msg/Twist"]
 

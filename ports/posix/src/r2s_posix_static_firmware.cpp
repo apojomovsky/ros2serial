@@ -1,7 +1,7 @@
-/* Static posix firmware: the same Float32, Twist, String and Time topics as
- * the generated C firmware, announced from a fixed R2S_TOPICS list through
- * the static C++ API, so the end-to-end suite drives the static path as a
- * process on a pty. The command line mirrors the C firmware's, and the
+/* Static posix firmware: the same Float32, Twist, String, Time and JointState
+ * topics as the generated C firmware, announced from a fixed R2S_TOPICS list
+ * through the static C++ API, so the end-to-end suite drives the static path
+ * as a process on a pty. The command line mirrors the C firmware's, and the
  * topics announce in the same order with IDs from 16. Renaming or dropping
  * a row is rejected: the static list fixes the announce, so only
  * --no-log-text silences its traffic while staying announced. */
@@ -18,10 +18,12 @@
     X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)                           \
     X(Publisher, geometry_msgs::msg::Twist, echo_vel_pub, "echo_vel")                                        \
     X(Publisher, std_msgs::msg::String, log_text_pub, "log_text")                                            \
-    X(Publisher, builtin_interfaces::msg::Time, time_now_pub, "time_now")
+    X(Publisher, builtin_interfaces::msg::Time, time_now_pub, "time_now")                                    \
+    X(Subscription, sensor_msgs::msg::JointState, joints_sub, "joints", on_joints)
 #include "ros2serial.h"
 
 #include <builtin_interfaces/msg/time.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/string.hpp>
 
@@ -75,11 +77,21 @@ void on_cmd_vel(const geometry_msgs::msg::Twist &msg)
     (void)echo_vel_pub.publish(msg);
 }
 
+static uint32_t s_joints_count;
+
+void on_joints(const sensor_msgs::msg::JointState &msg)
+{
+    (void)msg;
+    s_joints_count++;
+    fprintf(stderr, "r2s_posix: joints n=%lu\n", (unsigned long)s_joints_count);
+}
+
 static void usage(FILE *out)
 {
     fprintf(out, "Usage: r2s_posix_static_firmware PORT [--node NAME] [--rate HZ]\n"
                  "           [--pub NAME | --no-pub] [--sub NAME | --no-sub]\n"
                  "           [--echo NAME | --no-echo] [--time-now NAME | --no-time-now]\n"
+                 "           [--joints NAME | --no-joints]\n"
                  "           [--log-text NAME | --no-log-text] [--log-lines] [--tick-skew-ppm PPM]\n");
 }
 
@@ -214,6 +226,8 @@ static void parse_options(int argc, char **argv, struct options *opts)
             reject_list_change(arg, take_value(argc, argv, &i, arg));
         } else if (strcmp(arg, "--time-now") == 0) {
             reject_list_change(arg, take_value(argc, argv, &i, arg));
+        } else if (strcmp(arg, "--joints") == 0) {
+            reject_list_change(arg, take_value(argc, argv, &i, arg));
         } else if (strcmp(arg, "--tick-skew-ppm") == 0) {
             opts->skew_ppm = take_skew(take_value(argc, argv, &i, arg));
         } else if (strcmp(arg, "--no-pub") == 0) {
@@ -228,6 +242,8 @@ static void parse_options(int argc, char **argv, struct options *opts)
             opts->log_text = NULL;
         } else if (strcmp(arg, "--no-time-now") == 0) {
             reject_list_change(arg, kDefaultTimeNow);
+        } else if (strcmp(arg, "--no-joints") == 0) {
+            reject_list_change(arg, "joints");
         } else if (strcmp(arg, "--log-lines") == 0) {
             opts->log_lines = 1u;
         } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {

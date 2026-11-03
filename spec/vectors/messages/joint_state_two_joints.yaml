@@ -1,0 +1,11 @@
+name: joint_state_two_joints
+covers: [ENC-1, ENC-2, ENC-4, ENC-7, ENC-9]
+type: sensor_msgs/msg/JointState
+profile: {narrow_float64: false}
+message:
+  header: {stamp: {sec: 7, nanosec: 8}, frame_id: "base"}
+  name: ["shoulder", "elbow"]
+  position: [1.5, -2.5]
+  velocity: [0.0, 0.1]
+  effort: []
+payload: "07 00 00 00 08 00 00 00 04 62 61 73 65 02 08 73 68 6f 75 6c 64 65 72 05 65 6c 62 6f 77 02 00 00 00 00 00 00 f8 3f 00 00 00 00 00 00 04 c0 02 00 00 00 00 00 00 00 00 9a 99 99 99 99 99 b9 3f 00"

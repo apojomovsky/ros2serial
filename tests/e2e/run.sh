@@ -95,7 +95,7 @@ for leg in static runtime static_cpp; do
     # other legs run the whole file list.
     case $leg in
       static_cpp) files="test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix" ;;
-      *) files="test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_8_posix test_scenario_9_posix test_scenario_10_posix test_scenario_10_framing_posix test_publish_catchup_posix test_scenario_12_posix" ;;
+      *) files="test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_8_posix test_scenario_9_posix test_scenario_10_posix test_scenario_10_framing_posix test_publish_catchup_posix test_scenario_11_posix test_scenario_12_posix" ;;
     esac
     for test_file in $files; do
       # The isolation pairs skip scenario 8 through R2S_E2E_SKIP: its bound

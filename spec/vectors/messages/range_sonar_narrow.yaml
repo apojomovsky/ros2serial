@@ -1,0 +1,13 @@
+name: range_sonar_narrow
+covers: [ENC-1, ENC-3]
+type: sensor_msgs/msg/Range
+profile: {narrow_float64: true}
+message:
+  header: {stamp: {sec: 1, nanosec: 2}, frame_id: "sonar"}
+  radiation_type: 0
+  field_of_view: 0.5
+  min_range: {bits: "3ca3d70a"}
+  max_range: 4.0
+  range: .inf
+  variance: 0.0
+payload: "01 00 00 00 02 00 00 00 05 73 6f 6e 61 72 00 00 00 00 3f 0a d7 a3 3c 00 00 80 40 00 00 80 7f 00 00 00 00"

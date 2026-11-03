@@ -18,6 +18,7 @@ functions) for vectors, rather than against the generated runner.
 """
 
 import json
+import os
 import re
 import struct
 import sys
@@ -118,7 +119,278 @@ def _hex_field(where: str, prefix: str, field: str, case: dict) -> tuple[str, st
     return _blob(prefix, field, data, case[field])
 
 
-KNOWN_MESSAGE_TYPES = ("std_msgs/msg/Float32", "geometry_msgs/msg/Twist")
+KNOWN_MESSAGE_TYPES = (
+    "std_msgs/msg/Float32",
+    "geometry_msgs/msg/Twist",
+    "sensor_msgs/msg/Range",
+    "sensor_msgs/msg/Imu",
+    "sensor_msgs/msg/JointState",
+)
+
+# The struct sizes of the test build the images below must match, padding
+# included: LP64 with 8-byte doubles, or m32 where doubles align to 4. The C
+# tables read their offsets from the structs, so they follow both; the images
+# here name each ABI's layout outright. R2S_VECTOR_ABI selects it, defaulting
+# to the 64-bit host; the core CMake sets it from its own -m32 flag.
+_VECTOR_ABI = os.environ.get("R2S_VECTOR_ABI", "lp64")
+
+if _VECTOR_ABI == "lp64":
+    RANGE_STRUCT_SIZE = 60
+    IMU_STRUCT_SIZE = 336
+    JOINT_STATE_STRUCT_SIZE = 216
+    IMU_ORIENTATION = 40
+    IMU_ORI_COV = 72
+    IMU_ANG_VEL = 144
+    IMU_ANG_COV = 168
+    IMU_LIN_ACC = 240
+    IMU_LIN_COV = 264
+    JOINT_STATE_NAME = 36
+    JOINT_STATE_NAME_N = 88
+    JOINT_STATE_POSITION = 96
+    JOINT_STATE_POSITION_N = 128
+    JOINT_STATE_VELOCITY = 136
+    JOINT_STATE_VELOCITY_N = 168
+    JOINT_STATE_EFFORT = 176
+    JOINT_STATE_EFFORT_N = 208
+elif _VECTOR_ABI == "m32":
+    RANGE_STRUCT_SIZE = 60
+    IMU_STRUCT_SIZE = 332
+    JOINT_STATE_STRUCT_SIZE = 200
+    IMU_ORIENTATION = 36
+    IMU_ORI_COV = 68
+    IMU_ANG_VEL = 140
+    IMU_ANG_COV = 164
+    IMU_LIN_ACC = 236
+    IMU_LIN_COV = 260
+    JOINT_STATE_NAME = 36
+    JOINT_STATE_NAME_N = 88
+    JOINT_STATE_POSITION = 92
+    JOINT_STATE_POSITION_N = 124
+    JOINT_STATE_VELOCITY = 128
+    JOINT_STATE_VELOCITY_N = 160
+    JOINT_STATE_EFFORT = 164
+    JOINT_STATE_EFFORT_N = 196
+else:
+    raise VectorError(f"R2S_VECTOR_ABI is {_VECTOR_ABI!r}, not lp64 or m32")
+
+# The bounds the handwritten tables give the new types: a vector that exceeds
+# them is a bug in the vector, since the tables cannot decode it.
+FRAME_ID_BOUND = 24
+NAME_COUNT_BOUND = 4
+NAME_STRING_BOUND = 12
+ARRAY_BOUND = 4
+
+
+def _pack_int(where: str, value: object, width: int, signed: bool) -> bytes:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise VectorError(f"{where}: expected an integer, not {value!r}")
+    try:
+        return int(value).to_bytes(width, "little", signed=signed)
+    except OverflowError:
+        raise VectorError(f"{where}: {value!r} does not fit {width} bytes") from None
+
+
+def _put_int(image: bytearray, offset: int, where: str, value: object, width: int, signed: bool) -> None:
+    image[offset : offset + width] = _pack_int(where, value, width, signed)
+
+
+def _narrow_bytes(where: str, value: object) -> bytes:
+    """The binary32 of a value on a narrow topic ([ENC-11]): a finite value too
+    large for binary32 becomes an infinity of the same sign."""
+    if isinstance(value, dict):
+        return _float_bytes(where, value, 4)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise VectorError(f"{where}: expected a number or {{bits: ...}}, not {value!r}")
+    number = float(value)
+    try:
+        return struct.pack("<f", number)
+    except OverflowError:
+        return struct.pack("<f", float("inf") if number > 0 else float("-inf"))
+
+
+def _put_float(image: bytearray, offset: int, where: str, value: object, width: int, narrow_decode: bool) -> None:
+    if width == 8 and narrow_decode:
+        narrow = _narrow_bytes(where, value)
+        image[offset : offset + 8] = struct.pack("<d", struct.unpack("<f", narrow)[0])
+    else:
+        image[offset : offset + width] = _float_bytes(where, value, width)
+
+
+def _put_string(image: bytearray, offset: int, where: str, value: object, bound: int) -> None:
+    if not isinstance(value, str):
+        raise VectorError(f"{where}: expected a string, not {value!r}")
+    try:
+        raw = value.encode("ascii")
+    except UnicodeEncodeError:
+        raise VectorError(f"{where}: {value!r} is not ASCII") from None
+    if len(raw) > bound:
+        raise VectorError(f"{where}: {value!r} exceeds the bound of {bound}")
+    image[offset : offset + len(raw)] = raw
+    image[offset + len(raw)] = 0
+
+
+def _put_time(image: bytearray, offset: int, where: str, message: dict) -> None:
+    stamp = message["stamp"]
+    _put_int(image, offset, f"{where}.sec", stamp["sec"], 4, True)
+    _put_int(image, offset + 4, f"{where}.nanosec", stamp["nanosec"], 4, False)
+
+
+def _put_header(image: bytearray, offset: int, where: str, message: dict) -> None:
+    _put_time(image, offset, f"{where}.stamp", message)
+    _put_string(image, offset + 8, f"{where}.frame_id", message["frame_id"], FRAME_ID_BOUND)
+
+
+def _put_vector3(image: bytearray, offset: int, where: str, message: dict, narrow_decode: bool) -> None:
+    for i, axis in enumerate(("x", "y", "z")):
+        _put_float(image, offset + 8 * i, f"{where}.{axis}", message[axis], 8, narrow_decode)
+
+
+def _put_quaternion(image: bytearray, offset: int, where: str, message: dict, narrow_decode: bool) -> None:
+    for i, axis in enumerate(("x", "y", "z", "w")):
+        _put_float(image, offset + 8 * i, f"{where}.{axis}", message[axis], 8, narrow_decode)
+
+
+def _put_float64_array(
+    image: bytearray,
+    offset: int,
+    where: str,
+    values: object,
+    bound: int,
+    narrow_decode: bool,
+) -> None:
+    if not isinstance(values, list):
+        raise VectorError(f"{where}: expected a list, not {values!r}")
+    if len(values) > bound:
+        raise VectorError(f"{where}: {len(values)} elements exceed the bound of {bound}")
+    for i, value in enumerate(values):
+        _put_float(image, offset + 8 * i, f"{where}[{i}]", value, 8, narrow_decode)
+
+
+def _put_string_array(
+    image: bytearray,
+    offset: int,
+    count_offset: int,
+    where: str,
+    values: object,
+    bound: int,
+    string_bound: int,
+) -> None:
+    if not isinstance(values, list):
+        raise VectorError(f"{where}: expected a list, not {values!r}")
+    if len(values) > bound:
+        raise VectorError(f"{where}: {len(values)} elements exceed the bound of {bound}")
+    for i, value in enumerate(values):
+        _put_string(image, offset + (string_bound + 1) * i, f"{where}[{i}]", value, string_bound)
+    _put_int(image, count_offset, where, len(values), 1, False)
+
+
+def _put_float64_sequence(
+    image: bytearray,
+    offset: int,
+    count_offset: int,
+    where: str,
+    values: object,
+    bound: int,
+    narrow_decode: bool,
+) -> None:
+    _put_float64_array(image, offset, where, values, bound, narrow_decode)
+    _put_int(image, count_offset, where, len(values), 1, False)
+
+
+def _struct_range(where: str, message: dict, image: bytearray, narrow_decode: bool) -> None:
+    _put_header(image, 0, f"{where}.header", message["header"])
+    _put_int(image, 36, f"{where}.radiation_type", message["radiation_type"], 1, False)
+    for i, field in enumerate(("field_of_view", "min_range", "max_range", "range", "variance")):
+        _put_float(image, 40 + 4 * i, f"{where}.{field}", message[field], 4, False)
+
+
+def _struct_imu(where: str, message: dict, image: bytearray, narrow_decode: bool) -> None:
+    _put_header(image, 0, f"{where}.header", message["header"])
+    _put_quaternion(image, IMU_ORIENTATION, f"{where}.orientation", message["orientation"], narrow_decode)
+    _put_float64_array(
+        image,
+        IMU_ORI_COV,
+        f"{where}.orientation_covariance",
+        message["orientation_covariance"],
+        9,
+        narrow_decode,
+    )
+    _put_vector3(image, IMU_ANG_VEL, f"{where}.angular_velocity", message["angular_velocity"], narrow_decode)
+    _put_float64_array(
+        image,
+        IMU_ANG_COV,
+        f"{where}.angular_velocity_covariance",
+        message["angular_velocity_covariance"],
+        9,
+        narrow_decode,
+    )
+    _put_vector3(image, IMU_LIN_ACC, f"{where}.linear_acceleration", message["linear_acceleration"], narrow_decode)
+    _put_float64_array(
+        image,
+        IMU_LIN_COV,
+        f"{where}.linear_acceleration_covariance",
+        message["linear_acceleration_covariance"],
+        9,
+        narrow_decode,
+    )
+
+
+def _struct_joint_state(where: str, message: dict, image: bytearray, narrow_decode: bool) -> None:
+    _put_header(image, 0, f"{where}.header", message["header"])
+    _put_string_array(
+        image,
+        JOINT_STATE_NAME,
+        JOINT_STATE_NAME_N,
+        f"{where}.name",
+        message["name"],
+        NAME_COUNT_BOUND,
+        NAME_STRING_BOUND,
+    )
+    _put_float64_sequence(
+        image,
+        JOINT_STATE_POSITION,
+        JOINT_STATE_POSITION_N,
+        f"{where}.position",
+        message["position"],
+        ARRAY_BOUND,
+        narrow_decode,
+    )
+    _put_float64_sequence(
+        image,
+        JOINT_STATE_VELOCITY,
+        JOINT_STATE_VELOCITY_N,
+        f"{where}.velocity",
+        message["velocity"],
+        ARRAY_BOUND,
+        narrow_decode,
+    )
+    _put_float64_sequence(
+        image,
+        JOINT_STATE_EFFORT,
+        JOINT_STATE_EFFORT_N,
+        f"{where}.effort",
+        message["effort"],
+        ARRAY_BOUND,
+        narrow_decode,
+    )
+
+
+def _struct_image(where: str, type_name: str, message: dict, narrow_decode: bool, fill: int) -> bytes:
+    """The C struct image of a message: zeros fill padding on encode, while a
+    decode image keeps the 0xA5 the check prefills wherever the interpreter
+    writes nothing."""
+    if type_name == "sensor_msgs/msg/Range":
+        image = bytearray([fill]) * RANGE_STRUCT_SIZE
+        _struct_range(where, message, image, narrow_decode)
+    elif type_name == "sensor_msgs/msg/Imu":
+        image = bytearray([fill]) * IMU_STRUCT_SIZE
+        _struct_imu(where, message, image, narrow_decode)
+    elif type_name == "sensor_msgs/msg/JointState":
+        image = bytearray([fill]) * JOINT_STATE_STRUCT_SIZE
+        _struct_joint_state(where, message, image, narrow_decode)
+    else:
+        raise VectorError(f"{where}: no struct layout for {type_name}")
+    return bytes(image)
 
 
 def _float_bytes(where: str, value: object, width: int) -> bytes:
@@ -170,7 +442,7 @@ def _messages_case(where: str, prefix: str, case: dict) -> tuple[str, str]:
                 raise VectorError(f"{where}: a Float32 payload is 4 bytes")
             blobs = [_float_bytes(f"{where}.data", message["data"], 4)]
             encode = decode = b"".join(blobs)
-        else:
+        elif type_name == "geometry_msgs/msg/Twist":
             parts = [
                 _float_bytes(f"{where}.{group}.{axis}", message[group][axis], 8)
                 for group in ("linear", "angular")
@@ -187,8 +459,11 @@ def _messages_case(where: str, prefix: str, case: dict) -> tuple[str, str]:
                 if len(payload) != 48:
                     raise VectorError(f"{where}: a Twist payload is 48 bytes")
                 decode = encode
+        else:
+            encode = _struct_image(where, type_name, message, False, 0x00)
+            decode = _struct_image(where, type_name, message, narrow, 0xA5)
     except (KeyError, TypeError, AttributeError) as caught:
-        raise VectorError(f"{where}: the message is not a Float32 or Twist mapping: {caught}") from caught
+        raise VectorError(f"{where}: the message is not a mapping for {type_name}: {caught}") from caught
     p_def, p = _blob(prefix, "payload", payload, case["payload"])
     e_def, e_expr = _array(f"{prefix}_encode", encode)
     d_def, d_expr = _array(f"{prefix}_decode", decode)

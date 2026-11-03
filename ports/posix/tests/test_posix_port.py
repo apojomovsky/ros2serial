@@ -277,15 +277,15 @@ def test_hello_announces_firmware(tmp_path):
     assert hello["version"] == 2
     assert hello["mode"] == 0
     assert hello["token"] == 0, "no token before the first READY"
-    assert hello["max_frame"] == 53
-    assert hello["rx_capacity"] == 53 + 53 // 254 + 1
+    assert hello["max_frame"] == 279
+    assert hello["rx_capacity"] == 279 + 279 // 254 + 1
     # covers: CTL-8
     assert hello["tick_hz"] == 1000
     # covers: CTL-10
     assert hello["max_frame"] <= 65277
     # covers: CTL-2
     assert hello["features"] & 0xC0 == 0
-    assert hello["count"] == 5
+    assert hello["count"] == 6
     assert hello["node"] == "r2s_posix"
 
 
@@ -293,19 +293,20 @@ def test_hello_announces_firmware(tmp_path):
 def test_handshake_reaches_connected(tmp_path):
     with Firmware("--rate", "10") as fw:
         hello, topics, _host = do_handshake(fw)
-        assert [t["topic"] for t in topics] == ["battery", "cmd_vel", "echo_vel", "log_text", "time_now"]
+        assert [t["topic"] for t in topics] == ["battery", "cmd_vel", "echo_vel", "log_text", "time_now", "joints"]
         assert [(t["type"], t["id"]) for t in topics] == [
             ("std_msgs/msg/Float32", 16),
             ("geometry_msgs/msg/Twist", 17),
             ("geometry_msgs/msg/Twist", 18),
             ("std_msgs/msg/String", 19),
             ("builtin_interfaces/msg/Time", 20),
+            ("sensor_msgs/msg/JointState", 21),
         ]
         # covers: FRM-3
         assert all(16 <= t["id"] <= 255 for t in topics)
         # covers: CTL-4
         assert all(t["flags"] & 0xF0 == 0 for t in topics)
-        assert [t["flags"] & 0x01 for t in topics] == [0, 1, 0, 0, 0]
+        assert [t["flags"] & 0x01 for t in topics] == [0, 1, 0, 0, 0, 1]
         _, _, payload = read_frame(fw.master, want=4, timeout=2.0)
         assert len(payload) == 8, "the heartbeat carries four u16 counters"
     assert hello["node"] == "r2s_posix"
@@ -336,12 +337,13 @@ def test_configured_topics(tmp_path):
     with Firmware(*args) as fw:
         hello, topics, _host = do_handshake(fw)
         assert hello["node"] == "custom"
-        assert hello["count"] == 4
+        assert hello["count"] == 5
         assert [(t["id"], t["topic"]) for t in topics] == [
             (16, "volt"),
             (17, "drive"),
             (18, "echo_vel"),
             (20, "time_now"),
+            (21, "joints"),
         ]
 
 
@@ -486,6 +488,7 @@ LAUNCH_NAME_TYPES = [
     ("--echo", "geometry_msgs/msg/Twist"),
     ("--log-text", "std_msgs/msg/String"),
     ("--time-now", "builtin_interfaces/msg/Time"),
+    ("--joints", "sensor_msgs/msg/JointState"),
 ]
 
 
