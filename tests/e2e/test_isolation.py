@@ -37,6 +37,20 @@ def failure_lines(output):
     return [line for line in output.splitlines() if re.match(r"(FAIL|ERROR): ", line)]
 
 
+class TestSectionReport(unittest.TestCase):
+    def test_names_a_failure_outside_the_tail(self):
+        failure = "e2e-failure: test_scenario_9_posix leg=static rmw=rmw_fastrtps_cpp exit=1"
+        output = failure + "\n" + "test_x ... ok\n" * 2000
+        self.assertIn("test_scenario_9_posix", section_report(output))
+
+    def test_names_a_timeout_kill_outside_the_tail(self):
+        failure = "e2e-failure: test_scenario_10_posix leg=runtime rmw=rmw_zenoh_cpp exit=124 (timeout)"
+        output = failure + "\n" + "test_x ... ok\n" * 2000
+        report = section_report(output)
+        self.assertIn("test_scenario_10_posix", report)
+        self.assertIn("timeout", report)
+
+
 class TestFailureLines(unittest.TestCase):
     def test_names_each_failed_test(self):
         output = "test_a ... ok\nFAIL: test_b (mod.TestB)\nERROR: test_c (mod.TestC)\n"
