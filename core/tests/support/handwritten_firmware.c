@@ -10,6 +10,7 @@
 #include "r2s/r2s_tx.h"
 
 static geometry_msgs__msg__Twist r2s_handwritten_cmd_vel;
+static std_msgs__msg__String r2s_handwritten_cmd_str;
 
 /* Publishes through the interpreter: measures the payload, reserves its wire
  * form, then streams it, so a failed publish writes nothing. The emit pass
@@ -68,9 +69,9 @@ void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, u
     uint8_t narrow;
     uint8_t field = 0xFFu;
 
-    if (topic_id != R2S_HANDWRITTEN_CMD_VEL_ID) {
-        /* A frame for no configured topic names an unknown id; one for a
-         * published topic is refused without a report. */
+    /* A frame for no configured topic names an unknown id; one for a
+     * published topic is refused without a report. */
+    if (topic_id != R2S_HANDWRITTEN_CMD_VEL_ID && topic_id != R2S_HANDWRITTEN_CMD_STR_ID) {
         if (r2s_session_find_topic(topic_id) == 0xFFu) {
             r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);
         }
@@ -84,8 +85,26 @@ void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, u
     }
     narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);
     (void)r2s_session_note_rx_seq(index, seq);
-    switch (r2s_codec_decode(&R2S_HANDWRITTEN_TABLE, R2S_HANDWRITTEN_TWIST, payload, len, narrow,
-                             &r2s_handwritten_cmd_vel, &field)) {
+    /* A bound the message exceeds reports code 1 with the offending field
+     * ([ERR-4]); anything else the encoding breaks refuses silently. */
+    if (topic_id == R2S_HANDWRITTEN_CMD_VEL_ID) {
+        switch (r2s_codec_decode(&R2S_HANDWRITTEN_TABLE, R2S_HANDWRITTEN_TWIST, payload, len, narrow,
+                                 &r2s_handwritten_cmd_vel, &field)) {
+        case R2S_OK:
+            break;
+        case R2S_ERR_BOUNDS:
+            r2s_error_note(R2S_ERROR_BOUND, topic_id, field, 1u);
+            r2s_framer_count_refused();
+            return;
+        default:
+            r2s_framer_count_refused();
+            return;
+        }
+        r2s_on_cmd_vel(&r2s_handwritten_cmd_vel);
+        return;
+    }
+    switch (r2s_codec_decode(&R2S_HANDWRITTEN_TABLE, R2S_HANDWRITTEN_STRING, payload, len, narrow,
+                             &r2s_handwritten_cmd_str, &field)) {
     case R2S_OK:
         break;
     case R2S_ERR_BOUNDS:
@@ -96,5 +115,5 @@ void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, u
         r2s_framer_count_refused();
         return;
     }
-    r2s_on_cmd_vel(&r2s_handwritten_cmd_vel);
+    r2s_on_cmd_str(&r2s_handwritten_cmd_str);
 }

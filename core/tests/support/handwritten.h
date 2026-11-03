@@ -45,6 +45,7 @@ typedef struct {
 #define R2S_HANDWRITTEN_BATTERY_ID 16u
 #define R2S_HANDWRITTEN_CMD_VEL_ID 17u
 #define R2S_HANDWRITTEN_LOG_TEXT_ID 18u
+#define R2S_HANDWRITTEN_CMD_STR_ID 19u
 
 /* The narrow flag every topic carries on a build whose double is 32 bits,
  * where the flag is the truth for the wire ([ENC-12], [CTL-5]). */
@@ -74,5 +75,8 @@ r2s_status_t r2s_publish_log_text(const std_msgs__msg__String *msg);
 /* Handles a cmd_vel frame. The test binary implements it; dispatch calls it
  * from r2s_spin_some(), never from inside a publish. */
 void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg);
+
+/* Handles a cmd_str frame, like the cmd_vel handler above. */
+void r2s_on_cmd_str(const std_msgs__msg__String *msg);
 
 #endif
