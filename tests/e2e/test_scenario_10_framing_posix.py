@@ -5,9 +5,12 @@ firmware publishes battery at 50 Hz. A corrupted code byte shifts the
 decode and a corrupted delimiter merges two frames, so a touched frame
 may share its drop with a neighbour: the MCU's dropped-frames counter is
 at most the proxy's host-to-MCU touched count, and the device-to-host seq
-gaps are at least its touched user frames. The link stays connected
-through the faults, and afterwards the fault-free flow loses nothing,
-proving delivery recovers.
+gaps are at least its touched user frames. A merge pending when the
+faults stop swallows the first clean frame, so the MCU side allows one
+drop past its touches and the battery slice extends past the faults until
+the first clean arrival proves the boundary resolved. The link stays
+connected through the faults, and afterwards the fault-free flow loses
+nothing, proving delivery recovers.
 """
 
 import os
@@ -171,8 +174,16 @@ class TestScenario10Framing(unittest.TestCase):
                 for message in received[seen:]:
                     self.assertEqual(message.status[0].message, "connected", "link left connected state")
                 seen = len(received)
-            fault_end = len(battery)
             _PROXY.set_faults()
+            # The first clean frame after a pending merge is lost with it,
+            # so the slice ends at the first arrival past the faults: from
+            # there on every frame proves the boundary resolved.
+            straggler_end = len(battery)
+            deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
+            while len(battery) == straggler_end:
+                rclpy.spin_once(node, timeout_sec=0.5)
+                self.assertLess(time.monotonic(), deadline, "no battery flow after the faults stopped")
+            fault_end = len(battery)
             disabled_at = time.monotonic()
             settled = None
             clean_end = disabled_at + CLEAN_WINDOW_S
@@ -189,7 +200,9 @@ class TestScenario10Framing(unittest.TestCase):
             host_touched = fault_counts["host_to_mcu"].frames_touched - base_counts["host_to_mcu"].frames_touched
             # Every drop consumes a touched frame and clean blobs never drop,
             # while a merge carries two touched frames into a single drop.
-            self.assertLessEqual(mcu_dropped, host_touched, "MCU dropped more than the injected faults")
+            # One past the touches is the merge pending at the boundary,
+            # which swallows the first clean frame after the faults stop.
+            self.assertLessEqual(mcu_dropped, host_touched + 1, "MCU dropped more than the injected faults")
             if host_touched:
                 self.assertGreater(mcu_dropped, 0, "touched frames reached the MCU without a drop")
             user_gaps = _user_gaps(final) - _user_gaps(base_values)
