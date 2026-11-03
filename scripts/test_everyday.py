@@ -159,6 +159,7 @@ STRIPPED_SCOPES = (
     "FUZZ",
     "README",
     "NIGHTLY",
+    "SOAK",
     "FULL",
     "R2S_FULL",
     "SCRIPTS_SHARD",

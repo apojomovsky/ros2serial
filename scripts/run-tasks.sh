@@ -9,7 +9,7 @@
 set -uo pipefail
 
 names=()
-for scope in LINT COMMITS SCRIPTS CORE GEN BRIDGE CPP COVERAGE DOCS EXAMPLES BUDGETS FUZZ README NIGHTLY; do
+for scope in LINT COMMITS SCRIPTS CORE GEN BRIDGE CPP COVERAGE DOCS EXAMPLES BUDGETS FUZZ README NIGHTLY SOAK; do
   [ -n "${!scope:-}" ] && names+=("$(printf '%s' "$scope" | tr '[:upper:]' '[:lower:]')")
 done
 case "${E2E:-}" in

@@ -19,7 +19,7 @@ use_gitignore: true
 tasks:
   default:
     desc: Run every section whose inputs changed.
-    deps: [lint, commits, scripts, core, gen, bridge, cpp, coverage, docs, examples, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
+    deps: [lint, commits, scripts, core, gen, bridge, cpp, coverage, docs, examples, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly, soak]
 
   # The standing cheap gates: unlistable inputs must never skip them.
   lint:
@@ -385,12 +385,17 @@ tasks:
       - ports/arduino/**
       # The shared leg files. The posix runner, the posix scenarios and the
       # posix firmware helper stay with the posix leg; the isolation pairs
-      # run in the nightly workflow instead.
+      # and the soak checks run in the nightly workflow instead.
       - tests/e2e/**
       - exclude: tests/e2e/run.sh
       - exclude: tests/e2e/test_*_posix.py
       - exclude: tests/e2e/e2e_support/firmware.py
       - exclude: tests/e2e/test_isolation.py
+      - exclude: tests/e2e/run-soak.sh
+      - exclude: tests/e2e/e2e_support/soak.py
+      - exclude: tests/e2e/test_soak_avr.py
+      - exclude: tests/e2e/test_soak_posix.py
+      - exclude: tests/e2e/soak_check_test.py
       - tests/harness/**
     cmds:
       - bash scripts/ci-test.sh E2E=avr
@@ -412,7 +417,9 @@ tasks:
       - scripts/e2e-lease.sh
       - core/**
       - bridge/**
-      # The leg builds and launches the posix firmware shapes.
+      # The leg builds and launches the posix firmware shapes. The avr-only
+      # files stay with the avr leg; the isolation pairs and the soak checks
+      # run in the nightly workflow instead.
       - ports/posix/**
       - tests/e2e/**
       - exclude: tests/e2e/run-avr.sh
@@ -421,6 +428,11 @@ tasks:
       - exclude: tests/e2e/avr_slice/**
       - exclude: tests/e2e/avr_flood/**
       - exclude: tests/e2e/test_isolation.py
+      - exclude: tests/e2e/run-soak.sh
+      - exclude: tests/e2e/e2e_support/soak.py
+      - exclude: tests/e2e/test_soak_avr.py
+      - exclude: tests/e2e/test_soak_posix.py
+      - exclude: tests/e2e/soak_check_test.py
     cmds:
       - bash scripts/ci-test.sh E2E=posix
 
@@ -444,6 +456,41 @@ tasks:
       - tests/e2e/test_isolation.py
     cmds:
       - bash scripts/ci-test.sh NIGHTLY=1
+
+  soak:
+    desc: Runs the two hour soak on posix and simavr.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      # The soak driver, its helpers and its checks. The soak runs on
+      # schedule only: ci.yml keeps it off on pull requests, so the plan
+      # carries no soak output and nothing restores this checksum. The task
+      # exists so `make test SOAK=1` and the default task run it by status.
+      - tests/e2e/run-soak.sh
+      - tests/e2e/e2e_support/soak.py
+      - tests/e2e/test_soak_avr.py
+      - tests/e2e/test_soak_posix.py
+      - tests/e2e/soak_check_test.py
+      # Both backend worlds it drives traffic over.
+      - core/**
+      - bridge/**
+      - ports/posix/**
+      - ports/arduino/**
+      - cpp/**
+      - tests/harness/**
+      - tests/e2e/e2e_support/**
+    cmds:
+      - bash scripts/ci-test.sh SOAK=1
 
   # Host-only: needs docker, so the dev image cannot run it. No image task
   # depends on it; the plan gates the mermaid job on its status, and the job

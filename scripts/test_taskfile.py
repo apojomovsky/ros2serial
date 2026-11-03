@@ -243,3 +243,17 @@ def test_the_isolation_pairs_belong_to_nightly_not_the_e2e_legs():
     assert matches(tasks()["nightly"], "tests/e2e/test_isolation.py")
     assert not matches(tasks()["e2e-avr"], "tests/e2e/test_isolation.py")
     assert not matches(tasks()["e2e-posix"], "tests/e2e/test_isolation.py")
+
+
+def test_the_soak_checks_belong_to_soak_not_the_e2e_legs():
+    """The soak driver and its checks run on schedule, never in the legs."""
+    for path in (
+        "tests/e2e/run-soak.sh",
+        "tests/e2e/e2e_support/soak.py",
+        "tests/e2e/test_soak_avr.py",
+        "tests/e2e/test_soak_posix.py",
+        "tests/e2e/soak_check_test.py",
+    ):
+        assert matches(tasks()["soak"], path), path
+        assert not matches(tasks()["e2e-avr"], path), path
+        assert not matches(tasks()["e2e-posix"], path), path

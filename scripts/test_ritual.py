@@ -850,6 +850,7 @@ def strip_ambient_scopes(monkeypatch):
         "FUZZ",
         "README",
         "NIGHTLY",
+        "SOAK",
     ):
         monkeypatch.delenv(scope, raising=False)
 
@@ -917,6 +918,7 @@ def test_ci_runs_every_scope_on_pull_requests():
             "BUDGETS",
             "README",
             "FUZZ",
+            "SOAK",
         ):
             if scope in line:
                 mentioned.add(scope)
@@ -944,6 +946,7 @@ def test_ci_runs_every_scope_on_pull_requests():
         "BUDGETS",
         "README",
         "FUZZ",
+        "SOAK",
         "MERMAID",
         "NIGHTLY",
         "E2E=avr",

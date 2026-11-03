@@ -159,6 +159,15 @@ def test_the_plan_checks_each_task_status():
     assert "full=" in script
 
 
+def test_the_plan_carries_no_soak_output():
+    """The soak runs on schedule only: ci.yml keeps it off on pull requests."""
+    plan = workflow()["jobs"]["plan"]
+    assert "soak" not in plan["outputs"]
+    nightly = workflow()["jobs"]["nightly"]
+    assert "soak" not in nightly["if"]
+    assert nightly["with"]["soak"] is False
+
+
 def test_each_section_job_needs_the_plan_and_gates_on_its_scope():
     jobs = workflow()["jobs"]
     for name, scope in SECTION_SCOPE.items():
