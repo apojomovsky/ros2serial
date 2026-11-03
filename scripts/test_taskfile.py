@@ -233,7 +233,7 @@ def test_a_versions_env_edit_reruns_every_task(tmp_path):
 
 @needs_task
 def test_a_second_run_skips_everything_but_the_standing_gates(tmp_path):
-    """The checksums replace the suite stamp: a fresh tree is a fast no-op."""
+    """Task checksums make a fresh tree a fast no-op."""
     repo = fixture(tmp_path)
     first = run_task(repo)
     assert len(first) == len(default_tasks()), first

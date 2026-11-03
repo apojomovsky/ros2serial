@@ -45,6 +45,7 @@ jobs:
     outputs:
       lint: ${{ steps.statuses.outputs.lint }}
       scripts: ${{ steps.statuses.outputs.scripts }}
+      # No ci.yml job reads this; COMMITS runs via pr-title.yml instead.
       commits: ${{ steps.statuses.outputs.commits }}
       core: ${{ steps.statuses.outputs.core }}
       gen: ${{ steps.statuses.outputs.gen }}

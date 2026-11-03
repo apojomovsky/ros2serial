@@ -147,7 +147,7 @@ if [ "${TEST:-}" = 1 ]; then
   # checked against their fixture commits. R2S_SUITE names the script to
   # run, so a test can see what the suite was given. R2S_FULL=1 forces all
   # the tasks instead. A fresh tree is a fast no-op once every task is up
-  # to date, which is what the retired suite stamp recorded explicitly.
+  # to date, as each task's checksum shows.
   # The output is kept, so a failure can be shown without running the suite
   # again: a second run would be refused by the lock the first one holds.
   suite_log=$(mktemp "${TMPDIR:-/tmp}/r2s-suite.XXXXXX")

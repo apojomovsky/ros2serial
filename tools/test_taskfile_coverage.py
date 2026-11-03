@@ -24,7 +24,7 @@ def tiny_repo(tmp_path, files):
     git(repo, "config", "user.email", "t@example.com")
     git(repo, "config", "user.name", "t")
     (repo / "Taskfile.yml").write_text(
-        "version: '3'\ntasks:\n  gen:\n    sources:\n      - Taskfile.yml\n      - gen/**\n    cmds:\n      - true\n"
+        "version: '3'\ntasks:\n  gen:\n    sources:\n      - Taskfile.yml\n      - gen/**\n    cmds:\n      - true\n  soak:\n    cmds:\n      - true\n"
     )
     for name, text in files.items():
         target = repo / name
@@ -32,6 +32,11 @@ def tiny_repo(tmp_path, files):
         target.write_text(text)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "test(taskfile): fixture")
+    # Untracked on purpose: git ls-files must not see it (no task lists
+    # a workflow), while the plan check reads it from disk.
+    plan = repo / ".github" / "workflows" / "ci.yml"
+    plan.parent.mkdir(parents=True, exist_ok=True)
+    plan.write_text("jobs:\n  plan:\n    run: |\n      for task in gen; do\n        echo $task\n      done\n")
     return repo
 
 
@@ -66,3 +71,13 @@ def test_the_real_tree_is_fully_mapped():
     """The map is complete: every tracked file belongs to a task or the allowlist."""
     proc = coverage(ROOT)
     assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_a_task_missing_from_the_plan_loop_fails_naming_it(tmp_path):
+    """A task the plan never checks would silently never run on pull requests."""
+    repo = tiny_repo(tmp_path, {"gen/a.py": "x\n"})
+    plan = repo / ".github" / "workflows" / "ci.yml"
+    plan.write_text(plan.read_text().replace("for task in gen;", "for task in lint;"))
+    proc = coverage(repo)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "gen" in proc.stdout + proc.stderr
