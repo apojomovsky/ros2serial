@@ -16,6 +16,12 @@ firmware and the real bridge over a serial line.
   slice sketch for Uno and Mega, checks the helper assertions, then runs
   scenarios 1 to 4 on both boards under each RMW. The suite runs it for
   `E2E=avr`; `R2S_RMWS` and `R2S_E2E_BOARDS` narrow the loops.
+- `run-soak.sh` is the nightly soak entry point: it builds the same binaries
+  and runs `test_soak_posix.py` then `test_soak_avr.py` on the Uno, one
+  `R2S_SOAK_SECONDS` window per backend with a single RMW. Each leg asserts
+  exactly consistent wire counters and plateaued bridge memory through
+  `e2e_support/soak.py`, which `soak_check_test.py` unit-tests with no ROS
+  in the loop.
 - `e2e_support/` is the framework: the pty relay, the fault-injecting pty
   proxy, the posix firmware launcher, the simavr launcher, the bridge launch
   through its own launch file, and the checks every backend shares.

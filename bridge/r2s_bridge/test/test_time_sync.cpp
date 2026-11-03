@@ -113,6 +113,34 @@ TEST(TimeSyncEstimate, HasNoEstimateBeforeTheFirstSample)
     EXPECT_FALSE(sync.moved_since(out));
 }
 
+TEST(TimeSyncEstimate, ReportsZerosWithoutAnEstimate)
+{
+    TimeSync sync(kTickHz);
+    EXPECT_EQ(sync.offset_ns(), 0);
+    EXPECT_EQ(sync.drift_ppm(), 0);
+    EXPECT_EQ(sync.round_trip_ns(), 0u);
+}
+
+TEST(TimeSyncEstimate, ReportsTheLatestRoundTrip)
+{
+    TimeSync sync(kTickHz);
+    SimMcu mcu;
+    mcu.rtt_ns = 3000000;
+    mcu.sample(sync, 0);
+    EXPECT_EQ(sync.round_trip_ns(), 3000000);
+}
+
+TEST(TimeSyncEstimate, NormalizesANegativeNanosecondField)
+{
+    TimeSync sync(kTickHz);
+    sync.add_sample(0, 2000000, -5000000000, 0);
+    TimeCorrection out;
+    ASSERT_TRUE(sync.correction(out));
+    EXPECT_EQ(out.sec, -6);
+    EXPECT_EQ(out.nanosec, 999000000u);
+    EXPECT_EQ(ros_ns_of(out), -5001000000);
+}
+
 TEST(TimeSyncEstimate, CorrectsExactlyOnASymmetricLinkWithoutDrift)
 {
     TimeSync sync(kTickHz);

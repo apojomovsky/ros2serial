@@ -107,6 +107,22 @@ std::vector<std::uint8_t> time_wire(std::uint8_t seq, const std::vector<std::uin
     return wire_of(with_check(decoded));
 }
 
+// The decoded frame behind one wire unit, checked: rCOBS without the
+// delimiter, exactly what the session wrote.
+std::vector<std::uint8_t> decoded_of(std::vector<std::uint8_t> unit)
+{
+    if (unit.empty() || unit.back() != 0x00u) {
+        throw std::invalid_argument("decoded_of needs one delimited unit");
+    }
+    unit.pop_back();
+    uint8_t *decoded = nullptr;
+    uint16_t decoded_len = 0;
+    if (r2s_rcobs_decode(unit.data(), static_cast<std::uint16_t>(unit.size()), &decoded, &decoded_len) != 0) {
+        throw std::invalid_argument("decoded_of refuses a bad encoding");
+    }
+    return std::vector<std::uint8_t>(decoded, decoded + decoded_len);
+}
+
 std::vector<std::vector<std::uint8_t>> units_of(const std::vector<std::uint8_t> &bytes)
 {
     std::vector<std::vector<std::uint8_t>> units;
@@ -195,11 +211,11 @@ class Fixture
   public:
     explicit Fixture(
         TopicResolver resolve = [](const TopicInfo &) { return std::uint8_t{0}; },
-        SessionConfig config = SessionConfig())
+        SessionConfig config = SessionConfig(), SessionEvents events = SessionEvents())
     {
         session_ = std::make_unique<Session>(
             config, clock_, ros_clock_, [this]() { return std::unique_ptr<Transport>(new Link(transport_)); },
-            std::move(resolve));
+            std::move(resolve), std::move(events));
     }
 
     // Moves time one tick at a time, polling after each, so a timer fires on
@@ -254,6 +270,12 @@ class Fixture
     void allow_writes()
     {
         transport_.limit_write(1000000u);
+    }
+
+    // Queues one scripted write outcome on the fake link.
+    void script_write(IoResult outcome)
+    {
+        transport_.script_write(outcome);
     }
 
     Session &session()
@@ -356,6 +378,193 @@ void replay_transcript(const std::string &path)
 TEST_P(SessionTranscript, ReplaysTheTranscriptInOrder)
 {
     replay_transcript(GetParam());
+}
+
+TEST(SessionState, TimeIsUnavailableBeforeTheHandshake)
+{
+    Fixture fixture;
+    EXPECT_FALSE(fixture.session().time_available());
+}
+
+TEST(SessionState, McuLimitsAreZeroBeforeTheHello)
+{
+    Fixture fixture;
+    EXPECT_EQ(fixture.session().mcu_max_frame(), 0u);
+    EXPECT_EQ(fixture.session().mcu_rx_capacity(), 0u);
+}
+
+TEST(SessionConfig, RejectsAPeriodThatIsNotPositive)
+{
+    const auto resolve = [](const TopicInfo &) { return std::uint8_t{0}; };
+    SessionConfig reconnect = SessionConfig();
+    reconnect.reconnect_period_ms = 0;
+    EXPECT_THROW(Fixture(resolve, reconnect), std::invalid_argument);
+    SessionConfig boot = SessionConfig();
+    boot.boot_wait_ms = -1;
+    EXPECT_THROW(Fixture(resolve, boot), std::invalid_argument);
+    SessionConfig heartbeat = SessionConfig();
+    heartbeat.heartbeat_period_ms = 0;
+    EXPECT_THROW(Fixture(resolve, heartbeat), std::invalid_argument);
+}
+
+TEST(SessionHandshake, RejectsATickRateBelowOneKilohertz)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 2u, 0u, 500u));
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
+    EXPECT_FALSE(fixture.session().seen_hello());
+}
+
+TEST(SessionHandshake, RefusesAHelloWithOnlyAnOpcode)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, std::vector<std::uint8_t>{0x02u});
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
+    EXPECT_FALSE(fixture.session().seen_hello());
+}
+
+TEST(SessionHandshake, RefusesAHelloCutAfterTheVersion)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u);
+    hello.resize(2u);
+    fixture.deliver_frame(kControl, 0u, hello);
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
+    EXPECT_FALSE(fixture.session().seen_hello());
+}
+
+TEST(SessionHandshake, RefusesAHelloCutAfterTheMaxFrame)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u);
+    hello.resize(8u);
+    fixture.deliver_frame(kControl, 0u, hello);
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
+    EXPECT_FALSE(fixture.session().seen_hello());
+}
+
+TEST(SessionHandshake, RefusesAHelloCutAfterTheFeatures)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u);
+    hello.resize(16u);
+    fixture.deliver_frame(kControl, 0u, hello);
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
+    EXPECT_FALSE(fixture.session().seen_hello());
+}
+
+TEST(SessionHandshake, StartsOverOnAHelloWithANewTokenMidWalk)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    EXPECT_EQ(fixture.drain_units().size(), 1u) << "the TOPIC_REQ of the walk";
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x2000u, 1u));
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 1u);
+    EXPECT_EQ(units[0][2], 0x03u) << "the TOPIC_REQ of the new walk";
+}
+
+TEST(SessionHandshake, RefusesATopicWithANameLongerThanThePayload)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    EXPECT_EQ(fixture.drain_units().size(), 1u) << "the TOPIC_REQ of the walk";
+    std::vector<std::uint8_t> topic = topic_payload(0u, 0x10u, "battery");
+    topic[33] = 100u;
+    fixture.deliver_frame(kControl, 0u, topic);
+    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
+    EXPECT_TRUE(fixture.drain_units().empty()) << "no TOPIC_STATUS for a short TOPIC";
+}
+
+TEST(SessionHandshake, AcceptsATopicWithAMultiByteNameLength)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    EXPECT_EQ(fixture.drain_units().size(), 1u) << "the TOPIC_REQ of the walk";
+    std::vector<std::uint8_t> topic = topic_payload(0u, 0x10u, "battery");
+    topic.resize(33u);
+    topic.push_back(0x82u);
+    topic.push_back(0x01u);
+    topic.insert(topic.end(), 130u, 'c');
+    fixture.deliver_frame(kControl, 0u, topic);
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 2u);
+    EXPECT_EQ(units[0][2], 0x05u) << "the TOPIC_STATUS of the accepted topic";
+}
+
+TEST(SessionHandshake, RefusesANameLengthThatNeverEnds)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    EXPECT_EQ(fixture.drain_units().size(), 1u) << "the TOPIC_REQ of the walk";
+    std::vector<std::uint8_t> topic = topic_payload(0u, 0x10u, "battery");
+    topic[33] = 0x80u;
+    topic.insert(topic.begin() + 34, {0x80u, 0x80u, 0x00u});
+    fixture.deliver_frame(kControl, 0u, topic);
+    EXPECT_TRUE(fixture.drain_units().empty()) << "no TOPIC_STATUS for a bad length";
+}
+
+TEST(SessionHandshake, AcceptsTopicsWithoutAResolver)
+{
+    Fixture fixture(nullptr);
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u));
+    fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
+TEST(SessionConnected, CallsTheUserFrameHandler)
+{
+    SessionEvents events;
+    std::vector<std::pair<std::uint8_t, std::vector<std::uint8_t>>> received;
+    events.user_frame = [&](std::uint8_t id, const std::vector<std::uint8_t> &payload) {
+        received.emplace_back(id, payload);
+    };
+    Fixture fixture([](const TopicInfo &) { return std::uint8_t{0}; }, SessionConfig(), events);
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u));
+    fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+    fixture.deliver_frame(0x10u, 0u, std::vector<std::uint8_t>{0x01u, 0x02u});
+    ASSERT_EQ(received.size(), 1u);
+    EXPECT_EQ(received[0].first, 0x10u);
+    EXPECT_EQ(received[0].second, (std::vector<std::uint8_t>{0x01u, 0x02u}));
+}
+
+TEST(SessionHandshake, DropsWedgedControlFramesOnRestart)
+{
+    Fixture fixture;
+    fixture.block_writes();
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    fixture.advance_to(900);
+    fixture.allow_writes();
+    fixture.advance_to(901);
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 1u) << "the wedged TOPIC_REQ is gone, only the HELLO_REQ goes out";
+    EXPECT_EQ(units[0][2], 0x01u) << "a HELLO_REQ";
+    EXPECT_EQ(fixture.session().control_coalesced(), 3u);
+}
+
+TEST(SessionLink, CoalescesControlFramesOnAWedgedLink)
+{
+    Fixture fixture;
+    fixture.block_writes();
+    fixture.advance_to(3600);
+    fixture.allow_writes();
+    fixture.advance_to(3601);
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 1u) << "one HELLO_REQ, however many were queued";
+    EXPECT_EQ(units[0][2], 0x01u) << "a HELLO_REQ";
+    EXPECT_EQ(fixture.session().control_coalesced(), 2u);
 }
 
 // The transcripts no conforming firmware produces: their refused HELLOs come
@@ -1462,6 +1671,68 @@ TEST(SessionTimeSync, ResendsTheCorrectionOnAMoveAndEvery5s)
     EXPECT_EQ(floor_correction.payload, moved.back().payload);
 }
 
+TEST(SessionHandshake, IgnoresATopicOutsideTheWalk)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    connect_empty(fixture);
+    fixture.drain_units();
+    fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+    EXPECT_TRUE(fixture.drain_units().empty()) << "a stray TOPIC answers nothing";
+}
+
+TEST(SessionLink, IgnoresAnEmptyControlFrame)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    connect_empty(fixture);
+    fixture.deliver_frame(kControl, 0u, std::vector<std::uint8_t>{});
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
+TEST(SessionLink, IgnoresAnUnknownControlOpcode)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    connect_empty(fixture);
+    fixture.deliver_frame(kControl, 0u, std::vector<std::uint8_t>{0x7Fu});
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
+TEST(SessionLink, IgnoresAShortTimeFrame)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    connect_empty(fixture);
+    fixture.deliver_frame(0x01u, 0u, std::vector<std::uint8_t>{0x00u});
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
+TEST(SessionLink, IgnoresASystemChannelFrame)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    connect_empty(fixture);
+    const std::uint32_t before = fixture.session().resets();
+    fixture.deliver_frame(0x05u, 0u, std::vector<std::uint8_t>{0x01u});
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+    EXPECT_EQ(fixture.session().resets(), before) << "later system traffic is not a reset";
+}
+
+TEST(SessionConnected, QueuesHostFramesForTheMcu)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    connect_empty(fixture);
+    fixture.drain_units();
+    EXPECT_TRUE(fixture.session().send_user(0x10u, {0x01u, 0x02u}));
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 1u);
+    EXPECT_EQ(hex_of(units[0]), hex_of(wire_of(with_check({0x10u, 0u, 0x01u, 0x02u}))))
+        << "the user topic rides its own frame";
+}
+
 TEST(SessionTimeSync, SendsNothingWhenDisabled)
 {
     SessionConfig config;
@@ -1951,6 +2222,215 @@ TEST(SessionError, FallsBackToTheFieldIndexWhenThePathMisses)
     deliver(5u, 0u, std::vector<std::uint8_t>{1u, 0x10u, 1u, 0u, 5u});
     ASSERT_EQ(lines.size(), 1u) << "one report forwards one line";
     EXPECT_NE(lines[0].second.find("at field '#5'"), std::string::npos) << lines[0].second;
+}
+
+TEST(SessionHandshake, RefusesATruncatedHelloAtEveryField)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    const std::vector<std::uint8_t> full = hello_payload(0x1000u, 1u);
+    for (std::size_t len = 1u; len < full.size(); ++len) {
+        fixture.deliver_frame(kControl, 0u, std::vector<std::uint8_t>(full.begin(), full.begin() + len));
+        EXPECT_EQ(fixture.session().state(), SessionState::kBootWait)
+            << "a hello cut at " << len << " refuses";
+        EXPECT_FALSE(fixture.session().seen_hello()) << "a hello cut at " << len << " records nothing";
+    }
+}
+
+TEST(SessionHandshake, AnswersAnExtraTopicAfterTheHandshake)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u));
+    fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    fixture.deliver_frame(kControl, 0u, topic_payload(1u, 0x11u, "extra"));
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected)
+        << "a TOPIC outside the walk never reopens it";
+}
+
+TEST(SessionHandshake, RefusesATruncatedTopic)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u));
+    fixture.deliver_frame(kControl, 0u, std::vector<std::uint8_t>{0x04u});
+    fixture.deliver_frame(kControl, 0u, std::vector<std::uint8_t>{0x04u, 0x00u});
+    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking)
+        << "a TOPIC cut inside its index never answers the walk";
+}
+
+TEST(SessionHandshake, AsksForAHelloAfterBootWait)
+{
+    Fixture fixture;
+    fixture.advance_to(2600);
+    const auto units = fixture.drain_units();
+    ASSERT_FALSE(units.empty()) << "the boot wait ends in a HELLO_REQ";
+    EXPECT_EQ(units[0][2], 0x01u) << "the first control frame asks for a HELLO";
+}
+
+TEST(SessionTime, IgnoresTimeFramesBeforeTheHandshake)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver(with_check({0x01u, 0u, 0x01u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait) << "time frames wait for the session";
+}
+
+TEST(SessionTime, IgnoresNonPongTimeFrames)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 2u, 0x01u));
+    fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    fixture.deliver(with_check({0x01u, 0u, 0x01u, 0x00u, 0x00u, 0x00u, 0x00u}));
+    fixture.deliver(with_check({0x01u, 1u, 0x07u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected)
+        << "a short frame and a foreign id never touch the estimator";
+}
+
+TEST(SessionTime, SendsAPingOnceTimeSyncIsUp)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 2u, 0x01u));
+    fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    bool pinged = false;
+    for (const auto &unit : fixture.drain_units()) {
+        const std::vector<std::uint8_t> decoded = decoded_of(unit);
+        pinged = pinged || (decoded.size() == 6u && decoded[0] == 0x01u && decoded[2] == 0x01u);
+    }
+    EXPECT_TRUE(pinged) << "the first connected poll sends a PING";
+}
+
+TEST(SessionTime, PublishesACorrectionAfterEightPongs)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 2u, 0x01u));
+    fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    EXPECT_FALSE(fixture.session().time_available()) << "no estimate before the first PONG";
+    const auto ping_id_of = [](const std::vector<std::uint8_t> &decoded) -> int {
+        if (decoded.size() == 6u && decoded[0] == 0x01u && decoded[2] == 0x01u) {
+            return decoded[3];
+        }
+        return -1;
+    };
+    std::uint32_t tick = 0;
+    int answers = 0;
+    for (int step = 0; step < 200 && answers < 8; ++step) {
+        fixture.advance_to(fixture.now_ms() + 10u);
+        for (const auto &unit : fixture.drain_units()) {
+            const int id = ping_id_of(decoded_of(unit));
+            if (id < 0) {
+                continue;
+            }
+            tick += 50000u;
+            std::vector<std::uint8_t> pong = with_check({0x01u, 0u, 0x02u, static_cast<std::uint8_t>(id),
+                                                         static_cast<std::uint8_t>(tick & 0xFFu),
+                                                         static_cast<std::uint8_t>((tick >> 8u) & 0xFFu),
+                                                         static_cast<std::uint8_t>((tick >> 16u) & 0xFFu),
+                                                         static_cast<std::uint8_t>((tick >> 24u) & 0xFFu)});
+            fixture.deliver(pong);
+            ++answers;
+        }
+    }
+    ASSERT_EQ(answers, 8) << "every burst PING gets its PONG";
+    EXPECT_TRUE(fixture.session().time_available()) << "eight consistent PONGs anchor a correction";
+    bool corrected = false;
+    for (const auto &unit : fixture.drain_units()) {
+        const std::vector<std::uint8_t> decoded = decoded_of(unit);
+        corrected = corrected || (decoded.size() > 2u && decoded[0] == 0x01u && decoded[2] == 0x03u);
+    }
+    EXPECT_TRUE(corrected) << "the estimate goes out as a CORRECTION";
+}
+
+TEST(SessionFrame, IgnoresARuntFrame)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    fixture.deliver({0x10u, 0x00u, 0xAAu});
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait) << "a frame under four bytes never parses";
+}
+
+TEST(SessionConnected, DropsAUserFrameWithNoRoute)
+{
+    Fixture fixture([](const TopicInfo &) { return std::uint8_t{0}; }, SessionConfig(), SessionEvents{});
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u));
+    fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    fixture.deliver_frame(0x30u, 0u, std::vector<std::uint8_t>{0x01u});
+    fixture.deliver_frame(0x10u, 1u, std::vector<std::uint8_t>{0x02u});
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected)
+        << "an unrouted topic and a missing handler both drop the frame";
+}
+
+TEST(SessionLink, TreatsAThrowingOpenAsAClosedPort)
+{
+    ManualClock clock;
+    Session session(
+        SessionConfig{}, clock, clock,
+        []() -> std::unique_ptr<Transport> { throw std::runtime_error("no port"); },
+        [](const TopicInfo &) { return std::uint8_t{0}; }, SessionEvents{});
+    session.poll();
+    session.poll();
+    EXPECT_EQ(session.state(), SessionState::kDisconnected) << "a throwing open retries like a missing port";
+}
+
+TEST(SessionLink, TreatsAForeignThrowFromOpenAsAClosedPort)
+{
+    // The constructor opens eagerly, so a foreign throw escapes construction
+    // instead of reading as a missing port.
+    ManualClock clock;
+    bool constructed = false;
+    try {
+        Session session(
+            SessionConfig{}, clock, clock, []() -> std::unique_ptr<Transport> { throw 42; },
+            [](const TopicInfo &) { return std::uint8_t{0}; }, SessionEvents{});
+        constructed = true;
+    } catch (int) {
+    }
+    EXPECT_FALSE(constructed) << "a foreign throw propagates instead of reading as a missing port";
+}
+
+TEST(SessionLink, KeepsUserFramesAcrossAHandshakeRestart)
+{
+    Fixture fixture;
+    // A port that takes five bytes of the HELLO_REQ and then blocks: the
+    // walk and the user frame queue behind the half-written head, and a link
+    // timeout restarts the handshake over them.
+    fixture.script_write({5u, IoStatus::kOk});
+    for (int i = 0; i < 12000; ++i) {
+        fixture.script_write({0u, IoStatus::kWouldBlock});
+    }
+    fixture.advance_to(2600);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    EXPECT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(200u, 0xAAu)));
+    const std::size_t queued = fixture.session().pending_bytes();
+    EXPECT_GT(queued, 0u);
+    fixture.advance_to(5000);
+    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking)
+        << "silence past the link timeout restarts the walk";
+    EXPECT_LT(fixture.session().pending_bytes(), queued) << "the dead walk's control frames are gone";
+    EXPECT_GT(fixture.session().pending_bytes(), 0u) << "the half-written head and the user frame survive";
+}
+
+TEST(SessionLink, ScansQueuedControlsForANewSlot)
+{
+    Fixture fixture;
+    fixture.block_writes();
+    fixture.advance_to(2600);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+    fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+    EXPECT_GT(fixture.session().pending_bytes(), 0u)
+        << "the walk queues behind the blocked link without coalescing";
 }
 
 } // namespace
