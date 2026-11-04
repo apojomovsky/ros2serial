@@ -4,10 +4,9 @@
 # s390x and runs them under qemu-s390x, then runs the generator reference
 # suite and the vector check with the image's Python. The bridge stays out:
 # rclcpp is not available cross-compiled, so nothing here imports ROS, and
-# the ROS-dependent generator tests skip without an underlay. The generator
-# model tests load a native host library: they prove the reference codec,
-# while the qemu run proves the core. Usage, from the repository root inside
-# the image: bash scripts/bigendian-suite.sh
+# the ROS-dependent generator tests skip without an underlay. The model tests
+# load a native host library; only the qemu run proves the core. Usage, from
+# the repository root inside the image: bash scripts/bigendian-suite.sh
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root" || exit 2

@@ -2,11 +2,10 @@
 # nightly job builds the core for a big-endian target and runs its unit and
 # vector tests under emulation. This image is separate from the everyday dev
 # image on purpose: big-endian runs nightly only, never in a pull request
-# check or the pre-PR ritual, so its toolchain must not slow down or reshape
-# what every contributor builds with. Reproduce locally with: task bigendian.
-# The versions stay pinned here as build arguments. They live in this file
-# and not in ci/versions.env because only a human may touch that file, while
-# this nightly-only image never gates a pull request or measures a budget.
+# check or the pre-PR ritual. Reproduce locally with: task bigendian.
+# The versions stay pinned here as build arguments, not in ci/versions.env,
+# which only a human may touch; this nightly-only image never gates a pull
+# request or measures a budget.
 ARG UBUNTU_IMAGE=ubuntu:24.04
 FROM ${UBUNTU_IMAGE}
 ARG DEBIAN_FRONTEND=noninteractive
