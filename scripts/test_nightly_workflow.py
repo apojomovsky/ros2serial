@@ -117,6 +117,39 @@ def test_the_isolation_job_runs_the_nightly_scope_with_both_envs():
     assert str(env.get("R2S_SYNC_BOUND_NS")) == "5000000"
 
 
+def test_ci_e2e_posix_keeps_the_shared_host_bound():
+    runs = " ".join(str(step.get("run", "")) for step in steps_of(workflow(CI), "e2e-posix"))
+    assert "make test E2E=posix" in runs
+    envs = [step.get("env", {}) or {} for step in steps_of(workflow(CI), "e2e-posix")]
+    assert any(str(env.get("R2S_SYNC_BOUND_NS")) == "5000000" for env in envs)
+
+
+def strict_sync_job():
+    """The nightly lone suite judging scenario 8 against the strict 1 ms."""
+    matches = {}
+    for name, job in workflow(NIGHTLY)["jobs"].items():
+        runs = [step for step in job.get("steps", []) if "make test E2E=posix" in str(step.get("run", ""))]
+        if runs:
+            matches[name] = (job, runs)
+    assert len(matches) == 1, f"nightly.yml should run one lone E2E=posix suite: {sorted(matches)}"
+    return next(iter(matches.values()))
+
+
+def test_nightly_runs_a_lone_strict_sync_suite():
+    job, runs = strict_sync_job()
+    assert any("./.github/actions/dev-image" in str(step.get("uses", "")) for step in job["steps"])
+    assert len(runs) == 1
+    env = runs[0].get("env", {})
+    assert str(env.get("R2S_SYNC_BOUND_NS")) == "1000000"
+
+
+def test_the_lone_strict_suite_skips_nothing():
+    job, runs = strict_sync_job()
+    assert "make test NIGHTLY=1" not in " ".join(str(step.get("run", "")) for step in job["steps"])
+    for step in runs:
+        assert "R2S_E2E_SKIP" not in (step.get("env", {}) or {})
+
+
 def pass_vars():
     """The variables make forwards into the dev image, one per list line."""
     return (ROOT / "scripts" / "pass-vars.list").read_text().split()
