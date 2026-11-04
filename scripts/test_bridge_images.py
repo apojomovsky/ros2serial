@@ -120,6 +120,12 @@ def test_a_directory_as_versions_env_fails_with_a_read_error(tmp_path):
     assert "unbound variable" not in result.stderr
 
 
+def test_the_pinned_file_carries_a_rolling_image(tmp_path):
+    text = (ROOT / "ci" / "versions.env").read_text()
+    out = outputs(tree(tmp_path, text))
+    assert "rolling" in json.loads(out["matrix"])["distro"]
+
+
 def test_the_workflow_carries_no_image_of_its_own():
     workflow = yaml.safe_load(WORKFLOW.read_text())
     bridge = workflow["jobs"]["bridge"]
