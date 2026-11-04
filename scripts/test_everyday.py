@@ -162,6 +162,7 @@ STRIPPED_SCOPES = (
     "SOAK",
     "FULL",
     "R2S_FULL",
+    "R2S_LOCAL",
     "SCRIPTS_SHARD",
 )
 

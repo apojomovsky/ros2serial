@@ -17,6 +17,14 @@ tasks:
     desc: Run every section whose inputs changed.
     deps: [lint, commits, scripts, core, gen, bridge, cpp, coverage, docs, examples, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
 
+  # What the pre-push hook and the takeoff run: the default set without the
+  # end-to-end sections (e2e-avr, e2e-posix and the nightly isolation pairs).
+  # Their timing bounds assume a quiet host, which a shared one is not; CI
+  # runs them on every pull request.
+  local:
+    desc: Run every stale section but the end-to-end ones, which CI runs.
+    deps: [lint, commits, scripts, core, gen, bridge, cpp, coverage, docs, examples, budgets, readme, fuzz]
+
   # The standing cheap gates: unlistable inputs must never skip them.
   lint:
     desc: The LINT section, always.
