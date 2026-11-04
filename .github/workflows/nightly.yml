@@ -19,8 +19,22 @@ jobs:
     with:
       soak: true
 
+  # Scenario 8 against the strict 1 ms bound, as one suite alone on its
+  # runner: host scheduling jitter moves the host-side arrival stamps past
+  # 1 ms under a second suite or a shared PR host, so the default judges
+  # 5 ms and only this lone run judges the target.
+  e2e-sync-strict:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test E2E=posix
+        env:
+          R2S_SYNC_BOUND_NS: 1000000
+
   report-failure:
-    needs: [nightly]
+    needs: [nightly, e2e-sync-strict]
     if: github.event_name == 'schedule' && failure()
     runs-on: ubuntu-24.04
     permissions:
