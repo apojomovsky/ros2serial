@@ -2,7 +2,10 @@
 # Run the stale suite tasks: map the ci-test.sh scope variables to Taskfile
 # task names, then let `task` skip every task whose inputs match its last
 # successful run. Naming no scope runs the default task, which holds every
-# section but the host-only mermaid check. R2S_FULL=1 forces all of them.
+# section but the host-only mermaid check; with R2S_LOCAL=1 it runs the
+# local task instead, the same set without the end-to-end sections (the
+# pre-push hook and the takeoff set it). A named scope, E2E included, still
+# runs. R2S_FULL=1 forces all of them.
 # R2S_SUITE points the runner at another command (tests point it at a
 # recorder), which receives the task names as arguments; the scope
 # variables stay exported, so the command sees what `task` would.
@@ -19,6 +22,10 @@ case "${E2E:-}" in
   both) names+=(e2e-avr e2e-posix) ;;
   *) echo "run-tasks: unknown E2E backend '${E2E}': known are posix, avr and both" >&2; exit 2 ;;
 esac
+
+if [ ${#names[@]} -eq 0 ] && [ "${R2S_LOCAL:-}" = 1 ]; then
+  names=(local)
+fi
 
 args=()
 [ "${R2S_FULL:-}" = 1 ] && args+=(--force)

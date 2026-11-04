@@ -22,7 +22,7 @@ def run(tmp_path, script='echo "$*" > {args}; env > {env}', **env):
     seen_env = tmp_path / "env.txt"
     recorder.write_text("#!/usr/bin/env bash\n" + script.format(args=seen_args, env=seen_env) + "\n")
     recorder.chmod(0o755)
-    merged = {k: v for k, v in os.environ.items() if k not in ("R2S_FULL",)}
+    merged = {k: v for k, v in os.environ.items() if k not in ("R2S_FULL", "R2S_LOCAL")}
     for scope in (
         "LINT",
         "SCRIPTS",
@@ -129,3 +129,20 @@ def test_the_runner_marks_a_forced_attempt(tmp_path):
     proc, _, _ = run(tmp_path, CORE="1", R2S_FULL="1")
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "run-tasks: running tasks [core] --force" in proc.stdout
+
+
+def test_local_with_no_scope_runs_the_local_task(tmp_path):
+    """The pre-push hook and the takeoff leave the end-to-end sections to CI."""
+    args, _ = select(tmp_path, R2S_LOCAL="1")
+    assert args == ["local"], args
+
+
+def test_local_keeps_a_named_scope_including_e2e(tmp_path):
+    """Naming E2E still runs it: R2S_LOCAL only narrows the unscoped run."""
+    args, _ = select(tmp_path, R2S_LOCAL="1", E2E="posix")
+    assert args == ["e2e-posix"], args
+
+
+def test_local_with_full_forces_the_local_task(tmp_path):
+    args, _ = select(tmp_path, R2S_LOCAL="1", R2S_FULL="1")
+    assert args == ["--force", "local"], args

@@ -291,7 +291,7 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 | --- | --- | --- |
 | While editing | `make test CORE=1` (or the component being changed) | Seconds |
 | `pre-commit` hook | Format, warnings, unit tests of the touched component | Under 30 s |
-| `pre-push` hook | The stale tasks locally, leaving the suite to CI; a fresh tree is a fast no-op | Cheap, minutes |
+| `pre-push` hook | The stale tasks locally but the end-to-end ones (the `local` task), which CI runs; a fresh tree is a fast no-op | Cheap, minutes |
 | Takeoff (`make pre-pr-check TEST=1`) | The same stale tasks as the hook; scopes named on the command line and `R2S_FULL=1` still run locally | Cheap, minutes |
 | Every PR | Unit, component, contract, integration on posix, simavr scenarios, fuzz smoke (60 s per target), sanitizers, coverage, spec coverage, budgets, build matrix, golden, docs snippets | Under 15 min wall clock, in parallel jobs |
 | Nightly | Long fuzzing (30 min per target), mutation testing, extended property and model-based runs, long fault injection, soak (2 h), big-endian, Rolling, e2e isolation pairs | Hours |
