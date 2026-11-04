@@ -231,7 +231,7 @@ struct Router::Impl {
         try {
             result = converter_.to_cdr(route.info.type_name, route.info.narrow(), payload.data(),
                                        payload.size(), cdr);
-            // GCOVR_EXCL_BR_START: the middleware fails only when it cannot
+            // GCOVR_EXCL_START: the middleware fails only when it cannot
             // allocate or serialize, which a unit test cannot inject.
         } catch (const std::exception &error) {
             // A failed serialize (the middleware short under load) is a
@@ -243,8 +243,8 @@ struct Router::Impl {
             std::lock_guard<std::mutex> guard(mutex);
             ++routes[topic_id].publish_failures;
             return;
-            // GCOVR_EXCL_BR_STOP
         }
+        // GCOVR_EXCL_STOP: the brace above runs only with the catch.
         if (result.fail != ConvertFail::kNone) {
             emit(SessionLog::kWarning, "topic '" + route.info.topic_name + "': dropped packed payload (" +
                                            fail_name(result.fail) + " at '" +
