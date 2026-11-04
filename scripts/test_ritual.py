@@ -833,7 +833,14 @@ def test_pre_push_runs_the_same_suite_in_ci(tmp_path, monkeypatch):
 
 
 def strip_ambient_scopes(monkeypatch):
-    """The runner's own scopes must not leak in as caller scopes."""
+    """The runner's own scopes must not leak in as caller scopes.
+
+    R2S_FULL goes too: CI sets it on every master run, where it would force
+    the tasks these tests expect to see selected by name. So does R2S_LOCAL,
+    which the pre-push hook sets around the suite these tests run in.
+    """
+    monkeypatch.delenv("R2S_FULL", raising=False)
+    monkeypatch.delenv("R2S_LOCAL", raising=False)
     for scope in (
         "LINT",
         "SCRIPTS",
@@ -855,8 +862,15 @@ def strip_ambient_scopes(monkeypatch):
         monkeypatch.delenv(scope, raising=False)
 
 
+def test_strip_ambient_scopes_clears_the_master_force(monkeypatch):
+    """A master CI run exports R2S_FULL=1; the stripped environment must not."""
+    monkeypatch.setenv("R2S_FULL", "1")
+    strip_ambient_scopes(monkeypatch)
+    assert "R2S_FULL" not in os.environ
+
+
 def test_takeoff_runs_the_suite_unscoped_for_task_selection(tmp_path, monkeypatch):
-    """The takeoff runs the suite with no selection: the tasks decide."""
+    """The takeoff runs the local task with no selection: the checksums decide."""
     strip_ambient_scopes(monkeypatch)
     main, wt = fixture(tmp_path)
     commit(wt, {"Makefile": "# machinery\n"}, "chore: touch the gate")
@@ -869,7 +883,7 @@ def test_takeoff_runs_the_suite_unscoped_for_task_selection(tmp_path, monkeypatc
     body.write_text(GOOD_BODY)
     result = ritual(wt, TEST="1", PR_BODY=str(body), PR_TITLE="chore: touch the gate", R2S_SUITE=str(recorder))
     assert result.returncode == 0, result.stdout + result.stderr
-    assert seen_args.read_text().split() == [], "the takeoff selected tasks on its own"
+    assert seen_args.read_text().split() == ["local"], "the takeoff selected more than the local task"
 
 
 def test_takeoff_passes_an_explicit_scope_to_the_task_selection(tmp_path, monkeypatch):
