@@ -141,9 +141,10 @@ tasks:
       - scripts/with-build-lock.sh
       - scripts/e2e-lease.sh
       - scripts/build-host-lib.sh
-      # The package, its tests and its goldens, listed separately so the
-      # tests stay with this task only: nothing else reads them.
+      # The packages, their tests and their goldens, listed separately so
+      # the tests stay with this task only: nothing else reads them.
       - gen/r2s_gen/**
+      - gen/r2s_rosidl/**
       - gen/tests/**
       - gen/pyproject.toml
       - gen/setup.py

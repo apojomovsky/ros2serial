@@ -321,6 +321,35 @@ def test_the_isolation_pairs_belong_to_nightly_not_the_e2e_legs():
     assert not matches(tasks()["e2e-posix"], "tests/e2e/test_isolation.py")
 
 
+# Source roots with a single owning section task: a new package lands as
+# a new top-level directory, so every tracked file under each one must be
+# an input of that task, or the section stays fresh over the change.
+OWNED_ROOTS = {"gen": "gen", "core": "core", "bridge": "bridge", "cpp": "cpp"}
+
+
+def test_every_top_level_package_directory_is_an_input_of_its_section_task():
+    """A new package must wake its section: gen/r2s_rosidl once did not."""
+    for root, owner in OWNED_ROOTS.items():
+        task = tasks()[owner]
+        children = sorted(path for path in (ROOT / root).iterdir() if path.is_dir())
+        assert children, f"no package directory under {root}"
+        for child in children:
+            proc = subprocess.run(
+                ["git", "ls-files", child.name],
+                cwd=ROOT / root,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            tracked = proc.stdout.splitlines()
+            if not tracked:
+                # Build output from a test earlier in this session lands
+                # untracked and ignored: no tracked file means no package.
+                continue
+            for path in tracked:
+                assert matches(task, f"{root}/{path}"), f"{root}/{path} matches no {owner} source"
+
+
 def test_the_soak_checks_belong_to_soak_not_the_e2e_legs():
     """The soak driver and its checks run on schedule, never in the legs."""
     for path in (
