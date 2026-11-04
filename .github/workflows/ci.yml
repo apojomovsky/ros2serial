@@ -570,6 +570,8 @@ jobs:
       soak: false
       # Mutation testing is nightly-only: it never runs in a pull request.
       mutation: false
+      # The big-endian qemu job is nightly-only too: it never runs here.
+      bigendian: false
   build-matrix:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.examples == '1'

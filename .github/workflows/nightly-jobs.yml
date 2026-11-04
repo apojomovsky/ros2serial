@@ -1,10 +1,11 @@
 name: nightly-jobs
 
 # The runs too long or too exhaustive for a PR: the long fuzzing, the e2e
-# isolation pairs and the soak. nightly.yml calls this on schedule;
-# release.yml calls it on a tag before anything is published, without the
-# long fuzzing: fuzzing for a fixed time is exploration, and CI already
-# replays the seed corpus. The soak stays off there too, and on PRs.
+# isolation pairs, the soak and the big-endian qemu job. nightly.yml calls
+# this on schedule; release.yml calls it on a tag before anything is
+# published, without the long fuzzing: fuzzing for a fixed time is
+# exploration, and CI already replays the seed corpus. The soak stays off
+# there too, and on PRs.
 # Timeout floor (see the rule comment in ci.yml): image jobs carry 30 or more.
 on:
   workflow_call:
@@ -19,6 +20,10 @@ on:
         default: false
       mutation:
         description: Run mutation testing and publish the triage report
+        type: boolean
+        default: true
+      bigendian:
+        description: Run the core and the reference codec on a big-endian target under qemu
         type: boolean
         default: true
 
@@ -122,3 +127,24 @@ jobs:
           if [ -f mutation-report/report.md ]; then
             cat mutation-report/report.md >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  # The core unit and vector tests cross-built for s390x and run under
+  # qemu-user, plus the generator reference suite and the vector check, in
+  # an image of their own: the dev image carries no cross toolchain or
+  # emulator. Nightly only: pull request checks and the pre-PR ritual never
+  # run it, so the pull request caller turns it off, and so does the
+  # release call. The bridge stays out: rclcpp is not available
+  # cross-compiled.
+  big-endian:
+    if: ${{ inputs.bigendian }}
+    runs-on: ubuntu-24.04
+    # The image build plus the core suite under emulation and the gen suite.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4.2.2
+      # The task builds its own image and runs the suite in it, as the
+      # mermaid check runs its own command: one path for CI and local runs.
+      - name: Install Task
+        run: sudo python3 scripts/install-task.py
+      - run: task --concurrency 1 bigendian
+      # No checksum save: schedule-only, nothing plans it on pull requests.
