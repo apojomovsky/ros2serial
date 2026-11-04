@@ -230,3 +230,17 @@ def test_make_forwards_the_e2e_loop_narrowers():
     # must hand them into the dev image or they are silently ignored.
     for var in ("R2S_RMWS", "R2S_E2E_BOARDS", "R2S_E2E_BAUDS"):
         assert var in pass_vars(), f"make drops {var} before the container"
+
+
+def test_make_forwards_the_suite_lock_wait():
+    # scripts/ci-test.sh queues on the suite lock when R2S_SUITE_LOCK_WAIT=1;
+    # make must hand it into the dev image or queueing never works.
+    assert "R2S_SUITE_LOCK_WAIT" in (ROOT / "scripts" / "ci-test.sh").read_text()
+    assert "R2S_SUITE_LOCK_WAIT" in pass_vars(), "make drops R2S_SUITE_LOCK_WAIT before the container"
+
+
+def test_make_forwards_the_build_lock_nowait():
+    # scripts/with-build-lock.sh refuses the build lock when
+    # R2S_LOCK_NOWAIT=1; make must hand it into the dev image too.
+    assert "R2S_LOCK_NOWAIT" in (ROOT / "scripts" / "with-build-lock.sh").read_text()
+    assert "R2S_LOCK_NOWAIT" in pass_vars(), "make drops R2S_LOCK_NOWAIT before the container"
