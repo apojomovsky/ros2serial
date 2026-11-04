@@ -129,6 +129,7 @@ if wants LINT; then scope_now=LINT
   section spec-coverage spec_coverage
   section zone python3 tools/zone_check.py
   section taskfile-coverage python3 tools/taskfile_coverage.py
+  section rosdep-audit python3 tools/rosdep_audit.py
 fi
 if wants COMMITS; then scope_now=COMMITS
   section commits check_commits
