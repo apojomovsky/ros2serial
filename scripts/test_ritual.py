@@ -836,9 +836,11 @@ def strip_ambient_scopes(monkeypatch):
     """The runner's own scopes must not leak in as caller scopes.
 
     R2S_FULL goes too: CI sets it on every master run, where it would force
-    the tasks these tests expect to see selected by name.
+    the tasks these tests expect to see selected by name. So does R2S_LOCAL,
+    which the pre-push hook sets around the suite these tests run in.
     """
     monkeypatch.delenv("R2S_FULL", raising=False)
+    monkeypatch.delenv("R2S_LOCAL", raising=False)
     for scope in (
         "LINT",
         "SCRIPTS",
