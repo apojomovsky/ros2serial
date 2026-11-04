@@ -5,8 +5,10 @@ drive them without editing this file: port names the serial device, and
 params_file selects the parameter set, the example one by default. log_level
 sets the node's ROS log level, and mcu_log_level sets the `<node>.mcu` child
 logger alone, debug when a test asserts on the MCU's debug lines without
-drowning the node in its own debug output. Namespace and remappings use the
-standard scoping actions around the inclusion.
+drowning the node in its own debug output. namespace places the bridge node
+and the MCU topics, and remappings renames them; empty values keep the root
+namespace and rename nothing. PushRosNamespace and SetRemap around the
+inclusion stay the equivalent scoping route.
 """
 
 import os
@@ -26,17 +28,46 @@ def check_params_file(context):
         raise RuntimeError("params_file is not a file: " + path)
 
 
+def parse_remappings(text):
+    """Split comma-separated src:=dst pairs into a remapping list.
+
+    Empty text renames nothing. Every item holds exactly one separator with
+    a name on each side; anything else fails fast, since a misspelled rule
+    must never rename topics silently.
+    """
+    pairs = []
+    if not text.strip():
+        return pairs
+    for item in text.split(","):
+        if item.count(":=") != 1:
+            raise RuntimeError("remappings must be comma-separated src:=dst pairs, got: " + item.strip())
+        src, _, dst = item.partition(":=")
+        if not src.strip() or not dst.strip():
+            raise RuntimeError("remappings must be comma-separated src:=dst pairs, got: " + item.strip())
+        pairs.append((src.strip(), dst.strip()))
+    return pairs
+
+
 def add_bridge(context):
-    """Start the bridge with the launch's log levels.
+    """Start the bridge with the launch's log levels, namespace and remappings.
 
     The mcu override names the node's default child logger; a remapped node
-    keeps the global level. An empty mcu_log_level sets no override.
+    keeps the global level. An empty mcu_log_level sets no override. Empty
+    namespace and remappings keep the Node construction the launch file
+    always built, so existing inclusions behave exactly as before.
     """
     log_level = LaunchConfiguration("log_level").perform(context)
     mcu_log_level = LaunchConfiguration("mcu_log_level").perform(context)
     arguments = ["--ros-args", "--log-level", log_level]
     if mcu_log_level:
         arguments += ["--log-level", "r2s_bridge.mcu:=" + mcu_log_level]
+    placement = {}
+    namespace = LaunchConfiguration("namespace").perform(context)
+    if namespace:
+        placement["namespace"] = namespace
+    remappings = parse_remappings(LaunchConfiguration("remappings").perform(context))
+    if remappings:
+        placement["remappings"] = remappings
     return [
         Node(
             package="r2s_bridge",
@@ -45,6 +76,7 @@ def add_bridge(context):
             parameters=[LaunchConfiguration("params_file"), {"port": LaunchConfiguration("port")}],
             arguments=arguments,
             output="screen",
+            **placement,
         )
     ]
 
@@ -71,6 +103,19 @@ def generate_launch_description():
                 "mcu_log_level",
                 default_value="",
                 description="ROS log level for the bridge's mcu child logger alone.",
+            ),
+            DeclareLaunchArgument(
+                "namespace",
+                default_value="",
+                description=("ROS namespace for the bridge node and the MCU topics. Empty keeps the root namespace."),
+            ),
+            DeclareLaunchArgument(
+                "remappings",
+                default_value="",
+                description=(
+                    "Comma-separated topic remappings as src:=dst pairs, for example "
+                    "battery:=cell_voltage. Empty applies none."
+                ),
             ),
             OpaqueFunction(function=check_params_file),
             OpaqueFunction(function=add_bridge),
