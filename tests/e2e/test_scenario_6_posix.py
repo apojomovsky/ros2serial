@@ -166,6 +166,7 @@ class TestScenario6(unittest.TestCase):
                 TOPIC_BUDGET,
                 "handshake",
                 lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
+                clock=time.monotonic,
             )
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
             # Discovery starts when the bridge creates its endpoints at the
@@ -214,6 +215,7 @@ class TestScenario6(unittest.TestCase):
                 reconnect_budget,
                 "reconnect",
                 lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
+                clock=time.monotonic,
             )
             self.assertLessEqual(took, reconnect_budget, "reconnect took longer than boot wait plus 3 s")
             final = _connected_values(received[-1])

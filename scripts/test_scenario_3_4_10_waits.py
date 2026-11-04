@@ -204,10 +204,9 @@ def _install_stubs():
     real_checks = importlib.util.module_from_spec(spec)
     sys.modules["s3410_waits_real_checks"] = real_checks
     spec.loader.exec_module(real_checks)
-    # One clock for the driven run: the helper keeps its file, but reads
-    # the world's stepped clock instead of the host one, so the waits it
-    # shares with the scenario measure fake seconds on any host uptime.
-    real_checks.time = types.SimpleNamespace(monotonic=lambda: _clock().monotonic())
+    # The helper keeps its file and its real time module: the scenario
+    # passes its own time.monotonic as the clock, so the driven run needs
+    # no patching of the helper's globals on any host uptime.
 
     launch_testing = types.ModuleType("launch_testing")
     markers = types.ModuleType("launch_testing.markers")
@@ -377,21 +376,6 @@ def _restore_stubs(saved):
 
 def _discovery(world):
     return next(event for event in world.events if event[0] == "wait_for_topics")
-
-
-def test_the_checks_helper_reads_the_world_clock():
-    """One clock for the driven run: the helper must read the fake one."""
-    saved = _save_stubs()
-    real_checks = _install_stubs()
-    try:
-        world = World()
-        module = world.load("s3410_single_clock_probe", POSIX_4)
-        assert module.time.monotonic() == world.clock.now
-        assert real_checks.time.monotonic() == world.clock.now
-        world.clock.advance(STEP)
-        assert real_checks.time.monotonic() == module.time.monotonic()
-    finally:
-        _restore_stubs(saved)
 
 
 def test_posix_3_discovers_on_its_own_budget_after_the_handshake():

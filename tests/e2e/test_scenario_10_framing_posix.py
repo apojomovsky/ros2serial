@@ -175,6 +175,7 @@ class TestScenario10Framing(unittest.TestCase):
                 TOPIC_BUDGET,
                 "handshake",
                 lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
+                clock=time.monotonic,
             )
             seen = len(received)
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
