@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# pre-push: refuse force pushes, run the prose gate, then the stale tasks, leaving the suite to CI.
+# pre-push: refuse force pushes, run the prose gate, then the stale tasks but
+# the end-to-end ones (R2S_LOCAL=1), which CI runs on every pull request.
 # A force push is any push whose remote ref is not an ancestor of what is
 # pushed: it drops commits other agents may have pulled, so it needs the
 # maintainer's go-ahead and R2S_FORCE_PUSH_APPROVED=1.
@@ -30,4 +31,4 @@ fi
 source "$root/scripts/clean-git-env.sh"
 if [ -n "${R2S_PRE_PUSH_SUITE:-}" ]; then
   bash -c "$R2S_PRE_PUSH_SUITE" || exit 1
-else make -s -C "$root" image test || exit 1; fi
+else R2S_LOCAL=1 make -s -C "$root" image test || exit 1; fi
