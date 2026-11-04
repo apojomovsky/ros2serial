@@ -577,6 +577,7 @@ tasks:
       - docker/bigendian/**
       - scripts/run-bigendian.sh
       - scripts/bigendian-suite.sh
+      - scripts/build-host-lib.sh
       - tools/vectors_check.py
       - tools/unity_runner.py
       - core/**

@@ -17,7 +17,11 @@ need() {
   return 1
 }
 need s390x-linux-gnu-gcc && need s390x-linux-gnu-g++ && need qemu-s390x \
-  && need cmake && need ninja && need python3 && need pytest || exit 2
+  && need cmake && need ninja && need python3 || exit 2
+python3 -c "import pytest" 2>/dev/null || {
+  echo "bigendian-suite.sh: pytest not found: run inside the docker/bigendian image" >&2
+  exit 2
+}
 
 # A scratch tree under /tmp: the mounted repository stays clean, so the job
 # leaves no build output behind it.
