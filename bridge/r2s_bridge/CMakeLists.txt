@@ -44,7 +44,11 @@ target_compile_options(r2s_bridge_component PRIVATE -Wall -Wextra -Wpedantic -We
 # The core's framer, rCOBS and CRC compiled for the host, so the bridge and
 # the MCU share one framing implementation (docs/00-design.md, Code reuse
 # between MCU and host). The host's maximum decoded frame is 65277 and is not
-# announced (FRM-10).
+# announced (FRM-10). One bridge process serves up to R2S_HOST_MAX_LINKS
+# serial links, each with its own framer instance (#122); the MCU keeps the
+# default of one link.
+set(R2S_HOST_MAX_FRAME 65277)
+set(R2S_HOST_MAX_LINKS 16)
 add_library(r2s_core_framing STATIC
   ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src/crc.c
   ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src/framer.c
@@ -56,9 +60,14 @@ set_target_properties(r2s_core_framing PROPERTIES
   C_STANDARD_REQUIRED ON
   C_EXTENSIONS OFF
   POSITION_INDEPENDENT_CODE ON)
-target_compile_definitions(r2s_core_framing PUBLIC R2S_MAX_FRAME=65277)
+target_compile_definitions(r2s_core_framing PUBLIC
+  R2S_MAX_FRAME=${R2S_HOST_MAX_FRAME} R2S_MAX_LINKS=${R2S_HOST_MAX_LINKS})
 target_compile_options(r2s_core_framing PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(r2s_bridge_component PRIVATE r2s_core_framing)
+# The component's own sources see the same framer configuration: the framing
+# instance and the port slots agree with the linked core on both values.
+target_compile_definitions(r2s_bridge_component PRIVATE
+  R2S_MAX_FRAME=${R2S_HOST_MAX_FRAME} R2S_MAX_LINKS=${R2S_HOST_MAX_LINKS})
 rclcpp_components_register_nodes(r2s_bridge_component "r2s_bridge::Bridge")
 
 add_executable(bridge src/main.cpp)
@@ -170,12 +179,14 @@ if(BUILD_TESTING)
   target_link_libraries(test_termios_transport r2s_bridge_component util)
 
   # The core port seam is header-private to the bridge sources, so its test
-  # includes them directly.
+  # includes them directly. It attaches scripted transports, so it links the
+  # test fakes and sees the same link count as the component.
   ament_add_gtest(test_core_port test/test_core_port.cpp)
   target_include_directories(test_core_port PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${R2S_CORE_DIR}/include)
-  target_link_libraries(test_core_port r2s_bridge_component)
+  target_compile_definitions(test_core_port PRIVATE R2S_MAX_LINKS=${R2S_HOST_MAX_LINKS})
+  target_link_libraries(test_core_port r2s_bridge_component r2s_bridge_test_support)
 
   # The ROS clock is plain C++ over a callback, so its tests need no node.
   ament_add_gtest(test_ros_clock test/test_ros_clock.cpp)
