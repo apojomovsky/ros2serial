@@ -237,3 +237,10 @@ def test_make_forwards_the_suite_lock_wait():
     # make must hand it into the dev image or queueing never works.
     assert "R2S_SUITE_LOCK_WAIT" in (ROOT / "scripts" / "ci-test.sh").read_text()
     assert "R2S_SUITE_LOCK_WAIT" in pass_vars(), "make drops R2S_SUITE_LOCK_WAIT before the container"
+
+
+def test_make_forwards_the_build_lock_nowait():
+    # scripts/with-build-lock.sh refuses the build lock when
+    # R2S_LOCK_NOWAIT=1; make must hand it into the dev image too.
+    assert "R2S_LOCK_NOWAIT" in (ROOT / "scripts" / "with-build-lock.sh").read_text()
+    assert "R2S_LOCK_NOWAIT" in pass_vars(), "make drops R2S_LOCK_NOWAIT before the container"
