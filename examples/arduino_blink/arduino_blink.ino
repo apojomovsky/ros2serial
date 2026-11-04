@@ -7,6 +7,12 @@
 
 r2s::Node node("blink");
 
+/* The Dev Module variant names no built-in LED, so the example falls back
+ * to GPIO2, the LED pin on the common DevKit boards. */
+#ifndef LED_BUILTIN
+#define LED_BUILTIN 2
+#endif
+
 void on_led(const std_msgs::msg::Bool &msg) { digitalWrite(LED_BUILTIN, msg.data ? HIGH : LOW); }
 r2s::Subscription<std_msgs::msg::Bool> led_sub(node, "led", on_led);
 

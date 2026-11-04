@@ -9,6 +9,9 @@ firmware:
     flash: 12500
     ram: 1400
     stack: 200
+  arduino_minimal/esp32/arduino_minimal.ino.elf:
+    flash: 332500
+    ram: 90900
   arduino_xmacro/uno/arduino_xmacro.ino.elf:
     flash: 12000
     ram: 1250
@@ -17,6 +20,9 @@ firmware:
     flash: 12500
     ram: 1250
     stack: 256
+  arduino_xmacro/esp32/arduino_xmacro.ino.elf:
+    flash: 332200
+    ram: 90700
   arduino_static/uno/arduino_static.ino.elf:
     flash: 11200
     ram: 950
@@ -25,6 +31,9 @@ firmware:
     flash: 11600
     ram: 950
     stack: 250
+  arduino_static/esp32/arduino_static.ino.elf:
+    flash: 331500
+    ram: 90100
   cmake_minimal/hello_cmake:
     flash: 11200
     ram: 400
@@ -37,6 +46,9 @@ firmware:
     flash: 12200
     ram: 1320
     stack: 208
+  arduino_hello/esp32/arduino_hello.ino.elf:
+    flash: 330500
+    ram: 90600
   arduino_blink/uno/arduino_blink.ino.elf:
     flash: 9900
     ram: 1300
@@ -45,6 +57,9 @@ firmware:
     flash: 10800
     ram: 1300
     stack: 32
+  arduino_blink/esp32/arduino_blink.ino.elf:
+    flash: 333400
+    ram: 91100
   arduino_button/uno/arduino_button.ino.elf:
     flash: 10300
     ram: 1300
@@ -53,6 +68,9 @@ firmware:
     flash: 11200
     ram: 1300
     stack: 216
+  arduino_button/esp32/arduino_button.ino.elf:
+    flash: 333600
+    ram: 91100
   arduino_servo/uno/arduino_servo.ino.elf:
     flash: 10900
     ram: 1320
@@ -61,6 +79,9 @@ firmware:
     flash: 11400
     ram: 1320
     stack: 32
+  arduino_servo/esp32/arduino_servo.ino.elf:
+    flash: 343300
+    ram: 93400
   arduino_range/uno/arduino_range.ino.elf:
     flash: 9950
     ram: 1290
@@ -69,3 +90,9 @@ firmware:
     flash: 10400
     ram: 1290
     stack: 264
+  arduino_range/esp32/arduino_range.ino.elf:
+    flash: 330400
+    ram: 90700
+  arduino_xmacro_c/esp32/arduino_xmacro_c.ino.elf:
+    flash: 332100
+    ram: 90700

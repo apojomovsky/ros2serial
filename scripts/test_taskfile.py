@@ -101,6 +101,7 @@ log="$R2S_TASK_LOG"
 [ -n "${COVERAGE:-}" ] && echo "stub COVERAGE=$COVERAGE" >> "$log"
 [ -n "${DOCS:-}" ] && echo "stub DOCS=$DOCS" >> "$log"
 [ -n "${EXAMPLES:-}" ] && echo "stub EXAMPLES=$EXAMPLES" >> "$log"
+[ -n "${ESP32:-}" ] && echo "stub ESP32=$ESP32" >> "$log"
 [ -n "${BUDGETS:-}" ] && echo "stub BUDGETS=$BUDGETS" >> "$log"
 [ -n "${FUZZ:-}" ] && echo "stub FUZZ=$FUZZ" >> "$log"
 [ -n "${README:-}" ] && echo "stub README=$README" >> "$log"
@@ -155,6 +156,7 @@ LEAKY_VARS = (
     "COVERAGE",
     "DOCS",
     "EXAMPLES",
+    "ESP32",
     "BUDGETS",
     "FUZZ",
     "README",
@@ -222,6 +224,25 @@ def test_a_mutation_script_edit_reruns_scripts_but_no_suite_task():
             if name in ("default", "scripts"):
                 continue
             assert not matches(task, path), f"{path} also matches {name}"
+
+
+@needs_task
+def test_an_esp32_script_edit_reruns_esp32_budgets_and_scripts(tmp_path):
+    """Editing the ESP32 build stales its task, the budgets gate that calls
+    it, and the scripts task that owns every script. Lint and commits always
+    run; every other task stays quiet.
+    """
+    repo = fixture(tmp_path)
+    ran = run_task(repo)
+    assert "ESP32=1" in ran, ran
+    edited = "scripts/build-examples-esp32.sh"
+    for name, task in tasks().items():
+        if name in ("default", "esp32", "budgets", "scripts", "lint", "commits"):
+            continue
+        assert not matches(task, edited), f"{edited} also matches {name}"
+    (repo / edited).write_text("probe\nprobe again\n")
+    reran = run_task(repo)
+    assert sorted(reran) == ["BUDGETS=1", "COMMITS=1", "ESP32=1", "LINT=1", "SCRIPTS=1"], reran
 
 
 @needs_task
@@ -329,12 +350,12 @@ def test_soak_runs_on_schedule_outside_the_default_task(tmp_path):
     assert run_task(repo, "soak") == ["SOAK=1"]
 
 
-def test_the_local_task_is_the_default_set_without_the_end_to_end_sections():
-    """The pre-push hook and the takeoff run it; CI runs e2e on every PR."""
-    end_to_end = {"e2e-avr", "e2e-posix", "nightly"}
+def test_the_local_task_is_the_default_set_without_the_ci_only_sections():
+    """The pre-push hook and the takeoff run it; CI runs e2e and esp32."""
+    ci_only = {"e2e-avr", "e2e-posix", "nightly", "esp32"}
     local = list(tasks()["local"]["deps"])
-    assert local == [name for name in default_tasks() if name not in end_to_end], local
-    assert not end_to_end & set(local), local
+    assert local == [name for name in default_tasks() if name not in ci_only], local
+    assert not ci_only & set(local), local
 
 
 def test_the_hook_and_the_takeoff_run_the_local_task():
