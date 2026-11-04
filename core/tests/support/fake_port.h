@@ -22,7 +22,6 @@ uint16_t fake_port_rx_pending(void);
 /* The same queue controls for one link's r2s_port_read_link(). The plain
  * functions above use link 0; every link is below R2S_MAX_LINKS. */
 void fake_port_queue_rx_link(uint8_t link, const uint8_t *data, uint16_t len);
-void fake_port_queue_rx_hex_link(uint8_t link, const char *hex);
 uint16_t fake_port_rx_pending_link(uint8_t link);
 
 /* Everything written so far, and the same split at each 0x00 delimiter into
