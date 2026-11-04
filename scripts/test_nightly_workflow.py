@@ -143,11 +143,20 @@ def test_nightly_runs_a_lone_strict_sync_suite():
     assert str(env.get("R2S_SYNC_BOUND_NS")) == "1000000"
 
 
-def test_the_lone_strict_suite_skips_nothing():
+def list_file_entries(name):
+    """Scenario file names from a legs list file, minus comments and blanks."""
+    lines = (ROOT / "tests" / "e2e" / name).read_text(encoding="utf-8").splitlines()
+    return {line for line in lines if line and not line.startswith("#")}
+
+
+def test_the_lone_strict_suite_runs_only_scenario_8():
     job, runs = strict_sync_job()
     assert "make test NIGHTLY=1" not in " ".join(str(step.get("run", "")) for step in job["steps"])
-    for step in runs:
-        assert "R2S_E2E_SKIP" not in (step.get("env", {}) or {})
+    env = runs[0].get("env", {})
+    skipped = set(str(env.get("R2S_E2E_SKIP", "")).split())
+    runnable = list_file_entries("scenarios.list") | list_file_entries("scenarios-compat.list")
+    assert "test_scenario_8_posix" in runnable
+    assert skipped == runnable - {"test_scenario_8_posix"}
 
 
 def pass_vars():
