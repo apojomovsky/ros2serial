@@ -350,12 +350,12 @@ def test_soak_runs_on_schedule_outside_the_default_task(tmp_path):
     assert run_task(repo, "soak") == ["SOAK=1"]
 
 
-def test_the_local_task_is_the_default_set_without_the_end_to_end_sections():
-    """The pre-push hook and the takeoff run it; CI runs e2e on every PR."""
-    end_to_end = {"e2e-avr", "e2e-posix", "nightly"}
+def test_the_local_task_is_the_default_set_without_the_ci_only_sections():
+    """The pre-push hook and the takeoff run it; CI runs e2e and esp32."""
+    ci_only = {"e2e-avr", "e2e-posix", "nightly", "esp32"}
     local = list(tasks()["local"]["deps"])
-    assert local == [name for name in default_tasks() if name not in end_to_end], local
-    assert not end_to_end & set(local), local
+    assert local == [name for name in default_tasks() if name not in ci_only], local
+    assert not ci_only & set(local), local
 
 
 def test_the_hook_and_the_takeoff_run_the_local_task():
