@@ -49,26 +49,9 @@ fi
 python3 "$root/scripts/set_version.py" "$next" "$PWD"
 make -C "$PWD" regen
 "${cliff[@]}" --tag "v$next" -o CHANGELOG.md
-git add VERSION CHANGELOG.md gen/r2s_gen/version.py gen/package.xml gen/r2s_rosidl/package.xml \
-  bridge/r2s_bridge/package.xml bridge/r2s_bridge_tests/package.xml \
-  gen/tests/golden/bundle/library.properties gen/tests/golden/bundle/r2s_bundled.c \
-  gen/tests/golden/bundle/r2s_bundled.h gen/tests/golden/bundle/ros2serial.h \
-  gen/tests/golden/bundle/ros2serial.hpp \
-  gen/tests/golden/descriptors/float32_twist.c gen/tests/golden/layouts/library.properties \
-  gen/tests/golden/topics/posix.c gen/tests/golden/topics/posix.h \
-  gen/tests/golden/types/float32.h gen/tests/golden/types/header.h gen/tests/golden/types/imu.h \
-  gen/tests/golden/types/joint_state.h gen/tests/golden/types/range.h gen/tests/golden/types/tf_message.h \
-  gen/tests/golden/types/transform.h gen/tests/golden/types/transform_stamped.h gen/tests/golden/types/twist.h \
-  examples/cmake_minimal/lib/CMakeLists.txt \
-  examples/cmake_minimal/lib/r2s_generated.c examples/cmake_minimal/lib/r2s_generated.h \
-  ports/posix/src/r2s_generated.c ports/posix/src/r2s_generated.h \
-  cpp/include/builtin_interfaces/msg/time.hpp cpp/include/geometry_msgs/msg/quaternion.hpp \
-  cpp/include/geometry_msgs/msg/transform.hpp cpp/include/geometry_msgs/msg/transform_stamped.hpp \
-  cpp/include/geometry_msgs/msg/twist.hpp cpp/include/geometry_msgs/msg/vector3.hpp \
-  cpp/include/r2s_bundled.h cpp/include/ros2serial.h cpp/include/ros2serial.hpp cpp/include/sensor_msgs/msg/imu.hpp \
-  cpp/include/sensor_msgs/msg/joint_state.hpp cpp/include/sensor_msgs/msg/range.hpp \
-  cpp/include/std_msgs/msg/bool.hpp cpp/include/std_msgs/msg/float32.hpp \
-  cpp/include/std_msgs/msg/header.hpp cpp/include/std_msgs/msg/string.hpp \
-  cpp/include/tf2_msgs/msg/tf_message.hpp
+# The staged set lives one per line in scripts/release-files.list, so
+# concurrent branches staging different files keep both on merge.
+mapfile -t staged < <(grep -v -e '^#' -e '^$' "$root/scripts/release-files.list")
+git add -- "${staged[@]}"
 git commit -q -m "chore(release): v$next"
 echo "committed chore(release): v$next"

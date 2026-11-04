@@ -500,6 +500,8 @@ jobs:
     with:
       fuzz: ${{ needs.plan.outputs.fuzz == '1' }}
       soak: false
+      # Mutation testing is nightly-only: it never runs in a pull request.
+      mutation: false
   build-matrix:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.examples == '1'

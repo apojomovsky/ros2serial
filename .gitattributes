@@ -2,3 +2,47 @@
 core/tests/vendor/** -whitespace
 # The fuzz corpus holds raw bytes, so it is not text and has no whitespace.
 core/fuzz/corpus/** binary
+# Structural merges: mergiraf merges order-free additions (imports, map keys)
+# where line merge would conflict. Without the driver installed git falls back
+# to its line merge, so contributors without it lose nothing.
+*.c merge=mergiraf
+*.cc merge=mergiraf
+*.cpp merge=mergiraf
+*.cxx merge=mergiraf
+*.h merge=mergiraf
+*.hh merge=mergiraf
+*.hpp merge=mergiraf
+*.hxx merge=mergiraf
+*.py merge=mergiraf
+*.yaml merge=mergiraf
+*.yml merge=mergiraf
+*.toml merge=mergiraf
+CMakeLists.txt merge=mergiraf
+*.cmake merge=mergiraf
+Makefile merge=mergiraf
+GNUmakefile merge=mergiraf
+*.mk merge=mergiraf
+*.sh merge=mergiraf
+*.bash merge=mergiraf
+*.md merge=mergiraf
+# Generated files merge by keeping our side; CI regenerates and fails when
+# the checked-in outputs go stale, which is the guard. The refresh tooling
+# keys on linguist-generated to find these files after a conflict.
+gen/tests/golden/** linguist-generated merge=ours
+examples/cmake_minimal/lib/** linguist-generated merge=ours
+ports/posix/src/r2s_generated.* linguist-generated merge=ours
+cpp/include/builtin_interfaces/** linguist-generated merge=ours
+cpp/include/geometry_msgs/** linguist-generated merge=ours
+cpp/include/sensor_msgs/** linguist-generated merge=ours
+cpp/include/std_msgs/** linguist-generated merge=ours
+cpp/include/tf2_msgs/** linguist-generated merge=ours
+cpp/include/r2s_bundled.h linguist-generated merge=ours
+cpp/include/ros2serial.h linguist-generated merge=ours
+cpp/include/ros2serial.hpp linguist-generated merge=ours
+# One-item-per-line lists merge with union: two branches appending different
+# items keep both. A test fails on a duplicate entry, the hazard of union.
+scripts/pass-vars.list merge=union
+scripts/release-files.list merge=union
+tests/e2e/legs.list merge=union
+tests/e2e/scenarios.list merge=union
+tests/e2e/scenarios-compat.list merge=union

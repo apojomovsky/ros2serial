@@ -9,6 +9,8 @@ __pycache__/
 .pytest_cache/
 
 node_modules/
+mutants/
+mutation-report/
 
 # Task's checksum store: a local cache, restored from CI, never committed.
 .task/

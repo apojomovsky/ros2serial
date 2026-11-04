@@ -17,6 +17,10 @@ on:
         description: Run the two hour soak on posix and simavr
         type: boolean
         default: false
+      mutation:
+        description: Run mutation testing and publish the triage report
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -76,3 +80,45 @@ jobs:
       - run: make test SOAK=1
         env:
           R2S_SOAK_SECONDS: 7200
+
+  # Nightly-only mutation testing in its own image: Mull over the core,
+  # mutmut over the generator. It publishes a triage report to the run
+  # summary and an artifact, and it never gates: pull requests and the
+  # pre-PR ritual never run it, and a low score never fails this job once
+  # the report is written. A broken run still fails loudly, so the
+  # scheduled failure reporter files it instead of going silent.
+  mutation:
+    if: ${{ inputs.mutation }}
+    runs-on: ubuntu-24.04
+    # Mull runs every unit binary once per mutant and mutmut runs the
+    # covering gen tests per mutant; both suites take seconds to minutes
+    # unmutated, so two hours leaves wide headroom. Past it, the scheduled
+    # failure reporter files the hang instead of holding a runner.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: docker/setup-buildx-action@v4.4.1
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: docker/mutation/Dockerfile
+          load: true
+          tags: ros2serial-mutation:local
+          cache-from: type=gha,scope=mutation
+          cache-to: type=gha,mode=max,scope=mutation
+      - run: |
+          mkdir -p mutation-report
+          docker run --rm -v "$PWD:/src" -w /src ros2serial-mutation:local \
+            bash scripts/run-mutation.sh
+      # The report is the deliverable: best effort on a broken run, so a
+      # failure still leaves whatever the tools produced before it stopped.
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: mutation-report/
+      - if: always()
+        run: |
+          if [ -f mutation-report/report.md ]; then
+            cat mutation-report/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi

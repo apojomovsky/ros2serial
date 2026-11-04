@@ -216,6 +216,16 @@ def test_a_gen_test_edit_reruns_only_gen_besides_the_standing_gates(tmp_path):
     assert sorted(reran) == ["COMMITS=1", "GEN=1", "LINT=1"], reran
 
 
+def test_a_mutation_script_edit_reruns_scripts_but_no_suite_task():
+    """Mutation testing never runs in a pull request: its scripts only wake the scripts task."""
+    for path in ("scripts/mutation_triage.py", "scripts/run-mutation.sh"):
+        assert matches(tasks()["scripts"], path), path
+        for name, task in tasks().items():
+            if name in ("default", "scripts"):
+                continue
+            assert not matches(task, path), f"{path} also matches {name}"
+
+
 @needs_task
 def test_an_esp32_script_edit_reruns_esp32_budgets_and_scripts(tmp_path):
     """Editing the ESP32 build stales its task, the budgets gate that calls
@@ -353,5 +363,5 @@ def test_the_hook_and_the_takeoff_run_the_local_task():
     assert "R2S_LOCAL=1 make -s -C" in hook
     takeoff = (ROOT / "scripts" / "pre-pr-check.sh").read_text()
     assert 'R2S_LOCAL=1 bash "$root/scripts/run-tasks.sh"' in takeoff
-    makefile = (ROOT / "Makefile").read_text()
-    assert " R2S_LOCAL" in next(line for line in makefile.splitlines() if line.startswith("PASS_VARS :="))
+    pass_vars = (ROOT / "scripts" / "pass-vars.list").read_text().split()
+    assert "R2S_LOCAL" in pass_vars
