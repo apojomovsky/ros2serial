@@ -332,5 +332,5 @@ def test_the_hook_and_the_takeoff_run_the_local_task():
     assert "R2S_LOCAL=1 make -s -C" in hook
     takeoff = (ROOT / "scripts" / "pre-pr-check.sh").read_text()
     assert 'R2S_LOCAL=1 bash "$root/scripts/run-tasks.sh"' in takeoff
-    makefile = (ROOT / "Makefile").read_text()
-    assert " R2S_LOCAL" in next(line for line in makefile.splitlines() if line.startswith("PASS_VARS :="))
+    pass_vars = (ROOT / "scripts" / "pass-vars.list").read_text().split()
+    assert "R2S_LOCAL" in pass_vars
