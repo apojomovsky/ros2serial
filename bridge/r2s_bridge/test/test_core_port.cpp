@@ -96,6 +96,33 @@ TEST(CorePort, AFaultMarksOnlyItsOwnSlot)
     detach_core_port(second);
 }
 
+TEST(CorePort, PlainSeamReachesTheDefaultLink)
+{
+    // The plain seam is the singleton's link. An empty table hands the first
+    // attach slot 0, so the plain functions below reach that slot's pair.
+    FakeTransport transport;
+    ManualClock clock(std::chrono::milliseconds(40));
+    std::vector<std::uint8_t> links;
+
+    for (std::uint8_t n = 0; n < R2S_MAX_LINKS; n++) {
+        links.push_back(attach_core_port(transport, clock));
+    }
+    for (const std::uint8_t link : links) {
+        detach_core_port(link);
+    }
+    const std::uint8_t link = attach_core_port(transport, clock);
+    EXPECT_EQ(link, 0u);
+
+    transport.script_read(std::vector<std::uint8_t>{0x11, 0x22});
+    std::uint8_t buffer[4]{0xAA, 0xBB, 0xCC, 0xDD};
+    EXPECT_EQ(r2s_port_read(buffer, sizeof buffer), 2u);
+    EXPECT_EQ(buffer[0u], 0x11u);
+    EXPECT_EQ(buffer[1u], 0x22u);
+    EXPECT_EQ(r2s_port_tick(), 40u);
+
+    detach_core_port(link);
+}
+
 TEST(CorePort, EachSlotTicksItsOwnClock)
 {
     FakeTransport first_transport;
