@@ -471,3 +471,17 @@ def test_pull_requests_do_not_force_the_suite():
 def test_master_runs_force_the_suite():
     for event in ("push", "schedule", "workflow_dispatch"):
         assert workflow_env(event).get("R2S_FULL") == "1", event
+
+
+def test_the_budgets_job_posts_no_pull_request_comment():
+    """The table lives in the job summary; a comment would email every reviewer."""
+    lines = (ROOT / ".github/workflows/ci.yml").read_text().splitlines()
+    start = lines.index("  budgets:")
+    job = [lines[start]]
+    for line in lines[start + 1 :]:
+        if line[:2] == "  " and line[:3] != "   " and line.strip():
+            break
+        job.append(line)
+    text = "\n".join(job)
+    assert "gh pr comment" not in text, "the budgets job must not comment on pull requests"
+    assert "budgets_comment.py" not in text
