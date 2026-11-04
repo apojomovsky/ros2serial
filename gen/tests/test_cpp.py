@@ -69,9 +69,7 @@ def bundled_resolved(distro="jazzy"):
 
 def emit_bundled(resolved, repository, type_name, distro="jazzy"):
     """The C++ header of a bundled type, with the banner the bundle gives it."""
-    return cpp.emit_message_hpp(
-        resolved, type_name, repository=repository, distro=distro, digest=bundle._digest(distro)
-    )
+    return cpp.emit_message_hpp(resolved, type_name, repository=repository, distro=distro)
 
 
 def frozen(type_name):

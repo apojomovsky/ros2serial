@@ -117,10 +117,14 @@ def test_the_isolation_job_runs_the_nightly_scope_with_both_envs():
     assert str(env.get("R2S_SYNC_BOUND_NS")) == "5000000"
 
 
+def pass_vars():
+    """The variables make forwards into the dev image, one per list line."""
+    return (ROOT / "scripts" / "pass-vars.list").read_text().split()
+
+
 def test_make_forwards_the_nightly_scope_and_its_env():
-    line = next(line for line in (ROOT / "Makefile").read_text().splitlines() if line.startswith("PASS_VARS"))
     for var in ("NIGHTLY", "R2S_E2E_SKIP", "R2S_SYNC_BOUND_NS"):
-        assert var in line.split(), f"make drops {var} before the container"
+        assert var in pass_vars(), f"make drops {var} before the container"
 
 
 def test_the_soak_job_runs_the_soak_scope_for_two_hours():
@@ -132,9 +136,8 @@ def test_the_soak_job_runs_the_soak_scope_for_two_hours():
 
 
 def test_make_forwards_the_soak_scope_and_its_env():
-    line = next(line for line in (ROOT / "Makefile").read_text().splitlines() if line.startswith("PASS_VARS"))
     for var in ("SOAK", "R2S_SOAK_SECONDS", "R2S_SOAK_BACKENDS"):
-        assert var in line.split(), f"make drops {var} before the container"
+        assert var in pass_vars(), f"make drops {var} before the container"
 
 
 def test_nightly_calls_the_reusable_workflow_on_schedule():

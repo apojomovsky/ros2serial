@@ -49,6 +49,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -103,6 +104,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -130,6 +132,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -163,6 +166,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -193,6 +197,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -215,6 +220,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -239,6 +245,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -266,6 +273,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -293,6 +301,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -323,6 +332,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -354,6 +364,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -377,6 +388,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -394,6 +406,9 @@ tasks:
       # and the soak checks run in the nightly workflow instead.
       - tests/e2e/**
       - exclude: tests/e2e/run.sh
+      - exclude: tests/e2e/legs.list
+      - exclude: tests/e2e/scenarios.list
+      - exclude: tests/e2e/scenarios-compat.list
       - exclude: tests/e2e/test_*_posix.py
       - exclude: tests/e2e/e2e_support/firmware.py
       - exclude: tests/e2e/test_isolation.py
@@ -415,6 +430,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -451,6 +467,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -472,6 +489,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
