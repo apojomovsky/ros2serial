@@ -561,3 +561,26 @@ tasks:
       - "**/*.md"
     cmds:
       - bash scripts/lint-docs.sh
+
+  # Host-only: builds docker/bigendian and runs the portable scope inside it
+  # under qemu-s390x, so the dev image cannot run it either. It stays out of
+  # the default and local tasks, as the mermaid check does, and CI never
+  # plans it: the nightly workflow runs it with `task bigendian`, and it is
+  # planless like the schedule-only soak. The bridge stays out: rclcpp is not
+  # available cross-compiled.
+  bigendian:
+    desc: Cross-build the core for s390x and run the suite under qemu (host-only, needs docker).
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - ci/versions.env
+      - docker/bigendian/**
+      - scripts/run-bigendian.sh
+      - scripts/bigendian-suite.sh
+      - tools/vectors_check.py
+      - tools/unity_runner.py
+      - core/**
+      - spec/**
+      - gen/r2s_gen/**
+    cmds:
+      - bash scripts/run-bigendian.sh

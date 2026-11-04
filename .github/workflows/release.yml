@@ -40,6 +40,10 @@ jobs:
       soak: false
       # Mutation testing is nightly-only: it never gates a release either.
       mutation: false
+      # The big-endian qemu job is schedule-only too: a first-run failure
+      # is triaged through the scheduled failure reporter, not a blocked
+      # publish.
+      bigendian: false
 
   release:
     needs: [nightly]

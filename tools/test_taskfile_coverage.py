@@ -28,6 +28,7 @@ def tiny_repo(tmp_path, files):
         "  gen:\n    sources:\n      - Taskfile.yml\n      - gen/**\n"
         "    cmds:\n      - true\n"
         "  soak:\n    cmds:\n      - true\n"
+        "  bigendian:\n    cmds:\n      - true\n"
     )
     for name, text in files.items():
         target = repo / name

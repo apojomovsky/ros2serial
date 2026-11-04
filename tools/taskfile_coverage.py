@@ -55,6 +55,9 @@ PLANLESS = {
     # Schedule-only: the plan carries no soak output and CI restores no
     # soak checksum, so nothing selects it on a pull request.
     "soak": "schedule-only soak, selected by name and by the schedule",
+    # Nightly-only: the plan carries no big-endian output, so nothing
+    # selects it on a pull request; the nightly workflow runs it by name.
+    "bigendian": "nightly-only big-endian job, selected by name and by the schedule",
 }
 
 

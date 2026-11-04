@@ -297,7 +297,7 @@ def test_lint_and_commits_list_no_sources():
 def test_every_conditional_task_lists_the_image_and_machinery():
     """The image definition and the suite machinery feed every section."""
     for name, task in tasks().items():
-        if name in ("default", "local", "lint", "commits", "mermaid"):
+        if name in ("default", "local", "lint", "commits", "mermaid", "bigendian"):
             continue
         for path in ("Taskfile.yml", ".gitignore", "Dockerfile", "ci/versions.env", "scripts/ci-test.sh"):
             assert matches(task, path), f"{path} matches no {name} source"
