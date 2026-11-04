@@ -66,17 +66,19 @@ def collect_until(values, count, deadline, what, spin):
         spin()
 
 
-def wait_for_handshake(received, wanted, since, budget, what, spin):
+def wait_for_handshake(received, wanted, since, budget, what, spin, clock=time.monotonic):
     """Block until the latest /diagnostics report shows the handshake done.
 
     The latest report is read before spinning, so the time kept is the
     arrival of the completing report, never a spin quantum later. spin is
     a zero-argument callable that runs the node's callbacks once, pausing
-    HANDSHAKE_SPIN between reads. Returns the seconds from since.
+    HANDSHAKE_SPIN between reads. clock reads the clock since came from,
+    so callers pass their own time.monotonic and driven tests with a
+    stepped clock measure fake seconds. Returns the seconds from since.
     """
     while True:
         missing = handshake_missing(received[-1], wanted) if received else ["link silent"]
-        took = time.monotonic() - since
+        took = clock() - since
         if not missing:
             return took
         assert took < budget, f"{what} still missing {missing} after {took:.1f} s"

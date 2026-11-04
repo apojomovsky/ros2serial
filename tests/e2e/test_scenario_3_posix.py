@@ -154,6 +154,7 @@ class TestScenario3(unittest.TestCase):
                 TOPIC_BUDGET,
                 "handshake",
                 lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
+                clock=time.monotonic,
             )
             self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
             # The echo path needs both directions matched: the bridge's

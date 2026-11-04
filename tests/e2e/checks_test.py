@@ -176,6 +176,18 @@ class TestWaitForHandshake(unittest.TestCase):
     def test_spin_quantum_stays_short(self):
         self.assertLessEqual(checks.HANDSHAKE_SPIN, 0.05)
 
+    def test_took_comes_from_the_passed_clock(self):
+        now = [1000000.0]
+        received = [FakeDiagnostics("handshaking", [])]
+        ready = self._ready()
+
+        def spin():
+            now[0] += 0.25
+            received.append(ready)
+
+        took = checks.wait_for_handshake(received, self.WANTED, now[0], 3.0, "handshake", spin, clock=lambda: now[0])
+        self.assertAlmostEqual(took, 0.25)
+
 
 class TestDiscoveryTimeout(unittest.TestCase):
     def test_stays_generous_against_the_handshake_bound(self):
