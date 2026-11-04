@@ -1,5 +1,76 @@
 # Changelog
 
+## 0.2.0 (2026-11-04)
+
+### Features
+
+- **ci:** Run the nightly jobs on PRs that touch them (#383)
+- **ci:** Publish full releases marked Latest by default (#384)
+- **ci:** Check mermaid blocks in the docs with mermaid's own parser (#390)
+- **e2e:** Fault-injecting pty proxy and scenario 10 (#393)
+- **ports:** Saturate the link and prove TX_BUSY in scenario 12 (#397)
+- **e2e:** Corrupt delimiters and code bytes in scenario 10 (#399)
+- **e2e:** Avr leg for link-saturation scenario 12 (#401)
+- **bridge:** Injectable termios seam and error-path tests toward section 6 floors (#406)
+- **e2e:** Two hour soak on posix and simavr, nightly (#400)
+- **ci:** Require the bridge floors with throw branches excluded (#410)
+- **core:** Send and decode error reports on message ID 5 (#409)
+- **cpp:** Add rosserial-compatible runtime aliases (#419)
+- **e2e:** Paint the stack in scenarios and table it with static (#421)
+- **cpp:** Remaining NodeHandle surface over the runtime registry (#422)
+- **gen:** Range, Imu and JointState with bounds and field-carrying bound reports (#420)
+- **e2e:** Simavr baud matrix at 115200, 500000 and 1000000 (#429)
+- **benchmark:** Framing and CRC benchmark (AVR Uno/Mega) (#431)
+- **e2e:** Scenarios 6 and 7 for reconnect and reset (#430)
+- **benchmark:** P10 encoding benchmark and write-up (#434)
+- **cpp:** Tf broadcaster, service stubs and ros e2e leg (#436)
+- **examples:** Task-shaped sketches with the native runtime API (#446)
+- **gen:** Rosidl plugin wrapper for colcon builds (#456)
+- **ci:** Per-section change detection with Task checksums (#435)
+- **ci:** Make concurrent branches merge cleanly (#466)
+- **ci:** Nightly mutation testing with a triage report (#467)
+- **ports:** ESP32 build-only via the Arduino layout (#468)
+- **ci:** Save matrix checksums only when every leg passed (#465)
+- **bridge:** Add namespace and remappings launch arguments (#475)
+- **bridge:** Several live links share one bridge process (#476)
+- **ci:** Run the big-endian qemu job nightly (#478)
+
+### Fixes
+
+- **gen:** Tab-tolerant limit guards and named failures for bad bytes (#387)
+- **e2e:** Scenario 3 waits for handshake and discovery before priming (#388)
+- **gen:** Stage the cpp tree inside gen for the sdist (#396)
+- **e2e:** Hold scenario 10 slice edges and name isolation failures (#403)
+- **ci:** Forward R2S_RMWS and R2S_E2E_BOARDS into the image (#408)
+- **e2e:** Run scenario 1 discovery budget from the completed handshake (#414)
+- **e2e:** Run discovery waits from the completed handshake (#416)
+- **ports:** Static firmware refuses overlong --node (#427)
+- **bridge:** Catch a failed diagnostics publish in the poll entry (#432)
+- **ci:** Leave the end-to-end sections out of pre-push and takeoff (#464)
+- **bridge:** Count a failed serialize instead of aborting the node (#470)
+- **e2e:** Scenario 8 bound defaults to 5 ms, strict 1 ms runs nightly (#473)
+- **ci:** Forward R2S_SUITE_LOCK_WAIT and R2S_LOCK_NOWAIT into the image (#477)
+
+### Documentation
+
+- **architecture:** Add contributor page with mermaid diagrams (#385)
+- **testing:** Add Testing in practice section with test levels and CI flow (#389)
+- **gen:** Record padding-gap struct rejection by the emitted size check (#392)
+- **design:** Bring actions into scope in the design doc (#424)
+- **ports:** Draft port your rosserial sketch guide (#425)
+- **design:** Note ros2serial stays serial-only, point WiFi boards onward (#451)
+- **design:** Rename services and actions spec S6 to S8 (#453)
+
+### Tests
+
+- **e2e:** Flash-to-RAM topic rebind over simavr (#394)
+- **e2e:** Anchor scenario 6 and 7 handshakes past the boot wait (#441)
+- **e2e:** Name isolation failures and anchor handshakes past boot wait (#445)
+- **e2e:** Read the handshake on a short spin (#455)
+
+### CI
+
+- **versions:** Pin the rolling bridge image (#474)
 ## 0.1.0 (2026-11-02)
 
 ### Breaking
@@ -155,6 +226,12 @@
 - **e2e:** Wait out a full pty instead of dropping UART bytes (#357)
 - **ci:** Write the plan scopes outside the checkout (#364)
 - **docs:** Truth pass on what works and what does not yet (#360) (#366)
+- **ci:** Tag the release fixture at the tree's version (#370)
+- **e2e:** Resolve the isolation root from tests/e2e (#372)
+- **e2e:** Tolerate slow zenoh session close in teardown (#375)
+- **ci:** Run SCRIPTS for tests/e2e changes and stub the teardown module (#377)
+- **ci:** Give fuzz-long time for its four targets (#379)
+- **ci:** Release skips the time-boxed fuzzing (#381)
 
 ### Refactoring
 
