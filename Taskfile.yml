@@ -23,7 +23,7 @@ tasks:
   # runs them on every pull request.
   local:
     desc: Run every stale section but the end-to-end ones, which CI runs.
-    deps: [lint, commits, scripts, core, gen, bridge, cpp, coverage, docs, examples, budgets, readme, fuzz]
+    deps: [lint, commits, scripts, core, gen, bridge, cpp, coverage, docs, examples, esp32, budgets, readme, fuzz]
 
   # The standing cheap gates: unlistable inputs must never skip them.
   lint:
