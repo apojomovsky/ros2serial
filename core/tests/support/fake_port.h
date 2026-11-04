@@ -19,6 +19,12 @@ void fake_port_queue_rx(const uint8_t *data, uint16_t len);
 void fake_port_queue_rx_hex(const char *hex);
 uint16_t fake_port_rx_pending(void);
 
+/* The same queue controls for one link's r2s_port_read_link(). The plain
+ * functions above use link 0; every link is below R2S_MAX_LINKS. */
+void fake_port_queue_rx_link(uint8_t link, const uint8_t *data, uint16_t len);
+void fake_port_queue_rx_hex_link(uint8_t link, const char *hex);
+uint16_t fake_port_rx_pending_link(uint8_t link);
+
 /* Everything written so far, and the same split at each 0x00 delimiter into
  * encoded frames (still rCOBS-encoded, without the delimiter); an unterminated
  * tail is not a frame. Clearing starts a new capture. */
@@ -37,6 +43,10 @@ uint16_t fake_port_tx_write_max(void);
 /* r2s_port_tick() returns the set value; advance adds to it, wrapping. */
 void fake_port_set_tick(uint32_t tick);
 void fake_port_advance(uint32_t ticks);
+
+/* The same tick control for one link's r2s_port_tick_link(). The plain
+ * functions above use link 0; every link is below R2S_MAX_LINKS. */
+void fake_port_set_tick_link(uint8_t link, uint32_t tick);
 
 /* r2s_port_tx_free() returns this, reduced by each write; 0xFFFF never shrinks.
  * A write longer than the reported space is an overrun: it leaves no space, and
