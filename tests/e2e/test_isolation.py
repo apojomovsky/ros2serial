@@ -33,8 +33,21 @@ def port_of(output):
 
 
 def failure_lines(output):
-    """FAIL: and ERROR: lines, naming every test the section lost."""
-    return [line for line in output.splitlines() if re.match(r"(FAIL|ERROR): ", line)]
+    """Failure lines, naming every test and launch process the section lost.
+
+    Besides the launch_test FAIL and ERROR lines, a launch whose nodes die
+    before the tests complete reports no test at all: it prints that the
+    processes stopped and how each exited, so those lines name the cause.
+    """
+    found = []
+    for line in output.splitlines():
+        if re.match(r"(FAIL|ERROR): ", line):
+            found.append(line)
+        elif line == "Processes under test stopped before tests completed":
+            found.append(line)
+        elif re.match(r"Process '.+' exited with [0-9]+", line):
+            found.append(line)
+    return found
 
 
 def summary_lines(output):
@@ -46,7 +59,7 @@ def section_report(output):
     """The failure report for one isolation section.
 
     The summary lines name the cause whatever the output length, then the
-    launch_test FAIL and ERROR lines, then the tail for context.
+    failure lines, then the tail for context.
     """
     return "\n".join(summary_lines(output) + failure_lines(output) + [output[-4000:]])
 
