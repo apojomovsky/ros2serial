@@ -108,6 +108,10 @@ void test_framer_links_drops_and_counters_stay_on_their_link(void)
     TEST_ASSERT_EQUAL_UINT16(0, counters->dropped_frames);
     TEST_ASSERT_EQUAL_UINT16(0, counters->rx_frames);
 
+    r2s_framer_count_refused_inst(&second);
+    TEST_ASSERT_EQUAL_UINT16(3, r2s_framer_counters_inst(&second)->dropped_frames);
+    TEST_ASSERT_EQUAL_UINT16(0, r2s_framer_counters_inst(&first)->dropped_frames);
+
     len = r2s_test_frame(other, 16, 0, payload, sizeof payload);
     fake_port_queue_rx_link(0u, other, len);
     TEST_ASSERT_EQUAL_UINT8(1, r2s_framer_poll_inst(&first, &frame));
