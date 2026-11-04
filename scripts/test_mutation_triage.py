@@ -130,3 +130,13 @@ def test_a_missing_result_file_fails_with_a_precise_message(tmp_path):
     )
     assert result.returncode != 0
     assert "absent.json" in result.stderr
+
+
+def test_the_report_table_has_matching_header_and_row_widths(tmp_path):
+    mull, mutmut = weakened_crc_results()
+    result, report = run_triage(tmp_path, mull, mutmut)
+    assert result.returncode == 0, result.stderr
+    rows = [line for line in report.splitlines() if line.startswith("|")]
+    assert len(rows) > 2, report
+    widths = {len(row.split("|")) for row in rows}
+    assert len(widths) == 1, rows

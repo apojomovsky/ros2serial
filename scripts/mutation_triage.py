@@ -69,7 +69,10 @@ def main():
     known = load_equivalent(args.equivalent)
     by_component = {result["component"]: result.get("mutants", []) for result in results}
     lines = ["# Mutation triage", ""]
-    lines += ["| Component | Killed | Total | Score | Floor |", "| --- | --- | --- | --- | --- |"]
+    lines += [
+        "| Component | Killed | Total | Score | Floor | Status |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
     for component in ("core", "cpp", "gen", "bridge"):
         killed, total, percent = score(by_component.get(component, []))
         mark = "ok" if total and 100 * killed // total >= FLOORS[component] else ("below floor" if total else "no data")
