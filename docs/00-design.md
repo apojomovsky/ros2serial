@@ -500,6 +500,16 @@ Node(
 )
 ```
 
+The bridge launch file carries the same two knobs as arguments, so
+users who prefer flags over scoping actions write:
+
+```console
+ros2 launch r2s_bridge r2s_bridge.launch.py namespace:=robot1 remappings:=battery:=power/battery
+```
+
+Empty values keep the root namespace and rename nothing. `PushRosNamespace`
+and `SetRemap` around the inclusion stay the equivalent scoping route.
+
 ## Code generator and packaging
 
 *Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling, plus the rosidl plugin wrapper (`gen/r2s_rosidl`); planned: `.action` support in #317.*
@@ -515,7 +525,7 @@ The generator targets a ROS distro explicitly (`distro:` in the config, default 
 
 ## Host bridge
 
-*Status (0.1.0): built: full-mode handshake, generic pub/sub, packed-to-CDR conversion, Uno boot handling, log forwarding, time-sync estimation, rate limiting; planned: parameters and services in #155 and #156, launch remapping arguments in #235.*
+*Status (0.1.0): built: full-mode handshake, generic pub/sub, packed-to-CDR conversion, Uno boot handling, log forwarding, time-sync estimation, rate limiting, launch namespace and remapping arguments; planned: parameters and services in #155 and #156.*
 
 - C++ (rclcpp), packaged as a component so several bridges (one per serial port) can share a process. The framing allows one live link per process until the framer gains a per-instance state (#122).
 - Generic publishers and subscriptions, plus introspection-based conversion from packed to CDR.
@@ -1080,7 +1090,7 @@ The generator computes the REP-2011 RIHS01 hash for each type in `gen/r2s_gen/ty
 | `qos_depth` | int | 10 | Depth for publishers and subscriptions created for the MCU |
 
 The package ships these defaults as `config/r2s_bridge.params.yaml`, started
-by `launch/r2s_bridge.launch.py` with `port` and `params_file` arguments.
+by `launch/r2s_bridge.launch.py` with `port`, `params_file`, `namespace` and `remappings` arguments.
 
 ### Published by the bridge
 
