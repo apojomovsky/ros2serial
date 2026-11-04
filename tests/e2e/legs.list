@@ -1,0 +1,6 @@
+# Firmware legs tests/e2e/run.sh runs, in order. One per line so concurrent
+# branches appending a leg keep both.
+static
+runtime
+ros
+static_cpp

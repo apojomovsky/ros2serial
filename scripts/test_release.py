@@ -70,6 +70,10 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
     (repo / "gen" / "package.xml").write_text(
         f'<package format="3">\n  <name>r2s_gen</name>\n  <version>{version}</version>\n</package>\n'
     )
+    (repo / "gen" / "r2s_rosidl").mkdir(parents=True)
+    (repo / "gen" / "r2s_rosidl" / "package.xml").write_text(
+        f'<package format="3">\n  <name>r2s_rosidl</name>\n  <version>{version}</version>\n</package>\n'
+    )
     (repo / "bridge" / "r2s_bridge" / "package.xml").write_text(
         f'<package format="3">\n  <name>r2s_bridge</name>\n  <version>{version}</version>\n</package>\n'
     )
@@ -88,11 +92,13 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(ROOT / config, target)
     shutil.copy(ROOT / "Makefile", repo / "Makefile")
+    (repo / "scripts").mkdir()
+    shutil.copy(ROOT / "scripts" / "release-files.list", repo / "scripts" / "release-files.list")
+    shutil.copy(ROOT / "scripts" / "pass-vars.list", repo / "scripts" / "pass-vars.list")
     shutil.copytree(ROOT / "gen" / "r2s_gen", repo / "gen" / "r2s_gen")
     (repo / "gen" / "r2s_gen" / "version.py").write_text(f'__version__ = "{version}"\nPROTOCOL_VERSION = 1\n')
     (repo / "tools").mkdir()
     shutil.copy(ROOT / "tools" / "refresh_generated.py", repo / "tools" / "refresh_generated.py")
-    (repo / "scripts").mkdir()
     shutil.copy(ROOT / "scripts" / "check-main-clone-build.sh", repo / "scripts" / "check-main-clone-build.sh")
     git(repo, "add", ".")
     git(repo, "commit", "-q", "-m", "chore: start")
@@ -210,6 +216,7 @@ def test_a_real_run_writes_the_version_into_the_generator_package(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert '__version__ = "0.4.0"' in (repo / "gen" / "r2s_gen" / "version.py").read_text()
     assert "<version>0.4.0</version>" in (repo / "gen" / "package.xml").read_text()
+    assert "<version>0.4.0</version>" in (repo / "gen" / "r2s_rosidl" / "package.xml").read_text()
     assert "<version>0.4.0</version>" in (repo / "bridge" / "r2s_bridge" / "package.xml").read_text()
     assert "<version>0.4.0</version>" in (repo / "bridge" / "r2s_bridge_tests" / "package.xml").read_text()
     for rel in STAMPED:
@@ -321,6 +328,7 @@ def test_a_simulated_cut_leaves_the_versioned_tests_green(tmp_path):
         "CHANGELOG.md",
         "gen/r2s_gen/version.py",
         "gen/package.xml",
+        "gen/r2s_rosidl/package.xml",
         "bridge/r2s_bridge/package.xml",
         "bridge/r2s_bridge_tests/package.xml",
         *STAMPED,

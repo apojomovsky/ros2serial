@@ -49,8 +49,8 @@ def test_the_scheduled_nightly_keeps_the_long_fuzzing():
             assert (job.get("with") or {}).get("fuzz", True) is True
 
 
-def test_the_reusable_workflow_holds_fuzzing_isolation_and_soak():
-    assert set(workflow(JOBS)["jobs"]) == {"fuzz-long", "e2e-isolation", "soak"}
+def test_the_reusable_workflow_holds_fuzzing_isolation_soak_mutation_and_big_endian():
+    assert set(workflow(JOBS)["jobs"]) == {"fuzz-long", "e2e-isolation", "soak", "mutation", "big-endian"}
 
 
 def test_the_soak_runs_only_when_the_caller_asks_for_it():
@@ -117,10 +117,56 @@ def test_the_isolation_job_runs_the_nightly_scope_with_both_envs():
     assert str(env.get("R2S_SYNC_BOUND_NS")) == "5000000"
 
 
+def test_ci_e2e_posix_keeps_the_shared_host_bound():
+    runs = " ".join(str(step.get("run", "")) for step in steps_of(workflow(CI), "e2e-posix"))
+    assert "make test E2E=posix" in runs
+    envs = [step.get("env", {}) or {} for step in steps_of(workflow(CI), "e2e-posix")]
+    assert any(str(env.get("R2S_SYNC_BOUND_NS")) == "5000000" for env in envs)
+
+
+def strict_sync_job():
+    """The nightly lone suite judging scenario 8 against the strict 1 ms."""
+    matches = {}
+    for name, job in workflow(NIGHTLY)["jobs"].items():
+        runs = [step for step in job.get("steps", []) if "make test E2E=posix" in str(step.get("run", ""))]
+        if runs:
+            matches[name] = (job, runs)
+    assert len(matches) == 1, f"nightly.yml should run one lone E2E=posix suite: {sorted(matches)}"
+    return next(iter(matches.values()))
+
+
+def test_nightly_runs_a_lone_strict_sync_suite():
+    job, runs = strict_sync_job()
+    assert any("./.github/actions/dev-image" in str(step.get("uses", "")) for step in job["steps"])
+    assert len(runs) == 1
+    env = runs[0].get("env", {})
+    assert str(env.get("R2S_SYNC_BOUND_NS")) == "1000000"
+
+
+def list_file_entries(name):
+    """Scenario file names from a legs list file, minus comments and blanks."""
+    lines = (ROOT / "tests" / "e2e" / name).read_text(encoding="utf-8").splitlines()
+    return {line for line in lines if line and not line.startswith("#")}
+
+
+def test_the_lone_strict_suite_runs_only_scenario_8():
+    job, runs = strict_sync_job()
+    assert "make test NIGHTLY=1" not in " ".join(str(step.get("run", "")) for step in job["steps"])
+    env = runs[0].get("env", {})
+    skipped = set(str(env.get("R2S_E2E_SKIP", "")).split())
+    runnable = list_file_entries("scenarios.list") | list_file_entries("scenarios-compat.list")
+    assert "test_scenario_8_posix" in runnable
+    assert skipped == runnable - {"test_scenario_8_posix"}
+
+
+def pass_vars():
+    """The variables make forwards into the dev image, one per list line."""
+    return (ROOT / "scripts" / "pass-vars.list").read_text().split()
+
+
 def test_make_forwards_the_nightly_scope_and_its_env():
-    line = next(line for line in (ROOT / "Makefile").read_text().splitlines() if line.startswith("PASS_VARS"))
     for var in ("NIGHTLY", "R2S_E2E_SKIP", "R2S_SYNC_BOUND_NS"):
-        assert var in line.split(), f"make drops {var} before the container"
+        assert var in pass_vars(), f"make drops {var} before the container"
 
 
 def test_the_soak_job_runs_the_soak_scope_for_two_hours():
@@ -132,9 +178,8 @@ def test_the_soak_job_runs_the_soak_scope_for_two_hours():
 
 
 def test_make_forwards_the_soak_scope_and_its_env():
-    line = next(line for line in (ROOT / "Makefile").read_text().splitlines() if line.startswith("PASS_VARS"))
     for var in ("SOAK", "R2S_SOAK_SECONDS", "R2S_SOAK_BACKENDS"):
-        assert var in line.split(), f"make drops {var} before the container"
+        assert var in pass_vars(), f"make drops {var} before the container"
 
 
 def test_nightly_calls_the_reusable_workflow_on_schedule():
@@ -168,3 +213,113 @@ def test_a_failed_scheduled_nightly_files_or_comments_one_issue():
     assert "GITHUB_RUN_ID" in runs
     envs = [step.get("env", {}) or {} for step in reporter["steps"]]
     assert any(str(env.get("GH_REPO")) == "${{ github.repository }}" for env in envs)
+
+
+def mutation_job():
+    return workflow(JOBS)["jobs"]["mutation"]
+
+
+def test_the_mutation_job_runs_unless_the_caller_turns_it_off():
+    doc = workflow(JOBS)
+    mutation = triggers(doc)["workflow_call"]["inputs"]["mutation"]
+    assert (mutation["type"], mutation["default"]) == ("boolean", True)
+    assert doc["jobs"]["mutation"].get("if") == "${{ inputs.mutation }}"
+
+
+def test_the_scheduled_nightly_keeps_the_mutation_job():
+    for job in workflow(NIGHTLY)["jobs"].values():
+        if "nightly-jobs.yml" in str(job.get("uses", "")):
+            assert (job.get("with") or {}).get("mutation", True) is True
+
+
+def test_pr_ci_turns_the_mutation_job_off():
+    job = ci_nightly_call()
+    assert (job.get("with") or {}).get("mutation") is False
+
+
+def test_the_release_call_skips_the_mutation_job():
+    calls = [job for job in workflow(RELEASE)["jobs"].values() if "nightly-jobs.yml" in str(job.get("uses", ""))]
+    assert len(calls) == 1
+    assert (calls[0].get("with") or {}).get("mutation") is False
+
+
+def test_the_mutation_job_builds_its_own_image():
+    steps = mutation_job()["steps"]
+    assert any(str(step.get("with", {}).get("file", "")) == "docker/mutation/Dockerfile" for step in steps)
+
+
+def test_the_mutation_job_runs_the_mutation_script_and_publishes_a_report():
+    runs = " ".join(str(step.get("run", "")) for step in mutation_job()["steps"])
+    assert "scripts/run-mutation.sh" in runs
+    assert "GITHUB_STEP_SUMMARY" in runs
+    assert any("upload-artifact" in str(step.get("uses", "")) for step in mutation_job()["steps"])
+
+
+def test_the_mutation_report_uses_the_triage_script():
+    runner = (ROOT / "scripts" / "run-mutation.sh").read_text(encoding="utf-8")
+    assert "scripts/mutation_triage.py" in runner
+
+
+def bigendian_job():
+    return workflow(JOBS)["jobs"]["big-endian"]
+
+
+def test_the_big_endian_job_runs_unless_the_caller_turns_it_off():
+    doc = workflow(JOBS)
+    bigendian = triggers(doc)["workflow_call"]["inputs"]["bigendian"]
+    assert (bigendian["type"], bigendian["default"]) == ("boolean", True)
+    assert doc["jobs"]["big-endian"].get("if") == "${{ inputs.bigendian }}"
+
+
+def test_the_scheduled_nightly_keeps_the_big_endian_job():
+    for job in workflow(NIGHTLY)["jobs"].values():
+        if "nightly-jobs.yml" in str(job.get("uses", "")):
+            assert (job.get("with") or {}).get("bigendian", True) is True
+
+
+def test_pr_ci_turns_the_big_endian_job_off():
+    job = ci_nightly_call()
+    assert (job.get("with") or {}).get("bigendian") is False
+
+
+def test_the_release_call_skips_the_big_endian_job():
+    calls = [job for job in workflow(RELEASE)["jobs"].values() if "nightly-jobs.yml" in str(job.get("uses", ""))]
+    assert len(calls) == 1
+    assert (calls[0].get("with") or {}).get("bigendian") is False
+
+
+def test_the_big_endian_task_builds_its_own_image():
+    driver = (ROOT / "scripts" / "run-bigendian.sh").read_text(encoding="utf-8")
+    assert "docker build" in driver
+    assert "docker/bigendian/Dockerfile" in driver
+
+
+def test_the_big_endian_job_runs_the_big_endian_task():
+    steps = bigendian_job()["steps"]
+    assert any("scripts/install-task.py" in str(step.get("run", "")) for step in steps)
+    runs = " ".join(str(step.get("run", "")) for step in steps)
+    assert "task" in runs and "bigendian" in runs
+
+
+def test_the_big_endian_image_pins_its_toolchain():
+    dockerfile = (ROOT / "docker" / "bigendian" / "Dockerfile").read_text(encoding="utf-8")
+    assert "ARG QEMU_VERSION=" in dockerfile
+    assert "ARG GCC_S390X_VERSION=" in dockerfile
+    assert "gcc-s390x-linux-gnu" in dockerfile and "qemu-user" in dockerfile
+    assert "qemu-s390x --version" in dockerfile
+    assert "s390x-linux-gnu-gcc -dumpfullversion" in dockerfile
+    assert "packages.ubuntu.com" in dockerfile
+
+
+def test_the_big_endian_driver_forwards_the_python_pins():
+    driver = (ROOT / "scripts" / "run-bigendian.sh").read_text(encoding="utf-8")
+    for pin in ("PYTEST_VERSION", "HYPOTHESIS_VERSION", "PYYAML_VERSION", "JSONSCHEMA_VERSION"):
+        assert pin in driver
+    assert "ci/versions.env" in driver
+
+
+def test_the_mutation_image_resolves_the_mull_package_dependencies():
+    dockerfile = (ROOT / "docker" / "mutation" / "Dockerfile").read_text(encoding="utf-8")
+    assert "Mull-18-" in dockerfile and "LLVM-" in dockerfile
+    assert "Mull-${MULL_VERSION}-ubuntu" in dockerfile
+    assert "apt-get install" in dockerfile and "dpkg -i" not in dockerfile

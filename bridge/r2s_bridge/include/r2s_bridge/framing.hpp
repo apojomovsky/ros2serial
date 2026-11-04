@@ -1,14 +1,18 @@
-// The bridge's receive framing: the core's framer and CRC read from the
-// bridge's transport, so the host and the MCU share one framing
-// implementation. The core framer keeps one state per process behind its
-// port seam, so one FrameReader is live per process.
+// The bridge's receive framing: each reader owns a core framer instance
+// bound to its link, so the host and the MCU share one framing
+// implementation and several links frame in one process. The instance lives
+// behind a pointer so this header stays free of the core's configuration.
 #ifndef R2S_BRIDGE__FRAMING_HPP_
 #define R2S_BRIDGE__FRAMING_HPP_
 
 #include <cstdint>
+#include <memory>
 
 #include "r2s_bridge/clock.hpp"
 #include "r2s_bridge/transport.hpp"
+
+// The core's per-link framer state, named without its header.
+struct r2s_framer;
 
 namespace r2s_bridge
 {
@@ -26,15 +30,14 @@ struct Frame {
 class FrameReader
 {
   public:
-    // Binds the core framer to transport and clock for this reader's lifetime
-    // and starts from a clean line. Throws std::logic_error when another
-    // reader is live: the core framer has one state per process.
+    // Binds an owned core framer instance to transport and clock and starts
+    // from a clean line. Throws std::logic_error when no link slot is free.
     FrameReader(Transport &transport, const Clock &clock);
     ~FrameReader();
     FrameReader(const FrameReader &) = delete;
     FrameReader &operator=(const FrameReader &) = delete;
 
-    // Pulls bytes from the transport until a frame is decoded or none is left.
+    // Pulls bytes from the link until a frame is decoded or none is left.
     // Returns true and fills frame when one is ready, false when none is. A
     // frame the core refuses is dropped inside its framer. While an unreleased
     // frame waits, no byte is read, so the next frame stays in the transport.
@@ -42,6 +45,18 @@ class FrameReader
 
     // Releases the frame poll() last returned, so the next poll may start one.
     void release();
+
+    // True when a read through this reader's link reported kClosed or kError
+    // since the last clear_link_fault(). The framer cannot tell an empty
+    // link from a dead one, so the session asks here after polling it.
+    bool link_faulted() const;
+
+    // Forgets the link fault, which the session does when it opens the link.
+    void clear_link_fault();
+
+  private:
+    std::unique_ptr<struct r2s_framer> framer_;
+    std::uint8_t link_ = 0;
 };
 
 } // namespace r2s_bridge

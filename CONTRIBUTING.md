@@ -164,8 +164,8 @@ Run that target inside the image and you see the same failure CI saw:
 | `budgets` | `make test BUDGETS=1` |
 
 Two jobs have no local twin. `bridge-images` is CI setup: it only reads
-`ci/versions.env` to pick the bridge images. `plan` only computes the
-scope map; `make check` shows you its answer.
+`ci/versions.env` to pick the bridge images. `plan` only reports which
+tasks are stale; `make check` shows you its answer.
 
 Read the failure in the job log: open the failed job in the Actions tab,
 or run `gh run view <run-id> --log-failed`. Fix the cause, not the
@@ -178,6 +178,8 @@ fails again, say so on the pull request instead of rerunning it.
 **The dev image is stale.** Rebuild it with `make image`. The tag is
 content-addressed, so a rebuild with no changes finishes at once. If
 `make doctor` reports the image missing, run `make bootstrap` again.
+
+**Merging without conflicts.** `.gitattributes` routes sources to the mergiraf structural merge driver, generated files to keep-our-side plus regeneration, and one-item-per-line lists to union merge. mergiraf itself is optional: install it (for example with `cargo install mergiraf`) and re-run `make setup-hooks`, which registers this clone's merge drivers. Without it git merges lines as usual.
 
 **A test is flaky.** Rerun just its scope, for example `make test-core`.
 The simulator runs at its own pace, so a timing failure that passes

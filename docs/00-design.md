@@ -78,7 +78,7 @@ The list is still based on prior knowledge of rosserial; the Phase 0 archaeology
 
 ## Architecture
 
-*Status (0.1.0): built: one bridge per serial port; planned: one live link per process until the framer gains per-instance state in #122.*
+*Status (0.1.0): built: one bridge per serial port; framing gives each link its own framer instance, so several links share one process (#122).*
 
 ```
  build time                                        runtime
@@ -500,9 +500,19 @@ Node(
 )
 ```
 
+The bridge launch file carries the same two knobs as arguments, so
+users who prefer flags over scoping actions write:
+
+```console
+ros2 launch r2s_bridge r2s_bridge.launch.py namespace:=robot1 remappings:=battery:=power/battery
+```
+
+Empty values keep the root namespace and rename nothing. `PushRosNamespace`
+and `SetRemap` around the inclusion stay the equivalent scoping route.
+
 ## Code generator and packaging
 
-*Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling; planned: rosidl plugin wrapper and `.action` support in #317.*
+*Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling, plus the rosidl plugin wrapper (`gen/r2s_rosidl`); planned: `.action` support in #317.*
 
 `r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required). It parses the `.msg` grammar itself, since `rosidl_parser` ships only with a ROS installation and the bundled snapshots make the ROS-free path complete. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources, the optional C++ headers, and the compact-mode node map. It also builds the bundled Arduino library (common types with default bounds) that the X-macro path uses. Outputs are laid out to be usable as:
 
@@ -511,13 +521,13 @@ Node(
 - a CMake or Makefile include for bare-metal and vendor toolchains;
 - an epic-hal module (serial and tick) for PIC (Phase 5).
 
-The generator targets a ROS distro explicitly (`distro:` in the config, default `jazzy`), because type hashes can differ between distros. It bundles a `common_interfaces` snapshot per supported distro. A thin rosidl plugin wraps it later for users who want generation inside `colcon build`. The bridge, the generator and a bundle of the standard messages are released as ROS packages through the buildfarm.
+The generator targets a ROS distro explicitly (`distro:` in the config, default `jazzy`), because type hashes can differ between distros. It bundles a `common_interfaces` snapshot per supported distro. A thin rosidl plugin (`gen/r2s_rosidl`) wraps it for users who want generation inside `colcon build`: a firmware package calls `r2s_generate_firmware(CONFIG r2s.yaml)` and the build runs `r2s-gen generate --layout cmake`. The bridge, the generator and a bundle of the standard messages are released as ROS packages through the buildfarm.
 
 ## Host bridge
 
-*Status (0.1.0): built: full-mode handshake, generic pub/sub, packed-to-CDR conversion, Uno boot handling, log forwarding, time-sync estimation, rate limiting; planned: parameters and services in #155 and #156, launch remapping arguments in #235.*
+*Status (0.1.0): built: full-mode handshake, generic pub/sub, packed-to-CDR conversion, Uno boot handling, log forwarding, time-sync estimation, rate limiting, launch namespace and remapping arguments; planned: parameters and services in #155 and #156.*
 
-- C++ (rclcpp), packaged as a component so several bridges (one per serial port) can share a process. The framing allows one live link per process until the framer gains a per-instance state (#122).
+- C++ (rclcpp), packaged as a component so several bridges (one per serial port) can share a process. The framing gives each link its own framer instance, so one process serves up to 16 live links (#122).
 - Generic publishers and subscriptions, plus introspection-based conversion from packed to CDR.
 - Serial I/O behind a small interface; termios first (research ticket R8).
 - Board quirks handled explicitly: opening a Uno's port toggles DTR and resets the board, and the bootloader runs for up to about 2 s. The bridge waits for the MCU's unsolicited `HELLO` (up to `boot_wait_ms`) before sending `HELLO_REQ`, so it does not talk to the bootloader. `hupcl:=false` avoids the reset where the adapter allows it.
@@ -1056,8 +1066,8 @@ The generator computes the REP-2011 RIHS01 hash for each type in `gen/r2s_gen/ty
 ### Executable and component
 
 - Package `r2s_bridge`, component `r2s_bridge::Bridge`, executable `bridge`.
-- One instance per serial port and one link per process. `/dev/serial/by-id/...` paths are recommended in the docs.
-- Receive framing is the core's `framer.c`, `rcobs.c` and `crc.c` compiled for the host (FRM-10). The core framer keeps one state per process, so one `FrameReader` is live per process.
+- One instance per serial port and up to 16 live links per process. `/dev/serial/by-id/...` paths are recommended in the docs.
+- Receive framing is the core's `framer.c`, `rcobs.c` and `crc.c` compiled for the host (FRM-10). Each `FrameReader` owns a framer instance bound to its link, so several readers frame in one process; the MCU keeps the singleton on link 0.
 
 ### Parameters
 
@@ -1080,7 +1090,7 @@ The generator computes the REP-2011 RIHS01 hash for each type in `gen/r2s_gen/ty
 | `qos_depth` | int | 10 | Depth for publishers and subscriptions created for the MCU |
 
 The package ships these defaults as `config/r2s_bridge.params.yaml`, started
-by `launch/r2s_bridge.launch.py` with `port` and `params_file` arguments.
+by `launch/r2s_bridge.launch.py` with `port`, `params_file`, `namespace` and `remappings` arguments.
 
 ### Published by the bridge
 
@@ -1112,7 +1122,7 @@ Scenario numbers in the tickets below refer to the key end-to-end scenarios in `
 
 | Workflow | Trigger | Jobs |
 | --- | --- | --- |
-| `ci.yml` | Push, PR and manual | `plan` (maps the diff to the scopes each section job gates on); `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component, fails on a drop); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `docs` (every code snippet in `README.md` and `docs/` extracted and compiled); `readme` (every Getting started command runs on simavr); `cpp`; `bridge` (colcon build and test in `ros:jazzy` and `ros:lyrical`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `pic-canary` (advisory, from Phase 2); `budgets` (size table as a PR comment, fails on budget breach); `nightly` (calls `nightly-jobs.yml` when the plan selects `NIGHTLY`; the long fuzzing runs only when it also selects `FUZZ`) |
+| `ci.yml` | Push, PR and manual | `plan` (restores each task's checksums from the latest `master` run and reports the stale scopes each section job gates on); `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component, fails on a drop); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `docs` (every code snippet in `README.md` and `docs/` extracted and compiled); `readme` (every Getting started command runs on simavr); `cpp`; `bridge` (colcon build and test in `ros:jazzy` and `ros:lyrical`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `esp32` (example sketches for the ESP32 Dev Module at the pinned core); `pic-canary` (advisory, from Phase 2); `budgets` (size table as a PR comment, fails on budget breach); `nightly` (calls `nightly-jobs.yml` when the plan selects `NIGHTLY`; the long fuzzing runs only when it also selects `FUZZ`) |
 | `nightly.yml` | Schedule | Calls `nightly-jobs.yml`; files or comments on one `needs-triage` issue when the scheduled run fails |
 | `nightly-jobs.yml` | Reusable | `fuzz-long` (30 min per target); `e2e-isolation` (two e2e sections side by side) |
 | `release.yml` | Tag | Runs `nightly-jobs.yml` on a tag first, then the release with the Arduino library zip and the Python sdist and wheel attached: a full release marked Latest, or a pre-release when the tag carries a SemVer pre-release suffix; publishes nowhere else |

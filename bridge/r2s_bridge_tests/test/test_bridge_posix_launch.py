@@ -22,8 +22,9 @@ import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchContext
-from launch.actions import ExecuteProcess, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.utilities import perform_substitutions
 from launch_ros.substitutions import FindPackageShare
 from rcl_interfaces.srv import GetParameters
 from rclpy.qos import QoSProfile, ReliabilityPolicy
@@ -69,6 +70,22 @@ DOCUMENTED_PARAMETERS = frozenset(
 
 HANDSHAKE_TIMEOUT = 20.0
 FLOW_TIMEOUT = 20.0
+
+# Every launch argument the bridge launch file declares, with the default the
+# description performs. The namespace and remapping entries pin the public
+# interface from #235: no other argument may appear.
+LAUNCH_ARGUMENT_DEFAULTS = {
+    "port": "/dev/ttyACM0",
+    "log_level": "info",
+    "mcu_log_level": "",
+    "namespace": "",
+    "remappings": "",
+}
+
+NAMESPACE_HELP = "ROS namespace for the bridge node and the MCU topics. Empty keeps the root namespace."
+REMAPPINGS_HELP = (
+    "Comma-separated topic remappings as src:=dst pairs, for example battery:=cell_voltage. Empty applies none."
+)
 
 _SCRATCH = None
 _FIRMWARE = None
@@ -258,3 +275,112 @@ class TestLaunchFileChecks(unittest.TestCase):
         context.launch_configurations["params_file"] = "/nonexistent/r2s.params.yaml"
         with self.assertRaisesRegex(RuntimeError, "not a file"):
             module.check_params_file(context)
+
+
+class TestLaunchNamespaceArguments(unittest.TestCase):
+    def _declared(self, module):
+        found = {}
+        for entity in module.generate_launch_description().entities:
+            if isinstance(entity, DeclareLaunchArgument):
+                found[entity.name] = entity
+        return found
+
+    def test_launch_declares_only_the_documented_arguments(self):
+        # The help pins the public argument names, so a renamed or extra
+        # argument fails here instead of silently changing the interface.
+        module = _load_launch_module()
+        found = self._declared(module)
+        self.assertEqual(set(found), set(LAUNCH_ARGUMENT_DEFAULTS) | {"params_file"})
+        context = LaunchContext()
+        for name, default in LAUNCH_ARGUMENT_DEFAULTS.items():
+            performed = perform_substitutions(context, found[name].default_value)
+            self.assertEqual(performed, default)
+        params_default = perform_substitutions(context, found["params_file"].default_value)
+        self.assertTrue(params_default.endswith("/config/r2s_bridge.params.yaml"), params_default)
+
+    def test_launch_help_pins_the_new_arguments(self):
+        module = _load_launch_module()
+        found = self._declared(module)
+        self.assertEqual(found["namespace"].description, NAMESPACE_HELP)
+        self.assertEqual(found["remappings"].description, REMAPPINGS_HELP)
+
+    def test_parse_remappings_empty(self):
+        module = _load_launch_module()
+        self.assertEqual(module.parse_remappings(""), [])
+        self.assertEqual(module.parse_remappings("   "), [])
+
+    def test_parse_remappings_pairs(self):
+        module = _load_launch_module()
+        self.assertEqual(
+            module.parse_remappings("battery:=cell_voltage,cmd_vel:=steer"),
+            [("battery", "cell_voltage"), ("cmd_vel", "steer")],
+        )
+
+    def test_parse_remappings_trims_whitespace(self):
+        module = _load_launch_module()
+        self.assertEqual(module.parse_remappings(" battery := cell_voltage "), [("battery", "cell_voltage")])
+
+    def test_parse_remappings_rejects_pair_without_separator(self):
+        module = _load_launch_module()
+        with self.assertRaisesRegex(RuntimeError, "src:=dst"):
+            module.parse_remappings("battery:=cell_voltage,cmd_vel")
+
+    def test_parse_remappings_rejects_empty_side(self):
+        module = _load_launch_module()
+        with self.assertRaisesRegex(RuntimeError, "src:=dst"):
+            module.parse_remappings("battery:=cell_voltage,:=steer")
+
+    def _add_bridge(self, module, configs):
+        # The Node action resolves its namespace only while visited, so the
+        # test captures the constructor arguments instead of reading them
+        # back from the action.
+        seen = {}
+
+        class FakeNode:
+            def __init__(self, **kwargs):
+                seen.update(kwargs)
+
+        real_node = module.Node
+        module.Node = FakeNode
+        try:
+            context = LaunchContext()
+            for key, value in configs.items():
+                context.launch_configurations[key] = value
+            module.add_bridge(context)
+        finally:
+            module.Node = real_node
+        return seen
+
+    def test_bridge_node_forwards_namespace_and_remappings(self):
+        module = _load_launch_module()
+        seen = self._add_bridge(
+            module,
+            {
+                "port": "/dev/ttyACM0",
+                "params_file": "/tmp/r2s.params.yaml",
+                "log_level": "info",
+                "mcu_log_level": "",
+                "namespace": "robot1",
+                "remappings": "battery:=power/battery",
+            },
+        )
+        self.assertEqual(seen.get("namespace"), "robot1")
+        self.assertEqual(seen.get("remappings"), [("battery", "power/battery")])
+
+    def test_bridge_node_omits_empty_namespace_and_remappings(self):
+        # Empty values keep the Node construction the launch file always
+        # built, so existing inclusions behave exactly as before.
+        module = _load_launch_module()
+        seen = self._add_bridge(
+            module,
+            {
+                "port": "/dev/ttyACM0",
+                "params_file": "/tmp/r2s.params.yaml",
+                "log_level": "info",
+                "mcu_log_level": "",
+                "namespace": "",
+                "remappings": "",
+            },
+        )
+        self.assertNotIn("namespace", seen)
+        self.assertNotIn("remappings", seen)

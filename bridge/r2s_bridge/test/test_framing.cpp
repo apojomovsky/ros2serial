@@ -165,13 +165,62 @@ TEST(FrameReader, DropsADecodedFrameOneByteOverTheHostMaximum)
     EXPECT_FALSE(reader.poll(received));
 }
 
-TEST(FrameReader, RefusesASecondReaderInOneProcess)
+TEST(FrameReader, TwoLiveReadersFrameOnSeparateLinks)
 {
-    FakeTransport transport;
-    ManualClock clock;
-    FrameReader first(transport, clock);
+    const std::vector<std::uint8_t> wire_a = wire_of(6u, 0xAAu);
+    const std::vector<std::uint8_t> wire_b = wire_of(7u, 0xBBu);
 
-    EXPECT_THROW(FrameReader(transport, clock), std::logic_error);
+    FakeTransport transport_a;
+    FakeTransport transport_b;
+    ManualClock clock_a(std::chrono::milliseconds(40));
+    ManualClock clock_b(std::chrono::milliseconds(90));
+    FrameReader reader_a(transport_a, clock_a);
+    FrameReader reader_b(transport_b, clock_b);
+
+    transport_a.script_read(std::vector<std::uint8_t>(wire_a.begin(), wire_a.end() - 1));
+    transport_b.script_read(wire_b);
+
+    Frame frame;
+    EXPECT_FALSE(reader_a.poll(frame)) << "a partial frame waits on its own link";
+    ASSERT_TRUE(reader_b.poll(frame));
+    EXPECT_EQ(frame.size, 7u);
+    EXPECT_EQ(frame.data[2u], 0xBBu);
+    EXPECT_EQ(frame.tick, 90u);
+    reader_b.release();
+
+    clock_a.advance(std::chrono::milliseconds(2));
+    transport_a.script_read({wire_a.back()});
+    ASSERT_TRUE(reader_a.poll(frame));
+    EXPECT_EQ(frame.size, 6u);
+    EXPECT_EQ(frame.data[2u], 0xAAu);
+    EXPECT_EQ(frame.tick, 42u);
+    reader_a.release();
+    EXPECT_FALSE(reader_a.poll(frame));
+    EXPECT_FALSE(reader_b.poll(frame));
+}
+
+TEST(FrameReader, AClosedLinkFaultsOnlyItsOwnReader)
+{
+    FakeTransport transport_a;
+    FakeTransport transport_b;
+    ManualClock clock_a;
+    ManualClock clock_b;
+    FrameReader reader_a(transport_a, clock_a);
+    FrameReader reader_b(transport_b, clock_b);
+
+    transport_a.script_read(IoStatus::kClosed);
+    Frame frame;
+    EXPECT_FALSE(reader_a.poll(frame));
+    EXPECT_TRUE(reader_a.link_faulted());
+    EXPECT_FALSE(reader_b.link_faulted());
+
+    reader_a.clear_link_fault();
+    EXPECT_FALSE(reader_a.link_faulted());
+
+    transport_b.script_read(wire_of(6u, 0xAAu));
+    EXPECT_TRUE(reader_b.poll(frame)) << "the other link keeps framing";
+    EXPECT_EQ(frame.data[2u], 0xAAu);
+    reader_b.release();
 }
 
 } // namespace

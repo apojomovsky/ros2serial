@@ -26,12 +26,12 @@ flowchart TB
 
 ### CI flow
 
-The `plan` job maps the pull request diff to the scopes each section job gates on; pushes to `master` and manual runs select every scope. The SCRIPTS scope runs as one job per shard; the `nightly` job calls the shared nightly jobs on pull requests that select them. A version tag runs the same nightly jobs with the long fuzzing off, and they gate the publish.
+The `plan` job restores each Taskfile task's last successful inputs from the latest `master` run and reports every section whose inputs changed since; each section job gates on its scope. Pushes to `master` and manual runs select every scope and force the tasks, then save the checksums. The SCRIPTS scope runs as one job per shard; the `nightly` job calls the shared nightly jobs on pull requests that select them. A version tag runs the same nightly jobs with the long fuzzing off, and they gate the publish.
 
 ```mermaid
 flowchart TB
-    diff["Pull request diff"]
-    plan["plan: scopes_for_diff.py maps changed paths to scopes; unknown paths select FULL"]
+    cache["Task checksums from the latest master run"]
+    plan["plan: one task status per section; a miss runs everything"]
     subgraph jobs["Section jobs, each running only when its scope is selected"]
         lint["lint"]
         shards["scripts, one job per shard"]
@@ -40,12 +40,12 @@ flowchart TB
         gates["coverage, docs, readme, examples, budgets, fuzz-smoke"]
         cinight["nightly: nightly-jobs.yml when NIGHTLY is selected; fuzz-long only with FUZZ"]
     end
-    full["FULL: a push to master or a manual run selects every scope"]
+    full["Master or manual: every job forced, checksums saved"]
     shared["nightly-jobs.yml: fuzz-long plus e2e-isolation"]
     sched["nightly.yml on schedule"]
     rel["release.yml on a version tag: nightly jobs with fuzz off gate the publish; a plain tag ships Latest, an -rc tag ships a pre-release"]
 
-    diff --> plan --> jobs
+    cache --> plan --> jobs
     full --> jobs
     cinight --> shared
     sched --> shared
@@ -54,7 +54,7 @@ flowchart TB
 
 ### Rerunning one failure
 
-`make check` runs the scopes CI would run for the current diff against `origin/master`, plus the fast gates, and prints which scopes it chose. A diff that maps to FULL runs only the fast gates locally and leaves the full suite to CI. From there, narrow down:
+`make check` runs the stale tasks for the current tree and prints which scopes it chose. A fresh tree runs the full suite once, then stays incremental; `R2S_FULL=1` forces all the tasks. From there, narrow down:
 
 - One scope: `make test-core`, `test-gen`, `test-bridge`, `test-cpp`, `test-scripts`, `make e2e-posix`, `make e2e-avr`. `make test-all` runs the whole suite unscoped.
 - One pytest file or node: `make pytest ARGS='<path>[::name] [-k expr]'`.
@@ -84,7 +84,7 @@ These rules shape how the code is written. They are part of the code review, not
 
 ### 2.1 MCU core (C99)
 
-- **All mutable state lives in one struct per module, as a single static instance.** The public API stays handle-free (one node per firmware), and internal functions access the instance directly, so small targets pay nothing for testability. Host test builds compile with `R2S_TESTING`, which adds `r2s_test_reset()` to zero every instance; every test starts from it. No other code differs between test and target builds.
+- **All mutable state lives in one struct per module, as a single static instance.** The public API stays handle-free (one node per firmware), and internal functions access the instance directly, so small targets pay nothing for testability. The framer also offers caller-owned instances for hosts that frame several links; the singleton stays the default instance. Host test builds compile with `R2S_TESTING`, which adds `r2s_test_reset()` to zero every instance; every test starts from it. No other code differs between test and target builds.
 - **Seams are link-time.** The only boundaries to the outside are the port functions (`r2s_port_*`) and the user handlers (`r2s_on_*`). Tests link a fake port (`core/tests/support/fake_port.c`) instead of a real one. No function pointers are needed, so the zone rules and testability never conflict.
 - **The fake port is scriptable.** It queues RX bytes, captures every TX byte, sets the tick, sets `tx_free`, and records handler calls. Assertions are made on captured bytes decoded with the same vector helpers the conformance tests use.
 - **Time is an input.** The core reads time only through `r2s_port_tick()`. Nothing in the core waits, sleeps or busy-loops. Tests advance the fake clock explicitly, including across the 32-bit wraparound.
@@ -291,15 +291,15 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 | --- | --- | --- |
 | While editing | `make test CORE=1` (or the component being changed) | Seconds |
 | `pre-commit` hook | Format, warnings, unit tests of the touched component | Under 30 s |
-| `pre-push` hook | The cheap checks locally, leaving the suite to CI; skipped when the stamp shows this tree already passed | Cheap, minutes |
-| Takeoff (`make pre-pr-check TEST=1`) | The same cheap run as the hook, recording the stamp the push checks; scopes named on the command line and `R2S_FULL=1` still run locally | Cheap, minutes |
+| `pre-push` hook | The stale tasks locally but the end-to-end ones (the `local` task), which CI runs; a fresh tree is a fast no-op | Cheap, minutes |
+| Takeoff (`make pre-pr-check TEST=1`) | The same stale tasks as the hook; scopes named on the command line and `R2S_FULL=1` still run locally | Cheap, minutes |
 | Every PR | Unit, component, contract, integration on posix, simavr scenarios, fuzz smoke (60 s per target), sanitizers, coverage, spec coverage, budgets, build matrix, golden, docs snippets | Under 15 min wall clock, in parallel jobs |
 | Nightly | Long fuzzing (30 min per target), mutation testing, extended property and model-based runs, long fault injection, soak (2 h), big-endian, Rolling, e2e isolation pairs | Hours |
 | Release | Everything above; on a tag the nightly jobs run first and gate the publish, then the hardware checklist on a Uno and a Mega, the full distro and RMW matrix, frozen-vector check | |
 
 When the PR suite exceeds its budget, the slowest tests are made faster or moved down a level; the budget is not raised without the maintainer's approval.
 
-Each top-level tree maps to the sections that test it and the sections that consume it (`scripts/scopes_for_diff.py`), and the cheap checks always run. Changes to the gate machinery itself, and paths the mapping does not know, map to the full suite: unknown means full, never less. Outside CI every diff runs only the cheap scopes instead, with one line saying the full suite is left to CI. Scopes named on the command line still run, and `R2S_FULL=1` still runs everything locally. CI is where the suite runs: it still runs everything on the merge with master, and a PR merges only on green CI.
+Each Taskfile task lists the files its section reads (`Taskfile.yml`), and the lint and commits tasks always run. `tools/taskfile_coverage.py` fails the lint section on a tracked file no task lists, so adding a file the suite should cover means listing it, and files no section reads carry their reason in that script's allowlist. Scopes named on the command line select their tasks, and `R2S_FULL=1` forces them. CI is where the suite runs: the plan gates each section job on its task status on the merge with master, and a PR merges only on green CI.
 
 Suites share nothing: every section that starts ROS nodes (bridge, coverage, e2e) leases its own DDS domain from one slot pool (`scripts/e2e-lease.sh`), and the e2e legs take a Zenoh router port from the same slot, so two suites on one host never see each other's topics. Slot 0 maps to the domain and port each leg always used (89 for the e2e legs, 0 for bridge and coverage), so a lone run and CI keep their domains. An explicit `R2S_E2E_DOMAIN_ID` skips allocation; `R2S_E2E_DOMAIN_BASE` shifts the pool and defaults to 89.
 
@@ -382,7 +382,7 @@ In `tests/e2e/`, each a launch_testing test parameterized by MCU backend (posix,
 5. A type hash mismatch rejects only that topic, with an error naming the type.
 6. Unplug (close the pty) and replug: CONNECTED again within `boot_wait_ms` + 3 s without restarting the bridge.
 7. MCU reset: detected within 500 ms (HELLO in reply to a heartbeat), re-handshake follows; publishers are kept when the table is unchanged.
-8. Time sync: with a simulated MCU clock off by 5000 ppm, stamps stay within R2S_SYNC_BOUND_NS nanoseconds of host time after the initial burst. The bound defaults to 1000000; the CI e2e jobs set 5000000 for the shared host. The concurrent isolation pairs skip this scenario through R2S_E2E_SKIP; the standalone legs keep judging it.
+8. Time sync: with a simulated MCU clock off by 5000 ppm, stamps stay within R2S_SYNC_BOUND_NS nanoseconds of host time after the initial burst. The bound defaults to 5000000 for the shared host; the nightly lone suite runs scenario 8 alone against the strict 1000000 instead. The concurrent isolation pairs skip this scenario through R2S_E2E_SKIP; the standalone legs keep judging it.
 9. Log messages at each level appear on `/rosout` with the right severity and logger name.
 10. Fault injection at 1% byte corruption: no crash, the counters match the injected faults, and delivery recovers on the next frame.
 11. A subscribed message that exceeds a bound is dropped, and the bridge logs the topic and the field path.

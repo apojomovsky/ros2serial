@@ -16,7 +16,6 @@
 #include <utility>
 #include <vector>
 
-#include "core_port.hpp"
 #include "r2s_bridge/converter.hpp"
 #include "r2s_bridge/framing.hpp"
 #include "r2s_bridge/time_sync.hpp"
@@ -291,8 +290,8 @@ struct Session::Impl {
             return;
         }
         transport = std::move(opened);
-        clear_link_fault();
         reader = std::make_unique<FrameReader>(*transport, clock);
+        reader->clear_link_fault();
         clear_queue();
         state = SessionState::kBootWait;
         boot_wait_deadline_ms = now_ms() + config.boot_wait_ms;
@@ -1046,7 +1045,8 @@ struct Session::Impl {
                 reader->release();
                 flush();
             }
-            if (link_faulted()) {
+            // A close inside the loop already dropped the reader.
+            if (reader && reader->link_faulted()) {
                 close_link();
                 return;
             }

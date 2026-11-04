@@ -63,8 +63,15 @@ def test_every_timeout_stays_within_two_hours():
 
 
 # Jobs that build nothing keep the small bound; everything else builds or
-# pulls an image (see the rule comment in ci.yml).
-NO_BUILD_JOBS = {("ci.yml", "plan"), ("ci.yml", "bridge-images")}
+# pulls an image (see the rule comment in ci.yml). The checksum save jobs
+# only download one artifact and write the cache, so they stay at five.
+NO_BUILD_JOBS = {
+    ("ci.yml", "plan"),
+    ("ci.yml", "bridge-images"),
+    ("ci.yml", "scripts-save"),
+    ("ci.yml", "bridge-save"),
+    ("ci.yml", "e2e-posix-save"),
+}
 
 
 def test_image_jobs_carry_a_thirty_minute_floor():

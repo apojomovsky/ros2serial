@@ -12,3 +12,9 @@ select = ["E", "F", "W", "I", "B", "UP"]
 addopts = "-q"
 # The generator is importable from its tests without installing it.
 pythonpath = ["gen"]
+
+# Nightly-only mutation testing (scripts/run-mutation.sh in the
+# docker/mutation image): mutmut runs the gen suite once per mutant.
+[tool.mutmut]
+source_paths = ["gen/r2s_gen"]
+pytest_add_cli_args_test_selection = ["gen/tests"]

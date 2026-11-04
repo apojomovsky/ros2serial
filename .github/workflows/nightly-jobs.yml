@@ -1,10 +1,11 @@
 name: nightly-jobs
 
 # The runs too long or too exhaustive for a PR: the long fuzzing, the e2e
-# isolation pairs and the soak. nightly.yml calls this on schedule;
-# release.yml calls it on a tag before anything is published, without the
-# long fuzzing: fuzzing for a fixed time is exploration, and CI already
-# replays the seed corpus. The soak stays off there too, and on PRs.
+# isolation pairs, the soak and the big-endian qemu job. nightly.yml calls
+# this on schedule; release.yml calls it on a tag before anything is
+# published, without the long fuzzing: fuzzing for a fixed time is
+# exploration, and CI already replays the seed corpus. The soak stays off
+# there too, and on PRs.
 # Timeout floor (see the rule comment in ci.yml): image jobs carry 30 or more.
 on:
   workflow_call:
@@ -17,9 +18,21 @@ on:
         description: Run the two hour soak on posix and simavr
         type: boolean
         default: false
+      mutation:
+        description: Run mutation testing and publish the triage report
+        type: boolean
+        default: true
+      bigendian:
+        description: Run the core and the reference codec on a big-endian target under qemu
+        type: boolean
+        default: true
 
 permissions:
   contents: read
+
+# Master runs force their sections, as in ci.yml; pull requests run stale ones.
+env:
+  R2S_FULL: ${{ github.event_name == 'pull_request' && '' || '1' }}
 
 jobs:
   fuzz-long:
@@ -33,6 +46,11 @@ jobs:
       - run: make test FUZZ=1
         env:
           R2S_FUZZ_SECONDS: 1800
+      - if: github.ref == 'refs/heads/master'
+        uses: actions/cache/save@v4.2.2
+        with:
+          path: .task/checksum/fuzz
+          key: r2s-task-fuzz-refs/heads/master-${{ github.sha }}
 
   # Two full e2e sections side by side on one host. The load-sensitive
   # scenario is skipped and the sync bound keeps headroom for the shared
@@ -47,6 +65,11 @@ jobs:
         env:
           R2S_E2E_SKIP: test_scenario_8_posix
           R2S_SYNC_BOUND_NS: 5000000
+      - if: github.ref == 'refs/heads/master'
+        uses: actions/cache/save@v4.2.2
+        with:
+          path: .task/checksum/nightly
+          key: r2s-task-nightly-refs/heads/master-${{ github.sha }}
 
   # Two hours of clean-link traffic on each soak backend. The wire counters
   # must stay exactly consistent and the bridge memory must plateau, as the
@@ -62,3 +85,66 @@ jobs:
       - run: make test SOAK=1
         env:
           R2S_SOAK_SECONDS: 7200
+
+  # Nightly-only mutation testing in its own image: Mull over the core,
+  # mutmut over the generator. It publishes a triage report to the run
+  # summary and an artifact, and it never gates: pull requests and the
+  # pre-PR ritual never run it, and a low score never fails this job once
+  # the report is written. A broken run still fails loudly, so the
+  # scheduled failure reporter files it instead of going silent.
+  mutation:
+    if: ${{ inputs.mutation }}
+    runs-on: ubuntu-24.04
+    # Mull runs every unit binary once per mutant and mutmut runs the
+    # covering gen tests per mutant; both suites take seconds to minutes
+    # unmutated, so two hours leaves wide headroom. Past it, the scheduled
+    # failure reporter files the hang instead of holding a runner.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: docker/setup-buildx-action@v4.4.1
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: docker/mutation/Dockerfile
+          load: true
+          tags: ros2serial-mutation:local
+          cache-from: type=gha,scope=mutation
+          cache-to: type=gha,mode=max,scope=mutation
+      - run: |
+          mkdir -p mutation-report
+          docker run --rm -v "$PWD:/src" -w /src ros2serial-mutation:local \
+            bash scripts/run-mutation.sh
+      # The report is the deliverable: best effort on a broken run, so a
+      # failure still leaves whatever the tools produced before it stopped.
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: mutation-report/
+      - if: always()
+        run: |
+          if [ -f mutation-report/report.md ]; then
+            cat mutation-report/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # The core unit and vector tests cross-built for s390x and run under
+  # qemu-user, plus the generator reference suite and the vector check, in
+  # an image of their own: the dev image carries no cross toolchain or
+  # emulator. Nightly only: pull request checks and the pre-PR ritual never
+  # run it, so the pull request caller turns it off, and so does the
+  # release call. The bridge stays out: rclcpp is not available
+  # cross-compiled.
+  big-endian:
+    if: ${{ inputs.bigendian }}
+    runs-on: ubuntu-24.04
+    # The image build plus the core suite under emulation and the gen suite.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4.2.2
+      # The task builds its own image and runs the suite in it, as the
+      # mermaid check runs its own command: one path for CI and local runs.
+      - name: Install Task
+        run: sudo python3 scripts/install-task.py
+      - run: task --concurrency 1 bigendian
+      # No checksum save: schedule-only, nothing plans it on pull requests.

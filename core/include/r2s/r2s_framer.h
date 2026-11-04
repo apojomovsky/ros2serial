@@ -48,9 +48,34 @@ typedef struct {
     uint16_t dropped_frames; /* every frame dropped, whichever rule (HB-7) */
 } r2s_framer_counters_t;
 
+/* One link's framer state: the receive buffer, the frame in progress, the
+ * decoded frame waiting for its release, the drops its session reports on
+ * the error channel, and the heartbeat counters. The caller owns the
+ * storage, one struct per link, so several links frame in one process, each
+ * reading its own link from the port seam (#122). The tag lets C++ name the
+ * struct without this header. */
+typedef struct r2s_framer {
+    uint8_t link;
+    uint8_t rx[R2S_FRAMER_RX_CAPACITY];
+    uint16_t len;
+    uint8_t overflow;
+    uint8_t ready;
+    const uint8_t *ready_data;
+    uint16_t ready_len;
+    uint32_t ready_tick;
+    uint16_t rep_overflow;
+    uint16_t rep_toolarge;
+    uint8_t rep_topic;
+    r2s_framer_counters_t counters;
+} r2s_framer_t;
+
 /* Returns the framer to its power-up state: as if a 0x00 had just arrived
  * (FRM-13), with no frame waiting and the counters at zero. */
 void r2s_framer_init(void);
+
+/* The same reset for one owned instance, bound to link, which is below
+ * R2S_MAX_LINKS. The singleton above is the default instance on link 0. */
+void r2s_framer_init_inst(r2s_framer_t *framer, uint8_t link);
 
 #ifdef R2S_TESTING
 /* Host test builds only: the same reset, as r2s_test_reset() calls it. */
@@ -68,20 +93,37 @@ uint8_t r2s_framer_poll(r2s_frame_t *frame);
  * from clearing it, a poll before the release returns the same frame again. */
 void r2s_framer_release(void);
 
+/* The same poll and release for one owned instance, reading that
+ * instance's link. Ready frames on different instances never alias: each
+ * one points into its own instance's buffer. */
+uint8_t r2s_framer_poll_inst(r2s_framer_t *framer, r2s_frame_t *frame);
+void r2s_framer_release_inst(r2s_framer_t *framer);
+
 /* Returns the counters, which only r2s_framer_init() resets. The session
  * reads them for the heartbeat. */
 const r2s_framer_counters_t *r2s_framer_counters(void);
+
+/* The counters of one owned instance, reset only by r2s_framer_init_inst().
+ * The pointer stays valid while the instance outlives its use. */
+const r2s_framer_counters_t *r2s_framer_counters_inst(const r2s_framer_t *framer);
 
 /* Counts a frame the session refused ([SYS-5]): the framer accepted it, but
  * the session took no other action on it. The heartbeat reports it in
  * dropped_frames. */
 void r2s_framer_count_refused(void);
 
+/* Counts a refused frame on one owned instance instead of the default one. */
+void r2s_framer_count_refused_inst(r2s_framer_t *framer);
+
 /* Takes the drops the session reports on the error channel since the last
  * take: receive overflows, whose bytes never decode, and frames past the
  * limit with the last one's topic. The take clears both, so each occurrence
  * reports once. The bridge links the framer but never takes. */
 void r2s_framer_take_error_reports(uint16_t *overflow, uint16_t *too_large, uint8_t *topic);
+
+/* Takes one owned instance's reports instead of the default one's. */
+void r2s_framer_take_error_reports_inst(r2s_framer_t *framer, uint16_t *overflow, uint16_t *too_large,
+                                        uint8_t *topic);
 
 #ifdef __cplusplus
 }

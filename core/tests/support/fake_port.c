@@ -10,16 +10,16 @@
 #define TX_UNLIMITED 0xFFFFu
 
 static struct {
-    uint8_t rx[FAKE_PORT_CAPACITY];
-    uint16_t rx_len;
-    uint16_t rx_pos;
+    uint8_t rx[R2S_MAX_LINKS][FAKE_PORT_CAPACITY];
+    uint16_t rx_len[R2S_MAX_LINKS];
+    uint16_t rx_pos[R2S_MAX_LINKS];
     uint8_t tx[FAKE_PORT_CAPACITY];
     uint16_t tx_len;
     uint16_t tx_write_calls;
     uint16_t tx_write_max;
     uint16_t tx_free;
     uint16_t tx_overruns;
-    uint32_t tick;
+    uint32_t tick[R2S_MAX_LINKS];
 } port;
 
 void fake_port_reset(void)
@@ -28,19 +28,24 @@ void fake_port_reset(void)
     port.tx_free = TX_UNLIMITED;
 }
 
-void fake_port_queue_rx(const uint8_t *data, uint16_t len)
+void fake_port_queue_rx_link(uint8_t link, const uint8_t *data, uint16_t len)
 {
-    if (port.rx_pos == port.rx_len) {
-        port.rx_pos = port.rx_len = 0;
+    if (port.rx_pos[link] == port.rx_len[link]) {
+        port.rx_pos[link] = port.rx_len[link] = 0;
     }
-    if (len > FAKE_PORT_CAPACITY - port.rx_len) {
+    if (len > FAKE_PORT_CAPACITY - port.rx_len[link]) {
         fake_port_fail("fake port: RX queue full");
         return;
     }
     if (len > 0u) {
-        memcpy(port.rx + port.rx_len, data, len);
+        memcpy(port.rx[link] + port.rx_len[link], data, len);
     }
-    port.rx_len = (uint16_t)(port.rx_len + len);
+    port.rx_len[link] = (uint16_t)(port.rx_len[link] + len);
+}
+
+void fake_port_queue_rx(const uint8_t *data, uint16_t len)
+{
+    fake_port_queue_rx_link(0u, data, len);
 }
 
 void fake_port_queue_rx_hex(const char *hex)
@@ -55,9 +60,14 @@ void fake_port_queue_rx_hex(const char *hex)
     fake_port_queue_rx(bytes, (uint16_t)n);
 }
 
+uint16_t fake_port_rx_pending_link(uint8_t link)
+{
+    return (uint16_t)(port.rx_len[link] - port.rx_pos[link]);
+}
+
 uint16_t fake_port_rx_pending(void)
 {
-    return (uint16_t)(port.rx_len - port.rx_pos);
+    return fake_port_rx_pending_link(0u);
 }
 
 const uint8_t *fake_port_tx(uint16_t *len)
@@ -117,14 +127,19 @@ const uint8_t *fake_port_tx_frame(uint16_t index, uint16_t *len)
     return NULL;
 }
 
+void fake_port_set_tick_link(uint8_t link, uint32_t tick)
+{
+    port.tick[link] = tick;
+}
+
 void fake_port_set_tick(uint32_t tick)
 {
-    port.tick = tick;
+    fake_port_set_tick_link(0u, tick);
 }
 
 void fake_port_advance(uint32_t ticks)
 {
-    port.tick += ticks;
+    port.tick[0] += ticks;
 }
 
 void fake_port_set_tx_free(uint16_t free_bytes)
@@ -140,18 +155,30 @@ uint16_t fake_port_take_overruns(void)
     return n;
 }
 
-uint16_t r2s_port_read(uint8_t *buf, uint16_t max)
+static uint16_t read_from(uint8_t link, uint8_t *buf, uint16_t max)
 {
-    uint16_t n = fake_port_rx_pending();
+    uint16_t n = fake_port_rx_pending_link(link);
 
     if (n > max) {
         n = max;
     }
     if (n > 0u) {
-        memcpy(buf, port.rx + port.rx_pos, n);
+        memcpy(buf, port.rx[link] + port.rx_pos[link], n);
     }
-    port.rx_pos = (uint16_t)(port.rx_pos + n);
+    port.rx_pos[link] = (uint16_t)(port.rx_pos[link] + n);
     return n;
+}
+
+#if R2S_MAX_LINKS > 1
+uint16_t r2s_port_read_link(uint8_t link, uint8_t *buf, uint16_t max)
+{
+    return read_from(link, buf, max);
+}
+#endif
+
+uint16_t r2s_port_read(uint8_t *buf, uint16_t max)
+{
+    return read_from(0u, buf, max);
 }
 
 void r2s_port_write(const uint8_t *buf, uint16_t len)
@@ -184,7 +211,14 @@ uint16_t r2s_port_tx_free(void)
     return port.tx_free;
 }
 
+#if R2S_MAX_LINKS > 1
+uint32_t r2s_port_tick_link(uint8_t link)
+{
+    return port.tick[link];
+}
+#endif
+
 uint32_t r2s_port_tick(void)
 {
-    return port.tick;
+    return port.tick[0u];
 }
