@@ -350,6 +350,31 @@ def test_every_top_level_package_directory_is_an_input_of_its_section_task():
                 assert matches(task, f"{root}/{path}"), f"{root}/{path} matches no {owner} source"
 
 
+def test_bigendian_runs_on_the_host_outside_the_default_task():
+    """The big-endian check needs host docker, so no image task may pull it in."""
+    assert "bigendian" not in default_tasks()
+    assert matches(tasks()["bigendian"], "Taskfile.yml")
+    assert matches(tasks()["bigendian"], "ci/versions.env")
+    assert matches(tasks()["bigendian"], "docker/bigendian/Dockerfile")
+    assert matches(tasks()["bigendian"], "scripts/run-bigendian.sh")
+    assert matches(tasks()["bigendian"], "scripts/bigendian-suite.sh")
+    assert matches(tasks()["bigendian"], "core/src/codec.c")
+    assert matches(tasks()["bigendian"], "spec/vectors/frames/hello_req.yaml")
+    assert matches(tasks()["bigendian"], "gen/r2s_gen/reference/messages.py")
+    assert not matches(tasks()["bigendian"], "scripts/ci-test.sh")
+
+
+def test_the_big_endian_scripts_belong_to_bigendian_not_the_section_tasks():
+    """The big-endian driver only wakes its task and the scripts task."""
+    for path in ("scripts/run-bigendian.sh", "scripts/bigendian-suite.sh"):
+        assert matches(tasks()["scripts"], path), path
+        assert matches(tasks()["bigendian"], path), path
+        for name, task in tasks().items():
+            if name in ("default", "local", "scripts", "bigendian", "lint", "commits"):
+                continue
+            assert not matches(task, path), f"{path} also matches {name}"
+
+
 def test_the_soak_checks_belong_to_soak_not_the_e2e_legs():
     """The soak driver and its checks run on schedule, never in the legs."""
     for path in (

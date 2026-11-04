@@ -260,6 +260,64 @@ def test_the_mutation_report_uses_the_triage_script():
     assert "scripts/mutation_triage.py" in runner
 
 
+def bigendian_job():
+    return workflow(JOBS)["jobs"]["big-endian"]
+
+
+def test_the_big_endian_job_runs_unless_the_caller_turns_it_off():
+    doc = workflow(JOBS)
+    bigendian = triggers(doc)["workflow_call"]["inputs"]["bigendian"]
+    assert (bigendian["type"], bigendian["default"]) == ("boolean", True)
+    assert doc["jobs"]["big-endian"].get("if") == "${{ inputs.bigendian }}"
+
+
+def test_the_scheduled_nightly_keeps_the_big_endian_job():
+    for job in workflow(NIGHTLY)["jobs"].values():
+        if "nightly-jobs.yml" in str(job.get("uses", "")):
+            assert (job.get("with") or {}).get("bigendian", True) is True
+
+
+def test_pr_ci_turns_the_big_endian_job_off():
+    job = ci_nightly_call()
+    assert (job.get("with") or {}).get("bigendian") is False
+
+
+def test_the_release_call_skips_the_big_endian_job():
+    calls = [job for job in workflow(RELEASE)["jobs"].values() if "nightly-jobs.yml" in str(job.get("uses", ""))]
+    assert len(calls) == 1
+    assert (calls[0].get("with") or {}).get("bigendian") is False
+
+
+def test_the_big_endian_task_builds_its_own_image():
+    driver = (ROOT / "scripts" / "run-bigendian.sh").read_text(encoding="utf-8")
+    assert "docker build" in driver
+    assert "docker/bigendian/Dockerfile" in driver
+
+
+def test_the_big_endian_job_runs_the_big_endian_task():
+    steps = bigendian_job()["steps"]
+    assert any("scripts/install-task.py" in str(step.get("run", "")) for step in steps)
+    runs = " ".join(str(step.get("run", "")) for step in steps)
+    assert "task" in runs and "bigendian" in runs
+
+
+def test_the_big_endian_image_pins_its_toolchain():
+    dockerfile = (ROOT / "docker" / "bigendian" / "Dockerfile").read_text(encoding="utf-8")
+    assert "ARG QEMU_VERSION=" in dockerfile
+    assert "ARG GCC_S390X_VERSION=" in dockerfile
+    assert "gcc-s390x-linux-gnu" in dockerfile and "qemu-user" in dockerfile
+    assert "qemu-s390x --version" in dockerfile
+    assert "s390x-linux-gnu-gcc -dumpfullversion" in dockerfile
+    assert "packages.ubuntu.com" in dockerfile
+
+
+def test_the_big_endian_driver_forwards_the_python_pins():
+    driver = (ROOT / "scripts" / "run-bigendian.sh").read_text(encoding="utf-8")
+    for pin in ("PYTEST_VERSION", "HYPOTHESIS_VERSION", "PYYAML_VERSION", "JSONSCHEMA_VERSION"):
+        assert pin in driver
+    assert "ci/versions.env" in driver
+
+
 def test_the_mutation_image_resolves_the_mull_package_dependencies():
     dockerfile = (ROOT / "docker" / "mutation" / "Dockerfile").read_text(encoding="utf-8")
     assert "Mull-18-" in dockerfile and "LLVM-" in dockerfile
