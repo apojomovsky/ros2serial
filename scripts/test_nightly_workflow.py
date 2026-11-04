@@ -213,3 +213,10 @@ def test_the_mutation_job_runs_the_mutation_script_and_publishes_a_report():
 def test_the_mutation_report_uses_the_triage_script():
     runner = (ROOT / "scripts" / "run-mutation.sh").read_text(encoding="utf-8")
     assert "scripts/mutation_triage.py" in runner
+
+
+def test_the_mutation_image_resolves_the_mull_package_dependencies():
+    dockerfile = (ROOT / "docker" / "mutation" / "Dockerfile").read_text(encoding="utf-8")
+    assert "Mull-18-" in dockerfile and "LLVM-" in dockerfile
+    assert "Mull-${MULL_VERSION}-ubuntu" in dockerfile
+    assert "apt-get install" in dockerfile and "dpkg -i" not in dockerfile

@@ -24,9 +24,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         clang-${CLANG_VERSION} cmake ninja-build python3 python3-venv python3-pip \
         gcc curl ca-certificates make git \
     && rm -rf /var/lib/apt/lists/*
+# Both debs: the LLVM build depends on the base package and the LLVM
+# libraries, so apt resolves them instead of a bare dpkg install.
 RUN curl -sSL -o /tmp/mull.deb \
+        https://github.com/mull-project/mull/releases/download/${MULL_VERSION}/Mull-${MULL_VERSION}-ubuntu-amd64-24.04.deb \
+    && curl -sSL -o /tmp/mull-llvm.deb \
         https://github.com/mull-project/mull/releases/download/${MULL_VERSION}/Mull-18-${MULL_VERSION}-LLVM-${LLVM_VERSION}-ubuntu-amd64-24.04.deb \
-    && dpkg -i /tmp/mull.deb && rm /tmp/mull.deb \
+    && apt-get update && apt-get install -y /tmp/mull.deb /tmp/mull-llvm.deb \
+    && rm /tmp/mull.deb /tmp/mull-llvm.deb \
     && mull-runner --version
 RUN python3 -m venv /opt/mutmut \
     && /opt/mutmut/bin/pip install --no-cache-dir "mutmut==${MUTMUT_VERSION}" \
