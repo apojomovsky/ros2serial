@@ -1,0 +1,57 @@
+name: farm
+
+# Release-shaped check outside the dev image: the ROS build farm builds each
+# package from a clean chroot with no Docker and no network at build time.
+# This workflow proves that shape on every pull request in a clean ROS base
+# image from ci/versions.env: dependencies resolve through rosdep, colcon
+# builds and tests r2s_gen, r2s_bridge and r2s_rosidl, and the installed
+# entry points smoke. The dev-image suite stays; this stands alongside it.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The farm images, resolved from ci/versions.env before the job starts: a
+  # job's container is fixed before any step runs, so a job of its own
+  # resolves the pins first. Shared with the bridge job's setup.
+  pins:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.pins.outputs.matrix }}
+      images: ${{ steps.pins.outputs.images }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - id: pins
+        run: bash scripts/bridge-images.sh >> "$GITHUB_OUTPUT"
+
+  farm:
+    needs: pins
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.pins.outputs.matrix) }}
+    container:
+      image: ${{ fromJSON(needs.pins.outputs.images)[matrix.distro] }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      # Dependencies resolve through rosdep: anything this installs is a
+      # released package or a rosdep rule, never a network fetch at build
+      # time. The script itself runs no Docker and no fetch.
+      - name: Install dependencies through rosdep
+        run: |
+          rosdep update
+          rosdep install --from-paths gen bridge --ignore-src -r -y --rosdistro "$ROS_DISTRO"
+        env:
+          ROS_DISTRO: ${{ matrix.distro }}
+      - name: Build, test and smoke the released packages
+        run: bash scripts/farm-test.sh
+        env:
+          R2S_BUILD_DIR: /tmp/r2s-build
