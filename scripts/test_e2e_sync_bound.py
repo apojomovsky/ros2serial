@@ -1,8 +1,9 @@
 """Scenario 8 reads its median bound from R2S_SYNC_BOUND_NS.
 
-The standalone legs judge the 1 ms default; the CI e2e jobs set
-5000000 ns for the shared host. These tests execute the scenario
-module's bound lines with stubbed ROS imports, never a suite.
+The bound defaults to 5 ms of shared-host headroom; the CI e2e jobs
+set the same value explicitly, and the nightly lone suite judges the
+strict 1 ms through R2S_SYNC_BOUND_NS. These tests execute the
+scenario module's bound lines with stubbed ROS imports, never a suite.
 """
 
 import importlib.util
@@ -48,8 +49,8 @@ def _install_ros_stubs():
 _install_ros_stubs()
 
 
-def load_bound(monkeypatch, raw):
-    """The scenario module's BOUND_NS with R2S_SYNC_BOUND_NS set to raw."""
+def load_module(monkeypatch, raw):
+    """The scenario module with R2S_SYNC_BOUND_NS set to raw (None unsets)."""
     if raw is None:
         monkeypatch.delenv("R2S_SYNC_BOUND_NS", raising=False)
     else:
@@ -59,15 +60,30 @@ def load_bound(monkeypatch, raw):
     module = importlib.util.module_from_spec(spec)
     sys.modules[MODULE_NAME] = module
     spec.loader.exec_module(module)
-    return module.BOUND_NS
+    return module
 
 
-def test_bound_defaults_to_1ms(monkeypatch):
-    assert load_bound(monkeypatch, None) == 1_000_000
+def load_bound(monkeypatch, raw):
+    """The scenario module's BOUND_NS with R2S_SYNC_BOUND_NS set to raw."""
+    return load_module(monkeypatch, raw).BOUND_NS
+
+
+def test_bound_defaults_to_5ms(monkeypatch):
+    assert load_bound(monkeypatch, None) == 5_000_000
+
+
+def test_default_is_a_named_constant(monkeypatch):
+    module = load_module(monkeypatch, None)
+    assert module.DEFAULT_BOUND_NS == 5_000_000
+    assert module.BOUND_NS == module.DEFAULT_BOUND_NS
 
 
 def test_bound_follows_env(monkeypatch):
     assert load_bound(monkeypatch, "5000000") == 5_000_000
+
+
+def test_bound_accepts_the_nightly_strict_value(monkeypatch):
+    assert load_bound(monkeypatch, "1000000") == 1_000_000
 
 
 def test_bound_rejects_a_non_integer(monkeypatch):

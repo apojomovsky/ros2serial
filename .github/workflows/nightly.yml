@@ -19,8 +19,25 @@ jobs:
     with:
       soak: true
 
+  # Scenario 8 alone against the strict 1 ms bound, as one suite alone on
+  # its runner: host scheduling jitter moves the host-side arrival stamps
+  # past 1 ms under a second suite or a shared PR host, so the default
+  # judges 5 ms and only this lone run judges the target. The skip list
+  # names every other scenario file, so a new scenario still runs here
+  # until it is listed.
+  e2e-sync-strict:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test E2E=posix
+        env:
+          R2S_SYNC_BOUND_NS: 1000000
+          R2S_E2E_SKIP: test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_6_posix test_scenario_7_posix test_scenario_9_posix test_scenario_10_posix test_scenario_10_framing_posix test_publish_catchup_posix test_scenario_11_posix test_scenario_12_posix
+
   report-failure:
-    needs: [nightly]
+    needs: [nightly, e2e-sync-strict]
     if: github.event_name == 'schedule' && failure()
     runs-on: ubuntu-24.04
     permissions:

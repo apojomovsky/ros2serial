@@ -510,7 +510,7 @@ jobs:
           R2S_IN_IMAGE: 1
           R2S_BUILD_DIR: /tmp/r2s-build
           R2S_RMWS: ${{ matrix.rmw }}
-          # Scenario 8's median bound: the shared host needs headroom above the 1 ms default.
+          # Scenario 8's median bound: pinned to the 5 ms default for the shared host.
           R2S_SYNC_BOUND_NS: 5000000
       # One upload per leg: the e2e-posix-save job saves the checksum
       # only when every distro and RMW leg passed.
