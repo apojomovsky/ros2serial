@@ -15,14 +15,15 @@ use_gitignore: true
 tasks:
   default:
     desc: Run every section whose inputs changed.
-    deps: [lint, commits, scripts, core, gen, bridge, cpp, coverage, docs, examples, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
+    deps: [lint, commits, scripts, core, gen, bridge, cpp, coverage, docs, examples, esp32, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
 
   # What the pre-push hook and the takeoff run: the default set without the
-  # end-to-end sections (e2e-avr, e2e-posix and the nightly isolation pairs).
-  # Their timing bounds assume a quiet host, which a shared one is not; CI
-  # runs them on every pull request.
+  # CI-only sections. The end-to-end ones (e2e-avr, e2e-posix and the nightly
+  # isolation pairs) assume a quiet host for their timing bounds, which a
+  # shared one is not; the ESP32 Arduino core is installed only in its CI
+  # job. CI runs all of them on every pull request.
   local:
-    desc: Run every stale section but the end-to-end ones, which CI runs.
+    desc: Run every stale section but the CI-only ones, which CI runs.
     deps: [lint, commits, scripts, core, gen, bridge, cpp, coverage, docs, examples, budgets, readme, fuzz]
 
   # The standing cheap gates: unlistable inputs must never skip them.
@@ -49,6 +50,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -103,6 +105,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -130,6 +133,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -164,6 +168,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -194,6 +199,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -216,6 +222,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -240,6 +247,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -267,6 +275,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -294,6 +303,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -302,6 +312,7 @@ tasks:
       - scripts/e2e-lease.sh
       - scripts/budgets-check.sh
       - scripts/build-examples.sh
+      - scripts/build-examples-esp32.sh
       - tools/budgets.yaml
       - tools/size_report.py
       - tools/stack_report.py
@@ -315,6 +326,33 @@ tasks:
     cmds:
       - BUDGETS=1 bash scripts/ci-test.sh
 
+  esp32:
+    desc: Builds the example sketches for the ESP32 Dev Module.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - scripts/build-examples-esp32.sh
+      - examples/**
+      # The bundle is emitted at build time; the core, the runtime layer
+      # and the port glue are staged into it.
+      - gen/**
+      - exclude: gen/tests/**
+      - core/**
+      - cpp/**
+      - ports/arduino/**
+    cmds:
+      - ESP32=1 bash scripts/ci-test.sh
+
   readme:
     desc: Runs the walkthrough on simavr.
     sources:
@@ -324,6 +362,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -355,6 +394,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -378,6 +418,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -395,6 +436,9 @@ tasks:
       # and the soak checks run in the nightly workflow instead.
       - tests/e2e/**
       - exclude: tests/e2e/run.sh
+      - exclude: tests/e2e/legs.list
+      - exclude: tests/e2e/scenarios.list
+      - exclude: tests/e2e/scenarios-compat.list
       - exclude: tests/e2e/test_*_posix.py
       - exclude: tests/e2e/e2e_support/firmware.py
       - exclude: tests/e2e/test_isolation.py
@@ -416,6 +460,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -452,6 +497,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh
@@ -473,6 +519,7 @@ tasks:
       - .dockerignore
       - ci/versions.env
       - Makefile
+      - scripts/pass-vars.list
       - scripts/ci-test.sh
       - scripts/run-tasks.sh
       - scripts/suite-lock.sh

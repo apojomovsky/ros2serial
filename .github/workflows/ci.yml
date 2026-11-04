@@ -54,6 +54,7 @@ jobs:
       bridge: ${{ steps.statuses.outputs.bridge }}
       cpp: ${{ steps.statuses.outputs.cpp }}
       e2e: ${{ steps.statuses.outputs.e2e }}
+      esp32: ${{ steps.statuses.outputs.esp32 }}
       coverage: ${{ steps.statuses.outputs.coverage }}
       docs: ${{ steps.statuses.outputs.docs }}
       mermaid: ${{ steps.statuses.outputs.mermaid }}
@@ -138,6 +139,13 @@ jobs:
             r2s-task-budgets-refs/heads/master-
       - uses: actions/cache/restore@v4.2.2
         with:
+          path: .task/checksum/esp32
+          key: r2s-task-esp32-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            r2s-task-esp32-${{ github.ref }}-
+            r2s-task-esp32-refs/heads/master-
+      - uses: actions/cache/restore@v4.2.2
+        with:
           path: .task/checksum/readme
           key: r2s-task-readme-${{ github.ref }}-${{ github.sha }}
           restore-keys: |
@@ -184,7 +192,7 @@ jobs:
           full=""
           # A task without a checksum file (lint, commits) is always stale.
           # Exit 0 is fresh, 1 is stale; anything else fails safe to FULL.
-          for task in lint commits scripts core gen bridge cpp coverage docs examples budgets readme fuzz e2e-avr e2e-posix nightly mermaid; do
+          for task in lint commits scripts core gen bridge cpp coverage docs examples esp32 budgets readme fuzz e2e-avr e2e-posix nightly mermaid; do
             rc=0
             task --status "$task" >/dev/null 2>&1 || rc=$?
             case $rc in
@@ -560,6 +568,8 @@ jobs:
     with:
       fuzz: ${{ needs.plan.outputs.fuzz == '1' }}
       soak: false
+      # Mutation testing is nightly-only: it never runs in a pull request.
+      mutation: false
   build-matrix:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.examples == '1'
@@ -575,6 +585,31 @@ jobs:
         with:
           path: .task/checksum/examples
           key: r2s-task-examples-refs/heads/master-${{ github.sha }}
+
+  # The ESP32 check: the example sketches and the staged Arduino library
+  # compile for the ESP32 Dev Module at the core version pinned in
+  # ci/versions.env. The core lives outside the dev image, so the check
+  # installs it into a cache directory the build script manages.
+  esp32:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.esp32 == '1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - uses: actions/cache@v4.2.2
+        with:
+          path: ~/.cache/ros2serial/arduino-esp32
+          key: esp32-core-${{ hashFiles('ci/versions.env') }}
+          restore-keys: |
+            esp32-core-
+      - run: make test ESP32=1
+      - if: github.ref == 'refs/heads/master'
+        uses: actions/cache/save@v4.2.2
+        with:
+          path: .task/checksum/esp32
+          key: r2s-task-esp32-refs/heads/master-${{ github.sha }}
   budgets:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.budgets == '1'
@@ -589,6 +624,14 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dev-image
+      # The budgets build compiles the ESP32 firmware too, so it restores
+      # the same cached core the esp32 job installs.
+      - uses: actions/cache@v4.2.2
+        with:
+          path: ~/.cache/ros2serial/arduino-esp32
+          key: esp32-core-${{ hashFiles('ci/versions.env') }}
+          restore-keys: |
+            esp32-core-
       - run: |
           range="$(bash scripts/pr-title-range.sh)" || exit 1
           export BASE="${range%%..*}"

@@ -36,6 +36,7 @@ OUTPUTS = (
     "bridge",
     "cpp",
     "e2e",
+    "esp32",
     "coverage",
     "docs",
     "mermaid",
@@ -62,6 +63,7 @@ SECTION_SCOPE = {
     "bridge": "bridge",
     "fuzz-smoke": "fuzz",
     "build-matrix": "examples",
+    "esp32": "esp32",
     "budgets": "budgets",
     "nightly": "nightly",
     "e2e-avr": "e2e",
@@ -92,6 +94,7 @@ TASKS_WITH_CHECKSUMS = (
     "coverage",
     "docs",
     "examples",
+    "esp32",
     "budgets",
     "readme",
     "fuzz",
@@ -283,6 +286,7 @@ def test_section_jobs_save_their_checksums_on_master():
     assert saves["coverage"] == ".task/checksum/coverage"
     assert saves["fuzz-smoke"] == ".task/checksum/fuzz"
     assert saves["build-matrix"] == ".task/checksum/examples"
+    assert saves["esp32"] == ".task/checksum/esp32"
     assert saves["budgets"] == ".task/checksum/budgets"
     assert saves["e2e-avr"] == ".task/checksum/e2e-avr"
     assert saves["scripts-save"] == ".task/checksum/scripts"
@@ -406,6 +410,20 @@ def test_a_gen_test_edit_runs_only_gen_besides_lint(tmp_path):
     establish(repo)
     (repo / "gen" / "tests" / "probe").write_text("probe\nprobe again\n")
     assert selected_jobs(repo, tmp_path) == ["bridge-images", "gen", "lint", "plan"]
+
+
+def test_an_esp32_script_edit_runs_esp32_budgets_and_scripts_besides_lint(tmp_path):
+    repo = test_taskfile.fixture(tmp_path)
+    establish(repo)
+    (repo / "scripts" / "build-examples-esp32.sh").write_text("probe\nprobe again\n")
+    assert selected_jobs(repo, tmp_path) == [
+        "bridge-images",
+        "budgets",
+        "esp32",
+        "lint",
+        "plan",
+        "scripts",
+    ]
 
 
 def test_a_versions_env_edit_runs_every_job_but_the_saves(tmp_path):

@@ -137,6 +137,29 @@ def test_static_worst_rejects_a_build_without_su_files(tmp_path, monkeypatch):
         stack_report.static_worst(str(tmp_path / "firmware.elf"), tmp_path)
 
 
+def test_collect_skips_xtensa_firmware(tmp_path, monkeypatch):
+    avr = tmp_path / "arduino_hello" / "uno"
+    avr.mkdir(parents=True)
+    (avr / "arduino_hello.ino.elf").write_bytes(b"")
+    esp = tmp_path / "arduino_hello" / "esp32"
+    esp.mkdir(parents=True)
+    header = bytearray(64)
+    header[0:4] = b"\x7fELF"
+    header[4] = 1
+    header[5] = 1
+    header[18:20] = (0x5E).to_bytes(2, "little")
+    (esp / "arduino_hello.ino.elf").write_bytes(bytes(header))
+    stacked = tmp_path / "stack" / "arduino_hello" / "uno"
+    stacked.mkdir(parents=True)
+    (stacked / "arduino_hello.ino.elf").write_bytes(b"")
+    (stacked / "firmware.su").write_text(SU)
+    calls = []
+    monkeypatch.setattr(stack_report, "_run", lambda *args: calls.append(args[-1]) or OBJDUMP)
+    stacks = stack_report.collect(tmp_path)
+    assert sorted(stacks) == ["arduino_hello/uno/arduino_hello.ino.elf"]
+    assert all("esp32" not in elf for elf in calls)
+
+
 def test_collect_skips_cmake_compiler_id_frames(tmp_path, monkeypatch):
     fw = tmp_path / "fw"
     fw.mkdir()

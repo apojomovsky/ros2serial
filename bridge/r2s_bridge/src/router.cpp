@@ -227,8 +227,24 @@ struct Router::Impl {
             route = found->second;
         }
         std::vector<std::uint8_t> cdr;
-        const ConvertResult result =
-            converter_.to_cdr(route.info.type_name, route.info.narrow(), payload.data(), payload.size(), cdr);
+        ConvertResult result;
+        try {
+            result = converter_.to_cdr(route.info.type_name, route.info.narrow(), payload.data(),
+                                       payload.size(), cdr);
+            // GCOVR_EXCL_START: the middleware fails only when it cannot
+            // allocate or serialize, which a unit test cannot inject.
+        } catch (const std::exception &error) {
+            // A failed serialize (the middleware short under load) is a
+            // dropped frame, never an abort: it names its topic and counts.
+            emit(SessionLog::kWarning,
+                 "topic '" + route.info.topic_name + "': failed to serialize (" + error.what() + ")");
+            // The route exists: only the poll thread mutates the table, so
+            // the entry looked up above is still there.
+            std::lock_guard<std::mutex> guard(mutex);
+            ++routes[topic_id].publish_failures;
+            return;
+        }
+        // GCOVR_EXCL_STOP: the brace above runs only with the catch.
         if (result.fail != ConvertFail::kNone) {
             emit(SessionLog::kWarning, "topic '" + route.info.topic_name + "': dropped packed payload (" +
                                            fail_name(result.fail) + " at '" +

@@ -33,6 +33,9 @@ if [ -z "${AMENT_PREFIX_PATH:-}" ] && [ -f "/opt/ros/$ROS_DISTRO/setup.bash" ]; 
   set -u
 fi
 export R2S_BUILD_DIR=$build
+# One log per scenario file, so a failure that prints no FAIL line still
+# leaves its own output behind for the report below to name.
+mkdir -p "$build/scenario-logs" || exit 1
 
 bash scripts/bridge-test.sh --build-only || exit 1
 # shellcheck source=/dev/null
@@ -63,7 +66,9 @@ echo "== e2e isolation: ROS_DOMAIN_ID=$ROS_DOMAIN_ID ZENOH_ROUTER_PORT=$R2S_ZENO
 
 status=0
 failures=""
-for leg in static runtime ros static_cpp; do
+# shellcheck disable=SC2086 # splitting the list into legs is intended.
+legs=$(grep -v '^#' "$root/tests/e2e/legs.list" | tr '\n' ' ')
+for leg in $legs; do
   case $leg in
     static) export R2S_E2E_FW=$build/ports/posix/r2s_posix_firmware ;;
     runtime) export R2S_E2E_FW=$build/ports/posix/r2s_posix_runtime_firmware ;;
@@ -94,26 +99,36 @@ for leg in static runtime ros static_cpp; do
       kill -0 "$router" 2>/dev/null || { echo "rmw_zenohd on port $R2S_ZENOH_ROUTER_PORT died"; status=1; break; }
     fi
     # The static C++ and ros compat legs cover scenarios 1 to 4; the
-    # other legs run the whole file list.
+    # other legs run the whole file list. Each list file holds one scenario
+    # per line, so concurrent branches appending different scenarios keep both.
     case $leg in
-      static_cpp|ros) files="test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix" ;;
-      *) files="test_scenario_1_posix test_scenario_2_posix test_scenario_3_posix test_scenario_4_posix test_scenario_6_posix test_scenario_7_posix test_scenario_8_posix test_scenario_9_posix test_scenario_10_posix test_scenario_10_framing_posix test_publish_catchup_posix test_scenario_11_posix test_scenario_12_posix" ;;
+      static_cpp|ros) list=scenarios-compat.list ;;
+      *) list=scenarios.list ;;
     esac
+    # shellcheck disable=SC2086 # splitting the list into files is intended.
+    files=$(grep -v '^#' "$root/tests/e2e/$list" | tr '\n' ' ')
     for test_file in $files; do
       # The isolation pairs skip scenario 8 through R2S_E2E_SKIP: its bound
       # assumes a lone suite and cannot survive two suites on one host.
       case " ${R2S_E2E_SKIP:-} " in
         *" $test_file "*) echo "skip $test_file (R2S_E2E_SKIP)" ;;
         *)
-          timeout 300 launch_test "tests/e2e/${test_file}.py"
-          code=$?
+          scenario_log=$build/scenario-logs/${leg}.${rmw}.${test_file}.log
+          timeout 300 launch_test "tests/e2e/${test_file}.py" 2>&1 | tee "$scenario_log"
+          code=${PIPESTATUS[0]}
           # One line per failed scenario file, so a nonzero exit always
           # names its cause even when the failure scrolled out of the tail.
+          # A launch whose node died reports no FAIL line, so the report
+          # also prints the launch-layer naming lines and the failed
+          # scenario tail from its own log.
           if [ "$code" -ne 0 ]; then
             status=1
             line="e2e-failure: $test_file leg=$leg rmw=$rmw exit=$code"
             [ "$code" -eq 124 ] && line="$line (timeout)"
             echo "$line"
+            grep -E "^(FAIL|ERROR): |Processes under test stopped before tests completed|Process '.+' exited with [0-9]+" "$scenario_log" | head -20
+            echo "--- $test_file tail (leg=$leg rmw=$rmw) ---"
+            tail -30 "$scenario_log"
             failures="$failures$line
 "
           fi

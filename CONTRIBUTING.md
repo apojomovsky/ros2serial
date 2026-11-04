@@ -179,6 +179,8 @@ fails again, say so on the pull request instead of rerunning it.
 content-addressed, so a rebuild with no changes finishes at once. If
 `make doctor` reports the image missing, run `make bootstrap` again.
 
+**Merging without conflicts.** `.gitattributes` routes sources to the mergiraf structural merge driver, generated files to keep-our-side plus regeneration, and one-item-per-line lists to union merge. mergiraf itself is optional: install it (for example with `cargo install mergiraf`) and re-run `make setup-hooks`, which registers this clone's merge drivers. Without it git merges lines as usual.
+
 **A test is flaky.** Rerun just its scope, for example `make test-core`.
 The simulator runs at its own pace, so a timing failure that passes
 alone and fails under load is usually the load. In CI, rerun the failed

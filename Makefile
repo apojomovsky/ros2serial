@@ -18,7 +18,10 @@ BUILD_DIR := $(CACHE)/build$(subst /,-,$(CURDIR))
 # container and must not key a shared lock.
 export R2S_HOST_MOUNT := $(REPO_ROOT)
 TTY := $(shell [ -t 0 ] && echo -it)
-PASS_VARS := LINT SCRIPTS SCRIPTS_SHARD COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES BUDGETS FUZZ README NIGHTLY SOAK PR_TITLE COMMIT_RANGE BASE PR_BODY TEST TARGET R2S_FUZZ_SECONDS R2S_SOAK_SECONDS R2S_SOAK_BACKENDS R2S_FULL R2S_E2E_DOMAIN_ID R2S_ZENOH_ROUTER_PORT R2S_E2E_DOMAIN_BASE R2S_E2E_SKIP R2S_SYNC_BOUND_NS R2S_RMWS R2S_E2E_BOARDS R2S_E2E_BAUDS R2S_LOCAL
+# Scope and suite variables forwarded into the dev image, one per line in
+# scripts/pass-vars.list so concurrent branches appending different variables
+# keep both on merge.
+PASS_VARS := $(shell grep -v '^#' scripts/pass-vars.list | tr '\n' ' ')
 
 DOCKER_BASE = docker run --rm $(TTY) --user $$(id -u):$$(id -g) \
 	-v $(REPO_ROOT):$(REPO_ROOT) -w $(CURDIR) -v $(CACHE):$(CACHE) -e R2S_BUILD_DIR=$(BUILD_DIR) -e R2S_CACHE_DIR=$(CACHE) -e R2S_HOST_MOUNT=$(REPO_ROOT)
@@ -135,8 +138,8 @@ lint-docs: guard-main-clone cache-dir ## Check mermaid blocks in the docs with m
 check-warnings: guard-main-clone cache-dir ## Fail on any compiler warning (hard gate): core builds with -Werror, cppcheck
 	@$(call in_image,bash scripts/check-warnings.sh)
 
-setup-hooks: ## Install git hooks from .githooks/
-	@git config core.hooksPath .githooks && echo "git hooks installed (core.hooksPath = .githooks)"
+setup-hooks: ## Install git hooks and this clone's merge drivers
+	@bash scripts/setup-hooks.sh
 
 pre-pr-check: guard-main-clone cache-dir ## Takeoff ritual before opening a PR (BASE=<ref> PR_BODY=<file> PR_TITLE="<title>" TEST=1)
 	@$(call in_image,bash scripts/pre-pr-check.sh)

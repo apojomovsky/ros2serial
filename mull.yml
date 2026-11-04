@@ -1,0 +1,22 @@
+# Which mutants Mull tries in the core, and which paths it never touches.
+# The core under test is core/src: the Unity harness, the test support
+# libraries and the generated runners are not product code, and mutating
+# them only measures the tests against themselves. The mutator names are
+# the ones Mull documents; an unknown name fails the nightly run loudly.
+mutators:
+  - cxx_add_to_sub
+  - cxx_sub_to_add
+  - cxx_mul_to_div
+  - cxx_div_to_mul
+  - cxx_rem_to_div
+  - cxx_remove_void_call
+  - cxx_eq_to_ne
+  - cxx_ne_to_eq
+  - cxx_lt_to_le
+  - cxx_le_to_lt
+  - cxx_gt_to_ge
+  - cxx_ge_to_gt
+excludePaths:
+  - .*vendor.*
+  - .*support.*
+  - .*tests.*

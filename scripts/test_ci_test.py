@@ -53,6 +53,7 @@ SCOPES = (
     "COVERAGE",
     "DOCS",
     "EXAMPLES",
+    "ESP32",
     "BUDGETS",
     "FUZZ",
     "README",
@@ -170,7 +171,22 @@ def stub_toolbox(path: Path) -> Path:
     """
     path.mkdir(parents=True, exist_ok=True)
     (path / "cmake").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-    (path / "arduino-cli").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    # The stubbed core install plants a stub Xtensa toolchain where the real
+    # install would put it, so the build finds its binutils. The size tool
+    # only needs to exist: the stubbed compiles produce no firmware for the
+    # budgets step to measure.
+    (path / "arduino-cli").write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "${1:-}" = core ] && [ "${2:-}" = install ]; then\n'
+        '    bindir="$ARDUINO_DIRECTORIES_DATA/packages/esp32/tools/xtensa-esp32-elf-gcc/0.0.0/bin"\n'
+        '    mkdir -p "$bindir"\n'
+        '    ln -sf "$(command -v xtensa-esp32-elf-nm)" "$bindir/xtensa-esp32-elf-nm"\n'
+        '    printf "#!/usr/bin/env bash\\nexit 0\\n" > "$bindir/xtensa-esp32-elf-size"\n'
+        '    chmod +x "$bindir/xtensa-esp32-elf-size"\n'
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
     (path / "avr-size").write_text(
         "#!/usr/bin/env bash\n"
         "printf '   text\\t   data\\t    bss\\t    dec\\t    hex\\tfilename\\n"
@@ -199,7 +215,19 @@ def stub_toolbox(path: Path) -> Path:
         "esac\n",
         encoding="utf-8",
     )
-    for tool in ("cmake", "arduino-cli", "avr-size", "avr-objdump", "avr-nm"):
+    (path / "xtensa-esp32-elf-nm").write_text(
+        "#!/usr/bin/env bash\n"
+        "echo '008001eb b r2s_rx_buf'\n"
+        'case "$*" in\n'
+        "    *arduino_minimal*|*arduino_hello*|*arduino_blink*|*arduino_button*|*arduino_servo*|*arduino_range*)\n"
+        "        echo '00800460 000000e0 b r2s_runtime_topics'\n"
+        "        echo '00800410 00000050 b r2s_runtime_subscribers'\n"
+        "        echo '00800540 00000050 b r2s_runtime_publishers'\n"
+        "        ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    for tool in ("cmake", "arduino-cli", "avr-size", "avr-objdump", "avr-nm", "xtensa-esp32-elf-nm"):
         (path / tool).chmod(0o755)
     return path
 
@@ -223,7 +251,20 @@ def test_examples_scope_runs_its_section(tmp_path, monkeypatch):
     assert "== examples" in result.stdout
 
 
-def test_budgets_scope_runs_its_section(tmp_path):
+def test_esp32_scope_runs_its_section(tmp_path, monkeypatch):
+    # The stubbed core install plants its toolchain under the data dir, so
+    # the run keeps a scratch directory instead of the shared cache.
+    monkeypatch.setenv("R2S_ARDUINO_DATA_DIR", str(tmp_path / "arduino-data"))
+    result = run_scope(copy_tree(tmp_path), "ESP32", stubs=stub_toolbox(tmp_path / "bin"), build_dir=tmp_path / "build")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "== esp32" in result.stdout
+
+
+def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):
+    # The budgets run builds the ESP32 firmware too, whose stubbed install
+    # plants its toolchain under the data dir: keep a scratch directory.
+    monkeypatch.setenv("R2S_ARDUINO_DATA_DIR", str(tmp_path / "arduino-data"))
     root = copy_tree(tmp_path)
     build = tmp_path / "build" / "examples"
     shipped = [
