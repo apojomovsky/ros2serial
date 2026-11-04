@@ -108,8 +108,9 @@ for leg in $legs; do
     # shellcheck disable=SC2086 # splitting the list into files is intended.
     files=$(grep -v '^#' "$root/tests/e2e/$list" | tr '\n' ' ')
     for test_file in $files; do
-      # The isolation pairs skip scenario 8 through R2S_E2E_SKIP: its bound
-      # assumes a lone suite and cannot survive two suites on one host.
+      # The isolation pairs skip scenario 8 through R2S_E2E_SKIP: the strict
+      # 1 ms check assumes a lone suite and cannot survive two suites on
+      # one host. The default bound keeps shared-host headroom instead.
       case " ${R2S_E2E_SKIP:-} " in
         *" $test_file "*) echo "skip $test_file (R2S_E2E_SKIP)" ;;
         *)
