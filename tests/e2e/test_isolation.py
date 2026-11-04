@@ -33,8 +33,21 @@ def port_of(output):
 
 
 def failure_lines(output):
-    """FAIL: and ERROR: lines, naming every test the section lost."""
-    return [line for line in output.splitlines() if re.match(r"(FAIL|ERROR): ", line)]
+    """Failure lines, naming every test and launch process the section lost.
+
+    Besides the launch_test FAIL and ERROR lines, a launch whose nodes die
+    before the tests complete reports no test at all: it prints that the
+    processes stopped and how each exited, so those lines name the cause.
+    """
+    found = []
+    for line in output.splitlines():
+        if re.match(r"(FAIL|ERROR): ", line):
+            found.append(line)
+        elif line == "Processes under test stopped before tests completed":
+            found.append(line)
+        elif re.match(r"Process '.+' exited with [0-9]+", line):
+            found.append(line)
+    return found
 
 
 def summary_lines(output):
@@ -46,7 +59,7 @@ def section_report(output):
     """The failure report for one isolation section.
 
     The summary lines name the cause whatever the output length, then the
-    launch_test FAIL and ERROR lines, then the tail for context.
+    failure lines, then the tail for context.
     """
     return "\n".join(summary_lines(output) + failure_lines(output) + [output[-4000:]])
 
@@ -64,6 +77,15 @@ class TestSectionReport(unittest.TestCase):
         self.assertIn("test_scenario_10_posix", report)
         self.assertIn("timeout", report)
 
+    def test_names_a_launch_death_outside_the_tail(self):
+        failure = "e2e-failure: test_scenario_3_posix leg=runtime rmw=rmw_zenoh_cpp exit=1"
+        death = "Processes under test stopped before tests completed\nProcess 'bridge-1' exited with 1\n"
+        output = failure + "\n" + death + "test_x ... ok\n" * 2000
+        report = section_report(output)
+        self.assertIn("test_scenario_3_posix", report)
+        self.assertIn("Processes under test stopped before tests completed", report)
+        self.assertIn("Process 'bridge-1' exited with 1", report)
+
 
 class TestFailureLines(unittest.TestCase):
     def test_names_each_failed_test(self):
@@ -76,6 +98,18 @@ class TestFailureLines(unittest.TestCase):
     def test_ignores_traceback_body(self):
         output = 'FAIL: test_b (mod.TestB)\nTraceback:\n  File "x.py", line 1\nAssertionError\n'
         self.assertEqual(failure_lines(output), ["FAIL: test_b (mod.TestB)"])
+
+    def test_names_a_dead_launch_process(self):
+        output = (
+            "test_x ... ok\nProcesses under test stopped before tests completed\nProcess 'bridge-1' exited with 1\n"
+        )
+        self.assertEqual(
+            failure_lines(output),
+            [
+                "Processes under test stopped before tests completed",
+                "Process 'bridge-1' exited with 1",
+            ],
+        )
 
 
 def pair_build_dir(suffix):

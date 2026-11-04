@@ -33,6 +33,9 @@ if [ -z "${AMENT_PREFIX_PATH:-}" ] && [ -f "/opt/ros/$ROS_DISTRO/setup.bash" ]; 
   set -u
 fi
 export R2S_BUILD_DIR=$build
+# One log per scenario file, so a failure that prints no FAIL line still
+# leaves its own output behind for the report below to name.
+mkdir -p "$build/scenario-logs" || exit 1
 
 bash scripts/bridge-test.sh --build-only || exit 1
 # shellcheck source=/dev/null
@@ -110,15 +113,22 @@ for leg in $legs; do
       case " ${R2S_E2E_SKIP:-} " in
         *" $test_file "*) echo "skip $test_file (R2S_E2E_SKIP)" ;;
         *)
-          timeout 300 launch_test "tests/e2e/${test_file}.py"
-          code=$?
+          scenario_log=$build/scenario-logs/${leg}.${rmw}.${test_file}.log
+          timeout 300 launch_test "tests/e2e/${test_file}.py" 2>&1 | tee "$scenario_log"
+          code=${PIPESTATUS[0]}
           # One line per failed scenario file, so a nonzero exit always
           # names its cause even when the failure scrolled out of the tail.
+          # A launch whose node died reports no FAIL line, so the report
+          # also prints the launch-layer naming lines and the failed
+          # scenario tail from its own log.
           if [ "$code" -ne 0 ]; then
             status=1
             line="e2e-failure: $test_file leg=$leg rmw=$rmw exit=$code"
             [ "$code" -eq 124 ] && line="$line (timeout)"
             echo "$line"
+            grep -E "^(FAIL|ERROR): |Processes under test stopped before tests completed|Process '.+' exited with [0-9]+" "$scenario_log" | head -20
+            echo "--- $test_file tail (leg=$leg rmw=$rmw) ---"
+            tail -30 "$scenario_log"
             failures="$failures$line
 "
           fi
