@@ -26,6 +26,9 @@ done
 status=0
 export R2S_STACK_BUILD=1
 bash "$root/scripts/build-examples.sh" || status=1
+# The ESP32 firmware joins the same build tree, so its flash and RAM land in
+# the table beside the AVR numbers; its stack stays unanalyzed (see below).
+bash "$root/scripts/build-examples-esp32.sh" || status=1
 if [ "$status" -ne 0 ]; then
   echo "budgets: the example builds failed" >&2
   exit 1
@@ -133,6 +136,7 @@ fi
   cat "$build/stack-table.md"
   echo
   echo "Stack comes from the non-LTO rebuild under stack/; flash and RAM from the shipped firmware."
+  echo "ESP32 firmware reports flash and RAM only; the AVR call-graph analysis does not cover Xtensa."
 } >"$build/budgets-table.md"
 echo "TABLE $build/budgets-table.md"
 

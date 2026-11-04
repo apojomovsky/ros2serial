@@ -116,7 +116,7 @@ def _banner(prefix: str, distro: str) -> str:
 
 
 def _library_properties(distro: str) -> str:
-    """The Arduino library metadata for the bundle, AVR only."""
+    """The Arduino library metadata for the bundle, AVR and ESP32."""
     lines = [
         _banner("#", distro),
         "name=ros2serial",
@@ -127,7 +127,7 @@ def _library_properties(distro: str) -> str:
         "paragraph=Bundled by r2s-gen; pairs with the ros2serial bridge over a serial link.",
         "category=Communication",
         "url=https://github.com/apojomovsky/ros2serial",
-        "architectures=avr",
+        "architectures=avr,esp32",
         "includes=ros2serial.h",
         "",
     ]

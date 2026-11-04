@@ -281,7 +281,7 @@ def test_the_arduino_properties_name_the_node_and_the_toolchain(tmp_path):
 
     properties = files["library.properties"]
     assert "name=r2s_posix" in properties.splitlines()
-    assert "architectures=avr" in properties.splitlines()
+    assert "architectures=avr,esp32" in properties.splitlines()
 
 
 @pytest.mark.parametrize("layout", ["cmake", "arduino"])

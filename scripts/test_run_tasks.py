@@ -35,6 +35,7 @@ def run(tmp_path, script='echo "$*" > {args}; env > {env}', **env):
         "COVERAGE",
         "DOCS",
         "EXAMPLES",
+        "ESP32",
         "BUDGETS",
         "FUZZ",
         "README",
@@ -89,6 +90,11 @@ def test_the_caller_environment_reaches_the_runner(tmp_path):
 def test_the_soak_scope_selects_its_task(tmp_path):
     args, _ = select(tmp_path, SOAK="1")
     assert args == ["soak"], args
+
+
+def test_the_esp32_scope_selects_its_task(tmp_path):
+    args, _ = select(tmp_path, ESP32="1")
+    assert args == ["esp32"], args
 
 
 def test_full_forces_the_selected_tasks(tmp_path):
