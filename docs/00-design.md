@@ -78,7 +78,7 @@ The list is still based on prior knowledge of rosserial; the Phase 0 archaeology
 
 ## Architecture
 
-*Status (0.1.0): built: one bridge per serial port; planned: one live link per process until the framer gains per-instance state in #122.*
+*Status (0.1.0): built: one bridge per serial port; framing gives each link its own framer instance, so several links share one process (#122).*
 
 ```
  build time                                        runtime
@@ -527,7 +527,7 @@ The generator targets a ROS distro explicitly (`distro:` in the config, default 
 
 *Status (0.1.0): built: full-mode handshake, generic pub/sub, packed-to-CDR conversion, Uno boot handling, log forwarding, time-sync estimation, rate limiting, launch namespace and remapping arguments; planned: parameters and services in #155 and #156.*
 
-- C++ (rclcpp), packaged as a component so several bridges (one per serial port) can share a process. The framing allows one live link per process until the framer gains a per-instance state (#122).
+- C++ (rclcpp), packaged as a component so several bridges (one per serial port) can share a process. The framing gives each link its own framer instance, so one process serves up to 16 live links (#122).
 - Generic publishers and subscriptions, plus introspection-based conversion from packed to CDR.
 - Serial I/O behind a small interface; termios first (research ticket R8).
 - Board quirks handled explicitly: opening a Uno's port toggles DTR and resets the board, and the bootloader runs for up to about 2 s. The bridge waits for the MCU's unsolicited `HELLO` (up to `boot_wait_ms`) before sending `HELLO_REQ`, so it does not talk to the bootloader. `hupcl:=false` avoids the reset where the adapter allows it.
@@ -1066,8 +1066,8 @@ The generator computes the REP-2011 RIHS01 hash for each type in `gen/r2s_gen/ty
 ### Executable and component
 
 - Package `r2s_bridge`, component `r2s_bridge::Bridge`, executable `bridge`.
-- One instance per serial port and one link per process. `/dev/serial/by-id/...` paths are recommended in the docs.
-- Receive framing is the core's `framer.c`, `rcobs.c` and `crc.c` compiled for the host (FRM-10). The core framer keeps one state per process, so one `FrameReader` is live per process.
+- One instance per serial port and up to 16 live links per process. `/dev/serial/by-id/...` paths are recommended in the docs.
+- Receive framing is the core's `framer.c`, `rcobs.c` and `crc.c` compiled for the host (FRM-10). Each `FrameReader` owns a framer instance bound to its link, so several readers frame in one process; the MCU keeps the singleton on link 0.
 
 ### Parameters
 

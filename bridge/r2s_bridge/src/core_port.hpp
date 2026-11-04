@@ -1,8 +1,11 @@
-// The core's port seam for the bridge: reads and ticks come from the one
-// transport and clock the live FrameReader installed. One pair at a time,
-// because the core framer keeps one state per process.
+// The core's port seam for the bridge: one slot per live link, each reading
+// its own transport and clock through the indexed port functions. A
+// FrameReader owns the slot its constructor attaches and returns it in its
+// destructor, so several readers frame in one process, each on its link.
 #ifndef R2S_BRIDGE__CORE_PORT_HPP_
 #define R2S_BRIDGE__CORE_PORT_HPP_
+
+#include <cstdint>
 
 #include "r2s_bridge/clock.hpp"
 #include "r2s_bridge/transport.hpp"
@@ -10,20 +13,21 @@
 namespace r2s_bridge
 {
 
-// Installs the pair the port functions read through. Returns false when a
-// pair is already installed.
-bool attach_core_port(Transport &transport, const Clock &clock);
+// Installs the pair the indexed port functions read through and returns its
+// link id. Throws std::logic_error when every slot is taken, naming the
+// link limit.
+std::uint8_t attach_core_port(Transport &transport, const Clock &clock);
 
-// Removes the installed pair, if any.
-void detach_core_port();
+// Removes the installed pair, so its slot serves the next link.
+void detach_core_port(std::uint8_t link);
 
-// True when a read through the installed transport reported kClosed or
-// kError since the last clear_link_fault(). The core framer cannot tell an
-// empty link from a dead one, so the session asks here after polling it.
-bool link_faulted();
+// True when a read through the slot's transport reported kClosed or kError
+// since the last clear_link_fault(). The core framer cannot tell an empty
+// link from a dead one, so the session asks here after polling it.
+bool link_faulted(std::uint8_t link);
 
-// Forgets any fault, which the session does when it opens a link.
-void clear_link_fault();
+// Forgets the slot's fault, which the session does when it opens a link.
+void clear_link_fault(std::uint8_t link);
 
 } // namespace r2s_bridge
 
