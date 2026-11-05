@@ -10,9 +10,20 @@ no two hour run.
 import os
 
 # Counters a clean link never moves; traffic counters are absent by design.
-EXACT_KEYS = ("resets", "mcu crc errors", "mcu rx overflows", "mcu dropped frames")
+EXACT_KEYS = (
+    "resets",
+    "mcu crc errors",
+    "mcu rx overflows",
+    "mcu dropped frames",
+    "mcu error code 1",
+    "mcu error code 2",
+    "mcu error code 3",
+    "mcu error code 4",
+    "mcu error code 5",
+    "mcu error code 6",
+)
 
-_TOPIC_SUFFIXES = (" seq gaps", " dropped", " publish failures")
+_TOPIC_SUFFIXES = (" seq gaps", " dropped", " publish failures", " mcu errors")
 
 
 def _is_topic_counter(key):
