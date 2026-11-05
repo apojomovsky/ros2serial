@@ -1,0 +1,37 @@
+name: param_walk_retry
+covers: [PAR-7]
+steps:
+  - from: mcu
+    frame: "00 00 02 03 00 00 00 00 00 00 01 00 01 e8 03 00 00 0d 01 04 6e 6f 64 65 c6 95"
+    at_ms: 0
+    note: "HELLO, protocol 3, time plus params plus reliable, one topic"
+  - from: host
+    frame: "00 00 03 00 49 29"
+    at_ms: 0
+  - from: mcu
+    frame: "00 01 04 00 10 00 00 01 02 03 04 05 06 07 15 73 74 64 5f 6d 73 67 73 2f 6d 73 67 2f 46 6c 6f 61 74 33 32 07 62 61 74 74 65 72 79 95 09"
+    at_ms: 50
+  - from: host
+    frame: "00 01 05 10 00 1f 80"
+    at_ms: 50
+  - from: host
+    frame: "03 00 01 00 34 3f"
+    at_ms: 50
+    note: "param walk starts after the topic walk"
+  - from: host
+    frame: "03 01 01 00 e8 65"
+    at_ms: 250
+    note: "no DECLARE for 200 ms; retry with the next frame seq"
+  - from: mcu
+    frame: "03 00 02 00 00 00 03 6c 65 64 01 32 a9"
+    at_ms: 300
+  - from: host
+    frame: "03 02 01 01 05 9b"
+    at_ms: 300
+  - from: mcu
+    frame: "03 01 04 00 01 01 f4 75"
+    at_ms: 350
+    note: "STATUS 1 ends the walk; a plain reply under the request retry"
+  - from: host
+    frame: "00 02 06 01 00 00 00 fa 5c"
+    at_ms: 350

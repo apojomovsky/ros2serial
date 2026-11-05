@@ -336,9 +336,9 @@ name: hello
 covers: [FRM-1]
 topic_id: 0
 seq: 0
-payload: "02 02 01 11 22 33 44 00 04 80 00 e8 03 00 00 11 01 6e 6f 64 65"
-frame: "00 00 02 02 01 11 22 33 44 00 04 80 00 e8 03 00 00 11 01 6e 6f 64 65 57 86"
-wire: "01 01 02 02 01 11 22 33 44 08 04 80 03 e8 03 03 01 11 01 6e 6f 64 65 57 86 09 00"
+payload: "02 03 01 11 22 33 44 00 04 80 00 e8 03 00 00 11 01 6e 6f 64 65"
+frame: "00 00 02 03 01 11 22 33 44 00 04 80 00 e8 03 00 00 11 01 6e 6f 64 65 01 59"
+wire: "01 01 02 03 01 11 22 33 44 08 04 80 03 e8 03 03 01 11 01 6e 6f 64 65 01 59 09 00"
 """,
         "frames/compact_topic.yaml": """
 name: topic_compact
@@ -384,6 +384,134 @@ wire: "01 00 03 02 00 02 00 00 00 00 00 00 00 00 00 94 35 77 00 00 00 00 00 00"
     }
     problems = vectors_check.check_tree(make_tree(tmp_path, files))
     assert any("nanosec is not below 10^9" in p for p in problems), problems
+
+
+def test_a_param_declare_with_a_reserved_type_is_reported(tmp_path):
+    files = {
+        "frames/param_declare.yaml": """
+name: param_declare
+covers: [FRM-1]
+topic_id: 3
+seq: 0
+payload: "02 00 04 00 03 6c 65 64 01"
+frame: "03 00 02 00 04 00 03 6c 65 64 01 44 c6"
+wire: "03 02 02 02 04 02 03 6c 65 64 01 44 c6 08 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("the type is not one the spec gives" in p for p in problems), problems
+
+
+def test_a_param_declare_with_a_reserved_flag_is_reported(tmp_path):
+    files = {
+        "frames/param_declare.yaml": """
+name: param_declare
+covers: [FRM-1]
+topic_id: 3
+seq: 0
+payload: "02 00 00 02 03 6c 65 64 01"
+frame: "03 00 02 00 00 02 03 6c 65 64 01 64 a1"
+wire: "03 02 02 02 01 02 03 6c 65 64 01 64 a1 09 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("reserved bit set" in p for p in problems), problems
+
+
+def test_a_param_declare_with_a_bad_bool_is_reported(tmp_path):
+    files = {
+        "frames/param_declare.yaml": """
+name: param_declare
+covers: [FRM-1]
+topic_id: 3
+seq: 0
+payload: "02 00 00 00 03 6c 65 64 02"
+frame: "03 00 02 00 00 00 03 6c 65 64 02 a9 9b"
+wire: "03 02 02 02 01 01 03 6c 65 64 02 a9 9b 08 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("neither 0 nor 1" in p for p in problems), problems
+
+
+def test_a_param_set_with_no_decodable_value_is_reported(tmp_path):
+    files = {
+        "frames/param_set.yaml": """
+name: param_set
+covers: [FRM-1]
+topic_id: 3
+seq: 0
+payload: "03 00 00 00 00"
+frame: "03 00 03 00 00 00 00 2d c6"
+wire: "03 02 03 02 01 01 01 2d c6 03 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("not a bool, i64, f64 or string" in p for p in problems), problems
+
+
+def test_a_param_status_outside_the_table_is_reported(tmp_path):
+    files = {
+        "frames/param_status.yaml": """
+name: param_status
+covers: [FRM-1]
+topic_id: 3
+seq: 0
+payload: "04 00 00 05"
+frame: "03 00 04 00 00 05 4c 21"
+wire: "03 02 04 02 01 05 4c 21 04 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("the status is not one the spec gives" in p for p in problems), problems
+
+
+def test_a_short_reliable_ack_is_reported(tmp_path):
+    files = {
+        "frames/reliable_ack.yaml": """
+name: reliable_ack
+covers: [FRM-1]
+topic_id: 6
+seq: 0
+payload: "03"
+frame: "06 00 03 71 dd"
+wire: "06 02 03 71 dd 04 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("payload" in p for p in problems), problems
+
+
+def test_a_param_frame_on_the_control_channel_is_reported(tmp_path):
+    files = {
+        "frames/param_req.yaml": """
+name: param_req
+covers: [FRM-1]
+topic_id: 0
+seq: 0
+payload: "01 00"
+frame: "00 00 01 00 f9 1a"
+wire: "01 01 01 02 f9 1a 03 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("is not the channel 3 of a param_req frame" in p for p in problems), problems
+
+
+def test_an_opcode_the_params_channel_does_not_give_is_reported(tmp_path):
+    files = {
+        "frames/bad_opcode.yaml": """
+name: something_else
+covers: [FRM-1]
+topic_id: 3
+seq: 0
+payload: "05 00"
+frame: "03 00 05 00 54 58"
+wire: "03 02 05 02 54 58 03 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("the opcode is not one the spec gives" in p for p in problems), problems
 
 
 def test_a_message_vector_must_carry_the_payload_the_reference_makes(tmp_path):

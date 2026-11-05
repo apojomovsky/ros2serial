@@ -1,0 +1,35 @@
+name: param_set_reliable
+covers: [REL-2, REL-3, REL-4, PAR-8]
+steps:
+  - from: host
+    frame: "03 00 03 00 00 00 c0 21"
+    at_ms: 0
+    note: "SET rel 0, index 0, false"
+  - from: host
+    frame: "03 01 03 00 00 00 84 2a"
+    at_ms: 500
+    note: "no ack for 500 ms; retransmit with the next frame seq, same rel seq; the first ack was lost on the wire"
+  - from: mcu
+    frame: "06 00 03 00 d3 62"
+    at_ms: 510
+    note: "the duplicate is acked again; the payload applied once"
+  - from: mcu
+    frame: "03 01 04 00 00 00 a5 7d"
+    at_ms: 510
+    note: "STATUS retransmit with the next frame seq, same rel seq; applied once"
+  - from: host
+    frame: "06 00 03 00 d3 62"
+    at_ms: 520
+  - from: host
+    frame: "03 02 03 01 00 01 1d 7c"
+    at_ms: 600
+    note: "next rel seq; the counter advances"
+  - from: mcu
+    frame: "06 01 03 01 86 29"
+    at_ms: 610
+  - from: mcu
+    frame: "03 02 04 01 00 00 b5 3a"
+    at_ms: 610
+  - from: host
+    frame: "06 01 03 01 86 29"
+    at_ms: 620

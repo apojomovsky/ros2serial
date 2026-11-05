@@ -781,7 +781,7 @@ The encoding is deterministic: 254 non-zero bytes at the end of a frame produce 
 
 ### System channels
 
-The first payload byte of IDs 0 and 1 is an opcode.
+The first payload byte of IDs 0, 1 and 3 is an opcode.
 
 **ID 0, control**
 
@@ -826,13 +826,13 @@ normalize again
 
 **ID 2, log** (MCU → host): `level u8` (ROS severities: 10 debug, 20 info, 30 warn, 40 error, 50 fatal), `text string`, `value_kind u8` (0 none, 1 u16, 2 i16, 3 u32, 4 i32, 5 f32), then the value if present.
 
-**ID 3, parameters**: P1, specified by ticket S5.
+**ID 3, parameters**: PARAM_REQ, PARAM_DECLARE, PARAM_SET and PARAM_STATUS as `spec/protocol.md` section 7.6 gives them.
 
 **ID 4, heartbeat**: host → MCU has an empty payload. MCU → host carries `rx_frames u16, crc_errors u16, rx_overflows u16, dropped_frames u16`, all wrapping counters. `rx_frames` counts the frames the MCU accepted, `crc_errors` the ones it dropped for a bad CRC, `rx_overflows` the ones that did not fit its buffer, and `dropped_frames` every frame it dropped, whichever rule dropped it.
 
 **ID 5, error report** (MCU → host): `code u8, topic_id u8, count u16, field u8`. Codes: 1 bound violation on decode, 2 unknown topic ID, 3 RX overflow, 4 frame too large, 5 publish while not connected (reported once per connection), 6 TX busy (reported once per second at most). `count` is the number of times the error occurred since the last error report of that code, and it wraps at 65535; a code that is rate-limited is counted the same way and reported no more often than that. `field` is the index of the offending field in depth-first declaration order over the type's field definitions (array elements are not counted separately), or 0xFF when not applicable. The bridge computes the same order with introspection and logs the field path.
 
-**ID 6, reliable-channel ack**: P1, specified by ticket S5.
+**ID 6, reliable-channel ack**: `channel u8, rel_seq u8` as `spec/protocol.md` section 7.7 gives it.
 
 ### State machines
 

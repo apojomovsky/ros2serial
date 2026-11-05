@@ -1,0 +1,7 @@
+name: reliable_ack
+covers: [REL-1, REL-4]
+topic_id: 6
+seq: 0
+payload: "03 00"
+frame: "06 00 03 00 d3 62"
+wire: "06 02 03 02 d3 62 03 00"

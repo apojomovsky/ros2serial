@@ -1,0 +1,7 @@
+name: param_set
+covers: [PAR-1, PAR-3]
+topic_id: 3
+seq: 1
+payload: "03 00 00 2a 00 00 00 00 00 00 00"
+frame: "03 01 03 00 00 2a 00 00 00 00 00 00 00 26 d5"
+wire: "03 01 03 04 01 2a 02 01 01 01 01 01 01 26 d5 03 00"

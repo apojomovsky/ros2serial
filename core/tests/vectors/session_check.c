@@ -331,7 +331,7 @@ static uint16_t hello_payload(uint8_t *out, uint32_t token, uint8_t topic_count)
     uint16_t len = 0u;
 
     out[len++] = 0x02u;
-    out[len++] = 0x02u;
+    out[len++] = R2S_PROTOCOL_VERSION;
     out[len++] = 0x00u;
     out[len++] = (uint8_t)(token & 0xFFu);
     out[len++] = (uint8_t)((token >> 8u) & 0xFFu);

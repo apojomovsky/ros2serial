@@ -25,7 +25,7 @@ from r2s_gen.reference import frames
 from test_announce import read_string
 from test_echo import Harness
 
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
 RUN_MS = ("--run-ms", "60000")
 HELLO_NODE = "hello"
 BLINK_NODE = "blink"

@@ -182,6 +182,7 @@ CONTROL_OPCODES = {
     0x06: "ready",
 }
 TIME_OPCODES = {0x01: "ping", 0x02: "pong", 0x03: "correction"}
+PARAM_OPCODES = {0x01: "param_req", 0x02: "param_declare", 0x03: "param_set", 0x04: "param_status"}
 # The channels whose payload has no opcode byte, so an empty payload on
 # them is what the spec says.
 NO_OPCODE_CHANNELS = {4, 5}
@@ -189,8 +190,10 @@ SYSTEM_CHANNELS = {
     0: CONTROL_OPCODES,
     1: TIME_OPCODES,
     2: {"log": "log"},
+    3: PARAM_OPCODES,
     4: {"heartbeat": "heartbeat"},
     5: {"error_report": "error_report"},
+    6: {"reliable_ack": "reliable_ack"},
 }
 
 
@@ -236,11 +239,16 @@ SPEC_NAMES = {
     "ping": 1,
     "pong": 1,
     "correction": 1,
+    "param_req": 3,
+    "param_declare": 3,
+    "param_set": 3,
+    "param_status": 3,
     "log": 2,
     "heartbeat": 4,
     "host_heartbeat": 4,
     "mcu_heartbeat": 4,
     "error_report": 5,
+    "reliable_ack": 6,
 }
 
 
@@ -341,8 +349,8 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
         if layout == "hello_req":
             if r.u8() != 0x01:
                 problems.append(f"{name}/payload: the opcode is not HELLO_REQ")
-            if r.u8() != 0x02:
-                problems.append(f"{name}/payload: the protocol version is not 2")
+            if r.u8() != 0x03:
+                problems.append(f"{name}/payload: the protocol version is not 3")
         elif layout == "ready":
             if r.u8() != 0x06:
                 problems.append(f"{name}/payload: the opcode is not READY")
@@ -351,8 +359,8 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
         elif layout == "hello":
             if r.u8() != 0x02:
                 problems.append(f"{name}/payload: the opcode is not HELLO")
-            if r.u8() != 0x02:
-                problems.append(f"{name}/payload: the protocol version is not 2")
+            if r.u8() != 0x03:
+                problems.append(f"{name}/payload: the protocol version is not 3")
             mode = r.u8()
             if mode not in (0, 1):
                 problems.append(f"{name}/payload: the handshake mode is neither full nor compact")
@@ -435,6 +443,62 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
                 r.take(2)
             elif kind in (3, 4, 5):
                 r.take(4)
+        elif layout == "param_req":
+            if r.u8() != 0x01:
+                problems.append(f"{name}/payload: the opcode is not PARAM_REQ")
+            r.u8()  # index
+        elif layout == "param_declare":
+            if r.u8() != 0x02:
+                problems.append(f"{name}/payload: the opcode is not PARAM_DECLARE")
+            r.u8()  # index
+            kind = r.u8()
+            if kind > 3:
+                problems.append(f"{name}/payload: the type is not one the spec gives")
+                r.take(len(payload) - r.pos)
+            else:
+                if r.u8() & ~0x01:
+                    problems.append(f"{name}/payload: the flags byte has a reserved bit set")
+                if not r.string():
+                    problems.append(f"{name}/payload: the name is empty")
+                if kind == 0:
+                    if r.u8() not in (0, 1):
+                        problems.append(f"{name}/payload: the bool value is neither 0 nor 1")
+                elif kind in (1, 2):
+                    r.take(8)  # i64, f64
+                else:
+                    text = r.string()
+                    if b"\x00" in text:
+                        problems.append(f"{name}/payload: the string value holds a 0x00 byte")
+        elif layout == "param_set":
+            if r.u8() != 0x03:
+                problems.append(f"{name}/payload: the opcode is not PARAM_SET")
+            r.u8()  # rel seq
+            r.u8()  # index
+            value = r.take(len(payload) - r.pos)
+            if len(value) == 8 or value in (b"\x00", b"\x01"):
+                pass  # i64, f64, or a bool; a SET carries no type byte
+            else:
+                # A SET carries no type byte, so anything else must parse as
+                # a string: a varint length holding exactly the rest.
+                try:
+                    rest = _Reader(value)
+                    text = rest.take(rest.varint())
+                    if rest.pos != len(value):
+                        raise ValueError("the value is not a bool, i64, f64 or string")
+                    if b"\x00" in text:
+                        problems.append(f"{name}/payload: the string value holds a 0x00 byte")
+                except ValueError:
+                    problems.append(f"{name}/payload: the value is not a bool, i64, f64 or string")
+        elif layout == "param_status":
+            if r.u8() != 0x04:
+                problems.append(f"{name}/payload: the opcode is not PARAM_STATUS")
+            r.u8()  # rel seq
+            r.u8()  # index
+            if r.u8() > 4:
+                problems.append(f"{name}/payload: the status is not one the spec gives")
+        elif layout == "reliable_ack":
+            r.u8()  # channel
+            r.u8()  # rel seq
         elif layout == "error_report":
             r.u8()  # code
             r.u8()  # topic id
