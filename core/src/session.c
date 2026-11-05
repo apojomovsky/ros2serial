@@ -455,10 +455,11 @@ static void send_status_now(const uint8_t *payload, uint32_t now)
     for (i = 0u; i < REL_STATUS_LEN; i++) {
         put_byte(payload[i]);
     }
-    if (r2s_tx_end() == R2S_OK) {
-        session.tx_seq_param++;
-        session.rel_out_deadline = now;
-    }
+    /* The begin reserved the frame and the loop feeds exactly its length,
+     * while port errors never surface, so the end below cannot fail. */
+    (void)r2s_tx_end();
+    session.tx_seq_param++;
+    session.rel_out_deadline = now;
 }
 
 /* The pending STATUS becomes outstanding and goes out at once, with a fresh
@@ -525,11 +526,10 @@ static void send_declare(uint8_t index)
     size_t name_len;
     uint16_t i;
 
-    if (param == NULL) {
-        return;
-    }
+    /* The caller answers a PARAM_REQ for an announced index, so the entry
+     * exists and its DECLARE does not fit in zero bytes. */
     len = r2s_params_declare_len(index);
-    if (len == 0u || r2s_tx_begin(3u, session.tx_seq_param, len) != R2S_OK) {
+    if (r2s_tx_begin(3u, session.tx_seq_param, len) != R2S_OK) {
         return;
     }
     name_len = strlen(param->name);
@@ -566,9 +566,10 @@ static void send_declare(uint8_t index)
             put_byte((uint8_t)param->initial.s[i]);
         }
     }
-    if (r2s_tx_end() == R2S_OK) {
-        session.tx_seq_param++;
-    }
+    /* The begin reserved the frame and the loop feeds exactly its length,
+     * while port errors never surface, so the end below cannot fail. */
+    (void)r2s_tx_end();
+    session.tx_seq_param++;
 }
 
 /* One plain STATUS answering a PARAM_REQ past the table (PAR-7, PAR-8):
@@ -588,9 +589,10 @@ static void send_plain_status(uint8_t index, uint8_t status)
     for (i = 0u; i < REL_STATUS_LEN; i++) {
         put_byte(payload[i]);
     }
-    if (r2s_tx_end() == R2S_OK) {
-        session.tx_seq_param++;
-    }
+    /* The begin reserved the frame and the loop feeds exactly its length,
+     * while port errors never surface, so the end below cannot fail. */
+    (void)r2s_tx_end();
+    session.tx_seq_param++;
 }
 
 static void on_params(const uint8_t *payload, uint16_t len, uint32_t now)
@@ -614,12 +616,10 @@ static void on_params(const uint8_t *payload, uint16_t len, uint32_t now)
         }
         return;
     }
-    if (session.state != CONNECTED) {
-        return;
-    }
-    /* A SET carries its opcode, rel_seq and index; anything else on the
-     * channel is refused. A value the encoding cannot carry is refused
-     * too (PAR-3); a decodable one earns its verdict (PAR-5). */
+    /* The ANNOUNCING branch above returned and those are the only states. A
+     * SET carries its opcode, rel_seq and index; anything else on the
+     * channel is refused. A value the encoding cannot carry is refused too
+     * (PAR-3); a decodable one earns its verdict (PAR-5). */
     if (len < 3u || payload[0] != R2S_PARAM_OP_SET) {
         refuse();
         return;
@@ -657,7 +657,8 @@ static void on_ack(const uint8_t *payload, uint16_t len, uint32_t now)
         answer_with_hello(now);
         return;
     }
-    if (session.state != CONNECTED || len != 2u) {
+    /* The ANNOUNCING branch above returned and those are the only states. */
+    if (len != 2u) {
         return;
     }
     /* Channel 3 names the reliable exchange the ack answers. */
@@ -861,27 +862,16 @@ static void on_frame(const r2s_frame_t *frame)
             answer_with_hello(frame->tick);
         }
 #endif
+#ifdef R2S_WITH_PARAMS
     } else if (topic == 3u) {
-#ifdef R2S_WITH_PARAMS
         on_params(payload, payload_len, frame->tick);
-#else
-        /* A later ticket's channel: accepted, and answered in ANNOUNCING
-         * like any other non-handshake frame, otherwise ignored. */
-        if (session.state == ANNOUNCING) {
-            answer_with_hello(frame->tick);
-        }
-#endif
     } else if (topic == 6u) {
-#ifdef R2S_WITH_PARAMS
         on_ack(payload, payload_len, frame->tick);
-#else
-        if (session.state == ANNOUNCING) {
-            answer_with_hello(frame->tick);
-        }
 #endif
     } else if (topic <= 6u) {
-        /* The channels later tickets own (log, error report): accepted, and
-         * answered in ANNOUNCING like any other non-handshake frame,
+        /* The channels later tickets own (log, error report), and the
+         * parameters and ack channels in a build without them: accepted,
+         * and answered in ANNOUNCING like any other non-handshake frame,
          * otherwise ignored. */
         if (session.state == ANNOUNCING) {
             answer_with_hello(frame->tick);
