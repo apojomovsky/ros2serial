@@ -45,6 +45,28 @@ constexpr std::uint8_t kLogTopic = 2u;
 constexpr std::uint8_t kHeartbeatTopic = 4u;
 constexpr std::uint8_t kErrorTopic = 5u;
 
+// The parameters channel and the reliable-channel ack (sections 7.6, 7.7).
+constexpr std::uint8_t kParamsTopic = 3u;
+constexpr std::uint8_t kAckTopic = 6u;
+
+// The parameters channel's opcodes ([PAR-1]).
+constexpr std::uint8_t kParamReq = 0x01u;
+constexpr std::uint8_t kParamDeclare = 0x02u;
+constexpr std::uint8_t kParamSet = 0x03u;
+constexpr std::uint8_t kParamStatus = 0x04u;
+
+// The reliable engine ([REL-2]): one payload outstanding per direction,
+// resent every 500 ms, dropped and counted after 3 retries.
+constexpr std::int64_t kRelRetryMs = 500;
+constexpr int kRelRetries = 3;
+
+// The parameter walk ([PAR-7]) mirrors the topic walk ([SES-16]): one REQ
+// per index, a 200 ms timeout, at most 3 retries. Bit 2 of the HELLO
+// features announces the parameters ([CTL-2]).
+constexpr std::uint8_t kParamFeaturesBit = 0x04u;
+constexpr std::int64_t kParamTimeoutMs = 200;
+constexpr int kParamRetries = 3;
+
 // The log channel's levels ([LOG-2]) and value kinds ([LOG-3]).
 constexpr std::uint8_t kLogDebug = 10u;
 constexpr std::uint8_t kLogInfo = 20u;
@@ -355,11 +377,13 @@ struct Session::Impl {
     // the wire order never changes and the queue stays bounded ([SES-33]).
     // The replaced frame never reached the wire, so the new one keeps its
     // seq and [FRM-5] continuity holds.
-    void queue_frame(std::uint8_t topic_id, std::uint8_t seq, const std::vector<std::uint8_t> &payload)
+    void queue_frame(std::uint8_t topic_id, std::uint8_t seq, const std::vector<std::uint8_t> &payload,
+                     bool use_slot = true)
     {
         QueuedFrame frame;
+        frame.topic_id = topic_id;
         std::size_t match = queue_.size();
-        if (topic_id < 16u) {
+        if (topic_id < 16u && use_slot) {
             frame = control_slot(topic_id, payload);
             const std::size_t first = front_offset_ > 0u ? 1u : 0u;
             for (std::size_t i = first; i < queue_.size(); ++i) {
@@ -449,6 +473,92 @@ struct Session::Impl {
         topic_deadline_ms = now_ms() + kTopicTimeoutMs;
     }
 
+    // One PARAM_REQ for the walk's current index ([PAR-7]). The REQ joins
+    // the [SES-33] slot list, so a blocked link keeps the newest with the
+    // first seq; a timer retry is a new emission with the next seq.
+    void send_param_req()
+    {
+        queue_frame(kParamsTopic, seq_params_, {kParamReq, param_index_});
+        ++seq_params_;
+        param_deadline_ms_ = now_ms() + kParamTimeoutMs;
+    }
+
+    // The walk after the topic walk ([PAR-7]): REQ per index while the MCU
+    // announced parameters, READY at once when it did not.
+    void start_param_walk()
+    {
+        awaiting_topic = false;
+        awaiting_param_ = false;
+        if ((hello.features & kParamFeaturesBit) == 0u) {
+            finish_handshake();
+            return;
+        }
+        awaiting_param_ = true;
+        param_index_ = 0;
+        param_retries_ = 0;
+        send_param_req();
+    }
+
+    // One PARAM_SET emission with a fresh rel_seq: the index and the value
+    // travel after the opcode and rel_seq ([PAR-1]). Plain queueing, never
+    // a slot: pending SETs replace at the API level instead ([REL-7]).
+    void emit_set(std::uint8_t index, const std::vector<std::uint8_t> &value, std::uint8_t rel_seq)
+    {
+        std::vector<std::uint8_t> payload;
+        payload.reserve(value.size() + 3u);
+        payload.push_back(kParamSet);
+        payload.push_back(rel_seq);
+        payload.push_back(index);
+        payload.insert(payload.end(), value.begin(), value.end());
+        queue_frame(kParamsTopic, seq_params_, payload, false);
+        ++seq_params_;
+        flush();
+    }
+
+    // One ack naming the channel and rel_seq of a reliable frame ([REL-1]).
+    // The ack joins the slot list, so a blocked link keeps one pending ack
+    // per channel with the first seq, each replaced frame counted ([REL-6]).
+    void send_ack_frame(std::uint8_t channel, std::uint8_t rel_seq)
+    {
+        queue_frame(kAckTopic, seq_ack_, {channel, rel_seq});
+        ++seq_ack_;
+        flush();
+    }
+
+    // The oldest pending SET becomes outstanding with the next rel_seq and
+    // goes out at once ([REL-7]).
+    void promote_pending()
+    {
+        if (rel_pending_.empty()) {
+            return;
+        }
+        const auto next = rel_pending_.begin();
+        const std::uint8_t rel_seq = rel_next_++;
+        emit_set(next->first, next->second, rel_seq);
+        rel_out_.emplace(OutstandingSet{next->first, next->second, rel_seq, 0, now_ms() + kRelRetryMs});
+        rel_pending_.erase(next);
+    }
+
+    // A re-handshake drops the reliable state ([REL-5]): the outstanding
+    // SET, the pending ones and their queued frames. Queued acks are
+    // control frames, dropped with the rest ([SES-33]).
+    void drop_reliable()
+    {
+        rel_out_.reset();
+        rel_pending_.clear();
+        std::deque<QueuedFrame> kept;
+        std::size_t kept_bytes = 0;
+        for (std::size_t i = 0; i < queue_.size(); ++i) {
+            if ((i > 0 || front_offset_ == 0) && queue_[i].topic_id == kParamsTopic && !queue_[i].control) {
+                continue;
+            }
+            kept_bytes += queue_[i].bytes.size();
+            kept.push_back(std::move(queue_[i]));
+        }
+        queue_ = std::move(kept);
+        pending_bytes_ = kept_bytes;
+    }
+
     void send_heartbeat()
     {
         queue_frame(kHeartbeatTopic, seq_heartbeat, {});
@@ -525,10 +635,12 @@ struct Session::Impl {
     void restart_handshake()
     {
         awaiting_topic = false;
+        awaiting_param_ = false;
         requested_index = 0;
         retries = 0;
         collected.clear();
         clear_pending_control();
+        drop_reliable();
         reset_time();
         begin_handshake_wait();
     }
@@ -539,11 +651,19 @@ struct Session::Impl {
         retries = 0;
         collected.clear();
         awaiting_topic = true;
+        awaiting_param_ = false;
         clear_pending_control();
+        drop_reliable();
+        // A re-handshake drops the reliable state ([REL-5]); the walk and
+        // the connected stream number their channel frames from 0.
+        rel_next_ = 0;
+        rel_expected_.clear();
+        seq_params_ = 0;
+        seq_ack_ = 0;
         if (requested_index < hello.topic_count) {
             send_topic_req();
         } else {
-            finish_handshake();
+            start_param_walk();
         }
     }
 
@@ -569,8 +689,12 @@ struct Session::Impl {
                       static_cast<std::uint8_t>((hello.token >> 16u) & 0xFFu),
                       static_cast<std::uint8_t>((hello.token >> 24u) & 0xFFu)});
         // The handshake is over, so every counter restarts at 0 ([FRM-4]).
+        // The walk's REQs and the connected SETs number separately: the
+        // vectors show the first SET at frame seq 0 after the walk.
         seq_control = 0;
         seq_heartbeat = 0;
+        seq_params_ = 0;
+        seq_ack_ = 0;
         user_seq_.clear();
         expected_seq.clear();
         last_rx_ms = now_ms();
@@ -710,7 +834,7 @@ struct Session::Impl {
         if (requested_index < hello.topic_count) {
             send_topic_req();
         } else {
-            finish_handshake();
+            start_param_walk();
         }
     }
 
@@ -731,6 +855,82 @@ struct Session::Impl {
             // the link's health already counted the frame.
             break;
         }
+    }
+
+    // The parameters channel ([PAR-7], [PAR-8], [REL-3]). Walk answers
+    // arrive while handshaking and are never acked; STATUS applies at most
+    // once while connected, acked every time and reported to the
+    // parameters layer through the param_status event.
+    void on_params(const std::uint8_t *payload, std::uint16_t len)
+    {
+        if (len < 1u) {
+            return;
+        }
+        switch (payload[0]) {
+        case kParamDeclare:
+            // A DECLARE moves the walk to the next index. Its content is
+            // the parameters layer's (X5), and it is never acked ([PAR-8]).
+            if (state == SessionState::kHandshaking && awaiting_param_ && len >= 2u &&
+                payload[1] == param_index_) {
+                ++param_index_;
+                param_retries_ = 0;
+                send_param_req();
+            }
+            break;
+        case kParamStatus:
+            on_status(payload, len);
+            break;
+        default:
+            break;
+        }
+    }
+
+    void on_status(const std::uint8_t *payload, std::uint16_t len)
+    {
+        if (len < 4u || payload[3] > 4u) {
+            return;
+        }
+        const std::uint8_t rel_seq = payload[1];
+        const std::uint8_t index = payload[2];
+        const std::uint8_t status = payload[3];
+        if (state == SessionState::kHandshaking && awaiting_param_) {
+            // A plain reply under the requester's retry ([PAR-8]).
+            if (index != param_index_) {
+                return;
+            }
+            if (status == 1u) {
+                awaiting_param_ = false;
+                finish_handshake();
+            } else {
+                ++param_index_;
+                param_retries_ = 0;
+                send_param_req();
+            }
+            return;
+        }
+        if (state != SessionState::kConnected) {
+            return;
+        }
+        send_ack_frame(kParamsTopic, rel_seq);
+        std::uint8_t &expected = rel_expected_[kParamsTopic];
+        if (rel_seq == expected) {
+            ++expected;
+            if (events.param_status) {
+                events.param_status(index, status);
+            }
+        }
+    }
+
+    // An ack for the outstanding SET clears it and promotes the oldest
+    // pending one; anything else is a duplicate or a stranger ([REL-2]).
+    void on_ack_frame(const std::uint8_t *payload, std::uint16_t len)
+    {
+        if (state != SessionState::kConnected || len != 2u || payload[0] != kParamsTopic || !rel_out_ ||
+            payload[1] != rel_out_->rel_seq) {
+            return;
+        }
+        rel_out_.reset();
+        promote_pending();
     }
 
     void maybe_send_correction(std::int64_t now)
@@ -950,6 +1150,14 @@ struct Session::Impl {
             on_error(payload, len);
             return;
         }
+        if (topic_id == kParamsTopic) {
+            on_params(payload, len);
+            return;
+        }
+        if (topic_id == kAckTopic) {
+            on_ack_frame(payload, len);
+            return;
+        }
         if (topic_id == kHeartbeatTopic) {
             if (len != 8u) {
                 return;
@@ -984,6 +1192,30 @@ struct Session::Impl {
         }
     }
 
+    // The outstanding SET's retry ([REL-2]): the same rel_seq under the
+    // next frame seq. Nothing unsent may wait for the link: a blocked link
+    // holds the retry without spending one, like a frame the link never
+    // carried. Spent retries drop the SET, count it and promote the next.
+    void poll_reliable(std::int64_t now)
+    {
+        if (!rel_out_ || now < rel_out_->deadline_ms) {
+            return;
+        }
+        if (!queue_.empty()) {
+            return;
+        }
+        if (rel_out_->retries >= kRelRetries) {
+            log(SessionLog::kWarning, "no ack for the PARAM_SET; the SET is dropped");
+            ++reliable_dropped_;
+            rel_out_.reset();
+            promote_pending();
+            return;
+        }
+        ++rel_out_->retries;
+        rel_out_->deadline_ms = now + kRelRetryMs;
+        emit_set(rel_out_->index, rel_out_->value, rel_out_->rel_seq);
+    }
+
     void run_timers()
     {
         const std::int64_t now = now_ms();
@@ -1014,6 +1246,17 @@ struct Session::Impl {
                         send_topic_req();
                     }
                 }
+            } else if (awaiting_param_) {
+                if (now >= param_deadline_ms_) {
+                    if (param_retries_ >= kParamRetries) {
+                        log(SessionLog::kWarning, "no PARAM_DECLARE answered; the handshake starts over");
+                        restart_handshake();
+                        send_hello_req();
+                    } else {
+                        ++param_retries_;
+                        send_param_req();
+                    }
+                }
             } else if (now >= next_hello_req_ms) {
                 send_hello_req();
             }
@@ -1027,6 +1270,7 @@ struct Session::Impl {
                 if (now >= next_heartbeat_ms) {
                     send_heartbeat();
                 }
+                poll_reliable(now);
                 maybe_send_ping(now);
                 // The correction floor needs no new PONG: with the estimate
                 // standing still the timer resends it on schedule ([SES-25]).
@@ -1108,6 +1352,28 @@ struct Session::Impl {
     bool awaiting_topic = false;
     std::uint8_t requested_index = 0;
     int retries = 0;
+    // The parameter walk ([PAR-7]): whether the topic walk handed over,
+    // the index under request, its retries and its deadline.
+    bool awaiting_param_ = false;
+    std::uint8_t param_index_ = 0;
+    int param_retries_ = 0;
+    std::int64_t param_deadline_ms_ = 0;
+    // The reliable engine ([REL-2], [REL-7]): one outstanding SET with its
+    // timer and retries, one pending SET per index, the next rel_seq and
+    // the per-channel expected rel_seq, with the giveup and replace counts.
+    struct OutstandingSet {
+        std::uint8_t index = 0;
+        std::vector<std::uint8_t> value;
+        std::uint8_t rel_seq = 0;
+        int retries = 0;
+        std::int64_t deadline_ms = 0;
+    };
+    std::optional<OutstandingSet> rel_out_;
+    std::map<std::uint8_t, std::vector<std::uint8_t>> rel_pending_;
+    std::uint8_t rel_next_ = 0;
+    std::map<std::uint8_t, std::uint8_t> rel_expected_;
+    std::uint32_t reliable_dropped_ = 0;
+    std::uint32_t reliable_replaced_ = 0;
 
     std::vector<TopicInfo> collected;
     std::vector<TopicInfo> topics;
@@ -1130,6 +1396,10 @@ struct Session::Impl {
 
     std::uint8_t seq_control = 0;
     std::uint8_t seq_heartbeat = 0;
+    // The frame seqs of the parameters channel and the ack channel,
+    // restarting at each handshake and at READY ([FRM-4], [REL-5]).
+    std::uint8_t seq_params_ = 0;
+    std::uint8_t seq_ack_ = 0;
     // The seq the time channel shares between its PINGs and CORRECTIONs,
     // restarting at 0 after each handshake ([FRM-4], [FRM-5]).
     std::uint8_t seq_time = 0;
@@ -1222,6 +1492,42 @@ std::size_t Session::pending_bytes() const
 std::uint32_t Session::control_coalesced() const
 {
     return impl_->control_coalesced_;
+}
+
+bool Session::send_param_set(std::uint8_t index, const std::vector<std::uint8_t> &value)
+{
+    Impl &impl = *impl_;
+    if (impl.state != SessionState::kConnected) {
+        return false;
+    }
+    const std::size_t cap = std::max<std::uint16_t>(impl.hello.rx_capacity, impl.hello.max_frame);
+    if (impl.pending_bytes_ > 0u && impl.pending_bytes_ >= cap) {
+        return false;
+    }
+    if (!impl.rel_out_) {
+        const std::uint8_t rel_seq = impl.rel_next_++;
+        impl.emit_set(index, value, rel_seq);
+        impl.rel_out_.emplace(Impl::OutstandingSet{index, value, rel_seq, 0, impl.now_ms() + kRelRetryMs});
+    } else {
+        const auto found = impl.rel_pending_.find(index);
+        if (found != impl.rel_pending_.end()) {
+            found->second = value;
+            ++impl.reliable_replaced_;
+        } else {
+            impl.rel_pending_.emplace(index, value);
+        }
+    }
+    return true;
+}
+
+std::uint32_t Session::reliable_dropped() const
+{
+    return impl_->reliable_dropped_;
+}
+
+std::uint32_t Session::reliable_replaced() const
+{
+    return impl_->reliable_replaced_;
 }
 
 bool Session::send_user(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload)

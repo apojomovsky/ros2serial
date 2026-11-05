@@ -338,11 +338,17 @@ std::pair<std::string, std::vector<Step>> load_steps(const std::string &path)
     const YAML::Node root = YAML::LoadFile(path);
     const std::string name = root["name"].as<std::string>();
     std::vector<Step> steps;
+    // A step without its own time runs with the previous one: the walk
+    // vectors leave it off the same-tick answers.
+    std::uint32_t at_ms = 0;
     for (const auto &node : root["steps"]) {
         Step step;
         step.from_host = node["from"].as<std::string>() == "host";
         step.decoded = bytes_of(node["frame"].as<std::string>());
-        step.at_ms = node["at_ms"].as<std::uint32_t>();
+        if (node["at_ms"]) {
+            at_ms = node["at_ms"].as<std::uint32_t>();
+        }
+        step.at_ms = at_ms;
         steps.push_back(std::move(step));
     }
     return {name, steps};
@@ -2570,10 +2576,11 @@ std::vector<std::vector<std::uint8_t>> reliable_sets(const std::vector<Step> &st
 }
 
 // Sends one transcript SET through the session: index and value travel after
-// the opcode and rel seq, so they sit at bytes 4 and 5.
+// the opcode and rel seq, so they sit at bytes 4 and 5, ahead of the check.
 void send_transcript_set(Fixture &fixture, const std::vector<std::uint8_t> &set)
 {
-    EXPECT_TRUE(fixture.session().send_param_set(set[4], {set.begin() + 5, set.end()}));
+    ASSERT_GE(set.size(), 7u);
+    EXPECT_TRUE(fixture.session().send_param_set(set[4], {set.begin() + 5, set.end() - 2}));
 }
 
 // Replays one reliable-channel transcript after the scripted handshake: the
@@ -2626,7 +2633,18 @@ void replay_reliable(const std::string &filename, bool upfront, bool chain)
             expected.push_back(i);
         }
     }
+    // Compares one decoded unit with the transcript's host steps, skipping
+    // every other channel: the decoded unit starts with the topic id,
+    // where a wire unit would start with an rCOBS distance code.
     std::size_t next = 0;
+    const auto check = [&](const std::vector<std::uint8_t> &unit) {
+        if (unit.size() < 3u || (unit[0] != kParams && unit[0] != kAck)) {
+            return;
+        }
+        ASSERT_LT(next, expected.size()) << name << ": the session wrote more than the transcript";
+        EXPECT_EQ(unit, steps[expected[next]].decoded) << name << " host step " << expected[next];
+        ++next;
+    };
     for (std::size_t i = 0; i < steps.size(); ++i) {
         const Step &step = steps[i];
         SCOPED_TRACE(name + " step " + std::to_string(i));
@@ -2636,24 +2654,13 @@ void replay_reliable(const std::string &filename, bool upfront, bool chain)
         }
         trigger();
         for (const auto &unit : drain_decoded(fixture)) {
-            if (unit.empty() || (unit[0] != kParams && unit[0] != kAck)) {
-                continue;
-            }
-            ASSERT_LT(next, expected.size()) << name << ": the session wrote more than the transcript";
-            EXPECT_EQ(unit, steps[expected[next]].decoded)
-                << name << " host step " << expected[next] << " at " << fixture.now_ms() << " ms";
-            ++next;
+            check(unit);
         }
     }
     if (next < expected.size()) {
         fixture.advance_to(steps.back().at_ms + 500);
         for (const auto &unit : drain_decoded(fixture)) {
-            if (unit.empty() || (unit[0] != kParams && unit[0] != kAck)) {
-                continue;
-            }
-            ASSERT_LT(next, expected.size()) << name << ": the session wrote more than the transcript";
-            EXPECT_EQ(unit, steps[expected[next]].decoded) << name << " host step " << expected[next];
-            ++next;
+            check(unit);
         }
     }
     EXPECT_EQ(next, expected.size()) << name << ": the transcript's reliable frames did not all go out";
@@ -2710,7 +2717,11 @@ TEST(ReliableWalk, StartsAfterTheTopicWalk)
 // covers: PAR-7
 TEST(ReliableWalk, SkipsWhenTheMcuAnnouncesNoParameters)
 {
-    Fixture fixture;
+    // Time sync stays off: features announce time, and the first PING
+    // would follow READY in the same poll.
+    SessionConfig config;
+    config.time_sync_enabled = false;
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, config};
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x01u, 1000u));
     fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
     const auto units = drain_decoded(fixture);
@@ -2746,14 +2757,14 @@ TEST(ReliableSend, RetransmitsAndStopsOnAck)
     EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
     auto units = drain_decoded(fixture);
     ASSERT_EQ(units.size(), 1u);
-    EXPECT_EQ(units[0], std::vector<std::uint8_t>({kParams, 0u, kParamSet, 0x00u, 0x00u, 0x00u}))
+    EXPECT_EQ(units[0], with_check({kParams, 0u, kParamSet, 0x00u, 0x00u, 0x00u}))
         << "the SET carries rel seq 0";
     fixture.advance_to(499);
     EXPECT_TRUE(drain_decoded(fixture).empty()) << "no retry before 500 ms";
     fixture.advance_to(500);
     units = drain_decoded(fixture);
     ASSERT_EQ(units.size(), 1u);
-    EXPECT_EQ(units[0], std::vector<std::uint8_t>({kParams, 1u, kParamSet, 0x00u, 0x00u, 0x00u}))
+    EXPECT_EQ(units[0], with_check({kParams, 1u, kParamSet, 0x00u, 0x00u, 0x00u}))
         << "the retry keeps rel seq 0 with the next frame seq";
     fixture.deliver_frame(kAck, 0u, {kParams, 0x00u});
     EXPECT_TRUE(drain_decoded(fixture).empty()) << "the ack clears the outstanding SET";
@@ -2774,6 +2785,9 @@ TEST(ReliableSend, GivesUpAfterThreeRetries)
         fixture.advance_to(500u * static_cast<std::uint32_t>(retry + 1u));
         EXPECT_EQ(drain_decoded(fixture).size(), 1u) << "retry " << retry;
     }
+    // The link stays alive past the drop deadline: without MCU traffic the
+    // link timeout at 2000 ms would re-handshake first.
+    fixture.deliver_frame(kHeartbeat, 0u, {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u});
     fixture.advance_to(2500);
     for (const auto &unit : drain_decoded(fixture)) {
         EXPECT_NE(unit[0], kParams) << "the spent SET never goes out again";
@@ -2794,7 +2808,8 @@ TEST(ReliableReceive, AcksEveryStatusAndAppliesOnce)
     fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x00u});
     auto units = drain_decoded(fixture);
     ASSERT_EQ(units.size(), 1u);
-    EXPECT_EQ(units[0], std::vector<std::uint8_t>({kAck, 0u, kParams, 0x00u})) << "the ack names channel and rel";
+    EXPECT_EQ(units[0], with_check({kAck, 0u, kParams, 0x00u}))
+        << "the ack names channel and rel";
     ASSERT_EQ(statuses.size(), 1u);
     EXPECT_EQ(statuses[0], std::make_pair(std::uint8_t{0}, std::uint8_t{0}));
     fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x00u, 0x00u});
@@ -2805,7 +2820,7 @@ TEST(ReliableReceive, AcksEveryStatusAndAppliesOnce)
     fixture.deliver_frame(kParams, 2u, {kParamStatus, 0x05u, 0x00u, 0x00u});
     units = drain_decoded(fixture);
     ASSERT_EQ(units.size(), 1u) << "a future rel is acked too";
-    EXPECT_EQ(units[0], std::vector<std::uint8_t>({kAck, 2u, kParams, 0x05u}));
+    EXPECT_EQ(units[0], with_check({kAck, 2u, kParams, 0x05u}));
     EXPECT_EQ(statuses.size(), 1u) << "and not applied";
 }
 
@@ -2820,6 +2835,7 @@ TEST(ReliableAck, CoalescesBehindABlockedLink)
     fixture.deliver_frame(kParams, 2u, {kParamStatus, 0x01u, 0x01u, 0x01u});
     EXPECT_EQ(fixture.session().control_coalesced(), 2u) << "each replaced ack counts";
     fixture.allow_writes();
+    fixture.session().poll();
     const auto units = drain_decoded(fixture);
     ASSERT_EQ(units.size(), 1u) << "one ack goes out for the whole backlog";
     EXPECT_EQ(units[0][0], kAck);
@@ -2840,7 +2856,7 @@ TEST(ReliableSend, ReplacesAPendingSetForTheSameIndex)
     fixture.deliver_frame(kAck, 0u, {kParams, 0x00u});
     const auto units = drain_decoded(fixture);
     ASSERT_EQ(units.size(), 1u) << "the replacement goes out after the ack";
-    EXPECT_EQ(units[0], std::vector<std::uint8_t>({kParams, 1u, kParamSet, 0x01u, 0x00u, 0x02u}))
+    EXPECT_EQ(units[0], with_check({kParams, 1u, kParamSet, 0x01u, 0x00u, 0x02u}))
         << "with the newest value and the next rel seq";
 }
 
