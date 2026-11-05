@@ -318,6 +318,17 @@ def test_the_big_endian_driver_forwards_the_python_pins():
     assert "ci/versions.env" in driver
 
 
+def test_the_big_endian_image_provides_the_cxx_cross_compiler():
+    dockerfile = (ROOT / "docker" / "bigendian" / "Dockerfile").read_text(encoding="utf-8")
+    assert "g++-s390x-linux-gnu" in dockerfile
+    assert "s390x-linux-gnu-g++ -dumpfullversion" in dockerfile
+
+
+def test_the_make_reproducer_runs_the_big_endian_driver():
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "scripts/run-bigendian.sh" in makefile
+
+
 def test_the_mutation_image_resolves_the_mull_package_dependencies():
     dockerfile = (ROOT / "docker" / "mutation" / "Dockerfile").read_text(encoding="utf-8")
     assert "Mull-18-" in dockerfile and "LLVM-" in dockerfile
