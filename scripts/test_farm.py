@@ -51,6 +51,13 @@ def test_the_farm_job_builds_tests_and_smokes_the_released_packages():
         assert package in text, f"farm covers {package}"
 
 
+def test_the_farm_job_refreshes_apt_lists_before_rosdep():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert text.index("apt-get update") < text.index("rosdep install"), (
+        "rosdep installs from apt, so stale package lists fail the job"
+    )
+
+
 def test_the_farm_script_runs_no_docker_or_network_fetch():
     text = script_text()
     for banned in ("docker run", "docker build", "curl ", "wget ", "pip install"):

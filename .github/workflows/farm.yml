@@ -47,6 +47,7 @@ jobs:
       # time. The script itself runs no Docker and no fetch.
       - name: Install dependencies through rosdep
         run: |
+          apt-get update
           rosdep update
           rosdep install --from-paths gen bridge --ignore-src -r -y --rosdistro "$ROS_DISTRO"
         env:
