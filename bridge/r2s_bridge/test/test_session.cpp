@@ -2760,6 +2760,7 @@ TEST(ReliableWalk, IgnoresWalkFramesForAnotherIndex)
     fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x05u, 0x00u});
     fixture.deliver_frame(kParams, 2u, {kParamReq});
     fixture.deliver_frame(kParams, 3u, {0x09u});
+    fixture.deliver_frame(kParams, 4u, {kParamDeclare});
     EXPECT_TRUE(drain_decoded(fixture).empty()) << "nothing answers a frame for another index";
     fixture.advance_to(200);
     const auto units = drain_decoded(fixture);
@@ -3109,6 +3110,35 @@ TEST(ReliableSend, SendsWhileUserFramesAreQueued)
     ASSERT_EQ(units.size(), 2u);
     EXPECT_EQ(units[0][0], 16u) << "the user frame keeps its place ahead of the SET";
     EXPECT_EQ(units[1], with_check({kParams, 0u, kParamSet, 0x00u, 0x00u, 0x00u}));
+}
+
+// covers: REL-5
+TEST(ReliableWalk, KeepsAPartialReqAcrossTheLinkTimeout)
+{
+    SessionConfig config;
+    config.heartbeat_period_ms = 3600000;
+    config.time_sync_enabled = false;
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, config};
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    drain_decoded(fixture);
+    // The topic answer flushes whole, the walk REQ wedges after two bytes,
+    // and every later write blocks: the REQ stays partial at the front.
+    fixture.script_write({1000u, IoStatus::kOk});
+    fixture.script_write({2u, IoStatus::kOk});
+    fixture.script_write({0u, IoStatus::kWouldBlock});
+    fixture.block_writes();
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+    fixture.advance_to(2500);
+    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking) << "the silent link re-handshakes";
+    EXPECT_EQ(fixture.session().reliable_dropped(), 0u) << "a REQ is not a SET";
+    fixture.allow_writes();
+    fixture.session().poll();
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 3u);
+    EXPECT_EQ(units[0], with_check({kControl, 0x01u, 0x05u, 0x10u, 0x00u}))
+        << "the topic answer flushed before the timeout";
+    EXPECT_EQ(units[1], with_check({kParams, 0u, kParamReq, 0x00u})) << "the partial REQ completes";
+    EXPECT_EQ(units[2][2], 0x01u) << "and the handshake starts over";
 }
 
 // covers: REL-5
