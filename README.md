@@ -6,6 +6,16 @@ ROS 2 topics from small microcontrollers, down to an 8-bit Arduino Uno, over a s
 
 [![CI](https://github.com/apojomovsky/ros2serial/actions/workflows/ci.yml/badge.svg)](https://github.com/apojomovsky/ros2serial/actions/workflows/ci.yml)
 
+The payoff, at the end of either walkthrough below (the emulated Uno reads 0.0; the virtual MCU counts up):
+
+```sh
+ros2 topic echo /battery std_msgs/msg/Float32 --once
+```
+
+```text
+data: 0.0
+```
+
 ## Contents
 
 - [Getting started](#getting-started)
@@ -61,7 +71,7 @@ ros2 topic list
 /rosout
 ```
 
-(The firmware also announces its test topics; `battery` and `cmd_vel` are the pair this walkthrough uses.) One reading proves the whole path:
+(Excerpt: the firmware also announces its test topics `/echo_vel`, `/joints`, `/log_text` and `/time_now`.) One reading proves the whole path:
 
 ```sh
 ros2 topic echo /battery std_msgs/msg/Float32 --once
