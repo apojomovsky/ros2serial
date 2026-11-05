@@ -176,7 +176,12 @@ class SessionMachine(RuleBasedStateMachine):
     @rule()
     def reboot(self) -> None:
         self.pair.reset()
-        self.host_seq = {0: 0, 4: 0, 17: 0}
+        self.host_seq = {0: 0, 3: 0, 4: 0, 6: 0, 17: 0}
+        self.set_rel = 0
+        self.status_rel = 0
+        self.led = 1
+        self.name_value = b"hi"
+        self.last_set = None
 
     @invariant()
     def encoded_tx_holds_no_zero(self) -> None:

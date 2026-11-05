@@ -202,30 +202,36 @@ void test_reliable_status_retransmits_then_gives_up_counted(void)
 {
     const uint8_t set[] = {0x03u, 0x00u, 0x00u, 0x00u};
     const uint8_t status[] = {0x04u, 0x00u, 0x00u, 0x00u};
-    /* rx 2, crc 0, overflow 0, dropped 0: the give-up has not happened yet. */
-    const uint8_t heartbeat[] = {0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
-    /* Dropped 1: the spent STATUS counted [HB-7] well. */
-    const uint8_t last_heartbeat[] = {0x02u, 0x00u, 0x00u, 0x00u, 0x01u, 0x00u, 0x00u, 0x00u};
+    const uint8_t empty[1] = {0u};
 
     configure();
     connect();
     fake_port_tx_clear();
     feed_host(3, 0, set, sizeof set);
     TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
-    /* Three retries, each with the next frame seq and the same rel seq,
-     * beside the heartbeat each 500 ms step also carries. */
+    /* Three retries, each with the next frame seq and the same rel seq. The
+     * fed heartbeat keeps the link alive; the timers fire while its bytes
+     * arrive, so each MCU heartbeat reports the count from before it. */
     for (uint16_t retry = 1u; retry <= 3u; retry++) {
+        uint8_t want[8] = {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
+
         fake_port_advance(500);
-        r2s_spin_some();
+        feed_host(4, (uint8_t)(retry - 1u), empty, 0);
         TEST_ASSERT_EQUAL_UINT16((uint16_t)(2u + 2u * retry), fake_port_tx_frame_count());
         assert_tx((uint16_t)(2u * retry), 3, (uint8_t)retry, status, sizeof status);
-        assert_tx((uint16_t)(2u * retry + 1u), 4, (uint8_t)(retry - 1u), heartbeat, sizeof heartbeat);
+        want[0] = (uint8_t)(retry + 1u);
+        assert_tx((uint16_t)(2u * retry + 1u), 4, (uint8_t)(retry - 1u), want, sizeof want);
     }
-    /* Spent: no fourth STATUS, and the drop counted with the next heartbeat. */
-    fake_port_advance(500);
-    r2s_spin_some();
-    TEST_ASSERT_EQUAL_UINT16(9, fake_port_tx_frame_count());
-    assert_tx(8, 4, 3, last_heartbeat, sizeof last_heartbeat);
+    /* Spent: no fourth STATUS, and the drop counted with the next heartbeat,
+     * which still reports the count from before the fed one. */
+    {
+        uint8_t want[8] = {5u, 0u, 0u, 0u, 0u, 0u, 1u, 0u};
+
+        fake_port_advance(500);
+        feed_host(4, 3, empty, 0);
+        TEST_ASSERT_EQUAL_UINT16(9, fake_port_tx_frame_count());
+        assert_tx(8, 4, 3, want, sizeof want);
+    }
 }
 
 /* covers: REL-2, REL-1 */
@@ -242,9 +248,16 @@ void test_reliable_host_ack_stops_the_retry(void)
     feed_host(3, 0, set, sizeof set);
     feed_host(6, 0, ack, sizeof ack);
     TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
-    /* Four heartbeats and no STATUS: the ack cleared the outstanding one. */
-    fake_port_advance(2000);
-    r2s_spin_some();
+    /* Four heartbeats and no STATUS: the ack cleared the outstanding one.
+     * The fed heartbeats keep the link alive across the 2000 ms. */
+    {
+        const uint8_t empty[1] = {0u};
+
+        for (uint8_t step = 0u; step < 4u; step++) {
+            fake_port_advance(500);
+            feed_host(4, step, empty, 0);
+        }
+    }
     TEST_ASSERT_EQUAL_UINT16(6, fake_port_tx_frame_count());
     /* The next SET moves the rel seq on. */
     feed_host(3, 1, next, sizeof next);
@@ -270,6 +283,7 @@ void test_reliable_rehandshake_drops_reliable_state(void)
     TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
     /* A HELLO_REQ re-announces: the outstanding STATUS never goes out. */
     feed_host(0, 1, hello_req, sizeof hello_req);
+    fake_port_tx_clear();
     fake_port_advance(1500);
     r2s_spin_some();
     for (uint16_t i = 0u; i < fake_port_tx_frame_count(); i++) {
@@ -292,6 +306,8 @@ void test_reliable_blocked_ack_reports_busy_transmitter(void)
 {
     const uint8_t set[] = {0x03u, 0x00u, 0x00u, 0x00u};
 
+    /* Past the first second, so the rate-limited busy report is due. */
+    fake_port_set_tick(5000);
     configure();
     connect();
     fake_port_tx_clear();
@@ -344,29 +360,67 @@ void test_params_set_answers_unknown_readonly_bad_length_or_range(void)
     /* Unknown index. */
     const uint8_t unknown[] = {0x03u, 0x00u, 0x09u, 0x00u};
     const uint8_t unknown_status[] = {0x04u, 0x00u, 0x09u, 0x01u};
+    const uint8_t ack0[] = {0x03u, 0x00u};
     /* Eight value bytes for a bool: bad length. */
     const uint8_t bad_length[] = {0x03u, 0x01u, 0x00u, 0x00u, 0x00u, 0x00u,
                                   0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
     const uint8_t bad_length_status[] = {0x04u, 0x01u, 0x00u, 0x02u};
+    const uint8_t ack1[] = {0x03u, 0x01u};
     /* A SET to the read-only limit. */
     const uint8_t readonly[] = {0x03u, 0x02u, 0x01u, 0x07u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
     const uint8_t readonly_status[] = {0x04u, 0x02u, 0x01u, 0x03u};
-    /* Three bytes into a two-byte string: out of range. */
-    const uint8_t too_long[] = {0x03u, 0x03u, 0x02u, 0x03u, 'a', 'b', 'c'};
+    const uint8_t ack2[] = {0x03u, 0x02u};
+    /* Eight bytes into the seven-byte string: out of range. */
+    const uint8_t too_long[] = {0x03u, 0x03u, 0x02u, 0x08u, 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
     const uint8_t too_long_status[] = {0x04u, 0x03u, 0x02u, 0x04u};
 
     configure();
     connect();
     fake_port_tx_clear();
+    /* Each STATUS is acked before the next SET, the way a conforming host
+     * answers every reliable frame. */
     feed_host(3, 0, unknown, sizeof unknown);
     assert_tx(1, 3, 0, unknown_status, sizeof unknown_status);
+    feed_host(6, 0, ack0, sizeof ack0);
     feed_host(3, 1, bad_length, sizeof bad_length);
     assert_tx(3, 3, 1, bad_length_status, sizeof bad_length_status);
+    feed_host(6, 1, ack1, sizeof ack1);
     feed_host(3, 2, readonly, sizeof readonly);
     assert_tx(5, 3, 2, readonly_status, sizeof readonly_status);
+    feed_host(6, 2, ack2, sizeof ack2);
     feed_host(3, 3, too_long, sizeof too_long);
     assert_tx(7, 3, 3, too_long_status, sizeof too_long_status);
-    TEST_ASSERT_EQUAL_INT64(7, r2s_params_get(1)->value.i);
+    /* No Unity 64-bit assert on 32-bit builds: compare directly. */
+    TEST_ASSERT_TRUE(r2s_params_get(1)->value.i == 7);
+    TEST_ASSERT_EQUAL_STRING("ab", r2s_params_get(2)->value.s);
+}
+
+/* covers: REL-2 */
+void test_reliable_second_set_waits_behind_the_first(void)
+{
+    const uint8_t first[] = {0x03u, 0x00u, 0x00u, 0x00u};
+    const uint8_t second[] = {0x03u, 0x01u, 0x02u, 0x02u, 'h', 'i'};
+    const uint8_t ack_first[] = {0x03u, 0x00u};
+    const uint8_t ack_second[] = {0x03u, 0x01u};
+    const uint8_t second_status[] = {0x04u, 0x01u, 0x02u, 0x00u};
+
+    configure();
+    connect();
+    fake_port_tx_clear();
+    feed_host(3, 0, first, sizeof first);
+    /* The second SET applies while the first STATUS is still outstanding,
+     * but its STATUS waits behind it: one payload per direction. */
+    feed_host(3, 1, second, sizeof second);
+    TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_frame_count());
+    assert_tx(2, 6, 1, ack_second, sizeof ack_second);
+    TEST_ASSERT_EQUAL_UINT8(0, r2s_params_get(0)->value.b);
+    TEST_ASSERT_EQUAL_STRING("hi", r2s_params_get(2)->value.s);
+    /* The first ack releases the pending STATUS with its own rel seq. */
+    feed_host(6, 0, ack_first, sizeof ack_first);
+    TEST_ASSERT_EQUAL_UINT16(4, fake_port_tx_frame_count());
+    assert_tx(3, 3, 1, second_status, sizeof second_status);
+    feed_host(6, 1, ack_second, sizeof ack_second);
+    TEST_ASSERT_EQUAL_UINT16(4, fake_port_tx_frame_count());
 }
 
 /* covers: PAR-3 */

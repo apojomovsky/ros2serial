@@ -550,11 +550,15 @@ class McuSession:
         self.tx.append(encode_frame(ACK_CHANNEL, self.ack_seq, bytes((channel, rel))))
         self.ack_seq = (self.ack_seq + 1) & MASK_8
 
-    def _queue_status(self, rel: int, index: int, status: int) -> None:
+    def _queue_status(self, index: int, status: int) -> None:
         """Hold the STATUS for the retransmit timer: at most one reliable
-        payload is outstanding per direction (REL-2), a second waits behind
-        it while a conforming host cannot send one.
+        payload is outstanding per direction (REL-2). The STATUS carries the
+        next rel_seq of this direction's own stream, which moves in lockstep
+        with the host's under stop-and-wait. A second applied SET waits
+        behind the first.
         """
+        rel = self.tx_rel_next
+        self.tx_rel_next = (self.tx_rel_next + 1) & MASK_8
         payload = bytes((OP_PARAM_STATUS, rel, index, status))
         if self.rel_outstanding is None:
             self.rel_outstanding = payload
@@ -603,7 +607,7 @@ class McuSession:
                 self._send_ack(PARAM_CHANNEL, rel)
                 if rel == self.rx_rel_expected:
                     self.rx_rel_expected = (self.rx_rel_expected + 1) & MASK_8
-                    self._queue_status(rel, index, PARAM_UNKNOWN_INDEX)
+                    self._queue_status(index, PARAM_UNKNOWN_INDEX)
                 return
             code = self._check_value(self.params[index], payload[3:])
             if code is None:
@@ -615,7 +619,7 @@ class McuSession:
             self.rx_rel_expected = (self.rx_rel_expected + 1) & MASK_8
             if code == PARAM_APPLIED:
                 self._store(index, payload[3:])
-            self._queue_status(rel, index, code)
+            self._queue_status(index, code)
         else:
             self._refuse()
 

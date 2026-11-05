@@ -71,6 +71,21 @@ uint8_t r2s_params_count(void);
 /* The table entry at index, or NULL past the count. The caller reads the
  * live value the last applied SET left; the session writes it. */
 const r2s_param_t *r2s_params_get(uint8_t index);
+
+/* The verdict a SET value earns without applying it: one of the status
+ * codes above, or -1 when the value breaks its type's rule and the session
+ * refuses the frame (PAR-3, PAR-5). The order is unknown index, length,
+ * read-only, then range. */
+int r2s_params_check_set(uint8_t index, const uint8_t *value, uint16_t len);
+
+/* Keeps the checked SET value as the live one. The caller checked it first,
+ * so the copy cannot overflow. */
+void r2s_params_store(uint8_t index, const uint8_t *value, uint16_t len);
+
+/* The DECLARE payload length for the entry at index, or 0 when the entry is
+ * missing. The session reserves the frame from this before streaming it, so
+ * no buffer holds a frame. */
+uint16_t r2s_params_declare_len(uint8_t index);
 #endif
 
 #ifdef R2S_TESTING
