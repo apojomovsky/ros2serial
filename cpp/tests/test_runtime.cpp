@@ -213,6 +213,40 @@ void test_runtime_publisher_and_subscriber_carry_their_direction_flags(void)
     TEST_ASSERT_EQUAL_UINT8(0x01u, r2s_topic_get(1)->flags & 0x01u);
 }
 
+/* covers: CTL-4 */
+void test_runtime_default_registration_announces_best_effort(void)
+{
+    r2s::Node node("base_controller");
+    r2s::Publisher<Float32> battery_pub(node, "battery");
+    r2s::Subscription<Twist> cmd_vel_sub(node, "cmd_vel", on_twist);
+
+    node.spin_some();
+    TEST_ASSERT_EQUAL_UINT8(0x00u, r2s_topic_get(0)->flags & 0x0Cu);
+    TEST_ASSERT_EQUAL_UINT8(0x00u, r2s_topic_get(1)->flags & 0x0Cu);
+}
+
+/* covers: CTL-4 */
+void test_runtime_publisher_with_keep_latest_announces_the_flag(void)
+{
+    r2s::Node node("base_controller");
+    r2s::Publisher<Float32> battery_pub(node, "battery", r2s::QoS::KeepLatest);
+
+    node.spin_some();
+    TEST_ASSERT_EQUAL_UINT8(0x04u, r2s_topic_get(0)->flags & 0x0Cu);
+    TEST_ASSERT_EQUAL_UINT8(0x00u, r2s_topic_get(0)->flags & 0x01u);
+}
+
+/* covers: CTL-4 */
+void test_runtime_subscription_with_reliable_announces_the_flag(void)
+{
+    r2s::Node node("base_controller");
+    r2s::Subscription<Twist> cmd_vel_sub(node, "cmd_vel", on_twist, r2s::QoS::Reliable);
+
+    node.spin_some();
+    TEST_ASSERT_EQUAL_UINT8(0x08u, r2s_topic_get(0)->flags & 0x0Cu);
+    TEST_ASSERT_EQUAL_UINT8(0x01u, r2s_topic_get(0)->flags & 0x01u);
+}
+
 /* covers: CTL-12 */
 void test_runtime_table_announces_the_type_name_and_hash(void)
 {
