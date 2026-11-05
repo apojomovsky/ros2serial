@@ -111,7 +111,7 @@ class TestHandshakeReady(unittest.TestCase):
     WANTED = ["battery", "cmd_vel"]
 
     def test_connected_with_all_ok_is_ready(self):
-        message = FakeDiagnostics("connected", [("topic battery status", "ok"), ("topic cmd_vel status", "ok")])
+        message = FakeDiagnostics("connected", [("topic 16 battery status", "ok"), ("topic 17 cmd_vel status", "ok")])
         self.assertEqual(checks.handshake_missing(message, self.WANTED), [])
 
     def test_handshaking_link_is_missing(self):
@@ -120,20 +120,30 @@ class TestHandshakeReady(unittest.TestCase):
 
     def test_rejected_topic_is_missing(self):
         message = FakeDiagnostics(
-            "connected", [("topic battery status", "ok"), ("topic cmd_vel status", "hash mismatch")]
+            "connected", [("topic 16 battery status", "ok"), ("topic 17 cmd_vel status", "hash mismatch")]
         )
         self.assertEqual(checks.handshake_missing(message, self.WANTED), ["topic cmd_vel"])
 
     def test_unlisted_topic_is_missing(self):
-        message = FakeDiagnostics("connected", [("topic battery status", "ok")])
+        message = FakeDiagnostics("connected", [("topic 16 battery status", "ok")])
         self.assertEqual(checks.handshake_missing(message, self.WANTED), ["topic cmd_vel"])
+
+    def test_same_name_topics_share_no_key(self):
+        message = FakeDiagnostics("connected", [("topic 16 dup status", "ok"), ("topic 17 dup status", "ok")])
+        self.assertEqual(checks.handshake_missing(message, ["dup"]), [])
+
+    def test_refused_same_name_duplicate_is_missing(self):
+        message = FakeDiagnostics(
+            "connected", [("topic 16 dup status", "ok"), ("topic 17 dup status", "name conflict")]
+        )
+        self.assertEqual(checks.handshake_missing(message, ["dup"]), ["topic dup"])
 
 
 class TestWaitForHandshake(unittest.TestCase):
     WANTED = ["battery", "cmd_vel"]
 
     def _ready(self):
-        return FakeDiagnostics("connected", [("topic battery status", "ok"), ("topic cmd_vel status", "ok")])
+        return FakeDiagnostics("connected", [("topic 16 battery status", "ok"), ("topic 17 cmd_vel status", "ok")])
 
     def test_ready_report_returns_without_spinning(self):
         spins = []
