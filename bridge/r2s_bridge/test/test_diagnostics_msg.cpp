@@ -89,13 +89,21 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(values.at("mcu error code 6"), "9");
     EXPECT_EQ(values.at("topic 16 battery mcu errors"), "1=0 2=2 3=0 4=0 5=0 6=5");
     EXPECT_EQ(values.at("topic 17 cmd_vel mcu errors"), "1=0 2=0 3=0 4=0 5=0 6=0");
-    EXPECT_EQ(values.at("topic battery direction"), "device to host");
-    EXPECT_EQ(values.at("topic battery seq gaps"), "4");
-    EXPECT_EQ(values.at("topic battery dropped"), "0");
-    EXPECT_EQ(values.at("topic battery publish failures"), "1");
-    EXPECT_EQ(values.at("topic cmd_vel direction"), "host to device");
-    EXPECT_EQ(values.at("topic cmd_vel seq gaps"), "0");
-    EXPECT_EQ(values.at("topic cmd_vel dropped"), "5");
+    EXPECT_EQ(values.at("topic 16 battery direction"), "device to host");
+    EXPECT_EQ(values.at("topic 16 battery seq gaps"), "4");
+    EXPECT_EQ(values.at("topic 16 battery dropped"), "0");
+    EXPECT_EQ(values.at("topic 16 battery publish failures"), "1");
+    EXPECT_EQ(values.at("topic 17 cmd_vel direction"), "host to device");
+    EXPECT_EQ(values.at("topic 17 cmd_vel seq gaps"), "0");
+    EXPECT_EQ(values.at("topic 17 cmd_vel dropped"), "5");
+    EXPECT_EQ(values.at("mcu error code 1"), "0");
+    EXPECT_EQ(values.at("mcu error code 2"), "0");
+    EXPECT_EQ(values.at("mcu error code 3"), "7");
+    EXPECT_EQ(values.at("mcu error code 4"), "0");
+    EXPECT_EQ(values.at("mcu error code 5"), "0");
+    EXPECT_EQ(values.at("mcu error code 6"), "9");
+    EXPECT_EQ(values.at("topic 16 battery mcu errors"), "1=0 2=2 3=0 4=0 5=0 6=5");
+    EXPECT_EQ(values.at("topic 17 cmd_vel mcu errors"), "1=0 2=0 3=0 4=0 5=0 6=0");
     EXPECT_EQ(values.at("control coalesced"), "6");
     EXPECT_EQ(values.at("time sync offset"), "-1500");
     EXPECT_EQ(values.at("time sync drift"), "12");
@@ -117,10 +125,42 @@ TEST(DiagnosticsMessage, ReportsPerTopicStatus)
     }
     const std::map<std::string, std::string> values =
         values_of(diagnostics_message(snapshot, "test_node", "").status[0]);
-    EXPECT_EQ(values.at("topic ok_topic status"), "ok");
-    EXPECT_EQ(values.at("topic unknown_topic status"), "unknown type");
-    EXPECT_EQ(values.at("topic mismatch_topic status"), "hash mismatch");
-    EXPECT_EQ(values.at("topic dup status"), "name conflict");
+    EXPECT_EQ(values.at("topic 16 ok_topic status"), "ok");
+    EXPECT_EQ(values.at("topic 17 unknown_topic status"), "unknown type");
+    EXPECT_EQ(values.at("topic 18 mismatch_topic status"), "hash mismatch");
+    EXPECT_EQ(values.at("topic 19 dup status"), "name conflict");
+}
+
+TEST(DiagnosticsMessage, SameNameTopicsKeepDistinctKeys)
+{
+    Router::Diagnostics snapshot;
+    snapshot.link_state = "connected";
+    Router::TopicDiagnostics first;
+    first.topic_id = 16u;
+    first.topic_name = "dup";
+    first.device_to_host = true;
+    first.status = 0u;
+    first.seq_gaps = 4u;
+    snapshot.topics.push_back(first);
+    Router::TopicDiagnostics second;
+    second.topic_id = 17u;
+    second.topic_name = "dup";
+    second.device_to_host = false;
+    second.status = 3u;
+    second.dropped = 5u;
+    snapshot.topics.push_back(second);
+    const diagnostic_msgs::msg::DiagnosticArray message = diagnostics_message(snapshot, "test_node", "");
+    ASSERT_EQ(message.status.size(), 1u);
+    std::map<std::string, std::string> values;
+    for (const diagnostic_msgs::msg::KeyValue &value : message.status[0].values) {
+        ASSERT_TRUE(values.emplace(value.key, value.value).second) << "duplicate key " << value.key;
+    }
+    EXPECT_EQ(values.at("topic 16 dup direction"), "device to host");
+    EXPECT_EQ(values.at("topic 16 dup status"), "ok");
+    EXPECT_EQ(values.at("topic 16 dup seq gaps"), "4");
+    EXPECT_EQ(values.at("topic 17 dup direction"), "host to device");
+    EXPECT_EQ(values.at("topic 17 dup status"), "name conflict");
+    EXPECT_EQ(values.at("topic 17 dup dropped"), "5");
 }
 
 // Two announced topics sharing one name still render distinct error keys:

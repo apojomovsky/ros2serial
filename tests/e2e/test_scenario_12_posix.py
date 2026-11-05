@@ -154,7 +154,7 @@ class TestScenario12(unittest.TestCase):
             self.assertGreater(sent, 0, "the firmware reported no flood samples")
             self.assertGreater(busy, 0, "no publish returned TX_BUSY on a saturated link")
             gaps = {value.key: value.value for value in received[-1].status[0].values}
-            self.assertEqual(gaps.get("topic battery seq gaps"), "0", "shed samples took a seq")
+            self.assertEqual(gaps.get(checks.topic_key(gaps, "battery", "seq gaps")), "0", "shed samples took a seq")
             # Battery is the first announced topic, so its diagnostics id is 16.
             self.assertGreater(int(gaps.get("mcu error code 6", "0")), 0, "busy sum missing from /diagnostics")
             breakdown = gaps.get("topic 16 battery mcu errors", "")

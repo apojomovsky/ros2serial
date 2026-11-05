@@ -19,7 +19,9 @@ void add_value(diagnostic_msgs::msg::DiagnosticStatus &status, const std::string
 
 void add_topic(diagnostic_msgs::msg::DiagnosticStatus &status, const Router::TopicDiagnostics &topic)
 {
-    const std::string head = "topic " + topic.topic_name;
+    // The id disambiguates two announced topics sharing one name: the
+    // snapshot lists refused topics too, so names alone collide.
+    const std::string head = "topic " + std::to_string(topic.topic_id) + " " + topic.topic_name;
     add_value(status, head + " direction", topic.device_to_host ? "device to host" : "host to device");
     const char *verdict = "ok";
     if (topic.status == 1u) {

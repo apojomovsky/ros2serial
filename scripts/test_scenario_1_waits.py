@@ -227,7 +227,7 @@ class World:
 
 
 def _connected(names):
-    return FakeDiagnostics("connected", [(f"topic {name} status", "ok") for name in names])
+    return FakeDiagnostics("connected", [(f"topic {16 + i} {name} status", "ok") for i, name in enumerate(names)])
 
 
 def _handshake_script(world):

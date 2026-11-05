@@ -25,11 +25,11 @@ def clean_counters():
         "mcu error code 4": "0",
         "mcu error code 5": "0",
         "mcu error code 6": "0",
-        "topic battery direction": "device to host",
-        "topic battery status": "ok",
-        "topic battery seq gaps": "0",
-        "topic battery dropped": "0",
-        "topic battery publish failures": "0",
+        "topic 16 battery direction": "device to host",
+        "topic 16 battery status": "ok",
+        "topic 16 battery seq gaps": "0",
+        "topic 16 battery dropped": "0",
+        "topic 16 battery publish failures": "0",
         "topic 16 battery mcu errors": "1=0 2=0 3=0 4=0 5=0 6=0",
     }
 
@@ -67,15 +67,15 @@ class TestWireCounters(unittest.TestCase):
 
     def test_seq_gaps_fail(self):
         with self.assertRaises(AssertionError):
-            soak.check_wire_counters(clean_counters(), drifted("topic battery seq gaps"))
+            soak.check_wire_counters(clean_counters(), drifted("topic 16 battery seq gaps"))
 
     def test_topic_dropped_fails(self):
         with self.assertRaises(AssertionError):
-            soak.check_wire_counters(clean_counters(), drifted("topic battery dropped"))
+            soak.check_wire_counters(clean_counters(), drifted("topic 16 battery dropped"))
 
     def test_publish_failures_fail(self):
         with self.assertRaises(AssertionError):
-            soak.check_wire_counters(clean_counters(), drifted("topic battery publish failures"))
+            soak.check_wire_counters(clean_counters(), drifted("topic 16 battery publish failures"))
 
     def test_mcu_error_code_fails(self):
         with self.assertRaises(AssertionError):
