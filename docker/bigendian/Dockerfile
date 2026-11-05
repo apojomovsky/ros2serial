@@ -15,7 +15,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 # the upstream version qemu-s390x --version prints, and GCC_S390X_VERSION is
 # what s390x-linux-gnu-gcc -dumpfullversion prints. Both came from
 # https://packages.ubuntu.com/noble-updates (qemu-user and
-# gcc-13-s390x-linux-gnu) on 2026-11-04.
+# gcc-13-s390x-linux-gnu and g++-13-s390x-linux-gnu) on 2026-11-04.
 ARG QEMU_VERSION=8.2.2
 ARG GCC_S390X_VERSION=13.3.0
 # These mirror ci/versions.env, so the reference codec tests meet the same
@@ -28,14 +28,16 @@ ARG HYPOTHESIS_VERSION=6.170.12
 ARG PYYAML_VERSION=6.0.3
 ARG JSONSCHEMA_VERSION=4.26.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        gcc-s390x-linux-gnu qemu-user \
+        gcc-s390x-linux-gnu g++-s390x-linux-gnu qemu-user \
         build-essential clang-format cmake ninja-build \
         python3 python3-venv python3-pip git make \
     && rm -rf /var/lib/apt/lists/* \
     && test "$(qemu-s390x --version | sed -n '1s/.*version \([0-9.]*\).*/\1/p')" = "${QEMU_VERSION}" \
     || { echo "qemu is $(qemu-s390x --version | head -1), Dockerfile pins ${QEMU_VERSION}" >&2; exit 1; } \
     && test "$(s390x-linux-gnu-gcc -dumpfullversion)" = "${GCC_S390X_VERSION}" \
-    || { echo "s390x gcc is $(s390x-linux-gnu-gcc -dumpfullversion), Dockerfile pins ${GCC_S390X_VERSION}" >&2; exit 1; }
+    || { echo "s390x gcc is $(s390x-linux-gnu-gcc -dumpfullversion), Dockerfile pins ${GCC_S390X_VERSION}" >&2; exit 1; } \
+    && test "$(s390x-linux-gnu-g++ -dumpfullversion)" = "${GCC_S390X_VERSION}" \
+    || { echo "s390x g++ is $(s390x-linux-gnu-g++ -dumpfullversion), Dockerfile pins ${GCC_S390X_VERSION}" >&2; exit 1; }
 # clang-format is unpinned, as in the dev image: the emit tests format only
 # when it is installed, and skip otherwise.
 RUN python3 -m venv /opt/bigendian \
