@@ -340,7 +340,7 @@ def _deliver(world, topic, msg):
 
 
 def _connected(names):
-    return FakeDiagnostics("connected", [(f"topic {name} status", "ok") for name in names])
+    return FakeDiagnostics("connected", [(f"topic {16 + i} {name} status", "ok") for i, name in enumerate(names)])
 
 
 def _copy_twist(source):
@@ -433,8 +433,8 @@ def _diag_values(dropped, gaps):
     return {
         "resets": "0",
         "mcu dropped frames": str(dropped),
-        "topic battery seq gaps": str(gaps),
-        "topic battery direction": "device to host",
+        "topic 16 battery seq gaps": str(gaps),
+        "topic 16 battery direction": "device to host",
     }
 
 

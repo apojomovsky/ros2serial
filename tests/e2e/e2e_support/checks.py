@@ -85,14 +85,35 @@ def wait_for_handshake(received, wanted, since, budget, what, spin, clock=time.m
         spin()
 
 
+def topic_key(values, name, field):
+    """The full diagnostics key for one announced topic's field.
+
+    Per-topic keys read `topic <id> <name> <field>`; the id keeps two
+    topics sharing one name apart. Callers name the topic and field and
+    this resolves the id, failing loudly on zero or several matches.
+    """
+    matches = [key for key in values if key.startswith("topic ") and key.endswith(" " + name + " " + field)]
+    assert len(matches) == 1, f"expected one key for topic {name!r} field {field!r}, found {matches}"
+    return matches[0]
+
+
 def handshake_missing(message, wanted):
     """What the bridge has not finished handshaking, from one /diagnostics message.
 
     wanted holds announced names without the graph's leading slash. Empty
-    means the link is connected and every wanted topic reads ok.
+    means the link is connected and every wanted topic reads ok. A name
+    announced twice needs every entry ok: a refused duplicate still means
+    the handshake did not finish that name.
     """
     status = message.status[0]
     if status.message != "connected":
         return ["link " + status.message]
     values = {value.key: value.value for value in status.values}
-    return ["topic " + name for name in wanted if values.get("topic " + name + " status") != "ok"]
+    missing = []
+    for name in wanted:
+        verdicts = [
+            value for key, value in values.items() if key.startswith("topic ") and key.endswith(" " + name + " status")
+        ]
+        if not verdicts or any(verdict != "ok" for verdict in verdicts):
+            missing.append("topic " + name)
+    return missing

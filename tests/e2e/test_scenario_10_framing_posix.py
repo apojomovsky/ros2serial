@@ -116,8 +116,8 @@ def _user_gaps(values):
     total = 0
     for key, value in values.items():
         if key.startswith("topic ") and key.endswith(" seq gaps"):
-            name = key[len("topic ") : -len(" seq gaps")]
-            if values.get("topic " + name + " direction") == "device to host":
+            middle = key[len("topic ") : -len(" seq gaps")]
+            if values.get("topic " + middle + " direction") == "device to host":
                 total += int(value)
     return total
 
@@ -253,7 +253,8 @@ class TestScenario10Framing(unittest.TestCase):
             # clean neighbour it swallows, so gaps only exceed the touches.
             self.assertGreaterEqual(user_gaps, 1, "framing faults lost no user frame")
             self.assertGreaterEqual(user_gaps + GAP_SLACK, mcu_touched, "seq gaps below the injected faults")
-            battery_gaps = int(final["topic battery seq gaps"]) - int(base_values["topic battery seq gaps"])
+            gaps_key = checks.topic_key(final, "battery", "seq gaps")
+            battery_gaps = int(final[gaps_key]) - int(base_values[gaps_key])
             fault_values = battery[fault_start:fault_end]
             checks.check_float_sequence(fault_values, FLOW_FLOOR, battery_gaps + ROS_SLACK, "battery under faults")
             span = int(fault_values[-1]) - int(fault_values[0]) + 1

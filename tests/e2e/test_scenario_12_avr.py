@@ -116,7 +116,7 @@ class TestScenario12(unittest.TestCase):
                 for report in reports:
                     busy = max(busy, _parse_busy(report))
             gaps = {value.key: value.value for value in received[-1].status[0].values}
-            self.assertEqual(gaps.get("topic battery seq gaps"), "0", "shed samples took a seq")
+            self.assertEqual(gaps.get(checks.topic_key(gaps, "battery", "seq gaps")), "0", "shed samples took a seq")
             self.assertEqual(_SPAWNED.stop(), 0, "the harness stopped dirty")
         finally:
             node.destroy_node()
