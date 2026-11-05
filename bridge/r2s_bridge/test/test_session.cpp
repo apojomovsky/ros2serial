@@ -2749,6 +2749,38 @@ TEST(ReliableWalk, GivesUpAfterThreeRetries)
     EXPECT_EQ(units[0][2], 0x01u) << "a HELLO_REQ, not another PARAM_REQ";
 }
 
+// covers: PAR-7
+TEST(ReliableWalk, IgnoresWalkFramesForAnotherIndex)
+{
+    Fixture fixture;
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+    drain_decoded(fixture);
+    fixture.deliver_frame(kParams, 0u, {kParamDeclare, 0x05u});
+    fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x05u, 0x00u});
+    fixture.deliver_frame(kParams, 2u, {kParamReq});
+    fixture.deliver_frame(kParams, 3u, {0x09u});
+    EXPECT_TRUE(drain_decoded(fixture).empty()) << "nothing answers a frame for another index";
+    fixture.advance_to(200);
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 1u) << "the walk still waits on index 0";
+    EXPECT_EQ(units[0], with_check({kParams, 1u, kParamReq, 0x00u}));
+    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
+}
+
+// covers: PAR-7
+TEST(ReliableWalk, AdvancesOnAnAppliedStatus)
+{
+    Fixture fixture;
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+    drain_decoded(fixture);
+    fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x00u});
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 1u);
+    EXPECT_EQ(units[0], with_check({kParams, 1u, kParamReq, 0x01u})) << "an applied STATUS walks to the next index";
+}
+
 // covers: REL-7
 TEST(ReliableWalk, CoalescesParamReqBehindABlockedLink)
 {
@@ -2841,6 +2873,65 @@ TEST(ReliableReceive, AcksEveryStatusAndAppliesOnce)
     EXPECT_EQ(statuses.size(), 1u) << "and not applied";
 }
 
+// covers: REL-3
+TEST(ReliableReceive, IgnoresMalformedStatuses)
+{
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    handshake_with_params(fixture);
+    fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u});
+    fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x00u, 0x05u});
+    EXPECT_TRUE(drain_decoded(fixture).empty()) << "short frames and bad verdicts earn no ack";
+    fixture.deliver_frame(kParams, 2u, {0x09u});
+    fixture.deliver_frame(kParams, 3u, {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x00u});
+    EXPECT_TRUE(drain_decoded(fixture).empty()) << "unknown opcodes and walk frames earn no ack";
+}
+
+// covers: REL-3
+TEST(ReliableReceive, AcksWithoutAnEventSink)
+{
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    handshake_with_params(fixture);
+    fixture.deliver_frame(kParams, 0u, {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x00u});
+    EXPECT_TRUE(drain_decoded(fixture).empty()) << "a DECLARE is never acked";
+    fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x00u, 0x00u});
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 1u);
+    EXPECT_EQ(units[0], with_check({kAck, 0u, kParams, 0x00u}));
+}
+
+// covers: REL-6
+TEST(ReliableReceive, IgnoresReliableFramesBeforeTheHandshake)
+{
+    Fixture fixture;
+    fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x00u});
+    fixture.deliver_frame(kAck, 0u, {kParams, 0x00u});
+    EXPECT_TRUE(drain_decoded(fixture).empty()) << "nothing answers before the handshake";
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 1u) << "the session still walks after stray frames";
+    EXPECT_EQ(units[0][2], 0x03u) << "a TOPIC_REQ";
+}
+
+// covers: REL-2
+TEST(ReliableAck, IgnoresMismatchedAcks)
+{
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    handshake_with_params(fixture);
+    EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
+    drain_decoded(fixture);
+    fixture.deliver_frame(kAck, 0u, {0x04u, 0x00u});
+    fixture.deliver_frame(kAck, 1u, {kParams, 0x09u});
+    EXPECT_TRUE(drain_decoded(fixture).empty()) << "neither ack names the outstanding SET";
+    fixture.advance_to(500);
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 1u) << "the outstanding SET still retries";
+    EXPECT_EQ(units[0], with_check({kParams, 1u, kParamSet, 0x00u, 0x00u, 0x00u}));
+    fixture.deliver_frame(kAck, 2u, {kParams, 0x00u});
+    fixture.deliver_frame(kAck, 3u, {kParams, 0x00u});
+    EXPECT_TRUE(drain_decoded(fixture).empty()) << "the second ack answers nothing";
+    EXPECT_EQ(fixture.session().reliable_dropped(), 0u);
+}
+
 // covers: REL-6
 TEST(ReliableAck, CoalescesBehindABlockedLink)
 {
@@ -2857,6 +2948,85 @@ TEST(ReliableAck, CoalescesBehindABlockedLink)
     ASSERT_EQ(units.size(), 1u) << "one ack goes out for the whole backlog";
     EXPECT_EQ(units[0][0], kAck);
     EXPECT_EQ(units[0][3], 0x01u) << "carrying the newest rel seq";
+}
+
+// covers: REL-2
+TEST(ReliableSend, RefusesToSendWhileNotConnected)
+{
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    EXPECT_FALSE(fixture.session().send_param_set(0u, {0x00u})) << "no SET leaves a boot-waiting session";
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    EXPECT_FALSE(fixture.session().send_param_set(0u, {0x00u})) << "no SET leaves a handshaking session";
+}
+
+// covers: REL-7
+TEST(ReliableSend, RefusesToSendWhenTheLinkIsFull)
+{
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    handshake_with_params(fixture);
+    fixture.block_writes();
+    EXPECT_TRUE(fixture.session().send_user(16u, std::vector<std::uint8_t>(400u, 0xABu)));
+    EXPECT_TRUE(fixture.session().send_user(16u, std::vector<std::uint8_t>(200u, 0xABu)));
+    EXPECT_FALSE(fixture.session().send_param_set(0u, {0x00u})) << "a queued SET would overflow the link window";
+}
+
+// covers: REL-7
+TEST(ReliableSend, QueuesOnePendingSetPerIndex)
+{
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    handshake_with_params(fixture);
+    EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
+    EXPECT_TRUE(fixture.session().send_param_set(1u, {0x07u}));
+    EXPECT_EQ(fixture.session().reliable_replaced(), 0u) << "a new index pends beside the outstanding one";
+    drain_decoded(fixture);
+    fixture.deliver_frame(kAck, 0u, {kParams, 0x00u});
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 1u) << "the pending SET goes out with the next rel seq";
+    EXPECT_EQ(units[0], with_check({kParams, 1u, kParamSet, 0x01u, 0x01u, 0x07u}));
+}
+
+// covers: REL-2
+TEST(ReliableSend, HoldsTheRetryWhileTheLinkIsBlocked)
+{
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    handshake_with_params(fixture);
+    fixture.block_writes();
+    EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
+    fixture.advance_to(1500);
+    EXPECT_TRUE(drain_decoded(fixture).empty()) << "deadlines pass without spending a retry";
+    EXPECT_EQ(fixture.session().reliable_dropped(), 0u);
+    fixture.deliver_frame(kHeartbeat, 0u, {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u});
+    fixture.allow_writes();
+    fixture.session().poll();
+    const auto sent = drain_decoded(fixture);
+    ASSERT_EQ(sent.size(), 2u) << "the queued SET and its overdue retry go out at once";
+    EXPECT_EQ(sent[0], with_check({kParams, 0u, kParamSet, 0x00u, 0x00u, 0x00u}));
+    EXPECT_EQ(sent[1], with_check({kParams, 1u, kParamSet, 0x00u, 0x00u, 0x00u}));
+    fixture.advance_to(2400);
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 1u) << "the next retry keeps its 500 ms cadence";
+    EXPECT_EQ(units[0], with_check({kParams, 2u, kParamSet, 0x00u, 0x00u, 0x00u}));
+    EXPECT_EQ(fixture.session().reliable_dropped(), 0u);
+}
+
+// covers: REL-2, REL-5
+TEST(ReliableSend, DropsQueuedSetsOnLinkTimeout)
+{
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    handshake_with_params(fixture);
+    fixture.block_writes();
+    EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
+    fixture.advance_to(2500);
+    EXPECT_EQ(fixture.session().reliable_dropped(), 0u) << "a timeout drops, it never gives up";
+    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
+    fixture.allow_writes();
+    fixture.session().poll();
+    const auto units = drain_decoded(fixture);
+    ASSERT_FALSE(units.empty());
+    for (const auto &unit : units) {
+        EXPECT_NE(unit[0], kParams) << "no SET survives the re-handshake";
+    }
+    EXPECT_EQ(units.back()[2], 0x01u) << "the handshake starts over";
 }
 
 // covers: REL-7
