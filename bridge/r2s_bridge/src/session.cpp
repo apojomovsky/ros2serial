@@ -540,16 +540,20 @@ struct Session::Impl {
     }
 
     // A re-handshake drops the reliable state ([REL-5]): the outstanding
-    // SET, the pending ones and their queued frames. Queued acks are
-    // control frames, dropped with the rest ([SES-33]).
+    // SET, the pending ones and their queued frames, even a partially
+    // written one. A fragment already on the wire dies by its check, and a
+    // stale SET must never complete under a new handshake's numbering.
+    // Queued acks are control frames, dropped with the rest ([SES-33]).
     void drop_reliable()
     {
         rel_out_.reset();
         rel_pending_.clear();
+        const bool drop_front =
+            !queue_.empty() && queue_.front().topic_id == kParamsTopic && !queue_.front().control;
         std::deque<QueuedFrame> kept;
         std::size_t kept_bytes = 0;
         for (std::size_t i = 0; i < queue_.size(); ++i) {
-            if ((i > 0 || front_offset_ == 0) && queue_[i].topic_id == kParamsTopic && !queue_[i].control) {
+            if (queue_[i].topic_id == kParamsTopic && !queue_[i].control) {
                 continue;
             }
             kept_bytes += queue_[i].bytes.size();
@@ -557,6 +561,9 @@ struct Session::Impl {
         }
         queue_ = std::move(kept);
         pending_bytes_ = kept_bytes;
+        if (drop_front) {
+            front_offset_ = 0;
+        }
     }
 
     void send_heartbeat()
