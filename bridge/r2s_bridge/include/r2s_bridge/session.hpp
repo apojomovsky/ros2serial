@@ -136,6 +136,10 @@ struct SessionEvents {
     std::function<void(bool identical)> handshake_completed;
     std::function<void(std::uint8_t, const std::vector<std::uint8_t> &)> user_frame;
     std::function<void(SessionLog, const std::string &)> mcu_log;
+    // One PARAM_STATUS the MCU reported while connected, as index and status
+    // code. The bridge answers every reliable frame itself; this reports the
+    // verdicts the parameters layer (X5) consumes.
+    std::function<void(std::uint8_t, std::uint8_t)> param_status;
 };
 
 // The section 8.2 state machine. poll() advances timers, drains the link and
@@ -200,6 +204,16 @@ class Session
     // bytes: the frame waits for the link instead of growing the host heap
     // ([SES-32]). True always goes out when nothing is pending.
     bool send_user(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload);
+    // Queues one PARAM_SET on the reliable channel (REL-2, REL-7): the value
+    // bytes travel after the index, laid out the way section 7.6 lays the
+    // value out. False unless connected; a queued SET goes out behind the
+    // outstanding one, at most one per index, with the next rel seq.
+    bool send_param_set(std::uint8_t index, const std::vector<std::uint8_t> &value);
+    // PARAM_SET frames the spent retry dropped ([REL-2]), for diagnostics.
+    std::uint32_t reliable_dropped() const;
+    // Queued SETs a newer SET to the same index replaced ([REL-7]), for
+    // diagnostics.
+    std::uint32_t reliable_replaced() const;
     // The MCU's announced receive limits, 0 before the first HELLO. A sender
     // stays within both ([FRM-11]).
     std::uint16_t mcu_max_frame() const;

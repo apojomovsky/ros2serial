@@ -96,7 +96,7 @@ struct Router::Impl {
         : topics(in_topics), params(std::move(in_params)), sink(std::move(in_sink)), clock(in_clock),
           mcu_sink(std::move(in_mcu_sink)),
           session_(session_config, in_clock, in_ros_clock, std::move(in_open), resolve_topic_type,
-                   SessionEvents{log_event(), handshake_event(), user_event(), mcu_log_event()})
+                   SessionEvents{log_event(), handshake_event(), user_event(), mcu_log_event(), {}})
     {
         if (!sink) {
             throw std::invalid_argument("r2s_bridge::Router: a log sink is required");

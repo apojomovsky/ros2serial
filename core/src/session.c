@@ -12,6 +12,9 @@
 #include "r2s/r2s_port.h"
 #include "r2s/r2s_tx.h"
 #include "r2s/r2s_varint.h"
+#ifdef R2S_WITH_PARAMS
+#include "r2s/r2s_params.h"
+#endif
 
 #ifdef R2S_WITH_CODEC
 #include "r2s/r2s_codec.h"
@@ -42,8 +45,8 @@
 #define HELLO_REPEAT_MS 1000u
 #define HELLO_NACK_MS 100u
 
-/* The CTL-2 feature bits this build sets: bit 0 for time, bit 1 for logging.
- * Parameters and the reliable channel set theirs when they land; bit 4 is
+/* The CTL-2 feature bits this build sets: bit 0 for time, bit 1 for logging,
+ * bits 2 and 3 for parameters and the reliable channel; bit 4 is
  * informational. Each bit rides on the switch of the calls it announces. */
 #if DBL_MANT_DIG == FLT_MANT_DIG
 #define R2S_FEATURE_BASE 0x10u
@@ -60,7 +63,12 @@
 #else
 #define R2S_FEATURE_TIME 0x00u
 #endif
-#define R2S_FEATURE_BITS (R2S_FEATURE_BASE | R2S_FEATURE_LOG | R2S_FEATURE_TIME)
+#ifdef R2S_WITH_PARAMS
+#define R2S_FEATURE_PARAMS 0x0Cu
+#else
+#define R2S_FEATURE_PARAMS 0x00u
+#endif
+#define R2S_FEATURE_BITS (R2S_FEATURE_BASE | R2S_FEATURE_LOG | R2S_FEATURE_TIME | R2S_FEATURE_PARAMS)
 
 /* tick_hz is 1000 times a divisor of 10^6, so a tick converts to nanoseconds
  * with integer math alone (CTL-8). A failing build names the rule here. */
@@ -73,6 +81,14 @@ typedef char r2s_tick_hz_form[(R2S_TICK_HZ >= 1000u && R2S_TICK_HZ % 1000u == 0u
  * indexes its R2S_SESSION_MAX_TOPICS arrays by accessor index: the arrays
  * cover every bindable count only when the bindable maximum fits them. */
 typedef char r2s_topic_max_within_session_max[(R2S_TOPIC_MAX_COUNT <= R2S_SESSION_MAX_TOPICS) ? 1 : -1];
+
+/* A STATUS payload is its opcode, rel_seq, index and verdict. */
+#define REL_STATUS_LEN 4u
+
+/* A reliable payload waits this long for its ack before it goes out again,
+ * and is dropped after this many retries (REL-2). */
+#define REL_RETRY_MS 500u
+#define REL_RETRIES 3u
 
 static struct {
     uint8_t state;
@@ -90,6 +106,25 @@ static struct {
     uint32_t last_hb_tick;
     uint32_t last_nack_tick;
     uint8_t heard;
+#ifdef R2S_WITH_PARAMS
+    /* The reliable channel (REL-1 to REL-5): the frame seqs of the parameter
+     * and ack channels, the next expected SET rel_seq and the next STATUS
+     * one, and the outstanding STATUS with its timer and retries. A second
+     * applied SET waits in the pending slot while the first is outstanding;
+     * a conforming host never fills it. */
+    uint8_t tx_seq_param;
+    uint8_t tx_seq_ack;
+    uint8_t rx_rel_expected;
+    uint8_t tx_rel_next;
+    uint8_t rel_out_active;
+    uint8_t rel_out_rel;
+    uint8_t rel_out_retries;
+    uint32_t rel_out_deadline;
+    uint8_t rel_out_payload[REL_STATUS_LEN];
+    uint8_t rel_pending_active;
+    uint8_t rel_pending_rel;
+    uint8_t rel_pending_payload[REL_STATUS_LEN];
+#endif
 } session = {.node_name = ""};
 
 static uint32_t ms_to_ticks(uint32_t ms)
@@ -202,6 +237,20 @@ uint16_t r2s_session_rx_lost(uint8_t index)
     return session.rx_lost[index];
 }
 
+#ifdef R2S_WITH_PARAMS
+/* A re-handshake drops all reliable state on both sides (REL-5). */
+static void drop_reliable(void)
+{
+    session.tx_seq_param = 0u;
+    session.tx_seq_ack = 0u;
+    session.rx_rel_expected = 0u;
+    session.tx_rel_next = 0u;
+    session.rel_out_active = 0u;
+    session.rel_out_retries = 0u;
+    session.rel_pending_active = 0u;
+}
+#endif
+
 static void enter_announcing(uint32_t now)
 {
     uint8_t i;
@@ -217,6 +266,9 @@ static void enter_announcing(uint32_t now)
         session.tx_seq[i] = 0u;
         session.rx_expected[i] = 0u;
     }
+#ifdef R2S_WITH_PARAMS
+    drop_reliable();
+#endif
     session.last_hello_tick = now;
     session.last_nack_tick = now - ms_to_ticks(HELLO_NACK_MS);
 }
@@ -226,6 +278,9 @@ static void enter_connected(uint32_t now)
     session.state = CONNECTED;
     session.tx_seq_ctrl = 0u;
     session.tx_seq_hb = 0u;
+#ifdef R2S_WITH_PARAMS
+    drop_reliable();
+#endif
 #ifdef R2S_WITH_TIME
     session.tx_seq_time = 0u;
 #endif
@@ -363,6 +418,275 @@ static void refuse(void)
 {
     r2s_framer_count_refused();
 }
+
+/* Answers a non-handshake host frame, defined below; the reliable channel
+ * calls it for frames that need no other answer. */
+static void answer_with_hello(uint32_t now);
+
+#ifdef R2S_WITH_PARAMS
+/* One ack for the reliable frame received, on the ack channel with the
+ * channel and rel_seq it carried (REL-1). When the link cannot take bytes
+ * the ack is dropped and the busy transmitter reported (REL-6): the
+ * sender's retry brings the frame back. */
+static void send_ack(uint8_t channel, uint8_t rel_seq)
+{
+    if (r2s_tx_begin(6u, session.tx_seq_ack, 2u) != R2S_OK) {
+        r2s_error_note(R2S_ERROR_TX_BUSY, channel, 0xFFu, 1u);
+        return;
+    }
+    put_byte(channel);
+    put_byte(rel_seq);
+    if (r2s_tx_end() == R2S_OK) {
+        session.tx_seq_ack++;
+    }
+}
+
+/* One STATUS frame from its payload, with the next parameter frame seq
+ * (REL-4). A frame that finds no space stays outstanding and due at once,
+ * without counting a retry the link never carried. */
+static void send_status_now(const uint8_t *payload, uint32_t now)
+{
+    uint8_t i;
+
+    if (r2s_tx_begin(3u, session.tx_seq_param, REL_STATUS_LEN) != R2S_OK) {
+        session.rel_out_deadline = now - ms_to_ticks(REL_RETRY_MS);
+        return;
+    }
+    for (i = 0u; i < REL_STATUS_LEN; i++) {
+        put_byte(payload[i]);
+    }
+    /* The begin reserved the frame and the loop feeds exactly its length,
+     * while port errors never surface, so the end below cannot fail. */
+    (void)r2s_tx_end();
+    session.tx_seq_param++;
+    session.rel_out_deadline = now;
+}
+
+/* The pending STATUS becomes outstanding and goes out at once, with a fresh
+ * timer and retry count. */
+static void promote_status(uint32_t now)
+{
+    uint8_t i;
+
+    if (session.rel_pending_active == 0u) {
+        return;
+    }
+    session.rel_out_active = 1u;
+    session.rel_out_rel = session.rel_pending_rel;
+    session.rel_out_retries = 0u;
+    for (i = 0u; i < REL_STATUS_LEN; i++) {
+        session.rel_out_payload[i] = session.rel_pending_payload[i];
+    }
+    session.rel_pending_active = 0u;
+    send_status_now(session.rel_out_payload, now);
+}
+
+/* Holds the STATUS for the retransmit timer: at most one reliable payload
+ * is outstanding per direction (REL-2). The STATUS carries the next rel_seq
+ * of this direction's own stream (REL-3), which moves in lockstep with the
+ * host's under stop-and-wait. A second applied SET waits behind the first;
+ * a conforming host never fills that slot. */
+static void queue_status(uint8_t index, uint8_t status, uint32_t now)
+{
+    uint8_t payload[REL_STATUS_LEN];
+    uint8_t status_rel = session.tx_rel_next++;
+
+    payload[0] = R2S_PARAM_OP_STATUS;
+    payload[1] = status_rel;
+    payload[2] = index;
+    payload[3] = status;
+    if (session.rel_out_active == 0u) {
+        uint8_t i;
+
+        session.rel_out_active = 1u;
+        session.rel_out_rel = status_rel;
+        session.rel_out_retries = 0u;
+        for (i = 0u; i < REL_STATUS_LEN; i++) {
+            session.rel_out_payload[i] = payload[i];
+        }
+        send_status_now(session.rel_out_payload, now);
+    } else {
+        uint8_t i;
+
+        session.rel_pending_active = 1u;
+        session.rel_pending_rel = status_rel;
+        for (i = 0u; i < REL_STATUS_LEN; i++) {
+            session.rel_pending_payload[i] = payload[i];
+        }
+    }
+}
+
+/* One plain DECLARE answering a PARAM_REQ (PAR-7, PAR-8), streamed byte by
+ * byte so no buffer holds the frame. The default travels as the table
+ * holds it: the scalar width, or the length varint and the bytes. */
+static void send_declare(uint8_t index)
+{
+    const r2s_param_t *param = r2s_params_get(index);
+    uint16_t len;
+    size_t name_len;
+    uint16_t i;
+
+    /* The caller answers a PARAM_REQ for an announced index, so the entry
+     * exists and its DECLARE does not fit in zero bytes. */
+    len = r2s_params_declare_len(index);
+    if (r2s_tx_begin(3u, session.tx_seq_param, len) != R2S_OK) {
+        return;
+    }
+    name_len = strlen(param->name);
+    put_byte(R2S_PARAM_OP_DECLARE);
+    put_byte(index);
+    put_byte(param->type);
+    put_byte(param->flags);
+    put_varint((uint16_t)name_len);
+    for (i = 0u; i < (uint16_t)name_len; i++) {
+        put_byte((uint8_t)param->name[i]);
+    }
+    if (param->type == R2S_PARAM_BOOL) {
+        put_byte(param->initial.b);
+    } else if (param->type == R2S_PARAM_I64) {
+        /* The bits move as integers, never as float arithmetic. */
+        uint64_t bits = 0u;
+
+        memcpy(&bits, &param->initial.i, 8u);
+        for (i = 0u; i < 8u; i++) {
+            put_byte((uint8_t)(bits >> (i * 8u)));
+        }
+    } else if (param->type == R2S_PARAM_F64) {
+        uint64_t bits = 0u;
+
+        memcpy(&bits, &param->initial.f, 8u);
+        for (i = 0u; i < 8u; i++) {
+            put_byte((uint8_t)(bits >> (i * 8u)));
+        }
+    } else {
+        size_t text_len = strlen(param->initial.s);
+
+        put_varint((uint16_t)text_len);
+        for (i = 0u; i < (uint16_t)text_len; i++) {
+            put_byte((uint8_t)param->initial.s[i]);
+        }
+    }
+    /* The begin reserved the frame and the loop feeds exactly its length,
+     * while port errors never surface, so the end below cannot fail. */
+    (void)r2s_tx_end();
+    session.tx_seq_param++;
+}
+
+/* One plain STATUS answering a PARAM_REQ past the table (PAR-7, PAR-8):
+ * under the request retry, never a reliable frame, rel_seq 0. */
+static void send_plain_status(uint8_t index, uint8_t status)
+{
+    uint8_t payload[REL_STATUS_LEN];
+    uint8_t i;
+
+    payload[0] = R2S_PARAM_OP_STATUS;
+    payload[1] = 0u;
+    payload[2] = index;
+    payload[3] = status;
+    if (r2s_tx_begin(3u, session.tx_seq_param, REL_STATUS_LEN) != R2S_OK) {
+        return;
+    }
+    for (i = 0u; i < REL_STATUS_LEN; i++) {
+        put_byte(payload[i]);
+    }
+    /* The begin reserved the frame and the loop feeds exactly its length,
+     * while port errors never surface, so the end below cannot fail. */
+    (void)r2s_tx_end();
+    session.tx_seq_param++;
+}
+
+static void on_params(const uint8_t *payload, uint16_t len, uint32_t now)
+{
+    uint8_t rel_seq;
+    uint8_t index;
+    int code;
+
+    /* In ANNOUNCING a PARAM_REQ is answered the way SES-2 answers a
+     * TOPIC_REQ, and anything else is ignored like any other non-handshake
+     * frame. */
+    if (session.state == ANNOUNCING) {
+        if (len == 2u && payload[0] == R2S_PARAM_OP_REQ) {
+            if (payload[1] < r2s_params_count()) {
+                send_declare(payload[1]);
+            } else {
+                send_plain_status(payload[1], R2S_PARAM_UNKNOWN_INDEX);
+            }
+        } else {
+            answer_with_hello(now);
+        }
+        return;
+    }
+    /* The ANNOUNCING branch above returned and those are the only states. A
+     * SET carries its opcode, rel_seq and index; anything else on the
+     * channel is refused. A value the encoding cannot carry is refused too
+     * (PAR-3); a decodable one earns its verdict (PAR-5). */
+    if (len < 3u || payload[0] != R2S_PARAM_OP_SET) {
+        refuse();
+        return;
+    }
+    rel_seq = payload[1];
+    index = payload[2];
+    if (index >= r2s_params_count()) {
+        code = R2S_PARAM_UNKNOWN_INDEX;
+    } else {
+        code = r2s_params_check_set(index, payload + 3u, (uint16_t)(len - 3u));
+        if (code < 0) {
+            refuse();
+            return;
+        }
+    }
+    /* Every reliable frame is acked, duplicates included, and the payload
+     * applied at most once: only the expected rel_seq applies and advances
+     * the counter (REL-3). */
+    send_ack(3u, rel_seq);
+    if (rel_seq != session.rx_rel_expected) {
+        return;
+    }
+    session.rx_rel_expected++;
+    if (code == R2S_PARAM_APPLIED) {
+        r2s_params_store(index, payload + 3u, (uint16_t)(len - 3u));
+    }
+    queue_status(index, (uint8_t)code, now);
+}
+
+static void on_ack(const uint8_t *payload, uint16_t len, uint32_t now)
+{
+    /* A stale ack in ANNOUNCING is answered like any other non-handshake
+     * frame. An ID 6 frame is never acked itself (REL-4). */
+    if (session.state == ANNOUNCING) {
+        answer_with_hello(now);
+        return;
+    }
+    /* The ANNOUNCING branch above returned and those are the only states. */
+    if (len != 2u) {
+        return;
+    }
+    /* Channel 3 names the reliable exchange the ack answers. */
+    if (payload[0] == 3u && session.rel_out_active != 0u && payload[1] == session.rel_out_rel) {
+        session.rel_out_active = 0u;
+        promote_status(now);
+    }
+}
+
+/* The 500 ms timer: resends the outstanding STATUS, or drops and counts it
+ * after 3 retries (REL-2). A pending STATUS moves up either way, so an
+ * applied SET is never left unreported. */
+static void params_poll(uint32_t now)
+{
+    if (session.rel_out_active == 0u ||
+        (uint32_t)(now - session.rel_out_deadline) < ms_to_ticks(REL_RETRY_MS)) {
+        return;
+    }
+    if (session.rel_out_retries >= REL_RETRIES) {
+        session.rel_out_active = 0u;
+        r2s_framer_count_refused();
+        promote_status(now);
+        return;
+    }
+    session.rel_out_retries++;
+    send_status_now(session.rel_out_payload, now);
+}
+#endif
 
 #ifdef R2S_WITH_TIME
 static uint32_t read_u32(const uint8_t *at)
@@ -538,10 +862,17 @@ static void on_frame(const r2s_frame_t *frame)
             answer_with_hello(frame->tick);
         }
 #endif
+#ifdef R2S_WITH_PARAMS
+    } else if (topic == 3u) {
+        on_params(payload, payload_len, frame->tick);
+    } else if (topic == 6u) {
+        on_ack(payload, payload_len, frame->tick);
+#endif
     } else if (topic <= 6u) {
-        /* The channels later tickets own (log, parameters, error report,
-         * reliable ack): accepted, and answered in ANNOUNCING like any other
-         * non-handshake frame, otherwise ignored. */
+        /* The channels later tickets own (log, error report), and the
+         * parameters and ack channels in a build without them: accepted,
+         * and answered in ANNOUNCING like any other non-handshake frame,
+         * otherwise ignored. */
         if (session.state == ANNOUNCING) {
             answer_with_hello(frame->tick);
         }
@@ -615,6 +946,13 @@ void r2s_spin_some(void)
         (uint32_t)(now - session.last_host_tick) >= ms_to_ticks(R2S_LINK_TIMEOUT_MS)) {
         enter_announcing(now);
     }
+#ifdef R2S_WITH_PARAMS
+    /* The retransmit timer runs before the heartbeat, so a due STATUS goes
+     * out ahead of the periodic frame. */
+    if (session.state == CONNECTED) {
+        params_poll(now);
+    }
+#endif
     if (session.state == ANNOUNCING) {
         if (session.heard == 0u &&
             (uint32_t)(now - session.last_hello_tick) >= ms_to_ticks(HELLO_REPEAT_MS)) {
@@ -648,6 +986,9 @@ void r2s_session_test_reset(void)
     }
     session.tx_seq_ctrl = 0u;
     session.tx_seq_hb = 0u;
+#ifdef R2S_WITH_PARAMS
+    drop_reliable();
+#endif
 #ifdef R2S_WITH_TIME
     session.tx_seq_time = 0u;
 #endif

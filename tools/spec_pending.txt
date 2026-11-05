@@ -7,5 +7,3 @@ DSC-27  C9
 ENC-12  C9
 PAR-9   X5
 PAR-10  X5
-REL-6   X4
-REL-7   X4

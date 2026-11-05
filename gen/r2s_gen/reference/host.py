@@ -33,6 +33,25 @@ class _Battery(ctypes.Structure):
     _fields_ = [("data", ctypes.c_float)]
 
 
+class _ParamInit(ctypes.Union):
+    _fields_ = [("b", ctypes.c_uint8), ("i", ctypes.c_int64), ("f", ctypes.c_double), ("s", ctypes.c_char_p)]  # type: ignore[assignment]
+
+
+class _ParamValue(ctypes.Union):
+    _fields_ = [("b", ctypes.c_uint8), ("i", ctypes.c_int64), ("f", ctypes.c_double), ("s", ctypes.c_char_p)]  # type: ignore[assignment]
+
+
+class _Param(ctypes.Structure):
+    _fields_ = [  # type: ignore[assignment]
+        ("name", ctypes.c_char_p),
+        ("type", ctypes.c_uint8),
+        ("flags", ctypes.c_uint8),
+        ("bound", ctypes.c_uint16),
+        ("initial", _ParamInit),
+        ("value", _ParamValue),
+    ]
+
+
 def default_lib_dir() -> Path:
     """Where build-host-lib.sh puts the libraries, without arguments."""
     override = os.environ.get("R2S_HOST_LIB_DIR")
@@ -101,6 +120,10 @@ class HostSession:
         lib.r2s_framer_counters.restype = ctypes.POINTER(_Counters)
         lib.r2s_publish_battery.argtypes = [ctypes.POINTER(_Battery)]
         lib.r2s_publish_battery.restype = ctypes.c_int8
+        lib.r2s_params_count.argtypes = []
+        lib.r2s_params_count.restype = ctypes.c_uint8
+        lib.r2s_params_get.argtypes = [ctypes.c_uint8]
+        lib.r2s_params_get.restype = ctypes.c_void_p
         lib.r2s_host_error.argtypes = []
         lib.r2s_host_error.restype = ctypes.c_char_p
 
@@ -151,6 +174,27 @@ class HostSession:
         self.lib.fake_port_tx_clear()
         return out
 
+    def param_values(self) -> list[tuple[int, object]]:
+        """The live parameter values: (type, value) per table entry, with
+        strings as the bytes up to their NUL terminator.
+        """
+        out = []
+        for index in range(int(self.lib.r2s_params_count())):
+            ptr = self.lib.r2s_params_get(index)
+            assert ptr is not None
+            param = ctypes.cast(ptr, ctypes.POINTER(_Param)).contents
+            kind = int(param.type)
+            if kind == 0:
+                value: object = int(param.value.b)
+            elif kind == 1:
+                value = int(param.value.i)
+            elif kind == 2:  # pragma: no cover - the C table has no f64 parameter
+                value = float(param.value.f)
+            else:
+                value = bytes(ctypes.string_at(param.value.s))
+            out.append((kind, value))
+        return out
+
     def snapshot(self) -> dict[str, object]:
         """Every observable the tests compare after a step."""
         counters = self.lib.r2s_framer_counters().contents
@@ -166,6 +210,7 @@ class HostSession:
             ),
             "tx_seq": [int(self.lib.r2s_session_tx_seq(i)) for i in range(4)],
             "rx_lost": [int(self.lib.r2s_session_rx_lost(i)) for i in range(4)],
+            "params": self.param_values(),
         }
 
     def topic_flags(self, index: int) -> int:

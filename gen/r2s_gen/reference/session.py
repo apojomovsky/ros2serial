@@ -2,15 +2,17 @@
 
 The oracle the model-based tests compare the real C core against
 (docs/01-testing.md, section 5.4). It is written from spec/protocol.md
-sections 7.1, 7.4, 7.5 and 8.1, not from the C code, so a mismatch names a
-bug in one of the two. It covers what the core implements now: the control
-channel, the heartbeat, user dispatch and the error report channel. The
-time, log, parameters and reliable-ack channels are accepted and ignored
-here, as in the core; P1, P2 and P5 specify their behavior.
+sections 7.1, 7.4, 7.5, 7.6, 7.7 and 8.1, not from the C code, so a mismatch
+names a bug in one of the two. It covers what the core implements now: the
+control channel, the heartbeat, user dispatch, the error report channel,
+the parameters channel and the reliable channel. The time and log channels
+are accepted and ignored here, as in the core; P1 and P2 specify their
+behavior.
 """
 
 from __future__ import annotations
 
+import struct
 from dataclasses import dataclass
 
 from r2s_gen.reference import crc as crc_mod
@@ -48,6 +50,30 @@ ERR_TOPIC_REJECTED = -4
 STATUS_OK = 0
 STATUS_UNKNOWN = 0xFF
 
+OP_PARAM_REQ = 0x01
+OP_PARAM_DECLARE = 0x02
+OP_PARAM_SET = 0x03
+OP_PARAM_STATUS = 0x04
+
+PARAM_BOOL = 0
+PARAM_I64 = 1
+PARAM_F64 = 2
+PARAM_STRING = 3
+
+PARAM_READONLY = 0x01
+
+PARAM_APPLIED = 0
+PARAM_UNKNOWN_INDEX = 1
+PARAM_BAD_TYPE_OR_LENGTH = 2
+PARAM_READONLY_STATUS = 3
+PARAM_OUT_OF_RANGE = 4
+
+PARAM_CHANNEL = 3
+ACK_CHANNEL = 6
+
+REL_RETRY_MS = 500
+REL_RETRIES = 3
+
 ERROR_TOPIC = 5
 
 ERR_BOUND = 1
@@ -78,6 +104,21 @@ class Topic:
     bound: int = 0
 
 
+@dataclass
+class Param:
+    """One parameter: the PAR-2 type, the PAR-4 flags, the string bound and
+    the default the DECLARE carries. The value is the live one the last
+    applied SET left.
+    """
+
+    name: str
+    type: int
+    flags: int
+    bound: int
+    initial: object
+    value: object
+
+
 def encode_frame(topic_id: int, seq: int, payload: bytes) -> bytes:
     """One frame without its delimiter, as the C TX capture holds it."""
     return frames_mod.encode_wire(topic_id, seq, payload)[:-1]
@@ -93,12 +134,14 @@ class McuSession:
         max_frame: int = 512,
         tick_hz: int = 1000,
         features: int = 0x02,
+        params: list[Param] | None = None,
     ) -> None:
         self.node = node
         self.topics: list[Topic] = list(topics) if topics is not None else []
         self.max_frame = max_frame
         self.tick_hz = tick_hz
         self.features = features
+        self.params: list[Param] = list(params) if params is not None else []
         self.rx_capacity = max_frame + max_frame // 254 + 1
         self.tick = 0
         self.rx_buf = bytearray()
@@ -112,6 +155,16 @@ class McuSession:
         self.rx_lost: list[int] = []
         self.ctrl_seq = 0
         self.hb_seq = 0
+        self.param_seq = 0
+        self.ack_seq = 0
+        self.rx_rel_expected = 0
+        self.tx_rel_next = 0
+        self.rel_outstanding: bytes | None = None
+        self.rel_outstanding_rel = 0
+        self.rel_deadline = 0
+        self.rel_retries = 0
+        self.rel_pending: bytes | None = None
+        self.rel_pending_rel = 0
         self.counters = {"rx_frames": 0, "crc_errors": 0, "rx_overflows": 0, "dropped": 0}
         self.err_pending = [0] * 7
         self.err_topic = [0xFF] * 7
@@ -138,8 +191,13 @@ class McuSession:
         self.tx_seq = [0] * len(self.topics)
         self.rx_expected = [0] * len(self.topics)
         self.rx_lost = [0] * len(self.topics)
+        for param in self.params:
+            param.value = param.initial
         self.ctrl_seq = 0
         self.hb_seq = 0
+        self.param_seq = 0
+        self.ack_seq = 0
+        self._drop_reliable()
         self.counters = {"rx_frames": 0, "crc_errors": 0, "rx_overflows": 0, "dropped": 0}
         self.err_pending = [0] * 7
         self.err_topic = [0xFF] * 7
@@ -285,6 +343,7 @@ class McuSession:
             ),
             "tx_seq": list(self.tx_seq),
             "rx_lost": list(self.rx_lost),
+            "params": [(param.type, param.value) for param in self.params],
         }
 
     def _accept(self, encoded: bytes, at: int) -> bool:
@@ -320,7 +379,11 @@ class McuSession:
                 self._refuse()
             elif self.state == ANNOUNCING:
                 self._answer_with_hello()
-        elif topic in (1, 2, 3, 5, 6):
+        elif topic == PARAM_CHANNEL:
+            self._on_params(payload)
+        elif topic == ACK_CHANNEL:
+            self._on_ack(payload)
+        elif topic in (1, 2, 5):
             if self.state == ANNOUNCING:
                 self._answer_with_hello()
         elif topic >= 16:
@@ -409,6 +472,179 @@ class McuSession:
         if len(rest) != length or any(byte == 0 for byte in rest):
             self._refuse()
 
+    def _default_bytes(self, param: Param) -> bytes:
+        """The DECLARE default for one parameter (PAR-1, PAR-3)."""
+        if param.type == PARAM_BOOL:
+            return bytes((param.initial,))
+        if param.type == PARAM_I64:
+            return int(param.initial).to_bytes(8, "little", signed=True)
+        if param.type == PARAM_F64:
+            return struct.pack("<d", param.initial)
+        encoded = bytes(param.initial)
+        return varint_mod.encode(len(encoded)) + encoded
+
+    def _check_value(self, param: Param, value: bytes) -> int | None:
+        """The STATUS verdict for a SET value, or None when the value breaks
+        its type's rule and the frame is refused (PAR-3, PAR-5). Unknown
+        index, length, read-only and range report 1, 2, 3 and 4 in order.
+        """
+        if param.type == PARAM_BOOL:
+            if len(value) != 1:
+                return PARAM_BAD_TYPE_OR_LENGTH
+            if value[0] > 1:
+                return None
+        elif param.type in (PARAM_I64, PARAM_F64):
+            if len(value) != 8:
+                return PARAM_BAD_TYPE_OR_LENGTH
+        else:
+            try:
+                length, used = varint_mod.decode(value)
+            except Rejected:
+                return None
+            rest = value[used:]
+            if len(rest) != length or any(byte == 0 for byte in rest):
+                return None
+            if length > param.bound:
+                return PARAM_OUT_OF_RANGE
+        if param.flags & PARAM_READONLY:
+            return PARAM_READONLY_STATUS
+        return PARAM_APPLIED
+
+    def _store(self, index: int, value: bytes) -> None:
+        """Keep the applied SET value as the live one."""
+        param = self.params[index]
+        if param.type == PARAM_BOOL:
+            param.value = value[0]
+        elif param.type == PARAM_I64:
+            param.value = int.from_bytes(value, "little", signed=True)
+        elif param.type == PARAM_F64:
+            param.value = struct.unpack("<d", value)[0]
+        else:
+            length, used = varint_mod.decode(value)
+            param.value = bytes(value[used : used + length])
+
+    def _send_declare(self, index: int) -> None:
+        """One plain DECLARE answering a PARAM_REQ (PAR-7, PAR-8)."""
+        param = self.params[index]
+        name = param.name.encode()
+        payload = (
+            bytes((OP_PARAM_DECLARE, index, param.type, param.flags))
+            + varint_mod.encode(len(name))
+            + name
+            + self._default_bytes(param)
+        )
+        self.tx.append(encode_frame(PARAM_CHANNEL, self.param_seq, payload))
+        self.param_seq = (self.param_seq + 1) & MASK_8
+
+    def _send_plain_status(self, index: int, status: int) -> None:
+        """One plain STATUS answering a PARAM_REQ past the table (PAR-7,
+        PAR-8): under the request retry, never a reliable frame, rel_seq 0.
+        """
+        payload = bytes((OP_PARAM_STATUS, 0, index, status))
+        self.tx.append(encode_frame(PARAM_CHANNEL, self.param_seq, payload))
+        self.param_seq = (self.param_seq + 1) & MASK_8
+
+    def _send_ack(self, channel: int, rel: int) -> None:
+        """One ack for the reliable frame received (REL-1, REL-3)."""
+        self.tx.append(encode_frame(ACK_CHANNEL, self.ack_seq, bytes((channel, rel))))
+        self.ack_seq = (self.ack_seq + 1) & MASK_8
+
+    def _queue_status(self, index: int, status: int) -> None:
+        """Hold the STATUS for the retransmit timer: at most one reliable
+        payload is outstanding per direction (REL-2). The STATUS carries the
+        next rel_seq of this direction's own stream, which moves in lockstep
+        with the host's under stop-and-wait. A second applied SET waits
+        behind the first.
+        """
+        rel = self.tx_rel_next
+        self.tx_rel_next = (self.tx_rel_next + 1) & MASK_8
+        payload = bytes((OP_PARAM_STATUS, rel, index, status))
+        if self.rel_outstanding is None:
+            self.rel_outstanding = payload
+            self.rel_outstanding_rel = rel
+            self._send_status()
+        else:
+            self.rel_pending = payload
+            self.rel_pending_rel = rel
+
+    def _send_status(self) -> None:
+        """The outstanding STATUS goes out with the next frame seq (REL-4)."""
+        assert self.rel_outstanding is not None
+        self.tx.append(encode_frame(PARAM_CHANNEL, self.param_seq, self.rel_outstanding))
+        self.param_seq = (self.param_seq + 1) & MASK_8
+        self.rel_deadline = self.tick
+        self.rel_retries = 0
+
+    def _promote_status(self) -> None:
+        """The pending STATUS becomes outstanding and goes out at once."""
+        self.rel_outstanding = self.rel_pending
+        self.rel_outstanding_rel = self.rel_pending_rel
+        self.rel_pending = None
+        if self.rel_outstanding is not None:
+            self._send_status()
+
+    def _on_params(self, payload: bytes) -> None:
+        """One channel 3 frame: a plain REQ answer in ANNOUNCING (PAR-10),
+        a reliable SET exchange while connected (PAR-8, REL-1 to REL-4). A
+        SET in ANNOUNCING is ignored like any other non-handshake frame.
+        """
+        if self.state == ANNOUNCING:
+            if len(payload) == 2 and payload[0] == OP_PARAM_REQ:
+                index = payload[1]
+                if index < len(self.params):
+                    self._send_declare(index)
+                else:
+                    self._send_plain_status(index, PARAM_UNKNOWN_INDEX)
+            else:
+                self._answer_with_hello()
+            return
+        if self.state != CONNECTED:  # pragma: no cover - only ANNOUNCING and CONNECTED exist
+            return
+        if len(payload) >= 3 and payload[0] == OP_PARAM_SET:
+            rel, index = payload[1], payload[2]
+            if index >= len(self.params):
+                self._send_ack(PARAM_CHANNEL, rel)
+                if rel == self.rx_rel_expected:
+                    self.rx_rel_expected = (self.rx_rel_expected + 1) & MASK_8
+                    self._queue_status(index, PARAM_UNKNOWN_INDEX)
+                return
+            code = self._check_value(self.params[index], payload[3:])
+            if code is None:
+                self._refuse()
+                return
+            self._send_ack(PARAM_CHANNEL, rel)
+            if rel != self.rx_rel_expected:
+                return
+            self.rx_rel_expected = (self.rx_rel_expected + 1) & MASK_8
+            if code == PARAM_APPLIED:
+                self._store(index, payload[3:])
+            self._queue_status(index, code)
+        else:
+            self._refuse()
+
+    def _on_ack(self, payload: bytes) -> None:
+        """One channel 6 frame: a stale ack in ANNOUNCING is answered like
+        any other non-handshake frame; a matching one while connected clears
+        the outstanding STATUS (REL-1, REL-2, REL-4).
+        """
+        if self.state == ANNOUNCING:
+            self._answer_with_hello()
+            return
+        if self.state != CONNECTED or len(payload) != 2:
+            return
+        channel, rel = payload[0], payload[1]
+        if channel == PARAM_CHANNEL and self.rel_outstanding is not None and rel == self.rel_outstanding_rel:
+            self.rel_outstanding = None
+            self._promote_status()
+
+    def _drop_reliable(self) -> None:
+        """A re-handshake drops all reliable state (REL-5)."""
+        self.rx_rel_expected = 0
+        self.tx_rel_next = 0
+        self.rel_outstanding = None
+        self.rel_pending = None
+        self.rel_retries = 0
+
     def _enter_announcing(self) -> None:
         self.state = ANNOUNCING
         self.heard = False
@@ -416,6 +652,9 @@ class McuSession:
         for i in range(len(self.topics)):
             self.tx_seq[i] = 0
             self.rx_expected[i] = 0
+        self.param_seq = 0
+        self.ack_seq = 0
+        self._drop_reliable()
         self.last_hello = self.tick
         self.last_nack = (self.tick - HELLO_NACK_MS) & MASK_32
 
@@ -423,6 +662,9 @@ class McuSession:
         self.state = CONNECTED
         self.ctrl_seq = 0
         self.hb_seq = 0
+        self.param_seq = 0
+        self.ack_seq = 0
+        self._drop_reliable()
         self.last_hb = self.tick
         self._note_connected()
 
@@ -474,6 +716,24 @@ class McuSession:
         self.tx.append(encode_frame(4, self.hb_seq, payload))
         self.hb_seq = (self.hb_seq + 1) & MASK_8
 
+    def _retransmit_status(self) -> None:
+        """The 500 ms timer: resend the outstanding STATUS, or drop it and
+        count it after 3 retries (REL-2). A pending STATUS moves up either
+        way, so an applied SET is never left unreported.
+        """
+        if (self.tick - self.rel_deadline) & MASK_32 < REL_RETRY_MS:
+            return
+        assert self.rel_outstanding is not None
+        if self.rel_retries >= REL_RETRIES:
+            self.rel_outstanding = None
+            self.counters["dropped"] += 1
+            self._promote_status()
+            return
+        self.rel_retries += 1
+        self.rel_deadline = self.tick
+        self.tx.append(encode_frame(PARAM_CHANNEL, self.param_seq, self.rel_outstanding))
+        self.param_seq = (self.param_seq + 1) & MASK_8
+
     def _timers(self) -> None:
         if self.state == CONNECTED and (self.tick - self.last_host) & MASK_32 >= LINK_TIMEOUT_MS:
             self._enter_announcing()
@@ -481,6 +741,9 @@ class McuSession:
             if not self.heard and (self.tick - self.last_hello) & MASK_32 >= HELLO_REPEAT_MS:
                 self.last_hello = self.tick
                 self._send_hello()
-        elif (self.tick - self.last_hb) & MASK_32 >= HEARTBEAT_MS:
-            self.last_hb = self.tick
-            self._send_heartbeat()
+        else:
+            if self.rel_outstanding is not None:
+                self._retransmit_status()
+            if (self.tick - self.last_hb) & MASK_32 >= HEARTBEAT_MS:
+                self.last_hb = self.tick
+                self._send_heartbeat()
