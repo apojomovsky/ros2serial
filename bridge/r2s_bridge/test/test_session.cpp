@@ -2778,7 +2778,8 @@ TEST(ReliableWalk, AdvancesOnAnAppliedStatus)
     fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x00u});
     const auto units = drain_decoded(fixture);
     ASSERT_EQ(units.size(), 1u);
-    EXPECT_EQ(units[0], with_check({kParams, 1u, kParamReq, 0x01u})) << "an applied STATUS walks to the next index";
+    EXPECT_EQ(units[0], with_check({kParams, 1u, kParamReq, 0x01u}))
+        << "an applied STATUS walks to the next index";
 }
 
 // covers: REL-7
@@ -2967,7 +2968,8 @@ TEST(ReliableSend, RefusesToSendWhenTheLinkIsFull)
     fixture.block_writes();
     EXPECT_TRUE(fixture.session().send_user(16u, std::vector<std::uint8_t>(400u, 0xABu)));
     EXPECT_TRUE(fixture.session().send_user(16u, std::vector<std::uint8_t>(200u, 0xABu)));
-    EXPECT_FALSE(fixture.session().send_param_set(0u, {0x00u})) << "a queued SET would overflow the link window";
+    EXPECT_FALSE(fixture.session().send_param_set(0u, {0x00u}))
+        << "a queued SET would overflow the link window";
 }
 
 // covers: REL-7
@@ -3045,6 +3047,90 @@ TEST(ReliableSend, ReplacesAPendingSetForTheSameIndex)
     ASSERT_EQ(units.size(), 1u) << "the replacement goes out after the ack";
     EXPECT_EQ(units[0], with_check({kParams, 1u, kParamSet, 0x01u, 0x00u, 0x02u}))
         << "with the newest value and the next rel seq";
+}
+
+// covers: PAR-7
+TEST(ReliableWalk, IgnoresWalkFramesDuringTheTopicWalk)
+{
+    Fixture fixture;
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    fixture.deliver_frame(kParams, 0u, {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x03u, 'l', 'e', 'd', 0x01u});
+    fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x00u, 0x00u});
+    auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 1u) << "only the HELLO_REQ goes out before the topics";
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+    units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 2u);
+    EXPECT_EQ(units[1][0], kParams);
+    EXPECT_EQ(units[1][2], kParamReq) << "the parameter walk still starts";
+    EXPECT_EQ(units[1][3], 0x00u) << "the stray STATUS never advanced it past index 0";
+}
+
+// covers: REL-3
+TEST(ReliableReceive, IgnoresAnEmptyParamsPayload)
+{
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    handshake_with_params(fixture);
+    fixture.deliver_frame(kParams, 0u, {});
+    EXPECT_TRUE(drain_decoded(fixture).empty()) << "an empty params frame earns no ack";
+    fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x00u, 0x00u});
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 1u) << "the session still acks after the empty frame";
+    EXPECT_EQ(units[0], with_check({kAck, 0u, kParams, 0x00u}));
+}
+
+// covers: REL-2
+TEST(ReliableAck, IgnoresAWrongLengthAck)
+{
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    handshake_with_params(fixture);
+    EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
+    drain_decoded(fixture);
+    fixture.deliver_frame(kAck, 0u, {kParams});
+    fixture.deliver_frame(kAck, 1u, {kParams, 0x00u, 0xFFu});
+    EXPECT_TRUE(drain_decoded(fixture).empty()) << "a short or long ack answers nothing";
+    fixture.advance_to(500);
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 1u) << "the outstanding SET still retries";
+    EXPECT_EQ(units[0], with_check({kParams, 1u, kParamSet, 0x00u, 0x00u, 0x00u}));
+}
+
+// covers: REL-7
+TEST(ReliableSend, SendsWhileUserFramesAreQueued)
+{
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    handshake_with_params(fixture);
+    fixture.block_writes();
+    EXPECT_TRUE(fixture.session().send_user(16u, std::vector<std::uint8_t>(100u, 0xABu)));
+    EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u})) << "a SET fits beside queued user frames";
+    fixture.allow_writes();
+    fixture.session().poll();
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 2u);
+    EXPECT_EQ(units[0][0], 16u) << "the user frame keeps its place ahead of the SET";
+    EXPECT_EQ(units[1], with_check({kParams, 0u, kParamSet, 0x00u, 0x00u, 0x00u}));
+}
+
+// covers: REL-5
+TEST(ReliableSend, KeepsAPartialAckAcrossTheLinkTimeout)
+{
+    SessionConfig config;
+    config.heartbeat_period_ms = 3600000;
+    config.time_sync_enabled = false;
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, config};
+    handshake_with_params(fixture);
+    fixture.script_write({2u, IoStatus::kOk});
+    fixture.block_writes();
+    fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x00u});
+    fixture.advance_to(2500);
+    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking) << "the silent link re-handshakes";
+    EXPECT_EQ(fixture.session().reliable_dropped(), 0u) << "an ack is not a SET";
+    fixture.allow_writes();
+    fixture.session().poll();
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 2u);
+    EXPECT_EQ(units[0], with_check({kAck, 0u, kParams, 0x00u})) << "the partial ack completes";
+    EXPECT_EQ(units[1][2], 0x01u) << "and the handshake starts over";
 }
 
 } // namespace
