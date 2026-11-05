@@ -7,7 +7,6 @@
   <maintainer email="apojomovsky@gmail.com">Alexis Pojomovsky</maintainer>
   <license>MIT</license>
   <url type="repository">https://github.com/apojomovsky/ros2serial</url>
-  <buildtool_depend>ament_python</buildtool_depend>
   <exec_depend>python3-yaml</exec_depend>
   <exec_depend>python3-jsonschema</exec_depend>
   <test_depend>python3-pytest</test_depend>

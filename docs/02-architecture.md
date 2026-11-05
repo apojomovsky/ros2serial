@@ -29,7 +29,11 @@ and the firmware exchanges rCOBS frames with one bridge node over a
 serial link. The bridge republishes the MCU topics on the ROS 2 graph
 and forwards subscriptions back. `r2s-gen` runs at build time only: it
 turns the topic list into C sources the firmware compiles, so no Python
-ships on either side of the wire. See [Part I, Architecture](00-design.md#architecture)
+ships on either side of the wire. The wire today is protocol v2
+([GEN-2] in `spec/protocol.md`). Parameters (ID 3) and the
+reliable-channel ack (ID 6) stay reserved under [SYS-3] pending S5, and
+services and actions stay out pending S8, so no section here claims
+their behavior. See [Part I, Architecture](00-design.md#architecture)
 and [Part I, Declaring topics](00-design.md#declaring-topics).
 
 ## Containers
@@ -62,11 +66,14 @@ flowchart TB
 
 The core compiles with no ROS and no hardware: ports implement the
 `r2s_port.h` contract (`r2s_port_read`, `r2s_port_write`,
-`r2s_port_tx_free`, `r2s_port_tick`) and the C++ layer calls the same C
+`r2s_port_tx_free`, `r2s_port_tick`), with `_link` variants where a port
+hosts several links, and the C++ layer calls the same C
 API a C sketch calls. The bridge reuses the core framing sources
 (`core/src/framer.c`, `rcobs.c`, `crc.c`) compiled for the host, so
-framing has one implementation. `spec/vectors/` checks all
-three implementations. See [Part II, Repository layout](00-design.md#repository-layout)
+framing has one implementation, with one framer instance per live link
+(up to 16 per bridge process). `spec/vectors/` checks all
+three implementations. Launch arguments place the node in a namespace
+and remap the MCU topics. See [Part II, Repository layout](00-design.md#repository-layout)
 and [Part II, Test strategy](00-design.md#test-strategy).
 
 | Box | Directory | Test scope |
@@ -105,9 +112,11 @@ flowchart LR
 ```
 
 `r2s-gen check` validates `r2s.yaml` without emitting anything, and
-`r2s-gen generate --layout arduino|cMake` emits the structs (`emit.py`),
+`r2s-gen generate --layout arduino|cmake` emits the structs (`emit.py`),
 the descriptors (`descriptors.py`), the topic table and publish
-wrappers (`topics.py`), with bounds resolved by `bounds.py`. The
+wrappers (`topics.py`), with bounds resolved by `bounds.py`. Layouts today
+are `arduino` and `cmake`; `compact` handshakes need the node map, which
+`generate` does not emit yet, so use `handshake: full`. The
 firmware announces each topic in a TOPIC frame; the bridge resolves the
 type support, compares the hash, and answers TOPIC_STATUS. Sketches that
 skip the generator use the X-macro list instead and announce the same
@@ -159,7 +168,9 @@ The diagrams below follow `spec/protocol.md`, sections 8.1 and 8.2. In
 code the MCU states are the `ANNOUNCING` and `CONNECTED` values in
 `core/src/session.c` (`BOOT` is the init path that sends the first
 HELLO), and the host states are the `SessionState` values in
-`bridge/r2s_bridge/include/r2s_bridge/session.hpp`.
+`bridge/r2s_bridge/include/r2s_bridge/session.hpp`. Pending S5
+(parameters, reliable channel) and S8 (services and actions) add rules
+outside these two machines and claim no transition here.
 
 ```mermaid
 stateDiagram-v2
