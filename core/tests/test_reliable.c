@@ -494,12 +494,11 @@ void test_params_declare_answers_int_and_string_types(void)
 {
     const uint8_t req_one[] = {0x01u, 0x01u};
     /* DECLARE index 1, i64, read-only, name "limit", default 7. */
-    const uint8_t declare_i64[] = {0x02u, 0x01u, 0x01u, 0x01u, 0x05u, 'l', 'i', 'm', 'i', 't',
-                                   0x07u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
+    const uint8_t declare_i64[] = {0x02u, 0x01u, 0x01u, 0x01u, 0x05u, 'l',   'i',   'm',   'i',
+                                   't',   0x07u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
     const uint8_t req_two[] = {0x01u, 0x02u};
     /* DECLARE index 2, string, no flags, name "name", default "ab". */
-    const uint8_t declare_string[] = {0x02u, 0x02u, 0x03u, 0x00u, 0x04u, 'n', 'a', 'm', 'e',
-                                      0x02u, 'a', 'b'};
+    const uint8_t declare_string[] = {0x02u, 0x02u, 0x03u, 0x00u, 0x04u, 'n', 'a', 'm', 'e', 0x02u, 'a', 'b'};
 
     configure();
     feed_host(3, 0, req_one, sizeof req_one);
@@ -517,11 +516,10 @@ void test_params_f64_declare_streams_eight_bytes(void)
         {"gain", R2S_PARAM_F64, 0u, 0u, {.f = 1.5}, {.f = 0}},
     };
     /* DECLARE index 0, f64, no flags, name "gain", default 1.5. */
-    const uint8_t declare[] = {0x02u, 0x00u, 0x02u, 0x00u, 0x04u, 'g', 'a', 'i', 'n',
+    const uint8_t declare[] = {0x02u, 0x00u, 0x02u, 0x00u, 0x04u, 'g',   'a',   'i',  'n',
                                0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF8u, 0x3Fu};
     const uint8_t req[] = {0x01u, 0x00u};
-    static const uint8_t two_point_five[] = {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x04u,
-                                             0x40u};
+    static const uint8_t two_point_five[] = {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x04u, 0x40u};
     static const uint8_t short_value[] = {0x00u, 0x00u};
 
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", one_topic, 1));
