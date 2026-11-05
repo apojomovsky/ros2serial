@@ -98,6 +98,16 @@ void test_params_configure_refuses_a_table_it_cannot_announce(void)
     static r2s_param_t bad_default[] = {
         {"led", R2S_PARAM_BOOL, 0u, 0u, {.b = 5u}, {.b = 0u}},
     };
+    static r2s_param_t null_name[] = {
+        {NULL, R2S_PARAM_BOOL, 0u, 0u, {.b = 1u}, {.b = 0u}},
+    };
+    static char long_name[600];
+    static r2s_param_t long_table[] = {
+        {"", R2S_PARAM_BOOL, 0u, 0u, {.b = 1u}, {.b = 0u}},
+    };
+    static r2s_param_t null_string[] = {
+        {"name", R2S_PARAM_STRING, 0u, 7u, {.s = NULL}, {.s = NULL}},
+    };
     static char tiny[1];
     static r2s_param_t bad_string[] = {
         {"name", R2S_PARAM_STRING, 0u, sizeof tiny - 1u, {.s = "ab"}, {.s = NULL}},
@@ -107,6 +117,12 @@ void test_params_configure_refuses_a_table_it_cannot_announce(void)
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_params_configure(bad_type, 1));
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_params_configure(bad_flags, 1));
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_params_configure(bad_default, 1));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_params_configure(null_name, 1));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_params_configure(null_string, 1));
+    memset(long_name, 'n', sizeof long_name - 1u);
+    long_name[sizeof long_name - 1u] = '\0';
+    long_table[0].name = long_name;
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_params_configure(long_table, 1));
     bad_string[0].value.s = tiny;
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_params_configure(bad_string, 1));
     TEST_ASSERT_EQUAL_UINT8(0, r2s_params_count());
@@ -340,6 +356,8 @@ void test_reliable_malformed_frames_are_refused_not_acked(void)
     const uint8_t stray_status[] = {0x04u, 0x00u, 0x00u, 0x00u};
     const uint8_t short_ack[] = {0x03u};
     const uint8_t wrong_channel_ack[] = {0x05u, 0x00u};
+    static const uint8_t bad_varint[] = {0x03u, 0x00u, 0x02u, 0x80u};
+    static const uint8_t short_string[] = {0x03u, 0x01u, 0x02u, 0x04u, 'h', 'i'};
 
     configure();
     connect();
@@ -351,7 +369,52 @@ void test_reliable_malformed_frames_are_refused_not_acked(void)
     /* An ID 6 frame is never acked and never rides the reliable channel. */
     feed_host(6, 0, short_ack, sizeof short_ack);
     feed_host(6, 1, wrong_channel_ack, sizeof wrong_channel_ack);
+    feed_host(3, 4, bad_varint, sizeof bad_varint);
+    feed_host(3, 5, short_string, sizeof short_string);
     TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+}
+
+/* covers: PAR-5 */
+void test_params_set_with_short_int_value_answers_bad_length(void)
+{
+    /* SET rel 0, index 1, no value bytes: an i64 needs 8. */
+    const uint8_t set[] = {0x03u, 0x00u, 0x01u};
+    const uint8_t ack[] = {0x03u, 0x00u};
+    const uint8_t status[] = {0x04u, 0x00u, 0x01u, 0x02u};
+
+    configure();
+    connect();
+    fake_port_tx_clear();
+    feed_host(3, 0, set, sizeof set);
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+    assert_tx(0, 6, 0, ack, sizeof ack);
+    assert_tx(1, 3, 0, status, sizeof status);
+}
+
+/* covers: PAR-5 */
+void test_params_check_set_reports_unknown_index(void)
+{
+    static const uint8_t value[] = {0x00u};
+
+    configure();
+    TEST_ASSERT_EQUAL_INT(R2S_PARAM_UNKNOWN_INDEX, r2s_params_check_set(9, value, sizeof value));
+}
+
+/* covers: PAR-2 */
+void test_params_declare_len_reports_zero_past_the_table(void)
+{
+    configure();
+    TEST_ASSERT_EQUAL_UINT16(0u, r2s_params_declare_len(9));
+}
+
+/* covers: PAR-6 */
+void test_params_store_applies_int_value(void)
+{
+    static const uint8_t seven[] = {0x07u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
+
+    configure();
+    r2s_params_store(1, seven, sizeof seven);
+    TEST_ASSERT_TRUE(r2s_params_get(1)->value.i == 7);
 }
 
 /* covers: PAR-5 */
@@ -413,6 +476,53 @@ void test_params_readonly_string_over_bound_earns_readonly(void)
 }
 
 /* covers: REL-2 */
+/* covers: PAR-1, PAR-2, PAR-6 */
+void test_params_declare_answers_int_and_string_types(void)
+{
+    const uint8_t req_one[] = {0x01u, 0x01u};
+    /* DECLARE index 1, i64, read-only, name "limit", default 7. */
+    const uint8_t declare_i64[] = {0x02u, 0x01u, 0x01u, 0x01u, 0x05u, 'l', 'i', 'm', 'i', 't',
+                                   0x07u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
+    const uint8_t req_two[] = {0x01u, 0x02u};
+    /* DECLARE index 2, string, no flags, name "name", default "ab". */
+    const uint8_t declare_string[] = {0x02u, 0x02u, 0x03u, 0x00u, 0x04u, 'n', 'a', 'm', 'e',
+                                      0x02u, 'a', 'b'};
+
+    configure();
+    feed_host(3, 0, req_one, sizeof req_one);
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+    assert_tx(1, 3, 0, declare_i64, sizeof declare_i64);
+    feed_host(3, 1, req_two, sizeof req_two);
+    TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_frame_count());
+    assert_tx(2, 3, 1, declare_string, sizeof declare_string);
+}
+
+/* covers: PAR-1, PAR-2, PAR-5, PAR-6 */
+void test_params_f64_declare_streams_eight_bytes(void)
+{
+    static r2s_param_t f64_table[] = {
+        {"gain", R2S_PARAM_F64, 0u, 0u, {.f = 1.5}, {.f = 0}},
+    };
+    /* DECLARE index 0, f64, no flags, name "gain", default 1.5. */
+    const uint8_t declare[] = {0x02u, 0x00u, 0x02u, 0x00u, 0x04u, 'g', 'a', 'i', 'n',
+                               0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF8u, 0x3Fu};
+    const uint8_t req[] = {0x01u, 0x00u};
+    static const uint8_t two_point_five[] = {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x04u,
+                                             0x40u};
+    static const uint8_t short_value[] = {0x00u, 0x00u};
+
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", one_topic, 1));
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_params_configure(f64_table, 1));
+    r2s_init();
+    feed_host(3, 0, req, sizeof req);
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+    assert_tx(1, 3, 0, declare, sizeof declare);
+    TEST_ASSERT_EQUAL_INT(R2S_PARAM_APPLIED, r2s_params_check_set(0, two_point_five, 8));
+    TEST_ASSERT_EQUAL_INT(R2S_PARAM_BAD_TYPE_OR_LENGTH, r2s_params_check_set(0, short_value, 2));
+    r2s_params_store(0, two_point_five, sizeof two_point_five);
+    TEST_ASSERT_EQUAL_MEMORY(two_point_five, &f64_table[0].value.f, sizeof two_point_five);
+}
+
 void test_reliable_second_set_waits_behind_the_first(void)
 {
     const uint8_t first[] = {0x03u, 0x00u, 0x00u, 0x00u};
@@ -458,6 +568,60 @@ void test_params_string_set_applies_and_rejects_nul(void)
     feed_host(3, 1, nul, sizeof nul);
     TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
     TEST_ASSERT_EQUAL_STRING("hi", r2s_params_get(2)->value.s);
+}
+
+/* covers: PAR-7, PAR-8 */
+void test_params_announcing_blocked_link_sends_nothing(void)
+{
+    const uint8_t req[] = {0x01u, 0x00u};
+    const uint8_t req_unknown[] = {0x01u, 0x09u};
+
+    configure();
+    fake_port_tx_clear();
+    fake_port_set_tx_free(0);
+    feed_host(3, 0, req, sizeof req);
+    feed_host(3, 1, req_unknown, sizeof req_unknown);
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    fake_port_set_tx_free(0xFFFFu);
+}
+
+/* covers: REL-4, PAR-7 */
+void test_params_announcing_answers_non_handshake_frames_with_hello(void)
+{
+    const uint8_t ack[] = {0x03u, 0x00u};
+    const uint8_t short_req[] = {0x01u};
+
+    configure();
+    fake_port_tx_clear();
+    feed_host(6, 0, ack, sizeof ack);
+    fake_port_advance(100);
+    feed_host(3, 1, short_req, sizeof short_req);
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+}
+
+/* covers: REL-2, REL-3 */
+void test_reliable_ack_for_old_rel_leaves_the_outstanding_set(void)
+{
+    const uint8_t set[] = {0x03u, 0x00u, 0x00u, 0x00u};
+    const uint8_t stray[] = {0x03u, 0x09u};
+    const uint8_t empty[] = {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
+    const uint8_t status[] = {0x04u, 0x00u, 0x00u, 0x00u};
+    const uint8_t want[] = {0x04u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
+
+    configure();
+    connect();
+    fake_port_tx_clear();
+    feed_host(6, 0, stray, sizeof stray);
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    feed_host(3, 0, set, sizeof set);
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+    feed_host(6, 1, stray, sizeof stray);
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+    fake_port_advance(500);
+    feed_host(4, 0, empty, sizeof empty);
+    TEST_ASSERT_EQUAL_UINT16(4, fake_port_tx_frame_count());
+    assert_tx(2, 3, 1, status, sizeof status);
+    assert_tx(3, 4, 0, want, sizeof want);
 }
 
 void test_params_set_ignored_in_announcing(void)
