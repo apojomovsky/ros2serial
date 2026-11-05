@@ -11,7 +11,7 @@
   <exec_depend>python3-yaml</exec_depend>
   <exec_depend>python3-jsonschema</exec_depend>
   <test_depend>python3-pytest</test_depend>
-  <test_depend>python3-pip</test_depend>
+  <test_depend>python3-venv</test_depend>
   <test_depend>python3-hypothesis</test_depend>
   <export>
     <build_type>ament_python</build_type>

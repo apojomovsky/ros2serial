@@ -74,7 +74,7 @@ def test_colcon_tests_the_generator_with_pytest():
 
 def test_the_generator_test_tooling_resolves_through_rosdep():
     text = (ROOT / "gen" / "package.xml").read_text(encoding="utf-8")
-    for key in ("python3-pytest", "python3-pip", "python3-hypothesis"):
+    for key in ("python3-pytest", "python3-venv", "python3-hypothesis"):
         assert key in text, f"gen/package.xml names no {key} test dependency"
 
 
