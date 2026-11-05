@@ -188,7 +188,7 @@ class HostSession:
                 value: object = int(param.value.b)
             elif kind == 1:
                 value = int(param.value.i)
-            elif kind == 2:
+            elif kind == 2:  # pragma: no cover - the C table has no f64 parameter
                 value = float(param.value.f)
             else:
                 value = bytes(ctypes.string_at(param.value.s))

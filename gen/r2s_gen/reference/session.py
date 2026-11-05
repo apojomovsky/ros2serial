@@ -598,7 +598,7 @@ class McuSession:
             else:
                 self._answer_with_hello()
             return
-        if self.state != CONNECTED:
+        if self.state != CONNECTED:  # pragma: no cover - only ANNOUNCING and CONNECTED exist
             return
         if len(payload) >= 3 and payload[0] == OP_PARAM_SET:
             rel, index = payload[1], payload[2]
