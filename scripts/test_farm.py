@@ -65,16 +65,16 @@ def test_the_farm_script_runs_no_docker_or_network_fetch():
 
 
 def test_colcon_tests_the_generator_with_pytest():
-    text = (ROOT / "gen" / "setup.py").read_text(encoding="utf-8")
-    assert "pytest" in text and "tests_require" in text, (
-        "gen/setup.py must declare tests_require with pytest, or colcon test "
-        "falls back to unittest discovery and fails with no tests collected"
+    text = (ROOT / "scripts" / "farm-test.sh").read_text(encoding="utf-8")
+    assert "--python-testing pytest" in text, (
+        "colcon must run pytest explicitly: newer setuptools ignore setup.py "
+        "tests_require, so the unittest fallback finds no tests and fails"
     )
 
 
 def test_the_generator_test_tooling_resolves_through_rosdep():
     text = (ROOT / "gen" / "package.xml").read_text(encoding="utf-8")
-    for key in ("python3-pytest", "python3-venv", "python3-hypothesis"):
+    for key in ("python3-pytest", "python3-venv", "python3-hypothesis", "python3-wheel"):
         assert key in text, f"gen/package.xml names no {key} test dependency"
 
 

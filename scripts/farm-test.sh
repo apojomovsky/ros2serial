@@ -57,11 +57,14 @@ set +u
 source "$workspace/install/setup.bash"
 set -u
 status=0
+# The pytest step runs only when asked: newer setuptools ignore setup.py
+# tests_require, so the default unittest fallback finds no tests and fails.
 colcon --log-base "$workspace/log" test \
   --base-paths gen gen/r2s_rosidl bridge/r2s_bridge bridge/r2s_bridge_tests \
   --build-base "$workspace/build" \
   --install-base "$workspace/install" \
   --event-handlers console_direct+ \
+  --python-testing pytest \
   --return-code-on-test-failure || status=1
 colcon --log-base "$workspace/log" test-result --test-result-base "$workspace/build" --all --verbose || status=1
 [ "$status" -eq 0 ] || exit "$status"

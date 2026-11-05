@@ -12,6 +12,7 @@
   <test_depend>python3-pytest</test_depend>
   <test_depend>python3-venv</test_depend>
   <test_depend>python3-hypothesis</test_depend>
+  <test_depend>python3-wheel</test_depend>
   <export>
     <build_type>ament_python</build_type>
   </export>

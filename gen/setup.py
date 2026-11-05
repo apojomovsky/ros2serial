@@ -44,9 +44,6 @@ setup(
     package_dir=package_dir,
     package_data=package_data,
     python_requires=">=3.10",
-    # Colcon runs pytest for this package only when the requirement is
-    # declared here: without it the unittest step finds no tests and fails.
-    tests_require=["pytest"],
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/r2s_gen"]),
         ("share/r2s_gen", ["package.xml"]),
