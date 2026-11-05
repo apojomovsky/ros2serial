@@ -303,3 +303,110 @@ def test_spin_budget_skips_dropped_units():
     handshake(pair)
     pair.feed_raw(b"\x00" * 8 + wire(4, 0, b""))
     assert pair.host.snapshot()["counters"] == (11, 0, 0, 0)
+
+
+# covers: PAR-1, PAR-2, PAR-6, PAR-7
+def test_declare_answers_every_configured_type():
+    pair = Pair()
+    pair.feed_frame(3, 0, bytes((PARAM_REQ, 0)))
+    pair.feed_frame(3, 1, bytes((PARAM_REQ, 1)))
+    pair.feed_frame(3, 2, bytes((PARAM_REQ, 2)))
+    assert pair.last_model_tx == [
+        model.encode_frame(
+            3, 2, bytes((model.OP_PARAM_DECLARE, 2, model.PARAM_STRING, 0, 4)) + b"name" + bytes((2,)) + b"ab"
+        )
+    ]
+    pair.feed_frame(3, 3, bytes((PARAM_REQ, 3)))
+    assert pair.last_model_tx == [
+        model.encode_frame(3, 3, bytes((model.OP_PARAM_STATUS, 0, 3, model.PARAM_UNKNOWN_INDEX)))
+    ]
+
+
+# covers: SES-10
+def test_reserved_channel_in_announcing_answers_hello():
+    pair = Pair()
+    pair.feed_frame(2, 0, b"")
+    assert len(pair.last_model_tx) == 1
+
+
+def _send_set(pair: Pair, seq: int, rel: int, index: int, value: bytes) -> None:
+    """One SET through both sides; the check after it compares everything."""
+    pair.feed_frame(3, seq, bytes((PARAM_SET, rel, index)) + value)
+
+
+def _send_ack(pair: Pair, seq: int, rel: int) -> None:
+    """One channel 6 ack through both sides."""
+    pair.feed_frame(6, seq, bytes((model.PARAM_CHANNEL, rel)))
+
+
+# covers: PAR-3, PAR-4, PAR-5, PAR-8, REL-1, REL-3, REL-4
+def test_set_verdicts_cover_every_type_rule():
+    pair = Pair()
+    handshake(pair)
+    seq3, seq6 = 0, 0
+    _send_set(pair, seq3, 0, 0, b"\x01")
+    seq3 += 1
+    assert pair.model.snapshot()["params"][0] == (model.PARAM_BOOL, 1)
+    _send_ack(pair, seq6, 0)
+    seq6 += 1
+    _send_set(pair, seq3, 1, 0, b"\x02")
+    seq3 += 1
+    _send_set(pair, seq3, 1, 0, b"")
+    seq3 += 1
+    _send_ack(pair, seq6, 1)
+    seq6 += 1
+    _send_set(pair, seq3, 2, 1, b"\x01\x02\x03\x04")
+    seq3 += 1
+    _send_ack(pair, seq6, 2)
+    seq6 += 1
+    _send_set(pair, seq3, 3, 1, (7).to_bytes(8, "little"))
+    seq3 += 1
+    _send_ack(pair, seq6, 3)
+    seq6 += 1
+    _send_set(pair, seq3, 4, 2, b"\x80")
+    seq3 += 1
+    _send_set(pair, seq3, 4, 2, b"\x03ab\x00")
+    seq3 += 1
+    _send_set(pair, seq3, 4, 2, b"\x05ab")
+    seq3 += 1
+    _send_set(pair, seq3, 4, 2, b"\x08" + b"12345678")
+    seq3 += 1
+    _send_ack(pair, seq6, 4)
+    seq6 += 1
+    _send_set(pair, seq3, 5, 2, b"\x02xy")
+    seq3 += 1
+    assert pair.model.snapshot()["params"][2] == (model.PARAM_STRING, b"xy")
+    _send_ack(pair, seq6, 5)
+    seq6 += 1
+    _send_set(pair, seq3, 6, 9, b"\x00")
+    seq3 += 1
+    _send_ack(pair, seq6, 6)
+    seq6 += 1
+    _send_set(pair, seq3, 6, 9, b"\x00")
+    _send_set(pair, seq3 + 1, 11, 0, b"\x00")
+
+
+# covers: REL-1, REL-2, REL-4
+def test_pending_retransmit_and_giveup():
+    pair = Pair()
+    handshake(pair)
+    pair.feed_frame(3, 0, bytes((PARAM_SET, 0, 0, 0)))
+    pair.feed_frame(3, 1, bytes((PARAM_SET, 1, 0, 1)))
+    assert pair.last_model_tx == [model.encode_frame(6, 1, bytes((model.PARAM_CHANNEL, 1)))]
+    pair.feed_frame(6, 0, bytes((model.PARAM_CHANNEL, 9)))
+    pair.feed_frame(6, 1, bytes((model.PARAM_CHANNEL + 1, 0)))
+    pair.feed_frame(6, 2, bytes((model.PARAM_CHANNEL,)))
+    pair.feed_frame(6, 3, bytes((model.PARAM_CHANNEL, 0)))
+    assert pair.last_model_tx == [model.encode_frame(3, 1, bytes((model.OP_PARAM_STATUS, 1, 0, 0)))]
+    pair.advance(499)
+    assert pair.last_model_tx == []
+    pair.advance(1)
+    assert model.encode_frame(3, 2, bytes((model.OP_PARAM_STATUS, 1, 0, 0))) in pair.last_model_tx
+    seq4 = 0
+    for _ in range(3):
+        pair.feed_frame(4, seq4, b"")
+        seq4 += 1
+        pair.advance(500)
+    assert pair.model.snapshot()["counters"][3] == 1
+    pair.advance(500)
+    assert pair.model.snapshot()["counters"][3] == 1

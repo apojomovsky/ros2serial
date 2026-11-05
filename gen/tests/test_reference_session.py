@@ -139,6 +139,38 @@ def test_heartbeat_carries_the_counters():
     assert session.take_tx() == [model.encode_frame(4, 0, counters)]
 
 
+# covers: PAR-1, PAR-3
+def test_declare_and_set_cover_float_and_writable_int():
+    params = [
+        model.Param("gain", model.PARAM_F64, 0, 0, 1.5, 1.5),
+        model.Param("count", model.PARAM_I64, 0, 0, 7, 7),
+    ]
+    session = model.McuSession(topics=list(TOPICS), params=params)
+    session.reset(0)
+    session.take_tx()
+    session.feed(wire(3, 0, bytes((model.OP_PARAM_REQ, 0))))
+    session.spin()
+    assert session.take_tx() == [
+        model.encode_frame(
+            3, 0, bytes((model.OP_PARAM_DECLARE, 0, model.PARAM_F64, 0, 4)) + b"gain" + struct.pack("<d", 1.5)
+        )
+    ]
+    session.feed(wire(3, 1, bytes((model.OP_PARAM_REQ, 1))))
+    session.spin()
+    session.take_tx()
+    connect(session)
+    session.feed(wire(3, 0, bytes((model.OP_PARAM_SET, 0, 0)) + struct.pack("<d", 2.5)))
+    session.spin()
+    assert session.take_tx() == [
+        model.encode_frame(6, 0, bytes((model.PARAM_CHANNEL, 0))),
+        model.encode_frame(3, 0, bytes((model.OP_PARAM_STATUS, 0, 0, model.PARAM_APPLIED))),
+    ]
+    assert session.snapshot()["params"] == [(model.PARAM_F64, 2.5), (model.PARAM_I64, 7)]
+    session.feed(wire(3, 1, bytes((model.OP_PARAM_SET, 1, 1)) + (8).to_bytes(8, "little", signed=True)))
+    session.spin()
+    assert session.snapshot()["params"] == [(model.PARAM_F64, 2.5), (model.PARAM_I64, 8)]
+
+
 # covers: SES-5
 def test_hello_repeats_after_one_silent_second():
     session = fresh()
