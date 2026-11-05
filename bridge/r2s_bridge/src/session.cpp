@@ -4,6 +4,7 @@
 #include "r2s_bridge/session.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -896,6 +897,10 @@ struct Session::Impl {
         if (code < 1u || code > 6u) {
             return;
         }
+        error_sums_[code - 1u] += count;
+        if (topic != 0xFFu) {
+            error_by_topic_[topic][code - 1u] += count;
+        }
         std::string topic_text = std::to_string(topic);
         std::string field_text;
         for (const TopicInfo &info : topics) {
@@ -1116,6 +1121,12 @@ struct Session::Impl {
     // the counts never do.
     std::map<std::uint8_t, std::uint8_t> expected_seq;
     std::map<std::uint8_t, std::uint32_t> gaps;
+    // The running error report sums per code ([ERR-6]), and the same counts
+    // per naming topic id. A report adds its count to its code's sum, and
+    // to its topic's slot unless it names no topic (0xFF). The sums never
+    // wrap; unreported codes and ids read zero.
+    std::array<std::uint64_t, 6> error_sums_{};
+    std::map<std::uint8_t, std::array<std::uint64_t, 6>> error_by_topic_;
 
     std::uint8_t seq_control = 0;
     std::uint8_t seq_heartbeat = 0;
@@ -1159,6 +1170,17 @@ const std::vector<TopicInfo> &Session::topics() const
 McuCounters Session::mcu_counters() const
 {
     return impl_->mcu;
+}
+
+std::array<std::uint64_t, 6> Session::error_sums() const
+{
+    return impl_->error_sums_;
+}
+
+std::array<std::uint64_t, 6> Session::error_counts(std::uint8_t topic_id) const
+{
+    const auto found = impl_->error_by_topic_.find(topic_id);
+    return found == impl_->error_by_topic_.end() ? std::array<std::uint64_t, 6>{} : found->second;
 }
 
 std::uint32_t Session::seq_gaps(std::uint8_t topic_id) const
