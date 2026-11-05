@@ -546,8 +546,9 @@ struct Session::Impl {
 
     // A re-handshake drops the reliable state ([REL-5]): the outstanding
     // SET, the pending ones and their queued frames, even a partially
-    // written one. A fragment already on the wire dies by its check, and a
-    // stale SET must never complete under a new handshake's numbering.
+    // written one. Bytes already on the wire get a closing delimiter, so
+    // the next frame decodes instead of merging into the stale prefix,
+    // and a stale SET never completes under a new handshake's numbering.
     // Queued acks are control frames, dropped with the rest ([SES-33]).
     void drop_reliable()
     {
@@ -567,6 +568,15 @@ struct Session::Impl {
         queue_ = std::move(kept);
         pending_bytes_ = kept_bytes;
         if (drop_front) {
+            // A bare delimiter ends the stale prefix on the wire, so the
+            // next frame decodes instead of merging into it. The closed
+            // fragment fails its check and counts once ([FRM-1]).
+            if (front_offset_ > 0) {
+                QueuedFrame delimiter;
+                delimiter.bytes.push_back(0x00u);
+                queue_.push_front(std::move(delimiter));
+                ++pending_bytes_;
+            }
             front_offset_ = 0;
         }
     }
