@@ -108,6 +108,13 @@ void test_params_configure_refuses_a_table_it_cannot_announce(void)
     static r2s_param_t null_string[] = {
         {"name", R2S_PARAM_STRING, 0u, 7u, {.s = NULL}, {.s = NULL}},
     };
+    static r2s_param_t null_value[] = {
+        {"name", R2S_PARAM_STRING, 0u, 7u, {.s = "ab"}, {.s = NULL}},
+    };
+    static char huge_name[65537];
+    static r2s_param_t huge_table[] = {
+        {"", R2S_PARAM_BOOL, 0u, 0u, {.b = 1u}, {.b = 0u}},
+    };
     static char tiny[1];
     static r2s_param_t bad_string[] = {
         {"name", R2S_PARAM_STRING, 0u, sizeof tiny - 1u, {.s = "ab"}, {.s = NULL}},
@@ -119,6 +126,12 @@ void test_params_configure_refuses_a_table_it_cannot_announce(void)
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_params_configure(bad_default, 1));
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_params_configure(null_name, 1));
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_params_configure(null_string, 1));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_params_configure(null_value, 1));
+    memset(huge_name, 'n', sizeof huge_name - 1u);
+    huge_name[sizeof huge_name - 1u] = '\0';
+    huge_table[0].name = huge_name;
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_params_configure(huge_table, 1));
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_params_configure(NULL, 0));
     memset(long_name, 'n', sizeof long_name - 1u);
     long_name[sizeof long_name - 1u] = '\0';
     long_table[0].name = long_name;
@@ -590,13 +603,16 @@ void test_params_announcing_answers_non_handshake_frames_with_hello(void)
 {
     const uint8_t ack[] = {0x03u, 0x00u};
     const uint8_t short_req[] = {0x01u};
+    const uint8_t stray_status[] = {0x04u, 0x00u};
 
     configure();
     fake_port_tx_clear();
     feed_host(6, 0, ack, sizeof ack);
     fake_port_advance(100);
     feed_host(3, 1, short_req, sizeof short_req);
-    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+    fake_port_advance(100);
+    feed_host(3, 2, stray_status, sizeof stray_status);
+    TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_frame_count());
 }
 
 /* covers: REL-2, REL-3 */
