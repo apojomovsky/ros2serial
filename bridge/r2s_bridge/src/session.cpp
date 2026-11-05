@@ -570,7 +570,7 @@ struct Session::Impl {
         if (drop_front) {
             // A bare delimiter ends the stale prefix on the wire, so the
             // next frame decodes instead of merging into it. The closed
-            // fragment fails its check and counts once ([FRM-1]).
+            // fragment fails its check and counts once ([FRM-8]).
             if (front_offset_ > 0) {
                 QueuedFrame delimiter;
                 delimiter.bytes.push_back(0x00u);
