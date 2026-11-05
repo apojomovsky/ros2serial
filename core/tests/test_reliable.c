@@ -395,6 +395,23 @@ void test_params_set_answers_unknown_readonly_bad_length_or_range(void)
     TEST_ASSERT_EQUAL_STRING("ab", r2s_params_get(2)->value.s);
 }
 
+/* covers: PAR-5 */
+void test_params_readonly_string_over_bound_earns_readonly(void)
+{
+    static char buf[4];
+    static r2s_param_t ro_table[] = {
+        {"mode", R2S_PARAM_STRING, R2S_PARAM_READONLY, sizeof buf - 1u, {.s = "ab"}, {.s = NULL}},
+    };
+    /* Four text bytes into a three-byte read-only string: read-only wins
+     * over range, the documented verdict order. */
+    static const uint8_t over[] = {0x04u, 'a', 'b', 'c', 'd'};
+
+    buf[0] = '\0';
+    ro_table[0].value.s = buf;
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_params_configure(ro_table, 1));
+    TEST_ASSERT_EQUAL_INT(R2S_PARAM_READONLY_STATUS, r2s_params_check_set(0, over, sizeof over));
+}
+
 /* covers: REL-2 */
 void test_reliable_second_set_waits_behind_the_first(void)
 {

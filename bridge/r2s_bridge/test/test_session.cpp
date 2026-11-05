@@ -2749,6 +2749,24 @@ TEST(ReliableWalk, GivesUpAfterThreeRetries)
     EXPECT_EQ(units[0][2], 0x01u) << "a HELLO_REQ, not another PARAM_REQ";
 }
 
+// covers: REL-7
+TEST(ReliableWalk, CoalescesParamReqBehindABlockedLink)
+{
+    Fixture fixture;
+    fixture.block_writes();
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+    EXPECT_EQ(fixture.session().control_coalesced(), 0u) << "nothing replaced yet";
+    fixture.advance_to(200);
+    fixture.advance_to(400);
+    EXPECT_EQ(fixture.session().control_coalesced(), 2u) << "each retry replaces in place";
+    fixture.allow_writes();
+    fixture.session().poll();
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 3u);
+    EXPECT_EQ(units[2], with_check({kParams, 0u, kParamReq, 0x00u})) << "the REQ keeps the first seq";
+}
+
 // covers: REL-2
 TEST(ReliableSend, RetransmitsAndStopsOnAck)
 {
@@ -2808,8 +2826,7 @@ TEST(ReliableReceive, AcksEveryStatusAndAppliesOnce)
     fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x00u});
     auto units = drain_decoded(fixture);
     ASSERT_EQ(units.size(), 1u);
-    EXPECT_EQ(units[0], with_check({kAck, 0u, kParams, 0x00u}))
-        << "the ack names channel and rel";
+    EXPECT_EQ(units[0], with_check({kAck, 0u, kParams, 0x00u})) << "the ack names channel and rel";
     ASSERT_EQ(statuses.size(), 1u);
     EXPECT_EQ(statuses[0], std::make_pair(std::uint8_t{0}, std::uint8_t{0}));
     fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x00u, 0x00u});

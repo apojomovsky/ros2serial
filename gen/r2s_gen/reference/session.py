@@ -12,9 +12,8 @@ behavior.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import struct
+from dataclasses import dataclass
 
 from r2s_gen.reference import crc as crc_mod
 from r2s_gen.reference import frames as frames_mod

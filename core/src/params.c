@@ -181,11 +181,14 @@ int r2s_params_check_set(uint8_t index, const uint8_t *value, uint16_t len)
             return R2S_PARAM_BAD_TYPE_OR_LENGTH;
         }
     } else {
-        /* A string value the encoding cannot carry is refused (PAR-3);
-         * one past the bound is out of range (PAR-5). */
+        /* A string value the encoding cannot carry is refused (PAR-3). */
         if (!string_len(value, len, &text_len)) {
             return -1;
         }
+        if ((param->flags & R2S_PARAM_READONLY) != 0u) {
+            return R2S_PARAM_READONLY_STATUS;
+        }
+        /* One past the bound is out of range (PAR-5). */
         if (text_len > param->bound) {
             return R2S_PARAM_OUT_OF_RANGE;
         }
