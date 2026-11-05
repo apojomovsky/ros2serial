@@ -405,11 +405,11 @@ def test_a_docs_edit_runs_docs_mermaid_and_lint(tmp_path):
     ]
 
 
-def test_a_gen_test_edit_runs_only_gen_besides_lint(tmp_path):
+def test_a_gen_test_edit_runs_gen_and_coverage_besides_lint(tmp_path):
     repo = test_taskfile.fixture(tmp_path)
     establish(repo)
     (repo / "gen" / "tests" / "probe").write_text("probe\nprobe again\n")
-    assert selected_jobs(repo, tmp_path) == ["bridge-images", "gen", "lint", "plan"]
+    assert selected_jobs(repo, tmp_path) == ["bridge-images", "coverage", "gen", "lint", "plan"]
 
 
 def test_an_esp32_script_edit_runs_esp32_budgets_and_scripts_besides_lint(tmp_path):

@@ -12,7 +12,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-FLOORS = {"core": (95.0, 90.0), "bridge": (90.0, 80.0)}
+FLOORS = {"core": (95.0, 90.0), "bridge": (90.0, 80.0), "gen": (95.0, 90.0)}
 
 
 @dataclass

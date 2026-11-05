@@ -60,8 +60,8 @@ if [ "${1:-}" = json ]; then
   [ -n "$out" ] || exit 3
   if [[ "$PWD" == */base ]]; then figs=$R2S_COV_FIG_BASE; else figs=$R2S_COV_FIG_HEAD; fi
   set -- $figs
-  python3 -c "import json; json.dump({'line_covered': $1, 'line_total': 100, \\
-    'branch_covered': $2, 'branch_total': 100}, open('$out', 'w'))"
+  python3 -c "import json; json.dump({'totals': {'covered_lines': $1, 'num_statements': 100, \\
+    'covered_branches': $2, 'num_branches': 100}}, open('$out', 'w'))"
   exit 0
 fi
 exit 3

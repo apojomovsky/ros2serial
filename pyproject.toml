@@ -18,3 +18,13 @@ pythonpath = ["gen"]
 [tool.mutmut]
 source_paths = ["gen/r2s_gen"]
 pytest_add_cli_args_test_selection = ["gen/tests"]
+
+# Generator line and branch coverage. The gate passes the same scope as
+# flags, so this stays a local-run default rather than the judge.
+[tool.coverage.run]
+branch = true
+source = ["gen/r2s_gen"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

@@ -27,6 +27,7 @@ ARG HYPOTHESIS_VERSION
 ARG JSONSCHEMA_VERSION
 ARG PYSERIAL_VERSION
 ARG GCOVR_VERSION
+ARG COVERAGE_VERSION
 ARG ARDUINO_CLI_VERSION
 ARG ARDUINO_AVR_CORE_VERSION
 ARG TASK_VERSION
@@ -36,7 +37,8 @@ RUN python3 -m venv --system-site-packages /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir \
         "ruff==${RUFF_VERSION}" "pytest==${PYTEST_VERSION}" "actionlint-py==${ACTIONLINT_PY_VERSION}" \
         "git-cliff==${GIT_CLIFF_VERSION}" "pyyaml==${PYYAML_VERSION}" "jsonschema==${JSONSCHEMA_VERSION}" \
-        "pyserial==${PYSERIAL_VERSION}" "gcovr==${GCOVR_VERSION}" "hypothesis==${HYPOTHESIS_VERSION}"
+        "pyserial==${PYSERIAL_VERSION}" "gcovr==${GCOVR_VERSION}" "hypothesis==${HYPOTHESIS_VERSION}" \
+        "coverage==${COVERAGE_VERSION}"
 ENV ARDUINO_DIRECTORIES_DATA=/opt/arduino \
     ARDUINO_DIRECTORIES_USER=/opt/arduino/user \
     ARDUINO_BUILD_CACHE_PATH=/tmp/arduino-build-cache

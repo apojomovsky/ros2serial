@@ -192,11 +192,12 @@ def default_tasks():
 
 
 @needs_task
-def test_a_gen_test_edit_reruns_only_gen_besides_the_standing_gates(tmp_path):
-    """The acceptance case: editing a gen test reruns only the gen task.
+def test_a_gen_test_edit_reruns_gen_and_coverage_besides_the_standing_gates(tmp_path):
+    """The acceptance case: editing a gen test reruns gen and the gate.
 
     Lint and commits always run: they are the standing cheap gates, as
-    CHEAP was before them. Every other task stays quiet.
+    CHEAP was before them. The coverage gate measures the gen tests, so it
+    reruns with them. Every other task stays quiet.
     """
     repo = fixture(tmp_path)
     ran = run_task(repo)
@@ -205,15 +206,16 @@ def test_a_gen_test_edit_reruns_only_gen_besides_the_standing_gates(tmp_path):
     assert gen_tests, "the gen task lists no gen test inputs"
     edited = probe_for(gen_tests[0])
     for name, task in tasks().items():
-        if name in ("default", "local", "gen", "lint", "commits"):
+        if name in ("default", "local", "gen", "coverage", "lint", "commits"):
             continue
         assert not matches(task, edited), f"{edited} also matches {name}"
     (repo / edited).write_text("probe\nprobe again\n")
     reran = run_task(repo)
     assert "GEN=1" in reran, reran
+    assert "COVERAGE=1" in reran, reran
     assert "LINT=1" in reran, reran
     assert "COMMITS=1" in reran, reran
-    assert sorted(reran) == ["COMMITS=1", "GEN=1", "LINT=1"], reran
+    assert sorted(reran) == ["COMMITS=1", "COVERAGE=1", "GEN=1", "LINT=1"], reran
 
 
 def test_a_mutation_script_edit_reruns_scripts_but_no_suite_task():
