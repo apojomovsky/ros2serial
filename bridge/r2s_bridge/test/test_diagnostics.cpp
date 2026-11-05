@@ -37,6 +37,8 @@ namespace
 constexpr std::uint8_t kBattery = 16u;
 constexpr std::uint8_t kCmdVel = 17u;
 constexpr std::uint8_t kHeartbeat = 4u;
+// Message ID 5 carries the MCU error reports ([ERR-1]).
+constexpr std::uint8_t kErrorReport = 5u;
 using Diagnostics = Router::Diagnostics;
 using TopicDiagnostics = Router::TopicDiagnostics;
 
@@ -264,6 +266,30 @@ TEST_F(DiagnosticsNode, ReportsMcuCountersFromHeartbeat)
     EXPECT_EQ(diagnostics.mcu_counters.rx_overflows, 1u);
     EXPECT_EQ(diagnostics.mcu_counters.dropped_frames, 4u);
 }
+// Error report counts ([ERR-6]) accumulate per code globally and per topic
+// id where the report names one, and ride the snapshot to /diagnostics.
+// covers: ERR-6
+TEST_F(DiagnosticsNode, ReportsMcuErrorCountsFromReports)
+{
+    DiagnosticsFixture fixture("errs", RouterParams{});
+    fixture.handshake();
+    fixture.deliver_frame(kErrorReport, 0u, {6u, kBattery, 3u, 0u, 0xFFu});
+    fixture.deliver_frame(kErrorReport, 0u, {6u, 0xFFu, 2u, 0u, 0xFFu});
+    fixture.deliver_frame(kErrorReport, 0u, {2u, kCmdVel, 4u, 0u, 0xFFu});
+    const Diagnostics diagnostics = fixture.snapshot();
+    EXPECT_EQ(diagnostics.mcu_error_sums[5], 5u) << "the untargeted delta adds to the code sum";
+    EXPECT_EQ(diagnostics.mcu_error_sums[1], 4u);
+    EXPECT_EQ(diagnostics.mcu_error_sums[0], 0u);
+    const TopicDiagnostics *battery = find_topic(diagnostics, kBattery);
+    ASSERT_NE(battery, nullptr);
+    EXPECT_EQ(battery->mcu_errors[5], 3u);
+    EXPECT_EQ(battery->mcu_errors[1], 0u);
+    const TopicDiagnostics *cmd_vel = find_topic(diagnostics, kCmdVel);
+    ASSERT_NE(cmd_vel, nullptr);
+    EXPECT_EQ(cmd_vel->mcu_errors[1], 4u);
+    EXPECT_EQ(cmd_vel->mcu_errors[5], 0u);
+}
+
 TEST_F(DiagnosticsNode, CountsFirstFrameSeqAsGaps)
 {
     DiagnosticsFixture fixture("firstgap", RouterParams{});
