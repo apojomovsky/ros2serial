@@ -231,10 +231,14 @@ tasks:
       - scripts/e2e-lease.sh
       - scripts/coverage-gate.sh
       - scripts/coverage-filters.sh
+      - scripts/build-host-lib.sh
       - tools/coverage_gate.py
       # The gate measures the core and the bridge builds.
       - core/**
       - bridge/**
+      # The gate measures the generator tests under coverage.py.
+      - gen/r2s_gen/**
+      - gen/tests/**
     cmds:
       - COVERAGE=1 bash scripts/ci-test.sh
 

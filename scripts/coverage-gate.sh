@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Coverage gate: fail when HEAD lowers line or branch coverage of core or
-# bridge below the merge base, or below the floors in docs/01-testing.md.
+# Coverage gate: fail when HEAD lowers line or branch coverage of core,
+# bridge or gen below the merge base, or below the floors in
+# docs/01-testing.md.
 # The base is measured by checking it out in a detached worktree and running
 # the same measurement there, so a PR cannot relax its own judge and no
 # baseline file, secret or external service is needed.
@@ -110,9 +111,28 @@ measure_bridge() {
   gcovr_tree "$tree" "$out" "$workspace/build" "$filters" BRIDGE_FILTER || return 1
 }
 
+measure_gen() {
+  local tree=$1 build=$2 out=$3
+  local host_dir="$build/host" data="$build/gen-coverage.dat" raw="$build/gen-coverage-raw.json"
+  R2S_BUILD_DIR=$build bash "$tree/scripts/build-host-lib.sh" "$host_dir" >&2 || return 1
+  # Flags, not the pyproject defaults, define the measured scope, so a base
+  # that predates the config still measures the same files on both sides.
+  ( cd "$tree" && R2S_HOST_LIB_DIR="$host_dir" coverage run --branch --source=gen/r2s_gen \
+    --data-file="$data" -m pytest gen -p no:cacheprovider >&2 ) || return 1
+  ( cd "$tree" && coverage json --data-file="$data" -o "$raw" >&2 ) || return 1
+  python3 - "$raw" "$out" >&2 <<'EOF' || return 1
+import json, sys
+totals = json.load(open(sys.argv[1]))["totals"]
+json.dump({"line_covered": totals["covered_lines"], "line_total": totals["num_statements"],
+    "branch_covered": totals["covered_branches"], "branch_total": totals["num_branches"]},
+    open(sys.argv[2], "w"))
+EOF
+}
+
 gate_component() {
   local component=$1 head_out=$2 base_out=$3
-  # A drop against base always fails, for both components.
+  # A drop against base always fails, for every component. With no base the
+  # floors alone judge, so a missing base never passes silently.
   local advisory=()
   if [ -n "$base" ]; then
     python3 tools/coverage_gate.py --component "$component" "${advisory[@]}" --head "$head_out" --base "$base_out"
@@ -125,14 +145,19 @@ echo "== coverage: core on HEAD"
 measure_core "$root" "$work/head" "$work/core-head.json" "$work/filters.sh" || exit 1
 echo "== coverage: bridge on HEAD"
 measure_bridge "$root" "$work/head/bridge" "$work/bridge-head.json" "$work/filters.sh" || exit 1
+echo "== coverage: gen on HEAD"
+measure_gen "$root" "$work/head" "$work/gen-head.json" || exit 1
 if [ -n "$base" ]; then
   echo "== coverage: core on $base"
   measure_core "$work/base" "$work/base-build" "$work/core-base.json" "$work/filters.sh" || exit 1
   echo "== coverage: bridge on $base"
   measure_bridge "$work/base" "$work/base-build/bridge" "$work/bridge-base.json" "$work/filters.sh" || exit 1
+  echo "== coverage: gen on $base"
+  measure_gen "$work/base" "$work/base-build" "$work/gen-base.json" || exit 1
 fi
 
 failed=0
 gate_component core "$work/core-head.json" "$work/core-base.json" || failed=1
 gate_component bridge "$work/bridge-head.json" "$work/bridge-base.json" || failed=1
+gate_component gen "$work/gen-head.json" "$work/gen-base.json" || failed=1
 exit $failed

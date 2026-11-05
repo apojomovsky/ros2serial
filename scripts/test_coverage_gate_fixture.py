@@ -47,6 +47,25 @@ for arg in "$@"; do
 done
 touch "$install/setup.bash"
 """
+COVERAGE_STUB = """#!/usr/bin/env bash
+set -uo pipefail
+all_args="$*"
+if [ -n "${R2S_COVERAGE_LOG:-}" ]; then printf '%s\\n' "$all_args" >>"$R2S_COVERAGE_LOG"; fi
+if [ "${1:-}" = run ]; then exit 0; fi
+if [ "${1:-}" = json ]; then
+  out=""
+  while [ $# -gt 0 ]; do
+    case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac
+  done
+  [ -n "$out" ] || exit 3
+  if [[ "$PWD" == */base ]]; then figs=$R2S_COV_FIG_BASE; else figs=$R2S_COV_FIG_HEAD; fi
+  set -- $figs
+  python3 -c "import json; json.dump({'totals': {'covered_lines': $1, 'num_statements': 100, \\
+    'covered_branches': $2, 'num_branches': 100}}, open('$out', 'w'))"
+  exit 0
+fi
+exit 3
+"""
 
 
 def fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
@@ -59,15 +78,22 @@ def fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     shutil.copy(ROOT / "scripts" / "coverage-filters.sh", repo / "scripts" / "coverage-filters.sh")
     shutil.copy(ROOT / "tools" / "coverage_gate.py", repo / "tools" / "coverage_gate.py")
     (repo / "scripts" / "core-test.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
+    (repo / "scripts" / "build-host-lib.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
     (repo / "bridge" / "dummy.txt").write_text("bridge sources live here on a real tree\n")
-    for name in ("scripts/coverage-gate.sh", "scripts/e2e-lease.sh", "scripts/core-test.sh"):
+    for name in (
+        "scripts/coverage-gate.sh",
+        "scripts/e2e-lease.sh",
+        "scripts/core-test.sh",
+        "scripts/build-host-lib.sh",
+    ):
         path = repo / name
         path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     bindir = tmp_path / "bin"
     bindir.mkdir()
     (bindir / "gcovr").write_text(GCOVR_STUB)
     (bindir / "colcon").write_text(COLCON_STUB)
-    for name in ("gcovr", "colcon"):
+    (bindir / "coverage").write_text(COVERAGE_STUB)
+    for name in ("gcovr", "colcon", "coverage"):
         path = bindir / name
         path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     git = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
@@ -82,7 +108,13 @@ def fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
 
 
 def run_gate(
-    repo: Path, run_env: dict[str, str], head: str, base: str, extra: dict[str, str] | None = None
+    repo: Path,
+    run_env: dict[str, str],
+    head: str,
+    base: str,
+    extra: dict[str, str] | None = None,
+    gen_head: str = "96 91",
+    gen_base: str = "96 91",
 ) -> subprocess.CompletedProcess:
     env = {
         **os.environ,
@@ -93,6 +125,8 @@ def run_gate(
         "COMMIT_RANGE": "master..HEAD",
         "R2S_FIG_HEAD": head,
         "R2S_FIG_BASE": base,
+        "R2S_COV_FIG_HEAD": gen_head,
+        "R2S_COV_FIG_BASE": gen_base,
         **(extra or {}),
     }
     return subprocess.run(["bash", "scripts/coverage-gate.sh"], cwd=repo, env=env, capture_output=True, text=True)
@@ -143,6 +177,22 @@ def test_the_gate_requires_the_bridge_floors(tmp_path):
     assert result.returncode != 0, result.stdout + result.stderr
     assert "coverage: bridge branch 51.00% is below the floor 80%" in result.stdout
     assert "(advisory)" not in result.stdout
+
+
+def test_the_gate_fails_when_gen_head_lowers_coverage(tmp_path):
+    repo, run_env = fixture(tmp_path)
+    result = run_gate(repo, run_env, "96 91", "96 91", gen_head="94 89", gen_base="96 91")
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "coverage: gen line 94.00% is below base 96.00%" in result.stdout
+
+
+def test_the_gate_measures_gen_branches(tmp_path):
+    repo, run_env = fixture(tmp_path)
+    log = tmp_path / "coverage-args.log"
+    result = run_gate(repo, run_env, "96 91", "96 91", {"R2S_COVERAGE_LOG": str(log)})
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = log.read_text().splitlines()
+    assert any("--branch" in call.split() for call in calls), "gen measured without branches:\n" + "\n".join(calls)
 
 
 def test_the_gate_runs_the_bridge_tests_under_a_lease(tmp_path):
