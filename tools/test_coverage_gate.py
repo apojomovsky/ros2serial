@@ -72,8 +72,38 @@ def test_no_base_checks_only_the_floor(tmp_path):
 
 def test_an_unknown_component_is_a_problem(tmp_path):
     head = write_summary(tmp_path / "head.json", 96, 100, 90, 100)
-    problems, _ = coverage_gate.check_files("gen", head, None)
+    problems, _ = coverage_gate.check_files("firmware", head, None)
     assert problems != []
+
+
+def test_gen_at_the_floors_passes(tmp_path):
+    head = write_summary(tmp_path / "head.json", 95, 100, 90, 100)
+    base = write_summary(tmp_path / "base.json", 95, 100, 90, 100)
+    assert coverage_gate.check_files("gen", head, base) == ([], [])
+
+
+def test_gen_below_the_floor_fails_even_above_base(tmp_path):
+    head = write_summary(tmp_path / "head.json", 94, 100, 90, 100)
+    base = write_summary(tmp_path / "base.json", 93, 100, 90, 100)
+    assert any("floor" in p for p in errors("gen", head, base))
+
+
+def test_gen_below_the_branch_floor_fails(tmp_path):
+    head = write_summary(tmp_path / "head.json", 95, 100, 89, 100)
+    base = write_summary(tmp_path / "base.json", 95, 100, 89, 100)
+    assert any("floor" in p for p in errors("gen", head, base))
+
+
+def test_a_gen_drop_against_base_fails(tmp_path):
+    head = write_summary(tmp_path / "head.json", 95, 100, 90, 100)
+    base = write_summary(tmp_path / "base.json", 96, 100, 91, 100)
+    problems = errors("gen", head, base)
+    assert any("base" in p for p in problems)
+
+
+def test_gen_without_base_checks_only_the_floor(tmp_path):
+    head = write_summary(tmp_path / "head.json", 96, 100, 91, 100)
+    assert coverage_gate.check_files("gen", head, None) == ([], [])
 
 
 def test_an_empty_measurement_is_a_problem(tmp_path):
