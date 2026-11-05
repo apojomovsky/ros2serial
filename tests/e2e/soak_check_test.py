@@ -19,11 +19,18 @@ def clean_counters():
         "mcu crc errors": "0",
         "mcu rx overflows": "0",
         "mcu dropped frames": "0",
+        "mcu error code 1": "0",
+        "mcu error code 2": "0",
+        "mcu error code 3": "0",
+        "mcu error code 4": "0",
+        "mcu error code 5": "0",
+        "mcu error code 6": "0",
         "topic battery direction": "device to host",
         "topic battery status": "ok",
         "topic battery seq gaps": "0",
         "topic battery dropped": "0",
         "topic battery publish failures": "0",
+        "topic 16 battery mcu errors": "1=0 2=0 3=0 4=0 5=0 6=0",
     }
 
 
@@ -69,6 +76,16 @@ class TestWireCounters(unittest.TestCase):
     def test_publish_failures_fail(self):
         with self.assertRaises(AssertionError):
             soak.check_wire_counters(clean_counters(), drifted("topic battery publish failures"))
+
+    def test_mcu_error_code_fails(self):
+        with self.assertRaises(AssertionError):
+            soak.check_wire_counters(clean_counters(), drifted("mcu error code 6"))
+
+    def test_topic_mcu_errors_fail(self):
+        moved = clean_counters()
+        moved["topic 16 battery mcu errors"] = "1=0 2=0 3=0 4=0 5=0 6=1"
+        with self.assertRaises(AssertionError):
+            soak.check_wire_counters(clean_counters(), moved)
 
 
 def flat_samples(n=12, start=0.0, step=10.0, rss=51200.0):
