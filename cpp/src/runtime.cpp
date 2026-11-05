@@ -78,10 +78,10 @@ uint8_t find_subscriber(uint8_t topic_id)
 }
 
 /* Adds one entry to the table and hands back the id it took. The ids run
- * from 16 in construction order, and the flags carry the direction and the
- * narrow bit of the build (CTL-4). */
+ * from 16 in construction order, and the flags carry the direction, the
+ * narrow bit of the build and the caller's QoS bits (CTL-4). */
 r2s_status_t add_topic(const char *topic, const char *type_name, const uint8_t *type_hash, uint8_t direction,
-                       uint8_t *topic_id)
+                       uint8_t qos, uint8_t *topic_id)
 {
     r2s_topic_t *entry;
     uint8_t i;
@@ -100,7 +100,7 @@ r2s_status_t add_topic(const char *topic, const char *type_name, const uint8_t *
     }
     entry = &r2s_runtime_topics[reg.topic_count];
     entry->topic_id = (uint8_t)(R2S_RUNTIME_FIRST_TOPIC_ID + reg.topic_count);
-    entry->flags = (uint8_t)(direction | R2S_RUNTIME_NARROW_FLAG);
+    entry->flags = (uint8_t)(direction | R2S_RUNTIME_NARROW_FLAG | qos);
     for (i = 0u; i < 8u; i++) {
         entry->type_hash[i] = type_hash[i];
     }
@@ -117,10 +117,10 @@ namespace r2s
 namespace detail
 {
 r2s_status_t register_publisher(const char *topic, const r2s_codec_table_t *table, uint16_t type_index,
-                                const char *type_name, const uint8_t *type_hash, uint8_t *topic_id)
+                                const char *type_name, const uint8_t *type_hash, uint8_t *topic_id, QoS qos)
 {
     uint8_t id = 0xFFu;
-    r2s_status_t rc = add_topic(topic, type_name, type_hash, 0x00u, &id);
+    r2s_status_t rc = add_topic(topic, type_name, type_hash, 0x00u, static_cast<uint8_t>(qos), &id);
 
     if (rc != R2S_OK) {
         return rc;
@@ -136,10 +136,10 @@ r2s_status_t register_publisher(const char *topic, const r2s_codec_table_t *tabl
 r2s_status_t register_subscriber(const char *topic, const char *type_name, const uint8_t *type_hash,
                                  void *record,
                                  void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t, uint8_t),
-                                 uint8_t *topic_id)
+                                 uint8_t *topic_id, QoS qos)
 {
     uint8_t id = 0xFFu;
-    r2s_status_t rc = add_topic(topic, type_name, type_hash, 0x01u, &id);
+    r2s_status_t rc = add_topic(topic, type_name, type_hash, 0x01u, static_cast<uint8_t>(qos), &id);
 
     if (rc != R2S_OK) {
         return rc;
@@ -267,25 +267,26 @@ bool Node::registration_error() const
 }
 
 r2s_status_t Node::register_publisher(const char *topic, const r2s_codec_table_t *table, uint16_t type_index,
-                                      const char *type_name, const uint8_t *type_hash, uint8_t *topic_id)
+                                      const char *type_name, const uint8_t *type_hash, uint8_t *topic_id,
+                                      QoS qos)
 {
     if (!m_owned) {
         reg.error = 1u;
         return R2S_ERR_BOUNDS;
     }
-    return detail::register_publisher(topic, table, type_index, type_name, type_hash, topic_id);
+    return detail::register_publisher(topic, table, type_index, type_name, type_hash, topic_id, qos);
 }
 
 r2s_status_t Node::register_subscriber(const char *topic, const char *type_name, const uint8_t *type_hash,
                                        void *record,
                                        void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t, uint8_t),
-                                       uint8_t *topic_id)
+                                       uint8_t *topic_id, QoS qos)
 {
     if (!m_owned) {
         reg.error = 1u;
         return R2S_ERR_BOUNDS;
     }
-    return detail::register_subscriber(topic, type_name, type_hash, record, dispatch, topic_id);
+    return detail::register_subscriber(topic, type_name, type_hash, record, dispatch, topic_id, qos);
 }
 } // namespace r2s
 
