@@ -10,7 +10,7 @@ import struct
 import pytest
 from r2s_gen.reference import frames as frames_mod
 from r2s_gen.reference import session as model
-from session_harness import TOPIC_IDS, model_topics, wire
+from session_harness import TOPIC_IDS, model_params, model_topics, wire
 
 FLAGS = [0x00, 0x01, 0x00, 0x01]
 TOPICS = model_topics(FLAGS)
@@ -59,6 +59,21 @@ def test_handshake_reaches_connected_with_token():
     assert session.snapshot()["connected"] == model.CONNECTED
     assert session.snapshot()["token"] == 0xAABBCCDD
     assert session.snapshot()["status"] == [0, 0, 0, 0]
+
+
+# The DECLARE for the led parameter, written by hand from section 7.6:
+# opcode 02, index 0, bool, no flags, name "led", default true.
+DECLARE_LED = bytes.fromhex("02 00 00 00 03 6c 65 64 01")
+
+
+# covers: PAR-1, PAR-2, PAR-6
+def test_declare_answers_param_req_with_handwritten_bytes():
+    session = model.McuSession(topics=list(TOPICS), params=model_params())
+    session.reset(0)
+    session.take_tx()
+    session.feed(wire(3, 0, bytes((model.OP_PARAM_REQ, 0))))
+    session.spin()
+    assert session.take_tx() == [model.encode_frame(3, 0, DECLARE_LED)]
 
 
 # covers: SES-10

@@ -15,7 +15,7 @@ mkdir -p "$out" || exit 1
 
 flags=(-std=c99 -shared -fPIC -O2 -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow)
 flags+=(-Wstrict-prototypes -Wmissing-prototypes -Wundef)
-defines=(-DR2S_TESTING -DR2S_MAX_FRAME=512 -DR2S_WITH_CODEC -DR2S_MAX_NEST=2 -DR2S_WITH_LOG)
+defines=(-DR2S_TESTING -DR2S_MAX_FRAME=512 -DR2S_WITH_CODEC -DR2S_MAX_NEST=2 -DR2S_WITH_LOG -DR2S_WITH_PARAMS)
 includes=(-I core/include -I core/tests/support -I core/host)
 sources=(core/src/*.c core/tests/support/fake_port.c core/tests/support/bytes.c
     core/tests/support/handwritten.c core/tests/support/handwritten_firmware.c core/host/host_shim.c)

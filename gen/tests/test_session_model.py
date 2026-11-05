@@ -3,9 +3,9 @@
 Each rule feeds one event to the C core and to the Python model and compares
 every observable after it. The event set covers the implemented session: the
 handshake, heartbeats, user traffic, corrupted input, the timers, publish
-calls and the error reports they can trigger. Time, log, parameters and
-reliable-ack traffic stays out: P1, P2 and P5 specify that behavior when
-they land.
+calls, the error reports they can trigger, the parameter walk answers and
+the reliable SET and ack exchange with its retransmit timers. Time and log
+traffic stays out: P1 and P2 specify that behavior when they land.
 """
 
 import os
@@ -27,18 +27,32 @@ def valid_twist(narrow: bool) -> bytes:
     return bytes(24 if narrow else 48)
 
 
+PARAM_REQ = 0x01
+PARAM_SET = 0x03
+
+
 class SessionMachine(RuleBasedStateMachine):
     """Random sequences through the pair; every rule ends in a comparison."""
 
     def __init__(self) -> None:
         super().__init__()
         self.pair = Pair()
-        self.host_seq = {0: 0, 4: 0, 17: 0}
+        self.host_seq = {0: 0, 3: 0, 4: 0, 6: 0, 17: 0}
+        self.set_rel = 0
+        self.status_rel = 0
+        self.led = 1
+        self.name_value = b"hi"
+        self.last_set: bytes | None = None
 
     @initialize()
     def boot(self) -> None:
         self.pair.reset()
-        self.host_seq = {0: 0, 4: 0, 17: 0}
+        self.host_seq = {0: 0, 3: 0, 4: 0, 6: 0, 17: 0}
+        self.set_rel = 0
+        self.status_rel = 0
+        self.led = 1
+        self.name_value = b"hi"
+        self.last_set = None
 
     @rule()
     def hello_req(self) -> None:
@@ -78,6 +92,55 @@ class SessionMachine(RuleBasedStateMachine):
     def pub_topic_from_host(self, topic_id: int) -> None:
         """Host frames on MCU-published topics are refused, not dispatched."""
         self.pair.feed_frame(topic_id, 0, bytes(8))
+
+    @rule(index=st.sampled_from([0, 1, 2, 3, 9]))
+    def param_req(self, index: int) -> None:
+        self.pair.feed_frame(3, self._seq(3), bytes((PARAM_REQ, index)))
+
+    def _send_set(self, payload: bytes) -> None:
+        """One new-rel SET through both sides, tracking both rel streams."""
+        self.pair.feed_frame(3, self._seq(3), payload)
+        self.last_set = payload
+        self.set_rel = (self.set_rel + 1) & 0xFF
+        self.status_rel = (self.status_rel + 1) & 0xFF
+
+    @rule()
+    def param_set_led(self) -> None:
+        self.led = 1 - self.led
+        self._send_set(bytes((PARAM_SET, self.set_rel, 0, self.led)))
+
+    @rule()
+    def param_set_name(self) -> None:
+        self.name_value = b"xy" if self.name_value == b"hi" else b"hi"
+        value = self.name_value
+        self._send_set(bytes((PARAM_SET, self.set_rel, 2, len(value))) + value)
+
+    @rule()
+    def param_set_readonly(self) -> None:
+        self._send_set(bytes((PARAM_SET, self.set_rel, 1)) + (7).to_bytes(8, "little"))
+
+    @rule()
+    def param_set_unknown_index(self) -> None:
+        self._send_set(bytes((PARAM_SET, self.set_rel, 9, 0)))
+
+    @rule()
+    def param_set_duplicate(self) -> None:
+        """The last SET again: acked by both, applied by neither."""
+        if self.last_set is None:
+            return
+        self.pair.feed_frame(3, self._seq(3), self.last_set)
+
+    @rule()
+    def param_set_future(self) -> None:
+        """A rel seq neither side expects: acked by both, applied by neither."""
+        self.pair.feed_frame(3, self._seq(3), bytes((PARAM_SET, (self.set_rel + 5) & 0xFF, 0, 0)))
+
+    @rule()
+    def param_ack_status(self) -> None:
+        """Ack the newest STATUS both sides sent, when one went out."""
+        if self.status_rel == 0:
+            return
+        self.pair.feed_frame(6, self._seq(6), bytes((3, (self.status_rel - 1) & 0xFF)))
 
     @rule()
     def corrupt_crc(self) -> None:
@@ -130,6 +193,7 @@ class SessionMachine(RuleBasedStateMachine):
 # covers: SES-1, SES-2, SES-3, SES-4, SES-5, SES-6, SES-7, SES-8, SES-9, SES-10, SES-11
 # covers: FRM-6, FRM-7, FRM-8, FRM-12, FRM-14, FRM-15
 # covers: SYS-5, CTL-16, HB-2, HB-3, HB-4, HB-5, HB-6, HB-7
+# covers: REL-1, REL-2, REL-3, REL-4, REL-5, PAR-1, PAR-2, PAR-3, PAR-4, PAR-5, PAR-6, PAR-8
 def test_session_matches_model():
     run_state_machine_as_test(
         SessionMachine,

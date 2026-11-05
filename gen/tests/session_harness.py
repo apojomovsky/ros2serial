@@ -50,6 +50,23 @@ def model_topics(flags: list[int]) -> list[model.Topic]:
     return topics
 
 
+# The build flags scripts/build-host-lib.sh compiles the C library with:
+# logging and parameters, no time sync. The model carries the same features
+# so the boot HELLO agrees.
+MODEL_FEATURES = 0x02 | 0x04 | 0x08
+
+
+def model_params() -> list[model.Param]:
+    """The handwritten parameter table both sides announce."""
+    # The names, types, flags, bounds and defaults repeat
+    # core/tests/support/handwritten.c.
+    return [
+        model.Param("led", model.PARAM_BOOL, 0, 0, 1, 1),
+        model.Param("limit", model.PARAM_I64, model.PARAM_READONLY, 0, 7, 7),
+        model.Param("name", model.PARAM_STRING, 0, 7, b"ab", b"ab"),
+    ]
+
+
 def wire(topic_id: int, seq: int, payload: bytes) -> bytes:
     """One host frame on the wire, delimiter included."""
     return frames_mod.encode_wire(topic_id, seq, payload)
@@ -67,7 +84,7 @@ class Pair:
         self.host = host_mod.HostSession(lib_path)
         self.host.reset()
         flags = [self.host.topic_flags(i) for i in range(4)]
-        self.model = model.McuSession(topics=model_topics(flags))
+        self.model = model.McuSession(topics=model_topics(flags), features=MODEL_FEATURES, params=model_params())
         self.model.reset(0)
         self.tick = 0
         self.last_host_tx: list[bytes] = []

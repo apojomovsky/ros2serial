@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include "handwritten.h"
+#include "r2s/r2s_params.h"
 
 /* A 16-bit table value as two bytes, read from the struct it describes, so the
  * table stays right whatever the target's alignment. Kinds, modes, counts,
@@ -333,7 +334,30 @@ static const r2s_topic_t R2S_FLASH r2s_handwritten_topics[] = {
      "cmd_str"},
 };
 
+/* The announced parameters for the model-based tests: a bool led defaulting
+ * to true, a read-only i64 limit and a bounded string name. The table lives
+ * in RAM with the live values, as the session requires. */
+#ifdef R2S_WITH_PARAMS
+static char r2s_handwritten_name_value[8];
+static r2s_param_t r2s_handwritten_params[] = {
+    {"led", R2S_PARAM_BOOL, 0u, 0u, {.b = 1u}, {.b = 0u}},
+    {"limit", R2S_PARAM_I64, R2S_PARAM_READONLY, 0u, {.i = 7}, {.i = 0}},
+    {"name", R2S_PARAM_STRING, 0u, sizeof r2s_handwritten_name_value - 1u, {.s = "ab"}, {.s = NULL}},
+};
+#endif
+
 r2s_status_t r2s_handwritten_configure(void)
 {
-    return r2s_session_configure("node", r2s_handwritten_topics, 4u);
+    r2s_status_t rc = r2s_session_configure("node", r2s_handwritten_topics, 4u);
+
+    if (rc != R2S_OK) {
+        return rc;
+    }
+#ifdef R2S_WITH_PARAMS
+    r2s_handwritten_name_value[0] = '\0';
+    r2s_handwritten_params[2].value.s = r2s_handwritten_name_value;
+    return r2s_params_configure(r2s_handwritten_params, 3u);
+#else
+    return R2S_OK;
+#endif
 }
