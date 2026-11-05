@@ -535,7 +535,12 @@ struct Session::Impl {
         const auto next = rel_pending_.begin();
         const std::uint8_t rel_seq = rel_next_++;
         emit_set(next->first, next->second, rel_seq);
-        rel_out_.emplace(OutstandingSet{next->first, next->second, rel_seq, 0, now_ms() + kRelRetryMs});
+        rel_out_active_ = true;
+        rel_out_rel_ = rel_seq;
+        rel_out_index_ = next->first;
+        rel_out_value_ = next->second;
+        rel_out_retries_ = 0;
+        rel_out_deadline_ms_ = now_ms() + kRelRetryMs;
         rel_pending_.erase(next);
     }
 
@@ -546,7 +551,7 @@ struct Session::Impl {
     // Queued acks are control frames, dropped with the rest ([SES-33]).
     void drop_reliable()
     {
-        rel_out_.reset();
+        rel_out_active_ = false;
         rel_pending_.clear();
         const bool drop_front =
             !queue_.empty() && queue_.front().topic_id == kParamsTopic && !queue_.front().control;
@@ -932,11 +937,11 @@ struct Session::Impl {
     // pending one; anything else is a duplicate or a stranger ([REL-2]).
     void on_ack_frame(const std::uint8_t *payload, std::uint16_t len)
     {
-        if (state != SessionState::kConnected || len != 2u || payload[0] != kParamsTopic || !rel_out_ ||
-            payload[1] != rel_out_->rel_seq) {
+        if (state != SessionState::kConnected || len != 2u || payload[0] != kParamsTopic ||
+            !rel_out_active_ || payload[1] != rel_out_rel_) {
             return;
         }
-        rel_out_.reset();
+        rel_out_active_ = false;
         promote_pending();
     }
 
@@ -1205,22 +1210,22 @@ struct Session::Impl {
     // carried. Spent retries drop the SET, count it and promote the next.
     void poll_reliable(std::int64_t now)
     {
-        if (!rel_out_ || now < rel_out_->deadline_ms) {
+        if (!rel_out_active_ || now < rel_out_deadline_ms_) {
             return;
         }
         if (!queue_.empty()) {
             return;
         }
-        if (rel_out_->retries >= kRelRetries) {
+        if (rel_out_retries_ >= kRelRetries) {
             log(SessionLog::kWarning, "no ack for the PARAM_SET; the SET is dropped");
             ++reliable_dropped_;
-            rel_out_.reset();
+            rel_out_active_ = false;
             promote_pending();
             return;
         }
-        ++rel_out_->retries;
-        rel_out_->deadline_ms = now + kRelRetryMs;
-        emit_set(rel_out_->index, rel_out_->value, rel_out_->rel_seq);
+        ++rel_out_retries_;
+        rel_out_deadline_ms_ = now + kRelRetryMs;
+        emit_set(rel_out_index_, rel_out_value_, rel_out_rel_);
     }
 
     void run_timers()
@@ -1368,14 +1373,14 @@ struct Session::Impl {
     // The reliable engine ([REL-2], [REL-7]): one outstanding SET with its
     // timer and retries, one pending SET per index, the next rel_seq and
     // the per-channel expected rel_seq, with the giveup and replace counts.
-    struct OutstandingSet {
-        std::uint8_t index = 0;
-        std::vector<std::uint8_t> value;
-        std::uint8_t rel_seq = 0;
-        int retries = 0;
-        std::int64_t deadline_ms = 0;
-    };
-    std::optional<OutstandingSet> rel_out_;
+    // Plain fields behind an active flag: the engaged check is one branch,
+    // and every use reads the same shape the core keeps.
+    bool rel_out_active_ = false;
+    std::uint8_t rel_out_rel_ = 0;
+    std::uint8_t rel_out_index_ = 0;
+    std::vector<std::uint8_t> rel_out_value_;
+    int rel_out_retries_ = 0;
+    std::int64_t rel_out_deadline_ms_ = 0;
     std::map<std::uint8_t, std::vector<std::uint8_t>> rel_pending_;
     std::uint8_t rel_next_ = 0;
     std::map<std::uint8_t, std::uint8_t> rel_expected_;
@@ -1511,10 +1516,15 @@ bool Session::send_param_set(std::uint8_t index, const std::vector<std::uint8_t>
     if (impl.pending_bytes_ > 0u && impl.pending_bytes_ >= cap) {
         return false;
     }
-    if (!impl.rel_out_) {
+    if (!impl.rel_out_active_) {
         const std::uint8_t rel_seq = impl.rel_next_++;
         impl.emit_set(index, value, rel_seq);
-        impl.rel_out_.emplace(Impl::OutstandingSet{index, value, rel_seq, 0, impl.now_ms() + kRelRetryMs});
+        impl.rel_out_active_ = true;
+        impl.rel_out_rel_ = rel_seq;
+        impl.rel_out_index_ = index;
+        impl.rel_out_value_ = value;
+        impl.rel_out_retries_ = 0;
+        impl.rel_out_deadline_ms_ = impl.now_ms() + kRelRetryMs;
     } else {
         const auto found = impl.rel_pending_.find(index);
         if (found != impl.rel_pending_.end()) {
