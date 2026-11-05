@@ -3113,6 +3113,54 @@ TEST(ReliableSend, SendsWhileUserFramesAreQueued)
 }
 
 // covers: REL-5
+TEST(ReliableSend, DropsAPartialSetOnLinkTimeout)
+{
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    handshake_with_params(fixture);
+    // Two bytes of the SET go out, then the link blocks with the SET
+    // partial at the front: the timeout drops it instead of finishing it.
+    fixture.script_write({2u, IoStatus::kOk});
+    fixture.block_writes();
+    EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
+    fixture.advance_to(2500);
+    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking) << "the silent link re-handshakes";
+    EXPECT_EQ(fixture.session().reliable_dropped(), 0u) << "a timeout drops, it never gives up";
+    fixture.allow_writes();
+    fixture.session().poll();
+    const auto units = fixture.drain_units();
+    ASSERT_EQ(units.size(), 2u);
+    EXPECT_EQ(units[0].size(), 3u) << "two stale bytes closed by the delimiter";
+    EXPECT_EQ(units[0].back(), 0x00u);
+    const auto hello = decoded_of(units[1]);
+    EXPECT_EQ(hello[0], kControl) << "no SET survives the re-handshake";
+    EXPECT_EQ(hello[2], 0x01u) << "the handshake starts over on a clean frame";
+}
+
+// covers: REL-5
+TEST(ReliableSend, DropsTwoQueuedSetsOnLinkTimeout)
+{
+    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    handshake_with_params(fixture);
+    fixture.block_writes();
+    EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
+    EXPECT_TRUE(fixture.session().send_param_set(1u, {0x07u}));
+    // The ack promotes the pending SET behind the outstanding frame: two
+    // SET frames queue, and the timeout drops both.
+    fixture.deliver_frame(kAck, 0u, {kParams, 0x00u});
+    fixture.advance_to(2500);
+    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking) << "the silent link re-handshakes";
+    EXPECT_EQ(fixture.session().reliable_dropped(), 0u) << "a timeout drops, it never gives up";
+    fixture.allow_writes();
+    fixture.session().poll();
+    const auto units = drain_decoded(fixture);
+    ASSERT_FALSE(units.empty());
+    for (const auto &unit : units) {
+        EXPECT_NE(unit[0], kParams) << "no SET survives the re-handshake";
+    }
+    EXPECT_EQ(units.back()[2], 0x01u) << "the handshake starts over";
+}
+
+// covers: REL-5
 TEST(ReliableWalk, KeepsAPartialReqAcrossTheLinkTimeout)
 {
     SessionConfig config;
