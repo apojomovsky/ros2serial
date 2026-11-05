@@ -6,4 +6,4 @@ test fails when they drift apart.
 """
 
 __version__ = "0.2.0"
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3

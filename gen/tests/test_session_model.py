@@ -42,7 +42,7 @@ class SessionMachine(RuleBasedStateMachine):
 
     @rule()
     def hello_req(self) -> None:
-        self.pair.feed_frame(0, self._seq(0), bytes((model.OP_HELLO_REQ, 2)))
+        self.pair.feed_frame(0, self._seq(0), bytes((model.OP_HELLO_REQ, model.PROTOCOL_VERSION)))
 
     @rule(index=st.sampled_from([0, 1, 2, 3, 9]))
     def topic_req(self, index: int) -> None:
@@ -91,7 +91,7 @@ class SessionMachine(RuleBasedStateMachine):
 
     @rule()
     def truncated_frame(self) -> None:
-        frame = wire(0, self._seq(0), bytes((model.OP_HELLO_REQ, 2)))
+        frame = wire(0, self._seq(0), bytes((model.OP_HELLO_REQ, model.PROTOCOL_VERSION)))
         self.pair.feed_raw(frame[: len(frame) // 2])
 
     @rule()
@@ -141,7 +141,7 @@ def test_session_matches_model():
 
 def handshake(pair: Pair, token: int = 1) -> None:
     """The full handshake to CONNECTED, comparing after every step."""
-    pair.feed_frame(0, 0, bytes((model.OP_HELLO_REQ, 2)))
+    pair.feed_frame(0, 0, bytes((model.OP_HELLO_REQ, model.PROTOCOL_VERSION)))
     for index in range(4):
         pair.feed_frame(0, 1 + index, bytes((model.OP_TOPIC_REQ, index)))
         pair.feed_frame(0, 5 + index, bytes((model.OP_TOPIC_STATUS, TOPIC_IDS[index], 0)))
@@ -172,7 +172,7 @@ def test_seq_restarts_after_rehandshake():
     pair = Pair()
     handshake(pair)
     pair.publish(1.5)
-    pair.feed_frame(0, 10, bytes((model.OP_HELLO_REQ, 2)))
+    pair.feed_frame(0, 10, bytes((model.OP_HELLO_REQ, model.PROTOCOL_VERSION)))
     pair.publish(1.5)
     pair.check("publish after re-handshake reuses seq 0")
 

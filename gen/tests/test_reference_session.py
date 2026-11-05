@@ -16,10 +16,10 @@ FLAGS = [0x00, 0x01, 0x00, 0x01]
 TOPICS = model_topics(FLAGS)
 
 # The boot HELLO for node "node" with the four topics above, written by
-# hand from section 7.1: opcode 02, version 2, full mode, zero token,
+# hand from section 7.1: opcode 02, version 3, full mode, zero token,
 # max_frame 512, rx_capacity 515, tick_hz 1000, features 0x02, count 4,
 # then the varint length and "node".
-HELLO_PAYLOAD = bytes.fromhex("02 02 00 00 00 00 00 00 02 03 02 e8 03 00 00 02 04 04 6e 6f 64 65")
+HELLO_PAYLOAD = bytes.fromhex("02 03 00 00 00 00 00 00 02 03 02 e8 03 00 00 02 04 04 6e 6f 64 65")
 
 
 def fresh() -> model.McuSession:
@@ -32,7 +32,7 @@ def fresh() -> model.McuSession:
 
 def connect(session: model.McuSession, token: int = 0xAABBCCDD) -> None:
     """Run the handshake to CONNECTED, draining the TX after each step."""
-    session.feed(wire(0, 0, bytes((model.OP_HELLO_REQ, 2))))
+    session.feed(wire(0, 0, bytes((model.OP_HELLO_REQ, model.PROTOCOL_VERSION))))
     session.spin()
     session.take_tx()
     for index in range(4):
@@ -64,7 +64,7 @@ def test_handshake_reaches_connected_with_token():
 # covers: SES-10
 def test_ready_with_zero_token_is_refused():
     session = fresh()
-    session.feed(wire(0, 0, bytes((model.OP_HELLO_REQ, 2))))
+    session.feed(wire(0, 0, bytes((model.OP_HELLO_REQ, model.PROTOCOL_VERSION))))
     session.spin()
     session.take_tx()
     session.feed(wire(0, 1, bytes((model.OP_READY, 0, 0, 0, 0))))
@@ -78,7 +78,7 @@ def test_ready_with_zero_token_is_refused():
 def test_hello_echoes_the_last_ready_token():
     session = fresh()
     connect(session, token=0x01020304)
-    session.feed(wire(0, 9, bytes((model.OP_HELLO_REQ, 2))))
+    session.feed(wire(0, 9, bytes((model.OP_HELLO_REQ, model.PROTOCOL_VERSION))))
     session.spin()
     hello = session.take_tx()
     assert len(hello) == 1

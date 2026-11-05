@@ -1,0 +1,22 @@
+name: param_set_giveup
+covers: [REL-2]
+steps:
+  - from: host
+    frame: "03 00 03 00 00 00 c0 21"
+    at_ms: 0
+  - from: host
+    frame: "03 01 03 00 00 00 84 2a"
+    at_ms: 500
+    note: "first retry"
+  - from: host
+    frame: "03 02 03 00 00 00 48 37"
+    at_ms: 1000
+    note: "second retry"
+  - from: host
+    frame: "03 03 03 00 00 00 0c 3c"
+    at_ms: 1500
+    note: "third retry; the sender drops it after this"
+  - from: host
+    frame: "04 00 d8 97"
+    at_ms: 2000
+    note: "the link is alive; no further SET goes out"

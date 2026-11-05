@@ -24,7 +24,7 @@
         }                                                                                                    \
     } while (0)
 
-#define PROTOCOL_VERSION 2u
+#define PROTOCOL_VERSION 3u
 #define READY_TOKEN 0x2Au
 
 void loop_once(void);
