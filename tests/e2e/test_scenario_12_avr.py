@@ -24,7 +24,7 @@ from e2e_support import checks, teardown
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32, String
 
-# covers: FRM-5, FRM-15
+# covers: ERR-3, ERR-6, FRM-5, FRM-15
 
 # Count based gates: simavr runs unpaced, so the same publishes take a
 # wall time the host load decides. The flood moves thousands of samples;
@@ -117,6 +117,20 @@ class TestScenario12(unittest.TestCase):
                     busy = max(busy, _parse_busy(report))
             gaps = {value.key: value.value for value in received[-1].status[0].values}
             self.assertEqual(gaps.get("topic battery seq gaps"), "0", "shed samples took a seq")
+
+            # Battery is the first announced topic, so its diagnostics id is 16.
+            # Reports are rate limited to one per second, so the test waits
+            # for the running sum instead of assuming the first sample has it.
+            def latest():
+                return {v.key: v.value for v in received[-1].status[0].values}
+
+            deadline = time.monotonic() + FLOW_TIMEOUT
+            while int(latest().get("mcu error code 6", "0")) == 0:
+                self.assertLess(time.monotonic(), deadline, "busy sum never reached /diagnostics")
+                rclpy.spin_once(node, timeout_sec=0.5)
+            breakdown = latest().get("topic 16 battery mcu errors", "")
+            slots = dict(part.split("=") for part in breakdown.split())
+            self.assertGreater(int(slots.get("6", "0")), 0, "battery breakdown misses the busy count")
             self.assertEqual(_SPAWNED.stop(), 0, "the harness stopped dirty")
         finally:
             node.destroy_node()

@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -2014,6 +2015,16 @@ class ErrorFixture
         return lines_;
     }
 
+    std::array<std::uint64_t, 6> error_sums() const
+    {
+        return session_->error_sums();
+    }
+
+    std::array<std::uint64_t, 6> error_counts(std::uint8_t topic_id) const
+    {
+        return session_->error_counts(topic_id);
+    }
+
   private:
     static constexpr std::uint8_t kErrorTopic = 5u;
     ManualClock clock_;
@@ -2039,6 +2050,51 @@ TEST(SessionError, DropsAShortReport)
     ErrorFixture fixture;
     fixture.deliver_report({6u, 16u, 42u, 0u});
     EXPECT_TRUE(fixture.lines().empty()) << "a short payload forwards nothing";
+}
+
+// An MCU error report count ([ERR-6]) adds to the running sum of its code,
+// and to the per-topic count when the report names a topic.
+// covers: ERR-6
+TEST(SessionError, AccumulatesCodeCountsAcrossReports)
+{
+    ErrorFixture fixture;
+    fixture.deliver_report({6u, 16u, 42u, 0u, 0xFFu});
+    fixture.deliver_report({6u, 0xFFu, 3u, 0u, 0xFFu});
+    fixture.deliver_report({1u, 16u, 5u, 0u, 0x00u});
+    const std::array<std::uint64_t, 6> sums = fixture.error_sums();
+    EXPECT_EQ(sums[5], 45u) << "both code 6 deltas add up whatever topic they name";
+    EXPECT_EQ(sums[0], 5u);
+    EXPECT_EQ(sums[1], 0u);
+    EXPECT_EQ(sums[2], 0u);
+    EXPECT_EQ(sums[3], 0u);
+    EXPECT_EQ(sums[4], 0u);
+    EXPECT_EQ(fixture.error_counts(16u)[5], 42u) << "only the topic-naming report counts per topic";
+    EXPECT_EQ(fixture.error_counts(16u)[0], 5u);
+    EXPECT_EQ(fixture.error_counts(17u)[5], 0u) << "an unnamed topic reads zero";
+}
+
+// A report with topic id 0xFF names no topic, so it feeds the global sum of
+// its code only and leaves every per-topic count at zero.
+// covers: ERR-1, ERR-6
+TEST(SessionError, CountsUntargetedReportsGloballyOnly)
+{
+    ErrorFixture fixture;
+    fixture.deliver_report({3u, 0xFFu, 7u, 0u, 0xFFu});
+    EXPECT_EQ(fixture.error_sums()[2], 7u);
+    EXPECT_EQ(fixture.error_counts(0xFFu)[2], 0u) << "the 0xFF sentinel is not a topic";
+    EXPECT_EQ(fixture.error_counts(16u)[2], 0u);
+}
+
+// A count of 0xFFFF followed by 1 adds 65536: the report count wraps, the
+// running sum does not.
+// covers: ERR-6
+TEST(SessionError, AccumulatesAcrossAWrappedCount)
+{
+    ErrorFixture fixture;
+    fixture.deliver_report({4u, 16u, 0xFFu, 0xFFu, 0xFFu});
+    fixture.deliver_report({4u, 16u, 1u, 0u, 0xFFu});
+    EXPECT_EQ(fixture.error_sums()[3], 65536u);
+    EXPECT_EQ(fixture.error_counts(16u)[3], 65536u);
 }
 
 TEST(SessionError, DropsAReportWithAnUnknownCode)

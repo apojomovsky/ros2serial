@@ -162,11 +162,21 @@ class Session
     // The last completed handshake's topics, empty before the first one.
     const std::vector<TopicInfo> &topics() const;
     McuCounters mcu_counters() const;
+    // Running sums of the MCU error report counts per code ([ERR-6]): each
+    // decoded report adds its count to its code's slot, so a wrapped count
+    // still adds up. Slot 0 carries code 1 through slot 5 code 6, counting
+    // targeted and untargeted reports alike. Zero before the first report;
+    // a bridge restart resets every sum.
+    std::array<std::uint64_t, 6> error_sums() const;
     // Lost MCU-to-host frames per user topic ([FRM-15]): the sum of
     // (seq - expected) mod 256 over every user frame received while
     // connected. The first frame after each handshake expects seq 0, so a
     // first seq of N counts N; gaps accumulate across handshakes.
     std::uint32_t seq_gaps(std::uint8_t topic_id) const;
+    // MCU error report counts naming one topic id ([ERR-6]), in the same
+    // slots as error_sums. Zeros when no report named the id, including
+    // ids the handshake never announced and the 0xFF no-topic sentinel.
+    std::array<std::uint64_t, 6> error_counts(std::uint8_t topic_id) const;
     // HELLOs accepted while connected: the MCU rebooted and announced a new
     // handshake ([SES-19], [SES-21]). Link timeouts re-handshake without a
     // HELLO and do not count.

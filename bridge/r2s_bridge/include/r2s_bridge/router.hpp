@@ -5,6 +5,7 @@
 #ifndef R2S_BRIDGE__ROUTER_HPP_
 #define R2S_BRIDGE__ROUTER_HPP_
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -80,6 +81,10 @@ class Router
         // Converted device-to-host frames the serialized publish refused,
         // logged and counted instead of aborting.
         std::size_t publish_failures = 0;
+        // MCU error report counts naming this topic id ([ERR-6]): slot 0
+        // carries code 1 through slot 5 code 6. Zeros when no report named
+        // this id.
+        std::array<std::uint64_t, 6> mcu_errors{};
     };
     // The H8 snapshot: link state is one of disconnected, boot_wait,
     // handshaking or connected; the time sync values are real once a
@@ -94,6 +99,10 @@ class Router
         std::uint32_t control_coalesced = 0;
         std::uint8_t protocol_version = 0;
         McuCounters mcu_counters;
+        // Running MCU error report sums per code ([ERR-6]): slot 0 carries
+        // code 1 through slot 5 code 6, counting targeted and untargeted
+        // reports alike. Zeros before the first report.
+        std::array<std::uint64_t, 6> mcu_error_sums{};
         std::vector<TopicDiagnostics> topics;
         bool time_sync_available = false;
         std::int64_t time_offset_ns = 0;
