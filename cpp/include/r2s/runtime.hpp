@@ -33,6 +33,11 @@
 
 namespace r2s
 {
+/* How the bridge serves a topic on the ROS graph: best effort, keep-latest
+ * or reliable. The values are the CTL-4 flag bits they announce, the same
+ * mapping the generator uses for the qos names in r2s.yaml. */
+enum class QoS : uint8_t { BestEffort = 0x00u, KeepLatest = 0x04u, Reliable = 0x08u };
+
 /* What every message type must provide: the descriptor table that encodes
  * and decodes it, its index in that table, its type name and the first
  * eight bytes of its type hash. The generated message headers specialize
@@ -73,15 +78,20 @@ void dispatch_subscriber(void *record, const uint8_t *payload, uint16_t len, uin
 }
 
 /* The registry's seam. The registry itself lives in runtime.cpp, so the
- * core stays free of C++ and of the callbacks this layer stores. */
+ * core stays free of C++ and of the callbacks this layer stores. The
+ * default serves the topic best effort, as an unqualified r2s.yaml
+ * entry does. */
 r2s_status_t register_publisher(const char *topic, const r2s_codec_table_t *table, uint16_t type_index,
-                                const char *type_name, const uint8_t *type_hash, uint8_t *topic_id);
+                                const char *type_name, const uint8_t *type_hash, uint8_t *topic_id,
+                                QoS qos = QoS::BestEffort);
 /* A subscriber's table and type index live in its own typed record, so the
- * registry needs only the record and the dispatch that reaches it. */
+ * registry needs only the record and the dispatch that reaches it. The
+ * default serves the topic best effort, as an unqualified r2s.yaml
+ * entry does. */
 r2s_status_t register_subscriber(const char *topic, const char *type_name, const uint8_t *type_hash,
                                  void *record,
                                  void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t, uint8_t),
-                                 uint8_t *topic_id);
+                                 uint8_t *topic_id, QoS qos = QoS::BestEffort);
 r2s_status_t publish(uint8_t topic_id, const void *msg);
 void spin(void);
 bool registration_error(void);
@@ -127,13 +137,16 @@ class Node
 
     /* The registration the Publisher and the Subscription call. They are
      * public because the templates reach them, and a topic they refuse
-     * leaves the node with its registration error set. */
+     * leaves the node with its registration error set. The default
+     * serves the topic best effort, so existing sketches keep
+     * announcing what they always announced. */
     r2s_status_t register_publisher(const char *topic, const r2s_codec_table_t *table, uint16_t type_index,
-                                    const char *type_name, const uint8_t *type_hash, uint8_t *topic_id);
+                                    const char *type_name, const uint8_t *type_hash, uint8_t *topic_id,
+                                    QoS qos = QoS::BestEffort);
     r2s_status_t register_subscriber(const char *topic, const char *type_name, const uint8_t *type_hash,
                                      void *record,
                                      void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t, uint8_t),
-                                     uint8_t *topic_id);
+                                     uint8_t *topic_id, QoS qos = QoS::BestEffort);
 
   private:
     Node(const Node &);
@@ -150,14 +163,16 @@ template <typename T> class Publisher
     /* Announces the topic against the node. A node whose table already
      * closed refuses it, and the node keeps its registration error. The
      * parameter is not named node, since a sketch names its own node
-     * that way and the warning would fire on every such sketch. */
-    Publisher(Node &owner, const char *topic)
+     * that way and the warning would fire on every such sketch. The
+     * default announces best effort, so a sketch without the argument
+     * keeps its old announce. */
+    Publisher(Node &owner, const char *topic, QoS qos = QoS::BestEffort)
     {
         uint8_t id = 0xFFu;
 
         m_topic_id = 0xFFu;
         (void)owner.register_publisher(topic, msg_traits<T>::table(), msg_traits<T>::type_index(),
-                                       msg_traits<T>::type_name(), msg_traits<T>::type_hash(), &id);
+                                       msg_traits<T>::type_name(), msg_traits<T>::type_hash(), &id, qos);
         m_topic_id = id;
     }
 
@@ -189,8 +204,9 @@ template <typename T> class Subscription
      * capture-less lambda converts to the function pointer the handler
      * takes. The parameter is not named node, since a sketch names its
      * own node that way and the warning would fire on every such
-     * sketch. */
-    Subscription(Node &owner, const char *topic, void (*callback)(const T &msg))
+     * sketch. The default announces best effort, so a sketch without
+     * the argument keeps its old announce. */
+    Subscription(Node &owner, const char *topic, void (*callback)(const T &msg), QoS qos = QoS::BestEffort)
     {
         uint8_t id = 0xFFu;
 
@@ -200,7 +216,7 @@ template <typename T> class Subscription
         m_subscriber.storage = &m_storage;
         m_subscriber.callback = callback;
         (void)owner.register_subscriber(topic, msg_traits<T>::type_name(), msg_traits<T>::type_hash(),
-                                        &m_subscriber, &detail::dispatch_subscriber<T>, &id);
+                                        &m_subscriber, &detail::dispatch_subscriber<T>, &id, qos);
         m_topic_id = id;
     }
 

@@ -444,7 +444,7 @@ void setup() { nh.initNode(); nh.advertise(battery_pub); nh.subscribe(cmd_vel_su
 void loop()  { battery.data = read_battery(); battery_pub.publish(&battery); nh.spinOnce(); }
 ```
 
-**The 1-to-1 map.** The runtime API and the static API map line for line. Each runtime declaration has a twin X-macro line with the same words, type, object name, topic string and callback; everything after the declarations is identical. The block below shows both forms side by side, so it is an illustration and not a program:
+**The 1-to-1 map.** The runtime API and the static API map line for line. Each runtime declaration has a twin X-macro line with the same words, type, object name, topic string and callback; everything after the declarations is identical. A runtime declaration with a QoS argument has no X-macro twin: the static path always announces best effort. The block below shows both forms side by side, so it is an illustration and not a program:
 
 ```text
 // runtime
@@ -470,7 +470,7 @@ void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node
 
 **What the runtime path costs in RAM.** Every topic the sketch registers takes one entry in the RAM topic table the core announces, so the marginal cost of a topic is the size of that entry: 14 bytes on an ATmega328P, where the entry holds the topic id, the flags, the first eight bytes of the type hash and the two name pointers. Beside the table, the runtime keeps one record per publisher and one per subscriber, 5 bytes each, and each subscriber also holds its own copy of the message, which lives in the sketch's `Subscription` object rather than in a runtime symbol. The table itself is sized for the worst case the build allows, so the total grows with the topic limit while the marginal cost per topic does not.
 
-**What the runtime path announces.** A runtime topic carries direction and narrow only, which the bridge serves best effort: the same announce a static topic without a `qos` line makes. Picking reliable or keep-latest stays with the static paths until the runtime API grows the option.
+**What the runtime path announces.** A runtime topic carries direction, narrow and the QoS bits the sketch selects: the third constructor argument (`r2s::QoS::KeepLatest`, `r2s::QoS::Reliable`), defaulting to best effort, which is the same announce a static topic without a `qos` line makes. The bridge honors the bits the same way for both paths.
 
 The figures come from the linked firmware, not from a note: `scripts/build-examples.sh` prints the topic table's size, the per-topic cost, the publisher and subscriber records and the sketch's own objects for every board it builds, and `make test EXAMPLES=1` runs it.
 
