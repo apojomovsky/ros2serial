@@ -137,8 +137,8 @@ TEST(DiagnosticsMessage, DisambiguatesSameNameErrorKeysByTopicId)
         topic.mcu_errors = {{0u, 0u, 0u, 0u, 0u, static_cast<std::uint64_t>(id)}};
         snapshot.topics.push_back(topic);
     }
-    const diagnostic_msgs::msg::DiagnosticStatus &status =
-        diagnostics_message(snapshot, "test_node", "").status[0];
+    const diagnostic_msgs::msg::DiagnosticArray message = diagnostics_message(snapshot, "test_node", "");
+    const diagnostic_msgs::msg::DiagnosticStatus &status = message.status[0];
     std::vector<std::string> keys;
     for (const diagnostic_msgs::msg::KeyValue &value : status.values) {
         keys.push_back(value.key);
