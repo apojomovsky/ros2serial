@@ -415,6 +415,7 @@ Router::Diagnostics Router::diagnostics() const
     out.control_coalesced = impl_->session_.control_coalesced();
     out.protocol_version = R2S_PROTOCOL_VERSION;
     out.mcu_counters = impl_->session_.mcu_counters();
+    out.mcu_error_sums = impl_->session_.error_sums();
     for (const TopicInfo &info : impl_->session_.topics()) {
         TopicDiagnostics topic;
         topic.topic_id = info.topic_id;
@@ -425,6 +426,7 @@ Router::Diagnostics Router::diagnostics() const
         topic.dropped = impl_->scheduler_.dropped(info.topic_id);
         const auto route = impl_->routes.find(info.topic_id);
         topic.publish_failures = route == impl_->routes.end() ? 0u : route->second.publish_failures;
+        topic.mcu_errors = impl_->session_.error_counts(info.topic_id);
         out.topics.push_back(topic);
     }
     out.time_sync_available = impl_->session_.time_available();

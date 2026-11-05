@@ -444,7 +444,7 @@ void setup() { nh.initNode(); nh.advertise(battery_pub); nh.subscribe(cmd_vel_su
 void loop()  { battery.data = read_battery(); battery_pub.publish(&battery); nh.spinOnce(); }
 ```
 
-**The 1-to-1 map.** The runtime API and the static API map line for line. Each runtime declaration has a twin X-macro line with the same words, type, object name, topic string and callback; everything after the declarations is identical. The block below shows both forms side by side, so it is an illustration and not a program:
+**The 1-to-1 map.** The runtime API and the static API map line for line. Each runtime declaration has a twin X-macro line with the same words, type, object name, topic string and callback; everything after the declarations is identical. A runtime declaration with a QoS argument has no X-macro twin: the static path always announces best effort. The block below shows both forms side by side, so it is an illustration and not a program:
 
 ```text
 // runtime
@@ -470,7 +470,7 @@ void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node
 
 **What the runtime path costs in RAM.** Every topic the sketch registers takes one entry in the RAM topic table the core announces, so the marginal cost of a topic is the size of that entry: 14 bytes on an ATmega328P, where the entry holds the topic id, the flags, the first eight bytes of the type hash and the two name pointers. Beside the table, the runtime keeps one record per publisher and one per subscriber, 5 bytes each, and each subscriber also holds its own copy of the message, which lives in the sketch's `Subscription` object rather than in a runtime symbol. The table itself is sized for the worst case the build allows, so the total grows with the topic limit while the marginal cost per topic does not.
 
-**What the runtime path announces.** A runtime topic carries direction and narrow only, which the bridge serves best effort: the same announce a static topic without a `qos` line makes. Picking reliable or keep-latest stays with the static paths until the runtime API grows the option.
+**What the runtime path announces.** A runtime topic carries direction, narrow and the QoS bits the sketch selects: the third constructor argument (`r2s::QoS::KeepLatest`, `r2s::QoS::Reliable`), defaulting to best effort, which is the same announce a static topic without a `qos` line makes. The bridge honors the bits the same way for both paths.
 
 The figures come from the linked firmware, not from a note: `scripts/build-examples.sh` prints the topic table's size, the per-topic cost, the publisher and subscriber records and the sketch's own objects for every board it builds, and `make test EXAMPLES=1` runs it.
 
@@ -781,7 +781,7 @@ The encoding is deterministic: 254 non-zero bytes at the end of a frame produce 
 
 ### System channels
 
-The first payload byte of IDs 0 and 1 is an opcode.
+The first payload byte of IDs 0, 1 and 3 is an opcode.
 
 **ID 0, control**
 
@@ -826,13 +826,13 @@ normalize again
 
 **ID 2, log** (MCU → host): `level u8` (ROS severities: 10 debug, 20 info, 30 warn, 40 error, 50 fatal), `text string`, `value_kind u8` (0 none, 1 u16, 2 i16, 3 u32, 4 i32, 5 f32), then the value if present.
 
-**ID 3, parameters**: P1, specified by ticket S5.
+**ID 3, parameters**: PARAM_REQ, PARAM_DECLARE, PARAM_SET and PARAM_STATUS as `spec/protocol.md` section 7.6 gives them.
 
 **ID 4, heartbeat**: host → MCU has an empty payload. MCU → host carries `rx_frames u16, crc_errors u16, rx_overflows u16, dropped_frames u16`, all wrapping counters. `rx_frames` counts the frames the MCU accepted, `crc_errors` the ones it dropped for a bad CRC, `rx_overflows` the ones that did not fit its buffer, and `dropped_frames` every frame it dropped, whichever rule dropped it.
 
 **ID 5, error report** (MCU → host): `code u8, topic_id u8, count u16, field u8`. Codes: 1 bound violation on decode, 2 unknown topic ID, 3 RX overflow, 4 frame too large, 5 publish while not connected (reported once per connection), 6 TX busy (reported once per second at most). `count` is the number of times the error occurred since the last error report of that code, and it wraps at 65535; a code that is rate-limited is counted the same way and reported no more often than that. `field` is the index of the offending field in depth-first declaration order over the type's field definitions (array elements are not counted separately), or 0xFF when not applicable. The bridge computes the same order with introspection and logs the field path.
 
-**ID 6, reliable-channel ack**: P1, specified by ticket S5.
+**ID 6, reliable-channel ack**: `channel u8, rel_seq u8` as `spec/protocol.md` section 7.7 gives it.
 
 ### State machines
 
@@ -1094,7 +1094,7 @@ by `launch/r2s_bridge.launch.py` with `port`, `params_file`, `namespace` and `re
 
 ### Published by the bridge
 
-- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, per-topic direction, verdict, sequence gaps, drops and publish failures (`topic <id> <name> <field>`), time sync offset in nanoseconds, drift in ppm and round trip in nanoseconds.
+- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, running MCU error report sums per code (`mcu error code 1` through `mcu error code 6`) and the per-topic breakdown (`topic <id> <name> mcu errors`), per-topic direction, verdict, sequence gaps, drops and publish failures (`topic <id> <name> <field>`), time sync offset in nanoseconds, drift in ppm and round trip in nanoseconds.
 - The MCU's topics, under the names it announced, after remapping and namespacing.
 - MCU log messages and error reports through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`; a report names its code, topic, count since the previous report, and the field path for a bound violation.
 

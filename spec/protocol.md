@@ -1,6 +1,6 @@
 # ros2serial protocol specification
 
-Version 0.3 (draft) · protocol version 2
+Version 0.4 (draft) · protocol version 3
 
 This document is normative. Every normative statement is a list item starting with an ID in brackets, such as `[FRM-1]`. Conformance vectors (`spec/vectors/`) and tests name the IDs they cover, so every rule here is checked by at least one test (`docs/01-testing.md`, section 3). IDs are never reused: a removed rule keeps its list item, with its text replaced by "Retired.", so the numbering has no gaps.
 
@@ -8,14 +8,14 @@ A section whose heading ends in `(local)` specifies bytes that never appear on t
 
 The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119. Prose outside the ID items, tables included, is informative.
 
-This version covers the frame, the frame check, rCOBS, varints, the message encoding, the codec descriptors, the system channels, the handshake, the session state machines, the error counters and time synchronization. The parameters and reliable-channel channels follow in a later version.
+This version covers the frame, the frame check, rCOBS, varints, the message encoding, the codec descriptors, the system channels, the handshake, the session state machines, the error counters, time synchronization, parameters and the reliable channel.
 
 ## 1. Conventions
 
 Sizes are in bytes, and a byte is 8 bits. In this document and in the vectors, byte strings are written as lowercase hex byte pairs separated by single spaces, for example `10 02 01`.
 
 - [GEN-1] All multi-byte integers on the wire are little-endian.
-- [GEN-2] The protocol version described here is 2. Both sides announce it in the handshake.
+- [GEN-2] The protocol version described here is 3. Both sides announce it in the handshake.
 
 ## 2. Frame
 
@@ -111,11 +111,11 @@ A payload is the packed encoding of one message, field after field, with no padd
 
 ## 7. System channels
 
-A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3]). The payload of a system channel on ID 0 or ID 1 begins with an opcode byte; the other system channels have no opcode.
+A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3]). The payload of a system channel on ID 0, ID 1 or ID 3 begins with an opcode byte; the other system channels have no opcode.
 
 - [SYS-1] The system channels are: ID 0 control, ID 1 time, ID 2 log, ID 3 parameters, ID 4 heartbeat, ID 5 error report, ID 6 reliable-channel ack. IDs 7 to 15 are reserved and MUST NOT be used.
 - [SYS-2] A frame on a system channel uses the same framing as a user topic (section 2), so it has a `seq` counter and a CRC.
-- [SYS-3] The parameters and reliable-channel ack channels are specified in a later version of this document. Until then, a receiver MUST ignore a frame on them.
+- [SYS-3] Retired.
 - [SYS-4] A receiver MUST ignore a frame on a reserved channel (ID 7 to 15) and MUST NOT count it as an error.
 - [SYS-5] A receiver that refuses a frame drops it and takes no other action on it. The MCU also counts it as a dropped frame (section 7.4), which is the only side that keeps that counter.
 
@@ -197,7 +197,7 @@ The MCU sends on this channel; the host does not.
 - [HB-4] `rx_frames` counts the frames the MCU received and accepted.
 - [HB-5] `crc_errors` counts the frames the MCU dropped because their CRC check failed ([FRM-8]).
 - [HB-6] `rx_overflows` counts the frames the MCU dropped because their encoded bytes exceeded its buffer ([FRM-12]).
-- [HB-7] `dropped_frames` counts every frame the MCU dropped, whichever rule dropped it ([FRM-6], [FRM-7], [FRM-8], [FRM-12]). It is therefore the total of the drops, and is not the sum of the other three.
+- [HB-7] `dropped_frames` counts every frame the MCU dropped, whichever rule dropped it ([FRM-6], [FRM-7], [FRM-8], [FRM-12], [REL-2]). It is therefore the total of the drops, and is not the sum of the other three.
 
 ### 7.5 Error report channel (ID 5)
 
@@ -209,6 +209,36 @@ The MCU sends on this channel; the host does not.
 - [ERR-4] The `field` is the index of the offending field in depth-first declaration order over the type's field definitions, where the elements of an array are not counted separately, or 0xFF when the rule does not name a field.
 - [ERR-5] The host computes the same field order with introspection, so that it can log the path of the offending field.
 - [ERR-6] The `count` is the number of times the error occurred since the last error report of that code, and it wraps at 65535. A code that [ERR-3] rate-limits is counted the same way and reported no more often than that.
+
+### 7.6 Parameters channel (ID 3)
+
+| Opcode | Name | Direction | Payload after the opcode |
+| --- | --- | --- | --- |
+| 0x01 | PARAM_REQ | host to MCU | `index u8` |
+| 0x02 | PARAM_DECLARE | MCU to host | `index u8, type u8, flags u8, name string, default value` |
+| 0x03 | PARAM_SET | host to MCU | `rel_seq u8, index u8, value` |
+| 0x04 | PARAM_STATUS | MCU to host | `rel_seq u8, index u8, status u8` |
+
+- [PAR-1] The payload of each parameters opcode is the one the table above gives, in that order and with nothing between: the opcode byte, then the fields it lists, and a string as its varint length and bytes (section 5).
+- [PAR-2] A `type` is 0 for bool, 1 for i64, 2 for f64 and 3 for string. Every other value is reserved. A receiver MUST refuse ([SYS-5]) a DECLARE whose type is not one of those four.
+- [PAR-3] A bool value is one byte, 0 for false and 1 for true. An i64 value is 8 bytes, little-endian. An f64 value is IEEE 754 binary64, little-endian. A string value is a varint length with bytes, and MUST NOT hold a `0x00` byte. A receiver MUST refuse a value that breaks its type's rule.
+- [PAR-4] The `flags` byte has bit 0 for read-only. Every other bit is reserved and MUST be 0. A receiver MUST refuse ([SYS-5]) a DECLARE with a reserved bit set.
+- [PAR-5] A PARAM_STATUS `status` is 0 for applied, 1 for unknown index, 2 for bad type or length, 3 for read-only and 4 for out of range. Every other value is reserved. A receiver MUST refuse ([SYS-5]) a PARAM_STATUS whose status is not one of those five.
+- [PAR-6] A DECLARE carries the full name in both handshake modes.
+- [PAR-7] The host walks the parameters after the topic walk and before READY: one PARAM_REQ per index, with a 200 ms timeout and at most 3 retries, mirroring [SES-16]. The first PARAM_STATUS with status 1 (unknown index) ends the walk. When the retries are spent without an answer, the host abandons the walk and returns to HANDSHAKING.
+- [PAR-8] A PARAM_SET and the PARAM_STATUS that answers it ride the reliable channel ([REL-2]) while CONNECTED. During HANDSHAKING a PARAM_STATUS that answers a PARAM_REQ is a plain reply under the requester's retry, never a reliable frame. A plain reply carries `rel_seq` 0.
+- [PAR-9] After READY the bridge declares each parameter as a ROS parameter and pushes values that differ from the declared defaults with SET. After every re-handshake it re-pushes the current values.
+- [PAR-10] In ANNOUNCING the MCU answers a PARAM_REQ the way [SES-2] answers a TOPIC_REQ, and ignores a SET the way [SES-3] describes. A SET never applies before CONNECTED.
+
+### 7.7 Reliable-channel ack (ID 6)
+
+- [REL-1] The payload is `channel u8, rel_seq u8`: the topic id and the `rel_seq` of the reliable frame received.
+- [REL-2] At most one reliable payload per direction is outstanding. The sender keeps the frame, retransmits it every 500 ms while no ack arrives, and after 3 retries drops it and counts it: on the host in diagnostics, on the MCU in `dropped_frames` ([HB-7]).
+- [REL-3] The receiver sends an ack for every reliable frame, duplicates included, and applies the payload at most once: it keeps the next expected `rel_seq` per channel per direction, 0 after each handshake. A frame that matches it applies and advances the counter; any other is acked and not applied.
+- [REL-4] A reliable frame carries the normal per-topic `seq` ([FRM-4], [FRM-5]). An ID 6 frame is never acked and never rides the reliable channel.
+- [REL-5] A re-handshake drops all reliable state on both sides; the `seq` counters restart anyway ([SES-11], [FRM-4]).
+- [REL-6] An ack goes out as soon as the link takes bytes. When the link cannot take bytes, the host keeps at most one pending ack per channel, with the newer replacing the older in place and each replaced frame counted. The MCU reports a busy transmitter the way [ERR-2] code 6 reports it.
+- [REL-7] A PARAM_REQ joins the [SES-33] slot list: at most one queued PARAM_REQ, with the newer replacing the older in place and keeping its `seq`. Pending SET frames queue behind the outstanding one with at most one per parameter index: a newer SET to the same index replaces the older in place and counts it. Pending reliable frames drop on a return to HANDSHAKING, as [SES-33] control frames do.
 
 ## 8. Session
 
@@ -273,7 +303,7 @@ so unit and integration tests cover them and no vector does.
 - [SES-30] Each host-to-MCU queue holds `qos_depth` messages, or one when the topic is keep-latest. Past that the oldest message is dropped and counted.
 - [SES-31] A generic publisher or subscription created for an MCU topic keeps the last `qos_depth` messages, with reliable delivery when the announced flags name the reliable channel and best effort otherwise.
 - [SES-32] The host holds at most the MCU's announced receive capacity in unsent user-topic bytes, plus the frame in flight. A further user frame waits for the link instead of growing the host heap. Control frames keep their own retry rules.
-- [SES-33] While the link cannot take bytes, the host keeps at most one queued frame per control kind (HELLO_REQ, TOPIC_REQ, READY, heartbeat, PING), with the newer replacing the older in place and keeping its seq, and at most one TOPIC_STATUS per topic id. A frame already reaching the port is left to finish. Each replaced frame is counted. On a return to HANDSHAKING the host drops its pending control frames.
+- [SES-33] While the link cannot take bytes, the host keeps at most one queued frame per control kind (HELLO_REQ, TOPIC_REQ, PARAM_REQ, READY, heartbeat, PING), with the newer replacing the older in place and keeping its seq, and at most one TOPIC_STATUS per topic id. A frame already reaching the port is left to finish. Each replaced frame is counted. On a return to HANDSHAKING the host drops its pending control frames.
 
 ## 9. Codec descriptors (local)
 

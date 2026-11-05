@@ -37,6 +37,17 @@ void add_topic(diagnostic_msgs::msg::DiagnosticStatus &status, const Router::Top
     // GCOVR_EXCL_BR_START: a unit test cannot throw out of this call
     add_value(status, head + " publish failures", std::to_string(topic.publish_failures));
     // GCOVR_EXCL_BR_STOP
+    // The id heads this key under #271's approved scheme, so two announced
+    // topics sharing one name still render distinct keys.
+    const std::string id_head = "topic " + std::to_string(topic.topic_id) + " " + topic.topic_name;
+    std::string errors;
+    for (std::uint8_t code = 1u; code <= 6u; ++code) {
+        if (code != 1u) {
+            errors += " ";
+        }
+        errors += std::to_string(code) + "=" + std::to_string(topic.mcu_errors[code - 1u]);
+    }
+    add_value(status, id_head + " mcu errors", errors);
 }
 } // namespace
 
@@ -65,6 +76,10 @@ diagnostic_msgs::msg::DiagnosticArray diagnostics_message(const Router::Diagnost
     add_value(status, "mcu crc errors", std::to_string(snapshot.mcu_counters.crc_errors));
     add_value(status, "mcu rx overflows", std::to_string(snapshot.mcu_counters.rx_overflows));
     add_value(status, "mcu dropped frames", std::to_string(snapshot.mcu_counters.dropped_frames));
+    for (std::uint8_t code = 1u; code <= 6u; ++code) {
+        add_value(status, "mcu error code " + std::to_string(code),
+                  std::to_string(snapshot.mcu_error_sums[code - 1u]));
+    }
     for (const Router::TopicDiagnostics &topic : snapshot.topics) {
         add_topic(status, topic);
     }

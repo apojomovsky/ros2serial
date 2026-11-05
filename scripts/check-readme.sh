@@ -17,6 +17,9 @@ fi
 anchors=(
   "## Getting started"
   "pip install ./gen"
+  "ports/posix/run.sh --build-only"
+  "r2s_posix_firmware"
+  "pty_pair.py"
   "arduino-cli core install arduino:avr"
   "r2s-gen bundle --distro jazzy"
   "ports/arduino/r2s_arduino_port"
@@ -58,6 +61,12 @@ case ":$PATH:" in
   *) export PATH="$HOME/.local/bin:$PATH" ;;
 esac
 r2s-gen version || exit 1
+
+# The posix virtual MCU the walkthrough starts on. It lands under the same
+# build directory, so the check and the README name the same firmware path.
+bash ports/posix/run.sh --build-only || exit 1
+posix_fw=$build/ports/posix/r2s_posix_firmware
+[ -x "$posix_fw" ] || { echo "check-readme: no posix firmware at $posix_fw" >&2; exit 1; }
 
 # The AVR core the walkthrough installs. The dev image carries the pinned
 # core, so a present core stays untouched and no network is needed.
@@ -119,11 +128,64 @@ set -u
 
 sim_pid=""
 bridge_pid=""
+posix_pids=""
 cleanup() {
   [ -z "${bridge_pid:-}" ] || kill "$bridge_pid" 2>/dev/null || true
   [ -z "${sim_pid:-}" ] || kill "$sim_pid" 2>/dev/null || true
+  # shellcheck disable=SC2086 # posix_pids holds several pids on purpose.
+  [ -z "${posix_pids:-}" ] || kill $posix_pids 2>/dev/null || true
 }
 trap cleanup EXIT
+
+# The virtual serial line the walkthrough ties first: the relay prints the
+# MCU and host ends, and the firmware and bridge each open one of them.
+mkdir -p "$build/posix" || exit 1
+python3 ports/posix/pty_pair.py >"$build/posix/ports.env" 2>"$build/posix/pty_pair.log" &
+posix_pids="$posix_pids $!"
+for _ in $(seq 1 20); do
+  grep -q "^HOST_PORT=" "$build/posix/ports.env" 2>/dev/null && break
+  sleep 0.25
+done
+grep -q "^MCU_PORT=" "$build/posix/ports.env" || { echo "check-readme: the relay announced no ports" >&2; exit 1; }
+set -a
+# shellcheck source=/dev/null
+source "$build/posix/ports.env"
+set +a
+
+# The posix firmware the walkthrough starts, on the relay's MCU end.
+"$posix_fw" "$MCU_PORT" >"$build/posix/firmware.log" 2>&1 &
+posix_pids="$posix_pids $!"
+for _ in $(seq 1 40); do
+  grep -q "r2s_posix: ready" "$build/posix/firmware.log" 2>/dev/null && break
+  sleep 0.25
+done
+grep -q "r2s_posix: ready" "$build/posix/firmware.log" || { echo "check-readme: the posix firmware never announced ready" >&2; exit 1; }
+
+# The bridge the walkthrough launches on the relay's host end.
+export ROS_DOMAIN_ID=${R2S_E2E_DOMAIN_ID:?e2e-lease.sh provides it}
+ros2 launch r2s_bridge r2s_bridge.launch.py port:="$HOST_PORT" >"$build/posix/bridge.log" 2>&1 &
+posix_pids="$posix_pids $!"
+seen=""
+for _ in $(seq 1 60); do
+  seen=$(ros2 topic list 2>/dev/null || true)
+  case "$seen" in *"/battery"*) break ;; *) seen="" ;; esac
+  sleep 1
+done
+[ -n "$seen" ] || { echo "check-readme: posix /battery never appeared" >&2; exit 1; }
+for topic in /battery /cmd_vel /diagnostics /parameter_events /rosout; do
+  echo "$seen" | grep -qx "$topic" || { echo "check-readme: posix $topic never appeared" >&2; exit 1; }
+done
+echo "check-readme: posix topics announced"
+timeout 60 ros2 topic echo /battery std_msgs/msg/Float32 --once >"$build/posix/echo.txt" 2>&1 || {
+  echo "check-readme: no posix battery reading arrived" >&2
+  exit 1
+}
+grep -q "data:" "$build/posix/echo.txt" || { echo "check-readme: the posix echo held no reading" >&2; exit 1; }
+cat "$build/posix/echo.txt"
+echo "check-readme: posix walkthrough is green"
+# shellcheck disable=SC2086 # posix_pids holds several pids on purpose.
+kill $posix_pids 2>/dev/null || true
+posix_pids=""
 
 # The emulated Uno the walkthrough runs instead of hardware.
 "$sim" --mcu atmega328p --firmware "$elf" --run-ms 300000 >"$work/simavr.log" 2>&1 &

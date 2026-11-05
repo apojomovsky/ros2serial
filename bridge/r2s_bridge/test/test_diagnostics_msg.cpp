@@ -2,8 +2,10 @@
 // DiagnosticArray out, through the real builder and no node.
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <map>
 #include <string>
+#include <vector>
 
 #include <diagnostic_msgs/msg/diagnostic_array.hpp>
 
@@ -41,6 +43,7 @@ Router::Diagnostics connected_snapshot()
     snapshot.mcu_counters.crc_errors = 2u;
     snapshot.mcu_counters.rx_overflows = 1u;
     snapshot.mcu_counters.dropped_frames = 3u;
+    snapshot.mcu_error_sums = {{0u, 0u, 7u, 0u, 0u, 9u}};
     Router::TopicDiagnostics battery;
     battery.topic_id = 16u;
     battery.topic_name = "battery";
@@ -48,6 +51,7 @@ Router::Diagnostics connected_snapshot()
     battery.seq_gaps = 4u;
     battery.dropped = 0u;
     battery.publish_failures = 1u;
+    battery.mcu_errors = {{0u, 2u, 0u, 0u, 0u, 5u}};
     snapshot.topics.push_back(battery);
     Router::TopicDiagnostics cmd_vel;
     cmd_vel.topic_id = 17u;
@@ -77,6 +81,14 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(values.at("mcu crc errors"), "2");
     EXPECT_EQ(values.at("mcu rx overflows"), "1");
     EXPECT_EQ(values.at("mcu dropped frames"), "3");
+    EXPECT_EQ(values.at("mcu error code 1"), "0");
+    EXPECT_EQ(values.at("mcu error code 2"), "0");
+    EXPECT_EQ(values.at("mcu error code 3"), "7");
+    EXPECT_EQ(values.at("mcu error code 4"), "0");
+    EXPECT_EQ(values.at("mcu error code 5"), "0");
+    EXPECT_EQ(values.at("mcu error code 6"), "9");
+    EXPECT_EQ(values.at("topic 16 battery mcu errors"), "1=0 2=2 3=0 4=0 5=0 6=5");
+    EXPECT_EQ(values.at("topic 17 cmd_vel mcu errors"), "1=0 2=0 3=0 4=0 5=0 6=0");
     EXPECT_EQ(values.at("topic 16 battery direction"), "device to host");
     EXPECT_EQ(values.at("topic 16 battery seq gaps"), "4");
     EXPECT_EQ(values.at("topic 16 battery dropped"), "0");
@@ -84,6 +96,14 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(values.at("topic 17 cmd_vel direction"), "host to device");
     EXPECT_EQ(values.at("topic 17 cmd_vel seq gaps"), "0");
     EXPECT_EQ(values.at("topic 17 cmd_vel dropped"), "5");
+    EXPECT_EQ(values.at("mcu error code 1"), "0");
+    EXPECT_EQ(values.at("mcu error code 2"), "0");
+    EXPECT_EQ(values.at("mcu error code 3"), "7");
+    EXPECT_EQ(values.at("mcu error code 4"), "0");
+    EXPECT_EQ(values.at("mcu error code 5"), "0");
+    EXPECT_EQ(values.at("mcu error code 6"), "9");
+    EXPECT_EQ(values.at("topic 16 battery mcu errors"), "1=0 2=2 3=0 4=0 5=0 6=5");
+    EXPECT_EQ(values.at("topic 17 cmd_vel mcu errors"), "1=0 2=0 3=0 4=0 5=0 6=0");
     EXPECT_EQ(values.at("control coalesced"), "6");
     EXPECT_EQ(values.at("time sync offset"), "-1500");
     EXPECT_EQ(values.at("time sync drift"), "12");
@@ -141,6 +161,33 @@ TEST(DiagnosticsMessage, SameNameTopicsKeepDistinctKeys)
     EXPECT_EQ(values.at("topic 17 dup direction"), "host to device");
     EXPECT_EQ(values.at("topic 17 dup status"), "name conflict");
     EXPECT_EQ(values.at("topic 17 dup dropped"), "5");
+}
+
+// Two announced topics sharing one name still render distinct error keys:
+// the topic id heads every per-topic error key, as #271's scheme requires.
+TEST(DiagnosticsMessage, DisambiguatesSameNameErrorKeysByTopicId)
+{
+    Router::Diagnostics snapshot;
+    snapshot.link_state = "connected";
+    for (const std::uint8_t id : {16u, 17u}) {
+        Router::TopicDiagnostics topic;
+        topic.topic_id = id;
+        topic.topic_name = "dup";
+        topic.device_to_host = true;
+        topic.mcu_errors = {{0u, 0u, 0u, 0u, 0u, static_cast<std::uint64_t>(id)}};
+        snapshot.topics.push_back(topic);
+    }
+    const diagnostic_msgs::msg::DiagnosticArray message = diagnostics_message(snapshot, "test_node", "");
+    const diagnostic_msgs::msg::DiagnosticStatus &status = message.status[0];
+    std::vector<std::string> keys;
+    for (const diagnostic_msgs::msg::KeyValue &value : status.values) {
+        keys.push_back(value.key);
+    }
+    EXPECT_EQ(std::count(keys.begin(), keys.end(), "topic 16 dup mcu errors"), 1);
+    EXPECT_EQ(std::count(keys.begin(), keys.end(), "topic 17 dup mcu errors"), 1);
+    const std::map<std::string, std::string> values = values_of(status);
+    EXPECT_EQ(values.at("topic 16 dup mcu errors"), "1=0 2=0 3=0 4=0 5=0 6=16");
+    EXPECT_EQ(values.at("topic 17 dup mcu errors"), "1=0 2=0 3=0 4=0 5=0 6=17");
 }
 
 TEST(DiagnosticsMessage, RendersHugeTimeSyncValues)
