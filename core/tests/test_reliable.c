@@ -521,6 +521,9 @@ void test_params_f64_declare_streams_eight_bytes(void)
     const uint8_t req[] = {0x01u, 0x00u};
     static const uint8_t two_point_five[] = {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x04u, 0x40u};
     static const uint8_t short_value[] = {0x00u, 0x00u};
+    /* The wire bytes name 2.5 little-endian while the struct holds it in
+     * target order, so the test names the value, not the bytes ([PAR-3]). */
+    const double want = 2.5;
 
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", one_topic, 1));
     TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_params_configure(f64_table, 1));
@@ -531,7 +534,7 @@ void test_params_f64_declare_streams_eight_bytes(void)
     TEST_ASSERT_EQUAL_INT(R2S_PARAM_APPLIED, r2s_params_check_set(0, two_point_five, 8));
     TEST_ASSERT_EQUAL_INT(R2S_PARAM_BAD_TYPE_OR_LENGTH, r2s_params_check_set(0, short_value, 2));
     r2s_params_store(0, two_point_five, sizeof two_point_five);
-    TEST_ASSERT_EQUAL_MEMORY(two_point_five, &f64_table[0].value.f, sizeof two_point_five);
+    TEST_ASSERT_EQUAL_MEMORY(&want, &f64_table[0].value.f, sizeof want);
 }
 
 void test_reliable_second_set_waits_behind_the_first(void)
