@@ -21,7 +21,8 @@ def run(args, cwd, tmp_path, extra_env=None):
     }
     if extra_env:
         env.update(extra_env)
-    return subprocess.run(args, cwd=cwd, env=env, capture_output=True, text=True)
+    # A parse regression must fail, never hang the suite.
+    return subprocess.run(args, cwd=cwd, env=env, capture_output=True, text=True, timeout=120)
 
 
 def test_the_helper_rejects_an_unknown_board(tmp_path):
@@ -33,6 +34,12 @@ def test_the_helper_rejects_an_unknown_board(tmp_path):
 def test_the_helper_rejects_an_unknown_option(tmp_path):
     result = run(["bash", str(SCRIPT), "--sketchbogus"], ROOT, tmp_path)
     assert result.returncode != 0
+
+
+def test_the_helper_rejects_a_missing_option_value_without_hanging(tmp_path):
+    result = run(["bash", str(SCRIPT), "--board"], ROOT, tmp_path)
+    assert result.returncode != 0
+    assert "needs a value" in result.stderr
 
 
 def test_stage_only_stages_the_library_and_reports_the_limits(tmp_path):

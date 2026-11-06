@@ -18,11 +18,19 @@ stage_only=0
 no_bundle=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --board) board=${2:-}; shift 2 ;;
-    --sketch) sketch=${2:-}; shift 2 ;;
-    --lib) lib=${2:-}; shift 2 ;;
-    --out) out=${2:-}; shift 2 ;;
-    --distro) distro=${2:-}; shift 2 ;;
+    --board|--sketch|--lib|--out|--distro)
+      # A missing value must fail, not loop: shift 2 with one argument
+      # leaves the option in place and the parse never advances.
+      [ "$#" -ge 2 ] || { echo "ports/arduino/build.sh: '$1' needs a value" >&2; exit 2; }
+      case "$1" in
+        --board) board=$2 ;;
+        --sketch) sketch=$2 ;;
+        --lib) lib=$2 ;;
+        --out) out=$2 ;;
+        --distro) distro=$2 ;;
+      esac
+      shift 2
+      ;;
     --stage-only) stage_only=1; shift ;;
     --no-bundle) no_bundle=1; shift ;;
     -h|--help) echo "usage: ports/arduino/build.sh [--board uno|mega] [--sketch DIR] [--lib DIR] [--out DIR] [--distro NAME] [--stage-only] [--no-bundle]" >&2; exit 0 ;;

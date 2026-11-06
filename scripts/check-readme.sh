@@ -58,8 +58,8 @@ case ":$PATH:" in
 esac
 r2s-gen version || exit 1
 
-# The posix virtual MCU the walkthrough starts on. It lands under the same
-# build directory, so the check and the README name the same firmware path.
+# The posix virtual MCU the walkthrough reaches second. It lands under the
+# same build directory, so the check and the README name the same path.
 bash ports/posix/run.sh --build-only || exit 1
 posix_fw=$build/ports/posix/r2s_posix_firmware
 [ -x "$posix_fw" ] || { echo "check-readme: no posix firmware at $posix_fw" >&2; exit 1; }
@@ -74,6 +74,9 @@ mkdir -p "$work" || exit 1
 fw=build/uno
 bash ports/arduino/build.sh --board uno --lib "$lib" --out "$fw" || exit 1
 elf=$fw/arduino_minimal.ino.elf
+# The helper's own defaults, the way the README runs it: stage only, since
+# the firmware above already proves the compile.
+bash ports/arduino/build.sh --board uno --stage-only || exit 1
 
 # The harness the walkthrough runs, built by its own script, which stays
 # the single description of how it builds.
