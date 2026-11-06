@@ -57,7 +57,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 
 ## Scope: parity with rosserial
 
-*Status (0.1.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++; planned: parameters, services, actions and the reliable channel in #133, #154, #155, #156 and #315 to #320, rosserial compatibility in #145 and #149.*
+*Status (0.1.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++; specified: parameters in #133, services and actions in #316; planned: #154, #155, #156 and #315 to #320, rosserial compatibility in #145 and #149.*
 
 | Feature | Priority | Notes |
 | --- | --- | --- |
@@ -238,7 +238,7 @@ Lengths are varints (LEB128): 1 byte for values under 128, which covers almost a
 
 ## Protocol draft (v1)
 
-*Status (0.1.0): built: full-mode handshake, time, log, heartbeat and error channels; planned: parameters and reliable channel in #133 and #154, services and actions in #316; compact mode lands with tier S in Phase 5.*
+*Status (0.1.0): built: full-mode handshake, time, log, heartbeat and error channels; specified: parameters and reliable channel in #133, services and actions in #316; planned: #154; compact mode lands with tier S in Phase 5.*
 
 ```
 frame = rCOBS( topic_id[1] | seq[1] | payload[N] | crc16[2] ) + 0x00
@@ -254,7 +254,7 @@ frame = rCOBS( topic_id[1] | seq[1] | payload[N] | crc16[2] ) + 0x00
 
 **Why reverse COBS.** COBS replaces every 0x00 so that 0x00 can mark the end of a frame, but each code byte comes *before* its block, so an encoder must look up to 254 bytes ahead: in practice, a full TX buffer. rCOBS puts each code byte *after* its block. The encoder needs only a counter, so the MCU serializes, computes the CRC and encodes in one pass, straight to the UART. The receiver buffers the frame anyway and decodes it backwards, in place. Overhead and resync behavior are the same as COBS. The exact encoding is in Part II.
 
-**Reserved IDs (draft):** 0 handshake and control, 1 time, 2 log, 3 parameters, 4 heartbeat, 5 error report, 6 reliable-channel ack, 7 to 15 reserved.
+**Reserved IDs (draft):** 0 handshake and control, 1 time, 2 log, 3 parameters, 4 heartbeat, 5 error report, 6 reliable-channel ack, 7 services, 8 actions, 9 to 15 reserved.
 
 **Handshake.** Either side can start it. The MCU sends `HELLO` on boot, and the host sends `HELLO_REQ` when it connects or detects a problem. The MCU's reply contains a header and one entry per topic.
 
@@ -484,7 +484,22 @@ ROS 2-style aliases (`std_msgs::msg::Float32`) are always provided; rosserial-st
 
 ### Services and actions (P1)
 
-The service and action APIs mirror `rclcpp` and `rclcpp_action`: the MCU runs a minimal action server and the bridge is the ROS 2 action server on its behalf. The exact shapes are left to S8.
+The service and action APIs mirror `rclcpp` and `rclcpp_action`: the MCU runs a minimal action server and the bridge is the ROS 2 action server on its behalf. The wire is `spec/protocol.md` sections 7.8 and 7.9; the board side is:
+
+<!-- snippet: skip until #318: board service and action APIs land in X6 and X10b -->
+```cpp
+r2s::Service<std_srvs::srv::Trigger> reset(node, "reset",
+    [](const std_srvs::srv::Trigger::Request &, std_srvs::srv::Trigger::Response &res) {
+        res.success = true;
+    });
+r2s::Client<std_srvs::srv::Trigger> trigger(node, "trigger");
+r2s::action::Server<test_msgs::action::Fibonacci> fib(node, "spin",
+    [](const test_msgs::action::Fibonacci::Goal &) { return r2s::action::GoalResponse::ACCEPT_AND_EXECUTE; },
+    [](const test_msgs::action::Fibonacci::Goal &) { return r2s::action::CancelResponse::ACCEPT; },
+    [](r2s::action::ServerGoalHandle<test_msgs::action::Fibonacci> &handle) { /* run, then succeed/abort/canceled */ });
+```
+
+Services arrive as `r2s::Service<T>` and `r2s::Client<T>` mirroring `rclcpp::Service` and `rclcpp::Client`, with headers at the rclcpp include paths (`<pkg/srv/name.hpp>`). Actions arrive as `r2s::action::Server<T>` mirroring `rclcpp_action::Server`, with `handle_goal`, `handle_cancel` and `handle_accepted` callbacks returning `GoalResponse` and `CancelResponse`, and a `ServerGoalHandle<T>` with `publish_feedback`, `succeed`, `abort`, `canceled` and `is_canceling`, with headers at `<pkg/action/name.hpp>`. Each departure from rclcpp is named and justified: no heap and no `shared_ptr` anywhere, so requests, responses, goals and handles pass by reference and the server owns its single goal handle; no UUID parameter in the goal callbacks, since the bridge owns the goal UUIDs and the wire carries `goal_seq`; no `ACCEPT_AND_DEFER`, since one active goal per action leaves no queue; futures replaced by a response callback on the client, since dispatch happens in `spin_some` like the subscribers. Static X-macro rows map 1-to-1 to the runtime declarations, with `::` in C++ rows and generated C names in C rows. Callbacks live in the C++ layer as with the subscribers, so the core stays free of function pointers.
 
 ### Remapping from a launch file
 
@@ -794,7 +809,7 @@ The first payload byte of IDs 0, 1 and 3 is an opcode.
 | 0x05 | TOPIC_STATUS | host → MCU | `topic_id u8, status u8 (0 ok, 1 unknown type, 2 hash mismatch, 3 name conflict)` |
 | 0x06 | READY | host → MCU | `token u32` (nonzero, assigned for the handshake) |
 
-- `features` bits: 0 time, 1 log, 2 params, 3 reliable channel, 4 `double` is 32 bits (informational), 5 runtime topic registration (informational). The other bits are reserved and must be 0.
+- `features` bits: 0 time, 1 log, 2 params, 3 reliable channel, 4 `double` is 32 bits (informational), 5 runtime topic registration (informational), 6 services, 7 actions. Bits 6 and 7 are set only with bit 3. No bit is reserved anymore.
 - `flags` bits: 0 direction (0 = the MCU publishes, 1 = the MCU subscribes), 1 narrow_float64, 2 keep_latest, 3 reliable. The other bits are reserved. The flags are the truth for the wire; bit 1 is always set on a build whose `double` is 32 bits.
 - `rx_capacity` is the size of the MCU's RX frame buffer.
 - `tick_hz` must be `1000 × k` with `k` a divisor of 10^6 (1 kHz, 10 kHz, 100 kHz and 1 MHz are typical), so the MCU converts ticks to nanoseconds with integer math.
@@ -830,9 +845,13 @@ normalize again
 
 **ID 4, heartbeat**: host → MCU has an empty payload. MCU → host carries `rx_frames u16, crc_errors u16, rx_overflows u16, dropped_frames u16`, all wrapping counters. `rx_frames` counts the frames the MCU accepted, `crc_errors` the ones it dropped for a bad CRC, `rx_overflows` the ones that did not fit its buffer, and `dropped_frames` every frame it dropped, whichever rule dropped it.
 
-**ID 5, error report** (MCU → host): `code u8, topic_id u8, count u16, field u8`. Codes: 1 bound violation on decode, 2 unknown topic ID, 3 RX overflow, 4 frame too large, 5 publish while not connected (reported once per connection), 6 TX busy (reported once per second at most). `count` is the number of times the error occurred since the last error report of that code, and it wraps at 65535; a code that is rate-limited is counted the same way and reported no more often than that. `field` is the index of the offending field in depth-first declaration order over the type's field definitions (array elements are not counted separately), or 0xFF when not applicable. The bridge computes the same order with introspection and logs the field path.
+**ID 5, error report** (MCU → host): `code u8, topic_id u8, count u16, field u8`. Codes: 1 bound violation on decode, 2 unknown topic ID, 3 RX overflow, 4 frame too large, 5 send while not connected (reported once per connection), 6 TX busy (reported once per second at most). `count` is the number of times the error occurred since the last error report of that code, and it wraps at 65535; a code that is rate-limited is counted the same way and reported no more often than that. `field` is the index of the offending field in depth-first declaration order over the type's field definitions (array elements are not counted separately), or 0xFF when not applicable. The bridge computes the same order with introspection and logs the field path.
 
 **ID 6, reliable-channel ack**: `channel u8, rel_seq u8` as `spec/protocol.md` section 7.7 gives it.
+
+**ID 7, services**: SVC_QUERY, SVC_DECLARE, SVC_STATUS, SVC_REQUEST and SVC_RESPONSE as `spec/protocol.md` section 7.8 gives them. Requests carry `req_id` and responses echo it; the walk, the statuses and the timeouts follow the same section.
+
+**ID 8, actions**: ACT_QUERY, ACT_DECLARE, ACT_STATUS, ACT_GOAL, ACT_GOAL_RESP, ACT_CANCEL, ACT_CANCEL_RESP, ACT_FEEDBACK and ACT_RESULT as `spec/protocol.md` section 7.9 gives them. Goals are named by (action index, `goal_seq`) with the bridge owning the ROS UUIDs; feedback stays best effort; one goal runs per action.
 
 ### State machines
 
