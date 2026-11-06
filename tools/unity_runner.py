@@ -179,6 +179,16 @@ elif _VECTOR_ABI == "m32":
 else:
     raise VectorError(f"R2S_VECTOR_ABI is {_VECTOR_ABI!r}, not lp64 or m32")
 
+# The byte order the message struct images pack multi-byte values in. The
+# wire stays little-endian while a struct holds its values in the target's
+# own order, so the images name native bytes on a big-endian target
+# ([DSC-34]). R2S_VECTOR_ORDER selects it, defaulting to little-endian; the
+# core CMake sets it from its target.
+_VECTOR_ORDER = os.environ.get("R2S_VECTOR_ORDER", "little")
+if _VECTOR_ORDER not in ("little", "big"):
+    raise VectorError(f"R2S_VECTOR_ORDER is {_VECTOR_ORDER!r}, not little or big")
+_STRUCT_PREFIX = "<" if _VECTOR_ORDER == "little" else ">"
+
 # The bounds the handwritten tables give the new types: a vector that exceeds
 # them is a bug in the vector, since the tables cannot decode it.
 FRAME_ID_BOUND = 24
@@ -203,7 +213,7 @@ def _pack_int(where: str, value: object, width: int, signed: bool) -> bytes:
     if isinstance(value, bool) or not isinstance(value, int):
         raise VectorError(f"{where}: expected an integer, not {value!r}")
     try:
-        return int(value).to_bytes(width, "little", signed=signed)
+        return int(value).to_bytes(width, _VECTOR_ORDER, signed=signed)
     except OverflowError:
         raise VectorError(f"{where}: {value!r} does not fit {width} bytes") from None
 
@@ -213,8 +223,9 @@ def _put_int(image: bytearray, offset: int, where: str, value: object, width: in
 
 
 def _narrow_bytes(where: str, value: object) -> bytes:
-    """The binary32 of a value on a narrow topic ([ENC-11]): a finite value too
-    large for binary32 becomes an infinity of the same sign."""
+    """The little-endian binary32 of a value on a narrow topic ([ENC-11]):
+    a finite value too large for binary32 becomes an infinity of the same
+    sign. These are wire bytes, so they stay little-endian on every target."""
     if isinstance(value, dict):
         return _float_bytes(where, value, 4)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -229,7 +240,7 @@ def _narrow_bytes(where: str, value: object) -> bytes:
 def _put_float(image: bytearray, offset: int, where: str, value: object, width: int, narrow_decode: bool) -> None:
     if width == 8 and narrow_decode:
         narrow = _narrow_bytes(where, value)
-        image[offset : offset + 8] = struct.pack("<d", struct.unpack("<f", narrow)[0])
+        image[offset : offset + 8] = struct.pack(f"{_STRUCT_PREFIX}d", struct.unpack("<f", narrow)[0])
     else:
         image[offset : offset + width] = _float_bytes(where, value, width)
 
@@ -442,7 +453,8 @@ def _struct_image(where: str, type_name: str, message: dict, narrow_decode: bool
 
 
 def _float_bytes(where: str, value: object, width: int) -> bytes:
-    """The little-endian bytes of a message float: a number or `{bits: ...}`."""
+    """The struct bytes of a message float: a number or `{bits: ...}`."""
+    prefix = _STRUCT_PREFIX
     if isinstance(value, dict):
         bits = value.get("bits")
         if (
@@ -451,15 +463,16 @@ def _float_bytes(where: str, value: object, width: int) -> bytes:
             or any(digit not in "0123456789abcdefABCDEF" for digit in bits)
         ):
             raise VectorError(f"{where}: bits are {2 * width} hex digits of a binary{8 * width} pattern")
-        return bytes.fromhex(bits)[::-1]
+        raw = bytes.fromhex(bits)
+        return raw[::-1] if _VECTOR_ORDER == "little" else raw
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise VectorError(f"{where}: expected a number or {{bits: ...}}, not {value!r}")
     number = float(value)
     try:
-        packed = struct.pack("<f" if width == 4 else "<d", number)
+        packed = struct.pack(f"{prefix}f" if width == 4 else f"{prefix}d", number)
     except OverflowError:
         raise VectorError(f"{where}: {value!r} does not fit binary{8 * width}") from None
-    if width == 4 and struct.unpack("<f", packed)[0] != number:
+    if width == 4 and struct.unpack(f"{prefix}f", packed)[0] != number:
         raise VectorError(f"{where}: {value!r} is not exactly representable in binary32")
     return packed
 
@@ -501,7 +514,8 @@ def _messages_case(where: str, prefix: str, case: dict) -> tuple[str, str]:
                 if len(payload) != 24:
                     raise VectorError(f"{where}: a narrow Twist payload is 24 bytes")
                 decode = b"".join(
-                    struct.pack("<d", struct.unpack("<f", payload[i * 4 : (i + 1) * 4])[0]) for i in range(6)
+                    struct.pack(f"{_STRUCT_PREFIX}d", struct.unpack("<f", payload[i * 4 : (i + 1) * 4])[0])
+                    for i in range(6)
                 )
             else:
                 if len(payload) != 48:
