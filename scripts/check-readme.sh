@@ -20,11 +20,7 @@ anchors=(
   "ports/posix/run.sh --build-only"
   "r2s_posix_firmware"
   "pty_pair.py"
-  "arduino-cli core install arduino:avr"
-  "r2s-gen bundle --distro jazzy"
-  "ports/arduino/r2s_arduino_port"
-  "ports/arduino/r2s_arduino_port.cpp"
-  "cpp/src/runtime.cpp"
+  "ports/arduino/build.sh"
   "colcon build --base-paths bridge"
   "examples/arduino_minimal"
   "source build/bridge/install/setup.bash"
@@ -62,57 +58,25 @@ case ":$PATH:" in
 esac
 r2s-gen version || exit 1
 
-# The posix virtual MCU the walkthrough starts on. It lands under the same
-# build directory, so the check and the README name the same firmware path.
+# The posix virtual MCU the walkthrough reaches second. It lands under the
+# same build directory, so the check and the README name the same path.
 bash ports/posix/run.sh --build-only || exit 1
 posix_fw=$build/ports/posix/r2s_posix_firmware
 [ -x "$posix_fw" ] || { echo "check-readme: no posix firmware at $posix_fw" >&2; exit 1; }
 
-# The AVR core the walkthrough installs. The dev image carries the pinned
-# core, so a present core stays untouched and no network is needed.
-if arduino-cli core list | grep -q "arduino:avr"; then
-  echo "check-readme: arduino:avr core already installed"
-else
-  arduino-cli core install arduino:avr || exit 1
-fi
-
-# The Arduino library the walkthrough assembles: the bundle plus the core,
-# the port glue and the runtime layer, under a scratch directory in place
-# of the README's sketchbook path.
+# The Arduino build the walkthrough runs: the helper stages the library
+# and compiles the sketch, the way the README runs it. The library lands
+# under a scratch directory in place of the README's default.
 work=$build/walkthrough
 lib=$work/lib
 rm -rf "$work"
-mkdir -p "$lib/src/r2s" || exit 1
-r2s-gen bundle --distro jazzy --out "$lib" || exit 1
-cp core/include/r2s/*.h "$lib/src/r2s/" || exit 1
-cp core/src/*.c "$lib/src/" || exit 1
-rm -f "$lib/src/test_reset.c"
-cp ports/arduino/r2s_arduino_port.cpp ports/arduino/r2s_arduino_port.h "$lib/src/" || exit 1
-cp cpp/include/r2s/runtime.hpp "$lib/src/r2s/" || exit 1
-cp cpp/src/runtime.cpp "$lib/src/" || exit 1
-
-# The compile the walkthrough runs: the sketch's frame and nesting limits
-# travel as flags, since the core never includes the bundled header.
-extras=$(python3 - "$lib/src/r2s_bundled.h" <<'EOF'
-import sys
-
-from r2s_gen import layouts
-from r2s_gen.msgs import MessageError
-
-try:
-    defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
-except (MessageError, OSError) as error:
-    print(f"r2s-gen: error: {error}", file=sys.stderr)
-    raise SystemExit(1)
-print(" ".join("-D" + define for define in defines))
-EOF
-) || exit 1
+mkdir -p "$work" || exit 1
 fw=build/uno
-arduino-cli compile --fqbn arduino:avr:uno \
-  --build-property "compiler.c.extra_flags=$extras" \
-  --build-property "compiler.cpp.extra_flags=$extras" \
-  --library "$lib" --output-dir "$fw" examples/arduino_minimal || exit 1
+bash ports/arduino/build.sh --board uno --lib "$lib" --out "$fw" || exit 1
 elf=$fw/arduino_minimal.ino.elf
+# The helper's own defaults, the way the README runs it: stage only, since
+# the firmware above already proves the compile.
+bash ports/arduino/build.sh --board uno --stage-only || exit 1
 
 # The harness the walkthrough runs, built by its own script, which stays
 # the single description of how it builds.
@@ -137,7 +101,51 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# The virtual serial line the walkthrough ties first: the relay prints the
+# The emulated Uno the walkthrough starts on first.
+"$sim" --mcu atmega328p --firmware "$elf" --run-ms 300000 >"$work/simavr.log" 2>&1 &
+sim_pid=$!
+pty=""
+for _ in $(seq 1 40); do
+  pty=$(grep -m1 "r2s_simavr: pty=" "$work/simavr.log" 2>/dev/null || true)
+  pty=${pty##*=}
+  case "$pty" in /dev/*) break ;; *) pty="" ;; esac
+  sleep 0.5
+done
+[ -n "$pty" ] || { echo "check-readme: the harness announced no pty" >&2; exit 1; }
+echo "check-readme: firmware on $pty"
+
+# The bridge the walkthrough launches, on the emulated port.
+export ROS_DOMAIN_ID=${R2S_E2E_DOMAIN_ID:?e2e-lease.sh provides it}
+ros2 launch r2s_bridge r2s_bridge.launch.py port:="$pty" >"$work/bridge.log" 2>&1 &
+bridge_pid=$!
+seen=""
+for _ in $(seq 1 60); do
+  seen=$(ros2 topic list 2>/dev/null || true)
+  case "$seen" in *"/battery"*) break ;; *) seen="" ;; esac
+  sleep 1
+done
+[ -n "$seen" ] || { echo "check-readme: /battery never appeared" >&2; exit 1; }
+# The topics the walkthrough shows: the firmware pair plus the node's own.
+for topic in /battery /cmd_vel /diagnostics /parameter_events /rosout; do
+  echo "$seen" | grep -qx "$topic" || { echo "check-readme: $topic never appeared" >&2; exit 1; }
+done
+echo "check-readme: topics announced"
+echo "$seen"
+
+# The echo the walkthrough ends on: one battery reading from the Uno.
+timeout 60 ros2 topic echo /battery std_msgs/msg/Float32 --once >"$work/echo.txt" 2>&1 || {
+  echo "check-readme: no battery reading arrived" >&2
+  exit 1
+}
+grep -q "data:" "$work/echo.txt" || { echo "check-readme: the echo held no reading" >&2; exit 1; }
+cat "$work/echo.txt"
+echo "check-readme: Uno walkthrough is green"
+[ -z "${bridge_pid:-}" ] || kill "$bridge_pid" 2>/dev/null || true
+[ -z "${sim_pid:-}" ] || kill "$sim_pid" 2>/dev/null || true
+bridge_pid=""
+sim_pid=""
+
+# The virtual serial line the walkthrough ties second: the relay prints the
 # MCU and host ends, and the firmware and bridge each open one of them.
 mkdir -p "$build/posix" || exit 1
 python3 ports/posix/pty_pair.py >"$build/posix/ports.env" 2>"$build/posix/pty_pair.log" &
@@ -186,43 +194,4 @@ echo "check-readme: posix walkthrough is green"
 # shellcheck disable=SC2086 # posix_pids holds several pids on purpose.
 kill $posix_pids 2>/dev/null || true
 posix_pids=""
-
-# The emulated Uno the walkthrough runs instead of hardware.
-"$sim" --mcu atmega328p --firmware "$elf" --run-ms 300000 >"$work/simavr.log" 2>&1 &
-sim_pid=$!
-pty=""
-for _ in $(seq 1 40); do
-  pty=$(grep -m1 "r2s_simavr: pty=" "$work/simavr.log" 2>/dev/null || true)
-  pty=${pty##*=}
-  case "$pty" in /dev/*) break ;; *) pty="" ;; esac
-  sleep 0.5
-done
-[ -n "$pty" ] || { echo "check-readme: the harness announced no pty" >&2; exit 1; }
-echo "check-readme: firmware on $pty"
-
-# The bridge the walkthrough launches, on the emulated port.
-export ROS_DOMAIN_ID=${R2S_E2E_DOMAIN_ID:?e2e-lease.sh provides it}
-ros2 launch r2s_bridge r2s_bridge.launch.py port:="$pty" >"$work/bridge.log" 2>&1 &
-bridge_pid=$!
-seen=""
-for _ in $(seq 1 60); do
-  seen=$(ros2 topic list 2>/dev/null || true)
-  case "$seen" in *"/battery"*) break ;; *) seen="" ;; esac
-  sleep 1
-done
-[ -n "$seen" ] || { echo "check-readme: /battery never appeared" >&2; exit 1; }
-# The topics the walkthrough shows: the firmware pair plus the node's own.
-for topic in /battery /cmd_vel /diagnostics /parameter_events /rosout; do
-  echo "$seen" | grep -qx "$topic" || { echo "check-readme: $topic never appeared" >&2; exit 1; }
-done
-echo "check-readme: topics announced"
-echo "$seen"
-
-# The echo the walkthrough ends on: one battery reading from the Uno.
-timeout 60 ros2 topic echo /battery std_msgs/msg/Float32 --once >"$work/echo.txt" 2>&1 || {
-  echo "check-readme: no battery reading arrived" >&2
-  exit 1
-}
-grep -q "data:" "$work/echo.txt" || { echo "check-readme: the echo held no reading" >&2; exit 1; }
-cat "$work/echo.txt"
 echo "check-readme: walkthrough is green"
