@@ -282,6 +282,7 @@ set(R2S_SESSION_HOST_NAMES
   param_rehandshake
   service_walk
   service_call
+  service_not_connected
   action_walk
   action_goal
   action_cancel
