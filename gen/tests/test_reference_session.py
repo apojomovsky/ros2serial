@@ -16,10 +16,10 @@ FLAGS = [0x00, 0x01, 0x00, 0x01]
 TOPICS = model_topics(FLAGS)
 
 # The boot HELLO for node "node" with the four topics above, written by
-# hand from section 7.1: opcode 02, version 3, full mode, zero token,
+# hand from section 7.1: opcode 02, version 4, full mode, zero token,
 # max_frame 512, rx_capacity 515, tick_hz 1000, features 0x02, count 4,
 # then the varint length and "node".
-HELLO_PAYLOAD = bytes.fromhex("02 03 00 00 00 00 00 00 02 03 02 e8 03 00 00 02 04 04 6e 6f 64 65")
+HELLO_PAYLOAD = bytes.fromhex("02 04 00 00 00 00 00 00 02 03 02 e8 03 00 00 02 04 04 6e 6f 64 65")
 
 
 def fresh() -> model.McuSession:

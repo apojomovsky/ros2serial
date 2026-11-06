@@ -19,7 +19,7 @@ from test_announce import drain, read_string, read_unit
 from test_echo import Harness
 
 NODE_NAME = "rebind"
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 READY_TOKEN = 0x2A
 FLASH_TOPICS = (
     (16, 0x00, bytes(range(0x00, 0x08)), "std_msgs/msg/Float32", "battery"),

@@ -274,7 +274,7 @@ def test_hello_announces_firmware(tmp_path):
     with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
         hello = parse_hello(payload)
-    assert hello["version"] == 3
+    assert hello["version"] == 4
     assert hello["mode"] == 0
     assert hello["token"] == 0, "no token before the first READY"
     assert hello["max_frame"] == 279

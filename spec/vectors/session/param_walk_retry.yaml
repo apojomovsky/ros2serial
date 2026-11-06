@@ -2,9 +2,9 @@ name: param_walk_retry
 covers: [PAR-7]
 steps:
   - from: mcu
-    frame: "00 00 02 03 00 00 00 00 00 00 01 00 01 e8 03 00 00 0d 01 04 6e 6f 64 65 c6 95"
+    frame: "00 00 02 04 00 00 00 00 00 00 01 00 01 e8 03 00 00 0d 01 04 6e 6f 64 65 c2 11"
     at_ms: 0
-    note: "HELLO, protocol 3, time plus params plus reliable, one topic"
+    note: "HELLO, protocol 4, time plus params plus reliable, one topic"
   - from: host
     frame: "00 00 03 00 49 29"
     at_ms: 0

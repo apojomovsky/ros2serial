@@ -2,11 +2,11 @@ name: boot_wait_expiry
 covers: [SES-12, SES-13, SES-14, SES-16, SES-17]
 steps:
   - from: host
-    frame: "00 00 01 03 62 28"
+    frame: "00 00 01 04 dd 5c"
     at_ms: 2500
     note: "boot_wait_ms passed with no HELLO"
   - from: mcu
-    frame: "00 00 02 03 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 9c 9a"
+    frame: "00 00 02 04 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 98 1e"
     at_ms: 2600
   - from: host
     frame: "00 01 03 00 95 73"
