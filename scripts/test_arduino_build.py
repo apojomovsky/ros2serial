@@ -6,8 +6,6 @@ reads the frame limits out of the bundled header itself, so the reader
 never composes a `--build-property` flag string.
 """
 
-import os
-import re
 import subprocess
 from pathlib import Path
 
