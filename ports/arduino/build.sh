@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 # Stage the Arduino library and compile a sketch for Uno or Mega.
-#
-# The library is the generator bundle plus the core, the Arduino port glue
-# and the runtime layer. The sketch's frame and nesting limits travel as
-# flags read from the bundled header, since the core never includes it; a
-# library cannot set its own flags on this toolchain, hence
-# --build-property. Builds go under R2S_BUILD_DIR, so the tree stays clean.
 # Usage: build.sh [--board uno|mega] [--sketch DIR] [--lib DIR] [--out DIR]
-#   [--distro NAME] [--stage-only] [--no-bundle]
+# [--distro NAME] [--stage-only] [--no-bundle]. Builds go under
+# R2S_BUILD_DIR, so the tree stays clean. The sketch's limits travel as
+# flags read from the bundled header, since the core never includes it.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$root" || exit 2
