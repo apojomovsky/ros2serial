@@ -183,6 +183,24 @@ CONTROL_OPCODES = {
 }
 TIME_OPCODES = {0x01: "ping", 0x02: "pong", 0x03: "correction"}
 PARAM_OPCODES = {0x01: "param_req", 0x02: "param_declare", 0x03: "param_set", 0x04: "param_status"}
+SVC_OPCODES = {
+    0x01: "svc_query",
+    0x02: "svc_declare",
+    0x03: "svc_status",
+    0x04: "svc_request",
+    0x05: "svc_response",
+}
+ACT_OPCODES = {
+    0x01: "act_query",
+    0x02: "act_declare",
+    0x03: "act_status",
+    0x04: "act_goal",
+    0x05: "act_goal_resp",
+    0x06: "act_cancel",
+    0x07: "act_cancel_resp",
+    0x08: "act_feedback",
+    0x09: "act_result",
+}
 # The channels whose payload has no opcode byte, so an empty payload on
 # them is what the spec says.
 NO_OPCODE_CHANNELS = {4, 5}
@@ -194,6 +212,8 @@ SYSTEM_CHANNELS = {
     4: {"heartbeat": "heartbeat"},
     5: {"error_report": "error_report"},
     6: {"reliable_ack": "reliable_ack"},
+    7: SVC_OPCODES,
+    8: ACT_OPCODES,
 }
 
 
@@ -249,12 +269,33 @@ SPEC_NAMES = {
     "mcu_heartbeat": 4,
     "error_report": 5,
     "reliable_ack": 6,
+    "svc_query": 7,
+    "svc_declare": 7,
+    "svc_status": 7,
+    "svc_status_unknown": 7,
+    "svc_request": 7,
+    "svc_response": 7,
+    "svc_response_busy": 7,
+    "act_query": 8,
+    "act_declare": 8,
+    "act_status": 8,
+    "act_status_unknown": 8,
+    "act_goal": 8,
+    "act_goal_resp": 8,
+    "act_goal_resp_busy": 8,
+    "act_goal_resp_rejected": 8,
+    "act_cancel": 8,
+    "act_cancel_resp": 8,
+    "act_feedback": 8,
+    "act_result": 8,
+    "act_result_aborted": 8,
+    "act_result_canceled": 8,
 }
 
 
 def check_channel(name: str, vector_name: str, topic_id: int, payload: bytes) -> list[str]:
     """Check that the frame sits on the channel its name says."""
-    if 7 <= topic_id <= 15:
+    if 9 <= topic_id <= 15:
         if payload:
             return [f"{name}/payload: a reserved channel carries no payload"]
         return []
@@ -349,8 +390,8 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
         if layout == "hello_req":
             if r.u8() != 0x01:
                 problems.append(f"{name}/payload: the opcode is not HELLO_REQ")
-            if r.u8() != 0x03:
-                problems.append(f"{name}/payload: the protocol version is not 3")
+            if r.u8() != 0x04:
+                problems.append(f"{name}/payload: the protocol version is not 4")
         elif layout == "ready":
             if r.u8() != 0x06:
                 problems.append(f"{name}/payload: the opcode is not READY")
@@ -359,8 +400,8 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
         elif layout == "hello":
             if r.u8() != 0x02:
                 problems.append(f"{name}/payload: the opcode is not HELLO")
-            if r.u8() != 0x03:
-                problems.append(f"{name}/payload: the protocol version is not 3")
+            if r.u8() != 0x04:
+                problems.append(f"{name}/payload: the protocol version is not 4")
             mode = r.u8()
             if mode not in (0, 1):
                 problems.append(f"{name}/payload: the handshake mode is neither full nor compact")
@@ -371,7 +412,7 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
             tick_hz = r.u32()
             if tick_hz < 1000 or tick_hz % 1000 or 1000000 % (tick_hz // 1000):
                 problems.append(f"{name}/payload: tick_hz is not 1000 times k")
-            if r.u8() & ~0x3F:
+            if r.u8() & ~0xFF:
                 problems.append(f"{name}/payload: the features byte has a reserved bit set")
             r.u8()  # topic count
             if mode == 0:
@@ -496,6 +537,107 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
             r.u8()  # index
             if r.u8() > 4:
                 problems.append(f"{name}/payload: the status is not one the spec gives")
+        elif layout == "svc_query":
+            if r.u8() != 0x01:
+                problems.append(f"{name}/payload: the opcode is not SVC_QUERY")
+            r.u8()  # index
+        elif layout == "svc_declare":
+            if r.u8() != 0x02:
+                problems.append(f"{name}/payload: the opcode is not SVC_DECLARE")
+            r.u8()  # index
+            if r.u8() > 1:
+                problems.append(f"{name}/payload: the role is not one the spec gives")
+            r.take(8)  # type hash
+            if not r.string():
+                problems.append(f"{name}/payload: the type name is empty")
+            if not r.string():
+                problems.append(f"{name}/payload: the service name is empty")
+        elif layout == "svc_status":
+            if r.u8() != 0x03:
+                problems.append(f"{name}/payload: the opcode is not SVC_STATUS")
+            r.u8()  # rel seq
+            r.u8()  # index
+            if r.u8() > 3:
+                problems.append(f"{name}/payload: the status is not one the spec gives")
+        elif layout == "svc_request":
+            if r.u8() != 0x04:
+                problems.append(f"{name}/payload: the opcode is not SVC_REQUEST")
+            r.u8()  # rel seq
+            r.u8()  # req id
+            r.u8()  # service index
+            r.take(len(payload) - r.pos)  # request message bytes, possibly empty
+        elif layout == "svc_response":
+            if r.u8() != 0x05:
+                problems.append(f"{name}/payload: the opcode is not SVC_RESPONSE")
+            r.u8()  # rel seq
+            r.u8()  # req id
+            status = r.u8()
+            if status > 3:
+                problems.append(f"{name}/payload: the status is not one the spec gives")
+            rest = len(payload) - r.pos
+            if status != 0 and rest:
+                problems.append(f"{name}/payload: a nonzero status carries no response")
+            r.take(rest)  # response message bytes when the status is ok
+        elif layout == "act_query":
+            if r.u8() != 0x01:
+                problems.append(f"{name}/payload: the opcode is not ACT_QUERY")
+            r.u8()  # index
+        elif layout == "act_declare":
+            if r.u8() != 0x02:
+                problems.append(f"{name}/payload: the opcode is not ACT_DECLARE")
+            r.u8()  # index
+            r.take(8)  # type hash
+            if not r.string():
+                problems.append(f"{name}/payload: the type name is empty")
+            if not r.string():
+                problems.append(f"{name}/payload: the action name is empty")
+        elif layout == "act_status":
+            if r.u8() != 0x03:
+                problems.append(f"{name}/payload: the opcode is not ACT_STATUS")
+            r.u8()  # rel seq
+            r.u8()  # index
+            if r.u8() > 3:
+                problems.append(f"{name}/payload: the status is not one the spec gives")
+        elif layout == "act_goal":
+            if r.u8() != 0x04:
+                problems.append(f"{name}/payload: the opcode is not ACT_GOAL")
+            r.u8()  # rel seq
+            r.u8()  # goal seq
+            r.u8()  # action index
+            r.take(len(payload) - r.pos)  # goal message bytes, possibly empty
+        elif layout == "act_goal_resp":
+            if r.u8() != 0x05:
+                problems.append(f"{name}/payload: the opcode is not ACT_GOAL_RESP")
+            r.u8()  # rel seq
+            r.u8()  # goal seq
+            if r.u8() > 3:
+                problems.append(f"{name}/payload: the decision is not one the spec gives")
+        elif layout == "act_cancel":
+            if r.u8() != 0x06:
+                problems.append(f"{name}/payload: the opcode is not ACT_CANCEL")
+            r.u8()  # rel seq
+            r.u8()  # goal seq
+        elif layout == "act_cancel_resp":
+            if r.u8() != 0x07:
+                problems.append(f"{name}/payload: the opcode is not ACT_CANCEL_RESP")
+            r.u8()  # rel seq
+            r.u8()  # goal seq
+            if r.u8() > 2:
+                problems.append(f"{name}/payload: the decision is not one the spec gives")
+        elif layout == "act_feedback":
+            if r.u8() != 0x08:
+                problems.append(f"{name}/payload: the opcode is not ACT_FEEDBACK")
+            r.u8()  # goal seq
+            r.u8()  # action index
+            r.take(len(payload) - r.pos)  # feedback message bytes, possibly empty
+        elif layout == "act_result":
+            if r.u8() != 0x09:
+                problems.append(f"{name}/payload: the opcode is not ACT_RESULT")
+            r.u8()  # rel seq
+            r.u8()  # goal seq
+            if r.u8() not in (4, 5, 6):
+                problems.append(f"{name}/payload: the outcome is not one the spec gives")
+            r.take(len(payload) - r.pos)  # result message bytes, possibly empty
         elif layout == "reliable_ack":
             r.u8()  # channel
             r.u8()  # rel seq

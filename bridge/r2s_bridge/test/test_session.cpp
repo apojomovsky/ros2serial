@@ -145,7 +145,7 @@ std::vector<std::vector<std::uint8_t>> units_of(const std::vector<std::uint8_t> 
 // One HELLO payload: the fields of [CTL-16], with the defaults a compliant
 // MCU announces. The token is what the MCU echoes from RAM: 0 before the
 // host assigns one.
-std::vector<std::uint8_t> hello_payload(std::uint32_t token, std::uint8_t topics, std::uint8_t version = 3u,
+std::vector<std::uint8_t> hello_payload(std::uint32_t token, std::uint8_t topics, std::uint8_t version = 4u,
                                         std::uint8_t features = 0u, std::uint32_t tick_hz = 1000000u)
 {
     std::vector<std::uint8_t> p{0x02u, version, 0x00u};
@@ -437,7 +437,7 @@ TEST(SessionHandshake, RejectsATickRateBelowOneKilohertz)
 {
     Fixture fixture;
     fixture.advance_to(10);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 3u, 0u, 500u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0u, 500u));
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
     EXPECT_FALSE(fixture.session().seen_hello());
 }
@@ -680,17 +680,18 @@ TEST(SessionHandshake, RefusesAHelloOfAnotherProtocolVersion)
     ASSERT_EQ(logged.size(), 1u);
     EXPECT_NE(logged[0].find("MCU protocol version is 1"), std::string::npos)
         << "the error names the MCU version";
-    EXPECT_NE(logged[0].find("host protocol version is 3"), std::string::npos)
+    EXPECT_NE(logged[0].find("host protocol version is 4"), std::string::npos)
         << "the error names the host version";
 }
 
-TEST(SessionHandshake, RefusesAFeaturesByteWithAReservedBit)
+// covers: CTL-2
+TEST(SessionHandshake, AcceptsAFeaturesByteWithServicesAndActions)
 {
     Fixture fixture;
     fixture.advance_to(10);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 3u, 0x40u));
-    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
-    EXPECT_FALSE(fixture.session().seen_hello());
+    // Bits 6 and 7 are services and actions, so no bit is reserved anymore.
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0xC0u));
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
 }
 
 TEST(SessionHandshake, AcceptsAnMcuWhoseDoubleIs32Bits)
@@ -698,7 +699,7 @@ TEST(SessionHandshake, AcceptsAnMcuWhoseDoubleIs32Bits)
     Fixture fixture;
     fixture.advance_to(10);
     // Bit 4 is informational, and every AVR build sets it ([CTL-2]).
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 3u, 0x10u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0x10u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
 }
 
@@ -723,9 +724,9 @@ TEST(SessionHandshake, RefusesATickRateThatIsNotThousandTimesADivisor)
 {
     Fixture fixture;
     fixture.advance_to(10);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 3u, 0u, 1500u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0u, 1500u));
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 3u, 0u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0u, 1000u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected) << "1 kHz is a valid form";
 }
 
@@ -1520,7 +1521,7 @@ std::uint32_t le32(const std::vector<std::uint8_t> &bytes, std::size_t i)
 void connect_empty(Fixture &fixture)
 {
     // The time bit ([CTL-2]) tells the host the MCU answers PINGs.
-    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u, 3u, 0x01u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u, 4u, 0x01u));
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
 }
 
@@ -1819,7 +1820,7 @@ TEST(SessionTimeSync, RestartsBurstAndEstimateOnReset)
     answer_pings(fixture, 100);
     EXPECT_EQ(drain_time(fixture, 0x03u).size(), 1u);
     EXPECT_TRUE(fixture.session().time_available());
-    fixture.deliver_frame(kControl, 0u, hello_payload(1u, 0u, 3u, 0x01u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(1u, 0u, 4u, 0x01u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
     EXPECT_FALSE(fixture.session().time_available()) << "the re-handshake clears the estimate";
     const auto units = fixture.drain_units();

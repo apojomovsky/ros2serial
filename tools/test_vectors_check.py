@@ -336,9 +336,9 @@ name: hello
 covers: [FRM-1]
 topic_id: 0
 seq: 0
-payload: "02 03 01 11 22 33 44 00 04 80 00 e8 03 00 00 11 01 6e 6f 64 65"
-frame: "00 00 02 03 01 11 22 33 44 00 04 80 00 e8 03 00 00 11 01 6e 6f 64 65 01 59"
-wire: "01 01 02 03 01 11 22 33 44 08 04 80 03 e8 03 03 01 11 01 6e 6f 64 65 01 59 09 00"
+payload: "02 04 01 11 22 33 44 00 04 80 00 e8 03 00 00 11 01 6e 6f 64 65"
+frame: "00 00 02 04 01 11 22 33 44 00 04 80 00 e8 03 00 00 11 01 6e 6f 64 65 81 55"
+wire: "01 01 02 04 01 11 22 33 44 08 04 80 03 e8 03 03 01 11 01 6e 6f 64 65 81 55 09 00"
 """,
         "frames/compact_topic.yaml": """
 name: topic_compact
@@ -512,6 +512,150 @@ wire: "03 02 05 02 54 58 03 00"
     }
     problems = vectors_check.check_tree(make_tree(tmp_path, files))
     assert any("the opcode is not one the spec gives" in p for p in problems), problems
+
+
+def test_a_svc_frame_on_the_control_channel_is_reported(tmp_path):
+    files = {
+        "frames/svc_query.yaml": """
+name: svc_query
+covers: [FRM-1]
+topic_id: 0
+seq: 0
+payload: "01 00"
+frame: "00 00 01 00 f9 1a"
+wire: "01 01 01 02 f9 1a 03 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("is not the channel 7 of a svc_query frame" in p for p in problems), problems
+
+
+def test_an_opcode_the_services_channel_does_not_give_is_reported(tmp_path):
+    files = {
+        "frames/bad_opcode.yaml": """
+name: something_else
+covers: [FRM-1]
+topic_id: 7
+seq: 0
+payload: "06 00"
+frame: "07 00 06 00 d0 00"
+wire: "07 02 06 02 d0 02 01 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("the opcode is not one the spec gives" in p for p in problems), problems
+
+
+def test_a_svc_declare_with_a_reserved_role_is_reported(tmp_path):
+    files = {
+        "frames/svc_declare.yaml": """
+name: svc_declare
+covers: [FRM-1]
+topic_id: 7
+seq: 0
+payload: "02 00 02 01 02 03 04 05 06 07 08 14 73 74 64 5f 73 72 76 73 2f 73 72 76 2f 54 72 69 67 67 65 72 05 72 65 73 65 74"
+frame: "07 00 02 00 02 01 02 03 04 05 06 07 08 14 73 74 64 5f 73 72 76 73 2f 73 72 76 2f 54 72 69 67 67 65 72 05 72 65 73 65 74 79 cc"
+wire: "07 02 02 02 02 01 02 03 04 05 06 07 08 14 73 74 64 5f 73 72 76 73 2f 73 72 76 2f 54 72 69 67 67 65 72 05 72 65 73 65 74 79 cc 27 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("the role is not one the spec gives" in p for p in problems), problems
+
+
+def test_a_svc_response_outside_the_table_is_reported(tmp_path):
+    files = {
+        "frames/svc_response.yaml": """
+name: svc_response
+covers: [FRM-1]
+topic_id: 7
+seq: 0
+payload: "05 00 00 07"
+frame: "07 00 05 00 00 07 49 0e"
+wire: "07 02 05 02 01 07 49 0e 04 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("the status is not one the spec gives" in p for p in problems), problems
+
+
+def test_a_svc_response_with_a_status_and_a_response_is_reported(tmp_path):
+    files = {
+        "frames/svc_response.yaml": """
+name: svc_response
+covers: [FRM-1]
+topic_id: 7
+seq: 0
+payload: "05 00 00 03 01"
+frame: "07 00 05 00 00 03 01 22 a9"
+wire: "07 02 05 02 01 03 01 22 a9 05 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("a nonzero status carries no response" in p for p in problems), problems
+
+
+def test_an_act_goal_resp_outside_the_table_is_reported(tmp_path):
+    files = {
+        "frames/act_goal_resp.yaml": """
+name: act_goal_resp
+covers: [FRM-1]
+topic_id: 8
+seq: 0
+payload: "05 00 00 07"
+frame: "08 00 05 00 00 07 c0 33"
+wire: "08 02 05 02 01 07 c0 33 04 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("the decision is not one the spec gives" in p for p in problems), problems
+
+
+def test_an_act_cancel_resp_outside_the_table_is_reported(tmp_path):
+    files = {
+        "frames/act_cancel_resp.yaml": """
+name: act_cancel_resp
+covers: [FRM-1]
+topic_id: 8
+seq: 0
+payload: "07 00 00 05"
+frame: "08 00 07 00 00 05 a4 29"
+wire: "08 02 07 02 01 05 a4 29 04 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("the decision is not one the spec gives" in p for p in problems), problems
+
+
+def test_an_act_result_outside_the_table_is_reported(tmp_path):
+    files = {
+        "frames/act_result.yaml": """
+name: act_result
+covers: [FRM-1]
+topic_id: 8
+seq: 0
+payload: "09 00 00 02 00"
+frame: "08 00 09 00 00 02 00 b7 cf"
+wire: "08 02 09 02 01 02 02 b7 cf 03 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("the outcome is not one the spec gives" in p for p in problems), problems
+
+
+def test_an_act_cancel_with_trailing_bytes_is_reported(tmp_path):
+    files = {
+        "frames/act_cancel.yaml": """
+name: act_cancel
+covers: [FRM-1]
+topic_id: 8
+seq: 0
+payload: "06 00 00 01"
+frame: "08 00 06 00 00 01 3b 73"
+wire: "08 02 06 02 01 01 3b 73 04 00"
+"""
+    }
+    problems = vectors_check.check_tree(make_tree(tmp_path, files))
+    assert any("1 bytes were not read" in p for p in problems), problems
 
 
 def test_a_message_vector_must_carry_the_payload_the_reference_makes(tmp_path):
