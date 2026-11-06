@@ -1,0 +1,7 @@
+name: act_result_canceled
+covers: [ACT-6]
+topic_id: 8
+seq: 0
+payload: "09 00 00 05 00"
+frame: "08 00 09 00 00 05 00 bf 82"
+wire: "08 02 09 02 01 05 02 bf 82 03 00"

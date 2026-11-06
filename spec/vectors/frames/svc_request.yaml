@@ -1,0 +1,7 @@
+name: svc_request
+covers: [SVR-1, SVR-4, SVR-5]
+topic_id: 7
+seq: 0
+payload: "04 00 00 00"
+frame: "07 00 04 00 00 00 4d 66"
+wire: "07 02 04 02 01 01 4d 66 03 00"

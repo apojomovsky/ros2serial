@@ -1,0 +1,7 @@
+name: act_status
+covers: [ACT-1, ACT-7]
+topic_id: 8
+seq: 0
+payload: "03 00 00 00"
+frame: "08 00 03 00 00 00 e5 0c"
+wire: "08 02 03 02 01 01 e5 0c 03 00"

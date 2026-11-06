@@ -1,0 +1,7 @@
+name: act_result_aborted
+covers: [ACT-6]
+topic_id: 8
+seq: 0
+payload: "09 00 00 06 00"
+frame: "08 00 09 00 00 06 00 d7 a8"
+wire: "08 02 09 02 01 06 02 d7 a8 03 00"

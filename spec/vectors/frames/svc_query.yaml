@@ -1,0 +1,7 @@
+name: svc_query
+covers: [SVR-1, SVR-7]
+topic_id: 7
+seq: 0
+payload: "01 00"
+frame: "07 00 01 00 d8 4d"
+wire: "07 02 01 02 d8 4d 03 00"

@@ -1,0 +1,71 @@
+name: action_second_goal
+covers: [ACT-4, ACT-8]
+steps:
+  - from: mcu
+    frame: "00 00 02 04 00 00 00 00 00 00 04 80 00 e8 03 00 00 cd 00 04 6e 6f 64 65 56 9a"
+    at_ms: 0
+  - from: host
+    frame: "00 00 01 04 dd 5c"
+    at_ms: 0
+  - from: host
+    frame: "03 00 01 00 34 3f"
+    at_ms: 50
+  - from: mcu
+    frame: "03 00 04 00 00 01 68 67"
+    at_ms: 100
+  - from: host
+    frame: "07 00 01 00 d8 4d"
+    at_ms: 100
+    note: "no services here; the action walk follows the service walk"
+  - from: mcu
+    frame: "07 00 03 00 01 01 3d 39"
+    at_ms: 150
+    note: "empty service walk ends at once"
+  - from: host
+    frame: "08 00 01 00 21 ff"
+    at_ms: 150
+    note: "action walk starts"
+  - from: mcu
+    frame: "08 00 02 00 11 12 13 14 15 16 17 18 1a 74 65 73 74 5f 6d 73 67 73 2f 61 63 74 69 6f 6e 2f 46 69 62 6f 6e 61 63 63 69 04 73 70 69 6e a2 0c"
+    at_ms: 200
+  - from: host
+    frame: "08 01 03 00 00 00 a1 07"
+    at_ms: 200
+  - from: host
+    frame: "08 02 01 01 10 5b"
+    at_ms: 250
+  - from: mcu
+    frame: "08 01 03 00 01 01 f0 0f"
+    at_ms: 300
+    note: "STATUS 1 ends the action walk"
+  - from: host
+    frame: "00 01 06 01 00 00 00 87 50"
+    at_ms: 300
+  - from: host
+    frame: "08 03 04 00 00 00 05 00 00 00 20 5b"
+    at_ms: 350
+    note: "goal 0, order 5"
+  - from: mcu
+    frame: "06 00 08 00 7b 86"
+    at_ms: 350
+  - from: mcu
+    frame: "08 02 05 00 00 00 f7 51"
+    at_ms: 400
+    note: "accepted"
+  - from: host
+    frame: "06 00 08 00 7b 86"
+    at_ms: 400
+  - from: host
+    frame: "08 04 04 01 01 00 03 00 00 00 a6 62"
+    at_ms: 450
+    note: "second goal while one is active"
+  - from: mcu
+    frame: "06 01 08 01 2e cd"
+    at_ms: 450
+  - from: mcu
+    frame: "08 03 05 01 01 02 a5 3a"
+    at_ms: 500
+    note: "busy reject leaves the active goal untouched"
+  - from: host
+    frame: "06 01 08 01 2e cd"
+    at_ms: 500
