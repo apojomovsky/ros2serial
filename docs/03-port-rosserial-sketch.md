@@ -335,13 +335,38 @@ Run it exactly as the README runs the example: start the firmware on
 simavr (or flash it), launch the bridge on the port, and watch the
 topic. The bridge default baud is 115200, matching `initNode`.
 
+## Broadcast tf
+
+The `tf::TransformBroadcaster` keeps its ros_lib shape (`init` and
+`sendTransform`) over the compatibility publisher, announcing `/tf`
+carrying `TFMessage`:
+
+```cpp
+#include <ros2serial.h>
+#include <ros2serial/ros.h>
+#include <ros2serial/geometry_msgs/TransformStamped.h>
+#include <ros2serial/tf/transform_broadcaster.h>
+
+ros::NodeHandle nh;
+tf::TransformBroadcaster broadcaster;
+geometry_msgs::TransformStamped transform;
+
+void setup()
+{
+    nh.initNode();
+    broadcaster.init(nh);
+}
+
+void loop()
+{
+    broadcaster.sendTransform(transform);
+    (void)nh.spinOnce();
+}
+```
+
 ## Not yet
 
-Two ros_lib pieces have no counterpart yet and wait on
-[#418](https://github.com/apojomovsky/ros2serial/issues/418): the
-`tf::TransformBroadcaster` (`init` and `sendTransform`) and services
-(`advertiseService` and `serviceClient`, which will fail to compile
-with a message naming the services ticket until services land).
-Leave that code out of the port for now. The same ticket tracks the
-remaining proof: every end to end scenario passing on the
-compatibility path.
+Services have no counterpart yet: `advertiseService` and
+`serviceClient` fail to compile with a message naming the services
+ticket ([#156](https://github.com/apojomovsky/ros2serial/issues/156))
+until services land. Leave that code out of the port for now.
