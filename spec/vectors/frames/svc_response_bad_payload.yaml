@@ -1,0 +1,7 @@
+name: svc_response_bad_payload
+covers: [SVR-6]
+topic_id: 7
+seq: 0
+payload: "05 00 00 02"
+frame: "07 00 05 00 00 02 e4 59"
+wire: "07 02 05 02 01 02 e4 59 04 00"

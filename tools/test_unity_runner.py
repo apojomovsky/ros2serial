@@ -210,3 +210,45 @@ def test_a_session_step_with_a_bad_side_or_time_is_rejected(tmp_path):
     f = write(tmp_path, "bad.yaml", SESSION.replace("at_ms: 3", "at_ms: -1"))
     with pytest.raises(unity_runner.VectorError, match="bad.yaml step 1: at_ms"):
         unity_runner.vector_runner("session", [f])
+
+
+def test_message_struct_images_follow_the_target_byte_order(tmp_path, monkeypatch):
+    import importlib
+
+    f = write(
+        tmp_path,
+        "float32_1_5.yaml",
+        "name: float32_1_5\ncovers: [ENC-3]\ntype: std_msgs/msg/Float32\n"
+        'profile: {narrow_float64: false}\nmessage: {data: 1.5}\npayload: "00 00 c0 3f"\n',
+    )
+    little = unity_runner.vector_runner("messages", [f])
+    assert "v_float32_1_5_encode[] = {0x00, 0x00, 0xc0, 0x3f}" in little
+    monkeypatch.setenv("R2S_VECTOR_ORDER", "big")
+    try:
+        big = importlib.reload(unity_runner)
+        out = big.vector_runner("messages", [f])
+    finally:
+        monkeypatch.undo()
+        importlib.reload(unity_runner)
+    assert "v_float32_1_5_encode[] = {0x3f, 0xc0, 0x00, 0x00}" in out
+    assert "v_float32_1_5_payload[] = {0x00, 0x00, 0xc0, 0x3f}" in out
+
+
+def test_a_message_byte_order_outside_little_or_big_is_rejected(tmp_path):
+    import os
+
+    f = write(
+        tmp_path,
+        "float32_1_5.yaml",
+        "name: float32_1_5\ncovers: [ENC-3]\ntype: std_msgs/msg/Float32\n"
+        'profile: {narrow_float64: false}\nmessage: {data: 1.5}\npayload: "00 00 c0 3f"\n',
+    )
+    env = dict(os.environ, R2S_VECTOR_ORDER="middle")
+    proc = subprocess.run(
+        [sys.executable, str(TOOL), "vectors", "messages", str(tmp_path / "check.c"), str(tmp_path / "out.c"), str(f)],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert proc.returncode != 0
+    assert "not little or big" in proc.stderr

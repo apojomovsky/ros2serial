@@ -224,6 +224,18 @@ def test_pending_entries_must_be_unique_live_and_name_a_design_ticket(tmp_path):
     assert problems(tmp_path) == ["tools/spec_pending.txt:1: nonsense is not a ticket in docs/00-design.md"]
 
 
+def test_pending_entries_may_name_a_suffixed_design_ticket(tmp_path):
+    root = tree(
+        tmp_path,
+        {
+            "spec/vectors/rcobs/a.yaml": "covers: [AAA-1]\ncases: []\n",
+            "docs/00-design.md": "| X10c | Bridge actions | S8 | x |\n",
+            "tools/spec_pending.txt": "AAA-2  X10c\n",
+        },
+    )
+    assert problems(root) == []
+
+
 def test_a_covered_pending_rule_names_where_it_is_covered(tmp_path):
     files = {
         "spec/vectors/rcobs/a.yaml": "covers: [AAA-1, AAA-2]\ncases: []\n",

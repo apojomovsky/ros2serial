@@ -25,6 +25,12 @@ FIRMWARE = os.environ.get("R2S_POSIX_FW", "")
 START_TIMEOUT = 10.0
 FRAME_TIMEOUT = 5.0
 STOP_TIMEOUT = 10.0
+# How often a slow host pings: well under the 2 s link timeout ([SES-8]),
+# so a slow collection never looks like a dead host.
+KEEPALIVE_INTERVAL = 0.5
+# Consecutive quiet waits before the flood loop calls it silence: the same
+# 5 s bound the loop always judged, in 0.5 s steps that leave room to ping.
+QUIET_LIMIT = 10
 
 HELLO_OP = 0x02
 TOPIC_OP = 0x04
@@ -269,12 +275,22 @@ def do_handshake(fw, host=None):
     return hello, topics, host
 
 
+def ping_due(host, last_ping, ping_id):
+    """One keep-alive PING once KEEPALIVE_INTERVAL passed since last_ping:
+    returns the new (last_ping, ping_id), so slow loops share one cadence."""
+    now = time.monotonic()
+    if now - last_ping >= KEEPALIVE_INTERVAL:
+        host.ping(ping_id)
+        return now, (ping_id + 1) % 256
+    return last_ping, ping_id
+
+
 # covers: SES-1, SES-10
 def test_hello_announces_firmware(tmp_path):
     with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
         hello = parse_hello(payload)
-    assert hello["version"] == 3
+    assert hello["version"] == 4
     assert hello["mode"] == 0
     assert hello["token"] == 0, "no token before the first READY"
     assert hello["max_frame"] == 279
@@ -740,27 +756,41 @@ def test_flood_without_tx_free_fails():
     assert "--flood" in error
 
 
-# covers: FRM-4, FRM-5, FRM-15
+# covers: FRM-4, FRM-5, FRM-15, SES-7, SES-8
 def test_flood_sheds_samples_with_busy_and_whole_frames():
     """--flood with --tx-free publishes until the port refuses: a refused
     sample never takes a seq, so the shed samples show as gaps in the
-    values while the wire frames stay whole and ordered. The loop drains
-    the pty and stderr together, since an unread pty wedges the flooding
-    firmware in its blocking write."""
+    values while the wire frames stay whole and ordered. The loop pings
+    every 0.5 s while it drains the pty and stderr together: a collection
+    slower than the 2 s link timeout ([SES-8]) would otherwise return the
+    firmware to ANNOUNCING ([SES-7]) and stop the flood."""
     args = ("--no-sub", "--no-echo", "--no-log-text", "--no-time-now", "--tx-free", "16", "--flood")
     with Firmware(*args) as fw:
-        _hello, _topics, _host = do_handshake(fw)
+        _hello, _topics, host = do_handshake(fw)
         values = []
         busy = 0
         err = bytearray()
         efd = fw._proc.stderr.fileno()
+        ping_id = 0
+        last_ping = time.monotonic()
+        quiet = 0
         deadline = time.monotonic() + 30.0
         while len(values) < 60 or busy == 0:
             assert time.monotonic() < deadline, "the flood left no flow or no busy count"
-            ready, _, _ = select.select([fw.master, efd], [], [], 5.0)
-            assert ready, "the firmware went quiet mid-flood"
+            last_ping, ping_id = ping_due(host, last_ping, ping_id)
+            ready, _, _ = select.select([fw.master, efd], [], [], KEEPALIVE_INTERVAL)
+            if not ready:
+                quiet += 1
+                assert quiet < QUIET_LIMIT, "the firmware went quiet mid-flood"
+                continue
+            quiet = 0
             if fw.master in ready:
-                _topic, _seq, payload = read_frame(fw.master, want=16, timeout=5.0)
+                try:
+                    _topic, _seq, payload = read_frame(fw.master, want=16, timeout=KEEPALIVE_INTERVAL)
+                except AssertionError as error:
+                    if "timed out" not in str(error):
+                        raise
+                    continue
                 assert len(payload) == 4
                 values.append(struct.unpack("<f", payload)[0])
             if efd in ready:
@@ -778,3 +808,23 @@ def test_flood_sheds_samples_with_busy_and_whole_frames():
     ints = [int(value) for value in values]
     assert ints[-1] - ints[0] + 1 - len(ints) > 0, "no sample was shed on a saturated link"
     assert busy > 0, "no publish returned TX_BUSY on a saturated link"
+
+
+# covers: SES-7, SES-8
+def test_flood_slow_host_keeps_battery(tmp_path):
+    """A slow host that stays live keeps the flood: draining for 3 s leaves
+    battery flowing, since every accepted host frame proves the host alive
+    ([SES-8]) and only silence returns the firmware to ANNOUNCING ([SES-7])."""
+    args = ("--no-sub", "--no-echo", "--no-log-text", "--no-time-now", "--tx-free", "16", "--flood")
+    with Firmware(*args) as fw:
+        _hello, _topics, host = do_handshake(fw)
+        ping_id = 0
+        last_ping = time.monotonic()
+        stop = time.monotonic() + 3.0
+        while time.monotonic() < stop:
+            last_ping, ping_id = ping_due(host, last_ping, ping_id)
+            ready, _, _ = select.select([fw.master], [], [], min(KEEPALIVE_INTERVAL, stop - time.monotonic()))
+            if ready:
+                os.read(fw.master, 65536)
+        _topic, _seq, payload = read_frame(fw.master, want=16, timeout=2.0)
+        assert len(payload) == 4

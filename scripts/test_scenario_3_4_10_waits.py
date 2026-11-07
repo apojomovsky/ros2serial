@@ -4,8 +4,8 @@ Regression tests for #412: the discovery budget must run from the completed
 handshake, not from the firmware spawn, so a slow handshake cannot spend it.
 Each test drives its scenario module with recording fakes and a stepped
 clock, pins the wait order, and pins the timestamp the discovery wait starts
-from; they need no ROS. The avr scenario 1 test pins the same staging from
-bridge-up, since the boot HELLO predates the bridge there.
+from; they need no ROS. The avr tests pin the same staging from bridge-up,
+since the boot HELLO predates the bridge there.
 """
 
 import importlib.util
@@ -20,6 +20,8 @@ POSIX_4 = E2E / "test_scenario_4_posix.py"
 POSIX_10 = E2E / "test_scenario_10_posix.py"
 POSIX_10F = E2E / "test_scenario_10_framing_posix.py"
 AVR_1 = E2E / "test_scenario_1_avr.py"
+AVR_3 = E2E / "test_scenario_3_avr.py"
+AVR_4 = E2E / "test_scenario_4_avr.py"
 
 STEP = 0.25
 
@@ -531,5 +533,58 @@ def test_avr_1_discovers_on_its_own_budget_after_the_handshake():
     bridge_up = module._SPAWNED.ready_at
     assert discovery[2] == bridge_up + 2 * STEP
     assert discovery[3] == real_checks.DISCOVERY_TIMEOUT
+    assert world.events.index(("wait_for_bridge",)) < world.events.index(("sub", "/diagnostics"))
+    assert world.events.index(("sub", "/diagnostics")) < world.events.index(discovery)
+
+
+def test_avr_3_discovers_on_its_own_budget_after_the_handshake():
+    saved = _save_stubs()
+    real_checks = _install_stubs()
+    try:
+        world = World()
+        module = world.load("s3410_avr_3_probe", AVR_3)
+        module._SPAWNED = sys.modules["e2e_support.avr"].spawn("uno")
+        assert getattr(module, "TOPIC_BUDGET", None) == 3.0, "scenario 3 AVR moved its handshake budget"
+        assert getattr(module, "HANDSHAKE_TOPICS", None) is not None, "scenario 3 AVR has no handshake wait"
+        assert set(module.ECHO_TOPICS) == {"/cmd_vel", "/echo_vel"}
+        world.next_script.extend(_handshake_script(world, module.HANDSHAKE_TOPICS))
+        echoes = [_copy_twist(module.PRIME)] + [_copy_twist(sent) for sent in module.SENT]
+        for echo in echoes:
+            world.next_script.append(lambda echo=echo: _deliver(world, "echo_vel", echo))
+        world.drive(module, "TestScenario3", "test_published_twists_come_back_on_the_echo_topic")
+    finally:
+        _restore_stubs(saved)
+    discovery = _discovery(world)
+    assert discovery[1] == tuple(module.ECHO_TOPICS)
+    assert discovery[3] == real_checks.DISCOVERY_TIMEOUT
+    bridge_up = module._SPAWNED.ready_at
+    assert discovery[2] == bridge_up + 2 * STEP
+    assert ("sub", "/diagnostics") in world.events, "scenario 3 AVR never reads the handshake"
+    diag = world.events.index(("sub", "/diagnostics"))
+    assert diag < world.events.index(discovery)
+    echo_sub = world.events.index(("sub", "echo_vel"))
+    first_pub = next(i for i, event in enumerate(world.events) if event[0] == "publish")
+    assert world.events.index(discovery) < echo_sub < first_pub
+
+
+def test_avr_4_discovers_on_its_own_budget_after_the_handshake():
+    saved = _save_stubs()
+    real_checks = _install_stubs()
+    try:
+        world = World()
+        module = world.load("s3410_avr_4_probe", AVR_4)
+        module._SPAWNED = sys.modules["e2e_support.avr"].spawn("uno")
+        assert getattr(module, "TOPIC_BUDGET", None) == 3.0, "scenario 4 AVR moved its handshake budget"
+        assert getattr(module, "HANDSHAKE_TOPICS", None) is not None, "scenario 4 AVR has no handshake wait"
+        world.next_script.extend(_handshake_script(world, module.HANDSHAKE_TOPICS))
+        world.drive(module, "TestScenario4", "test_remapping_and_namespace_apply_to_mcu_topics")
+    finally:
+        _restore_stubs(saved)
+    discovery = _discovery(world)
+    assert discovery[1] == tuple(module.WANTED)
+    assert discovery[3] == real_checks.DISCOVERY_TIMEOUT
+    bridge_up = module._SPAWNED.ready_at
+    assert discovery[2] == bridge_up + 2 * STEP
+    assert ("sub", "/diagnostics") in world.events, "scenario 4 AVR never reads the handshake"
     assert world.events.index(("wait_for_bridge",)) < world.events.index(("sub", "/diagnostics"))
     assert world.events.index(("sub", "/diagnostics")) < world.events.index(discovery)

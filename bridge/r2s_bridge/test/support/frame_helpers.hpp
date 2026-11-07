@@ -13,6 +13,7 @@
 #include "fake_transport.hpp"
 #include "r2s_bridge/transport.hpp"
 extern "C" {
+#include "r2s/r2s.h"
 #include "r2s/r2s_crc.h"
 #include "r2s/r2s_rcobs.h"
 }
@@ -97,7 +98,7 @@ inline std::vector<std::uint8_t> helper_decode_unit(std::vector<std::uint8_t> un
 inline std::vector<std::uint8_t> helper_hello(std::uint32_t token, std::uint8_t topics,
                                               std::uint16_t max_frame = 512u, std::uint8_t features = 0x00u)
 {
-    std::vector<std::uint8_t> p{0x02u, 0x03u, 0x00u};
+    std::vector<std::uint8_t> p{0x02u, R2S_PROTOCOL_VERSION, 0x00u};
     const auto put_le = [&p](std::uint32_t value, int bytes) {
         for (int i = 0; i < bytes; ++i) {
             p.push_back(static_cast<std::uint8_t>((value >> (8 * i)) & 0xFFu));

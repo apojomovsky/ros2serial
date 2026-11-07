@@ -2,7 +2,9 @@
 
 The bridge is included under a namespace push and two remap rules; the
 announced topics show up renamed and namespaced, and the original names stay
-silent.
+silent. The handshake runs the unchanged 3 s budget from bridge-up, and
+graph discovery of the renamed topics waits on its own generous timeout
+from the handshake, so a slow runner cannot fail a correct remapping.
 """
 
 import os
@@ -12,9 +14,10 @@ import unittest
 
 import launch_testing.markers
 import rclpy
+from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import avr as avr_support
 from e2e_support import bridge as bridge_support
-from e2e_support import teardown
+from e2e_support import checks, teardown
 
 # covers: SES-16, SES-27
 
@@ -23,6 +26,9 @@ SERVICE = "/" + NAMESPACE + "/r2s_bridge/get_parameters"
 REMAPPINGS = (("battery", "cell_voltage"), ("cmd_vel", "steer"))
 WANTED = ["/" + NAMESPACE + "/cell_voltage", "/" + NAMESPACE + "/steer"]
 GONE = ["/battery", "/cmd_vel", "/" + NAMESPACE + "/battery", "/" + NAMESPACE + "/cmd_vel"]
+# The bridge reports announced names without remapping or namespace.
+HANDSHAKE_TOPICS = ["battery", "cmd_vel", "echo_vel", "log_text"]
+TOPIC_BUDGET = 3.0
 
 _SCRATCH = None
 _SPAWNED = None
@@ -62,14 +68,37 @@ class TestScenario4(unittest.TestCase):
         node = rclpy.create_node("e2e_s4_avr_probe")
         try:
             bridge_support.wait_for_bridge(node, service=SERVICE)
-            # The boot HELLO predates the bridge, so the budget runs from
-            # bridge-up, when the parameter service answers.
+            # The handshake wait below observes bridge state, not DDS
+            # discovery of the new topics.
+            received = []
+            node.create_subscription(DiagnosticArray, "/diagnostics", received.append, 10)
+            deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
+            while not received:
+                rclpy.spin_once(node, timeout_sec=0.5)
+                self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
+            received.clear()
+            # The boot HELLO predates the bridge, so the handshake budget runs
+            # from bridge-up, when the parameter service answers.
             _SPAWNED.ready_at = time.monotonic()
+            took = checks.wait_for_handshake(
+                received,
+                HANDSHAKE_TOPICS,
+                _SPAWNED.ready_at,
+                TOPIC_BUDGET,
+                "handshake",
+                lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
+                clock=time.monotonic,
+            )
+            self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
+            # Discovery starts when the bridge creates its endpoints at the
+            # handshake, so the generous timeout runs from there, not from
+            # bridge-up: a slow handshake must not spend it.
+            handshake_done_at = time.monotonic()
             bridge_support.wait_for_topics(
                 node,
                 WANTED,
-                _SPAWNED.ready_at,
-                3.0,
+                handshake_done_at,
+                checks.DISCOVERY_TIMEOUT,
                 "remapped topics",
                 lambda: rclpy.spin_once(node, timeout_sec=bridge_support.DISCOVERY_SPIN),
             )

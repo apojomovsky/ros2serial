@@ -1,20 +1,20 @@
 name: refused_hello
-covers: [SES-13, SES-14, SES-16, SES-17, CTL-3, CTL-9]
+covers: [SES-13, SES-14, SES-16, SES-17, CTL-9, CTL-17]
 steps:
   - from: mcu
-    frame: "00 00 02 03 00 00 00 00 00 00 02 03 02 40 42 0f 00 40 02 04 6e 6f 64 65 9a 5d"
+    frame: "00 00 02 04 00 00 00 00 00 00 02 03 02 40 42 0f 00 40 02 04 6e 6f 64 65 9e d9"
     at_ms: 100
-    note: "refused: reserved feature bit"
+    note: "refused: services without the reliable bit"
   - from: mcu
-    frame: "00 01 02 03 00 00 00 00 00 00 02 03 02 dc 05 00 00 00 02 04 6e 6f 64 65 52 11"
+    frame: "00 01 02 04 00 00 00 00 00 00 02 03 02 dc 05 00 00 00 02 04 6e 6f 64 65 56 95"
     at_ms: 200
     note: "refused: tick_hz 1500 is not 1000 times k"
   - from: host
-    frame: "00 00 01 03 62 28"
+    frame: "00 00 01 04 dd 5c"
     at_ms: 2500
     note: "boot_wait_ms passed with no accepted HELLO"
   - from: mcu
-    frame: "00 02 02 03 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 1f 81"
+    frame: "00 02 02 04 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 1b 05"
     at_ms: 2600
   - from: host
     frame: "00 01 03 00 95 73"
