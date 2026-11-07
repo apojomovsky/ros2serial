@@ -8,7 +8,6 @@ the reliable SET and ack exchange with its retransmit timers. Time and log
 traffic stays out: P1 and P2 specify that behavior when they land.
 """
 
-import os
 import struct
 
 from hypothesis import HealthCheck, settings
@@ -17,7 +16,7 @@ from hypothesis.stateful import RuleBasedStateMachine, initialize, invariant, ru
 from r2s_gen.reference import session as model
 from session_harness import TOPIC_IDS, Pair, wire
 
-EXAMPLES = int(os.environ.get("R2S_MODEL_EXAMPLES", "30"))
+MAX_EXAMPLES = 30
 
 VALID_MSS = [0, 1, 99, 100, 499, 500, 999, 1000, 1500, 1999, 2000, 2001, 5000]
 
@@ -203,7 +202,11 @@ def test_session_matches_model():
     run_state_machine_as_test(
         SessionMachine,
         settings=settings(
-            max_examples=EXAMPLES, deadline=None, database=None, suppress_health_check=[HealthCheck.too_slow]
+            max_examples=MAX_EXAMPLES,
+            deadline=None,
+            database=None,
+            derandomize=True,
+            suppress_health_check=[HealthCheck.too_slow],
         ),
     )
 
