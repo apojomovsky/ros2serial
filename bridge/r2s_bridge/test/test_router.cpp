@@ -189,13 +189,34 @@ class RouterFixture
         EXPECT_EQ(decoded[3], index);
     }
 
-    // One connected router with two MCU parameters walked after the topics:
-    // a bool "led" defaulting to true and an i64 "rate" defaulting to 2.
-    // The walk's DECLAREs and STATUS ride the parameters channel with its
-    // own frame seqs, as handshake_with_params in the session tests shows.
-    // Returns the writes the handshake's last step left: READY and whatever
-    // the parameters layer pushed, so the caller can inspect them.
-    std::vector<std::vector<std::uint8_t>> handshake_with_params(std::uint32_t token = 7u)
+    // One decoded PARAM_SET per parameter index among the drained units.
+    struct WireSet {
+        std::uint8_t rel;
+        std::vector<std::uint8_t> value;
+    };
+    std::map<std::uint8_t, WireSet> param_sets()
+    {
+        std::map<std::uint8_t, WireSet> out;
+        for (const auto &unit : drain()) {
+            const std::vector<std::uint8_t> decoded = checked_decode(unit);
+            if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u) {
+                out[decoded[4]] =
+                    WireSet{decoded[3], std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2)};
+            }
+        }
+        return out;
+    }
+
+    // One connected router with the MCU parameters walked after the topics:
+    // a bool "led" defaulting to true, an i64 "rate" defaulting to 2, an
+    // f64 "gain" defaulting to 1.5, a string "label" defaulting to "hi"
+    // and a read-only i64 "ro" defaulting to 7. The walk's DECLAREs and
+    // STATUS ride the parameters channel with its own frame seqs, as
+    // handshake_with_params in the session tests shows. Without the full
+    // table only "led" is announced. Returns the writes the handshake's
+    // last step left: READY and whatever the parameters layer pushed, so
+    // the caller can inspect them.
+    std::vector<std::vector<std::uint8_t>> handshake_with_params(std::uint32_t token = 7u, bool full = true)
     {
         deliver_frame(kHelperControl, 0u, helper_hello(token, 2u, max_frame_, 0x04u));
         expect_topic_req(0u);
@@ -211,11 +232,25 @@ class RouterFixture
         expect_param_req(0u);
         deliver_frame(kParamsTopic, 0u, helper_declare(0u, 0x00u, 0x00u, "led", {0x01u}));
         expect_param_req(1u);
+        if (!full) {
+            deliver_frame(kParamsTopic, 1u, {0x04u, 0x00u, 0x01u, 0x01u});
+            return drain();
+        }
         deliver_frame(kParamsTopic, 1u,
                       helper_declare(1u, 0x01u, 0x00u, "rate",
                                      {0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
         expect_param_req(2u);
-        deliver_frame(kParamsTopic, 2u, {0x04u, 0x00u, 0x02u, 0x01u});
+        deliver_frame(kParamsTopic, 2u,
+                      helper_declare(2u, 0x02u, 0x00u, "gain",
+                                     {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF8u, 0x3Fu}));
+        expect_param_req(3u);
+        deliver_frame(kParamsTopic, 3u, helper_declare(3u, 0x03u, 0x00u, "label", {0x02u, 'h', 'i'}));
+        expect_param_req(4u);
+        deliver_frame(
+            kParamsTopic, 4u,
+            helper_declare(4u, 0x01u, 0x01u, "ro", {0x07u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
+        expect_param_req(5u);
+        deliver_frame(kParamsTopic, 5u, {0x04u, 0x00u, 0x05u, 0x01u});
         return drain();
     }
 
@@ -662,6 +697,121 @@ TEST_F(RouterNode, RosParameterSetSendsASetToTheMcu)
         }
     }
     EXPECT_TRUE(saw_rate) << "the i64 set reaches the wire as eight bytes";
+}
+
+// covers: PAR-9
+TEST_F(RouterNode, LaunchOverrideIsPushedAfterTheHandshake)
+{
+    // A launch file sets the MCU value before the handshake: the layer
+    // declares the parameter with that value and pushes it, since it
+    // differs from the announced default.
+    rclcpp::NodeOptions over;
+    over.arguments({"--ros-args", "-r", "battery:=power/battery", "-p", "led:=false"});
+    RouterFixture fixture("override", over, RouterParams{});
+    bool pushed = false;
+    for (const auto &unit : fixture.handshake_with_params()) {
+        const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
+        if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u &&
+            decoded[4] == 0x00u) {
+            EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
+                      std::vector<std::uint8_t>{0x00u});
+            pushed = true;
+        }
+    }
+    ASSERT_TRUE(fixture.node()->has_parameter("led"));
+    EXPECT_EQ(fixture.node()->get_parameter("led").as_bool(), false);
+    EXPECT_TRUE(pushed) << "the overridden value goes out with SET after READY";
+}
+
+// covers: PAR-1, PAR-3, PAR-5
+TEST_F(RouterNode, McuParameterCodecsCoverAllTypes)
+{
+    RouterFixture fixture("codecs", remapped(), RouterParams{});
+    fixture.handshake_with_params();
+    ASSERT_TRUE(fixture.node()->has_parameter("gain"));
+    EXPECT_DOUBLE_EQ(fixture.node()->get_parameter("gain").as_double(), 1.5);
+    ASSERT_TRUE(fixture.node()->has_parameter("label"));
+    EXPECT_EQ(fixture.node()->get_parameter("label").as_string(), "hi");
+    ASSERT_TRUE(fixture.node()->has_parameter("ro"));
+    EXPECT_EQ(fixture.node()->get_parameter("ro").as_int(), 7);
+    const auto result = fixture.node()->set_parameters(
+        {rclcpp::Parameter("gain", 2.5), rclcpp::Parameter("label", std::string("yo"))});
+    ASSERT_EQ(result.size(), 2u);
+    EXPECT_TRUE(result[0].successful) << result[0].reason;
+    EXPECT_TRUE(result[1].successful) << result[1].reason;
+    const auto first = fixture.param_sets();
+    ASSERT_EQ(first.count(2u), 1u);
+    EXPECT_EQ(first.at(2u).value,
+              std::vector<std::uint8_t>({0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x04u, 0x40u}));
+    fixture.deliver_frame(kAckTopic, 0u, {kParamsTopic, first.at(2u).rel});
+    fixture.advance(1u);
+    const auto second = fixture.param_sets();
+    ASSERT_EQ(second.count(3u), 1u);
+    EXPECT_EQ(second.at(3u).value, std::vector<std::uint8_t>({0x02u, 'y', 'o'}));
+    const auto refused = fixture.node()->set_parameters({rclcpp::Parameter("ro", 8)});
+    ASSERT_EQ(refused.size(), 1u);
+    EXPECT_FALSE(refused[0].successful);
+    EXPECT_NE(refused[0].reason.find("read-only"), std::string::npos);
+}
+
+// covers: PAR-9
+TEST_F(RouterNode, RetiredParametersRejectSets)
+{
+    // A standard node cannot undeclare: the dropped ROS parameter stays,
+    // but its sets fail until the MCU announces it again.
+    RouterFixture fixture("drop", remapped(), RouterParams{});
+    fixture.handshake_with_params();
+    ASSERT_TRUE(fixture.node()->has_parameter("rate"));
+    fixture.handshake_with_params(8u, false);
+    EXPECT_TRUE(fixture.node()->has_parameter("led"));
+    EXPECT_TRUE(fixture.node()->has_parameter("rate")) << "the ROS parameter stays";
+    EXPECT_TRUE(logged_has(fixture.logged(), "no longer announced"));
+    const auto result = fixture.node()->set_parameters({rclcpp::Parameter("rate", 3)});
+    ASSERT_EQ(result.size(), 1u);
+    EXPECT_FALSE(result[0].successful);
+    EXPECT_NE(result[0].reason.find("no longer announced"), std::string::npos);
+    const auto live = fixture.node()->set_parameters({rclcpp::Parameter("led", false)});
+    ASSERT_EQ(live.size(), 1u);
+    EXPECT_TRUE(live[0].successful) << live[0].reason;
+}
+
+// covers: PAR-8
+TEST_F(RouterNode, SetsFailWhileDisconnected)
+{
+    RouterFixture fixture("down", remapped(), RouterParams{});
+    fixture.handshake_with_params();
+    fixture.advance(3000u);
+    const auto result = fixture.node()->set_parameters({rclcpp::Parameter("led", false)});
+    ASSERT_EQ(result.size(), 1u);
+    EXPECT_FALSE(result[0].successful);
+    EXPECT_NE(result[0].reason.find("link is down"), std::string::npos);
+}
+
+// covers: PAR-5
+TEST_F(RouterNode, RefusedSetIsLogged)
+{
+    RouterFixture fixture("refused", remapped(), RouterParams{});
+    fixture.handshake_with_params();
+    const auto result = fixture.node()->set_parameters({rclcpp::Parameter("led", false)});
+    ASSERT_EQ(result.size(), 1u);
+    ASSERT_TRUE(result[0].successful) << result[0].reason;
+    const auto sets = fixture.param_sets();
+    ASSERT_EQ(sets.count(0u), 1u);
+    fixture.deliver_frame(kParamsTopic, 0u, {0x04u, sets.at(0u).rel, 0x00u, 0x02u});
+    EXPECT_TRUE(logged_has(fixture.logged(), "refused")) << "the MCU verdict is logged";
+}
+
+// covers: PAR-9
+TEST_F(RouterNode, CollidingNodeParameterIsNotTracked)
+{
+    RouterFixture fixture("collide", remapped(), RouterParams{});
+    fixture.node()->declare_parameter("led", true);
+    fixture.handshake_with_params();
+    const auto result = fixture.node()->set_parameters({rclcpp::Parameter("led", false)});
+    ASSERT_EQ(result.size(), 1u);
+    EXPECT_TRUE(result[0].successful) << result[0].reason;
+    EXPECT_TRUE(fixture.param_sets().empty()) << "no SET goes out for a foreign parameter";
+    EXPECT_TRUE(logged_has(fixture.logged(), "not tracked"));
 }
 
 // covers: PAR-9
