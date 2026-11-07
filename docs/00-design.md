@@ -57,7 +57,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 
 ## Scope: parity with rosserial
 
-*Status (0.1.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++; specified: parameters in #133, services and actions in #316; planned: #154, #155, #156 and #315 to #320, rosserial compatibility in #145 and #149.*
+*Status (0.2.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++, the reliable channel, and rosserial-compatible runtime registration with the porting guide; specified: parameters in #133, services and actions in #316; planned: #155, #156 and #317 to #320.*
 
 | Feature | Priority | Notes |
 | --- | --- | --- |
@@ -120,7 +120,7 @@ PIC-enabling rules that apply from day one, even though PIC work comes last:
 
 ## Declaring topics
 
-*Status (0.1.0): built: runtime registration, X-macro list, and `r2s.yaml` with the generator; planned: rosserial-compatible runtime registration in Phase 2.*
+*Status (0.2.0): built: runtime registration, X-macro list, and `r2s.yaml` with the generator, plus rosserial-compatible runtime registration in Phase 2.*
 
 There are three ways to declare topics. All three produce the same wire behavior and run the same conformance and end-to-end tests.
 
@@ -236,9 +236,9 @@ Lengths are varints (LEB128): 1 byte for values under 128, which covers almost a
 
 **Strings carry no `0x00`.** The MCU holds strings NUL-terminated, so a string containing a `0x00` byte would be cut short without notice. Neither side sends one, and both drop a payload that has one; the bridge logs the topic and field instead of publishing a shortened string.
 
-## Protocol draft (v1)
+## Protocol draft (v4)
 
-*Status (0.1.0): built: full-mode handshake, time, log, heartbeat and error channels; specified: parameters and reliable channel in #133, services and actions in #316; planned: #154; compact mode lands with tier S in Phase 5.*
+*Status (0.2.0): built: full-mode handshake, time, log, heartbeat, error and reliable channels; specified: parameters in #133, services and actions in #316; compact mode lands with tier S in Phase 5.*
 
 ```
 frame = rCOBS( topic_id[1] | seq[1] | payload[N] | crc16[2] ) + 0x00
@@ -303,7 +303,7 @@ rCOBS decoding runs backwards in place in the frame buffer once the delimiter ar
 
 ## Time
 
-*Status (0.1.0): built: PONG with delimiter tick, CORRECTION and `r2s_now()` with the host estimator; planned: the measured accuracy figure in #348.*
+*Status (0.2.0): built: PONG with delimiter tick, CORRECTION and `r2s_now()` with the host estimator; measured: the accuracy figure in #348 (scenario 8).*
 
 **What rosserial did.** Right after connecting, and then every few seconds, the MCU asked the host for the current time. When the reply came, the MCU stored an offset from its own `millis()`, correcting for the round trip. From then on `nh.now()` was that offset plus `millis()`, with millisecond resolution. That is how sketches stamped their messages.
 
@@ -318,11 +318,11 @@ rCOBS decoding runs backwards in place in the frame buffer once the delimiter ar
 
 The drift term matters: the Uno's ATmega328P runs from a ceramic resonator that can be off by thousands of ppm, which is several milliseconds per second.
 
-The tick comes from the port: `micros()` on Arduino (1 MHz nominal, 4 µs resolution), a 1 ms tick from epic-hal on PIC, a hardware timer elsewhere. The tick rate is announced in the handshake. The bridge also sets the serial port to low latency where the OS supports it. Target accuracy: about 1 ms, bounded by the tick resolution. Phase 2 measures the real figure.
+The tick comes from the port: `micros()` on Arduino (1 MHz nominal, 4 µs resolution), a 1 ms tick from epic-hal on PIC, a hardware timer elsewhere. The tick rate is announced in the handshake. The bridge also sets the serial port to low latency where the OS supports it. Target accuracy: about 1 ms, bounded by the tick resolution. Phase 2 measured the real figure in #348 (scenario 8).
 
 ## User API
 
-*Status (0.1.0): built: C, runtime C++ and static C++ APIs; planned: rosserial-compatible runtime registration in #145 and the porting guide in #149.*
+*Status (0.2.0): built: C, runtime C++ and static C++ APIs, rosserial-compatible runtime registration in #145 and the porting guide in #149.*
 
 ### C (P0)
 
