@@ -48,6 +48,20 @@ def _load_relay():
 
 PtyRelay = _load_relay()
 
+
+def _load_discovery_wait():
+    """The shared discovery wait, loaded from its file like the relay.
+
+    It lives in the e2e framework the bridge tests cannot import, so it
+    loads by path the same way.
+    """
+    location = REPO_ROOT / "tests" / "e2e" / "e2e_support" / "bridge.py"
+    spec = importlib.util.spec_from_file_location("e2e_bridge_wait", location)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 DOCUMENTED_PARAMETERS = frozenset(
     [
         "port",
@@ -193,13 +207,15 @@ class TestBridgePosixLaunch(unittest.TestCase):
     def test_handshake_announces_topics(self):
         node = rclpy.create_node("h9_handshake_probe")
         try:
-            deadline = time.monotonic() + HANDSHAKE_TIMEOUT
-            while True:
-                names = {name for name, _ in node.get_topic_names_and_types()}
-                if "/battery" in names and "/cmd_vel" in names:
-                    return
-                self.assertLess(time.monotonic(), deadline, "bridge never announced battery and cmd_vel")
-                time.sleep(0.2)
+            wait = _load_discovery_wait()
+            wait.wait_for_topics(
+                node,
+                ["/battery", "/cmd_vel"],
+                time.monotonic(),
+                HANDSHAKE_TIMEOUT,
+                "bridge never announced battery and cmd_vel",
+                lambda: rclpy.spin_once(node, timeout_sec=wait.DISCOVERY_SPIN),
+            )
         finally:
             node.destroy_node()
 
