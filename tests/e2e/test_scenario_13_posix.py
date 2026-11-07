@@ -22,7 +22,7 @@ from e2e_support import bridge as bridge_support
 from e2e_support import checks, firmware, teardown
 from e2e_support.relay import PtyRelay
 from rclpy.parameter import Parameter
-from rclpy.parameter_client import AsyncParametersClient
+from rclpy.parameter_client import AsyncParameterClient
 
 ANNOUNCED = ["/battery", "/cmd_vel", "/echo_vel", "/log_text", "/time_now"]
 HANDSHAKE_TOPICS = [name.removeprefix("/") for name in ANNOUNCED]
@@ -81,15 +81,16 @@ def _wait_link_ready(node, received, since):
 def _wait_ros_params(client, node, names, budget):
     """Poll the bridge until it declares every MCU parameter, on the budget.
 
-    An undeclared name fails the get on the bridge side, so any error
-    means the walk has not declared the table yet.
+    Listing names is the declaration check: getting an undeclared name
+    answers with an unset value instead of failing.
     """
     since = time.monotonic()
     while True:
         try:
-            future = client.get_parameters(list(names))
+            future = client.list_parameters()
             rclpy.spin_until_future_complete(node, future, timeout_sec=2.0)
-            if future.result() is not None:
+            result = future.result()
+            if result is not None and all(name in result.result.names for name in names):
                 return
         except Exception:
             pass
@@ -147,8 +148,8 @@ class TestScenario13(unittest.TestCase):
                 lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
                 clock=time.monotonic,
             )
-            client = AsyncParametersClient(node, "/r2s_bridge")
-            self.assertTrue(client.wait_for_service(timeout_sec=PARAM_TIMEOUT), "no parameter service")
+            client = AsyncParameterClient(node, "/r2s_bridge")
+            self.assertTrue(client.wait_for_services(timeout_sec=PARAM_TIMEOUT), "no parameter service")
             _wait_ros_params(client, node, ["led", "rate"], PARAM_TIMEOUT)
             future = client.set_parameters(
                 [Parameter("led", Parameter.Type.BOOL, False), Parameter("rate", Parameter.Type.INTEGER, 5)]
