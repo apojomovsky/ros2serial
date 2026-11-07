@@ -41,6 +41,7 @@ namespace
 constexpr std::uint8_t kBattery = 16u;
 constexpr std::uint8_t kCmdVel = 17u;
 constexpr std::uint8_t kParamsTopic = 3u;
+constexpr std::uint8_t kAckTopic = 6u;
 
 std::array<std::uint8_t, 8> installed_hash(const std::string &type)
 {
@@ -192,7 +193,9 @@ class RouterFixture
     // a bool "led" defaulting to true and an i64 "rate" defaulting to 2.
     // The walk's DECLAREs and STATUS ride the parameters channel with its
     // own frame seqs, as handshake_with_params in the session tests shows.
-    void handshake_with_params(std::uint32_t token = 7u)
+    // Returns the writes the handshake's last step left: READY and whatever
+    // the parameters layer pushed, so the caller can inspect them.
+    std::vector<std::vector<std::uint8_t>> handshake_with_params(std::uint32_t token = 7u)
     {
         deliver_frame(kHelperControl, 0u, helper_hello(token, 2u, max_frame_, 0x04u));
         expect_topic_req(0u);
@@ -213,7 +216,7 @@ class RouterFixture
                                      {0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
         expect_param_req(2u);
         deliver_frame(kParamsTopic, 2u, {0x04u, 0x00u, 0x02u, 0x01u});
-        drain();
+        return drain();
     }
 
     std::vector<std::vector<std::uint8_t>> drain()
@@ -631,25 +634,33 @@ TEST_F(RouterNode, RosParameterSetSendsASetToTheMcu)
     ASSERT_EQ(result.size(), 2u);
     EXPECT_TRUE(result[0].successful) << result[0].reason;
     EXPECT_TRUE(result[1].successful) << result[1].reason;
+    // The first SET goes out at once; the second waits behind it for its
+    // ack, as the reliable channel allows one outstanding frame ([REL-2]).
+    std::uint8_t led_rel = 0u;
     bool saw_led = false;
-    bool saw_rate = false;
     for (const auto &unit : fixture.drain()) {
         const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
-        if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u) {
-            if (decoded[4] == 0x00u) {
-                EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
-                          std::vector<std::uint8_t>{0x00u});
-                saw_led = true;
-            }
-            if (decoded[4] == 0x01u) {
-                EXPECT_EQ(
-                    std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
-                    std::vector<std::uint8_t>({0x05u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
-                saw_rate = true;
-            }
+        if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u &&
+            decoded[4] == 0x00u) {
+            EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
+                      std::vector<std::uint8_t>{0x00u});
+            led_rel = decoded[3];
+            saw_led = true;
         }
     }
     EXPECT_TRUE(saw_led) << "the bool set reaches the wire as one byte";
+    fixture.deliver_frame(kAckTopic, 0u, {kParamsTopic, led_rel});
+    fixture.advance(1u);
+    bool saw_rate = false;
+    for (const auto &unit : fixture.drain()) {
+        const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
+        if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u &&
+            decoded[4] == 0x01u) {
+            EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
+                      std::vector<std::uint8_t>({0x05u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
+            saw_rate = true;
+        }
+    }
     EXPECT_TRUE(saw_rate) << "the i64 set reaches the wire as eight bytes";
 }
 
@@ -663,10 +674,10 @@ TEST_F(RouterNode, RehandshakeRepushesTheCurrentValues)
     ASSERT_TRUE(result[0].successful) << result[0].reason;
     fixture.drain();
     // The MCU reboots and announces the same table: the bridge walks it
-    // again and pushes the current values back.
-    fixture.handshake_with_params(8u);
+    // again and pushes the current values back, in the writes the second
+    // handshake leaves behind.
     bool repushed = false;
-    for (const auto &unit : fixture.drain()) {
+    for (const auto &unit : fixture.handshake_with_params(8u)) {
         const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
         if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u &&
             decoded[4] == 0x00u) {
