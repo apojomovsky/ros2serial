@@ -327,7 +327,13 @@ class MessageRepository:
                 return action.goal
             if canonical == action.result.type_name:
                 return action.result
-            return action.feedback
+            if canonical == action.feedback.type_name:
+                return action.feedback
+            raise MessageError(
+                canonical,
+                "not a goal, result or feedback type",
+                "name it as 'package/action/Name_Goal', '_Result' or '_Feedback'",
+            )
         package, _, name = canonical.partition("/msg/")
         for path in self._files(package, name):
             if path.is_file():

@@ -6,6 +6,9 @@ from pathlib import Path
 import pytest
 from r2s_gen import bounds, cpp, descriptors, emit, msgs, typehash
 
+ROOT = Path(__file__).resolve().parents[2]
+CORE_INCLUDE = ROOT / "core" / "include"
+
 
 def write_action(root: Path, type_name: str, text: str) -> Path:
     package, _, name = type_name.partition("/action/")
@@ -76,6 +79,28 @@ def test_a_malformed_goal_line_names_the_file_and_line(tmp_path):
         repository.load("demo_msgs/action/Spin_Goal")
 
     assert str(caught.value) == f"{path}:1: expected a type and a field name; write it as 'float32 value'"
+
+
+def test_a_malformed_result_line_names_the_file_and_line(tmp_path):
+    root = tmp_path / "messages"
+    path = write_action(root, "demo_msgs/action/Spin", "int32 a\n---\nfloat32\n---\nint32 c\n")
+    repository = msgs.MessageRepository(msg_paths=[root])
+
+    with pytest.raises(msgs.MessageError) as caught:
+        repository.load("demo_msgs/action/Spin_Result")
+
+    assert str(caught.value) == f"{path}:3: expected a type and a field name; write it as 'float32 value'"
+
+
+def test_a_malformed_feedback_line_names_the_file_and_line(tmp_path):
+    root = tmp_path / "messages"
+    path = write_action(root, "demo_msgs/action/Spin", "int32 a\n---\nint32 b\n---\nfloat32\n")
+    repository = msgs.MessageRepository(msg_paths=[root])
+
+    with pytest.raises(msgs.MessageError) as caught:
+        repository.load("demo_msgs/action/Spin_Feedback")
+
+    assert str(caught.value) == f"{path}:5: expected a type and a field name; write it as 'float32 value'"
 
 
 def test_a_bare_action_name_names_its_parts(tmp_path):
@@ -267,6 +292,57 @@ def test_a_bundled_action_compiles_as_c99(tmp_path):
 
     compiled = subprocess.run(
         ["cc", "-std=c99", "-pedantic", "-Werror", "-I", str(tmp_path), "-c", str(source)],
+        capture_output=True,
+        text=True,
+    )
+
+    assert compiled.returncode == 0, compiled.stderr
+
+
+def test_a_user_action_header_compiles_as_cxx(tmp_path):
+    root = tmp_path / "messages"
+    write_action(
+        root,
+        "demo_msgs/action/Spin",
+        "int32 order\n---\nint32[] sequence\n---\nint32[] partial_sequence\n",
+    )
+    repository = msgs.MessageRepository(msg_paths=[root])
+    roots = [
+        "demo_msgs/action/Spin_Goal",
+        "demo_msgs/action/Spin_Result",
+        "demo_msgs/action/Spin_Feedback",
+    ]
+    resolved = bounds.resolve(
+        repository,
+        roots,
+        bounds={
+            "demo_msgs/action/Spin_Result.sequence": 4,
+            "demo_msgs/action/Spin_Feedback.partial_sequence": 4,
+        },
+    )
+    (tmp_path / "r2s_bundled.h").write_text(emit.emit_types(resolved), encoding="utf-8")
+    (tmp_path / "spin.hpp").write_text(
+        cpp.emit_action_hpp(resolved, "demo_msgs/action/Spin", repository), encoding="utf-8"
+    )
+    source = tmp_path / "check.cpp"
+    source.write_text('#include "spin.hpp"\n', encoding="utf-8")
+
+    compiled = subprocess.run(
+        [
+            "g++",
+            "-std=c++11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-pedantic",
+            "-Wconversion",
+            "-fsyntax-only",
+            "-I",
+            str(CORE_INCLUDE),
+            "-I",
+            str(tmp_path),
+            str(source),
+        ],
         capture_output=True,
         text=True,
     )
