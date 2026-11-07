@@ -117,8 +117,12 @@ measure_gen() {
   R2S_BUILD_DIR=$build bash "$tree/scripts/build-host-lib.sh" "$host_dir" >&2 || return 1
   # Flags, not the pyproject defaults, define the measured scope, so a base
   # that predates the config still measures the same files on both sides.
+  # A fixed hypothesis seed for both sides, so the comparison measures code
+  # and not luck (docs/01-testing.md, section 5.2). The value is the gen
+  # suite's fixed seed. The suite is derandomized, which takes precedence
+  # over the flag; the flag pins bases predating the pin.
   ( cd "$tree" && R2S_HOST_LIB_DIR="$host_dir" coverage run --branch --source=gen/r2s_gen \
-    --data-file="$data" -m pytest gen -p no:cacheprovider >&2 ) || return 1
+    --data-file="$data" -m pytest gen -p no:cacheprovider --hypothesis-seed=20261026 >&2 ) || return 1
   ( cd "$tree" && coverage json --data-file="$data" -o "$raw" >&2 ) || return 1
   python3 - "$raw" "$out" >&2 <<'EOF' || return 1
 import json, sys
