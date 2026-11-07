@@ -105,6 +105,39 @@ def test_kill_tree_kills_the_wrapper_and_the_orphan():
         reap(wrapper)
 
 
+def live_marked(marker):
+    """Pids whose command line carries the marker, zombies excluded."""
+    result = subprocess.run(["pgrep", "-f", marker], capture_output=True, text=True)
+    return [pid for pid in result.stdout.split() if not gone(pid)]
+
+
+def test_kill_tree_reaches_grandchildren():
+    """A wrapper whose child spawned its own child: all three die."""
+    marker = f"r2s504-gc-{os.getpid()}"
+    middle = f'exec -a {marker}-mid bash -c "exec -a {marker}-leaf sleep 120 & wait"'
+    wrapper = subprocess.Popen(
+        ["bash", "-c", f"{middle} & wait"],
+        stdout=subprocess.DEVNULL,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 10.0
+        while len(live_marked(marker)) < 3:
+            assert time.monotonic() < deadline, "the grandchild never started"
+            time.sleep(0.1)
+        result = run_helper(str(wrapper.pid))
+        assert result.returncode == 0, result.stderr
+        wait_gone(wrapper.pid)
+        deadline = time.monotonic() + 10.0
+        while live_marked(marker):
+            assert time.monotonic() < deadline, "the grandchild survived"
+            time.sleep(0.1)
+    finally:
+        subprocess.run(["pkill", "-f", marker])
+        cleanup(wrapper.pid)
+        reap(wrapper)
+
+
 def test_kill_tree_sigkills_a_term_ignorer():
     """A child that traps TERM still dies, quickly, by SIGKILL."""
     ignorer = subprocess.Popen(["bash", "-c", "trap '' TERM; sleep 60"])
