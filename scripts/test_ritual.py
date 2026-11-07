@@ -128,7 +128,7 @@ def test_the_ritual_ignores_a_title_in_the_callers_shell(tmp_path, monkeypatch):
 
 def test_a_dirty_pr_gets_one_fix_line_per_problem(tmp_path):
     main, _ = fixture(tmp_path)
-    long_block = "".join(f"# reason line {i}\n" for i in range(9))
+    long_block = "".join(f"# reason line {i}\n" for i in range(21))
     commit(main, {"docs/plans/p.md": "plan\n", "core/b.py": long_block + "Y = 2\n"}, f"feat(core): b {EM} c")
     commit(main, {"core/c.py": "Z = 3\n"}, "fix(core): c\n\nCo-Authored-By: Someone <s@example.com>")
     (main / "stray.txt").write_text("uncommitted\n")
@@ -144,7 +144,7 @@ def test_a_dirty_pr_gets_one_fix_line_per_problem(tmp_path):
         "plan file",
         "em-dash",
         "trailer",
-        "9 lines",
+        "21 lines",
         "literal \\n",
         "Closes #",
         "## Review",

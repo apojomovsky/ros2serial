@@ -100,7 +100,7 @@ Work is plain GitHub issues.
 6. Lint: ruff, clang-format, ament linters.
 7. Zone check: `tools/zone_check.py` (no function pointers, float operations or C++ includes in `core/`).
 8. Spec sync: if `spec/protocol.md` changed, vectors changed in the same PR. A vectors-only PR passes when every rule ID its vectors cover is already defined there; a vector naming an unknown rule fails.
-9. Prose: `scripts/prose_check.py` lists every added comment block; the mechanical rules (8-line cap, no decoration, no narrative, no em-dashes) fail the ritual. Content judgment stays with the author.
+9. Prose: `scripts/prose_check.py` lists every added comment block; the mechanical rules (20-line cap, no separator art, no narrative, no em-dashes) fail the ritual. Content judgment stays with the author.
 10. PR body: real newlines, `Closes #N`, a `## Review` section.
 11. Hooks installed.
 12. README and docs freshness: user-visible changes update `README.md` or `docs/` in the same PR, or the PR body says `README: n/a` (advisory).
@@ -141,18 +141,52 @@ Pass the title the PR will carry as `make pre-pr-check PR_TITLE="<title>"`, so t
 ### Comments
 
 1. **Why, not what.** Comments carry the non-obvious reason, the datasheet fact, the invariant. A comment that restates the line below it is deleted.
-2. **A comment must earn its lines.** 2 to 3 lines for a compact reason, up to 8 when the reason needs it, never more (the prose gate fails it).
-3. **No decoration.** No separator art, no `@file` or `@brief` boilerplate. A 1 to 3 line file header is fine when it adds context.
-4. **No narrative.** No "fixed X by doing Y". Verification belongs in the PR. Durable hardware or toolchain facts, with a date, stay.
-5. `TODO` and `FIXME` carry a concrete reason or do not exist.
-6. **No em-dashes in prose,** in comments, docs or commit messages. Replacing one is a judgment call: rewrite the sentence so it reads well, don't swap characters mechanically. ASCII-art diagrams are the only exception.
+2. **A comment must earn its lines.** 2 to 3 lines for a compact reason, up to 20 when the reason needs it, never more (the prose gate fails it). A doc comment on a public function may use the room: a one-line summary, a short body, and one line per parameter, return, throw and precondition.
+3. **Doc comments are Doxygen; notes are plain.** A public function carries a `///` summary line plus a `/** */` body with `\param[in]`, `\param[out]`, `\return`, `\throws` and `\pre` as each applies, the way `rcl` and `rclcpp` write them. Short `//` notes stay for inline explanations. `@file` and `@brief` are legal where they add context; separator art never is.
+4. **Each language follows its ROS 2 upstream.** The C core and the ports follow the `rcl` header style; the C++ bridge follows `rclcpp`; Python (`r2s_gen`) follows PEP 8 and PEP 257 as `ament_flake8` and `ament_pep257` configure them. The repository stays MIT; only the style comes from upstream.
+5. **No narrative.** No "fixed X by doing Y". Verification belongs in the PR. Durable hardware or toolchain facts, with a date, stay.
+6. `TODO` and `FIXME` carry a concrete reason or do not exist.
+7. **No em-dashes in prose,** in comments, docs or commit messages. Replacing one is a judgment call: rewrite the sentence so it reads well, don't swap characters mechanically. ASCII-art diagrams are the only exception.
 
 ### API documentation
 
-- **C headers:** every public function has a prose contract above its declaration: what it does, what it returns, which errors and preconditions apply. No `@param` or `@return` boilerplate when the types already say it.
+- **C headers:** every public function has a Doxygen contract above its declaration in the `rcl` header style: a `///` summary plus a `/** */` body naming each parameter, the return, and the errors and preconditions. For example:
+  ```c
+  /// Hands the session its parameter table.
+  /**
+   * Copies each default into its live value; the live values start as the
+   * defaults. This runs once at startup, so it stays out of the hot path.
+   *
+   * \param[in] params the table to install.
+   * \param[in] count how many entries params holds.
+   * \return R2S_OK on success, R2S_ERR_BOUNDS on a bad table.
+   * \pre The caller keeps params alive past the call.
+   */
+  ```
 - **Each core source file** starts with 1 to 3 lines naming its role and its boundary (for example, "framer: bytes in, decoded frames out").
-- **C++ layer:** the same rules; document what template parameters must satisfy.
-- **Python (`r2s_gen`):** module docstrings stating the module's role; function docstrings only where the behavior isn't obvious from the signature and types.
+- **C++ layer:** the same Doxygen form in the `rclcpp` style, with C++17 as the language floor; document what template parameters must satisfy. For example:
+  ```cpp
+  /// Routes one link.
+  /**
+   * Single-threaded apart from the subscription callbacks, so one mutex
+   * guards the pacer and the routes.
+   *
+   * \param[in] params the pacing parameters to start with.
+   * \throws std::invalid_argument on a nonsense param.
+   */
+  ```
+- **Python (`r2s_gen`):** module docstrings stating the module's role; function docstrings in PEP 257 style, the way `ament_flake8` and `ament_pep257` check them. For example:
+  ```python
+  def encode(payload: bytes) -> str:
+      """Encode one payload as hex text.
+
+      Args:
+          payload: the raw bytes to encode.
+
+      Returns:
+          The lowercase hex text.
+      """
+  ```
 
 ### Docs lifecycle
 
