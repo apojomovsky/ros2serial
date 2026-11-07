@@ -174,7 +174,12 @@ class TestScenario6(unittest.TestCase):
             # the firmware spawn: a slow handshake must not spend it.
             handshake_done_at = time.monotonic()
             bridge_support.wait_for_topics(
-                node, ANNOUNCED, handshake_done_at, checks.DISCOVERY_TIMEOUT, "announced topics"
+                node,
+                ANNOUNCED,
+                handshake_done_at,
+                checks.DISCOVERY_TIMEOUT,
+                "announced topics",
+                lambda: rclpy.spin_once(node, timeout_sec=bridge_support.DISCOVERY_SPIN),
             )
             # The bridge forwards MCU traffic best effort, so the probe
             # matches that; a reliable probe would never match.
@@ -222,7 +227,12 @@ class TestScenario6(unittest.TestCase):
             self.assertEqual(final.get("resets"), "0", "a clean replug is not an MCU reset")
             handshake_done_at = time.monotonic()
             bridge_support.wait_for_topics(
-                node, ANNOUNCED, handshake_done_at, checks.DISCOVERY_TIMEOUT, "announced topics"
+                node,
+                ANNOUNCED,
+                handshake_done_at,
+                checks.DISCOVERY_TIMEOUT,
+                "announced topics",
+                lambda: rclpy.spin_once(node, timeout_sec=bridge_support.DISCOVERY_SPIN),
             )
             # The fresh firmware counts from 0 again, so the flow after the
             # mark is a new increasing run that proves traffic resumed.

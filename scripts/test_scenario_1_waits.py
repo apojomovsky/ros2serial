@@ -153,10 +153,14 @@ def _install_stubs():
 
     bridge = types.ModuleType("e2e_support.bridge")
     bridge.HANDSHAKE_TIMEOUT = 20.0
+    bridge.DISCOVERY_SPIN = 0.1
     bridge.wait_for_bridge = lambda node, service="", timeout=0.0: _events().append(("wait_for_bridge",))
-    bridge.wait_for_topics = lambda node, wanted, since, budget, what: _events().append(
-        ("wait_for_topics", tuple(wanted), since, budget)
-    )
+
+    def wait_for_topics(node, wanted, since, budget, what, spin):
+        assert callable(spin), "the scenario must pass a spin callback"
+        _events().append(("wait_for_topics", tuple(wanted), since, budget))
+
+    bridge.wait_for_topics = wait_for_topics
     bridge.launch_bridge_only = lambda *args, **kwargs: None
     bridge.example_params_file = lambda: None
 

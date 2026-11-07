@@ -94,7 +94,14 @@ class TestScenario4(unittest.TestCase):
             # handshake, so the generous timeout runs from there, not from
             # bridge-up: a slow handshake must not spend it.
             handshake_done_at = time.monotonic()
-            bridge_support.wait_for_topics(node, WANTED, handshake_done_at, checks.DISCOVERY_TIMEOUT, "remapped topics")
+            bridge_support.wait_for_topics(
+                node,
+                WANTED,
+                handshake_done_at,
+                checks.DISCOVERY_TIMEOUT,
+                "remapped topics",
+                lambda: rclpy.spin_once(node, timeout_sec=bridge_support.DISCOVERY_SPIN),
+            )
             names = {name for name, _ in node.get_topic_names_and_types()}
             for gone in GONE:
                 self.assertNotIn(gone, names, "unmapped name still announced: " + gone)
