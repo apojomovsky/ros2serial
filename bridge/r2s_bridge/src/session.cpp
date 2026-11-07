@@ -1464,6 +1464,13 @@ const std::vector<TopicInfo> &Session::topics() const
     return impl_->topics;
 }
 
+// The parameter walk's DECLAREs, in announcement order.
+const std::vector<ParamInfo> &Session::params() const
+{
+    static const std::vector<ParamInfo> empty;
+    return empty;
+}
+
 McuCounters Session::mcu_counters() const
 {
     return impl_->mcu;

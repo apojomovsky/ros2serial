@@ -125,6 +125,25 @@ using TransportFactory = std::function<std::unique_ptr<Transport>()>;
 // support; tests script it.
 using TopicResolver = std::function<std::uint8_t(const TopicInfo &)>;
 
+// One announced MCU parameter: the PAR-2 type, the PAR-4 flags, the name,
+// and the default value as its wire bytes (PAR-1, PAR-3).
+struct ParamInfo {
+    std::uint8_t index = 0;
+    std::uint8_t type = 0;
+    std::uint8_t flags = 0;
+    std::string name;
+    std::vector<std::uint8_t> default_value;
+    bool operator==(const ParamInfo &other) const
+    {
+        return index == other.index && type == other.type && flags == other.flags && name == other.name &&
+               default_value == other.default_value;
+    }
+    bool operator!=(const ParamInfo &other) const
+    {
+        return !(*this == other);
+    }
+};
+
 // The session's observable edge: log lines the bridge forwards to its
 // loggers, one call per completed handshake saying whether the new topic
 // table matches the previous one ([SES-20]), and one call per decoded user
@@ -165,6 +184,10 @@ class Session
     std::uint32_t token() const;
     // The last completed handshake's topics, empty before the first one.
     const std::vector<TopicInfo> &topics() const;
+    // The last completed handshake's parameters, in announcement order,
+    // empty before the first one. The parameters layer (X5) declares them
+    // as ROS parameters after READY.
+    const std::vector<ParamInfo> &params() const;
     McuCounters mcu_counters() const;
     // Running sums of the MCU error report counts per code ([ERR-6]): each
     // decoded report adds its count to its code's slot, so a wrapped count

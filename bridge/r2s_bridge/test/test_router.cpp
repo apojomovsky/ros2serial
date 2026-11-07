@@ -40,6 +40,7 @@ namespace
 
 constexpr std::uint8_t kBattery = 16u;
 constexpr std::uint8_t kCmdVel = 17u;
+constexpr std::uint8_t kParamsTopic = 3u;
 
 std::array<std::uint8_t, 8> installed_hash(const std::string &type)
 {
@@ -74,7 +75,7 @@ class RouterFixture
             node_->get_node_topics_interface(),
             [this]() { return std::unique_ptr<Transport>(new HelperLink(transport_)); }, clock_, clock_,
             std::move(params), [this](SessionLog, const std::string &text) { logged_.push_back(text); },
-            std::move(session_config), std::move(mcu_sink));
+            std::move(session_config), std::move(mcu_sink), node_->get_node_parameters_interface());
     }
 
     void block_link()
@@ -174,6 +175,45 @@ class RouterFixture
         EXPECT_EQ(decoded[0], kHelperControl);
         EXPECT_EQ(decoded[2], 0x03u) << "a TOPIC_REQ";
         EXPECT_EQ(decoded[3], index);
+    }
+
+    void expect_param_req(std::uint8_t index)
+    {
+        const std::vector<std::vector<std::uint8_t>> units = drain();
+        ASSERT_FALSE(units.empty());
+        const std::vector<std::uint8_t> decoded = checked_decode(units.back());
+        ASSERT_GE(decoded.size(), 4u);
+        EXPECT_EQ(decoded[0], 0x03u);
+        EXPECT_EQ(decoded[2], 0x01u) << "a PARAM_REQ";
+        EXPECT_EQ(decoded[3], index);
+    }
+
+    // One connected router with two MCU parameters walked after the topics:
+    // a bool "led" defaulting to true and an i64 "rate" defaulting to 2.
+    // The walk's DECLAREs and STATUS ride the parameters channel with its
+    // own frame seqs, as handshake_with_params in the session tests shows.
+    void handshake_with_params(std::uint32_t token = 7u)
+    {
+        deliver_frame(kHelperControl, 0u, helper_hello(token, 2u, max_frame_, 0x04u));
+        expect_topic_req(0u);
+        const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
+        deliver_frame(
+            kHelperControl, 1u,
+            helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
+        expect_topic_req(1u);
+        const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
+        deliver_frame(
+            kHelperControl, 2u,
+            helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "cmd_vel"));
+        expect_param_req(0u);
+        deliver_frame(kParamsTopic, 0u, helper_declare(0u, 0x00u, 0x00u, "led", {0x01u}));
+        expect_param_req(1u);
+        deliver_frame(kParamsTopic, 1u,
+                      helper_declare(1u, 0x01u, 0x00u, "rate",
+                                     {0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
+        expect_param_req(2u);
+        deliver_frame(kParamsTopic, 2u, {0x04u, 0x00u, 0x02u, 0x01u});
+        drain();
     }
 
     std::vector<std::vector<std::uint8_t>> drain()
@@ -568,6 +608,74 @@ TEST_F(RouterNode, RehandshakeRefreshesTheBurst)
     EXPECT_EQ(log_frames(), 0u) << "the 1152 byte budget cannot carry 1513 bytes yet";
     fixture.advance(1000u);
     EXPECT_EQ(log_frames(), 1u) << "the refreshed burst carries the frame";
+}
+
+// covers: PAR-9
+TEST_F(RouterNode, McuParametersBecomeRosParameters)
+{
+    RouterFixture fixture("params", remapped(), RouterParams{});
+    fixture.handshake_with_params();
+    ASSERT_TRUE(fixture.node()->has_parameter("led")) << "the MCU bool is a ROS parameter";
+    EXPECT_EQ(fixture.node()->get_parameter("led").as_bool(), true);
+    ASSERT_TRUE(fixture.node()->has_parameter("rate")) << "the MCU i64 is a ROS parameter";
+    EXPECT_EQ(fixture.node()->get_parameter("rate").as_int(), 2);
+}
+
+// covers: PAR-1, PAR-8
+TEST_F(RouterNode, RosParameterSetSendsASetToTheMcu)
+{
+    RouterFixture fixture("paramset", remapped(), RouterParams{});
+    fixture.handshake_with_params();
+    const auto result =
+        fixture.node()->set_parameters({rclcpp::Parameter("led", false), rclcpp::Parameter("rate", 5)});
+    ASSERT_EQ(result.size(), 2u);
+    EXPECT_TRUE(result[0].successful) << result[0].reason;
+    EXPECT_TRUE(result[1].successful) << result[1].reason;
+    bool saw_led = false;
+    bool saw_rate = false;
+    for (const auto &unit : fixture.drain()) {
+        const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
+        if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u) {
+            if (decoded[4] == 0x00u) {
+                EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
+                          std::vector<std::uint8_t>{0x00u});
+                saw_led = true;
+            }
+            if (decoded[4] == 0x01u) {
+                EXPECT_EQ(
+                    std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
+                    std::vector<std::uint8_t>({0x05u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
+                saw_rate = true;
+            }
+        }
+    }
+    EXPECT_TRUE(saw_led) << "the bool set reaches the wire as one byte";
+    EXPECT_TRUE(saw_rate) << "the i64 set reaches the wire as eight bytes";
+}
+
+// covers: PAR-9
+TEST_F(RouterNode, RehandshakeRepushesTheCurrentValues)
+{
+    RouterFixture fixture("paramre", remapped(), RouterParams{});
+    fixture.handshake_with_params();
+    const auto result = fixture.node()->set_parameters({rclcpp::Parameter("led", false)});
+    ASSERT_EQ(result.size(), 1u);
+    ASSERT_TRUE(result[0].successful) << result[0].reason;
+    fixture.drain();
+    // The MCU reboots and announces the same table: the bridge walks it
+    // again and pushes the current values back.
+    fixture.handshake_with_params(8u);
+    bool repushed = false;
+    for (const auto &unit : fixture.drain()) {
+        const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
+        if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u &&
+            decoded[4] == 0x00u) {
+            EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
+                      std::vector<std::uint8_t>{0x00u});
+            repushed = true;
+        }
+    }
+    EXPECT_TRUE(repushed) << "the current value goes out again after the re-handshake";
 }
 
 TEST_F(RouterNode, RejectsNonsenseParams)

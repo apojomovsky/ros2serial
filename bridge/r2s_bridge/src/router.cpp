@@ -92,9 +92,10 @@ std::map<std::string, double> parse_rate_overrides(const std::vector<std::string
 struct Router::Impl {
     Impl(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr in_topics, TransportFactory in_open,
          const Clock &in_clock, const Clock &in_ros_clock, RouterParams in_params, LogSink in_sink,
-         SessionConfig session_config, LogSink in_mcu_sink)
+         SessionConfig session_config, LogSink in_mcu_sink,
+         rclcpp::node_interfaces::NodeParametersInterface::SharedPtr in_node_params)
         : topics(in_topics), params(std::move(in_params)), sink(std::move(in_sink)), clock(in_clock),
-          mcu_sink(std::move(in_mcu_sink)),
+          mcu_sink(std::move(in_mcu_sink)), node_params_(std::move(in_node_params)),
           session_(session_config, in_clock, in_ros_clock, std::move(in_open), resolve_topic_type,
                    SessionEvents{log_event(), handshake_event(), user_event(), mcu_log_event(), {}})
     {
@@ -324,6 +325,7 @@ struct Router::Impl {
     LogSink sink;
     const Clock &clock;
     LogSink mcu_sink;
+    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params_;
     Converter converter_;
     Scheduler scheduler_;
     std::map<std::uint8_t, Route> routes;
@@ -333,9 +335,11 @@ struct Router::Impl {
 
 Router::Router(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,
                const Clock &clock, const Clock &ros_clock, RouterParams params, LogSink sink,
-               SessionConfig session_config, LogSink mcu_sink)
+               SessionConfig session_config, LogSink mcu_sink,
+               rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params)
     : impl_(std::make_unique<Impl>(std::move(topics), std::move(open), clock, ros_clock, std::move(params),
-                                   std::move(sink), std::move(session_config), std::move(mcu_sink)))
+                                   std::move(sink), std::move(session_config), std::move(mcu_sink),
+                                   std::move(node_params)))
 {
 }
 

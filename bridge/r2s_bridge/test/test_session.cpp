@@ -2755,6 +2755,33 @@ TEST(ReliableWalk, SkipsWhenTheMcuAnnouncesNoParameters)
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
 }
 
+// covers: PAR-1, PAR-7
+TEST(ReliableWalk, CollectsDeclaresForTheParametersLayer)
+{
+    Fixture fixture;
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+    fixture.deliver_frame(kParams, 0u, {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x03u, 'l', 'e', 'd', 0x01u});
+    fixture.deliver_frame(kParams, 1u,
+                          {kParamDeclare, 0x01u, 0x01u, 0x00u, 0x02u, 'h', 'z', 0x02u, 0x00u, 0x00u, 0x00u,
+                           0x00u, 0x00u, 0x00u, 0x00u});
+    fixture.deliver_frame(kParams, 2u, {kParamStatus, 0x00u, 0x02u, 0x01u});
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+    const std::vector<ParamInfo> &params = fixture.session().params();
+    ASSERT_EQ(params.size(), 2u);
+    EXPECT_EQ(params[0].index, 0u);
+    EXPECT_EQ(params[0].type, 0u);
+    EXPECT_EQ(params[0].flags, 0u);
+    EXPECT_EQ(params[0].name, "led");
+    EXPECT_EQ(params[0].default_value, std::vector<std::uint8_t>{0x01u});
+    EXPECT_EQ(params[1].index, 1u);
+    EXPECT_EQ(params[1].type, 1u);
+    EXPECT_EQ(params[1].flags, 0u);
+    EXPECT_EQ(params[1].name, "hz");
+    EXPECT_EQ(params[1].default_value,
+              std::vector<std::uint8_t>({0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
+}
+
 // covers: PAR-7
 TEST(ReliableWalk, GivesUpAfterThreeRetries)
 {
