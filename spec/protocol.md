@@ -1,6 +1,6 @@
 # ros2serial protocol specification
 
-Version 0.4 (draft) · protocol version 3
+Version 0.5 (draft) · protocol version 4
 
 This document is normative. Every normative statement is a list item starting with an ID in brackets, such as `[FRM-1]`. Conformance vectors (`spec/vectors/`) and tests name the IDs they cover, so every rule here is checked by at least one test (`docs/01-testing.md`, section 3). IDs are never reused: a removed rule keeps its list item, with its text replaced by "Retired.", so the numbering has no gaps.
 
@@ -8,14 +8,14 @@ A section whose heading ends in `(local)` specifies bytes that never appear on t
 
 The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119. Prose outside the ID items, tables included, is informative.
 
-This version covers the frame, the frame check, rCOBS, varints, the message encoding, the codec descriptors, the system channels, the handshake, the session state machines, the error counters, time synchronization, parameters and the reliable channel.
+This version covers the frame, the frame check, rCOBS, varints, the message encoding, the codec descriptors, the system channels, the handshake, the session state machines, the error counters, time synchronization, parameters, the reliable channel, services and actions.
 
 ## 1. Conventions
 
 Sizes are in bytes, and a byte is 8 bits. In this document and in the vectors, byte strings are written as lowercase hex byte pairs separated by single spaces, for example `10 02 01`.
 
 - [GEN-1] All multi-byte integers on the wire are little-endian.
-- [GEN-2] The protocol version described here is 3. Both sides announce it in the handshake.
+- [GEN-2] The protocol version described here is 4. Both sides announce it in the handshake.
 
 ## 2. Frame
 
@@ -111,9 +111,9 @@ A payload is the packed encoding of one message, field after field, with no padd
 
 ## 7. System channels
 
-A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3]). The payload of a system channel on ID 0, ID 1 or ID 3 begins with an opcode byte; the other system channels have no opcode.
+A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3]). The payload of a system channel on ID 0, ID 1, ID 3, ID 7 or ID 8 begins with an opcode byte; the other system channels have no opcode.
 
-- [SYS-1] The system channels are: ID 0 control, ID 1 time, ID 2 log, ID 3 parameters, ID 4 heartbeat, ID 5 error report, ID 6 reliable-channel ack. IDs 7 to 15 are reserved and MUST NOT be used.
+- [SYS-1] The system channels are: ID 0 control, ID 1 time, ID 2 log, ID 3 parameters, ID 4 heartbeat, ID 5 error report, ID 6 reliable-channel ack, ID 7 services, ID 8 actions. IDs 9 to 15 are reserved and MUST NOT be used.
 - [SYS-2] A frame on a system channel uses the same framing as a user topic (section 2), so it has a `seq` counter and a CRC.
 - [SYS-3] Retired.
 - [SYS-4] A receiver MUST ignore a frame on a reserved channel (ID 7 to 15) and MUST NOT count it as an error.
@@ -131,7 +131,7 @@ A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3
 | 0x06 | READY | host to MCU | `token u32` |
 
 - [CTL-1] The handshake mode is 0 for full and 1 for compact.
-- [CTL-2] The `features` byte has bit 0 for time, bit 1 for log, bit 2 for parameters, bit 3 for the reliable channel, bit 4 for "`double` is 32 bits" and bit 5 for runtime topic registration. Bits 4 and 5 are informational. Every other bit is reserved and MUST be 0 in both directions.
+- [CTL-2] The `features` byte has bit 0 for time, bit 1 for log, bit 2 for parameters, bit 3 for the reliable channel, bit 4 for "`double` is 32 bits", bit 5 for runtime topic registration, bit 6 for services and bit 7 for actions. Bits 4 and 5 are informational. A side sets bit 6 or bit 7 only with bit 3, since every service and action frame that matters rides the reliable channel.
 - [CTL-3] A receiver MUST refuse ([SYS-5]) a frame whose `features` byte has a reserved bit set.
 - [CTL-4] The `flags` byte has bit 0 for the direction (0 when the MCU publishes the topic, 1 when it subscribes), bit 1 for narrow `float64`, bit 2 for keep-latest and bit 3 for the reliable channel. Every other bit is reserved and MUST be 0.
 - [CTL-5] The flags are the truth for the wire. A receiver MUST use the announced flags rather than its own build to decide whether a topic is narrow.
@@ -146,6 +146,7 @@ A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3
 - [CTL-14] A receiver MUST refuse ([SYS-5]) a `TOPIC_STATUS` whose status is not one of those four.
 - [CTL-15] The topics of a handshake are requested and sent one at a time, so the MCU never needs a buffer larger than one TOPIC frame.
 - [CTL-16] The payload of each control opcode is the one the table above gives, in that order and with nothing between: the opcode byte, then the fields it lists, and a string as its varint length and bytes (section 5).
+- [CTL-17] A receiver MUST refuse ([SYS-5]) a HELLO whose features byte sets bit 6 or bit 7 without bit 3.
 
 ### 7.2 Time channel (ID 1)
 
@@ -204,8 +205,8 @@ The MCU sends on this channel; the host does not.
 The MCU sends on this channel; the host does not.
 
 - [ERR-1] The payload is `code u8, topic_id u8, count u16, field u8`.
-- [ERR-2] A code is 1 for a bound violation on decode, 2 for an unknown topic ID, 3 for a receive overflow, 4 for a frame too large, 5 for a publish while not connected and 6 for a busy transmitter.
-- [ERR-3] A publish while not connected is reported once per connection, and a busy transmitter at most once per second.
+- [ERR-2] A code is 1 for a bound violation on decode, 2 for an unknown topic ID, 3 for a receive overflow, 4 for a frame too large, 5 for a send while not connected and 6 for a busy transmitter.
+- [ERR-3] A send while not connected is reported once per connection, and a busy transmitter at most once per second.
 - [ERR-4] The `field` is the index of the offending field in depth-first declaration order over the type's field definitions, where the elements of an array are not counted separately, or 0xFF when the rule does not name a field.
 - [ERR-5] The host computes the same field order with introspection, so that it can log the path of the offending field.
 - [ERR-6] The `count` is the number of times the error occurred since the last error report of that code, and it wraps at 65535. A code that [ERR-3] rate-limits is counted the same way and reported no more often than that.
@@ -239,6 +240,55 @@ The MCU sends on this channel; the host does not.
 - [REL-5] A re-handshake drops all reliable state on both sides; the `seq` counters restart anyway ([SES-11], [FRM-4]).
 - [REL-6] An ack goes out as soon as the link takes bytes. When the link cannot take bytes, the host keeps at most one pending ack per channel, with the newer replacing the older in place and each replaced frame counted. The MCU reports a busy transmitter the way [ERR-2] code 6 reports it.
 - [REL-7] A PARAM_REQ joins the [SES-33] slot list: at most one queued PARAM_REQ, with the newer replacing the older in place and keeping its `seq`. Pending SET frames queue behind the outstanding one with at most one per parameter index: a newer SET to the same index replaces the older in place and counts it. Pending reliable frames drop on a return to HANDSHAKING, as [SES-33] control frames do.
+
+### 7.8 Services channel (ID 7)
+
+| Opcode | Name | Direction | Payload after the opcode |
+| --- | --- | --- | --- |
+| 0x01 | SVC_QUERY | host to MCU | `index u8` |
+| 0x02 | SVC_DECLARE | MCU to host | `index u8, role u8, type_hash[8], type_name string, service_name string` |
+| 0x03 | SVC_STATUS | either | `rel_seq u8, index u8, status u8` |
+| 0x04 | SVC_REQUEST | either | `rel_seq u8, req_id u8, svc_index u8, request-payload` |
+| 0x05 | SVC_RESPONSE | either | `rel_seq u8, req_id u8, status u8, response-payload` |
+
+The request-payload is the packed encoding (section 6) of the service's request message, and the response-payload is the packed encoding of its response message. A STATUS during HANDSHAKING is a plain reply under the requester's retry and carries `rel_seq` 0, as [PAR-8] describes.
+
+- [SVR-1] The payload of each services opcode is the one the table above gives, in that order and with nothing between: the opcode byte, then the fields it lists, and a string as its varint length and bytes (section 5).
+- [SVR-2] A `role` is 0 when the MCU serves the service and 1 when the MCU calls it. Every other value is reserved. A receiver MUST refuse ([SYS-5]) a DECLARE whose role is not one of those two.
+- [SVR-3] A DECLARE carries the full names in both handshake modes.
+- [SVR-4] A REQUEST and the RESPONSE that answers it ride the reliable channel ([REL-2]) while CONNECTED. The `rel_seq` stream of ID 7 is one stream per direction under [REL-3], shared by every service in that direction.
+- [SVR-5] A RESPONSE carries the `req_id` of the REQUEST it answers. Each side answers only the request outstanding under its own `req_id`, and retires the `req_id` when the RESPONSE goes out or when [SVR-8] fires. A RESPONSE for a retired or unknown `req_id` is acked and dropped.
+- [SVR-6] A RESPONSE `status` is 0 for ok, 1 for unknown service, 2 for bad payload and 3 for busy. Every other value is reserved. A receiver MUST refuse ([SYS-5]) a RESPONSE whose status is not one of those four. A RESPONSE with a nonzero status carries no response-payload.
+- [SVR-7] The host walks the services after the parameter walk and before READY: one QUERY per index, with a 200 ms timeout and at most 3 retries, mirroring [SES-16]. The MCU answers a QUERY for a known index with DECLARE and for an unknown index with STATUS 1 (unknown index). The host answers each DECLARE with STATUS: 0 for ok, 1 for unknown type, 2 for hash mismatch and 3 for name conflict, mirroring [CTL-13]. A receiver MUST refuse ([SYS-5]) a STATUS whose status is not one of those four. The first MCU STATUS with status 1 ends the walk. When the retries are spent without an answer, the host abandons the walk and returns to HANDSHAKING.
+- [SVR-8] A client call with no RESPONSE within the call timeout reports the timeout to its caller and retires the `req_id` as [SVR-5] describes. The timeout is a build-time setting and defaults to 5000 ms.
+- [SVR-9] In ANNOUNCING the MCU answers a QUERY the way [SES-2] answers a TOPIC_REQ, and ignores a REQUEST the way [SES-3] describes. A client send while not CONNECTED fails with the not-connected error and sends nothing, reported like [ERR-3] code 5.
+- [SVR-10] While the link cannot take bytes, the host keeps at most one pending REQUEST per service index behind the outstanding one, with a newer REQUEST to the same index replacing the older in place and each replaced frame counted. A second MCU client send while one is outstanding fails with the busy error and sends nothing. Pending REQUEST frames drop on a return to HANDSHAKING, as [SES-33] control frames do.
+
+### 7.9 Actions channel (ID 8)
+
+| Opcode | Name | Direction | Payload after the opcode |
+| --- | --- | --- | --- |
+| 0x01 | ACT_QUERY | host to MCU | `index u8` |
+| 0x02 | ACT_DECLARE | MCU to host | `index u8, type_hash[8], type_name string, action_name string` |
+| 0x03 | ACT_STATUS | either | `rel_seq u8, index u8, status u8` |
+| 0x04 | ACT_GOAL | host to MCU | `rel_seq u8, goal_seq u8, action_index u8, goal-payload` |
+| 0x05 | ACT_GOAL_RESP | MCU to host | `rel_seq u8, goal_seq u8, decision u8` |
+| 0x06 | ACT_CANCEL | host to MCU | `rel_seq u8, goal_seq u8` |
+| 0x07 | ACT_CANCEL_RESP | MCU to host | `rel_seq u8, goal_seq u8, decision u8` |
+| 0x08 | ACT_FEEDBACK | MCU to host | `goal_seq u8, action_index u8, feedback-payload` |
+| 0x09 | ACT_RESULT | MCU to host | `rel_seq u8, goal_seq u8, outcome u8, result-payload` |
+
+The goal-payload, the feedback-payload and the result-payload are the packed encodings (section 6) of the action's goal, feedback and result messages. A STATUS during HANDSHAKING is a plain reply under the requester's retry and carries `rel_seq` 0, as [PAR-8] describes. Every action the MCU declares is one it serves; the bridge is the ROS 2 action server on its behalf.
+
+- [ACT-1] The payload of each actions opcode is the one the table above gives, in that order and with nothing between: the opcode byte, then the fields it lists, and a string as its varint length and bytes (section 5).
+- [ACT-2] A goal on the wire is its action index and its `goal_seq`: one `u8` sequence per action, 0 after each handshake. The bridge owns the ROS goal UUIDs and maps each one to an (action index, `goal_seq`) pair; the MCU never holds a UUID.
+- [ACT-3] A GOAL, a GOAL_RESP, a CANCEL, a CANCEL_RESP and a RESULT ride the reliable channel ([REL-2]) while CONNECTED. The `rel_seq` stream of ID 8 is one stream per direction under [REL-3]. A FEEDBACK is best effort: it carries no `rel_seq`, it is never acked, and it is never retransmitted. A receiver MUST NOT expect an ack for a FEEDBACK.
+- [ACT-4] A GOAL_RESP `decision` is 0 for accepted, 1 for rejected, 2 for busy and 3 for unknown action. Every other value is reserved. A receiver MUST refuse ([SYS-5]) a GOAL_RESP whose decision is not one of those four.
+- [ACT-5] A CANCEL_RESP `decision` is 0 for accepted, 1 for rejected and 2 for unknown goal. Every other value is reserved. A receiver MUST refuse ([SYS-5]) a CANCEL_RESP whose decision is not one of those three.
+- [ACT-6] A RESULT `outcome` is 4 for succeeded, 5 for canceled and 6 for aborted, the terminal status codes of the ROS action. Every other value is reserved. A receiver MUST refuse ([SYS-5]) a RESULT whose outcome is not one of those three.
+- [ACT-7] The host walks the actions after the service walk and before READY: one QUERY per index, with a 200 ms timeout and at most 3 retries, mirroring [SES-16]. The MCU answers a QUERY for a known index with DECLARE and for an unknown index with STATUS 1 (unknown index). The host answers each DECLARE with STATUS: 0 for ok, 1 for unknown type, 2 for hash mismatch and 3 for name conflict, mirroring [CTL-13]. A receiver MUST refuse ([SYS-5]) a STATUS whose status is not one of those four. The first MCU STATUS with status 1 ends the walk. When the retries are spent without an answer, the host abandons the walk and returns to HANDSHAKING.
+- [ACT-8] Each action runs one goal at a time: IDLE takes a GOAL, EXECUTING runs it, CANCELING stops it, and a terminal RESULT returns it to IDLE. A GOAL that arrives while not IDLE is acked and answered busy without touching the active goal. A FEEDBACK sends only while EXECUTING or CANCELING; elsewhere it fails locally and sends nothing. A RESULT answers only the active goal.
+- [ACT-9] On a return to ANNOUNCING the MCU drops reliable state under [REL-5], so every action is IDLE again with `goal_seq` restarted at 0, and it never sends a RESULT for a pre-reset goal. A GOAL, CANCEL, FEEDBACK or terminal call while not CONNECTED fails with the not-connected error and sends nothing, reported like [ERR-3] code 5.
 
 ## 8. Session
 
@@ -278,7 +328,7 @@ DISCONNECTED --port open--> BOOT_WAIT --HELLO or boot_wait_ms--> HANDSHAKING --a
 - [SES-14] In HANDSHAKING the host sends HELLO_REQ every 500 ms until a HELLO arrives.
 - [SES-15] The host refuses a HELLO whose protocol version it does not support, and logs an error naming both versions.
 - [SES-16] For each topic index, the host sends TOPIC_REQ with a 200 ms timeout and at most 3 retries, resolves the type support, checks the hash, sends TOPIC_STATUS, and creates or reuses the publisher or subscription. When the retries are spent without a TOPIC, it abandons the walk and returns to HANDSHAKING.
-- [SES-17] The host sends READY with a nonzero token it assigns for the handshake when every topic is resolved.
+- [SES-17] The host sends READY with a nonzero token it assigns for the handshake when every topic, parameter, service and action is resolved.
 - [SES-18] In CONNECTED the host sends a heartbeat every 500 ms and forwards user traffic.
 - [SES-19] The host detects a reset when a HELLO arrives while it is connected, or when a HELLO carries a different `session_token` than the one recorded. A HELLO that repeats the recorded token of the handshake under way, while topics are still being collected, changes nothing: the walk answering the first HELLO continues.
 - [SES-20] On a re-handshake the host keeps its publishers and subscriptions when the new topic table is identical to the previous one, and destroys and recreates them otherwise.
@@ -303,7 +353,9 @@ so unit and integration tests cover them and no vector does.
 - [SES-30] Each host-to-MCU queue holds `qos_depth` messages, or one when the topic is keep-latest. Past that the oldest message is dropped and counted.
 - [SES-31] A generic publisher or subscription created for an MCU topic keeps the last `qos_depth` messages, with reliable delivery when the announced flags name the reliable channel and best effort otherwise.
 - [SES-32] The host holds at most the MCU's announced receive capacity in unsent user-topic bytes, plus the frame in flight. A further user frame waits for the link instead of growing the host heap. Control frames keep their own retry rules.
-- [SES-33] While the link cannot take bytes, the host keeps at most one queued frame per control kind (HELLO_REQ, TOPIC_REQ, PARAM_REQ, READY, heartbeat, PING), with the newer replacing the older in place and keeping its seq, and at most one TOPIC_STATUS per topic id. A frame already reaching the port is left to finish. Each replaced frame is counted. On a return to HANDSHAKING the host drops its pending control frames.
+- [SES-33] While the link cannot take bytes, the host keeps at most one queued frame per control kind (HELLO_REQ, TOPIC_REQ, PARAM_REQ, SVC_QUERY, ACT_QUERY, READY, heartbeat, PING), with the newer replacing the older in place and keeping its seq, and at most one TOPIC_STATUS per topic id. A frame already reaching the port is left to finish. Each replaced frame is counted. On a return to HANDSHAKING the host drops its pending control frames.
+- [SES-34] The host answers an MCU service call by mapping the wire `req_id` to the ROS service sequence number, with its own timeout and prune path so unanswered calls cannot leak entries. A service type the host cannot load throws a precise error naming the package and type, and never produces wrong bytes.
+- [SES-35] The host is the ROS 2 action server for every MCU action: it generates the goal UUID on accept and maps it to the wire (action index, `goal_seq`) pair, publishes the goal status array, stores results until taken, expires terminal goals, and rejects a second ROS goal while one is EXECUTING or CANCELING. On a link timeout, a disconnect or an MCU reset it aborts every active goal.
 
 ## 9. Codec descriptors (local)
 

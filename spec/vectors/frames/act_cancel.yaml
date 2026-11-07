@@ -1,0 +1,7 @@
+name: act_cancel
+covers: [ACT-1, ACT-3]
+topic_id: 8
+seq: 0
+payload: "06 00 00"
+frame: "08 00 06 00 00 71 bc"
+wire: "08 02 06 02 01 71 bc 03 00"

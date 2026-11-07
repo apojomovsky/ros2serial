@@ -24,7 +24,7 @@
         }                                                                                                    \
     } while (0)
 
-#define R2S_EXAMPLE_PROTOCOL_VERSION 3u
+#define R2S_EXAMPLE_PROTOCOL_VERSION 4u
 #define R2S_EXAMPLE_READY_TOKEN 0x2Au
 
 /* A stream the test drives: pushed bytes feed the firmware, written bytes

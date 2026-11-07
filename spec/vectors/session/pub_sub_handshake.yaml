@@ -2,7 +2,7 @@ name: pub_sub_handshake
 covers: [SES-9, SES-16, SES-17, SES-18, CTL-4, ENC-10, HB-2, HB-4]
 steps:
   - from: mcu
-    frame: "00 00 02 03 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 64 65 6d 6f 0a 4d"
+    frame: "00 00 02 04 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 64 65 6d 6f 0e c9"
     at_ms: 300
     note: "unsolicited HELLO after boot: full mode, two topics"
   - from: host

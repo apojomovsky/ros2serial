@@ -199,6 +199,19 @@ int r2s_params_check_set(uint8_t index, const uint8_t *value, uint16_t len)
     return R2S_PARAM_APPLIED;
 }
 
+/* The 8 wire bytes as a native 64-bit value: values travel little-endian
+ * while the struct holds the target's order ([PAR-3]). */
+static uint64_t wire_u64(const uint8_t *value)
+{
+    uint64_t bits = 0u;
+    uint16_t i;
+
+    for (i = 0u; i < 8u; i++) {
+        bits |= (uint64_t)value[i] << (i * 8u);
+    }
+    return bits;
+}
+
 void r2s_params_store(uint8_t index, const uint8_t *value, uint16_t len)
 {
     /* The caller checked the value above, so the casts cannot truncate and
@@ -209,9 +222,13 @@ void r2s_params_store(uint8_t index, const uint8_t *value, uint16_t len)
     if (param->type == R2S_PARAM_BOOL) {
         param->value.b = value[0];
     } else if (param->type == R2S_PARAM_I64) {
-        memcpy(&param->value.i, value, 8u);
+        uint64_t bits = wire_u64(value);
+
+        memcpy(&param->value.i, &bits, 8u);
     } else if (param->type == R2S_PARAM_F64) {
-        memcpy(&param->value.f, value, 8u);
+        uint64_t bits = wire_u64(value);
+
+        memcpy(&param->value.f, &bits, 8u);
     } else {
         uint16_t text_len = 0u;
 

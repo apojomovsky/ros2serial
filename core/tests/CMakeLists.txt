@@ -203,17 +203,32 @@ file(GLOB frames_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/frames
 r2s_vector_test(vectors_frames frames vectors/frames_check.c ${frames_vectors})
 
 # The messages runner builds its expected struct images for one ABI: the 32-bit
-# build packs doubles to 4 bytes, so its images differ from the host's.
+# build packs doubles to 4 bytes, so its images differ from the host's. The
+# images also hold each value in the target's byte order while the wire stays
+# little-endian, so a compile-only probe tells the runner the target's order,
+# which stays valid when the target cannot run on this host.
 if(CMAKE_C_FLAGS MATCHES "-m32")
   set(R2S_MESSAGE_ABI "m32")
 else()
   set(R2S_MESSAGE_ABI "lp64")
 endif()
+include(CheckCSourceCompiles)
+check_c_source_compiles([[
+#if __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__
+#error not big endian
+#endif
+int main(void) { return 0; }
+]] R2S_TARGET_BIG_ENDIAN)
+if(R2S_TARGET_BIG_ENDIAN)
+  set(R2S_MESSAGE_ORDER "big")
+else()
+  set(R2S_MESSAGE_ORDER "little")
+endif()
 file(GLOB messages_vectors CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/messages/*.yaml")
 set(messages_runner "${CMAKE_CURRENT_BINARY_DIR}/vectors_messages_runner.c")
 add_custom_command(
   OUTPUT "${messages_runner}"
-  COMMAND ${CMAKE_COMMAND} -E env R2S_VECTOR_ABI=${R2S_MESSAGE_ABI} "${Python3_EXECUTABLE}"
+  COMMAND ${CMAKE_COMMAND} -E env R2S_VECTOR_ABI=${R2S_MESSAGE_ABI} R2S_VECTOR_ORDER=${R2S_MESSAGE_ORDER} "${Python3_EXECUTABLE}"
           "${R2S_RUNNER_TOOL}" vectors messages "${CMAKE_CURRENT_SOURCE_DIR}/vectors/messages_check.c"
           "${messages_runner}" ${messages_vectors}
   WORKING_DIRECTORY "${R2S_REPO_ROOT}"
@@ -267,7 +282,10 @@ add_test(NAME vectors_session COMMAND vectors_session)
 # covered by the time vectors and test_time.c instead of a second replay.
 # The parameter transcripts exercise the host side of the parameter walk
 # and the reliable channel; the bridge session tests of X4 (reliable
-# channel) and X5 (parameters) replay them.
+# channel) and X5 (parameters) replay them. The service and action
+# transcripts exercise the host side of their walks and exchanges; the
+# bridge session tests of X6 (services) and X10c/X10d (actions) replay
+# them.
 set(R2S_SESSION_HOST_NAMES
   refused_hello
   time_sync
@@ -276,7 +294,15 @@ set(R2S_SESSION_HOST_NAMES
   param_walk_retry
   param_set_reliable
   param_set_giveup
-  param_rehandshake)
+  param_rehandshake
+  service_walk
+  service_call
+  service_not_connected
+  action_walk
+  action_goal
+  action_cancel
+  action_second_goal
+  action_reset_abort)
 file(GLOB R2S_SESSION_ALL_PATHS CONFIGURE_DEPENDS "${R2S_REPO_ROOT}/spec/vectors/session/*.yaml")
 foreach(path ${R2S_SESSION_ALL_PATHS})
   get_filename_component(stem "${path}" NAME_WE)

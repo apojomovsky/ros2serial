@@ -17,7 +17,7 @@ from test_announce import drain, read_string, read_unit
 from test_echo import Harness
 
 NODE_NAME = "runtime_base"
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 BATTERY_TOPIC_ID = 16
 CMD_VEL_TOPIC_ID = 17
 TOPICS = (

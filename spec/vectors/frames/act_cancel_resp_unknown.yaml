@@ -1,0 +1,7 @@
+name: act_cancel_resp_unknown
+covers: [ACT-5]
+topic_id: 8
+seq: 0
+payload: "07 00 00 02"
+frame: "08 00 07 00 00 02 1b 5d"
+wire: "08 02 07 02 01 02 1b 5d 04 00"

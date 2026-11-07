@@ -2,7 +2,7 @@ name: time_sync
 covers: [CTL-2, SES-22, SES-23, SES-24, SES-25]
 steps:
   - from: mcu
-    frame: "00 00 02 03 00 00 00 00 00 00 02 03 02 40 42 0f 00 01 00 04 6e 6f 64 65 1f 0d"
+    frame: "00 00 02 04 00 00 00 00 00 00 02 03 02 40 42 0f 00 01 00 04 6e 6f 64 65 1b 89"
     at_ms: 100
     note: "unsolicited HELLO after boot: full mode, no topics, time bit set"
   - from: host

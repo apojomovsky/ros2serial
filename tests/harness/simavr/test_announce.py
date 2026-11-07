@@ -19,7 +19,7 @@ from r2s_gen.reference import frames
 from test_echo import Harness
 
 NODE_NAME = "announce"
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 TOPICS = (
     (16, 0x00, bytes(range(0x00, 0x08)), "std_msgs/msg/Float32", "battery"),
     (17, 0x01, bytes(range(0x10, 0x18)), "geometry_msgs/msg/Twist", "cmd_vel"),
