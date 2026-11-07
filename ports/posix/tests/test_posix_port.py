@@ -778,3 +778,20 @@ def test_flood_sheds_samples_with_busy_and_whole_frames():
     ints = [int(value) for value in values]
     assert ints[-1] - ints[0] + 1 - len(ints) > 0, "no sample was shed on a saturated link"
     assert busy > 0, "no publish returned TX_BUSY on a saturated link"
+
+
+# covers: SES-7, SES-8
+def test_flood_slow_host_keeps_battery(tmp_path):
+    """A slow host that stays live keeps the flood: draining for 3 s leaves
+    battery flowing, since every accepted host frame proves the host alive
+    ([SES-8]) and only silence returns the firmware to ANNOUNCING ([SES-7])."""
+    args = ("--no-sub", "--no-echo", "--no-log-text", "--no-time-now", "--tx-free", "16", "--flood")
+    with Firmware(*args) as fw:
+        _hello, _topics, _host = do_handshake(fw)
+        stop = time.monotonic() + 3.0
+        while time.monotonic() < stop:
+            ready, _, _ = select.select([fw.master], [], [], stop - time.monotonic())
+            if ready:
+                os.read(fw.master, 65536)
+        _topic, _seq, payload = read_frame(fw.master, want=16, timeout=2.0)
+        assert len(payload) == 4
