@@ -190,6 +190,9 @@ def _element(field: ResolvedField) -> str:
 
 
 def _c_name(type_name: str) -> str:
-    """A canonical `package/msg/Type` as the rosidl C identifier `package__msg__Type`."""
+    """A canonical type as the rosidl C identifier, such as `package__msg__Type`."""
+    if "/action/" in type_name:
+        package, _, name = type_name.partition("/action/")
+        return f"{package}__action__{name}"
     package, _, name = type_name.partition("/msg/")
     return f"{package}__msg__{name}"

@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "gen"))
 
-from r2s_gen import bounds, bundle, config, descriptors, emit, layouts, msgs, topics  # noqa: E402
+from r2s_gen import bounds, bundle, config, cpp, descriptors, emit, layouts, msgs, topics  # noqa: E402
 from r2s_gen.bounds import ResolvedMessage  # noqa: E402
 
 GOLDEN = ROOT / "gen" / "tests" / "golden"
@@ -81,6 +81,55 @@ def _refresh_types() -> None:
         (GOLDEN / "types" / golden).write_text(emit.emit_types(resolved), encoding="utf-8")
 
 
+ACTION_BOUNDS = {
+    "tf2_msgs/action/LookupTransform_Goal.target_frame": 16,
+    "tf2_msgs/action/LookupTransform_Goal.source_frame": 16,
+    "tf2_msgs/action/LookupTransform_Goal.fixed_frame": 16,
+    "tf2_msgs/action/LookupTransform_Result.error.error_string": 16,
+    "std_msgs/msg/Header.frame_id": 16,
+    "geometry_msgs/msg/TransformStamped.child_frame_id": 16,
+}
+ACTION_ROOTS = [
+    "tf2_msgs/action/LookupTransform_Goal",
+    "tf2_msgs/action/LookupTransform_Result",
+    "tf2_msgs/action/LookupTransform_Feedback",
+]
+
+
+def _refresh_actions() -> None:
+    repository = msgs.MessageRepository()
+    resolved = bounds.resolve(repository, ACTION_ROOTS, bounds=ACTION_BOUNDS, default_string_bound=16)
+    actions = GOLDEN / "actions"
+    actions.mkdir(parents=True, exist_ok=True)
+    (actions / "lookup_transform.hpp").write_text(
+        cpp.emit_action_hpp(resolved, "tf2_msgs/action/LookupTransform", repository), encoding="utf-8"
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "messages"
+        action_dir = root / "demo_msgs" / "action"
+        action_dir.mkdir(parents=True)
+        (action_dir / "Spin.action").write_text(
+            "int32 order\n---\nint32[] sequence\n---\nint32[] partial_sequence\n", encoding="utf-8"
+        )
+        user_repo = msgs.MessageRepository(msg_paths=[root])
+        user_roots = [
+            "demo_msgs/action/Spin_Goal",
+            "demo_msgs/action/Spin_Result",
+            "demo_msgs/action/Spin_Feedback",
+        ]
+        user_resolved = bounds.resolve(
+            user_repo,
+            user_roots,
+            bounds={
+                "demo_msgs/action/Spin_Result.sequence": 4,
+                "demo_msgs/action/Spin_Feedback.partial_sequence": 4,
+            },
+        )
+        (actions / "spin.hpp").write_text(
+            cpp.emit_action_hpp(user_resolved, "demo_msgs/action/Spin", user_repo), encoding="utf-8"
+        )
+
+
 def _refresh_descriptors() -> None:
     repository = msgs.MessageRepository()
     resolved = bounds.resolve(repository, DESCRIPTOR_ROOTS, bounds={})
@@ -142,6 +191,7 @@ def _refresh_posix() -> None:
 
 def main() -> int:
     _refresh_types()
+    _refresh_actions()
     _refresh_descriptors()
     _refresh_topics()
     _refresh_bundle()
