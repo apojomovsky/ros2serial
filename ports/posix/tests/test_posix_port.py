@@ -656,11 +656,22 @@ def build_firmware_without_cmd_vel(tmp_path):
     # sources build as copies next to the narrowed pair: otherwise they pick
     # up the checked-in generated headers from ports/posix/src/.
     port_dir = root / "ports" / "posix" / "src"
-    for name in ("r2s_posix_port.c", "r2s_posix_port.h", "r2s_posix_firmware.c"):
+    for name in (
+        "r2s_posix_port.c",
+        "r2s_posix_port.h",
+        "r2s_posix_params.c",
+        "r2s_posix_params.h",
+        "r2s_posix_firmware.c",
+    ):
         shutil.copy(port_dir / name, gen_dir / name)
     core = root / "core" / "src"
     sources = sorted(p for p in core.glob("*.c") if p.name != "test_reset.c")
-    sources += [gen_dir / "r2s_posix_port.c", gen_dir / "r2s_posix_firmware.c", gen_dir / "r2s_generated.c"]
+    sources += [
+        gen_dir / "r2s_posix_port.c",
+        gen_dir / "r2s_posix_params.c",
+        gen_dir / "r2s_posix_firmware.c",
+        gen_dir / "r2s_generated.c",
+    ]
     command = [
         "cc",
         "-std=c99",
@@ -672,6 +683,7 @@ def build_firmware_without_cmd_vel(tmp_path):
         str(root / "ports" / "posix" / "src"),
         "-DR2S_WITH_CODEC",
         "-DR2S_WITH_TIME",
+        "-DR2S_WITH_PARAMS",
         *(["-include", str(gen_dir / "twist_shim.h")] if needs_shim else []),
         *[str(p) for p in sources],
         "-o",
