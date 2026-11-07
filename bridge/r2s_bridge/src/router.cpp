@@ -414,19 +414,14 @@ struct Router::Impl {
             return;
         }
         const std::vector<ParamInfo> announced = session_.params();
-        for (auto next = mcu_params_.begin(); next != mcu_params_.end();) {
-            const bool kept = std::any_of(announced.begin(), announced.end(), [&next](const ParamInfo &info) {
-                return info.name == next->first;
-            });
-            if (!kept) {
-                // Untracked first: a reentrant on-set hook then stays quiet.
-                const std::string dropped = next->first;
-                next = mcu_params_.erase(next);
-                if (node_params_->has_parameter(dropped)) {
-                    node_params_->undeclare_parameter(dropped);
-                }
-            } else {
-                ++next;
+        for (auto &entry : mcu_params_) {
+            const bool kept =
+                std::any_of(announced.begin(), announced.end(),
+                            [&entry](const ParamInfo &info) { return info.name == entry.first; });
+            if (!kept && !entry.second.stale) {
+                entry.second.stale = true;
+                emit(SessionLog::kWarning,
+                     "parameter '" + entry.first + "': no longer announced, its sets fail until it returns");
             }
         }
         for (const ParamInfo &info : announced) {
@@ -450,7 +445,8 @@ struct Router::Impl {
                     continue;
                 }
             }
-            mcu_params_[info.name] = McuParam{info.index, info.type, info.flags};
+            // A returning name unstales: the entry below overwrites the flag.
+            mcu_params_[info.name] = McuParam{info.index, info.type, info.flags, false};
             rclcpp::Parameter current;
             try {
                 current = node_params_->get_parameter(info.name);
@@ -482,6 +478,11 @@ struct Router::Impl {
             const auto found = mcu_params_.find(param.get_name());
             if (found == mcu_params_.end()) {
                 continue;
+            }
+            if (found->second.stale) {
+                result.successful = false;
+                result.reason = "parameter '" + param.get_name() + "' is no longer announced by the MCU";
+                return result;
             }
             if ((found->second.flags & kParamReadOnly) != 0u) {
                 result.successful = false;
@@ -621,6 +622,9 @@ struct Router::Impl {
         std::uint8_t index = 0;
         std::uint8_t type = 0;
         std::uint8_t flags = 0;
+        // A stale entry left the announced table. The ROS parameter stays:
+        // a standard node cannot undeclare it, so its sets fail instead.
+        bool stale = false;
     };
     std::map<std::string, McuParam> mcu_params_;
     Converter converter_;
