@@ -93,11 +93,16 @@ set -u
 sim_pid=""
 bridge_pid=""
 posix_pids=""
+killtree() {
+  # A bare kill leaves the launch wrapper's node child orphaned, announcing
+  # dead topics into the next leg: TERM the tree and wait it out instead.
+  [ -z "${1:-}" ] || bash scripts/kill-tree.sh "$1"
+}
 cleanup() {
-  [ -z "${bridge_pid:-}" ] || kill "$bridge_pid" 2>/dev/null || true
-  [ -z "${sim_pid:-}" ] || kill "$sim_pid" 2>/dev/null || true
-  # shellcheck disable=SC2086 # posix_pids holds several pids on purpose.
-  [ -z "${posix_pids:-}" ] || kill $posix_pids 2>/dev/null || true
+  [ -z "${bridge_pid:-}" ] || killtree "$bridge_pid"
+  [ -z "${sim_pid:-}" ] || killtree "$sim_pid"
+  # shellcheck disable=SC2086 # splitting posix_pids is the point of the loop.
+  for pid in ${posix_pids:-}; do killtree "$pid"; done
 }
 trap cleanup EXIT
 
@@ -132,16 +137,18 @@ done
 echo "check-readme: topics announced"
 echo "$seen"
 
-# The echo the walkthrough ends on: one battery reading from the Uno.
-timeout 60 ros2 topic echo /battery std_msgs/msg/Float32 --once >"$work/echo.txt" 2>&1 || {
+# The echo the walkthrough ends on: one battery reading from the Uno, with
+# a bounded retry of the same command inside the old 60 s budget.
+bash scripts/with-retry.sh --tries 3 --timeout 20 --out "$work/echo.txt" -- \
+  ros2 topic echo /battery std_msgs/msg/Float32 --once || {
   echo "check-readme: no battery reading arrived" >&2
   exit 1
 }
 grep -q "data:" "$work/echo.txt" || { echo "check-readme: the echo held no reading" >&2; exit 1; }
 cat "$work/echo.txt"
 echo "check-readme: Uno walkthrough is green"
-[ -z "${bridge_pid:-}" ] || kill "$bridge_pid" 2>/dev/null || true
-[ -z "${sim_pid:-}" ] || kill "$sim_pid" 2>/dev/null || true
+[ -z "${bridge_pid:-}" ] || killtree "$bridge_pid"
+[ -z "${sim_pid:-}" ] || killtree "$sim_pid"
 bridge_pid=""
 sim_pid=""
 
@@ -184,14 +191,16 @@ for topic in /battery /cmd_vel /diagnostics /parameter_events /rosout; do
   echo "$seen" | grep -qx "$topic" || { echo "check-readme: posix $topic never appeared" >&2; exit 1; }
 done
 echo "check-readme: posix topics announced"
-timeout 60 ros2 topic echo /battery std_msgs/msg/Float32 --once >"$build/posix/echo.txt" 2>&1 || {
+# The same bounded retry as the Uno leg: one reading, three attempts.
+bash scripts/with-retry.sh --tries 3 --timeout 20 --out "$build/posix/echo.txt" -- \
+  ros2 topic echo /battery std_msgs/msg/Float32 --once || {
   echo "check-readme: no posix battery reading arrived" >&2
   exit 1
 }
 grep -q "data:" "$build/posix/echo.txt" || { echo "check-readme: the posix echo held no reading" >&2; exit 1; }
 cat "$build/posix/echo.txt"
 echo "check-readme: posix walkthrough is green"
-# shellcheck disable=SC2086 # posix_pids holds several pids on purpose.
-kill $posix_pids 2>/dev/null || true
+# shellcheck disable=SC2086 # splitting posix_pids is the point of the loop.
+for pid in ${posix_pids:-}; do killtree "$pid"; done
 posix_pids=""
 echo "check-readme: walkthrough is green"
