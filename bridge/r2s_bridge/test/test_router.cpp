@@ -246,7 +246,9 @@ class RouterFixture
             kParamsTopic, 4u,
             helper_declare(4u, 0x01u, 0x01u, "ro", {0x07u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
         expect_param_req(5u);
-        deliver_frame(kParamsTopic, 5u, {0x04u, 0x00u, 0x05u, 0x01u});
+        deliver_frame(kParamsTopic, 5u, helper_declare(5u, 0x00u, 0x00u, "", {0x01u}));
+        expect_param_req(6u);
+        deliver_frame(kParamsTopic, 6u, {0x04u, 0x00u, 0x06u, 0x01u});
         return drain();
     }
 
@@ -755,13 +757,25 @@ TEST_F(RouterNode, RetiredParametersRejectSets)
 {
     // A standard node cannot undeclare: the dropped ROS parameter stays,
     // but its sets fail until the MCU announces it again.
+    const auto warnings = [](const RouterFixture &fixture) {
+        int found = 0;
+        for (const auto &line : fixture.logged()) {
+            if (line.find("no longer announced") != std::string::npos) {
+                ++found;
+            }
+        }
+        return found;
+    };
     RouterFixture fixture("drop", remapped(), RouterParams{});
     fixture.handshake_with_params();
     ASSERT_TRUE(fixture.node()->has_parameter("rate"));
     fixture.handshake_with_params(8u, false);
     EXPECT_TRUE(fixture.node()->has_parameter("led"));
     EXPECT_TRUE(fixture.node()->has_parameter("rate")) << "the ROS parameter stays";
-    EXPECT_TRUE(logged_has(fixture.logged(), "no longer announced"));
+    const int retired = warnings(fixture);
+    EXPECT_EQ(retired, 4) << "rate, gain, label and ro retire together";
+    fixture.handshake_with_params(9u, false);
+    EXPECT_EQ(warnings(fixture), retired) << "an already retired table warns once";
     const auto result = fixture.node()->set_parameters({rclcpp::Parameter("rate", 3)});
     ASSERT_EQ(result.size(), 1u);
     EXPECT_FALSE(result[0].successful);
@@ -788,13 +802,32 @@ TEST_F(RouterNode, RefusedSetIsLogged)
 {
     RouterFixture fixture("refused", remapped(), RouterParams{});
     fixture.handshake_with_params();
-    const auto result = fixture.node()->set_parameters({rclcpp::Parameter("led", false)});
-    ASSERT_EQ(result.size(), 1u);
-    ASSERT_TRUE(result[0].successful) << result[0].reason;
-    const auto sets = fixture.param_sets();
-    ASSERT_EQ(sets.count(0u), 1u);
-    fixture.deliver_frame(kParamsTopic, 0u, {0x04u, sets.at(0u).rel, 0x00u, 0x02u});
+    const auto applied = fixture.node()->set_parameters({rclcpp::Parameter("led", false)});
+    ASSERT_EQ(applied.size(), 1u);
+    ASSERT_TRUE(applied[0].successful) << applied[0].reason;
+    const auto first = fixture.param_sets();
+    ASSERT_EQ(first.count(0u), 1u);
+    fixture.deliver_frame(kParamsTopic, 0u, {0x04u, first.at(0u).rel, 0x00u, 0x00u});
+    EXPECT_FALSE(logged_has(fixture.logged(), "refused")) << "an applied SET stays quiet";
+    fixture.deliver_frame(kAckTopic, 0u, {kParamsTopic, first.at(0u).rel});
+    fixture.advance(1u);
+    const auto refused = fixture.node()->set_parameters({rclcpp::Parameter("led", true)});
+    ASSERT_EQ(refused.size(), 1u);
+    ASSERT_TRUE(refused[0].successful) << refused[0].reason;
+    const auto second = fixture.param_sets();
+    ASSERT_EQ(second.count(0u), 1u);
+    fixture.deliver_frame(kParamsTopic, 1u, {0x04u, second.at(0u).rel, 0x00u, 0x02u});
     EXPECT_TRUE(logged_has(fixture.logged(), "refused")) << "the MCU verdict is logged";
+}
+
+// covers: PAR-9
+TEST_F(RouterNode, NamelessDeclareIsSkipped)
+{
+    RouterFixture fixture("noname", remapped(), RouterParams{});
+    fixture.handshake_with_params();
+    EXPECT_TRUE(logged_has(fixture.logged(), "no name"));
+    EXPECT_TRUE(fixture.node()->has_parameter("led")) << "the table around the gap still declares";
+    EXPECT_TRUE(fixture.node()->has_parameter("ro"));
 }
 
 // covers: PAR-9
