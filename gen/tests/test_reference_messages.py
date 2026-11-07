@@ -10,6 +10,7 @@ from r2s_gen.reference.errors import Rejected
 from support import SEED, h, matches, random_message, vector_files, write_message
 
 BUNDLED = (
+    "builtin_interfaces/msg/Duration",
     "builtin_interfaces/msg/Time",
     "geometry_msgs/msg/Quaternion",
     "geometry_msgs/msg/Transform",
@@ -23,6 +24,7 @@ BUNDLED = (
     "std_msgs/msg/Float32",
     "std_msgs/msg/Header",
     "std_msgs/msg/String",
+    "tf2_msgs/msg/TF2Error",
     "tf2_msgs/msg/TFMessage",
 )
 DISTROS = ("jazzy", "lyrical", "rolling")
