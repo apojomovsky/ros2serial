@@ -172,7 +172,7 @@ def test_spins_until_late_topics_appear():
 def test_timeout_reports_the_last_graph_state():
     graph = [
         ("/cmd_vel", ["geometry_msgs/msg/Twist"]),
-        ("/rosout", ["rcl_interfaces/msg/Log"]),
+        ("/rosout", ["rcl_interfaces/msg/Log", "other/msg/Note"]),
     ]
     counts = {"/cmd_vel": (0, 1), "/echo_vel": (0, 0)}
     bridge, saved = _load_real_bridge()
@@ -187,5 +187,23 @@ def test_timeout_reports_the_last_graph_state():
         _restore(saved)
     assert node.spins == 3
     message = str(excinfo.value)
-    assert "/cmd_vel" in message and "/rosout" in message
+    assert "/cmd_vel: geometry_msgs/msg/Twist" in message
+    assert "/rosout: rcl_interfaces/msg/Log, other/msg/Note" in message
     assert "'/echo_vel': (0, 0)" in message and "'/cmd_vel': (0, 1)" in message
+
+
+def test_timeout_reports_an_empty_graph():
+    bridge, saved = _load_real_bridge()
+    try:
+        clock = FakeClock()
+        node = FakeNode([[]], {}, clock)
+        with pytest.raises(
+            AssertionError, match=r"echo topics missing after 0\.2 s: \['/cmd_vel', '/echo_vel'\]"
+        ) as excinfo:
+            bridge.wait_for_topics(
+                node, ["/cmd_vel", "/echo_vel"], clock.now, 0.2, "echo topics", node.spin, clock=clock.monotonic
+            )
+    finally:
+        _restore(saved)
+    assert node.spins == 2
+    assert "last graph: []" in str(excinfo.value)
