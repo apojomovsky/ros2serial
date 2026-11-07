@@ -104,9 +104,9 @@ constexpr std::uint8_t kModeFull = 0u;
 
 // Bits 6 and 7 are services and actions, so no features bit is reserved
 // anymore; bit 4 says the MCU's `double` is 32 bits and bit 5 runtime
-// registration, both informational ([CTL-2], [CTL-3]). The mask stays so
-// the check below keeps enforcing [CTL-3]; today it never fires.
-constexpr std::uint8_t kFeaturesReserved = 0x00u;
+// registration, both informational ([CTL-2]). There is nothing for [CTL-3]
+// to refuse, so the check is gone with the mask; the bridge test pins that
+// every features byte is accepted.
 
 // One frame waiting for the link, encoded exactly as [FRM-1] and [CHK-3] lay
 // it out. User frames never coalesce ([SES-32]); a control frame carries the
@@ -759,10 +759,6 @@ struct Session::Impl {
         if (facts.mode != kModeFull) {
             log(SessionLog::kError,
                 "HELLO refused: compact mode needs a node map, which is not supported yet");
-            return false;
-        }
-        if ((facts.features & kFeaturesReserved) != 0u) {
-            log(SessionLog::kError, "HELLO refused: the features byte has a reserved bit set");
             return false;
         }
         if (!tick_hz_is_valid(facts.tick_hz)) {
