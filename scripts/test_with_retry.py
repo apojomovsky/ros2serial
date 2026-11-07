@@ -65,8 +65,16 @@ def test_success_first_try_runs_once(tmp_path):
     out = tmp_path / "out.txt"
     result = run_helper(
         bindir,
-        "--tries", "3", "--timeout", "10", "--out", str(out), "--",
-        "env", *[f"{k}={v}" for k, v in env.items()], "probe",
+        "--tries",
+        "3",
+        "--timeout",
+        "10",
+        "--out",
+        str(out),
+        "--",
+        "env",
+        *[f"{k}={v}" for k, v in env.items()],
+        "probe",
     )
     assert result.returncode == 0, result.stderr
     assert attempts(count) == 1, "a passing command ran more than once"
@@ -79,8 +87,16 @@ def test_flaky_then_success_reports_the_winning_state(tmp_path):
     out = tmp_path / "out.txt"
     result = run_helper(
         bindir,
-        "--tries", "3", "--timeout", "10", "--out", str(out), "--",
-        "env", *[f"{k}={v}" for k, v in env.items()], "probe",
+        "--tries",
+        "3",
+        "--timeout",
+        "10",
+        "--out",
+        str(out),
+        "--",
+        "env",
+        *[f"{k}={v}" for k, v in env.items()],
+        "probe",
     )
     assert result.returncode == 0, result.stderr
     assert attempts(count) == 3, "the helper gave up early or ran long"
@@ -93,8 +109,16 @@ def test_total_failure_is_bounded_and_reports_the_last_state(tmp_path):
     out = tmp_path / "out.txt"
     result = run_helper(
         bindir,
-        "--tries", "3", "--timeout", "10", "--out", str(out), "--",
-        "env", *[f"{k}={v}" for k, v in env.items()], "probe",
+        "--tries",
+        "3",
+        "--timeout",
+        "10",
+        "--out",
+        str(out),
+        "--",
+        "env",
+        *[f"{k}={v}" for k, v in env.items()],
+        "probe",
     )
     assert result.returncode != 0, "a failing command reported success"
     assert attempts(count) == 3, "the attempts were not bounded at tries"
@@ -110,9 +134,7 @@ def test_a_hanging_command_is_cut_off_per_attempt(tmp_path):
     (bindir / "probe").chmod(0o755)
     out = tmp_path / "out.txt"
     start = time.monotonic()
-    result = run_helper(
-        bindir, "--tries", "2", "--timeout", "2", "--out", str(out), "--", "probe"
-    )
+    result = run_helper(bindir, "--tries", "2", "--timeout", "2", "--out", str(out), "--", "probe")
     elapsed = time.monotonic() - start
     assert result.returncode != 0, "a hanging command reported success"
     assert elapsed < 20, f"the per-attempt timeout did not bound the run: {elapsed:.1f}s"
@@ -122,7 +144,12 @@ def test_missing_command_is_a_usage_error(tmp_path):
     """No command to run exits 2 the way the other script helpers do."""
     result = run_helper(
         tmp_path,
-        "--tries", "3", "--timeout", "10", "--out", str(tmp_path / "out.txt"),
+        "--tries",
+        "3",
+        "--timeout",
+        "10",
+        "--out",
+        str(tmp_path / "out.txt"),
         cwd=tmp_path,
     )
     assert result.returncode == 2, result.stderr
