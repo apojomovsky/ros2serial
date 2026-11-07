@@ -64,6 +64,10 @@ constexpr int kRelRetries = 3;
 // per index, a 200 ms timeout, at most 3 retries. Bit 2 of the HELLO
 // features announces the parameters ([CTL-2]).
 constexpr std::uint8_t kParamFeaturesBit = 0x04u;
+// Bits 6 and 7 announce services and actions, and only ride the reliable
+// channel: a HELLO that sets either without bit 3 is refused ([CTL-17]).
+constexpr std::uint8_t kReliableFeaturesBit = 0x08u;
+constexpr std::uint8_t kSvcActFeaturesBits = 0xC0u;
 constexpr std::int64_t kParamTimeoutMs = 200;
 constexpr int kParamRetries = 3;
 
@@ -102,10 +106,11 @@ constexpr int kTopicRetries = 3;
 // The handshake mode byte ([CTL-1]).
 constexpr std::uint8_t kModeFull = 0u;
 
-// Bits 6 and 7 are the reserved features and MUST be 0; bit 4 says the MCU's
-// `double` is 32 bits and bit 5 runtime registration, both informational
-// ([CTL-2], [CTL-3]).
-constexpr std::uint8_t kFeaturesReserved = 0xC0u;
+// Bits 6 and 7 are services and actions, so no features bit is reserved
+// anymore; bit 4 says the MCU's `double` is 32 bits and bit 5 runtime
+// registration, both informational ([CTL-2]). There is nothing for [CTL-3]
+// to refuse, so the check is gone with the mask; the bridge test pins that
+// every features byte is accepted.
 
 // One frame waiting for the link, encoded exactly as [FRM-1] and [CHK-3] lay
 // it out. User frames never coalesce ([SES-32]); a control frame carries the
@@ -760,8 +765,8 @@ struct Session::Impl {
                 "HELLO refused: compact mode needs a node map, which is not supported yet");
             return false;
         }
-        if ((facts.features & kFeaturesReserved) != 0u) {
-            log(SessionLog::kError, "HELLO refused: the features byte has a reserved bit set");
+        if ((facts.features & kSvcActFeaturesBits) != 0u && (facts.features & kReliableFeaturesBit) == 0u) {
+            log(SessionLog::kError, "HELLO refused: services without the reliable bit");
             return false;
         }
         if (!tick_hz_is_valid(facts.tick_hz)) {

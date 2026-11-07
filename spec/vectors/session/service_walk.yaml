@@ -1,0 +1,38 @@
+name: service_walk
+covers: [SVR-7]
+steps:
+  - from: mcu
+    frame: "00 00 02 04 00 00 00 00 00 00 04 80 00 e8 03 00 00 cd 00 04 6e 6f 64 65 56 9a"
+    at_ms: 0
+    note: "HELLO, protocol 4, params plus reliable plus services, no topics"
+  - from: host
+    frame: "00 00 01 04 dd 5c"
+    at_ms: 0
+  - from: host
+    frame: "03 00 01 00 34 3f"
+    at_ms: 50
+    note: "param walk first; no parameters here"
+  - from: mcu
+    frame: "03 00 04 00 00 01 68 67"
+    at_ms: 100
+    note: "STATUS 1 ends the parameter walk"
+  - from: host
+    frame: "07 00 01 00 d8 4d"
+    at_ms: 100
+    note: "service walk starts after the parameter walk"
+  - from: mcu
+    frame: "07 00 02 00 00 01 02 03 04 05 06 07 08 14 73 74 64 5f 73 72 76 73 2f 73 72 76 2f 54 72 69 67 67 65 72 05 72 65 73 65 74 f6 9c"
+    at_ms: 150
+  - from: host
+    frame: "07 01 03 00 00 00 28 3a"
+    at_ms: 150
+  - from: host
+    frame: "07 02 01 01 e9 e9"
+    at_ms: 200
+  - from: mcu
+    frame: "07 01 03 00 01 01 79 32"
+    at_ms: 250
+    note: "STATUS 1 ends the service walk"
+  - from: host
+    frame: "00 01 06 01 00 00 00 87 50"
+    at_ms: 250

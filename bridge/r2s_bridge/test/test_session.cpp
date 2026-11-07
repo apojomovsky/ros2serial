@@ -145,7 +145,7 @@ std::vector<std::vector<std::uint8_t>> units_of(const std::vector<std::uint8_t> 
 // One HELLO payload: the fields of [CTL-16], with the defaults a compliant
 // MCU announces. The token is what the MCU echoes from RAM: 0 before the
 // host assigns one.
-std::vector<std::uint8_t> hello_payload(std::uint32_t token, std::uint8_t topics, std::uint8_t version = 3u,
+std::vector<std::uint8_t> hello_payload(std::uint32_t token, std::uint8_t topics, std::uint8_t version = 4u,
                                         std::uint8_t features = 0u, std::uint32_t tick_hz = 1000000u)
 {
     std::vector<std::uint8_t> p{0x02u, version, 0x00u};
@@ -306,12 +306,23 @@ struct Step {
 // Transcripts with their own replay below: the walk pair carries no PING
 // steps for the time sync the frozen vectors predate, so it replays with
 // time sync off; the reliable trio starts mid-connection and filters to
-// the parameter and ack channels. The stock replay covers the rest.
+// the parameter and ack channels. The service and action transcripts replay
+// in X6 (services) and X10c/X10d (actions). The stock replay covers the rest.
 std::vector<std::string> transcript_vectors()
 {
-    static const std::set<std::string> own_replay = {"param_walk.yaml", "param_walk_retry.yaml",
-                                                     "param_set_reliable.yaml", "param_set_giveup.yaml",
-                                                     "param_rehandshake.yaml"};
+    static const std::set<std::string> own_replay = {"param_walk.yaml",
+                                                     "param_walk_retry.yaml",
+                                                     "param_set_reliable.yaml",
+                                                     "param_set_giveup.yaml",
+                                                     "param_rehandshake.yaml",
+                                                     "service_walk.yaml",
+                                                     "service_not_connected.yaml",
+                                                     "service_call.yaml",
+                                                     "action_walk.yaml",
+                                                     "action_goal.yaml",
+                                                     "action_cancel.yaml",
+                                                     "action_second_goal.yaml",
+                                                     "action_reset_abort.yaml"};
     std::vector<std::string> files;
     for (const auto &entry : std::filesystem::directory_iterator(R2S_SESSION_VECTOR_DIR)) {
         if (entry.path().extension() != ".yaml") {
@@ -437,7 +448,7 @@ TEST(SessionHandshake, RejectsATickRateBelowOneKilohertz)
 {
     Fixture fixture;
     fixture.advance_to(10);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 3u, 0u, 500u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0u, 500u));
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
     EXPECT_FALSE(fixture.session().seen_hello());
 }
@@ -680,17 +691,8 @@ TEST(SessionHandshake, RefusesAHelloOfAnotherProtocolVersion)
     ASSERT_EQ(logged.size(), 1u);
     EXPECT_NE(logged[0].find("MCU protocol version is 1"), std::string::npos)
         << "the error names the MCU version";
-    EXPECT_NE(logged[0].find("host protocol version is 3"), std::string::npos)
+    EXPECT_NE(logged[0].find("host protocol version is 4"), std::string::npos)
         << "the error names the host version";
-}
-
-TEST(SessionHandshake, RefusesAFeaturesByteWithAReservedBit)
-{
-    Fixture fixture;
-    fixture.advance_to(10);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 3u, 0x40u));
-    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
-    EXPECT_FALSE(fixture.session().seen_hello());
 }
 
 TEST(SessionHandshake, AcceptsAnMcuWhoseDoubleIs32Bits)
@@ -698,7 +700,7 @@ TEST(SessionHandshake, AcceptsAnMcuWhoseDoubleIs32Bits)
     Fixture fixture;
     fixture.advance_to(10);
     // Bit 4 is informational, and every AVR build sets it ([CTL-2]).
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 3u, 0x10u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0x10u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
 }
 
@@ -723,9 +725,9 @@ TEST(SessionHandshake, RefusesATickRateThatIsNotThousandTimesADivisor)
 {
     Fixture fixture;
     fixture.advance_to(10);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 3u, 0u, 1500u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0u, 1500u));
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 3u, 0u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0u, 1000u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected) << "1 kHz is a valid form";
 }
 
@@ -1520,7 +1522,7 @@ std::uint32_t le32(const std::vector<std::uint8_t> &bytes, std::size_t i)
 void connect_empty(Fixture &fixture)
 {
     // The time bit ([CTL-2]) tells the host the MCU answers PINGs.
-    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u, 3u, 0x01u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u, 4u, 0x01u));
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
 }
 
@@ -1819,7 +1821,7 @@ TEST(SessionTimeSync, RestartsBurstAndEstimateOnReset)
     answer_pings(fixture, 100);
     EXPECT_EQ(drain_time(fixture, 0x03u).size(), 1u);
     EXPECT_TRUE(fixture.session().time_available());
-    fixture.deliver_frame(kControl, 0u, hello_payload(1u, 0u, 3u, 0x01u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(1u, 0u, 4u, 0x01u));
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
     EXPECT_FALSE(fixture.session().time_available()) << "the re-handshake clears the estimate";
     const auto units = fixture.drain_units();
@@ -2362,7 +2364,7 @@ TEST(SessionTime, IgnoresNonPongTimeFrames)
 {
     Fixture fixture;
     fixture.advance_to(100);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 3u, 0x01u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 4u, 0x01u));
     fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
     fixture.deliver(with_check({0x01u, 0u, 0x01u, 0x00u, 0x00u, 0x00u, 0x00u}));
@@ -2375,7 +2377,7 @@ TEST(SessionTime, SendsAPingOnceTimeSyncIsUp)
 {
     Fixture fixture;
     fixture.advance_to(100);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 3u, 0x01u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 4u, 0x01u));
     fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
     bool pinged = false;
@@ -2390,7 +2392,7 @@ TEST(SessionTime, PublishesACorrectionAfterEightPongs)
 {
     Fixture fixture;
     fixture.advance_to(100);
-    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 3u, 0x01u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u, 4u, 0x01u));
     fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
     EXPECT_FALSE(fixture.session().time_available()) << "no estimate before the first PONG";
@@ -2551,7 +2553,7 @@ std::vector<std::vector<std::uint8_t>> drain_decoded(Fixture &fixture)
 // PING disturbs the captures.
 void handshake_with_params(Fixture &fixture)
 {
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 3u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0x04u, 1000u));
     fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
     fixture.deliver_frame(kParams, 0u, {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x03u, 'l', 'e', 'd', 0x01u});
     fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x01u, 0x01u});
@@ -2704,13 +2706,36 @@ TEST(ReliableReplay, ReplaysParamWalkRetry)
 TEST(ReliableWalk, StartsAfterTheTopicWalk)
 {
     Fixture fixture;
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
     fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
     const auto units = drain_decoded(fixture);
     ASSERT_EQ(units.size(), 3u);
     EXPECT_EQ(units[1][2], 0x05u) << "the topic walk answers first";
     EXPECT_EQ(units[2][0], kParams) << "then the parameter walk starts";
     EXPECT_EQ(units[2][2], kParamReq) << "with a PARAM_REQ for index 0";
+    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
+}
+
+// covers: CTL-17
+TEST(ReliableWalk, RefusesServicesWithoutTheReliableBit)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0x40u, 1000u));
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
+    EXPECT_FALSE(fixture.session().seen_hello());
+}
+
+// covers: CTL-2, CTL-3
+TEST(ReliableWalk, AcceptsAFeaturesByteWithServicesAndActions)
+{
+    Fixture fixture;
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0xFFu, 1000u));
+    // Bits 6 and 7 are services and actions, so no bit is reserved anymore:
+    // every features byte, this one included, is accepted and parsed.
+    const auto units = drain_decoded(fixture);
+    ASSERT_FALSE(units.empty());
+    EXPECT_EQ(units[0][2], kParamReq) << "the parameter walk starts: the HELLO was accepted";
     EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
 }
 
@@ -2722,7 +2747,7 @@ TEST(ReliableWalk, SkipsWhenTheMcuAnnouncesNoParameters)
     SessionConfig config;
     config.time_sync_enabled = false;
     Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, config};
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x01u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x01u, 1000u));
     fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
     const auto units = drain_decoded(fixture);
     ASSERT_EQ(units.size(), 3u);
@@ -2734,7 +2759,7 @@ TEST(ReliableWalk, SkipsWhenTheMcuAnnouncesNoParameters)
 TEST(ReliableWalk, GivesUpAfterThreeRetries)
 {
     Fixture fixture;
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
     fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
     EXPECT_EQ(drain_decoded(fixture).size(), 3u);
     for (int retry = 0; retry < 3; ++retry) {
@@ -2753,7 +2778,7 @@ TEST(ReliableWalk, GivesUpAfterThreeRetries)
 TEST(ReliableWalk, IgnoresWalkFramesForAnotherIndex)
 {
     Fixture fixture;
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
     fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
     drain_decoded(fixture);
     fixture.deliver_frame(kParams, 0u, {kParamDeclare, 0x05u});
@@ -2773,7 +2798,7 @@ TEST(ReliableWalk, IgnoresWalkFramesForAnotherIndex)
 TEST(ReliableWalk, AdvancesOnAnAppliedStatus)
 {
     Fixture fixture;
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
     fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
     drain_decoded(fixture);
     fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x00u});
@@ -2788,7 +2813,7 @@ TEST(ReliableWalk, CoalescesParamReqBehindABlockedLink)
 {
     Fixture fixture;
     fixture.block_writes();
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
     fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
     EXPECT_EQ(fixture.session().control_coalesced(), 0u) << "nothing replaced yet";
     fixture.advance_to(200);
@@ -2908,7 +2933,7 @@ TEST(ReliableReceive, IgnoresReliableFramesBeforeTheHandshake)
     fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x00u});
     fixture.deliver_frame(kAck, 0u, {kParams, 0x00u});
     EXPECT_TRUE(drain_decoded(fixture).empty()) << "nothing answers before the handshake";
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
     const auto units = drain_decoded(fixture);
     ASSERT_EQ(units.size(), 1u) << "the session still walks after stray frames";
     EXPECT_EQ(units[0][2], 0x03u) << "a TOPIC_REQ";
@@ -2957,7 +2982,7 @@ TEST(ReliableSend, RefusesToSendWhileNotConnected)
 {
     Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
     EXPECT_FALSE(fixture.session().send_param_set(0u, {0x00u})) << "no SET leaves a boot-waiting session";
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
     EXPECT_FALSE(fixture.session().send_param_set(0u, {0x00u})) << "no SET leaves a handshaking session";
 }
 
@@ -3054,7 +3079,7 @@ TEST(ReliableSend, ReplacesAPendingSetForTheSameIndex)
 TEST(ReliableWalk, IgnoresWalkFramesDuringTheTopicWalk)
 {
     Fixture fixture;
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
     fixture.deliver_frame(kParams, 0u, {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x03u, 'l', 'e', 'd', 0x01u});
     fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x00u, 0x00u});
     auto units = drain_decoded(fixture);
@@ -3167,7 +3192,7 @@ TEST(ReliableWalk, KeepsAPartialReqAcrossTheLinkTimeout)
     config.heartbeat_period_ms = 3600000;
     config.time_sync_enabled = false;
     Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, config};
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 3u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
     drain_decoded(fixture);
     // The topic answer flushes whole, the walk REQ wedges after two bytes,
     // and every later write blocks: the REQ stays partial at the front.

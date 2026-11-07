@@ -2,7 +2,7 @@ name: reset_zero_token
 covers: [SES-1, SES-2, SES-10, SES-11, SES-16, SES-17, SES-19, SES-20, SES-21, HB-2, HB-4, FRM-4]
 steps:
   - from: mcu
-    frame: "00 00 02 03 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 9c 9a"
+    frame: "00 00 02 04 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 98 1e"
     at_ms: 100
   - from: host
     frame: "00 00 03 00 49 29"
@@ -35,7 +35,7 @@ steps:
     frame: "04 02 ca b4"
     at_ms: 1820
   - from: mcu
-    frame: "00 00 02 03 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 01 04 6e 6f 64 65 e1 96"
+    frame: "00 00 02 04 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 01 04 6e 6f 64 65 e5 12"
     at_ms: 2000
     note: "reset: a zero token; the MCU rebooted"
   - from: host

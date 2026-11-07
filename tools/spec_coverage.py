@@ -33,7 +33,7 @@ DEFINITION = re.compile(r"^\s*- \[([A-Z]{2,4}-\d+)\] (.*)$", re.MULTILINE)
 ID = re.compile(r"^[A-Z]{2,4}-\d+$")
 COMMENT_TEXT = re.compile(r"^\s*(?:#+|//+|/\*+|\*+)?\s*(.*?)\s*(?:\*+/)?\s*$")
 MARKER_START = re.compile(r"^covers:", re.IGNORECASE)
-DESIGN_TICKET = re.compile(r"^\| ([A-Z]+\d+) \|", re.MULTILINE)
+DESIGN_TICKET = re.compile(r"^\| ([A-Z]+\d+[a-z]?) \|", re.MULTILINE)
 TEST_ROOTS = (
     "core/tests",
     "cpp/tests",

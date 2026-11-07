@@ -21,7 +21,7 @@ from r2s_gen.reference import rcobs as rcobs_mod
 from r2s_gen.reference import varint as varint_mod
 from r2s_gen.reference.errors import Rejected
 
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 HANDSHAKE_MODE_FULL = 0
 
 HELLO_REPEAT_MS = 1000

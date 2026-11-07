@@ -4,13 +4,13 @@ steps:
   - from: mcu
     frame: "00 00 02 01 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 44 f4"
     at_ms: 100
-    note: "refused: version 1 against the host 3"
+    note: "refused: version 1 against the host 4"
   - from: host
-    frame: "00 00 01 03 62 28"
+    frame: "00 00 01 04 dd 5c"
     at_ms: 2500
     note: "boot_wait_ms passed with no accepted HELLO"
   - from: mcu
-    frame: "00 01 02 03 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 55 13"
+    frame: "00 01 02 04 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 02 04 6e 6f 64 65 51 97"
     at_ms: 2600
   - from: host
     frame: "00 01 03 00 95 73"

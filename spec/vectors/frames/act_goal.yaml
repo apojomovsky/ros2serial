@@ -1,0 +1,7 @@
+name: act_goal
+covers: [ACT-1, ACT-2, ACT-3]
+topic_id: 8
+seq: 0
+payload: "04 00 00 00 05 00 00 00"
+frame: "08 00 04 00 00 00 05 00 00 00 27 8d"
+wire: "08 02 04 02 01 01 05 02 01 01 27 8d 03 00"

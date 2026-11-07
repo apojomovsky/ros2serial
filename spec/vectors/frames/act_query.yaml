@@ -1,0 +1,7 @@
+name: act_query
+covers: [ACT-1, ACT-7]
+topic_id: 8
+seq: 0
+payload: "01 00"
+frame: "08 00 01 00 21 ff"
+wire: "08 02 01 02 21 ff 03 00"

@@ -2,7 +2,7 @@ name: empty_topics
 covers: [SES-14, SES-17]
 steps:
   - from: mcu
-    frame: "00 00 02 03 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 00 04 6e 6f 64 65 ca 92"
+    frame: "00 00 02 04 00 00 00 00 00 00 02 03 02 40 42 0f 00 00 00 04 6e 6f 64 65 ce 16"
     at_ms: 100
   - from: host
     frame: "00 00 06 01 00 00 00 ac 54"

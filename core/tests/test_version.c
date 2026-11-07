@@ -3,7 +3,7 @@
 #include "unity.h"
 
 /* covers: GEN-2 */
-void test_version_protocol_is_3(void)
+void test_version_protocol_is_4(void)
 {
-    TEST_ASSERT_EQUAL_UINT8(3, R2S_PROTOCOL_VERSION);
+    TEST_ASSERT_EQUAL_UINT8(4, R2S_PROTOCOL_VERSION);
 }

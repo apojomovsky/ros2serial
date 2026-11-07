@@ -1,0 +1,7 @@
+name: act_goal_resp_unknown
+covers: [ACT-4]
+topic_id: 8
+seq: 0
+payload: "05 00 00 03"
+frame: "08 00 05 00 00 03 e4 75"
+wire: "08 02 05 02 01 03 e4 75 04 00"
