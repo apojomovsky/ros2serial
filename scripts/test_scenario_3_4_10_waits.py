@@ -245,8 +245,10 @@ def _install_stubs():
 
     bridge = types.ModuleType("e2e_support.bridge")
     bridge.HANDSHAKE_TIMEOUT = 20.0
+    bridge.DISCOVERY_SPIN = 0.1
 
-    def wait_for_topics(node, wanted, since, budget, what):
+    def wait_for_topics(node, wanted, since, budget, what, spin):
+        assert callable(spin), "the scenario must pass a spin callback"
         _events().append(("wait_for_topics", tuple(wanted), since, budget))
         return 0.0
 

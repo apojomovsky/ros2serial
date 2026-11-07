@@ -164,7 +164,12 @@ class TestScenario3(unittest.TestCase):
             # from the firmware spawn: a slow handshake must not spend it.
             handshake_done_at = time.monotonic()
             bridge_support.wait_for_topics(
-                node, ECHO_TOPICS, handshake_done_at, checks.DISCOVERY_TIMEOUT, "echo topics"
+                node,
+                ECHO_TOPICS,
+                handshake_done_at,
+                checks.DISCOVERY_TIMEOUT,
+                "echo topics",
+                lambda: rclpy.spin_once(node, timeout_sec=bridge_support.DISCOVERY_SPIN),
             )
             # The bridge forwards MCU traffic best effort in both directions,
             # so both ends of the probe match that; reliable ends never match.

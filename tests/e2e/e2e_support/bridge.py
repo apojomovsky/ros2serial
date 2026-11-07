@@ -19,6 +19,11 @@ from rcl_interfaces.srv import GetParameters
 
 HANDSHAKE_TIMEOUT = 20.0
 
+# One discovery poll lets the node process graph events for this long: the
+# spin pumps whatever local discovery work the RMW needs, instead of the
+# wait sleeping through its budget the way it did before #515.
+DISCOVERY_SPIN = 0.1
+
 
 def example_params_file():
     """Return the installed example parameter file."""
@@ -79,14 +84,27 @@ def wait_for_bridge(node, service="/r2s_bridge/get_parameters", timeout=HANDSHAK
         node.destroy_client(client)
 
 
-def wait_for_topics(node, wanted, since, budget, what):
-    """Block until every wanted topic is listed, within budget of since."""
-    missing = set(wanted)
-    while missing:
-        names = {name for name, _ in node.get_topic_names_and_types()}
+def wait_for_topics(node, wanted, since, budget, what, spin, clock=time.monotonic):
+    """Block until every wanted topic is listed, within budget of since.
+
+    spin runs the node's callbacks once per poll, so the wait drives
+    discovery instead of sleeping through it. clock reads the clock since
+    came from, so driven tests with a stepped clock measure fake seconds.
+    The timeout carries the last full graph snapshot with per-topic
+    endpoint counts, so the next miss says what the probe saw. Returns
+    the seconds from since.
+    """
+    while True:
+        names_and_types = node.get_topic_names_and_types()
+        names = {name for name, _ in names_and_types}
         missing = set(wanted) - names
         if not missing:
-            return time.monotonic() - since
-        elapsed = time.monotonic() - since
-        assert elapsed < budget, f"{what} missing after {budget:.1f} s: {sorted(missing)}"
-        time.sleep(0.1)
+            return clock() - since
+        graph = sorted(f"{name}: {', '.join(types)}" for name, types in names_and_types)
+        counts = {topic: (node.count_publishers(topic), node.count_subscribers(topic)) for topic in wanted}
+        took = clock() - since
+        assert took < budget, (
+            f"{what} missing after {budget:.1f} s: {sorted(missing)}; "
+            f"last graph: {graph}; endpoint counts (publishers, subscribers): {counts}"
+        )
+        spin()

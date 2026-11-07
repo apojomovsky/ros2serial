@@ -65,7 +65,14 @@ class TestScenario4(unittest.TestCase):
             # The boot HELLO predates the bridge, so the budget runs from
             # bridge-up, when the parameter service answers.
             _SPAWNED.ready_at = time.monotonic()
-            bridge_support.wait_for_topics(node, WANTED, _SPAWNED.ready_at, 3.0, "remapped topics")
+            bridge_support.wait_for_topics(
+                node,
+                WANTED,
+                _SPAWNED.ready_at,
+                3.0,
+                "remapped topics",
+                lambda: rclpy.spin_once(node, timeout_sec=bridge_support.DISCOVERY_SPIN),
+            )
             names = {name for name, _ in node.get_topic_names_and_types()}
             for gone in GONE:
                 self.assertNotIn(gone, names, "unmapped name still announced: " + gone)

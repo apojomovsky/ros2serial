@@ -111,7 +111,14 @@ class TestScenario3(unittest.TestCase):
             # the echo topics once the handshake completes, so this waits out
             # DDS discovery instead of spending the priming budget on it.
             _SPAWNED.ready_at = time.monotonic()
-            bridge_support.wait_for_topics(node, ECHO_TOPICS, _SPAWNED.ready_at, TOPIC_BUDGET, "echo topics")
+            bridge_support.wait_for_topics(
+                node,
+                ECHO_TOPICS,
+                _SPAWNED.ready_at,
+                TOPIC_BUDGET,
+                "echo topics",
+                lambda: rclpy.spin_once(node, timeout_sec=bridge_support.DISCOVERY_SPIN),
+            )
             # The bridge forwards MCU traffic best effort in both directions,
             # so both ends of the probe match that; reliable ends never match.
             best_effort = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
