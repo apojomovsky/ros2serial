@@ -60,6 +60,13 @@ def test_the_protocol_version_is_the_one_the_spec_describes():
     assert str(PROTOCOL_VERSION) == _capture(r"The protocol version described here is (\d+)", _spec_text())
 
 
+def test_the_readme_names_the_protocol_version_the_wire_speaks():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert f"protocol v{PROTOCOL_VERSION}" in readme, (
+        "README.md states the wire protocol version; it must match PROTOCOL_VERSION"
+    )
+
+
 def test_a_spec_that_is_not_utf8_fails(tmp_path, monkeypatch):
     bad = tmp_path / "protocol.md"
     bad.write_bytes(b"The protocol version described here is 1\n\xff")
