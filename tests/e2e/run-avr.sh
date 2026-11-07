@@ -218,6 +218,7 @@ boards=${R2S_E2E_BOARDS:-"uno mega"}
 rmws=${R2S_RMWS:-rmw_fastrtps_cpp rmw_cyclonedds_cpp rmw_zenoh_cpp}
 
 status=0
+failures=""
 matrix_done=0
 for rmw in $rmws; do
   echo "== e2e-avr: $rmw"
@@ -248,7 +249,20 @@ for rmw in $rmws; do
       # Same R2S_E2E_SKIP contract as run.sh, matched on the avr file name.
       case " ${R2S_E2E_SKIP:-} " in
         *" test_scenario_${scenario}_avr "*) echo "skip test_scenario_${scenario}_avr (R2S_E2E_SKIP)" ;;
-        *) timeout 300 launch_test "tests/e2e/test_scenario_${scenario}_avr.py" || status=1 ;;
+        *)
+          timeout 300 launch_test "tests/e2e/test_scenario_${scenario}_avr.py"
+          code=$?
+          # One line per failed scenario file, so a nonzero exit always
+          # names its cause even when the failure scrolled out of the tail.
+          if [ "$code" -ne 0 ]; then
+            status=1
+            line="e2e-failure: test_scenario_${scenario}_avr board=$board rmw=$rmw exit=$code"
+            [ "$code" -eq 124 ] && line="$line (timeout)"
+            echo "$line"
+            failures="$failures$line
+"
+          fi
+          ;;
       esac
     done
   done
@@ -262,13 +276,32 @@ for rmw in $rmws; do
         export R2S_E2E_BAUD=$baud
         case " ${R2S_E2E_SKIP:-} " in
           *" test_baud_matrix_avr "*) echo "skip test_baud_matrix_avr (R2S_E2E_SKIP)" ;;
-          *) timeout 300 launch_test "tests/e2e/test_baud_matrix_avr.py" || status=1 ;;
+          *)
+            timeout 300 launch_test "tests/e2e/test_baud_matrix_avr.py"
+            code=$?
+            # Same per-failure line as the scenario loop, plus the baud:
+            # one matrix row per baud per board shares the file name.
+            if [ "$code" -ne 0 ]; then
+              status=1
+              line="e2e-failure: test_baud_matrix_avr board=$board baud=$baud rmw=$rmw exit=$code"
+              [ "$code" -eq 124 ] && line="$line (timeout)"
+              echo "$line"
+              failures="$failures$line
+"
+            fi
+            ;;
         esac
       done
     done
   fi
   if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
 done
+# A final list of every failure, so the report names each one whatever
+# the output length.
+if [ -n "$failures" ]; then
+  echo "== e2e failures:"
+  printf '%s' "$failures"
+fi
 
 # The report-only stack table: painted peaks next to the static figures.
 # Never judged, so firmware without a measurement (a skipped scenario)
