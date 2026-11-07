@@ -116,7 +116,7 @@ Bridge::Bridge(const rclcpp::NodeOptions &options)
     router_ = std::make_unique<Router>(
         get_node_topics_interface(),
         [serial]() { return std::unique_ptr<Transport>(new TermiosTransport(serial)); }, clock_, ros_clock_,
-        std::move(pacing), forward_log, std::move(link), forward_mcu_log);
+        std::move(pacing), forward_log, std::move(link), forward_mcu_log, get_node_parameters_interface());
     diagnostics_hardware_id_ = serial.port;
     diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10);
     timer_ = create_wall_timer(kPollPeriod, [this]() { poll(); });
