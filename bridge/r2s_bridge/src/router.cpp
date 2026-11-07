@@ -98,21 +98,16 @@ void put_varint(std::vector<std::uint8_t> &out, std::uint32_t value)
     } while (value != 0u);
 }
 
-// The MCU default as the ROS value to declare: the session already checked
-// the shape, so a throw here names a table the walk should not have kept.
+// The MCU default as the ROS value to declare. The walk validated every
+// shape before keeping the entry ([PAR-1], [PAR-3]), so this only lays the
+// bytes out; the trailing throw names a type the walk should not have kept.
 rclcpp::ParameterValue decode_param_default(const ParamInfo &info)
 {
     switch (info.type) {
     case kParamBool:
-        if (info.default_value.size() != 1u || info.default_value[0] > 1u) {
-            throw std::invalid_argument("bad bool default");
-        }
         return rclcpp::ParameterValue(info.default_value[0] != 0u);
     case kParamI64:
     case kParamF64: {
-        if (info.default_value.size() != 8u) {
-            throw std::invalid_argument("bad scalar default");
-        }
         std::uint64_t bits = 0u;
         for (std::size_t at = 0; at < 8u; ++at) {
             bits |= static_cast<std::uint64_t>(info.default_value[at]) << (8u * at);
@@ -126,28 +121,10 @@ rclcpp::ParameterValue decode_param_default(const ParamInfo &info)
         return rclcpp::ParameterValue(number);
     }
     case kParamString: {
-        std::uint32_t length = 0;
-        std::uint32_t shift = 0;
+        // The length prefix ends at the first byte without its top bit, as
+        // the walk already checked.
         std::size_t at = 0;
-        for (;;) {
-            if (at >= info.default_value.size()) {
-                throw std::invalid_argument("bad string default");
-            }
-            const std::uint8_t byte = info.default_value[at++];
-            length |= static_cast<std::uint32_t>(byte & 0x7Fu) << shift;
-            if ((byte & 0x80u) == 0u) {
-                if (shift != 0u && byte == 0u) {
-                    throw std::invalid_argument("bad string default");
-                }
-                break;
-            }
-            shift += 7u;
-            if (shift > 28u) {
-                throw std::invalid_argument("bad string default");
-            }
-        }
-        if (length != info.default_value.size() - at) {
-            throw std::invalid_argument("bad string default");
+        while ((info.default_value[at++] & 0x80u) != 0u) {
         }
         return rclcpp::ParameterValue(std::string(
             info.default_value.begin() + static_cast<std::ptrdiff_t>(at), info.default_value.end()));
@@ -447,13 +424,8 @@ struct Router::Impl {
             }
             // A returning name unstales: the entry below overwrites the flag.
             mcu_params_[info.name] = McuParam{info.index, info.type, info.flags, false};
-            rclcpp::Parameter current;
-            try {
-                current = node_params_->get_parameter(info.name);
-            } catch (const std::exception &error) {
-                emit(SessionLog::kWarning, "parameter '" + info.name + "': no value (" + error.what() + ")");
-                continue;
-            }
+            // Declared above or already present: the get cannot miss.
+            const rclcpp::Parameter current = node_params_->get_parameter(info.name);
             std::vector<std::uint8_t> wire;
             if (!encode_param_value(info.type, current, wire)) {
                 emit(SessionLog::kWarning, "parameter '" + info.name + "': type changed, not pushed");

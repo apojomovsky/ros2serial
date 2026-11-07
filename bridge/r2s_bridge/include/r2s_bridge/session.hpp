@@ -185,8 +185,10 @@ class Session
     // The last completed handshake's topics, empty before the first one.
     const std::vector<TopicInfo> &topics() const;
     // The last completed handshake's parameters, in announcement order,
-    // empty before the first one. The parameters layer (X5) declares them
-    // as ROS parameters after READY.
+    // empty before the first one. Every entry parsed cleanly: the walk
+    // keeps no short payload, unknown type, reserved flag, overrun name or
+    // misshapen default, so the parameters layer lays the bytes out
+    // without rechecking them.
     const std::vector<ParamInfo> &params() const;
     McuCounters mcu_counters() const;
     // Running sums of the MCU error report counts per code ([ERR-6]): each

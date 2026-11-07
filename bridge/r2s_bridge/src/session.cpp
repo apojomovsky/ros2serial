@@ -900,7 +900,7 @@ struct Session::Impl {
     // Only a fully parseable DECLARE is kept: a short payload, an unknown
     // type, reserved flag bits, a name the length overruns, or a default
     // outside its type's shape ([PAR-3]) leaves no entry, while the walk
-    // still advances. A retried REQ re-answers what is already kept.
+    // still advances.
     void collect_declare(const std::uint8_t *payload, std::uint16_t len)
     {
         Reader reader(payload, len);
@@ -932,9 +932,6 @@ struct Session::Impl {
             if (text.find('\0') != std::string::npos) {
                 return;
             }
-        }
-        if (info.index < collected_params.size()) {
-            return;
         }
         info.name = name;
         info.default_value = def;
