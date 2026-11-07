@@ -195,6 +195,17 @@ def test_the_gate_measures_gen_branches(tmp_path):
     assert any("--branch" in call.split() for call in calls), "gen measured without branches:\n" + "\n".join(calls)
 
 
+def test_the_gate_pins_the_gen_seed(tmp_path):
+    repo, run_env = fixture(tmp_path)
+    log = tmp_path / "coverage-args.log"
+    result = run_gate(repo, run_env, "96 91", "96 91", {"R2S_COVERAGE_LOG": str(log)})
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = log.read_text().splitlines()
+    assert any("--hypothesis-seed=20261026" in call.split() for call in calls), (
+        "gen measured without a pinned seed:\n" + "\n".join(calls)
+    )
+
+
 def test_the_gate_runs_the_bridge_tests_under_a_lease(tmp_path):
     repo, run_env = fixture(tmp_path)
     result = run_gate(repo, run_env, "96 91", "96 91")
