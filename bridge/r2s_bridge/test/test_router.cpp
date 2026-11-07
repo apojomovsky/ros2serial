@@ -207,15 +207,11 @@ class RouterFixture
         return out;
     }
 
-    // One connected router with the MCU parameters walked after the topics:
-    // a bool "led" defaulting to true, an i64 "rate" defaulting to 2, an
-    // f64 "gain" defaulting to 1.5, a string "label" defaulting to "hi"
-    // and a read-only i64 "ro" defaulting to 7. The walk's DECLAREs and
-    // STATUS ride the parameters channel with its own frame seqs, as
-    // handshake_with_params in the session tests shows. Without the full
-    // table only "led" is announced. Returns the writes the handshake's
-    // last step left: READY and whatever the parameters layer pushed, so
-    // the caller can inspect them.
+    // One connected router with the handshake's parameters: led, rate,
+    // gain, label and read-only ro with the defaults the tests assert.
+    // Without the full table only "led" is announced. Returns the writes
+    // the handshake's last step left: READY and whatever the parameters
+    // layer pushed, so the caller can inspect them.
     std::vector<std::vector<std::uint8_t>> handshake_with_params(std::uint32_t token = 7u, bool full = true)
     {
         deliver_frame(kHelperControl, 0u, helper_hello(token, 2u, max_frame_, 0x04u));
