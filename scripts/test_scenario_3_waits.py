@@ -310,10 +310,13 @@ def test_posix_primes_only_after_handshake_and_discovery():
     assert diag < spawn < found < echo_sub < first_pub
 
 
-def test_avr_primes_only_after_discovery():
+def test_avr_primes_only_after_handshake_and_discovery():
     world = World()
     module = world.load("s3_avr_waits_probe", AVR_CASE)
     assert module.TOPIC_BUDGET == 3.0
+    assert getattr(module, "HANDSHAKE_TOPICS", None) is not None, "scenario 3 AVR has no handshake wait"
+    assert "cmd_vel" in module.HANDSHAKE_TOPICS
+    assert "echo_vel" in module.HANDSHAKE_TOPICS
     assert set(module.ECHO_TOPICS) == {"/cmd_vel", "/echo_vel"}
     module._SPAWNED = sys.modules["e2e_support.avr"].spawn("uno")
 
@@ -324,6 +327,9 @@ def test_avr_primes_only_after_discovery():
     world.next_script.extend(
         [
             lambda: None,
+            lambda: deliver("/diagnostics", lambda: FakeDiagnostics("handshaking")),
+            lambda: deliver("/diagnostics", lambda: FakeDiagnostics("handshaking")),
+            lambda: deliver("/diagnostics", lambda: _connected(module.HANDSHAKE_TOPICS)),
             lambda: deliver("echo_vel", lambda: _copy(module.PRIME)),
             lambda: deliver("echo_vel", lambda: _copy(module.SENT[0])),
             lambda: deliver("echo_vel", lambda: _copy(module.SENT[1])),
@@ -333,8 +339,11 @@ def test_avr_primes_only_after_discovery():
         ]
     )
     world.drive(module)
-    discovery = ("wait_for_topics", tuple(module.ECHO_TOPICS), module.TOPIC_BUDGET)
+    discovery = ("wait_for_topics", tuple(module.ECHO_TOPICS), real_checks.DISCOVERY_TIMEOUT)
+    assert ("sub", "/diagnostics") in world.events, "scenario 3 AVR never reads the handshake"
     assert discovery in world.events
+    diag = world.events.index(("sub", "/diagnostics"))
     found = world.events.index(discovery)
+    echo_sub = world.events.index(("sub", "echo_vel"))
     first_pub = next(i for i, event in enumerate(world.events) if event[0] == "publish")
-    assert found < first_pub
+    assert diag < found < echo_sub < first_pub

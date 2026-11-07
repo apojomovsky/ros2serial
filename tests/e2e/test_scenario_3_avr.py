@@ -2,9 +2,10 @@
 
 Five distinct Twists go out on cmd_vel; the firmware republishes each on
 echo_vel, and every echoed field matches what was sent within the float32
-round trip the 8-bit MCU keeps. Discovery of the echo topics waits on its
-own budget, so a slow runner cannot fail a correct echo path on the
-priming budget.
+round trip the 8-bit MCU keeps. The handshake runs the unchanged 3 s budget
+from bridge-up, and discovery of the echo topics waits on its own generous
+timeout from the handshake, so a slow runner cannot fail a correct echo
+path on the priming budget.
 """
 
 import os
@@ -14,6 +15,7 @@ import unittest
 
 import launch_testing.markers
 import rclpy
+from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import avr as avr_support
 from e2e_support import bridge as bridge_support
 from e2e_support import checks, teardown
@@ -27,6 +29,8 @@ FLOW_TIMEOUT = 20.0
 # The MCU holds float32: the widest relative error the round trip keeps.
 REL_TOL = 1e-6
 ABS_TOL = 1e-9
+# The bridge reports announced names without the graph's leading slash.
+HANDSHAKE_TOPICS = ["battery", "cmd_vel", "echo_vel", "log_text"]
 # Both directions of the echo path, as the graph names them.
 ECHO_TOPICS = ["/cmd_vel", "/echo_vel"]
 TOPIC_BUDGET = 3.0
@@ -106,12 +110,37 @@ class TestScenario3(unittest.TestCase):
         node = rclpy.create_node("e2e_s3_avr_probe")
         try:
             bridge_support.wait_for_bridge(node)
-            # The boot HELLO predates the bridge, so the budget runs from
-            # bridge-up, when the parameter service answers. The graph shows
-            # the echo topics once the handshake completes, so this waits out
-            # DDS discovery instead of spending the priming budget on it.
+            # The handshake wait below observes bridge state, not DDS
+            # discovery of the new topics.
+            received = []
+            node.create_subscription(DiagnosticArray, "/diagnostics", received.append, 10)
+            deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
+            while not received:
+                rclpy.spin_once(node, timeout_sec=0.5)
+                self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
+            received.clear()
+            # The boot HELLO predates the bridge, so the handshake budget runs
+            # from bridge-up, when the parameter service answers.
             _SPAWNED.ready_at = time.monotonic()
-            bridge_support.wait_for_topics(node, ECHO_TOPICS, _SPAWNED.ready_at, TOPIC_BUDGET, "echo topics")
+            took = checks.wait_for_handshake(
+                received,
+                HANDSHAKE_TOPICS,
+                _SPAWNED.ready_at,
+                TOPIC_BUDGET,
+                "handshake",
+                lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
+                clock=time.monotonic,
+            )
+            self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
+            # The echo path needs both directions matched: the bridge's
+            # endpoints appear on the graph once the handshake above completes,
+            # so this waits out DDS discovery instead of spending the priming
+            # budget on it. The generous timeout runs from the handshake, not
+            # from bridge-up: a slow handshake must not spend it.
+            handshake_done_at = time.monotonic()
+            bridge_support.wait_for_topics(
+                node, ECHO_TOPICS, handshake_done_at, checks.DISCOVERY_TIMEOUT, "echo topics"
+            )
             # The bridge forwards MCU traffic best effort in both directions,
             # so both ends of the probe match that; reliable ends never match.
             best_effort = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
