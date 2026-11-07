@@ -1,6 +1,7 @@
 /* The codec interpreter over handwritten and purpose-built tables: scalars in
  * both byte orders, arrays, strings, nesting and the narrow conversion. */
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -249,21 +250,28 @@ void test_codec_multibyte_fields_travel_little_endian(void)
 /* covers: DSC-24 */
 void test_codec_sixtyfour_bit_fields_copy_all_eight_bytes(void)
 {
+    /* The struct holds each 64-bit value in target order and the wire
+     * carries it little-endian, so the test stores native values and
+     * expects their little-endian bytes on every target ([DSC-34]). */
+    static const uint8_t u64_le[8] = {0x00u, 0x11u, 0x22u, 0x33u, 0x44u, 0x55u, 0x66u, 0x77u};
+    static const uint8_t i64_le[8] = {0xFFu, 0xEEu, 0xDDu, 0xCCu, 0xBBu, 0xAAu, 0x99u, 0x88u};
     test_scalars_t in;
     static uint8_t buf[64];
     test_scalars_t out;
     int8_t rc;
     uint8_t field;
     uint16_t len;
+    uint64_t u64 = UINT64_C(0x7766554433221100);
+    int64_t i64 = (int64_t)UINT64_C(0x8899AABBCCDDEEFF);
 
     memset(&in, 0, sizeof in);
-    memcpy(in.u64v, "\x00\x11\x22\x33\x44\x55\x66\x77", 8u);
-    memcpy(in.i64v, "\xFF\xEE\xDD\xCC\xBB\xAA\x99\x88", 8u);
+    memcpy(in.u64v, &u64, 8u);
+    memcpy(in.i64v, &i64, 8u);
     len = encode_here(&test_scalars_table, 0u, &in, 0u, buf, (uint16_t)sizeof buf, &rc, &field);
     TEST_ASSERT_EQUAL_INT8(R2S_OK, rc);
     TEST_ASSERT_EQUAL_UINT16(35, len);
-    R2S_ASSERT_BYTES(in.u64v, 8u, buf + 19u, 8u, "u64 bytes");
-    R2S_ASSERT_BYTES(in.i64v, 8u, buf + 27u, 8u, "i64 bytes");
+    R2S_ASSERT_BYTES(u64_le, 8u, buf + 19u, 8u, "u64 bytes");
+    R2S_ASSERT_BYTES(i64_le, 8u, buf + 27u, 8u, "i64 bytes");
     memset(&out, 0, sizeof out);
     TEST_ASSERT_EQUAL_INT8(R2S_OK, decode_here(&test_scalars_table, 0u, buf, len, 0u, &out, &field));
     TEST_ASSERT_EQUAL_MEMORY(&in, &out, sizeof in);
@@ -357,6 +365,13 @@ void test_codec_narrow_converts_float64_like_the_reference(void)
     uint16_t i;
 
     for (i = 0u; i < (uint16_t)(sizeof rows / sizeof rows[0]); i++) {
+        /* The rows name binary64 values in little-endian bytes while the
+         * struct holds them in target order, so the test assembles the
+         * value from its bytes instead of copying them ([DSC-34]). */
+        uint64_t bits = (uint64_t)rows[i].in[0] | ((uint64_t)rows[i].in[1] << 8u) |
+                        ((uint64_t)rows[i].in[2] << 16u) | ((uint64_t)rows[i].in[3] << 24u) |
+                        ((uint64_t)rows[i].in[4] << 32u) | ((uint64_t)rows[i].in[5] << 40u) |
+                        ((uint64_t)rows[i].in[6] << 48u) | ((uint64_t)rows[i].in[7] << 56u);
         test_f64_t in;
         test_f64_t back;
         int8_t rc;
@@ -364,7 +379,7 @@ void test_codec_narrow_converts_float64_like_the_reference(void)
         uint16_t len;
 
         snprintf(label, sizeof label, "narrow row %u", (unsigned)i);
-        memcpy(&in, rows[i].in, sizeof in);
+        memcpy(&in, &bits, sizeof in);
         len = encode_here(&test_f64_table, 0u, &in, 1u, buf, (uint16_t)sizeof buf, &rc, &field);
         TEST_ASSERT_EQUAL_INT8_MESSAGE(R2S_OK, rc, label);
         TEST_ASSERT_EQUAL_UINT16_MESSAGE(4u, len, label);
@@ -382,14 +397,21 @@ void test_codec_narrow_converts_float64_like_the_reference(void)
         static const uint16_t exacts[] = {0u, 1u, 4u, 7u, 8u, 13u, 14u, 15u, 16u, 20u};
 
         for (i = 0u; i < (uint16_t)(sizeof exacts / sizeof exacts[0]); i++) {
+            uint64_t bits =
+                (uint64_t)rows[exacts[i]].in[0] | ((uint64_t)rows[exacts[i]].in[1] << 8u) |
+                ((uint64_t)rows[exacts[i]].in[2] << 16u) | ((uint64_t)rows[exacts[i]].in[3] << 24u) |
+                ((uint64_t)rows[exacts[i]].in[4] << 32u) | ((uint64_t)rows[exacts[i]].in[5] << 40u) |
+                ((uint64_t)rows[exacts[i]].in[6] << 48u) | ((uint64_t)rows[exacts[i]].in[7] << 56u);
+            test_f64_t want;
             test_f64_t back;
             uint8_t field;
             uint16_t row = exacts[i];
 
             snprintf(label, sizeof label, "widen row %u", (unsigned)row);
+            memcpy(&want, &bits, sizeof want);
             TEST_ASSERT_EQUAL_INT8_MESSAGE(
                 R2S_OK, decode_here(&test_f64_table, 0u, rows[row].want, 4u, 1u, &back, &field), label);
-            TEST_ASSERT_EQUAL_MEMORY_MESSAGE(rows[row].in, &back, sizeof back, label);
+            TEST_ASSERT_EQUAL_MEMORY_MESSAGE(&want, &back, sizeof back, label);
         }
     }
     /* A member assignment round-trips through the conversion. */
