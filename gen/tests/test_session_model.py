@@ -332,6 +332,14 @@ def test_reserved_channel_in_announcing_answers_hello():
     assert len(pair.last_model_tx) == 1
 
 
+# covers: ERR-2
+def test_unknown_topic_status_reports_code_2():
+    pair = Pair()
+    handshake(pair)
+    pair.feed_frame(0, 10, bytes((model.OP_TOPIC_STATUS, 0x42, 0)))
+    assert pair.last_model_tx == [model.encode_frame(5, 0, bytes((2, 0x42, 1, 0, 0xFF)))]
+
+
 def _send_set(pair: Pair, seq: int, rel: int, index: int, value: bytes) -> None:
     """One SET through both sides; the check after it compares everything."""
     pair.feed_frame(3, seq, bytes((PARAM_SET, rel, index)) + value)
