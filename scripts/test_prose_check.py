@@ -55,6 +55,27 @@ def test_a_clean_comment_passes():
     assert prose_check.verify(diff("a.py", ["# CRC-16/MCRF4XX: reflected, so a little-endian append leaves 0."])) == []
 
 
+def test_doxygen_doc_comment_passes():
+    doc = [
+        "/// Hands the session its parameter table.",
+        "/**",
+        " * Copies each default into its live value.",
+        " *",
+        " * \\param[in] params the table to install.",
+        " * \\param[in] count how many entries params holds.",
+        " * \\return R2S_OK on success, R2S_ERR_BOUNDS on a bad table.",
+        " * \\throws Nothing; the core never throws.",
+        " * \\pre The caller keeps params alive past the call.",
+        " */",
+    ]
+    assert prose_check.verify(diff("core/include/r2s/r2s_params.h", doc)) == []
+
+
+def test_at_file_and_at_brief_are_accepted():
+    assert prose_check.verify(diff("a.c", ["/* @file params: the parameter table. */"])) == []
+    assert prose_check.verify(diff("a.c", ["/* @brief Hands the session its table. */"])) == []
+
+
 def test_vendored_code_keeps_its_own_style():
     long_block = [f"/* line {i} */" for i in range(12)] + ["/* @brief upstream doc */"]
     assert prose_check.verify(diff("core/tests/vendor/unity/unity.h", long_block)) == []
