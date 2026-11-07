@@ -6,10 +6,11 @@ fields. The calls stay the same: `initNode`, `advertise`, `subscribe`,
 and the `log*` diagnostics. This guide covers what is on `master`:
 the aliases from [#145](https://github.com/apojomovsky/ros2serial/issues/145)
 and the rest of the handle surface from
-[#417](https://github.com/apojomovsky/ros2serial/issues/417).
-The `tf` broadcaster and services are not there yet; see
-[Not yet](#not-yet) for what waits on
-[#418](https://github.com/apojomovsky/ros2serial/issues/418).
+[#417](https://github.com/apojomovsky/ros2serial/issues/417),
+plus the `tf` broadcaster from
+[#418](https://github.com/apojomovsky/ros2serial/issues/418)
+(see [Broadcast tf](#broadcast-tf)). Services are not there yet; see
+[Not yet](#not-yet).
 
 What does not change: the wiring, the bridge launch, and the ROS 2
 side. The sketch still opens the serial port at 115200 baud, the
@@ -368,5 +369,5 @@ void loop()
 
 Services have no counterpart yet: `advertiseService` and
 `serviceClient` fail to compile with a message naming the services
-ticket ([#156](https://github.com/apojomovsky/ros2serial/issues/156))
+work item (X6, [#156](https://github.com/apojomovsky/ros2serial/issues/156))
 until services land. Leave that code out of the port for now.
