@@ -97,7 +97,12 @@ class TestScenario1(unittest.TestCase):
             # bridge-up: a slow handshake must not spend it.
             handshake_done_at = time.monotonic()
             bridge_support.wait_for_topics(
-                node, ANNOUNCED, handshake_done_at, checks.DISCOVERY_TIMEOUT, "announced topics"
+                node,
+                ANNOUNCED,
+                handshake_done_at,
+                checks.DISCOVERY_TIMEOUT,
+                "announced topics",
+                lambda: rclpy.spin_once(node, timeout_sec=bridge_support.DISCOVERY_SPIN),
             )
             # launch_testing never calls tearDownModule, so the harness
             # stops here: its stop summary carries the painted peak.
