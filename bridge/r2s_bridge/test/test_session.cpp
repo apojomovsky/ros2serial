@@ -2782,6 +2782,29 @@ TEST(ReliableWalk, CollectsDeclaresForTheParametersLayer)
               std::vector<std::uint8_t>({0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
 }
 
+// covers: PAR-1, PAR-3, PAR-7
+TEST(ReliableWalk, SkipsUnparseableDeclares)
+{
+    // Every broken shape still moves the walk on: only the valid DECLARE
+    // is kept for the parameters layer.
+    Fixture fixture;
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+    fixture.deliver_frame(kParams, 0u, {kParamDeclare, 0x00u});
+    fixture.deliver_frame(kParams, 1u, {kParamDeclare, 0x01u, 0x04u, 0x00u, 0x00u});
+    fixture.deliver_frame(kParams, 2u, {kParamDeclare, 0x02u, 0x00u, 0x02u, 0x00u});
+    fixture.deliver_frame(kParams, 3u, {kParamDeclare, 0x03u, 0x00u, 0x00u, 0x05u, 'a', 'b'});
+    fixture.deliver_frame(kParams, 4u, {kParamDeclare, 0x04u, 0x00u, 0x00u, 0x01u, 'c', 0x02u, 0x03u});
+    fixture.deliver_frame(kParams, 5u, {kParamDeclare, 0x05u, 0x03u, 0x00u, 0x01u, 'x', 0x01u, 0x00u});
+    fixture.deliver_frame(kParams, 6u, {kParamDeclare, 0x06u, 0x01u, 0x00u, 0x01u, 'y', 0x02u, 0x00u});
+    fixture.deliver_frame(kParams, 7u, {kParamDeclare, 0x07u, 0x00u, 0x00u, 0x02u, 'o', 'k', 0x00u});
+    fixture.deliver_frame(kParams, 8u, {kParamStatus, 0x00u, 0x08u, 0x01u});
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+    const std::vector<ParamInfo> &params = fixture.session().params();
+    ASSERT_EQ(params.size(), 1u);
+    EXPECT_EQ(params[0].name, "ok");
+}
+
 // covers: PAR-7
 TEST(ReliableWalk, GivesUpAfterThreeRetries)
 {

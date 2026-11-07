@@ -65,7 +65,7 @@ class RouterFixture
   public:
     RouterFixture(const std::string &name, rclcpp::NodeOptions options, RouterParams params,
                   std::uint16_t max_frame = 512u, bool with_mcu_sink = true,
-                  SessionConfig session_config = SessionConfig())
+                  SessionConfig session_config = SessionConfig(), bool with_node_params = true)
         : max_frame_(max_frame), node_(std::make_shared<rclcpp::Node>(name, "robot1", options))
     {
         LogSink mcu_sink;
@@ -76,7 +76,8 @@ class RouterFixture
             node_->get_node_topics_interface(),
             [this]() { return std::unique_ptr<Transport>(new HelperLink(transport_)); }, clock_, clock_,
             std::move(params), [this](SessionLog, const std::string &text) { logged_.push_back(text); },
-            std::move(session_config), std::move(mcu_sink), node_->get_node_parameters_interface());
+            std::move(session_config), std::move(mcu_sink),
+            with_node_params ? node_->get_node_parameters_interface() : nullptr);
     }
 
     void block_link()
@@ -212,7 +213,8 @@ class RouterFixture
     // Without the full table only "led" is announced. Returns the writes
     // the handshake's last step left: READY and whatever the parameters
     // layer pushed, so the caller can inspect them.
-    std::vector<std::vector<std::uint8_t>> handshake_with_params(std::uint32_t token = 7u, bool full = true)
+    std::vector<std::vector<std::uint8_t>> handshake_with_params(std::uint32_t token = 7u, bool full = true,
+                                                                 bool led_i64 = false)
     {
         deliver_frame(kHelperControl, 0u, helper_hello(token, 2u, max_frame_, 0x04u));
         expect_topic_req(0u);
@@ -226,7 +228,13 @@ class RouterFixture
             kHelperControl, 2u,
             helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "cmd_vel"));
         expect_param_req(0u);
-        deliver_frame(kParamsTopic, 0u, helper_declare(0u, 0x00u, 0x00u, "led", {0x01u}));
+        if (led_i64) {
+            deliver_frame(kParamsTopic, 0u,
+                          helper_declare(0u, 0x01u, 0x00u, "led",
+                                         {0x03u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
+        } else {
+            deliver_frame(kParamsTopic, 0u, helper_declare(0u, 0x00u, 0x00u, "led", {0x01u}));
+        }
         expect_param_req(1u);
         if (!full) {
             deliver_frame(kParamsTopic, 1u, {0x04u, 0x00u, 0x01u, 0x01u});
@@ -750,6 +758,14 @@ TEST_F(RouterNode, McuParameterCodecsCoverAllTypes)
     ASSERT_EQ(refused.size(), 1u);
     EXPECT_FALSE(refused[0].successful);
     EXPECT_NE(refused[0].reason.find("read-only"), std::string::npos);
+    fixture.deliver_frame(kAckTopic, 1u, {kParamsTopic, second.at(3u).rel});
+    fixture.advance(1u);
+    const auto cleared = fixture.node()->set_parameters({rclcpp::Parameter("label", std::string(""))});
+    ASSERT_EQ(cleared.size(), 1u);
+    ASSERT_TRUE(cleared[0].successful) << cleared[0].reason;
+    const auto third = fixture.param_sets();
+    ASSERT_EQ(third.count(3u), 1u);
+    EXPECT_EQ(third.at(3u).value, std::vector<std::uint8_t>{0x00u}) << "an empty string is one zero byte";
 }
 
 // covers: PAR-9
@@ -818,6 +834,43 @@ TEST_F(RouterNode, RefusedSetIsLogged)
     ASSERT_EQ(second.count(0u), 1u);
     fixture.deliver_frame(kParamsTopic, 1u, {0x04u, second.at(0u).rel, 0x00u, 0x02u});
     EXPECT_TRUE(logged_has(fixture.logged(), "refused")) << "the MCU verdict is logged";
+}
+
+// covers: PAR-9
+TEST_F(RouterNode, NoParametersInterfaceSkipsTheLayer)
+{
+    // The constructor default keeps the layer off: the walk still
+    // completes, but nothing is declared.
+    RouterFixture fixture("noparams", remapped(), RouterParams{}, 512u, true, SessionConfig{}, false);
+    fixture.handshake_with_params();
+    EXPECT_FALSE(fixture.node()->has_parameter("led"));
+}
+
+// covers: PAR-9
+TEST_F(RouterNode, MismatchedOverrideIsNotDeclared)
+{
+    // A launch value of the wrong type cannot become the parameter: the
+    // declare refuses it, while the walk still completes.
+    rclcpp::NodeOptions over;
+    over.arguments({"--ros-args", "-p", "led:=oops"});
+    RouterFixture fixture("mistype", over, RouterParams{});
+    fixture.handshake_with_params();
+    EXPECT_FALSE(fixture.node()->has_parameter("led"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "not declared"));
+    EXPECT_TRUE(fixture.node()->has_parameter("rate")) << "the table around the gap still declares";
+}
+
+// covers: PAR-9
+TEST_F(RouterNode, ChangedTypeIsNotPushed)
+{
+    // A reflash changes led to i64 while the ROS parameter stays a bool:
+    // no bool bytes go out as an i64.
+    RouterFixture fixture("retype", remapped(), RouterParams{});
+    fixture.handshake_with_params();
+    ASSERT_TRUE(fixture.node()->has_parameter("led"));
+    fixture.handshake_with_params(8u, true, true);
+    EXPECT_TRUE(logged_has(fixture.logged(), "type changed"));
+    EXPECT_TRUE(fixture.param_sets().empty());
 }
 
 // covers: PAR-9
