@@ -2798,7 +2798,9 @@ TEST(ReliableWalk, SkipsUnparseableDeclares)
     fixture.deliver_frame(kParams, 5u, {kParamDeclare, 0x05u, 0x03u, 0x00u, 0x01u, 'x', 0x01u, 0x00u});
     fixture.deliver_frame(kParams, 6u, {kParamDeclare, 0x06u, 0x01u, 0x00u, 0x01u, 'y', 0x02u, 0x00u});
     fixture.deliver_frame(kParams, 7u, {kParamDeclare, 0x07u, 0x00u, 0x00u, 0x02u, 'o', 'k', 0x00u});
-    fixture.deliver_frame(kParams, 8u, {kParamStatus, 0x00u, 0x08u, 0x01u});
+    fixture.deliver_frame(kParams, 8u, {kParamDeclare, 0x08u, 0x03u, 0x00u, 0x01u, 't', 0x05u, 'a'});
+    fixture.deliver_frame(kParams, 9u, {kParamDeclare, 0x09u, 0x03u, 0x00u, 0x01u, 'u', 0x01u, 'z', 0xFFu});
+    fixture.deliver_frame(kParams, 10u, {kParamStatus, 0x00u, 0x0Au, 0x01u});
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
     const std::vector<ParamInfo> &params = fixture.session().params();
     ASSERT_EQ(params.size(), 1u);

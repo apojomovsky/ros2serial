@@ -705,6 +705,24 @@ TEST_F(RouterNode, RosParameterSetSendsASetToTheMcu)
     EXPECT_TRUE(saw_rate) << "the i64 set reaches the wire as eight bytes";
 }
 
+// covers: PAR-1, PAR-8
+TEST_F(RouterNode, LongStringSetUsesMultiByteVarint)
+{
+    // A 200 byte string needs a two byte length prefix ([ENC-7]): the SET
+    // carries the continuation bit the short defaults never exercise.
+    RouterFixture fixture("longstring", remapped(), RouterParams{});
+    fixture.handshake_with_params();
+    const std::string text(200u, 'x');
+    const auto result = fixture.node()->set_parameters({rclcpp::Parameter("label", text)});
+    ASSERT_EQ(result.size(), 1u);
+    EXPECT_TRUE(result[0].successful) << result[0].reason;
+    const auto sets = fixture.param_sets();
+    ASSERT_EQ(sets.count(3u), 1u);
+    std::vector<std::uint8_t> want{0xC8u, 0x01u};
+    want.insert(want.end(), text.begin(), text.end());
+    EXPECT_EQ(sets.at(3u).value, want);
+}
+
 // covers: PAR-9
 TEST_F(RouterNode, LaunchOverrideIsPushedAfterTheHandshake)
 {
@@ -834,6 +852,21 @@ TEST_F(RouterNode, RefusedSetIsLogged)
     ASSERT_EQ(second.count(0u), 1u);
     fixture.deliver_frame(kParamsTopic, 1u, {0x04u, second.at(0u).rel, 0x00u, 0x02u});
     EXPECT_TRUE(logged_has(fixture.logged(), "refused")) << "the MCU verdict is logged";
+}
+
+// covers: PAR-5
+TEST_F(RouterNode, RefusedStatusNamesEachReason)
+{
+    // Every refusal code the session passes on names its reason: one
+    // STATUS per parameter, each acked in turn by the reliable layer.
+    RouterFixture fixture("reasons", remapped(), RouterParams{});
+    fixture.handshake_with_params();
+    fixture.deliver_frame(kParamsTopic, 0u, {0x04u, 0x00u, 0x00u, 0x01u});
+    fixture.deliver_frame(kParamsTopic, 1u, {0x04u, 0x01u, 0x01u, 0x03u});
+    fixture.deliver_frame(kParamsTopic, 2u, {0x04u, 0x02u, 0x02u, 0x04u});
+    EXPECT_TRUE(logged_has(fixture.logged(), "parameter 'led': the MCU refused the set (unknown index)"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "parameter 'rate': the MCU refused the set (read-only)"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "parameter 'gain': the MCU refused the set (out of range)"));
 }
 
 // covers: PAR-9
