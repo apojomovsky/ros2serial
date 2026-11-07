@@ -540,7 +540,7 @@ The generator targets a ROS distro explicitly (`distro:` in the config, default 
 
 ## Host bridge
 
-*Status (0.1.0): built: full-mode handshake, generic pub/sub, packed-to-CDR conversion, Uno boot handling, log forwarding, time-sync estimation, rate limiting, launch namespace and remapping arguments; planned: parameters and services in #155 and #156.*
+*Status (0.1.0): built: full-mode handshake, generic pub/sub, packed-to-CDR conversion, Uno boot handling, log forwarding, time-sync estimation, rate limiting, launch namespace and remapping arguments, parameters in #155; planned: services in #156.*
 
 - C++ (rclcpp), packaged as a component so several bridges (one per serial port) can share a process. The framing gives each link its own framer instance, so one process serves up to 16 live links (#122).
 - Generic publishers and subscriptions, plus introspection-based conversion from packed to CDR.
