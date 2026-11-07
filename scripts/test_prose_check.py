@@ -24,21 +24,33 @@ def test_shebangs_and_code_are_not_comments():
     assert blocks(diff("scripts/x.sh", ["#!/usr/bin/env bash", "echo hi"])) == []
 
 
-def test_nine_line_block_fails_eight_passes():
-    eight = diff("a.py", [f"# line {i}" for i in range(8)])
-    nine = diff("a.py", [f"# line {i}" for i in range(9)])
-    assert prose_check.verify(eight) == []
-    assert any("9 lines" in p for p in prose_check.verify(nine))
+def test_twenty_one_line_block_fails_twenty_passes():
+    twenty = diff("a.py", [f"# line {i}" for i in range(20)])
+    twenty_one = diff("a.py", [f"# line {i}" for i in range(21)])
+    assert prose_check.verify(twenty) == []
+    assert any("21 lines" in p for p in prose_check.verify(twenty_one))
 
 
-def test_decoration_is_rejected():
-    assert any("decoration" in p for p in prose_check.verify(diff("a.c", ["/* @brief does things */"])))
-    assert any("decoration" in p for p in prose_check.verify(diff("a.py", ["# ----------------"])))
+def test_separator_art_is_rejected():
+    assert any("separator art" in p for p in prose_check.verify(diff("a.c", ["/* ---------------- */"])))
+    assert any("separator art" in p for p in prose_check.verify(diff("a.py", ["# ----------------"])))
 
 
 def test_narrative_is_rejected():
     assert any("narrative" in p for p in prose_check.verify(diff("a.py", ["# fixed by moving the reset"])))
     assert any("narrative" in p for p in prose_check.verify(diff("a.py", ["# this PR changes the order"])))
+
+
+def test_narrative_in_doc_comment_is_rejected():
+    doc = [
+        "/// Hands the session its parameter table.",
+        "/**",
+        " * This PR changes the order of the defaults.",
+        " *",
+        " * \\param[in] params the table to install.",
+        " */",
+    ]
+    assert any("narrative" in p for p in prose_check.verify(diff("a.c", doc)))
 
 
 def test_em_dash_in_comments_and_markdown_is_rejected():
