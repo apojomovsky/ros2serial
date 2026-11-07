@@ -1,0 +1,7 @@
+name: svc_response_unknown
+covers: [SVR-6]
+topic_id: 7
+seq: 0
+payload: "05 00 00 01"
+frame: "07 00 05 00 00 01 7f 6b"
+wire: "07 02 05 02 01 01 7f 6b 04 00"

@@ -796,7 +796,7 @@ The encoding is deterministic: 254 non-zero bytes at the end of a frame produce 
 
 ### System channels
 
-The first payload byte of IDs 0, 1 and 3 is an opcode.
+The first payload byte of IDs 0, 1, 3, 7 and 8 is an opcode.
 
 **ID 0, control**
 
