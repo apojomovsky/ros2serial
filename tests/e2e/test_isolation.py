@@ -51,7 +51,7 @@ def failure_lines(output):
 
 
 def summary_lines(output):
-    """run.sh per-failure summary lines, naming every failed scenario file."""
+    """run.sh and run-avr.sh per-failure summary lines, naming every failed scenario file."""
     return [line for line in output.splitlines() if line.startswith("e2e-failure: ")]
 
 
@@ -85,6 +85,18 @@ class TestSectionReport(unittest.TestCase):
         self.assertIn("test_scenario_3_posix", report)
         self.assertIn("Processes under test stopped before tests completed", report)
         self.assertIn("Process 'bridge-1' exited with 1", report)
+
+    def test_names_an_avr_failure_outside_the_tail(self):
+        failure = "e2e-failure: test_scenario_1_avr board=uno rmw=rmw_fastrtps_cpp exit=1"
+        output = failure + "\n" + "test_x ... ok\n" * 2000
+        self.assertIn("test_scenario_1_avr", section_report(output))
+
+    def test_names_an_avr_timeout_kill_outside_the_tail(self):
+        failure = "e2e-failure: test_baud_matrix_avr board=mega baud=500000 rmw=rmw_zenoh_cpp exit=124 (timeout)"
+        output = failure + "\n" + "test_x ... ok\n" * 2000
+        report = section_report(output)
+        self.assertIn("test_baud_matrix_avr", report)
+        self.assertIn("timeout", report)
 
 
 class TestFailureLines(unittest.TestCase):
