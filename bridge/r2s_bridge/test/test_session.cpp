@@ -2716,6 +2716,16 @@ TEST(ReliableWalk, StartsAfterTheTopicWalk)
     EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
 }
 
+// covers: CTL-17
+TEST(ReliableWalk, RefusesServicesWithoutTheReliableBit)
+{
+    Fixture fixture;
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0x40u, 1000u));
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
+    EXPECT_FALSE(fixture.session().seen_hello());
+}
+
 // covers: CTL-2, CTL-3
 TEST(ReliableWalk, AcceptsAFeaturesByteWithServicesAndActions)
 {

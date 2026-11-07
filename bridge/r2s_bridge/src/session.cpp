@@ -64,6 +64,10 @@ constexpr int kRelRetries = 3;
 // per index, a 200 ms timeout, at most 3 retries. Bit 2 of the HELLO
 // features announces the parameters ([CTL-2]).
 constexpr std::uint8_t kParamFeaturesBit = 0x04u;
+// Bits 6 and 7 announce services and actions, and only ride the reliable
+// channel: a HELLO that sets either without bit 3 is refused ([CTL-17]).
+constexpr std::uint8_t kReliableFeaturesBit = 0x08u;
+constexpr std::uint8_t kSvcActFeaturesBits = 0xC0u;
 constexpr std::int64_t kParamTimeoutMs = 200;
 constexpr int kParamRetries = 3;
 
@@ -759,6 +763,10 @@ struct Session::Impl {
         if (facts.mode != kModeFull) {
             log(SessionLog::kError,
                 "HELLO refused: compact mode needs a node map, which is not supported yet");
+            return false;
+        }
+        if ((facts.features & kSvcActFeaturesBits) != 0u && (facts.features & kReliableFeaturesBit) == 0u) {
+            log(SessionLog::kError, "HELLO refused: services without the reliable bit");
             return false;
         }
         if (!tick_hz_is_valid(facts.tick_hz)) {

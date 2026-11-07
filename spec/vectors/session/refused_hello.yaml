@@ -1,10 +1,10 @@
 name: refused_hello
-covers: [SES-13, SES-14, SES-16, SES-17, CTL-9]
+covers: [SES-13, SES-14, SES-16, SES-17, CTL-9, CTL-17]
 steps:
   - from: mcu
-    frame: "00 00 02 04 00 00 00 00 00 00 02 03 02 dc 05 00 00 40 02 04 6e 6f 64 65 99 db"
+    frame: "00 00 02 04 00 00 00 00 00 00 02 03 02 40 42 0f 00 40 02 04 6e 6f 64 65 9e d9"
     at_ms: 100
-    note: "refused: tick_hz 1500 is not 1000 times k; features 0x40 is the legal services bit"
+    note: "refused: services without the reliable bit"
   - from: mcu
     frame: "00 01 02 04 00 00 00 00 00 00 02 03 02 dc 05 00 00 00 02 04 6e 6f 64 65 56 95"
     at_ms: 200

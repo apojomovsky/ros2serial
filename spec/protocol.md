@@ -146,6 +146,7 @@ A system channel carries one message on a reserved `topic_id` (section 2, [FRM-3
 - [CTL-14] A receiver MUST refuse ([SYS-5]) a `TOPIC_STATUS` whose status is not one of those four.
 - [CTL-15] The topics of a handshake are requested and sent one at a time, so the MCU never needs a buffer larger than one TOPIC frame.
 - [CTL-16] The payload of each control opcode is the one the table above gives, in that order and with nothing between: the opcode byte, then the fields it lists, and a string as its varint length and bytes (section 5).
+- [CTL-17] A receiver MUST refuse ([SYS-5]) a HELLO whose features byte sets bit 6 or bit 7 without bit 3.
 
 ### 7.2 Time channel (ID 1)
 
