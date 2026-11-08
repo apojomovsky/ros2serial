@@ -4,10 +4,13 @@
 #include "r2s_bridge/router.hpp"
 
 #include <algorithm>
+#include <array>
+
 #include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -28,6 +31,13 @@ namespace r2s_bridge
 namespace
 {
 constexpr std::uint8_t kReliableFlag = 0x08u;
+
+// How often a poll retries a route missing despite an ok verdict, and how
+// many poll attempts one handshake episode gets on top of the handshake's
+// own: a transient creation failure heals within one spacing, while a
+// deterministically uncreatable name stops retrying after its episode.
+constexpr int kRepairSpacingMs = 100;
+constexpr int kMaxRepairAttempts = 10;
 
 // The link state the H8 snapshot reports, one word per state. The table order
 // follows the SessionState enumerators, so no branch can go untaken.
@@ -235,6 +245,24 @@ struct Router::Impl {
         }
     }
 
+    // One routed topic's endpoints. Declared up here because the route
+    // builders below name it in their signatures.
+    struct Route {
+        TopicInfo info;
+        rclcpp::GenericPublisher::SharedPtr pub;
+        rclcpp::GenericSubscription::SharedPtr sub;
+        std::size_t publish_failures = 0;
+    };
+
+    // Poll-time repair attempts per topic missing despite an ok verdict: how
+    // many ran, when the last ran, and why creation failed. A handshake
+    // clears the table, renewing every missing route's episode.
+    struct RepairState {
+        int attempts = 0;
+        std::chrono::nanoseconds last_attempt{0};
+        std::string reason;
+    };
+
     std::function<void(SessionLog, const std::string &)> log_event()
     {
         return [this](SessionLog level, const std::string &text) { emit(level, text); };
@@ -285,9 +313,94 @@ struct Router::Impl {
         return qos;
     }
 
+    // Creates one route's endpoint, reporting the failure through the sink at
+    // the caller's level. Empty when the middleware refuses the endpoint, and
+    // the error text explains why for the diagnostics snapshot.
+    std::optional<Route> make_route(const TopicInfo &info, SessionLog failure_level, std::string &error)
+    {
+        Route route;
+        route.info = info;
+        try {
+            if (info.device_to_host()) {
+                route.pub = rclcpp::create_generic_publisher(topics, info.topic_name, info.type_name,
+                                                             route_qos(info));
+            } else {
+                route.sub = rclcpp::create_generic_subscription(
+                    topics, info.topic_name, info.type_name, route_qos(info),
+                    [this, id = info.topic_id](std::shared_ptr<rclcpp::SerializedMessage> msg) {
+                        on_ros_message(id, std::move(msg));
+                    });
+            }
+        } catch (const std::exception &failure) {
+            error = failure.what();
+            emit(failure_level, "topic '" + info.topic_name + "': no publisher or subscription: " + error);
+            return std::nullopt;
+        }
+        error.clear();
+        return route;
+    }
+
+    // The pacer entry the handshake registers for one routed topic.
+    SchedulerTopic pacing_for(const TopicInfo &info) const
+    {
+        SchedulerTopic paced;
+        paced.topic_id = info.topic_id;
+        paced.keep_latest = info.keep_latest();
+        const auto limited = params.rate_limits.find(info.topic_name);
+        paced.rate_hz = limited == params.rate_limits.end() ? params.rate_default_hz : limited->second;
+        paced.queue_bound = paced.keep_latest ? 1u : params.qos_depth;
+        return paced;
+    }
+
+    // Gives one ok topic its route and pacing, creating the endpoint when
+    // missing. Records a failed attempt for the repair schedule, so the
+    // handshake and the polls share one creation path.
+    void ensure_route(const TopicInfo &info, SessionLog failure_level)
+    {
+        std::string error;
+        auto route = make_route(info, failure_level, error);
+        if (!route) {
+            repairs_[info.topic_id].reason = error;
+            return;
+        }
+        scheduler_.add_topic(pacing_for(info));
+        routes[info.topic_id] = std::move(*route);
+    }
+
+    // Retries routes missing despite an ok verdict: one transient creation
+    // failure must not lose the topic forever while the handshake keeps
+    // reporting it ok. Only connected polls repair, so a walk in progress
+    // never races the handshake completing it; a healed subscription joins
+    // the pacing the way the handshake would have registered it.
+    void repair_missing_routes(std::chrono::nanoseconds now)
+    {
+        if (session_.state() != SessionState::kConnected) {
+            return;
+        }
+        for (const TopicInfo &info : session_.topics()) {
+            if (info.status != kTopicStatusOk || routes.count(info.topic_id) != 0u) {
+                continue;
+            }
+            RepairState &state = repairs_[info.topic_id];
+            if (state.attempts >= kMaxRepairAttempts) {
+                continue;
+            }
+            if (state.attempts > 0 &&
+                now - state.last_attempt < std::chrono::milliseconds(kRepairSpacingMs)) {
+                continue;
+            }
+            state.last_attempt = now;
+            ++state.attempts;
+            ensure_route(info, SessionLog::kDebug);
+        }
+    }
+
     void on_handshake(bool identical)
     {
         std::lock_guard<std::recursive_mutex> guard(mutex);
+        // A new handshake renews the repair attempts: a still-missing route
+        // retries from scratch instead of inheriting a spent episode.
+        repairs_.fill(RepairState{});
         if (identical && !routes.empty()) {
             // The endpoints stay, but the MCU's new limits may exceed the old
             // bucket: refresh the burst without touching the queues.
@@ -304,42 +417,16 @@ struct Router::Impl {
     void sync_routes()
     {
         routes.clear();
-        std::vector<SchedulerTopic> pacing;
         const double budget_bytes_per_sec =
             static_cast<double>(params.baud) / 10.0 * static_cast<double>(params.tx_budget_pct) / 100.0;
+        const double burst = static_cast<double>(Scheduler::encoded_frame_bound(session_.mcu_max_frame()));
+        scheduler_.configure({}, budget_bytes_per_sec, burst);
         for (const TopicInfo &info : session_.topics()) {
             if (info.status != kTopicStatusOk) {
                 continue;
             }
-            Route route;
-            route.info = info;
-            try {
-                if (info.device_to_host()) {
-                    route.pub = rclcpp::create_generic_publisher(topics, info.topic_name, info.type_name,
-                                                                 route_qos(info));
-                } else {
-                    route.sub = rclcpp::create_generic_subscription(
-                        topics, info.topic_name, info.type_name, route_qos(info),
-                        [this, id = info.topic_id](std::shared_ptr<rclcpp::SerializedMessage> msg) {
-                            on_ros_message(id, std::move(msg));
-                        });
-                }
-            } catch (const std::exception &error) {
-                emit(SessionLog::kError,
-                     "topic '" + info.topic_name + "': no publisher or subscription: " + error.what());
-                continue;
-            }
-            SchedulerTopic paced;
-            paced.topic_id = info.topic_id;
-            paced.keep_latest = info.keep_latest();
-            const auto limited = params.rate_limits.find(info.topic_name);
-            paced.rate_hz = limited == params.rate_limits.end() ? params.rate_default_hz : limited->second;
-            paced.queue_bound = paced.keep_latest ? 1u : params.qos_depth;
-            pacing.push_back(paced);
-            routes[info.topic_id] = std::move(route);
+            ensure_route(info, SessionLog::kError);
         }
-        const double burst = static_cast<double>(Scheduler::encoded_frame_bound(session_.mcu_max_frame()));
-        scheduler_.configure(std::move(pacing), budget_bytes_per_sec, burst);
     }
 
     // One refused SET the MCU reported while connected ([PAR-5]): applied
@@ -548,13 +635,6 @@ struct Router::Impl {
         return path.empty() ? "#" + std::to_string(field) : path;
     }
 
-    struct Route {
-        TopicInfo info;
-        rclcpp::GenericPublisher::SharedPtr pub;
-        rclcpp::GenericSubscription::SharedPtr sub;
-        std::size_t publish_failures = 0;
-    };
-
     rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics;
     RouterParams params;
     LogSink sink;
@@ -576,6 +656,9 @@ struct Router::Impl {
     Converter converter_;
     Scheduler scheduler_;
     std::map<std::uint8_t, Route> routes;
+    // Repair attempts by topic id: array indexing cannot miss, so the
+    // diagnostics snapshot below needs no fallback branch.
+    std::array<RepairState, 256> repairs_;
     // Recursive: declaring a ROS parameter reenters through the on-set
     // hook on the same thread, which takes the guard again.
     std::recursive_mutex mutex;
@@ -599,6 +682,7 @@ void Router::poll()
     impl_->session_.poll();
     const std::chrono::nanoseconds now = impl_->clock.now();
     std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
+    impl_->repair_missing_routes(now);
     impl_->scheduler_.poll(now, [this](std::uint8_t id, const std::vector<std::uint8_t> &payload) {
         return impl_->session_.send_user(id, payload);
     });
@@ -679,6 +763,10 @@ Router::Diagnostics Router::diagnostics() const
         topic.dropped = impl_->scheduler_.dropped(info.topic_id);
         const auto route = impl_->routes.find(info.topic_id);
         topic.publish_failures = route == impl_->routes.end() ? 0u : route->second.publish_failures;
+        topic.route_missing = info.status == kTopicStatusOk && route == impl_->routes.end();
+        if (topic.route_missing) {
+            topic.route_error = impl_->repairs_[info.topic_id].reason;
+        }
         topic.mcu_errors = impl_->session_.error_counts(info.topic_id);
         out.topics.push_back(topic);
     }

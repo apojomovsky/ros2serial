@@ -1,6 +1,7 @@
 // Snapshot in, DiagnosticArray out: the H8 values as key/value pairs.
 #include "r2s_bridge/diagnostics.hpp"
 
+#include <algorithm>
 #include <string>
 
 namespace r2s_bridge
@@ -32,6 +33,15 @@ void add_topic(diagnostic_msgs::msg::DiagnosticStatus &status, const Router::Top
         verdict = "name conflict";
     }
     add_value(status, head + " status", verdict);
+    // A route missing despite an ok verdict is a degraded bridge, never a
+    // silent one: the key names the reason, and the snapshot below warns
+    // until a repair poll heals it back to ok. The router records every
+    // failed creation, so a missing route always carries its reason.
+    if (topic.route_missing) {
+        add_value(status, head + " route", "missing: " + topic.route_error);
+    } else {
+        add_value(status, head + " route", "ok");
+    }
     add_value(status, head + " seq gaps", std::to_string(topic.seq_gaps));
     add_value(status, head + " dropped", std::to_string(topic.dropped));
     // GCOVR_EXCL_BR_START: a unit test cannot throw out of this call
@@ -59,9 +69,15 @@ diagnostic_msgs::msg::DiagnosticArray diagnostics_message(const Router::Diagnost
     diagnostic_msgs::msg::DiagnosticStatus status;
     status.name = node_name + ": " + kDiagnosticsTaskName;
     status.hardware_id = hardware_id;
-    // A silent link is an error; a link mid-handshake is transient.
+    // A silent link is an error; a link mid-handshake is transient. A
+    // connected link missing a route is degraded: it warns instead of
+    // reporting ok while a topic it announced has no endpoint.
     if (snapshot.link_state == "connected") {
-        status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+        const bool degraded =
+            std::any_of(snapshot.topics.begin(), snapshot.topics.end(),
+                        [](const Router::TopicDiagnostics &topic) { return topic.route_missing; });
+        status.level = degraded ? diagnostic_msgs::msg::DiagnosticStatus::WARN
+                                : diagnostic_msgs::msg::DiagnosticStatus::OK;
     } else if (snapshot.link_state == "disconnected") {
         status.level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
     } else {

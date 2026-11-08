@@ -315,6 +315,31 @@ TEST(SchedulerSend, StopsThePassWhenTheLinkRefusesAFrame)
     EXPECT_EQ(scheduler.queued(16), 1u);
 }
 
+TEST(SchedulerAddTopic, JoinsWithoutClearingQueues)
+{
+    Scheduler scheduler;
+    scheduler.configure({queued_topic(16)}, 1e9);
+    scheduler.submit(16, {0x01});
+    scheduler.add_topic(queued_topic(17));
+    scheduler.submit(17, {0x02});
+    EXPECT_EQ(scheduler.queued(16), 1u) << "the existing queue survives the repair";
+    EXPECT_EQ(scheduler.queued(17), 1u) << "the healed topic queues at once";
+    scheduler.add_topic(queued_topic(16));
+    EXPECT_EQ(scheduler.queued(16), 1u) << "a known id stays as it is";
+    Capture capture;
+    scheduler.poll(ns(0), std::ref(capture));
+    ASSERT_EQ(capture.sent.size(), 2u);
+}
+
+TEST(SchedulerAddTopic, RejectsANegativeRate)
+{
+    Scheduler scheduler;
+    scheduler.configure({queued_topic(16)}, 1e9);
+    SchedulerTopic bad = queued_topic(17);
+    bad.rate_hz = -1.0;
+    EXPECT_THROW(scheduler.add_topic(bad), std::invalid_argument);
+}
+
 } // namespace
 } // namespace test
 } // namespace r2s_bridge

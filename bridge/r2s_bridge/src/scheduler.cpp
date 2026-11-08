@@ -35,6 +35,20 @@ void Scheduler::configure(std::vector<SchedulerTopic> topics, double budget_byte
     budget_started_ = false;
 }
 
+void Scheduler::add_topic(SchedulerTopic topic)
+{
+    if (topic.rate_hz < 0.0) {
+        throw std::invalid_argument("r2s_bridge::Scheduler: the rate must not be negative");
+    }
+    if (find(topic.topic_id) != nullptr) {
+        return;
+    }
+    Entry entry;
+    entry.topic = topic;
+    entry.rate_tokens = 1.0;
+    entries_.push_back(entry);
+}
+
 void Scheduler::set_max_burst(double max_burst_bytes)
 {
     if (max_burst_bytes < 0.0) {

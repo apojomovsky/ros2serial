@@ -87,6 +87,13 @@ class Router
         // carries code 1 through slot 5 code 6. Zeros when no report named
         // this id.
         std::array<std::uint64_t, 6> mcu_errors{};
+        // Whether the verdict is ok but no route serves the topic: the
+        // endpoint creation failed and later polls keep retrying it. False
+        // for refused topics, which correctly serve nothing, and once a
+        // retry heals the route.
+        bool route_missing = false;
+        // Why the route is missing, meaningful only when route_missing holds.
+        std::string route_error;
     };
     // The H8 snapshot: link state is one of disconnected, boot_wait,
     // handshaking or connected; the time sync values are real once a

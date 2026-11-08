@@ -90,6 +90,8 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(values.at("topic 16 battery mcu errors"), "1=0 2=2 3=0 4=0 5=0 6=5");
     EXPECT_EQ(values.at("topic 17 cmd_vel mcu errors"), "1=0 2=0 3=0 4=0 5=0 6=0");
     EXPECT_EQ(values.at("topic 16 battery direction"), "device to host");
+    EXPECT_EQ(values.at("topic 16 battery route"), "ok");
+    EXPECT_EQ(values.at("topic 17 cmd_vel route"), "ok");
     EXPECT_EQ(values.at("topic 16 battery seq gaps"), "4");
     EXPECT_EQ(values.at("topic 16 battery dropped"), "0");
     EXPECT_EQ(values.at("topic 16 battery publish failures"), "1");
@@ -109,6 +111,31 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(values.at("time sync drift"), "12");
     EXPECT_EQ(values.at("time sync round trip"), "2300000");
 }
+TEST(DiagnosticsMessage, MissingRouteWarnsWithReason)
+{
+    Router::Diagnostics snapshot;
+    snapshot.link_state = "connected";
+    Router::TopicDiagnostics battery;
+    battery.topic_id = 16u;
+    battery.topic_name = "battery";
+    battery.device_to_host = true;
+    snapshot.topics.push_back(battery);
+    Router::TopicDiagnostics echo;
+    echo.topic_id = 18u;
+    echo.topic_name = "echo_vel";
+    echo.device_to_host = true;
+    echo.route_missing = true;
+    echo.route_error = "no publisher or subscription: invalid topic name";
+    snapshot.topics.push_back(echo);
+    const diagnostic_msgs::msg::DiagnosticStatus status =
+        diagnostics_message(snapshot, "test_node", "").status[0];
+    EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+    const std::map<std::string, std::string> values = values_of(status);
+    EXPECT_EQ(values.at("topic 16 battery route"), "ok");
+    EXPECT_EQ(values.at("topic 18 echo_vel route"),
+              "missing: no publisher or subscription: invalid topic name");
+}
+
 TEST(DiagnosticsMessage, ReportsPerTopicStatus)
 {
     Router::Diagnostics snapshot;

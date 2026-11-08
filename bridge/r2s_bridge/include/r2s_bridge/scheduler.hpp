@@ -32,6 +32,12 @@ class Scheduler
     void configure(std::vector<SchedulerTopic> topics, double budget_bytes_per_sec,
                    double max_burst_bytes = 0.0);
 
+    // Registers one more topic without touching the queues, buckets or
+    // counters the handshake left: route repair adds a healed topic the way
+    // the handshake would have. A known id stays as it is. Throws
+    // std::invalid_argument on a negative rate.
+    void add_topic(SchedulerTopic topic);
+
     // Refreshes the burst capacity after a re-handshake that kept the routes:
     // the MCU's new maximum frame may exceed the old bucket ([SES-28]).
     // Queues and counters are untouched. Throws std::invalid_argument on a
