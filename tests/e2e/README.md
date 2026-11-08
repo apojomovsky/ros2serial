@@ -5,16 +5,16 @@ firmware and the real bridge over a serial line.
 
 - `run.sh` is the posix entry point: it builds the bridge workspace and the
   posix firmwares, checks the helper assertions, then runs scenarios 1 to 4
-  and 8 to 10 plus the publish catch-up test under each RMW the design names,
-  once per registration path. The static leg uses the generated C firmware, the
-  runtime leg the C++ runtime firmware and the static C++ leg the static C++
-  firmware on scenarios 1 to 4; all three announce the same topics, so the
-  scenario files stay shared and read the firmware from `R2S_E2E_FW`. The
-  suite runs it for `E2E=posix`; `R2S_RMWS` narrows the RMW loop for a
-  quicker iteration.
+  and 6 to 13 plus the framing-fault variant and the publish catch-up test
+  under each RMW the design names, once per registration path. The static leg
+  uses the generated C firmware, the runtime leg the C++ runtime firmware and
+  the ros and static C++ legs their compat firmwares on scenarios 1 to 4; all
+  four announce the same topics, so the scenario files stay shared and read
+  the firmware from `R2S_E2E_FW`. The suite runs it for `E2E=posix`;
+  `R2S_RMWS` narrows the RMW loop for a quicker iteration.
 - `run-avr.sh` is the avr entry point: it builds the simavr harness and the
   slice sketch for Uno and Mega, checks the helper assertions, then runs
-  scenarios 1 to 4 on both boards under each RMW, plus the baud matrix (the
+  scenarios 1 to 4 and 12 on both boards under each RMW, plus the baud matrix (the
   scenario 2 flow gates per baud per board) under the first RMW only. The
   suite runs it for `E2E=avr`; `R2S_RMWS`, `R2S_E2E_BOARDS` and
   `R2S_E2E_BAUDS` narrow the loops.
