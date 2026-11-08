@@ -57,257 +57,259 @@ namespace test
 namespace
 {
 
-std::vector<std::uint8_t> bytes_of(const std::string &hex)
+std::vector<std::uint8_t> bytes_of(const std::string & hex)
 {
-    std::vector<std::uint8_t> bytes;
-    std::istringstream in(hex);
-    std::string pair;
-    while (in >> pair) {
-        bytes.push_back(static_cast<std::uint8_t>(std::stoul(pair, nullptr, 16)));
-    }
-    return bytes;
+  std::vector<std::uint8_t> bytes;
+  std::istringstream in(hex);
+  std::string pair;
+  while (in >> pair) {
+    bytes.push_back(static_cast<std::uint8_t>(std::stoul(pair, nullptr, 16)));
+  }
+  return bytes;
 }
 
-std::string hex_of(const std::vector<std::uint8_t> &bytes)
+std::string hex_of(const std::vector<std::uint8_t> & bytes)
 {
-    std::ostringstream out;
-    for (std::size_t i = 0; i < bytes.size(); ++i) {
-        if (i != 0) {
-            out << ' ';
-        }
-        out << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(bytes[i]);
+  std::ostringstream out;
+  for (std::size_t i = 0; i < bytes.size(); ++i) {
+    if (i != 0) {
+      out << ' ';
     }
-    return out.str();
+    out << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(bytes[i]);
+  }
+  return out.str();
 }
 
 // Little-endian bytes of an integer value, whatever the host order is.
 std::vector<std::uint8_t> le_u64(std::uint64_t value, std::size_t count)
 {
-    std::vector<std::uint8_t> out;
-    for (std::size_t i = 0; i < count; ++i) {
-        out.push_back(static_cast<std::uint8_t>(value >> (8 * i)));
-    }
-    return out;
+  std::vector<std::uint8_t> out;
+  for (std::size_t i = 0; i < count; ++i) {
+    out.push_back(static_cast<std::uint8_t>(value >> (8 * i)));
+  }
+  return out;
 }
 
 std::vector<std::uint8_t> le_double(double value)
 {
-    std::uint64_t raw = 0;
-    std::memcpy(&raw, &value, sizeof raw);
-    return le_u64(raw, 8);
+  std::uint64_t raw = 0;
+  std::memcpy(&raw, &value, sizeof raw);
+  return le_u64(raw, 8);
 }
 
 std::vector<std::uint8_t> le_float(float value)
 {
-    std::uint32_t raw = 0;
-    std::memcpy(&raw, &value, sizeof raw);
-    return le_u64(raw, 4);
+  std::uint32_t raw = 0;
+  std::memcpy(&raw, &value, sizeof raw);
+  return le_u64(raw, 4);
 }
 
-template <typename T> std::vector<std::uint8_t> serialize_ref(const T &msg)
+template<typename T> std::vector<std::uint8_t> serialize_ref(const T & msg)
 {
     // The middleware leaves CDR alignment padding unwritten; zeroing an
     // oversized buffer first makes the reference bytes deterministic, the
     // same way the converter does. A message outgrowing the initial buffer
     // is zeroed and serialized a second time.
-    constexpr std::size_t kCapacity = 4096;
-    rclcpp::Serialization<T> serializer;
-    rclcpp::SerializedMessage serialized(kCapacity);
-    rcl_serialized_message_t &rcl = serialized.get_rcl_serialized_message();
+  constexpr std::size_t kCapacity = 4096;
+  rclcpp::Serialization<T> serializer;
+  rclcpp::SerializedMessage serialized(kCapacity);
+  rcl_serialized_message_t & rcl = serialized.get_rcl_serialized_message();
+  std::memset(rcl.buffer, 0, rcl.buffer_capacity);
+  serializer.serialize_message(&msg, &serialized);
+  if (rcl.buffer_capacity > kCapacity) {
     std::memset(rcl.buffer, 0, rcl.buffer_capacity);
     serializer.serialize_message(&msg, &serialized);
-    if (rcl.buffer_capacity > kCapacity) {
-        std::memset(rcl.buffer, 0, rcl.buffer_capacity);
-        serializer.serialize_message(&msg, &serialized);
-    }
-    return {rcl.buffer, rcl.buffer + rcl.buffer_length};
+  }
+  return {rcl.buffer, rcl.buffer + rcl.buffer_length};
 }
 
 // The host side of [ENC-11]: binary64 through binary32 with roundTiesToEven,
 // carried out by the hardware conversion.
 double narrow_to_host(double value)
 {
-    return static_cast<double>(static_cast<float>(value));
+  return static_cast<double>(static_cast<float>(value));
 }
 
-double yaml_double(const YAML::Node &node, bool narrow)
+double yaml_double(const YAML::Node & node, bool narrow)
 {
-    double value = 0;
-    if (node.IsMap()) {
-        std::uint64_t raw = std::stoull(node["bits"].as<std::string>(), nullptr, 16);
-        std::memcpy(&value, &raw, sizeof value);
-        return value;
-    }
-    value = node.as<double>();
-    return narrow ? narrow_to_host(value) : value;
+  double value = 0;
+  if (node.IsMap()) {
+    std::uint64_t raw = std::stoull(node["bits"].as<std::string>(), nullptr, 16);
+    std::memcpy(&value, &raw, sizeof value);
+    return value;
+  }
+  value = node.as<double>();
+  return narrow ? narrow_to_host(value) : value;
 }
 
-float yaml_float(const YAML::Node &node)
+float yaml_float(const YAML::Node & node)
 {
-    if (node.IsMap()) {
-        std::uint32_t raw =
-            static_cast<std::uint32_t>(std::stoul(node["bits"].as<std::string>(), nullptr, 16));
-        float value = 0;
-        std::memcpy(&value, &raw, sizeof value);
-        return value;
-    }
-    return node.as<float>();
+  if (node.IsMap()) {
+    std::uint32_t raw =
+      static_cast<std::uint32_t>(std::stoul(node["bits"].as<std::string>(), nullptr, 16));
+    float value = 0;
+    std::memcpy(&value, &raw, sizeof value);
+    return value;
+  }
+  return node.as<float>();
 }
 
-void fill_header(std_msgs::msg::Header &header, const YAML::Node &node)
+void fill_header(std_msgs::msg::Header & header, const YAML::Node & node)
 {
-    header.stamp.sec = node["stamp"]["sec"].as<std::int32_t>();
-    header.stamp.nanosec = node["stamp"]["nanosec"].as<std::uint32_t>();
-    header.frame_id = node["frame_id"].as<std::string>();
+  header.stamp.sec = node["stamp"]["sec"].as<std::int32_t>();
+  header.stamp.nanosec = node["stamp"]["nanosec"].as<std::uint32_t>();
+  header.frame_id = node["frame_id"].as<std::string>();
 }
 
-void fill_transform(geometry_msgs::msg::Transform &transform, const YAML::Node &node, bool narrow)
+void fill_transform(geometry_msgs::msg::Transform & transform, const YAML::Node & node, bool narrow)
 {
-    transform.translation.x = yaml_double(node["translation"]["x"], narrow);
-    transform.translation.y = yaml_double(node["translation"]["y"], narrow);
-    transform.translation.z = yaml_double(node["translation"]["z"], narrow);
-    transform.rotation.x = yaml_double(node["rotation"]["x"], narrow);
-    transform.rotation.y = yaml_double(node["rotation"]["y"], narrow);
-    transform.rotation.z = yaml_double(node["rotation"]["z"], narrow);
-    transform.rotation.w = yaml_double(node["rotation"]["w"], narrow);
+  transform.translation.x = yaml_double(node["translation"]["x"], narrow);
+  transform.translation.y = yaml_double(node["translation"]["y"], narrow);
+  transform.translation.z = yaml_double(node["translation"]["z"], narrow);
+  transform.rotation.x = yaml_double(node["rotation"]["x"], narrow);
+  transform.rotation.y = yaml_double(node["rotation"]["y"], narrow);
+  transform.rotation.z = yaml_double(node["rotation"]["z"], narrow);
+  transform.rotation.w = yaml_double(node["rotation"]["w"], narrow);
 }
 
-void fill_transform_stamped(geometry_msgs::msg::TransformStamped &stamped, const YAML::Node &node,
-                            bool narrow)
+void fill_transform_stamped(
+  geometry_msgs::msg::TransformStamped & stamped, const YAML::Node & node,
+  bool narrow)
 {
-    fill_header(stamped.header, node["header"]);
-    stamped.child_frame_id = node["child_frame_id"].as<std::string>();
-    fill_transform(stamped.transform, node["transform"], narrow);
+  fill_header(stamped.header, node["header"]);
+  stamped.child_frame_id = node["child_frame_id"].as<std::string>();
+  fill_transform(stamped.transform, node["transform"], narrow);
 }
 
-void expect_cdr(Converter &converter, const std::string &type, bool narrow,
-                const std::vector<std::uint8_t> &payload, const std::vector<std::uint8_t> &want,
-                const std::string &trace)
+void expect_cdr(
+  Converter & converter, const std::string & type, bool narrow,
+  const std::vector<std::uint8_t> & payload, const std::vector<std::uint8_t> & want,
+  const std::string & trace)
 {
-    SCOPED_TRACE(trace);
-    std::vector<std::uint8_t> cdr;
-    const ConvertResult result = converter.to_cdr(type, narrow, payload.data(), payload.size(), cdr);
-    ASSERT_EQ(result.fail, ConvertFail::kNone) << "field " << static_cast<int>(result.field);
-    if (cdr != want) {
-        ADD_FAILURE() << "CDR differs\n got: " << hex_of(cdr) << "\nwant: " << hex_of(want);
-    }
+  SCOPED_TRACE(trace);
+  std::vector<std::uint8_t> cdr;
+  const ConvertResult result = converter.to_cdr(type, narrow, payload.data(), payload.size(), cdr);
+  ASSERT_EQ(result.fail, ConvertFail::kNone) << "field " << static_cast<int>(result.field);
+  if (cdr != want) {
+    ADD_FAILURE() << "CDR differs\n got: " << hex_of(cdr) << "\nwant: " << hex_of(want);
+  }
 }
 
-} // namespace
+}  // namespace
 
 TEST(ConverterVectors, MatchesRclcppSerializationForEveryVector)
 {
     Converter converter;
     std::vector<std::filesystem::path> files;
-    for (const auto &entry : std::filesystem::directory_iterator(R2S_MESSAGES_VECTOR_DIR)) {
-        if (entry.path().extension() == ".yaml") {
-            files.push_back(entry.path());
-        }
+    for (const auto & entry : std::filesystem::directory_iterator(R2S_MESSAGES_VECTOR_DIR)) {
+    if (entry.path().extension() == ".yaml") {
+      files.push_back(entry.path());
+    }
     }
     std::sort(files.begin(), files.end());
     ASSERT_FALSE(files.empty()) << "no message vectors found";
 
-    for (const auto &file : files) {
-        const YAML::Node node = YAML::LoadFile(file);
-        const std::string name = node["name"].as<std::string>();
-        const std::string type = node["type"].as<std::string>();
-        const bool narrow = node["profile"]["narrow_float64"].as<bool>();
-        const std::vector<std::uint8_t> payload = bytes_of(node["payload"].as<std::string>());
-        SCOPED_TRACE(name);
-        if (type == "std_msgs/msg/Float32") {
-            std_msgs::msg::Float32 msg;
-            const YAML::Node data = node["message"]["data"];
-            ASSERT_FALSE(narrow) << "no narrow Float32 vector exists";
-            if (data.IsMap()) {
-                std::uint32_t raw =
-                    static_cast<std::uint32_t>(std::stoul(data["bits"].as<std::string>(), nullptr, 16));
-                std::memcpy(&msg.data, &raw, sizeof raw);
-            } else {
-                msg.data = data.as<float>();
-            }
-            expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
-        } else if (type == "geometry_msgs/msg/Twist") {
-            geometry_msgs::msg::Twist msg;
-            msg.linear.x = yaml_double(node["message"]["linear"]["x"], narrow);
-            msg.linear.y = yaml_double(node["message"]["linear"]["y"], narrow);
-            msg.linear.z = yaml_double(node["message"]["linear"]["z"], narrow);
-            msg.angular.x = yaml_double(node["message"]["angular"]["x"], narrow);
-            msg.angular.y = yaml_double(node["message"]["angular"]["y"], narrow);
-            msg.angular.z = yaml_double(node["message"]["angular"]["z"], narrow);
-            expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
-        } else if (type == "sensor_msgs/msg/Range") {
-            sensor_msgs::msg::Range msg;
-            const YAML::Node message = node["message"];
-            fill_header(msg.header, message["header"]);
-            msg.radiation_type = message["radiation_type"].as<std::uint8_t>();
-            msg.field_of_view = yaml_float(message["field_of_view"]);
-            msg.min_range = yaml_float(message["min_range"]);
-            msg.max_range = yaml_float(message["max_range"]);
-            msg.range = yaml_float(message["range"]);
-            msg.variance = yaml_float(message["variance"]);
-            expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
-        } else if (type == "sensor_msgs/msg/Imu") {
-            sensor_msgs::msg::Imu msg;
-            const YAML::Node message = node["message"];
-            fill_header(msg.header, message["header"]);
-            msg.orientation.x = yaml_double(message["orientation"]["x"], narrow);
-            msg.orientation.y = yaml_double(message["orientation"]["y"], narrow);
-            msg.orientation.z = yaml_double(message["orientation"]["z"], narrow);
-            msg.orientation.w = yaml_double(message["orientation"]["w"], narrow);
-            std::size_t covariance = 0;
-            for (const YAML::Node value : message["orientation_covariance"]) {
-                msg.orientation_covariance[covariance++] = yaml_double(value, narrow);
-            }
-            ASSERT_EQ(covariance, 9u) << name;
-            msg.angular_velocity.x = yaml_double(message["angular_velocity"]["x"], narrow);
-            msg.angular_velocity.y = yaml_double(message["angular_velocity"]["y"], narrow);
-            msg.angular_velocity.z = yaml_double(message["angular_velocity"]["z"], narrow);
-            covariance = 0;
-            for (const YAML::Node value : message["angular_velocity_covariance"]) {
-                msg.angular_velocity_covariance[covariance++] = yaml_double(value, narrow);
-            }
-            ASSERT_EQ(covariance, 9u) << name;
-            msg.linear_acceleration.x = yaml_double(message["linear_acceleration"]["x"], narrow);
-            msg.linear_acceleration.y = yaml_double(message["linear_acceleration"]["y"], narrow);
-            msg.linear_acceleration.z = yaml_double(message["linear_acceleration"]["z"], narrow);
-            covariance = 0;
-            for (const YAML::Node value : message["linear_acceleration_covariance"]) {
-                msg.linear_acceleration_covariance[covariance++] = yaml_double(value, narrow);
-            }
-            ASSERT_EQ(covariance, 9u) << name;
-            expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
-        } else if (type == "sensor_msgs/msg/JointState") {
-            sensor_msgs::msg::JointState msg;
-            const YAML::Node message = node["message"];
-            fill_header(msg.header, message["header"]);
-            for (const YAML::Node value : message["name"]) {
-                msg.name.push_back(value.as<std::string>());
-            }
-            for (const YAML::Node value : message["position"]) {
-                msg.position.push_back(yaml_double(value, narrow));
-            }
-            for (const YAML::Node value : message["velocity"]) {
-                msg.velocity.push_back(yaml_double(value, narrow));
-            }
-            for (const YAML::Node value : message["effort"]) {
-                msg.effort.push_back(yaml_double(value, narrow));
-            }
-            expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
-        } else if (type == "geometry_msgs/msg/TransformStamped") {
-            geometry_msgs::msg::TransformStamped msg;
-            fill_transform_stamped(msg, node["message"], narrow);
-            expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
-        } else if (type == "tf2_msgs/msg/TFMessage") {
-            tf2_msgs::msg::TFMessage msg;
-            for (const YAML::Node stamped : node["message"]["transforms"]) {
-                geometry_msgs::msg::TransformStamped entry;
-                fill_transform_stamped(entry, stamped, narrow);
-                msg.transforms.push_back(entry);
-            }
-            expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
-        } else {
-            FAIL() << "no reference for vector type " << type;
-        }
+    for (const auto & file : files) {
+    const YAML::Node node = YAML::LoadFile(file);
+    const std::string name = node["name"].as<std::string>();
+    const std::string type = node["type"].as<std::string>();
+    const bool narrow = node["profile"]["narrow_float64"].as<bool>();
+    const std::vector<std::uint8_t> payload = bytes_of(node["payload"].as<std::string>());
+    SCOPED_TRACE(name);
+    if (type == "std_msgs/msg/Float32") {
+      std_msgs::msg::Float32 msg;
+      const YAML::Node data = node["message"]["data"];
+      ASSERT_FALSE(narrow) << "no narrow Float32 vector exists";
+      if (data.IsMap()) {
+        std::uint32_t raw =
+          static_cast<std::uint32_t>(std::stoul(data["bits"].as<std::string>(), nullptr, 16));
+        std::memcpy(&msg.data, &raw, sizeof raw);
+      } else {
+        msg.data = data.as<float>();
+      }
+      expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
+    } else if (type == "geometry_msgs/msg/Twist") {
+      geometry_msgs::msg::Twist msg;
+      msg.linear.x = yaml_double(node["message"]["linear"]["x"], narrow);
+      msg.linear.y = yaml_double(node["message"]["linear"]["y"], narrow);
+      msg.linear.z = yaml_double(node["message"]["linear"]["z"], narrow);
+      msg.angular.x = yaml_double(node["message"]["angular"]["x"], narrow);
+      msg.angular.y = yaml_double(node["message"]["angular"]["y"], narrow);
+      msg.angular.z = yaml_double(node["message"]["angular"]["z"], narrow);
+      expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
+    } else if (type == "sensor_msgs/msg/Range") {
+      sensor_msgs::msg::Range msg;
+      const YAML::Node message = node["message"];
+      fill_header(msg.header, message["header"]);
+      msg.radiation_type = message["radiation_type"].as<std::uint8_t>();
+      msg.field_of_view = yaml_float(message["field_of_view"]);
+      msg.min_range = yaml_float(message["min_range"]);
+      msg.max_range = yaml_float(message["max_range"]);
+      msg.range = yaml_float(message["range"]);
+      msg.variance = yaml_float(message["variance"]);
+      expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
+    } else if (type == "sensor_msgs/msg/Imu") {
+      sensor_msgs::msg::Imu msg;
+      const YAML::Node message = node["message"];
+      fill_header(msg.header, message["header"]);
+      msg.orientation.x = yaml_double(message["orientation"]["x"], narrow);
+      msg.orientation.y = yaml_double(message["orientation"]["y"], narrow);
+      msg.orientation.z = yaml_double(message["orientation"]["z"], narrow);
+      msg.orientation.w = yaml_double(message["orientation"]["w"], narrow);
+      std::size_t covariance = 0;
+      for (const YAML::Node value : message["orientation_covariance"]) {
+        msg.orientation_covariance[covariance++] = yaml_double(value, narrow);
+      }
+      ASSERT_EQ(covariance, 9u) << name;
+      msg.angular_velocity.x = yaml_double(message["angular_velocity"]["x"], narrow);
+      msg.angular_velocity.y = yaml_double(message["angular_velocity"]["y"], narrow);
+      msg.angular_velocity.z = yaml_double(message["angular_velocity"]["z"], narrow);
+      covariance = 0;
+      for (const YAML::Node value : message["angular_velocity_covariance"]) {
+        msg.angular_velocity_covariance[covariance++] = yaml_double(value, narrow);
+      }
+      ASSERT_EQ(covariance, 9u) << name;
+      msg.linear_acceleration.x = yaml_double(message["linear_acceleration"]["x"], narrow);
+      msg.linear_acceleration.y = yaml_double(message["linear_acceleration"]["y"], narrow);
+      msg.linear_acceleration.z = yaml_double(message["linear_acceleration"]["z"], narrow);
+      covariance = 0;
+      for (const YAML::Node value : message["linear_acceleration_covariance"]) {
+        msg.linear_acceleration_covariance[covariance++] = yaml_double(value, narrow);
+      }
+      ASSERT_EQ(covariance, 9u) << name;
+      expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
+    } else if (type == "sensor_msgs/msg/JointState") {
+      sensor_msgs::msg::JointState msg;
+      const YAML::Node message = node["message"];
+      fill_header(msg.header, message["header"]);
+      for (const YAML::Node value : message["name"]) {
+        msg.name.push_back(value.as<std::string>());
+      }
+      for (const YAML::Node value : message["position"]) {
+        msg.position.push_back(yaml_double(value, narrow));
+      }
+      for (const YAML::Node value : message["velocity"]) {
+        msg.velocity.push_back(yaml_double(value, narrow));
+      }
+      for (const YAML::Node value : message["effort"]) {
+        msg.effort.push_back(yaml_double(value, narrow));
+      }
+      expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
+    } else if (type == "geometry_msgs/msg/TransformStamped") {
+      geometry_msgs::msg::TransformStamped msg;
+      fill_transform_stamped(msg, node["message"], narrow);
+      expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
+    } else if (type == "tf2_msgs/msg/TFMessage") {
+      tf2_msgs::msg::TFMessage msg;
+      for (const YAML::Node stamped : node["message"]["transforms"]) {
+        geometry_msgs::msg::TransformStamped entry;
+        fill_transform_stamped(entry, stamped, narrow);
+        msg.transforms.push_back(entry);
+      }
+      expect_cdr(converter, type, narrow, payload, serialize_ref(msg), name);
+    } else {
+      FAIL() << "no reference for vector type " << type;
+    }
     }
 }
 
@@ -316,12 +318,15 @@ TEST(ConverterCache, BuildsOnePlanPerType)
     Converter converter;
     const std::vector<std::uint8_t> payload{0x00, 0x00, 0xC0, 0x3F};
     std::vector<std::uint8_t> cdr;
-    EXPECT_EQ(converter.to_cdr("std_msgs/msg/Float32", false, payload.data(), payload.size(), cdr).fail,
+    EXPECT_EQ(converter.to_cdr("std_msgs/msg/Float32", false, payload.data(), payload.size(),
+        cdr).fail,
               ConvertFail::kNone);
-    EXPECT_EQ(converter.to_cdr("std_msgs/msg/Float32", false, payload.data(), payload.size(), cdr).fail,
+    EXPECT_EQ(converter.to_cdr("std_msgs/msg/Float32", false, payload.data(), payload.size(),
+        cdr).fail,
               ConvertFail::kNone);
     const std::vector<std::uint8_t> twist(48, 0);
-    EXPECT_EQ(converter.to_cdr("geometry_msgs/msg/Twist", false, twist.data(), twist.size(), cdr).fail,
+    EXPECT_EQ(converter.to_cdr("geometry_msgs/msg/Twist", false, twist.data(), twist.size(),
+        cdr).fail,
               ConvertFail::kNone);
     EXPECT_EQ(converter.cached_plan_count(), 2u);
 }
@@ -333,8 +338,9 @@ TEST(ConverterErrors, ReportsTheDepthFirstFieldIndex)
     const std::vector<std::uint8_t> narrow_twist(24, 0);
     std::vector<std::uint8_t> cdr;
 
-    auto convert = [&](const std::string &type, bool narrow, const std::vector<std::uint8_t> &payload) {
-        return converter.to_cdr(type, narrow, payload.data(), payload.size(), cdr);
+    auto convert = [&](const std::string & type, bool narrow,
+    const std::vector<std::uint8_t> & payload) {
+      return converter.to_cdr(type, narrow, payload.data(), payload.size(), cdr);
     };
 
     // Twist counts the nested field itself, then its children: linear is 0,
@@ -426,9 +432,9 @@ TEST(ConverterScalars, ConvertsEveryIntegerWidth)
 {
     Converter converter;
 
-    const auto check = [&](const std::string &type, const std::vector<std::uint8_t> &payload,
-                           const std::vector<std::uint8_t> &want) {
-        expect_cdr(converter, type, false, payload, want, type);
+    const auto check = [&](const std::string & type, const std::vector<std::uint8_t> & payload,
+    const std::vector<std::uint8_t> & want) {
+      expect_cdr(converter, type, false, payload, want, type);
     };
 
     std_msgs::msg::Int8 int8;
@@ -441,7 +447,8 @@ TEST(ConverterScalars, ConvertsEveryIntegerWidth)
 
     std_msgs::msg::Int16 int16;
     int16.data = -300;
-    check("std_msgs/msg/Int16", le_u64(static_cast<std::uint64_t>(static_cast<std::uint16_t>(-300)), 2),
+    check("std_msgs/msg/Int16",
+        le_u64(static_cast<std::uint64_t>(static_cast<std::uint16_t>(-300)), 2),
           serialize_ref(int16));
 
     std_msgs::msg::UInt16 uint16;
@@ -450,7 +457,8 @@ TEST(ConverterScalars, ConvertsEveryIntegerWidth)
 
     std_msgs::msg::Int32 int32;
     int32.data = -70000;
-    check("std_msgs/msg/Int32", le_u64(static_cast<std::uint64_t>(static_cast<std::uint32_t>(-70000)), 4),
+    check("std_msgs/msg/Int32",
+        le_u64(static_cast<std::uint64_t>(static_cast<std::uint32_t>(-70000)), 4),
           serialize_ref(int32));
 
     std_msgs::msg::UInt32 uint32;
@@ -488,7 +496,7 @@ TEST(ConverterScalars, ConvertsEveryIntegerWidth)
 
     std::vector<std::uint8_t> cdr;
     ConvertResult result =
-        converter.to_cdr("std_msgs/msg/Bool", false, std::vector<std::uint8_t>{0x02}.data(), 1, cdr);
+    converter.to_cdr("std_msgs/msg/Bool", false, std::vector<std::uint8_t>{0x02}.data(), 1, cdr);
     EXPECT_EQ(result.fail, ConvertFail::kBadBool);
     EXPECT_EQ(result.field, 0u);
 
@@ -496,7 +504,8 @@ TEST(ConverterScalars, ConvertsEveryIntegerWidth)
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
     EXPECT_EQ(result.field, 0u);
 
-    result = converter.to_cdr("std_msgs/msg/Int16", false, std::vector<std::uint8_t>{0x12}.data(), 1, cdr);
+    result = converter.to_cdr("std_msgs/msg/Int16", false, std::vector<std::uint8_t>{0x12}.data(),
+        1, cdr);
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
     EXPECT_EQ(result.field, 0u);
 
@@ -504,14 +513,16 @@ TEST(ConverterScalars, ConvertsEveryIntegerWidth)
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
     EXPECT_EQ(result.field, 0u);
 
-    result = converter.to_cdr("std_msgs/msg/Int32", false, std::vector<std::uint8_t>{0x01, 0x02, 0x03}.data(),
+    result = converter.to_cdr("std_msgs/msg/Int32", false,
+        std::vector<std::uint8_t>{0x01, 0x02, 0x03}.data(),
                               3, cdr);
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
     EXPECT_EQ(result.field, 0u);
 
     result =
-        converter.to_cdr("std_msgs/msg/Int64", false,
-                         std::vector<std::uint8_t>{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07}.data(), 7, cdr);
+    converter.to_cdr("std_msgs/msg/Int64", false,
+                         std::vector<std::uint8_t>{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07}.data(),
+        7, cdr);
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
     EXPECT_EQ(result.field, 0u);
 }
@@ -532,11 +543,12 @@ TEST(ConverterStrings, ConvertsLengthsAndRejectsBadOnes)
     long_msg.data = long_text;
     std::vector<std::uint8_t> long_payload{0x82, 0x01};
     long_payload.insert(long_payload.end(), long_text.begin(), long_text.end());
-    expect_cdr(converter, "std_msgs/msg/String", false, long_payload, serialize_ref(long_msg), "long");
+    expect_cdr(converter, "std_msgs/msg/String", false, long_payload, serialize_ref(long_msg),
+        "long");
 
     std::vector<std::uint8_t> cdr;
-    const auto convert = [&](const std::vector<std::uint8_t> &payload) {
-        return converter.to_cdr("std_msgs/msg/String", false, payload.data(), payload.size(), cdr);
+    const auto convert = [&](const std::vector<std::uint8_t> & payload) {
+      return converter.to_cdr("std_msgs/msg/String", false, payload.data(), payload.size(), cdr);
     };
 
     ConvertResult result = convert({0x01, 0x00});
@@ -587,15 +599,17 @@ TEST(ConverterSequences, ConvertsJointState)
     payload.insert(payload.end(), minus_two.begin(), minus_two.end());
     payload.push_back(0x00);
     payload.push_back(0x00);
-    expect_cdr(converter, "sensor_msgs/msg/JointState", false, payload, serialize_ref(msg), "joint state");
+    expect_cdr(converter, "sensor_msgs/msg/JointState", false, payload, serialize_ref(msg),
+        "joint state");
 }
 
 TEST(ConverterSequences, ReportsSequenceFieldIndices)
 {
     Converter converter;
     std::vector<std::uint8_t> cdr;
-    const auto convert = [&](const std::vector<std::uint8_t> &payload) {
-        return converter.to_cdr("sensor_msgs/msg/JointState", false, payload.data(), payload.size(), cdr);
+    const auto convert = [&](const std::vector<std::uint8_t> & payload) {
+      return converter.to_cdr("sensor_msgs/msg/JointState", false, payload.data(), payload.size(),
+          cdr);
     };
 
     ConvertResult result = convert(std::vector<std::uint8_t>(9, 0x00));
@@ -626,7 +640,8 @@ TEST(ConverterSequences, ConvertsPoseArray)
     payload.insert(payload.end(), 48, 0x00);
     const std::vector<std::uint8_t> one = le_double(1.0);
     payload.insert(payload.end(), one.begin(), one.end());
-    expect_cdr(converter, "geometry_msgs/msg/PoseArray", false, payload, serialize_ref(msg), "pose array");
+    expect_cdr(converter, "geometry_msgs/msg/PoseArray", false, payload, serialize_ref(msg),
+        "pose array");
 }
 
 TEST(ConverterSequences, RejectsAMalformedSequenceCount)
@@ -637,7 +652,7 @@ TEST(ConverterSequences, RejectsAMalformedSequenceCount)
     payload.insert(payload.end(), {0xF0u, 0xA2u, 0x04u});
     payload.insert(payload.end(), 10, 0x00);
     const ConvertResult result =
-        converter.to_cdr("geometry_msgs/msg/PoseArray", false, payload.data(), payload.size(), cdr);
+    converter.to_cdr("geometry_msgs/msg/PoseArray", false, payload.data(), payload.size(), cdr);
     EXPECT_EQ(result.fail, ConvertFail::kBadVarint);
     EXPECT_EQ(result.field, 5u);
 }
@@ -650,7 +665,7 @@ TEST(ConverterSequences, RefusesAnEncodeOverBoundSequence)
     const std::vector<std::uint8_t> cdr = serialize_ref(msg);
     std::vector<std::uint8_t> packed;
     const ConvertResult result =
-        converter.from_cdr("std_msgs/msg/Int32MultiArray", false, cdr.data(), cdr.size(), packed);
+    converter.from_cdr("std_msgs/msg/Int32MultiArray", false, cdr.data(), cdr.size(), packed);
     EXPECT_EQ(result.fail, ConvertFail::kOverBound);
 }
 
@@ -658,8 +673,9 @@ TEST(ConverterSequences, NumbersNestedArrayElementsDynamically)
 {
     Converter converter;
     std::vector<std::uint8_t> cdr;
-    const auto convert = [&](const std::vector<std::uint8_t> &payload) {
-        return converter.to_cdr("geometry_msgs/msg/PoseArray", false, payload.data(), payload.size(), cdr);
+    const auto convert = [&](const std::vector<std::uint8_t> & payload) {
+      return converter.to_cdr("geometry_msgs/msg/PoseArray", false, payload.data(), payload.size(),
+          cdr);
     };
 
     // poses is 5, its first position is 6: cutting inside position.y names 8.
@@ -683,10 +699,11 @@ TEST(ConverterNested, ReportsNestedFieldIndices)
 {
     Converter converter;
     std::vector<std::uint8_t> cdr;
-    std::vector<std::uint8_t> payload{0x04, 0x03, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x03, 'i', 'm', 'u'};
+    std::vector<std::uint8_t> payload{0x04, 0x03, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x03, 'i',
+    'm', 'u'};
     payload.insert(payload.end(), 10, 0x00);
     const ConvertResult result =
-        converter.to_cdr("sensor_msgs/msg/Imu", false, payload.data(), payload.size(), cdr);
+    converter.to_cdr("sensor_msgs/msg/Imu", false, payload.data(), payload.size(), cdr);
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
     EXPECT_EQ(result.field, 7u);
 }
@@ -698,7 +715,8 @@ TEST(ConverterNested, ConvertsImuWithFixedArrays)
     msg.header.stamp.sec = 0x01020304;
     msg.header.frame_id = "imu";
 
-    std::vector<std::uint8_t> payload{0x04, 0x03, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x03, 'i', 'm', 'u'};
+    std::vector<std::uint8_t> payload{0x04, 0x03, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x03, 'i',
+    'm', 'u'};
     payload.insert(payload.end(), 3 * 8, 0x00);
     const std::vector<std::uint8_t> one = le_double(1.0);
     payload.insert(payload.end(), one.begin(), one.end());
@@ -729,11 +747,11 @@ void fake_noop_fini(void *)
 
 rosidl_message_type_support_t fake_ts_for(const MessageMembers *members)
 {
-    rosidl_message_type_support_t handle;
-    std::memset(&handle, 0, sizeof handle);
-    handle.typesupport_identifier = "rosidl_typesupport_introspection_cpp";
-    handle.data = members;
-    return handle;
+  rosidl_message_type_support_t handle;
+  std::memset(&handle, 0, sizeof handle);
+  handle.typesupport_identifier = "rosidl_typesupport_introspection_cpp";
+  handle.data = members;
+  return handle;
 }
 
 TEST(ConverterPlans, RefusesKindsWithoutAWireForm)
@@ -756,7 +774,7 @@ TEST(ConverterPlans, RefusesKindsWithoutAWireForm)
     std::vector<std::uint8_t> cdr;
     const std::vector<std::uint8_t> payload{0x00};
     const ConvertResult result =
-        converter.to_cdr("fake/msg/Wstring", false, payload.data(), payload.size(), cdr);
+    converter.to_cdr("fake/msg/Wstring", false, payload.data(), payload.size(), cdr);
     EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
     EXPECT_EQ(result.field, 0u);
 }
@@ -789,9 +807,9 @@ TEST(ConverterPlans, RefusesMoreThan255Fields)
 {
     Converter converter;
     static MessageMember many[256];
-    for (auto &member : many) {
-        member.name_ = "f";
-        member.type_id_ = ROS_TYPE_UINT8;
+    for (auto & member : many) {
+    member.name_ = "f";
+    member.type_id_ = ROS_TYPE_UINT8;
     }
     MessageMembers members{};
     members.message_namespace_ = "fake";
@@ -812,19 +830,19 @@ TEST(ConverterPlans, RefusesDeepNesting)
     static MessageMember links[40];
     static rosidl_message_type_support_t nested[40];
     for (int i = 39; i >= 0; --i) {
-        nested[i] = fake_ts_for(&levels[i]);
+    nested[i] = fake_ts_for(&levels[i]);
     }
     for (int i = 0; i < 39; ++i) {
-        links[i].name_ = "child";
-        links[i].type_id_ = ROS_TYPE_MESSAGE;
-        links[i].members_ = &nested[i + 1];
-        levels[i].message_namespace_ = "fake";
-        levels[i].message_name_ = "Deep";
-        levels[i].member_count_ = 1;
-        levels[i].size_of_ = 1;
-        levels[i].members_ = &links[i];
-        levels[i].init_function = fake_noop_init;
-        levels[i].fini_function = fake_noop_fini;
+    links[i].name_ = "child";
+    links[i].type_id_ = ROS_TYPE_MESSAGE;
+    links[i].members_ = &nested[i + 1];
+    levels[i].message_namespace_ = "fake";
+    levels[i].message_name_ = "Deep";
+    levels[i].member_count_ = 1;
+    levels[i].size_of_ = 1;
+    levels[i].members_ = &links[i];
+    levels[i].init_function = fake_noop_init;
+    levels[i].fini_function = fake_noop_fini;
     }
     links[39].name_ = "leaf";
     links[39].type_id_ = ROS_TYPE_UINT8;
@@ -972,28 +990,29 @@ TEST(ConverterPlans, RefusesMissingNestedMembers)
     EXPECT_FALSE(converter.install_plan_for_test("fake/msg/NoNested", &handle));
 }
 
-struct FakeBounded {
-    std::vector<double> values;
+struct FakeBounded
+{
+  std::vector<double> values;
 };
 
 void fake_bounded_init(void *memory, MessageInitialization)
 {
-    new (&static_cast<FakeBounded *>(memory)->values) std::vector<double>();
+  new (&static_cast<FakeBounded *>(memory)->values) std::vector<double>();
 }
 
 void fake_bounded_fini(void *memory)
 {
-    static_cast<FakeBounded *>(memory)->values.~vector();
+  static_cast<FakeBounded *>(memory)->values.~vector();
 }
 
-void *fake_bounded_get(void *memory, std::size_t index)
+void * fake_bounded_get(void *memory, std::size_t index)
 {
-    return &static_cast<FakeBounded *>(memory)->values[index];
+  return &static_cast<FakeBounded *>(memory)->values[index];
 }
 
 void fake_bounded_resize(void *memory, std::size_t size)
 {
-    static_cast<FakeBounded *>(memory)->values.resize(size);
+  static_cast<FakeBounded *>(memory)->values.resize(size);
 }
 
 TEST(ConverterSequences, RefusesOverBoundSequences)
@@ -1022,7 +1041,7 @@ TEST(ConverterSequences, RefusesOverBoundSequences)
     payload.insert(payload.end(), 6 * 8, 0x00);
     std::vector<std::uint8_t> cdr;
     const ConvertResult result =
-        converter.to_cdr("fake/msg/Bounded", false, payload.data(), payload.size(), cdr);
+    converter.to_cdr("fake/msg/Bounded", false, payload.data(), payload.size(), cdr);
     EXPECT_EQ(result.fail, ConvertFail::kOverBound);
     EXPECT_EQ(result.field, 0u);
 }
@@ -1042,14 +1061,15 @@ TEST(ConverterSequences, ConvertsMessagesPastTheInitialBuffer)
 
     std::vector<std::uint8_t> first;
     ConvertResult result =
-        converter.to_cdr("sensor_msgs/msg/JointState", false, payload.data(), payload.size(), first);
+    converter.to_cdr("sensor_msgs/msg/JointState", false, payload.data(), payload.size(), first);
     ASSERT_EQ(result.fail, ConvertFail::kNone) << "field " << static_cast<int>(result.field);
     std::vector<std::uint8_t> second;
-    result = converter.to_cdr("sensor_msgs/msg/JointState", false, payload.data(), payload.size(), second);
+    result = converter.to_cdr("sensor_msgs/msg/JointState", false, payload.data(), payload.size(),
+          second);
     ASSERT_EQ(result.fail, ConvertFail::kNone) << "field " << static_cast<int>(result.field);
     EXPECT_EQ(first, second);
     if (first != serialize_ref(msg) || second != serialize_ref(msg)) {
-        ADD_FAILURE() << "CDR differs from rclcpp serialization";
+    ADD_FAILURE() << "CDR differs from rclcpp serialization";
     }
 }
 
@@ -1078,23 +1098,25 @@ TEST(ConverterPlans, RefusesConversionWithoutAMiddlewareHandle)
     std::vector<std::uint8_t> cdr;
     const std::vector<std::uint8_t> payload{0x00};
     const ConvertResult result =
-        converter.to_cdr("fake/msg/BoundedEmpty", false, payload.data(), payload.size(), cdr);
+    converter.to_cdr("fake/msg/BoundedEmpty", false, payload.data(), payload.size(), cdr);
     EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
     EXPECT_EQ(result.field, 0xFFu);
 }
 
-struct FakeInner {
-    std::uint8_t x;
-};
-
-struct FakeOuter {
-    FakeInner items[2];
-    std::uint8_t after;
-};
-
-void *fake_outer_get(void *memory, std::size_t index)
+struct FakeInner
 {
-    return &static_cast<FakeOuter *>(memory)->items[index];
+  std::uint8_t x;
+};
+
+struct FakeOuter
+{
+  FakeInner items[2];
+  std::uint8_t after;
+};
+
+void * fake_outer_get(void *memory, std::size_t index)
+{
+  return &static_cast<FakeOuter *>(memory)->items[index];
 }
 
 TEST(ConverterFieldPath, PassesThroughFixedNestedArrays)
@@ -1254,8 +1276,9 @@ TEST(ConverterFieldPath, AdmitsUnknownPathsPastNestedSequences)
     EXPECT_EQ(converter.field_path("fake/msg/NestedSeq", 3), "");
 }
 
-struct FakeBools {
-    std::vector<bool> values;
+struct FakeBools
+{
+  std::vector<bool> values;
 };
 
 // The values the boolean assign callback receives, in order, and the sizes
@@ -1267,26 +1290,26 @@ std::vector<std::size_t> resized_bool_counts;
 
 void fake_bools_init(void *memory, MessageInitialization)
 {
-    new (&static_cast<FakeBools *>(memory)->values) std::vector<bool>();
-    assigned_bools.clear();
-    resized_bool_counts.clear();
+  new (&static_cast<FakeBools *>(memory)->values) std::vector<bool>();
+  assigned_bools.clear();
+  resized_bool_counts.clear();
 }
 
 void fake_bools_fini(void *memory)
 {
-    static_cast<FakeBools *>(memory)->values.~vector();
+  static_cast<FakeBools *>(memory)->values.~vector();
 }
 
 void fake_bools_assign(void *memory, std::size_t index, const void *value)
 {
-    static_cast<FakeBools *>(memory)->values[index] = *static_cast<const bool *>(value);
-    assigned_bools.emplace_back(index, *static_cast<const bool *>(value));
+  static_cast<FakeBools *>(memory)->values[index] = *static_cast<const bool *>(value);
+  assigned_bools.emplace_back(index, *static_cast<const bool *>(value));
 }
 
 void fake_bools_resize(void *memory, std::size_t size)
 {
-    static_cast<FakeBools *>(memory)->values.resize(size);
-    resized_bool_counts.push_back(size);
+  static_cast<FakeBools *>(memory)->values.resize(size);
+  resized_bool_counts.push_back(size);
 }
 
 TEST(ConverterSequences, ConvertsBooleanSequencesThroughAssign)
@@ -1313,27 +1336,29 @@ TEST(ConverterSequences, ConvertsBooleanSequencesThroughAssign)
 
     std::vector<std::uint8_t> cdr;
     ConvertResult result =
-        converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x01, 0x01}.data(), 2, cdr);
+    converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x01, 0x01}.data(), 2, cdr);
     EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
     EXPECT_EQ(result.field, 0xFFu);
     const std::vector<std::pair<std::size_t, bool>> want_assigned{{0, true}};
     EXPECT_EQ(assigned_bools, want_assigned);
     EXPECT_EQ(resized_bool_counts, std::vector<std::size_t>{1});
 
-    result = converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x02}.data(), 1, cdr);
+    result = converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x02}.data(), 1,
+          cdr);
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
     EXPECT_EQ(result.field, 0u);
     EXPECT_EQ(resized_bool_counts, std::vector<std::size_t>{2});
 
-    result = converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x01, 0x02}.data(), 2, cdr);
+    result = converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x01, 0x02}.data(),
+          2, cdr);
     EXPECT_EQ(result.fail, ConvertFail::kBadBool);
     EXPECT_EQ(result.field, 0u);
     EXPECT_EQ(resized_bool_counts, std::vector<std::size_t>{1});
 }
 
-void *fake_empty_get(void * /*memory*/, std::size_t /*index*/)
+void * fake_empty_get(void * /*memory*/, std::size_t /*index*/)
 {
-    return nullptr;
+  return nullptr;
 }
 
 TEST(ConverterFieldPath, StopsAtEmptyNestedArrays)
@@ -1369,33 +1394,35 @@ TEST(ConverterRoundTrip, PackedToCdrToPackedReturnsTheOriginal)
 {
     Converter converter;
     std::vector<std::filesystem::path> files;
-    for (const auto &entry : std::filesystem::directory_iterator(R2S_MESSAGES_VECTOR_DIR)) {
-        if (entry.path().extension() == ".yaml") {
-            files.push_back(entry.path());
-        }
+    for (const auto & entry : std::filesystem::directory_iterator(R2S_MESSAGES_VECTOR_DIR)) {
+    if (entry.path().extension() == ".yaml") {
+      files.push_back(entry.path());
+    }
     }
     std::sort(files.begin(), files.end());
     ASSERT_FALSE(files.empty()) << "no message vectors found";
 
-    for (const auto &file : files) {
-        const YAML::Node node = YAML::LoadFile(file);
-        const std::string name = node["name"].as<std::string>();
-        const std::string type = node["type"].as<std::string>();
-        if (type != "std_msgs/msg/Float32" && type != "geometry_msgs/msg/Twist") {
-            continue;
-        }
-        SCOPED_TRACE(name);
-        const bool narrow = node["profile"]["narrow_float64"].as<bool>();
-        const std::vector<std::uint8_t> payload = bytes_of(node["payload"].as<std::string>());
-        std::vector<std::uint8_t> cdr;
-        const ConvertResult forward = converter.to_cdr(type, narrow, payload.data(), payload.size(), cdr);
-        ASSERT_EQ(forward.fail, ConvertFail::kNone);
-        std::vector<std::uint8_t> packed;
-        const ConvertResult back = converter.from_cdr(type, narrow, cdr.data(), cdr.size(), packed);
-        ASSERT_EQ(back.fail, ConvertFail::kNone) << "field " << static_cast<int>(back.field);
-        if (packed != payload) {
-            ADD_FAILURE() << "round trip differs\n got: " << hex_of(packed) << "\nwant: " << hex_of(payload);
-        }
+    for (const auto & file : files) {
+    const YAML::Node node = YAML::LoadFile(file);
+    const std::string name = node["name"].as<std::string>();
+    const std::string type = node["type"].as<std::string>();
+    if (type != "std_msgs/msg/Float32" && type != "geometry_msgs/msg/Twist") {
+      continue;
+    }
+    SCOPED_TRACE(name);
+    const bool narrow = node["profile"]["narrow_float64"].as<bool>();
+    const std::vector<std::uint8_t> payload = bytes_of(node["payload"].as<std::string>());
+    std::vector<std::uint8_t> cdr;
+    const ConvertResult forward = converter.to_cdr(type, narrow, payload.data(), payload.size(),
+            cdr);
+    ASSERT_EQ(forward.fail, ConvertFail::kNone);
+    std::vector<std::uint8_t> packed;
+    const ConvertResult back = converter.from_cdr(type, narrow, cdr.data(), cdr.size(), packed);
+    ASSERT_EQ(back.fail, ConvertFail::kNone) << "field " << static_cast<int>(back.field);
+    if (packed != payload) {
+      ADD_FAILURE() << "round trip differs\n got: " << hex_of(packed) << "\nwant: " <<
+        hex_of(payload);
+    }
     }
 }
 
@@ -1403,7 +1430,8 @@ TEST(ConverterFromCdr, RejectsAnEmptyMessage)
 {
     Converter converter;
     std::vector<std::uint8_t> packed;
-    const ConvertResult result = converter.from_cdr("std_msgs/msg/Float32", false, nullptr, 0u, packed);
+    const ConvertResult result = converter.from_cdr("std_msgs/msg/Float32", false, nullptr, 0u,
+          packed);
     EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
 }
 
@@ -1412,10 +1440,10 @@ TEST(ConverterFromCdr, RejectsANulInAString)
     Converter converter;
     // CDR encapsulation, a length of 3, and "a" plus NUL plus "b".
     const std::vector<std::uint8_t> cdr{0x00, 0x01, 0x00, 0x00, 0x03, 0x00,
-                                        0x00, 0x00, 0x61, 0x00, 0x62, 0x00};
+    0x00, 0x00, 0x61, 0x00, 0x62, 0x00};
     std::vector<std::uint8_t> packed;
     const ConvertResult result =
-        converter.from_cdr("std_msgs/msg/String", false, cdr.data(), cdr.size(), packed);
+    converter.from_cdr("std_msgs/msg/String", false, cdr.data(), cdr.size(), packed);
     EXPECT_EQ(result.fail, ConvertFail::kNulInString);
     EXPECT_EQ(result.field, 0u);
     EXPECT_EQ(converter.field_path("std_msgs/msg/String", 0u), "data");
@@ -1427,26 +1455,28 @@ TEST(ConverterFromCdr, RejectsAnUnreadableMessage)
     const std::vector<std::uint8_t> cdr{0x00};
     std::vector<std::uint8_t> packed;
     const ConvertResult result =
-        converter.from_cdr("std_msgs/msg/Float32", false, cdr.data(), cdr.size(), packed);
+    converter.from_cdr("std_msgs/msg/Float32", false, cdr.data(), cdr.size(), packed);
     EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
 }
 TEST(ConverterFromCdr, ConvertsScalarsAndStrings)
 {
     Converter converter;
-    const auto expect = [&converter](const std::string &type, const std::vector<std::uint8_t> &cdr,
-                                     const std::vector<std::uint8_t> &want) {
-        SCOPED_TRACE(type);
-        std::vector<std::uint8_t> packed;
-        const ConvertResult result = converter.from_cdr(type, false, cdr.data(), cdr.size(), packed);
-        EXPECT_EQ(result.fail, ConvertFail::kNone);
-        EXPECT_EQ(packed, want);
+    const auto expect = [&converter](const std::string & type,
+    const std::vector<std::uint8_t> & cdr,
+    const std::vector<std::uint8_t> & want) {
+      SCOPED_TRACE(type);
+      std::vector<std::uint8_t> packed;
+      const ConvertResult result = converter.from_cdr(type, false, cdr.data(), cdr.size(), packed);
+      EXPECT_EQ(result.fail, ConvertFail::kNone);
+      EXPECT_EQ(packed, want);
     };
     std_msgs::msg::String text;
     text.data = "hi";
     expect("std_msgs/msg/String", serialize_ref(text), {0x02, 0x68, 0x69});
     std_msgs::msg::UInt64 wide;
     wide.data = 0x0102030405060708ull;
-    expect("std_msgs/msg/UInt64", serialize_ref(wide), {0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01});
+    expect("std_msgs/msg/UInt64", serialize_ref(wide),
+    {0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01});
     std_msgs::msg::UInt16 narrow16;
     narrow16.data = 0x0102;
     expect("std_msgs/msg/UInt16", serialize_ref(narrow16), {0x02, 0x01});
@@ -1480,12 +1510,12 @@ TEST(ConverterFromCdr, ConvertsBooleanSequences)
     const std::vector<std::uint8_t> cdr = serialize_ref(param);
     std::vector<std::uint8_t> packed;
     const ConvertResult result =
-        converter.from_cdr("rcl_interfaces/msg/ParameterValue", false, cdr.data(), cdr.size(), packed);
+    converter.from_cdr("rcl_interfaces/msg/ParameterValue", false, cdr.data(), cdr.size(), packed);
     ASSERT_EQ(result.fail, ConvertFail::kNone) << "field " << static_cast<int>(result.field);
     const std::vector<std::uint8_t> want{
-        0x01, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0xF8, 0x3F, 0x01, 0x73, 0x01, 0xAA, 0x02, 0x01, 0x00, 0x01, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x3F, 0x01, 0x01, 0x78};
+    0x01, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xF8, 0x3F, 0x01, 0x73, 0x01, 0xAA, 0x02, 0x01, 0x00, 0x01, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x3F, 0x01, 0x01, 0x78};
     EXPECT_EQ(packed, want);
 }
 
@@ -1497,7 +1527,7 @@ TEST(ConverterFromCdr, EncodesMultiByteVarints)
     const std::vector<std::uint8_t> cdr = serialize_ref(text);
     std::vector<std::uint8_t> packed;
     const ConvertResult result =
-        converter.from_cdr("std_msgs/msg/String", false, cdr.data(), cdr.size(), packed);
+    converter.from_cdr("std_msgs/msg/String", false, cdr.data(), cdr.size(), packed);
     ASSERT_EQ(result.fail, ConvertFail::kNone);
     ASSERT_EQ(packed.size(), 202u);
     EXPECT_EQ(packed[0], 0xC8u);
@@ -1514,7 +1544,7 @@ TEST(ConverterFromCdr, RejectsAnOverlongElement)
     const std::vector<std::uint8_t> cdr = serialize_ref(state);
     std::vector<std::uint8_t> packed;
     const ConvertResult result =
-        converter.from_cdr("sensor_msgs/msg/JointState", false, cdr.data(), cdr.size(), packed);
+    converter.from_cdr("sensor_msgs/msg/JointState", false, cdr.data(), cdr.size(), packed);
     EXPECT_EQ(result.fail, ConvertFail::kOverBound);
     EXPECT_EQ(result.field, 5u) << "the name field in depth-first order";
     EXPECT_TRUE(packed.empty()) << "no partial payload escapes";
@@ -1535,17 +1565,17 @@ TEST(ConverterFromCdr, ConvertsPoseArray)
     const std::vector<std::uint8_t> cdr = serialize_ref(msg);
     std::vector<std::uint8_t> packed;
     const ConvertResult result =
-        converter.from_cdr("geometry_msgs/msg/PoseArray", false, cdr.data(), cdr.size(), packed);
+    converter.from_cdr("geometry_msgs/msg/PoseArray", false, cdr.data(), cdr.size(), packed);
     ASSERT_EQ(result.fail, ConvertFail::kNone) << "field " << static_cast<int>(result.field);
     ASSERT_EQ(packed.size(), 66u);
     std::vector<std::uint8_t> want(9, 0x00);
     want.push_back(0x01);
     for (double value : {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0}) {
-        const std::vector<std::uint8_t> raw = le_double(value);
-        want.insert(want.end(), raw.begin(), raw.end());
+    const std::vector<std::uint8_t> raw = le_double(value);
+    want.insert(want.end(), raw.begin(), raw.end());
     }
     if (packed != want) {
-        ADD_FAILURE() << "packed differs\n got: " << hex_of(packed) << "\nwant: " << hex_of(want);
+    ADD_FAILURE() << "packed differs\n got: " << hex_of(packed) << "\nwant: " << hex_of(want);
     }
 }
 
@@ -1557,7 +1587,7 @@ TEST(ConverterFromCdr, RefusesAnOverlongSequence)
     const std::vector<std::uint8_t> cdr = serialize_ref(state);
     std::vector<std::uint8_t> packed;
     const ConvertResult result =
-        converter.from_cdr("sensor_msgs/msg/JointState", false, cdr.data(), cdr.size(), packed);
+    converter.from_cdr("sensor_msgs/msg/JointState", false, cdr.data(), cdr.size(), packed);
     EXPECT_EQ(result.fail, ConvertFail::kOverBound);
     EXPECT_EQ(result.field, 6u) << "the position field in depth-first order";
 }
@@ -1570,7 +1600,7 @@ TEST(ConverterFromCdr, RefusesAnOverlongNestedString)
     const std::vector<std::uint8_t> cdr = serialize_ref(fix);
     std::vector<std::uint8_t> packed;
     const ConvertResult result =
-        converter.from_cdr("sensor_msgs/msg/NavSatFix", false, cdr.data(), cdr.size(), packed);
+    converter.from_cdr("sensor_msgs/msg/NavSatFix", false, cdr.data(), cdr.size(), packed);
     EXPECT_EQ(result.fail, ConvertFail::kOverBound);
     EXPECT_EQ(result.field, 4u) << "the frame_id field in depth-first order";
     EXPECT_TRUE(packed.empty()) << "no partial payload escapes";
@@ -1581,7 +1611,8 @@ TEST(ConverterFromCdr, RejectsAnUnknownType)
     Converter converter;
     std::vector<std::uint8_t> packed;
     const std::vector<std::uint8_t> cdr{0x00};
-    const ConvertResult result = converter.from_cdr("nope/msg/Nope", false, cdr.data(), cdr.size(), packed);
+    const ConvertResult result = converter.from_cdr("nope/msg/Nope", false, cdr.data(), cdr.size(),
+          packed);
     EXPECT_EQ(result.fail, ConvertFail::kUnknownType);
 }
 
@@ -1615,11 +1646,11 @@ TEST(ConverterFromCdr, ConvertsJointState)
     const std::vector<std::uint8_t> cdr = serialize_ref(state);
     std::vector<std::uint8_t> packed;
     const ConvertResult result =
-        converter.from_cdr("sensor_msgs/msg/JointState", false, cdr.data(), cdr.size(), packed);
+    converter.from_cdr("sensor_msgs/msg/JointState", false, cdr.data(), cdr.size(), packed);
     ASSERT_EQ(result.fail, ConvertFail::kNone) << "field " << static_cast<int>(result.field);
     const std::vector<std::uint8_t> want{0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01,
-                                         0x66, 0x01, 0x02, 0x61, 0x62, 0x01, 0x00, 0x00, 0x00,
-                                         0x00, 0x00, 0x00, 0xF0, 0x3F, 0x00, 0x00};
+    0x66, 0x01, 0x02, 0x61, 0x62, 0x01, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0xF0, 0x3F, 0x00, 0x00};
     EXPECT_EQ(packed, want);
 }
 
@@ -1632,16 +1663,16 @@ TEST(ConverterFromCdr, RoundTripsImuBothWidths)
     imu.linear_acceleration.z = -2.0;
     const std::vector<std::uint8_t> cdr = serialize_ref(imu);
     for (const bool narrow : {false, true}) {
-        SCOPED_TRACE(narrow ? "narrow" : "full");
-        std::vector<std::uint8_t> packed;
-        const ConvertResult back =
-            converter.from_cdr("sensor_msgs/msg/Imu", narrow, cdr.data(), cdr.size(), packed);
-        ASSERT_EQ(back.fail, ConvertFail::kNone) << "field " << static_cast<int>(back.field);
-        std::vector<std::uint8_t> again;
-        const ConvertResult forth =
-            converter.to_cdr("sensor_msgs/msg/Imu", narrow, packed.data(), packed.size(), again);
-        ASSERT_EQ(forth.fail, ConvertFail::kNone);
-        EXPECT_EQ(again, cdr) << "the packed form converts back byte-identically";
+    SCOPED_TRACE(narrow ? "narrow" : "full");
+    std::vector<std::uint8_t> packed;
+    const ConvertResult back =
+      converter.from_cdr("sensor_msgs/msg/Imu", narrow, cdr.data(), cdr.size(), packed);
+    ASSERT_EQ(back.fail, ConvertFail::kNone) << "field " << static_cast<int>(back.field);
+    std::vector<std::uint8_t> again;
+    const ConvertResult forth =
+      converter.to_cdr("sensor_msgs/msg/Imu", narrow, packed.data(), packed.size(), again);
+    ASSERT_EQ(forth.fail, ConvertFail::kNone);
+    EXPECT_EQ(again, cdr) << "the packed form converts back byte-identically";
     }
     std::vector<std::uint8_t> full;
     ASSERT_EQ(converter.from_cdr("sensor_msgs/msg/Imu", false, cdr.data(), cdr.size(), full).fail,
@@ -1660,12 +1691,12 @@ TEST(ConverterFromCdr, RefusesAnOverlongString)
     const std::vector<std::uint8_t> cdr = serialize_ref(text);
     std::vector<std::uint8_t> packed;
     const ConvertResult result =
-        converter.from_cdr("std_msgs/msg/String", false, cdr.data(), cdr.size(), packed);
+    converter.from_cdr("std_msgs/msg/String", false, cdr.data(), cdr.size(), packed);
     EXPECT_EQ(result.fail, ConvertFail::kOverBound);
     EXPECT_EQ(result.field, 0u);
     EXPECT_TRUE(packed.empty()) << "no partial payload escapes";
 }
 
-} // namespace
-} // namespace test
-} // namespace r2s_bridge
+}  // namespace
+}  // namespace test
+}  // namespace r2s_bridge

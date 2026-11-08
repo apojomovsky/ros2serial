@@ -44,170 +44,185 @@ constexpr std::uint8_t kEchoVel = 18u;
 constexpr std::uint8_t kParamsTopic = 3u;
 constexpr std::uint8_t kAckTopic = 6u;
 
-std::array<std::uint8_t, 8> installed_hash(const std::string &type)
+std::array<std::uint8_t, 8> installed_hash(const std::string & type)
 {
-    const auto library = rclcpp::get_typesupport_library(type, "rosidl_typesupport_cpp");
-    const rosidl_message_type_support_t *handle =
-        rclcpp::get_message_typesupport_handle(type, "rosidl_typesupport_cpp", *library);
-    const rosidl_type_hash_t *hash = handle->get_type_hash_func(handle);
-    std::array<std::uint8_t, 8> out{};
-    std::copy(hash->value, hash->value + 8u, out.begin());
-    return out;
+  const auto library = rclcpp::get_typesupport_library(type, "rosidl_typesupport_cpp");
+  const rosidl_message_type_support_t *handle =
+    rclcpp::get_message_typesupport_handle(type, "rosidl_typesupport_cpp", *library);
+  const rosidl_type_hash_t *hash = handle->get_type_hash_func(handle);
+  std::array<std::uint8_t, 8> out{};
+  std::copy(hash->value, hash->value + 8u, out.begin());
+  return out;
 }
 
-bool logged_has(const std::vector<std::string> &logged, const std::string &part)
+bool logged_has(const std::vector<std::string> & logged, const std::string & part)
 {
-    return std::any_of(logged.begin(), logged.end(),
-                       [&part](const std::string &line) { return line.find(part) != std::string::npos; });
+  return std::any_of(logged.begin(), logged.end(),
+           [&part](const std::string & line) {return line.find(part) != std::string::npos;});
 }
 
 class RouterFixture
 {
-  public:
-    RouterFixture(const std::string &name, rclcpp::NodeOptions options, RouterParams params,
-                  std::uint16_t max_frame = 512u, bool with_mcu_sink = true,
-                  SessionConfig session_config = SessionConfig(), bool with_node_params = true)
-        : max_frame_(max_frame), node_(std::make_shared<rclcpp::Node>(name, "robot1", options))
-    {
-        LogSink mcu_sink;
-        if (with_mcu_sink) {
-            mcu_sink = [this](SessionLog level, const std::string &text) { mcu_.emplace_back(level, text); };
-        }
-        router_ = std::make_unique<Router>(
-            node_->get_node_topics_interface(),
-            [this]() { return std::unique_ptr<Transport>(new HelperLink(transport_)); }, clock_, clock_,
-            std::move(params), [this](SessionLog, const std::string &text) { logged_.push_back(text); },
-            std::move(session_config), std::move(mcu_sink),
-            with_node_params ? node_->get_node_parameters_interface() : nullptr);
+public:
+  RouterFixture(
+    const std::string & name, rclcpp::NodeOptions options, RouterParams params,
+    std::uint16_t max_frame = 512u, bool with_mcu_sink = true,
+    SessionConfig session_config = SessionConfig(), bool with_node_params = true)
+  : max_frame_(max_frame), node_(std::make_shared<rclcpp::Node>(name, "robot1", options))
+  {
+    LogSink mcu_sink;
+    if (with_mcu_sink) {
+      mcu_sink = [this](SessionLog level, const std::string & text) {
+          mcu_.emplace_back(level, text);
+        };
     }
+    router_ = std::make_unique<Router>(
+      node_->get_node_topics_interface(),
+      [this]() {return std::unique_ptr<Transport>(new HelperLink(transport_));},
+      clock_,
+      clock_,
+      std::move(params),
+      [this](SessionLog, const std::string & text) {
+        logged_.push_back(text);
+      },
+      std::move(session_config),
+      std::move(mcu_sink),
+      with_node_params ? node_->get_node_parameters_interface() : nullptr);
+  }
 
-    void block_link()
-    {
-        transport_.limit_write(0u);
-    }
+  void block_link()
+  {
+    transport_.limit_write(0u);
+  }
 
-    void allow_link()
-    {
-        transport_.limit_write(1000000u);
-    }
+  void allow_link()
+  {
+    transport_.limit_write(1000000u);
+  }
 
-    void advance(std::uint32_t ms)
-    {
-        clock_.advance(std::chrono::milliseconds(ms));
-        router_->poll();
-    }
+  void advance(std::uint32_t ms)
+  {
+    clock_.advance(std::chrono::milliseconds(ms));
+    router_->poll();
+  }
 
-    void deliver_frame(std::uint8_t topic_id, std::uint8_t seq, const std::vector<std::uint8_t> &payload)
-    {
-        std::vector<std::uint8_t> decoded{topic_id, seq};
-        decoded.insert(decoded.end(), payload.begin(), payload.end());
-        transport_.script_read(helper_wire_of(helper_with_check(decoded)));
-        router_->poll();
-    }
+  void deliver_frame(
+    std::uint8_t topic_id, std::uint8_t seq,
+    const std::vector<std::uint8_t> & payload)
+  {
+    std::vector<std::uint8_t> decoded{topic_id, seq};
+    decoded.insert(decoded.end(), payload.begin(), payload.end());
+    transport_.script_read(helper_wire_of(helper_with_check(decoded)));
+    router_->poll();
+  }
 
     // Answers what the session asks until CONNECTED: a Float32 publisher
     // "battery" and a Twist subscription "cmd_vel", with an optional String
     // topic "log_text" in either direction.
-    static constexpr std::uint8_t kLogText = 18u;
-    void handshake(std::uint8_t cmd_vel_flags = 0x01u, std::uint32_t token = 7u, bool with_log_text = false,
-                   std::uint8_t log_text_flags = 0x00u, std::uint16_t frame_cap = 0u)
-    {
-        const std::uint16_t cap = frame_cap == 0u ? max_frame_ : frame_cap;
-        deliver_frame(kHelperControl, 0u, helper_hello(token, with_log_text ? 3u : 2u, cap));
-        expect_topic_req(0u);
-        const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
-        deliver_frame(
+  static constexpr std::uint8_t kLogText = 18u;
+  void handshake(
+    std::uint8_t cmd_vel_flags = 0x01u, std::uint32_t token = 7u, bool with_log_text = false,
+    std::uint8_t log_text_flags = 0x00u, std::uint16_t frame_cap = 0u)
+  {
+    const std::uint16_t cap = frame_cap == 0u ? max_frame_ : frame_cap;
+    deliver_frame(kHelperControl, 0u, helper_hello(token, with_log_text ? 3u : 2u, cap));
+    expect_topic_req(0u);
+    const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
+    deliver_frame(
             kHelperControl, 1u,
-            helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
-        expect_topic_req(1u);
-        const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
-        deliver_frame(kHelperControl, 2u,
-                      helper_topic(1u, kCmdVel, cmd_vel_flags, twist_hash.data(), "geometry_msgs/msg/Twist",
+            helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32",
+            "battery"));
+    expect_topic_req(1u);
+    const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
+    deliver_frame(kHelperControl, 2u,
+                      helper_topic(1u, kCmdVel, cmd_vel_flags, twist_hash.data(),
+            "geometry_msgs/msg/Twist",
                                    "cmd_vel"));
-        if (with_log_text) {
-            expect_topic_req(2u);
-            const std::array<std::uint8_t, 8> string_hash = installed_hash("std_msgs/msg/String");
-            deliver_frame(kHelperControl, 3u,
+    if (with_log_text) {
+      expect_topic_req(2u);
+      const std::array<std::uint8_t, 8> string_hash = installed_hash("std_msgs/msg/String");
+      deliver_frame(kHelperControl, 3u,
                           helper_topic(2u, kLogText, log_text_flags, string_hash.data(),
                                        "std_msgs/msg/String", "log_text"));
-        }
-        drain();
-        const bool log_is_pub = with_log_text && (log_text_flags & 0x01u) == 0u;
-        EXPECT_EQ(router_->publisher_count(), log_is_pub ? 2u : 1u);
-        EXPECT_EQ(router_->subscription_count(), with_log_text && !log_is_pub ? 2u : 1u);
     }
+    drain();
+    const bool log_is_pub = with_log_text && (log_text_flags & 0x01u) == 0u;
+    EXPECT_EQ(router_->publisher_count(), log_is_pub ? 2u : 1u);
+    EXPECT_EQ(router_->subscription_count(), with_log_text && !log_is_pub ? 2u : 1u);
+  }
 
-    std::vector<std::uint8_t> hello_two()
-    {
-        return helper_hello(7u, 2u, max_frame_);
-    }
+  std::vector<std::uint8_t> hello_two()
+  {
+    return helper_hello(7u, 2u, max_frame_);
+  }
 
     // One drained unit, decoded, with its CRC checked.
-    std::vector<std::uint8_t> expect_one_frame()
-    {
-        const std::vector<std::vector<std::uint8_t>> units = drain();
-        EXPECT_EQ(units.size(), 1u);
-        if (units.size() != 1u) {
-            return {};
-        }
-        const std::vector<std::uint8_t> decoded = checked_decode(units[0]);
-        return decoded;
+  std::vector<std::uint8_t> expect_one_frame()
+  {
+    const std::vector<std::vector<std::uint8_t>> units = drain();
+    EXPECT_EQ(units.size(), 1u);
+    if (units.size() != 1u) {
+      return {};
     }
+    const std::vector<std::uint8_t> decoded = checked_decode(units[0]);
+    return decoded;
+  }
 
-    std::vector<std::uint8_t> checked_decode(const std::vector<std::uint8_t> &unit)
-    {
-        const std::vector<std::uint8_t> decoded = helper_decode_unit(unit);
-        EXPECT_FALSE(decoded.empty()) << "the capture is not rCOBS";
-        if (decoded.size() < 4u) {
-            return {};
-        }
-        const std::uint16_t check = static_cast<std::uint16_t>(r2s_crc16_update_buf(
+  std::vector<std::uint8_t> checked_decode(const std::vector<std::uint8_t> & unit)
+  {
+    const std::vector<std::uint8_t> decoded = helper_decode_unit(unit);
+    EXPECT_FALSE(decoded.empty()) << "the capture is not rCOBS";
+    if (decoded.size() < 4u) {
+      return {};
+    }
+    const std::uint16_t check = static_cast<std::uint16_t>(r2s_crc16_update_buf(
             R2S_CRC16_INIT, decoded.data(), static_cast<std::uint16_t>(decoded.size() - 2u)));
-        EXPECT_EQ(static_cast<std::uint8_t>(check & 0xFFu), decoded[decoded.size() - 2u]);
-        EXPECT_EQ(static_cast<std::uint8_t>(check >> 8u), decoded[decoded.size() - 1u]);
-        return decoded;
-    }
+    EXPECT_EQ(static_cast<std::uint8_t>(check & 0xFFu), decoded[decoded.size() - 2u]);
+    EXPECT_EQ(static_cast<std::uint8_t>(check >> 8u), decoded[decoded.size() - 1u]);
+    return decoded;
+  }
 
-    void expect_topic_req(std::uint8_t index)
-    {
+  void expect_topic_req(std::uint8_t index)
+  {
         // An answered TOPIC leaves its STATUS next to the following REQ.
-        const std::vector<std::vector<std::uint8_t>> units = drain();
-        ASSERT_FALSE(units.empty());
-        const std::vector<std::uint8_t> decoded = checked_decode(units.back());
-        ASSERT_GE(decoded.size(), 4u);
-        EXPECT_EQ(decoded[0], kHelperControl);
-        EXPECT_EQ(decoded[2], 0x03u) << "a TOPIC_REQ";
-        EXPECT_EQ(decoded[3], index);
-    }
+    const std::vector<std::vector<std::uint8_t>> units = drain();
+    ASSERT_FALSE(units.empty());
+    const std::vector<std::uint8_t> decoded = checked_decode(units.back());
+    ASSERT_GE(decoded.size(), 4u);
+    EXPECT_EQ(decoded[0], kHelperControl);
+    EXPECT_EQ(decoded[2], 0x03u) << "a TOPIC_REQ";
+    EXPECT_EQ(decoded[3], index);
+  }
 
-    void expect_param_req(std::uint8_t index)
-    {
-        const std::vector<std::vector<std::uint8_t>> units = drain();
-        ASSERT_FALSE(units.empty());
-        const std::vector<std::uint8_t> decoded = checked_decode(units.back());
-        ASSERT_GE(decoded.size(), 4u);
-        EXPECT_EQ(decoded[0], 0x03u);
-        EXPECT_EQ(decoded[2], 0x01u) << "a PARAM_REQ";
-        EXPECT_EQ(decoded[3], index);
-    }
+  void expect_param_req(std::uint8_t index)
+  {
+    const std::vector<std::vector<std::uint8_t>> units = drain();
+    ASSERT_FALSE(units.empty());
+    const std::vector<std::uint8_t> decoded = checked_decode(units.back());
+    ASSERT_GE(decoded.size(), 4u);
+    EXPECT_EQ(decoded[0], 0x03u);
+    EXPECT_EQ(decoded[2], 0x01u) << "a PARAM_REQ";
+    EXPECT_EQ(decoded[3], index);
+  }
 
     // One decoded PARAM_SET per parameter index among the drained units.
-    struct WireSet {
-        std::uint8_t rel;
-        std::vector<std::uint8_t> value;
-    };
-    std::map<std::uint8_t, WireSet> param_sets()
-    {
-        std::map<std::uint8_t, WireSet> out;
-        for (const auto &unit : drain()) {
-            const std::vector<std::uint8_t> decoded = checked_decode(unit);
-            if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u) {
-                out[decoded[4]] =
-                    WireSet{decoded[3], std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2)};
-            }
-        }
-        return out;
+  struct WireSet
+  {
+    std::uint8_t rel;
+    std::vector<std::uint8_t> value;
+  };
+  std::map<std::uint8_t, WireSet> param_sets()
+  {
+    std::map<std::uint8_t, WireSet> out;
+    for (const auto & unit : drain()) {
+      const std::vector<std::uint8_t> decoded = checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u) {
+        out[decoded[4]] =
+          WireSet{decoded[3], std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2)};
+      }
     }
+    return out;
+  }
 
     // One connected router with the handshake's parameters: led, rate,
     // gain, label and read-only ro with the defaults the tests assert.
@@ -215,146 +230,151 @@ class RouterFixture
     // label default is 200 bytes. Returns the writes the handshake's last
     // step left: READY and whatever the parameters layer pushed, so the
     // caller can inspect them.
-    std::vector<std::vector<std::uint8_t>> handshake_with_params(std::uint32_t token = 7u, bool full = true,
-                                                                 bool led_i64 = false,
-                                                                 bool long_label = false)
-    {
-        deliver_frame(kHelperControl, 0u, helper_hello(token, 2u, max_frame_, 0x04u));
-        expect_topic_req(0u);
-        const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
-        deliver_frame(
+  std::vector<std::vector<std::uint8_t>> handshake_with_params(
+    std::uint32_t token = 7u, bool full = true,
+    bool led_i64 = false,
+    bool long_label = false)
+  {
+    deliver_frame(kHelperControl, 0u, helper_hello(token, 2u, max_frame_, 0x04u));
+    expect_topic_req(0u);
+    const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
+    deliver_frame(
             kHelperControl, 1u,
-            helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
-        expect_topic_req(1u);
-        const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
-        deliver_frame(
+            helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32",
+            "battery"));
+    expect_topic_req(1u);
+    const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
+    deliver_frame(
             kHelperControl, 2u,
-            helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "cmd_vel"));
-        expect_param_req(0u);
-        if (led_i64) {
-            deliver_frame(kParamsTopic, 0u,
+            helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist",
+            "cmd_vel"));
+    expect_param_req(0u);
+    if (led_i64) {
+      deliver_frame(kParamsTopic, 0u,
                           helper_declare(0u, 0x01u, 0x00u, "led",
-                                         {0x03u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
-        } else {
-            deliver_frame(kParamsTopic, 0u, helper_declare(0u, 0x00u, 0x00u, "led", {0x01u}));
-        }
-        expect_param_req(1u);
-        if (!full) {
-            deliver_frame(kParamsTopic, 1u, {0x04u, 0x00u, 0x01u, 0x01u});
-            return drain();
-        }
-        deliver_frame(kParamsTopic, 1u,
+        {0x03u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
+    } else {
+      deliver_frame(kParamsTopic, 0u, helper_declare(0u, 0x00u, 0x00u, "led", {0x01u}));
+    }
+    expect_param_req(1u);
+    if (!full) {
+      deliver_frame(kParamsTopic, 1u, {0x04u, 0x00u, 0x01u, 0x01u});
+      return drain();
+    }
+    deliver_frame(kParamsTopic, 1u,
                       helper_declare(1u, 0x01u, 0x00u, "rate",
-                                     {0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
-        expect_param_req(2u);
-        deliver_frame(kParamsTopic, 2u,
+      {0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
+    expect_param_req(2u);
+    deliver_frame(kParamsTopic, 2u,
                       helper_declare(2u, 0x02u, 0x00u, "gain",
-                                     {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF8u, 0x3Fu}));
-        expect_param_req(3u);
-        if (long_label) {
-            std::vector<std::uint8_t> wide{0xC8u, 0x01u};
-            wide.insert(wide.end(), 200u, 'x');
-            deliver_frame(kParamsTopic, 3u, helper_declare(3u, 0x03u, 0x00u, "label", wide));
-        } else {
-            deliver_frame(kParamsTopic, 3u, helper_declare(3u, 0x03u, 0x00u, "label", {0x02u, 'h', 'i'}));
-        }
-        expect_param_req(4u);
-        deliver_frame(
+      {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF8u, 0x3Fu}));
+    expect_param_req(3u);
+    if (long_label) {
+      std::vector<std::uint8_t> wide{0xC8u, 0x01u};
+      wide.insert(wide.end(), 200u, 'x');
+      deliver_frame(kParamsTopic, 3u, helper_declare(3u, 0x03u, 0x00u, "label", wide));
+    } else {
+      deliver_frame(kParamsTopic, 3u, helper_declare(3u, 0x03u, 0x00u, "label", {0x02u, 'h', 'i'}));
+    }
+    expect_param_req(4u);
+    deliver_frame(
             kParamsTopic, 4u,
-            helper_declare(4u, 0x01u, 0x01u, "ro", {0x07u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
-        expect_param_req(5u);
-        deliver_frame(kParamsTopic, 5u, helper_declare(5u, 0x00u, 0x00u, "", {0x01u}));
-        expect_param_req(6u);
-        deliver_frame(kParamsTopic, 6u, {0x04u, 0x00u, 0x06u, 0x01u});
-        return drain();
-    }
+            helper_declare(4u, 0x01u, 0x01u, "ro",
+      {0x07u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
+    expect_param_req(5u);
+    deliver_frame(kParamsTopic, 5u, helper_declare(5u, 0x00u, 0x00u, "", {0x01u}));
+    expect_param_req(6u);
+    deliver_frame(kParamsTopic, 6u, {0x04u, 0x00u, 0x06u, 0x01u});
+    return drain();
+  }
 
-    std::vector<std::vector<std::uint8_t>> drain()
-    {
-        std::vector<std::uint8_t> all;
-        for (const auto &write : transport_.writes()) {
-            all.insert(all.end(), write.begin(), write.end());
-        }
-        transport_.discard_writes();
-        return helper_units_of(all);
+  std::vector<std::vector<std::uint8_t>> drain()
+  {
+    std::vector<std::uint8_t> all;
+    for (const auto & write : transport_.writes()) {
+      all.insert(all.end(), write.begin(), write.end());
     }
+    transport_.discard_writes();
+    return helper_units_of(all);
+  }
 
-    Router &router()
-    {
-        return *router_;
-    }
-    rclcpp::Node::SharedPtr node()
-    {
-        return node_;
-    }
-    const std::vector<std::string> &logged() const
-    {
-        return logged_;
-    }
-    const std::vector<std::pair<SessionLog, std::string>> &mcu_logged() const
-    {
-        return mcu_;
-    }
+  Router & router()
+  {
+    return *router_;
+  }
+  rclcpp::Node::SharedPtr node()
+  {
+    return node_;
+  }
+  const std::vector<std::string> & logged() const
+  {
+    return logged_;
+  }
+  const std::vector<std::pair<SessionLog, std::string>> & mcu_logged() const
+  {
+    return mcu_;
+  }
 
-  private:
-    std::uint16_t max_frame_;
-    FakeTransport transport_;
-    ManualClock clock_;
-    rclcpp::Node::SharedPtr node_;
-    std::unique_ptr<Router> router_;
-    std::vector<std::string> logged_;
-    std::vector<std::pair<SessionLog, std::string>> mcu_;
+private:
+  std::uint16_t max_frame_;
+  FakeTransport transport_;
+  ManualClock clock_;
+  rclcpp::Node::SharedPtr node_;
+  std::unique_ptr<Router> router_;
+  std::vector<std::string> logged_;
+  std::vector<std::pair<SessionLog, std::string>> mcu_;
 };
 
 class RouterNode : public ::testing::Test
 {
-  protected:
-    static void SetUpTestSuite()
-    {
-        rclcpp::init(0, nullptr);
-    }
-    static void TearDownTestSuite()
-    {
-        rclcpp::shutdown();
-    }
+protected:
+  static void SetUpTestSuite()
+  {
+    rclcpp::init(0, nullptr);
+  }
+  static void TearDownTestSuite()
+  {
+    rclcpp::shutdown();
+  }
 };
 
 // A three-topic walk whose echo_vel the middleware refuses: the type
 // resolves, so the verdict is ok, but no route serves it.
-void handshake_with_uncreatable_echo(RouterFixture &fixture)
+void handshake_with_uncreatable_echo(RouterFixture & fixture)
 {
-    const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
-    const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
-    fixture.deliver_frame(kHelperControl, 0u, helper_hello(7u, 3u));
-    fixture.expect_topic_req(0u);
-    fixture.deliver_frame(
+  const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
+  const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(7u, 3u));
+  fixture.expect_topic_req(0u);
+  fixture.deliver_frame(
         kHelperControl, 1u,
         helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
-    fixture.expect_topic_req(1u);
-    fixture.deliver_frame(
+  fixture.expect_topic_req(1u);
+  fixture.deliver_frame(
         kHelperControl, 2u,
         helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "cmd_vel"));
-    fixture.expect_topic_req(2u);
-    fixture.deliver_frame(
+  fixture.expect_topic_req(2u);
+  fixture.deliver_frame(
         kHelperControl, 3u,
-        helper_topic(2u, kEchoVel, 0x00u, twist_hash.data(), "geometry_msgs/msg/Twist", "not a topic name"));
-    fixture.drain();
+        helper_topic(2u, kEchoVel, 0x00u, twist_hash.data(), "geometry_msgs/msg/Twist",
+          "not a topic name"));
+  fixture.drain();
 }
 
 rclcpp::NodeOptions remapped()
 {
-    return rclcpp::NodeOptions().arguments({"--ros-args", "-r", "battery:=power/battery"});
+  return rclcpp::NodeOptions().arguments({"--ros-args", "-r", "battery:=power/battery"});
 }
 
 std::map<std::string, std::string> topic_map(rclcpp::Node::SharedPtr node)
 {
-    std::map<std::string, std::string> out;
-    for (const auto &[name, types] : node->get_topic_names_and_types()) {
-        if (!types.empty()) {
-            out[name] = types[0];
-        }
+  std::map<std::string, std::string> out;
+  for (const auto &[name, types] : node->get_topic_names_and_types()) {
+    if (!types.empty()) {
+      out[name] = types[0];
     }
-    return out;
+  }
+  return out;
 }
 
 TEST_F(RouterNode, RemappingAppliesToTheMcuTopics)
@@ -396,7 +416,7 @@ TEST_F(RouterNode, McuToHostForwardsTheConvertedMessage)
     // probe subscribes best effort too; a reliable probe would never match.
     auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
         "power/battery", rclcpp::QoS(10).best_effort(),
-        [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
+    [&received](const std_msgs::msg::Float32 & msg) {received.push_back(msg.data);});
     fixture.deliver_frame(kBattery, 0u, {0x00, 0x00, 0xC0, 0x3F});
     rclcpp::spin_some(fixture.node());
     ASSERT_EQ(received.size(), 1u);
@@ -429,7 +449,7 @@ TEST_F(RouterNode, BadPayloadLogsTheTopicAndField)
     std::vector<float> received;
     auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
         "power/battery", rclcpp::QoS(10).best_effort(),
-        [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
+    [&received](const std_msgs::msg::Float32 & msg) {received.push_back(msg.data);});
     fixture.deliver_frame(kBattery, 0u, {0x00});
     rclcpp::spin_some(fixture.node());
     EXPECT_TRUE(received.empty()) << "a truncated payload is dropped, never published";
@@ -444,7 +464,7 @@ TEST_F(RouterNode, TrailingBytesLogged)
     std::vector<float> received;
     auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
         "power/battery", rclcpp::QoS(10).best_effort(),
-        [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
+    [&received](const std_msgs::msg::Float32 & msg) {received.push_back(msg.data);});
     fixture.deliver_frame(kBattery, 0u, {0x00, 0x00, 0xC0, 0x3F, 0xFF});
     rclcpp::spin_some(fixture.node());
     EXPECT_TRUE(received.empty()) << "a payload with trailing bytes is dropped, never published";
@@ -458,7 +478,7 @@ TEST_F(RouterNode, BadVarintLogged)
     std::vector<std::string> received;
     auto sub = fixture.node()->create_subscription<std_msgs::msg::String>(
         "log_text", rclcpp::QoS(10).best_effort(),
-        [&received](const std_msgs::msg::String &msg) { received.push_back(msg.data); });
+    [&received](const std_msgs::msg::String & msg) {received.push_back(msg.data);});
     fixture.deliver_frame(RouterFixture::kLogText, 0u, {0x80, 0x00});
     rclcpp::spin_some(fixture.node());
     EXPECT_TRUE(received.empty()) << "a malformed length is dropped, never published";
@@ -472,7 +492,7 @@ TEST_F(RouterNode, NulInStringLoggedWithFieldPath)
     std::vector<std::string> received;
     auto sub = fixture.node()->create_subscription<std_msgs::msg::String>(
         "log_text", rclcpp::QoS(10).best_effort(),
-        [&received](const std_msgs::msg::String &msg) { received.push_back(msg.data); });
+    [&received](const std_msgs::msg::String & msg) {received.push_back(msg.data);});
     fixture.deliver_frame(RouterFixture::kLogText, 0u, {0x03, 0x61, 0x00, 0x62});
     rclcpp::spin_some(fixture.node());
     EXPECT_TRUE(received.empty()) << "a string with NUL is dropped, never published";
@@ -507,7 +527,8 @@ TEST_F(RouterNode, BadNameTopicGetsNoRoute)
     const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
     fixture.deliver_frame(
         kHelperControl, 2u,
-        helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "not a topic name"));
+        helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist",
+          "not a topic name"));
     fixture.drain();
     EXPECT_EQ(fixture.router().publisher_count(), 1u);
     EXPECT_EQ(fixture.router().subscription_count(), 0u) << "an uncreatable name gets no route";
@@ -540,13 +561,14 @@ TEST_F(RouterNode, BadBoolLoggedWithFieldPath)
     fixture.expect_topic_req(0u);
     const std::array<std::uint8_t, 8> bool_hash = installed_hash("std_msgs/msg/Bool");
     fixture.deliver_frame(kHelperControl, 1u,
-                          helper_topic(0u, kBattery, 0x00u, bool_hash.data(), "std_msgs/msg/Bool", "flag"));
+                          helper_topic(0u, kBattery, 0x00u, bool_hash.data(), "std_msgs/msg/Bool",
+          "flag"));
     fixture.drain();
     EXPECT_EQ(fixture.router().publisher_count(), 1u);
     std::vector<bool> received;
     auto sub = fixture.node()->create_subscription<std_msgs::msg::Bool>(
         "flag", rclcpp::QoS(10).best_effort(),
-        [&received](const std_msgs::msg::Bool &msg) { received.push_back(msg.data); });
+    [&received](const std_msgs::msg::Bool & msg) {received.push_back(msg.data);});
     fixture.deliver_frame(kBattery, 0u, {0x02});
     rclcpp::spin_some(fixture.node());
     EXPECT_TRUE(received.empty()) << "a bad bool byte is dropped, never published";
@@ -561,7 +583,7 @@ TEST_F(RouterNode, FramesOutsideARouteAreIgnored)
     std::vector<float> received;
     auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
         "power/battery", rclcpp::QoS(10).best_effort(),
-        [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
+    [&received](const std_msgs::msg::Float32 & msg) {received.push_back(msg.data);});
     fixture.deliver_frame(20u, 0u, {0x00, 0x00, 0xC0, 0x3F});
     fixture.deliver_frame(kCmdVel, 0u, {0x01});
     rclcpp::spin_some(fixture.node());
@@ -611,7 +633,7 @@ TEST_F(RouterNode, IdenticalRehandshakeKeepsRoutes)
     std::vector<float> received;
     auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
         "power/battery", rclcpp::QoS(10).best_effort(),
-        [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
+    [&received](const std_msgs::msg::Float32 & msg) {received.push_back(msg.data);});
     fixture.handshake(0x01u, 8u);
     EXPECT_EQ(fixture.router().publisher_count(), 1u);
     EXPECT_EQ(fixture.router().subscription_count(), 1u);
@@ -662,14 +684,14 @@ TEST_F(RouterNode, RehandshakeRefreshesTheBurst)
     std_msgs::msg::String text;
     text.data = std::string(1500, 'z');
     const auto log_frames = [&fixture]() {
-        std::size_t count = 0;
-        for (const auto &unit : fixture.drain()) {
-            const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
-            if (!decoded.empty() && decoded[0] == RouterFixture::kLogText) {
-                ++count;
-            }
+      std::size_t count = 0;
+      for (const auto & unit : fixture.drain()) {
+        const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
+        if (!decoded.empty() && decoded[0] == RouterFixture::kLogText) {
+          ++count;
         }
-        return count;
+      }
+      return count;
     };
     pub->publish(text);
     rclcpp::spin_some(fixture.node());
@@ -701,18 +723,19 @@ TEST_F(RouterNode, MissingRouteIsRetriedOnLaterPolls)
     fixture.advance(150u);
     fixture.advance(150u);
     for (int i = 0; i < 8; ++i) {
-        fixture.advance(150u);
+    fixture.advance(150u);
     }
     const std::size_t echo_lines =
-        std::count_if(fixture.logged().begin(), fixture.logged().end(), [](const std::string &line) {
-            return line.find("not a topic name") != std::string::npos;
+    std::count_if(fixture.logged().begin(), fixture.logged().end(), [](const std::string & line) {
+        return line.find("not a topic name") != std::string::npos;
         });
     EXPECT_GE(echo_lines, 2u) << "the missing route is retried on later polls";
-    EXPECT_EQ(fixture.router().publisher_count(), 1u) << "an uncreatable name still serves no route";
+    EXPECT_EQ(fixture.router().publisher_count(),
+          1u) << "an uncreatable name still serves no route";
     std::vector<float> received;
     auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
         "power/battery", rclcpp::QoS(10).best_effort(),
-        [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
+    [&received](const std_msgs::msg::Float32 & msg) {received.push_back(msg.data);});
     fixture.deliver_frame(kBattery, 0u, {0x00, 0x00, 0xC0, 0x3F});
     rclcpp::spin_some(fixture.node());
     ASSERT_EQ(received.size(), 1u) << "the healthy route keeps flowing";
@@ -731,21 +754,25 @@ TEST_F(RouterNode, TwoMissingRoutesAreRetried)
     fixture.expect_topic_req(1u);
     fixture.deliver_frame(
         kHelperControl, 2u,
-        helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "not a topic name"));
+        helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist",
+          "not a topic name"));
     fixture.expect_topic_req(2u);
     fixture.deliver_frame(
         kHelperControl, 3u,
-        helper_topic(2u, kEchoVel, 0x00u, twist_hash.data(), "geometry_msgs/msg/Twist", "bad topic name!"));
+        helper_topic(2u, kEchoVel, 0x00u, twist_hash.data(), "geometry_msgs/msg/Twist",
+          "bad topic name!"));
     fixture.drain();
     EXPECT_EQ(fixture.router().publisher_count(), 1u);
     EXPECT_EQ(fixture.router().subscription_count(), 0u);
     fixture.advance(150u);
     fixture.advance(150u);
     fixture.advance(150u);
-    const auto count_named = [&fixture](const std::string &name) {
-        return std::count_if(
+    const auto count_named = [&fixture](const std::string & name) {
+      return std::count_if(
             fixture.logged().begin(), fixture.logged().end(),
-            [&name](const std::string &line) { return line.find("'" + name + "'") != std::string::npos; });
+        [&name](const std::string & line) {
+          return line.find("'" + name + "'") != std::string::npos;
+            });
     };
     EXPECT_GE(count_named("not a topic name"), 2u) << "the missing subscription is retried";
     EXPECT_GE(count_named("bad topic name!"), 2u) << "the missing publisher is retried";
@@ -780,7 +807,7 @@ TEST_F(RouterNode, RosParameterSetSendsASetToTheMcu)
     RouterFixture fixture("paramset", remapped(), RouterParams{});
     fixture.handshake_with_params();
     const auto result =
-        fixture.node()->set_parameters({rclcpp::Parameter("led", false), rclcpp::Parameter("rate", 5)});
+    fixture.node()->set_parameters({rclcpp::Parameter("led", false), rclcpp::Parameter("rate", 5)});
     ASSERT_EQ(result.size(), 2u);
     EXPECT_TRUE(result[0].successful) << result[0].reason;
     EXPECT_TRUE(result[1].successful) << result[1].reason;
@@ -788,28 +815,31 @@ TEST_F(RouterNode, RosParameterSetSendsASetToTheMcu)
     // ack, as the reliable channel allows one outstanding frame ([REL-2]).
     std::uint8_t led_rel = 0u;
     bool saw_led = false;
-    for (const auto &unit : fixture.drain()) {
-        const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
-        if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u &&
-            decoded[4] == 0x00u) {
-            EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
+    for (const auto & unit : fixture.drain()) {
+    const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
+    if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u &&
+      decoded[4] == 0x00u)
+    {
+      EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
                       std::vector<std::uint8_t>{0x00u});
-            led_rel = decoded[3];
-            saw_led = true;
-        }
+      led_rel = decoded[3];
+      saw_led = true;
+    }
     }
     EXPECT_TRUE(saw_led) << "the bool set reaches the wire as one byte";
     fixture.deliver_frame(kAckTopic, 0u, {kParamsTopic, led_rel});
     fixture.advance(1u);
     bool saw_rate = false;
-    for (const auto &unit : fixture.drain()) {
-        const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
-        if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u &&
-            decoded[4] == 0x01u) {
-            EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
-                      std::vector<std::uint8_t>({0x05u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
-            saw_rate = true;
-        }
+    for (const auto & unit : fixture.drain()) {
+    const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
+    if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u &&
+      decoded[4] == 0x01u)
+    {
+      EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
+                      std::vector<std::uint8_t>({0x05u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
+          0x00u}));
+      saw_rate = true;
+    }
     }
     EXPECT_TRUE(saw_rate) << "the i64 set reaches the wire as eight bytes";
 }
@@ -841,9 +871,9 @@ TEST_F(RouterNode, LongDefaultDecodesMultibyteVarint)
     const auto writes = fixture.handshake_with_params(7u, true, false, true);
     ASSERT_TRUE(fixture.node()->has_parameter("label"));
     EXPECT_EQ(fixture.node()->get_parameter("label").as_string(), std::string(200u, 'x'));
-    for (const auto &unit : writes) {
-        const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
-        EXPECT_FALSE(decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u)
+    for (const auto & unit : writes) {
+    const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
+    EXPECT_FALSE(decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u)
             << "the matching default pushes nothing";
     }
 }
@@ -858,14 +888,15 @@ TEST_F(RouterNode, LaunchOverrideIsPushedAfterTheHandshake)
     over.arguments({"--ros-args", "-r", "battery:=power/battery", "-p", "led:=false"});
     RouterFixture fixture("override", over, RouterParams{});
     bool pushed = false;
-    for (const auto &unit : fixture.handshake_with_params()) {
-        const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
-        if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u &&
-            decoded[4] == 0x00u) {
-            EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
+    for (const auto & unit : fixture.handshake_with_params()) {
+    const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
+    if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u &&
+      decoded[4] == 0x00u)
+    {
+      EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
                       std::vector<std::uint8_t>{0x00u});
-            pushed = true;
-        }
+      pushed = true;
+    }
     }
     ASSERT_TRUE(fixture.node()->has_parameter("led"));
     EXPECT_EQ(fixture.node()->get_parameter("led").as_bool(), false);
@@ -884,7 +915,7 @@ TEST_F(RouterNode, McuParameterCodecsCoverAllTypes)
     ASSERT_TRUE(fixture.node()->has_parameter("ro"));
     EXPECT_EQ(fixture.node()->get_parameter("ro").as_int(), 7);
     const auto result = fixture.node()->set_parameters(
-        {rclcpp::Parameter("gain", 2.5), rclcpp::Parameter("label", std::string("yo"))});
+    {rclcpp::Parameter("gain", 2.5), rclcpp::Parameter("label", std::string("yo"))});
     ASSERT_EQ(result.size(), 2u);
     EXPECT_TRUE(result[0].successful) << result[0].reason;
     EXPECT_TRUE(result[1].successful) << result[1].reason;
@@ -903,12 +934,14 @@ TEST_F(RouterNode, McuParameterCodecsCoverAllTypes)
     EXPECT_NE(refused[0].reason.find("read-only"), std::string::npos);
     fixture.deliver_frame(kAckTopic, 1u, {kParamsTopic, second.at(3u).rel});
     fixture.advance(1u);
-    const auto cleared = fixture.node()->set_parameters({rclcpp::Parameter("label", std::string(""))});
+    const auto cleared = fixture.node()->set_parameters({rclcpp::Parameter("label",
+            std::string(""))});
     ASSERT_EQ(cleared.size(), 1u);
     ASSERT_TRUE(cleared[0].successful) << cleared[0].reason;
     const auto third = fixture.param_sets();
     ASSERT_EQ(third.count(3u), 1u);
-    EXPECT_EQ(third.at(3u).value, std::vector<std::uint8_t>{0x00u}) << "an empty string is one zero byte";
+    EXPECT_EQ(third.at(3u).value,
+          std::vector<std::uint8_t>{0x00u}) << "an empty string is one zero byte";
 }
 
 // covers: PAR-9
@@ -916,14 +949,14 @@ TEST_F(RouterNode, RetiredParametersRejectSets)
 {
     // A standard node cannot undeclare: the dropped ROS parameter stays,
     // but its sets fail until the MCU announces it again.
-    const auto warnings = [](const RouterFixture &fixture) {
-        int found = 0;
-        for (const auto &line : fixture.logged()) {
-            if (line.find("no longer announced") != std::string::npos) {
-                ++found;
-            }
+    const auto warnings = [](const RouterFixture & fixture) {
+      int found = 0;
+      for (const auto & line : fixture.logged()) {
+        if (line.find("no longer announced") != std::string::npos) {
+          ++found;
         }
-        return found;
+      }
+      return found;
     };
     RouterFixture fixture("drop", remapped(), RouterParams{});
     fixture.handshake_with_params();
@@ -990,10 +1023,14 @@ TEST_F(RouterNode, RefusedStatusNamesEachReason)
     fixture.deliver_frame(kParamsTopic, 1u, {0x04u, 0x01u, 0x01u, 0x03u});
     fixture.deliver_frame(kParamsTopic, 2u, {0x04u, 0x02u, 0x02u, 0x04u});
     fixture.deliver_frame(kParamsTopic, 3u, {0x04u, 0x03u, 0x09u, 0x02u});
-    EXPECT_TRUE(logged_has(fixture.logged(), "parameter #9: the MCU refused the set (bad type or length)"));
-    EXPECT_TRUE(logged_has(fixture.logged(), "parameter 'led': the MCU refused the set (unknown index)"));
-    EXPECT_TRUE(logged_has(fixture.logged(), "parameter 'rate': the MCU refused the set (read-only)"));
-    EXPECT_TRUE(logged_has(fixture.logged(), "parameter 'gain': the MCU refused the set (out of range)"));
+    EXPECT_TRUE(logged_has(fixture.logged(),
+          "parameter #9: the MCU refused the set (bad type or length)"));
+    EXPECT_TRUE(logged_has(fixture.logged(),
+          "parameter 'led': the MCU refused the set (unknown index)"));
+    EXPECT_TRUE(logged_has(fixture.logged(),
+          "parameter 'rate': the MCU refused the set (read-only)"));
+    EXPECT_TRUE(logged_has(fixture.logged(),
+          "parameter 'gain': the MCU refused the set (out of range)"));
 }
 
 // covers: PAR-9
@@ -1001,7 +1038,8 @@ TEST_F(RouterNode, NoParametersInterfaceSkipsTheLayer)
 {
     // The constructor default keeps the layer off: the walk still
     // completes, but nothing is declared.
-    RouterFixture fixture("noparams", remapped(), RouterParams{}, 512u, true, SessionConfig{}, false);
+    RouterFixture fixture("noparams", remapped(), RouterParams{}, 512u, true, SessionConfig{},
+    false);
     fixture.handshake_with_params();
     EXPECT_FALSE(fixture.node()->has_parameter("led"));
 }
@@ -1069,14 +1107,15 @@ TEST_F(RouterNode, RehandshakeRepushesTheCurrentValues)
     // again and pushes the current values back, in the writes the second
     // handshake leaves behind.
     bool repushed = false;
-    for (const auto &unit : fixture.handshake_with_params(8u)) {
-        const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
-        if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u &&
-            decoded[4] == 0x00u) {
-            EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
+    for (const auto & unit : fixture.handshake_with_params(8u)) {
+    const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
+    if (decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u &&
+      decoded[4] == 0x00u)
+    {
+      EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 5, decoded.end() - 2),
                       std::vector<std::uint8_t>{0x00u});
-            repushed = true;
-        }
+      repushed = true;
+    }
     }
     EXPECT_TRUE(repushed) << "the current value goes out again after the re-handshake";
 }
@@ -1120,19 +1159,19 @@ TEST_F(RouterNode, RejectsAnEmptySink)
     auto node = std::make_shared<rclcpp::Node>("sink", "robot1");
     EXPECT_THROW(Router(
                      node->get_node_topics_interface(),
-                     [&transport]() { return std::unique_ptr<Transport>(new HelperLink(transport)); }, clock,
+      [&transport]() {return std::unique_ptr<Transport>(new HelperLink(transport));}, clock,
                      clock, RouterParams{}, LogSink{}),
                  std::invalid_argument);
 }
 
 // One log payload ([LOG-1]): the level, the text as a string, then the value
 // kind with no value.
-std::vector<std::uint8_t> mcu_log_payload(std::uint8_t level, const std::string &text)
+std::vector<std::uint8_t> mcu_log_payload(std::uint8_t level, const std::string & text)
 {
-    std::vector<std::uint8_t> payload{level, static_cast<std::uint8_t>(text.size())};
-    payload.insert(payload.end(), text.begin(), text.end());
-    payload.push_back(0u);
-    return payload;
+  std::vector<std::uint8_t> payload{level, static_cast<std::uint8_t>(text.size())};
+  payload.insert(payload.end(), text.begin(), text.end());
+  payload.push_back(0u);
+  return payload;
 }
 
 TEST_F(RouterNode, ForwardsMcuLogLinesToTheirOwnSink)
@@ -1163,8 +1202,8 @@ TEST(RouterOverrides, ParsesTopicRates)
 {
     std::vector<std::string> logged;
     const std::map<std::string, double> rates =
-        parse_rate_overrides({"cmd_vel=20", "battery=0.5"},
-                             [&logged](SessionLog, const std::string &text) { logged.push_back(text); });
+    parse_rate_overrides({"cmd_vel=20", "battery=0.5"},
+      [&logged](SessionLog, const std::string & text) {logged.push_back(text);});
     EXPECT_EQ(rates.size(), 2u);
     EXPECT_DOUBLE_EQ(rates.at("cmd_vel"), 20.0);
     EXPECT_DOUBLE_EQ(rates.at("battery"), 0.5);
@@ -1175,8 +1214,8 @@ TEST(RouterOverrides, SkipsMalformedEntries)
 {
     std::vector<std::string> logged;
     const std::map<std::string, double> rates =
-        parse_rate_overrides({"bogus", "cmd_vel=-1", "again=1=2", "x==", "=5", "topic=", "fast=inf"},
-                             [&logged](SessionLog, const std::string &text) { logged.push_back(text); });
+    parse_rate_overrides({"bogus", "cmd_vel=-1", "again=1=2", "x==", "=5", "topic=", "fast=inf"},
+      [&logged](SessionLog, const std::string & text) {logged.push_back(text);});
     EXPECT_TRUE(rates.empty());
     EXPECT_TRUE(logged_has(logged, "bogus"));
     EXPECT_TRUE(logged_has(logged, "cmd_vel=-1"));
@@ -1268,7 +1307,7 @@ TEST_F(RouterNode, DropsMcuFramesOnSubscriptionTopics)
     std::vector<geometry_msgs::msg::Twist> received;
     auto sub = fixture.node()->create_subscription<geometry_msgs::msg::Twist>(
         "cmd_vel", rclcpp::QoS(10),
-        [&received](const geometry_msgs::msg::Twist &msg) { received.push_back(msg); });
+    [&received](const geometry_msgs::msg::Twist & msg) {received.push_back(msg);});
     fixture.deliver_frame(kCmdVel, 0u, std::vector<std::uint8_t>(48u, 0x00u));
     rclcpp::spin_some(fixture.node());
     EXPECT_TRUE(received.empty()) << "a host-to-MCU topic never publishes";
@@ -1286,35 +1325,37 @@ TEST_F(RouterNode, HoldsBackpressureOnAWedgedLink)
     std_msgs::msg::String text;
     text.data = std::string(200u, 'l');
     for (int i = 0; i < 4; ++i) {
-        pub->publish(text);
-        rclcpp::spin_some(fixture.node());
+    pub->publish(text);
+    rclcpp::spin_some(fixture.node());
     }
     // Each poll sends one frame into the blocked session; the first three
     // fill its 515-byte MCU window and the fourth is refused, so the pass
     // stops with that frame still queued. The steps are wide enough for the
     // bandwidth budget to cover one frame each.
     for (int i = 0; i < 10 && fixture.router().queued(RouterFixture::kLogText) > 1u; ++i) {
-        fixture.advance(100u);
+    fixture.advance(100u);
     }
-    EXPECT_EQ(fixture.router().queued(RouterFixture::kLogText), 1u) << "the refused frame stays queued";
-    EXPECT_EQ(fixture.router().dropped(RouterFixture::kLogText), 0u) << "the scheduler sheds nothing";
+    EXPECT_EQ(fixture.router().queued(RouterFixture::kLogText),
+          1u) << "the refused frame stays queued";
+    EXPECT_EQ(fixture.router().dropped(RouterFixture::kLogText),
+          0u) << "the scheduler sheds nothing";
     EXPECT_TRUE(fixture.drain().empty()) << "nothing leaves while wedged";
     fixture.allow_link();
     std::vector<std::vector<std::uint8_t>> user_units;
     for (int i = 0; i < 20 && user_units.size() < 4u; ++i) {
-        fixture.advance(500u);
-        for (const std::vector<std::uint8_t> &unit : fixture.drain()) {
-            const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
-            if (decoded.size() >= 4u && decoded[0] == RouterFixture::kLogText) {
-                user_units.push_back(decoded);
-            }
-        }
+    fixture.advance(500u);
+    for (const std::vector<std::uint8_t> & unit : fixture.drain()) {
+      const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 4u && decoded[0] == RouterFixture::kLogText) {
+        user_units.push_back(decoded);
+      }
+    }
     }
     ASSERT_EQ(user_units.size(), 4u) << "every queued frame flushes in order";
     EXPECT_EQ(user_units.front()[1], 0u) << "the first frame on a topic carries seq 0";
     EXPECT_EQ(user_units.back()[1], 3u) << "the refused frame goes out last with seq 3";
 }
 
-} // namespace
-} // namespace test
-} // namespace r2s_bridge
+}  // namespace
+}  // namespace test
+}  // namespace r2s_bridge

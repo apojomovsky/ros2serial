@@ -21,44 +21,45 @@ namespace r2s_bridge
 // the CRC, followed by nothing. The bytes stay valid until release() or
 // destruction. tick is the port tick read when the delimiter arrived, one
 // millisecond per tick.
-struct Frame {
-    const std::uint8_t *data = nullptr;
-    std::uint16_t size = 0;
-    std::uint32_t tick = 0;
+struct Frame
+{
+  const std::uint8_t *data = nullptr;
+  std::uint16_t size = 0;
+  std::uint32_t tick = 0;
 };
 
 class FrameReader
 {
-  public:
+public:
     // Binds an owned core framer instance to transport and clock and starts
     // from a clean line. Throws std::logic_error when no link slot is free.
-    FrameReader(Transport &transport, const Clock &clock);
-    ~FrameReader();
-    FrameReader(const FrameReader &) = delete;
-    FrameReader &operator=(const FrameReader &) = delete;
+  FrameReader(Transport & transport, const Clock & clock);
+  ~FrameReader();
+  FrameReader(const FrameReader &) = delete;
+  FrameReader & operator=(const FrameReader &) = delete;
 
     // Pulls bytes from the link until a frame is decoded or none is left.
     // Returns true and fills frame when one is ready, false when none is. A
     // frame the core refuses is dropped inside its framer. While an unreleased
     // frame waits, no byte is read, so the next frame stays in the transport.
-    bool poll(Frame &frame);
+  bool poll(Frame & frame);
 
     // Releases the frame poll() last returned, so the next poll may start one.
-    void release();
+  void release();
 
     // True when a read through this reader's link reported kClosed or kError
     // since the last clear_link_fault(). The framer cannot tell an empty
     // link from a dead one, so the session asks here after polling it.
-    bool link_faulted() const;
+  bool link_faulted() const;
 
     // Forgets the link fault, which the session does when it opens the link.
-    void clear_link_fault();
+  void clear_link_fault();
 
-  private:
-    std::unique_ptr<struct r2s_framer> framer_;
-    std::uint8_t link_ = 0;
+private:
+  std::unique_ptr<struct r2s_framer> framer_;
+  std::uint8_t link_ = 0;
 };
 
-} // namespace r2s_bridge
+}  // namespace r2s_bridge
 
-#endif // R2S_BRIDGE__FRAMING_HPP_
+#endif  // R2S_BRIDGE__FRAMING_HPP_

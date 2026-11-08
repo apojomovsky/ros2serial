@@ -1,10 +1,10 @@
 #include <gtest/gtest.h>
 
-#include <rclcpp/rclcpp.hpp>
-
 #include <chrono>
 #include <cstdint>
 #include <vector>
+
+#include <rclcpp/rclcpp.hpp>
 
 #include "fake_transport.hpp"
 #include "manual_clock.hpp"
@@ -32,13 +32,13 @@ TEST(SessionWithoutExecutor, RunsAScriptedExchangeOnTheManualClock)
     std::vector<std::uint8_t> received;
     std::uint8_t buffer[8]{};
     for (int pass = 0; pass < 3; ++pass) {
-        const IoResult got = transport.read(buffer, sizeof buffer);
-        if (got.status == IoStatus::kOk) {
-            received.insert(received.end(), buffer, buffer + got.bytes);
-            transport.write(buffer, got.bytes);
-        } else if (got.status == IoStatus::kWouldBlock) {
-            clock.advance(std::chrono::milliseconds(5));
-        }
+    const IoResult got = transport.read(buffer, sizeof buffer);
+    if (got.status == IoStatus::kOk) {
+      received.insert(received.end(), buffer, buffer + got.bytes);
+      transport.write(buffer, got.bytes);
+    } else if (got.status == IoStatus::kWouldBlock) {
+      clock.advance(std::chrono::milliseconds(5));
+    }
     }
 
     EXPECT_EQ(received, (std::vector<std::uint8_t>{0x11, 0x22, 0x33}));
@@ -46,6 +46,6 @@ TEST(SessionWithoutExecutor, RunsAScriptedExchangeOnTheManualClock)
     EXPECT_EQ(clock.now(), std::chrono::milliseconds(5));
 }
 
-} // namespace
-} // namespace test
-} // namespace r2s_bridge
+}  // namespace
+}  // namespace test
+}  // namespace r2s_bridge

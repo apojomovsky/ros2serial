@@ -2,8 +2,8 @@
 // its own transport and clock through the indexed port functions. A
 // FrameReader owns the slot its constructor attaches and returns it in its
 // destructor, so several readers frame in one process, each on its link.
-#ifndef R2S_BRIDGE__CORE_PORT_HPP_
-#define R2S_BRIDGE__CORE_PORT_HPP_
+#ifndef CORE_PORT_HPP_
+#define CORE_PORT_HPP_
 
 #include <cstdint>
 
@@ -16,7 +16,7 @@ namespace r2s_bridge
 // Installs the pair the indexed port functions read through and returns its
 // link id. Throws std::logic_error when every slot is taken, naming the
 // link limit.
-std::uint8_t attach_core_port(Transport &transport, const Clock &clock);
+std::uint8_t attach_core_port(Transport & transport, const Clock & clock);
 
 // Removes the installed pair, so its slot serves the next link.
 void detach_core_port(std::uint8_t link);
@@ -29,6 +29,6 @@ bool link_faulted(std::uint8_t link);
 // Forgets the slot's fault, which the session does when it opens a link.
 void clear_link_fault(std::uint8_t link);
 
-} // namespace r2s_bridge
+}  // namespace r2s_bridge
 
-#endif // R2S_BRIDGE__CORE_PORT_HPP_
+#endif  // CORE_PORT_HPP_

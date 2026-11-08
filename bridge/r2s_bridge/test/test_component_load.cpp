@@ -1,11 +1,11 @@
 #include <gtest/gtest.h>
 
+#include <memory>
+#include <string>
+
 #include <class_loader/class_loader.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_components/node_factory.hpp>
-
-#include <memory>
-#include <string>
 
 #ifndef R2S_BRIDGE_COMPONENT_LIBRARY
 #error "R2S_BRIDGE_COMPONENT_LIBRARY must name the built component library"
@@ -13,15 +13,15 @@
 
 class ComponentLoad : public ::testing::Test
 {
-  protected:
-    static void SetUpTestSuite()
-    {
-        rclcpp::init(0, nullptr);
-    }
-    static void TearDownTestSuite()
-    {
-        rclcpp::shutdown();
-    }
+protected:
+  static void SetUpTestSuite()
+  {
+    rclcpp::init(0, nullptr);
+  }
+  static void TearDownTestSuite()
+  {
+    rclcpp::shutdown();
+  }
 };
 
 TEST_F(ComponentLoad, LoadsTheBridgeFromTheBuiltLibrary)

@@ -22,10 +22,11 @@ inline const char *kDiagnosticsTaskName = "link";
 
 // Builds the array for one snapshot. hardware_id names the link, usually the
 // port. The header stamp is left zero for the bridge to fill in.
-diagnostic_msgs::msg::DiagnosticArray diagnostics_message(const Router::Diagnostics &snapshot,
-                                                          const std::string &node_name,
-                                                          const std::string &hardware_id);
+diagnostic_msgs::msg::DiagnosticArray diagnostics_message(
+  const Router::Diagnostics & snapshot,
+  const std::string & node_name,
+  const std::string & hardware_id);
 
-} // namespace r2s_bridge
+}  // namespace r2s_bridge
 
-#endif // R2S_BRIDGE__DIAGNOSTICS_HPP_
+#endif  // R2S_BRIDGE__DIAGNOSTICS_HPP_

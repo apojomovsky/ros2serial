@@ -4,6 +4,8 @@
 // covers: FRM-10
 #include <gtest/gtest.h>
 
+#include <yaml-cpp/yaml.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -12,8 +14,6 @@
 #include <sstream>
 #include <string>
 #include <vector>
-
-#include <yaml-cpp/yaml.h>
 
 #include "fake_transport.hpp"
 #include "manual_clock.hpp"
@@ -34,15 +34,15 @@ namespace
 // The decoded frame size the host accepts, from topic_id to crc16 (FRM-10).
 constexpr std::size_t kHostMaxFrame = 65277;
 
-std::vector<std::uint8_t> bytes_of(const std::string &hex)
+std::vector<std::uint8_t> bytes_of(const std::string & hex)
 {
-    std::vector<std::uint8_t> bytes;
-    std::istringstream in(hex);
-    std::string pair;
-    while (in >> pair) {
-        bytes.push_back(static_cast<std::uint8_t>(std::stoul(pair, nullptr, 16)));
-    }
-    return bytes;
+  std::vector<std::uint8_t> bytes;
+  std::istringstream in(hex);
+  std::string pair;
+  while (in >> pair) {
+    bytes.push_back(static_cast<std::uint8_t>(std::stoul(pair, nullptr, 16)));
+  }
+  return bytes;
 }
 
 // The encoded form of a decoded_size-byte frame (topic_id 0x10, seq 0, the
@@ -51,36 +51,36 @@ std::vector<std::uint8_t> bytes_of(const std::string &hex)
 // this helper only sizes the frames for the limit tests below.
 std::vector<std::uint8_t> wire_of(std::size_t decoded_size, std::uint8_t fill = 0xAAu)
 {
-    std::vector<std::uint8_t> decoded(decoded_size, fill);
-    decoded[0u] = 0x10u;
-    decoded[1u] = 0x00u;
-    const std::uint16_t crc = r2s_crc16_update_buf(R2S_CRC16_INIT, decoded.data(), decoded_size - 2u);
-    decoded[decoded_size - 2u] = static_cast<std::uint8_t>(crc & 0xFFu);
-    decoded[decoded_size - 1u] = static_cast<std::uint8_t>(crc >> 8u);
+  std::vector<std::uint8_t> decoded(decoded_size, fill);
+  decoded[0u] = 0x10u;
+  decoded[1u] = 0x00u;
+  const std::uint16_t crc = r2s_crc16_update_buf(R2S_CRC16_INIT, decoded.data(), decoded_size - 2u);
+  decoded[decoded_size - 2u] = static_cast<std::uint8_t>(crc & 0xFFu);
+  decoded[decoded_size - 1u] = static_cast<std::uint8_t>(crc >> 8u);
 
-    std::vector<std::uint8_t> wire;
-    r2s_rcobs_encoder_t encoder{};
-    r2s_rcobs_encoder_init(&encoder);
-    std::uint8_t chunk[R2S_RCOBS_MAX_EMIT]{};
-    for (const std::uint8_t byte : decoded) {
-        const std::uint8_t produced = r2s_rcobs_encode_byte(&encoder, byte, chunk);
-        wire.insert(wire.end(), chunk, chunk + produced);
-    }
-    wire.insert(wire.end(), chunk, chunk + r2s_rcobs_encode_end(&encoder, chunk));
-    wire.push_back(0x00u);
-    return wire;
+  std::vector<std::uint8_t> wire;
+  r2s_rcobs_encoder_t encoder{};
+  r2s_rcobs_encoder_init(&encoder);
+  std::uint8_t chunk[R2S_RCOBS_MAX_EMIT]{};
+  for (const std::uint8_t byte : decoded) {
+    const std::uint8_t produced = r2s_rcobs_encode_byte(&encoder, byte, chunk);
+    wire.insert(wire.end(), chunk, chunk + produced);
+  }
+  wire.insert(wire.end(), chunk, chunk + r2s_rcobs_encode_end(&encoder, chunk));
+  wire.push_back(0x00u);
+  return wire;
 }
 
 std::vector<std::string> frame_vectors()
 {
-    std::vector<std::string> files;
-    for (const auto &entry : std::filesystem::directory_iterator(R2S_FRAMES_VECTOR_DIR)) {
-        if (entry.path().extension() == ".yaml") {
-            files.push_back(entry.path().string());
-        }
+  std::vector<std::string> files;
+  for (const auto & entry : std::filesystem::directory_iterator(R2S_FRAMES_VECTOR_DIR)) {
+    if (entry.path().extension() == ".yaml") {
+      files.push_back(entry.path().string());
     }
-    std::sort(files.begin(), files.end());
-    return files;
+  }
+  std::sort(files.begin(), files.end());
+  return files;
 }
 
 class FrameVector : public ::testing::TestWithParam<std::string>
@@ -109,8 +109,8 @@ TEST_P(FrameVector, DecodesTheWireFormToTheVectorFrame)
 }
 
 INSTANTIATE_TEST_SUITE_P(Frames, FrameVector, ::testing::ValuesIn(frame_vectors()),
-                         [](const ::testing::TestParamInfo<std::string> &info) {
-                             return std::filesystem::path(info.param).stem().string();
+  [](const ::testing::TestParamInfo<std::string> & info) {
+    return std::filesystem::path(info.param).stem().string();
                          });
 
 TEST(FrameReader, ReadsTheTickWhenTheDelimiterArrives)
@@ -223,6 +223,6 @@ TEST(FrameReader, AClosedLinkFaultsOnlyItsOwnReader)
     reader_b.release();
 }
 
-} // namespace
-} // namespace test
-} // namespace r2s_bridge
+}  // namespace
+}  // namespace test
+}  // namespace r2s_bridge
