@@ -40,6 +40,7 @@ namespace
 
 constexpr std::uint8_t kBattery = 16u;
 constexpr std::uint8_t kCmdVel = 17u;
+constexpr std::uint8_t kEchoVel = 18u;
 
 std::array<std::uint8_t, 8> installed_hash(const std::string &type)
 {
@@ -568,6 +569,48 @@ TEST_F(RouterNode, RehandshakeRefreshesTheBurst)
     EXPECT_EQ(log_frames(), 0u) << "the 1152 byte budget cannot carry 1513 bytes yet";
     fixture.advance(1000u);
     EXPECT_EQ(log_frames(), 1u) << "the refreshed burst carries the frame";
+}
+
+TEST_F(RouterNode, MissingRouteIsRetriedOnLaterPolls)
+{
+    RouterFixture fixture("repair", remapped(), RouterParams{});
+    // The verdict checks the type, never the name, so an uncreatable name
+    // still resolves: the handshake reports it ok while no route serves it.
+    const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
+    const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
+    fixture.deliver_frame(kHelperControl, 0u, helper_hello(7u, 3u));
+    fixture.expect_topic_req(0u);
+    fixture.deliver_frame(
+        kHelperControl, 1u,
+        helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
+    fixture.expect_topic_req(1u);
+    fixture.deliver_frame(
+        kHelperControl, 2u,
+        helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "cmd_vel"));
+    fixture.expect_topic_req(2u);
+    fixture.deliver_frame(
+        kHelperControl, 3u,
+        helper_topic(2u, kEchoVel, 0x00u, twist_hash.data(), "geometry_msgs/msg/Twist", "not a topic name"));
+    fixture.drain();
+    EXPECT_EQ(fixture.router().publisher_count(), 1u);
+    EXPECT_EQ(fixture.router().subscription_count(), 1u);
+    // Later polls retry the missing route instead of losing it silently.
+    fixture.advance(150u);
+    fixture.advance(150u);
+    fixture.advance(150u);
+    const std::size_t echo_lines =
+        std::count_if(fixture.logged().begin(), fixture.logged().end(), [](const std::string &line) {
+            return line.find("not a topic name") != std::string::npos;
+        });
+    EXPECT_GE(echo_lines, 2u) << "the missing route is retried on later polls";
+    EXPECT_EQ(fixture.router().publisher_count(), 1u) << "an uncreatable name still serves no route";
+    std::vector<float> received;
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
+        "power/battery", rclcpp::QoS(10).best_effort(),
+        [&received](const std_msgs::msg::Float32 &msg) { received.push_back(msg.data); });
+    fixture.deliver_frame(kBattery, 0u, {0x00, 0x00, 0xC0, 0x3F});
+    rclcpp::spin_some(fixture.node());
+    ASSERT_EQ(received.size(), 1u) << "the healthy route keeps flowing";
 }
 
 TEST_F(RouterNode, RejectsNonsenseParams)
