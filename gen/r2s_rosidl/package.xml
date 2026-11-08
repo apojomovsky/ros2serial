@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>r2s_rosidl</name>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
   <description>The ros2serial firmware generator as a CMake helper: colcon builds run r2s-gen.</description>
   <maintainer email="apojomovsky@gmail.com">Alexis Pojomovsky</maintainer>
   <license>MIT</license>

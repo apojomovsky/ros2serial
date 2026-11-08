@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.3.0 (2026-11-08)
+
+### Breaking
+
+- **spec:** Parameters and the reliable channel (#457)
+- **spec:** Services and actions over the reliable channel (#500)
+
+### Features
+
+- **ci:** Audit released dependencies against rosdep (#485)
+- **ci:** Build and test the released packages outside the dev image (#486)
+- **cpp:** Opt-in QoS selection on runtime topics (#488)
+- **bridge:** Publish MCU error report counts on /diagnostics (#489)
+- **bridge:** Key per-topic diagnostics by topic id (#490)
+- **ci:** Gate the generator on head-vs-base coverage (#495)
+- **core:** Reliable channel and parameter walk (#496)
+- **ports:** Lead the quickstart with Arduino Uno (#498)
+- **ci:** Kill leg trees and retry the walkthrough echo (#517)
+- **e2e:** Report per-failure summary lines from run-avr.sh (#518)
+- **bridge:** Declare MCU parameters as ROS parameters and push their sets (#523)
+- **ci:** Run ament_lint_common on the ROS packages, advisory with a recorded baseline (#526)
+- **gen:** Parse .action files to Goal Result and Feedback (#525)
+- **ci:** Keep fuzz-long off pull requests unless labelled fuzz-long (#530)
+
+### Chores
+
+- **bridge:** Reformat to the ament uncrustify style (#527)
+
+### Fixes
+
+- **e2e:** Thread an explicit clock through wait_for_handshake (#484)
+- **ci:** Ship the s390x C++ compiler in the big-endian image (#494)
+- **gen:** Pin the gen coverage measurement (#502)
+- **core:** Little-endian wire order on big-endian targets (#499)
+- **ports:** Keep the flood host alive with keep-alive PINGs (#506)
+- **e2e:** Stage AVR scenarios 3 and 4 past the handshake (#505)
+- **e2e:** Spin the discovery wait and report the last graph (#516)
+- **bridge:** Repair routes missing despite an ok verdict (#524)
+
+### Documentation
+
+- **architecture:** Describe v2 today, name pending S5 and S8 (#483)
+- **readme:** Overhaul for 0.3.0 with a posix-first quickstart (#491)
+- **ci:** Adopt the ROS 2 comment and documentation rules (#520)
+- Audit README and all docs before 0.3.0 (#521)
+- Final README accuracy check before 0.3.0 (#531)
+
+### CI
+
+- Keep the budgets table in the job summary, not a pull request comment (#487)
 ## 0.2.0 (2026-11-04)
 
 ### Features
