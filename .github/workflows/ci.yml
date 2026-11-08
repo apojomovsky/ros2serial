@@ -52,6 +52,7 @@ jobs:
       core: ${{ steps.statuses.outputs.core }}
       gen: ${{ steps.statuses.outputs.gen }}
       bridge: ${{ steps.statuses.outputs.bridge }}
+      ament_lint: ${{ steps.statuses.outputs.ament_lint }}
       cpp: ${{ steps.statuses.outputs.cpp }}
       e2e: ${{ steps.statuses.outputs.e2e }}
       esp32: ${{ steps.statuses.outputs.esp32 }}
@@ -102,6 +103,13 @@ jobs:
           restore-keys: |
             r2s-task-bridge-${{ github.ref }}-
             r2s-task-bridge-refs/heads/master-
+      - uses: actions/cache/restore@v4.2.2
+        with:
+          path: .task/checksum/ament_lint
+          key: r2s-task-ament_lint-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            r2s-task-ament_lint-${{ github.ref }}-
+            r2s-task-ament_lint-refs/heads/master-
       - uses: actions/cache/restore@v4.2.2
         with:
           path: .task/checksum/cpp
@@ -192,7 +200,7 @@ jobs:
           full=""
           # A task without a checksum file (lint, commits) is always stale.
           # Exit 0 is fresh, 1 is stale; anything else fails safe to FULL.
-          for task in lint commits scripts core gen bridge cpp coverage docs examples esp32 budgets readme fuzz e2e-avr e2e-posix nightly mermaid; do
+          for task in lint commits scripts core gen bridge ament_lint cpp coverage docs examples esp32 budgets readme fuzz e2e-avr e2e-posix nightly mermaid; do
             rc=0
             task --status "$task" >/dev/null 2>&1 || rc=$?
             case $rc in
@@ -237,6 +245,25 @@ jobs:
           COMMIT_RANGE="$range" make test LINT=1
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+
+  # Advisory ament_lint_common over the ROS packages: reports the per-linter
+  # baseline and never fails, until the cleanup tickets land (#508). Runs
+  # through make, so the dev image provides colcon and the ROS underlay.
+  ament-lint:
+    needs: plan
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.ament_lint == '1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test AMENT_LINT=1
+      - if: github.ref == 'refs/heads/master'
+        uses: actions/cache/save@v4.2.2
+        with:
+          path: .task/checksum/ament_lint
+          key: r2s-task-ament_lint-refs/heads/master-${{ github.sha }}
 
   # The SCRIPTS scope runs as one job per shard over the collected node
   # ids, spread round-robin in sorted order (scripts/shard_nodes.py). The

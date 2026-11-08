@@ -64,7 +64,7 @@ else
 fi
 
 scoped=0
-for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES ESP32 BUDGETS FUZZ README NIGHTLY SOAK; do [ -n "${!v:-}" ] && scoped=1; done
+for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE AMENT_LINT CPP E2E COVERAGE DOCS EXAMPLES ESP32 BUDGETS FUZZ README NIGHTLY SOAK; do [ -n "${!v:-}" ] && scoped=1; done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }
 
 failed=()
@@ -156,6 +156,7 @@ gen_tests() {
 }
 if wants GEN; then scope_now=GEN; section gen gen_tests; fi
 if wants BRIDGE; then scope_now=BRIDGE; section bridge bash scripts/bridge-test.sh; fi
+if wants AMENT_LINT; then scope_now=AMENT_LINT; section ament-lint bash scripts/ament-lint.sh; fi
 if wants CPP; then scope_now=CPP; section cpp bash scripts/cpp-test.sh; fi
 if wants COVERAGE; then scope_now=COVERAGE; section coverage bash scripts/coverage-gate.sh; fi
 if wants DOCS; then scope_now=DOCS; section docs python3 tools/snippets_check.py; fi
@@ -186,7 +187,7 @@ fi
 
 empty=""
 if [ "$scoped" = 1 ]; then
-  for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE CPP E2E COVERAGE DOCS EXAMPLES ESP32 BUDGETS FUZZ README NIGHTLY SOAK; do
+  for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE AMENT_LINT CPP E2E COVERAGE DOCS EXAMPLES ESP32 BUDGETS FUZZ README NIGHTLY SOAK; do
     if [ -n "${!v:-}" ]; then
       case " $ran_scopes " in *" $v "*) ;; *) empty="$empty $v" ;; esac
     fi

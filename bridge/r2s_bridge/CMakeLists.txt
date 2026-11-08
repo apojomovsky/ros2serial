@@ -87,6 +87,14 @@ install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
+  # The ament linters stay advisory: the ament-lint CI job reports their
+  # findings and never fails this build, until the cleanup tickets land.
+  option(R2S_AMENT_LINT "Run the ament linters (advisory, see #508)" OFF)
+  if(R2S_AMENT_LINT)
+    find_package(ament_lint_auto REQUIRED)
+    ament_lint_auto_find_test_dependencies()
+  endif()
+
   find_package(ament_cmake_gtest REQUIRED)
   find_package(class_loader REQUIRED)
   find_package(yaml-cpp REQUIRED)
