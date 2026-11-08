@@ -128,6 +128,67 @@ def test_an_unknown_action_is_an_error():
     )
 
 
+def test_a_result_loads_first_from_a_fresh_repository(tmp_path):
+    root = tmp_path / "messages"
+    write_action(
+        root,
+        "demo_msgs/action/Spin",
+        "int32 order\n---\nint32[] sequence\n---\nint32[] partial_sequence\n",
+    )
+    repository = msgs.MessageRepository(msg_paths=[root])
+
+    assert [field.name for field in repository.load("demo_msgs/action/Spin_Result").fields] == ["sequence"]
+
+
+def test_load_action_caches_the_definition(tmp_path):
+    root = tmp_path / "messages"
+    write_action(root, "demo_msgs/action/Spin", "int32 a\n---\nint32 b\n---\nint32 c\n")
+    repository = msgs.MessageRepository(msg_paths=[root])
+
+    first = repository.load_action("demo_msgs/action/Spin")
+
+    assert repository.load_action("demo_msgs/action/Spin") is first
+
+
+def test_load_action_rejects_a_message_type():
+    repository = msgs.MessageRepository()
+
+    with pytest.raises(msgs.MessageError) as caught:
+        repository.load_action("std_msgs/msg/Float32")
+
+    assert str(caught.value) == ("std_msgs/msg/Float32: not an action type; name it as 'package/action/Name'")
+
+
+def test_an_action_loads_from_a_sourced_prefix(tmp_path):
+    package_dir = tmp_path / "prefix" / "share" / "demo_msgs" / "action"
+    package_dir.mkdir(parents=True)
+    (package_dir / "Spin.action").write_text(
+        "int32 order\n---\nint32[] sequence\n---\nint32[] partial_sequence\n", encoding="utf-8"
+    )
+    repository = msgs.MessageRepository(ament_prefix_path=[tmp_path / "prefix"])
+
+    assert [field.name for field in repository.load("demo_msgs/action/Spin_Goal").fields] == ["order"]
+
+
+def test_action_name_helpers():
+    assert cpp.action_name("demo_msgs/action/Spin_Goal") == "demo_msgs/action/Spin"
+    assert cpp.action_name("demo_msgs/action/Spin") == "demo_msgs/action/Spin"
+    assert cpp.message_path("demo_msgs/action/Spin") == "demo_msgs/action/spin.hpp"
+
+    with pytest.raises(ValueError):
+        cpp.action_name("std_msgs/msg/Float32")
+
+
+def test_emit_action_hpp_rejects_an_unresolved_part(tmp_path):
+    root = tmp_path / "messages"
+    write_action(root, "demo_msgs/action/Spin", "int32 order\n---\nint32 b\n---\nint32 c\n")
+    repository = msgs.MessageRepository(msg_paths=[root])
+    resolved = bounds.resolve(repository, ["demo_msgs/action/Spin_Goal"], bounds={})
+
+    with pytest.raises(ValueError, match="Spin_Result is not resolved"):
+        cpp.emit_action_hpp(resolved, "demo_msgs/action/Spin", repository)
+
+
 def test_a_user_action_hashes_deterministically(tmp_path):
     root = tmp_path / "messages"
     write_action(

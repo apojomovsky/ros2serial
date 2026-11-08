@@ -329,7 +329,7 @@ class MessageRepository:
                 return action.result
             if canonical == action.feedback.type_name:
                 return action.feedback
-            raise MessageError(
+            raise MessageError(  # pragma: no cover - every action suffix returns above
                 canonical,
                 "not a goal, result or feedback type",
                 "name it as 'package/action/Name_Goal', '_Result' or '_Feedback'",

@@ -74,9 +74,6 @@ def files_for() -> tuple[str, ...]:
 
 def _cname(type_name: str) -> str:
     """A canonical type as the bundle's suffix: `std_msgs/msg/Float32` to `std_msgs_Float32`."""
-    if "/action/" in type_name:
-        package, _, name = type_name.partition("/action/")
-        return f"{package}_{name}"
     package, _, name = type_name.partition("/msg/")
     return f"{package}_{name}"
 
