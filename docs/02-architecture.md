@@ -168,9 +168,10 @@ The diagrams below follow `spec/protocol.md`, sections 8.1 and 8.2. In
 code the MCU states are the `ANNOUNCING` and `CONNECTED` values in
 `core/src/session.c` (`BOOT` is the init path that sends the first
 HELLO), and the host states are the `SessionState` values in
-`bridge/r2s_bridge/include/r2s_bridge/session.hpp`. Pending S5
-(parameters, reliable channel) and S8 (services and actions) add rules
-outside these two machines and claim no transition here.
+`bridge/r2s_bridge/include/r2s_bridge/session.hpp`. The reliable
+channel rides these two machines without claiming a transition here.
+Pending work adds rules the same way: parameters in #155, services in
+#156, actions in #317 to #320.
 
 ```mermaid
 stateDiagram-v2
