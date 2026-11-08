@@ -170,7 +170,7 @@ code the MCU states are the `ANNOUNCING` and `CONNECTED` values in
 HELLO), and the host states are the `SessionState` values in
 `bridge/r2s_bridge/include/r2s_bridge/session.hpp`. The reliable
 channel rides these two machines without claiming a transition here.
-Pending work adds rules the same way: parameters in #155, services in
+Pending work adds rules the same way: services in
 #156, actions in #317 to #320.
 
 ```mermaid

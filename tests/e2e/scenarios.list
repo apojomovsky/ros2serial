@@ -13,3 +13,4 @@ test_scenario_10_framing_posix
 test_publish_catchup_posix
 test_scenario_11_posix
 test_scenario_12_posix
+test_scenario_13_posix

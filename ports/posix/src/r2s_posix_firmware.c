@@ -17,6 +17,7 @@
 #include "r2s/r2s_session.h"
 #include "r2s_generated.h"
 
+#include "r2s_posix_params.h"
 #include "r2s_posix_port.h"
 
 /* Publish rates in Hz, from once a second to the loop's 1 ms granularity. */
@@ -530,6 +531,11 @@ int main(int argc, char **argv)
         fprintf(stderr, "r2s_posix: cannot configure node '%s'\n", opts.node);
         return 2;
     }
+    /* The parameter table the bridge walks after the topics. */
+    if (r2s_posix_params_init() != 0) {
+        fprintf(stderr, "r2s_posix: cannot configure parameters\n");
+        return 2;
+    }
     r2s_init();
     fprintf(stderr, "r2s_posix: ready node=%s topics=%u rate=%u\n", opts.node, count, opts.rate);
     interval = (uint32_t)(1000u / opts.rate);
@@ -558,6 +564,8 @@ int main(int argc, char **argv)
             r2s_posix_set_tx_cap(opts.tx_cap);
             cap_armed = 1u;
         }
+        /* Applied SETs print here, so the suite reads the live values. */
+        r2s_posix_params_report();
         if (opts.log_lines != 0u && (uint32_t)(now - last_log) >= LOG_PERIOD_MS) {
             emit_log_lines();
             last_log = now;
