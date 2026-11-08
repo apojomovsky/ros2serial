@@ -227,6 +227,28 @@ class RouterNode : public ::testing::Test
     }
 };
 
+// A three-topic walk whose echo_vel the middleware refuses: the type
+// resolves, so the verdict is ok, but no route serves it.
+void handshake_with_uncreatable_echo(RouterFixture &fixture)
+{
+    const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
+    const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
+    fixture.deliver_frame(kHelperControl, 0u, helper_hello(7u, 3u));
+    fixture.expect_topic_req(0u);
+    fixture.deliver_frame(
+        kHelperControl, 1u,
+        helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
+    fixture.expect_topic_req(1u);
+    fixture.deliver_frame(
+        kHelperControl, 2u,
+        helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "cmd_vel"));
+    fixture.expect_topic_req(2u);
+    fixture.deliver_frame(
+        kHelperControl, 3u,
+        helper_topic(2u, kEchoVel, 0x00u, twist_hash.data(), "geometry_msgs/msg/Twist", "not a topic name"));
+    fixture.drain();
+}
+
 rclcpp::NodeOptions remapped()
 {
     return rclcpp::NodeOptions().arguments({"--ros-args", "-r", "battery:=power/battery"});
@@ -576,22 +598,7 @@ TEST_F(RouterNode, MissingRouteIsRetriedOnLaterPolls)
     RouterFixture fixture("repair", remapped(), RouterParams{});
     // The verdict checks the type, never the name, so an uncreatable name
     // still resolves: the handshake reports it ok while no route serves it.
-    const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
-    const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
-    fixture.deliver_frame(kHelperControl, 0u, helper_hello(7u, 3u));
-    fixture.expect_topic_req(0u);
-    fixture.deliver_frame(
-        kHelperControl, 1u,
-        helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
-    fixture.expect_topic_req(1u);
-    fixture.deliver_frame(
-        kHelperControl, 2u,
-        helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "cmd_vel"));
-    fixture.expect_topic_req(2u);
-    fixture.deliver_frame(
-        kHelperControl, 3u,
-        helper_topic(2u, kEchoVel, 0x00u, twist_hash.data(), "geometry_msgs/msg/Twist", "not a topic name"));
-    fixture.drain();
+    handshake_with_uncreatable_echo(fixture);
     EXPECT_EQ(fixture.router().publisher_count(), 1u);
     EXPECT_EQ(fixture.router().subscription_count(), 1u);
     // Later polls retry the missing route instead of losing it silently.
@@ -611,6 +618,18 @@ TEST_F(RouterNode, MissingRouteIsRetriedOnLaterPolls)
     fixture.deliver_frame(kBattery, 0u, {0x00, 0x00, 0xC0, 0x3F});
     rclcpp::spin_some(fixture.node());
     ASSERT_EQ(received.size(), 1u) << "the healthy route keeps flowing";
+}
+
+TEST_F(RouterNode, MissingRouteSurfacesInDiagnostics)
+{
+    RouterFixture fixture("diagmissing", remapped(), RouterParams{});
+    handshake_with_uncreatable_echo(fixture);
+    const Router::Diagnostics diagnostics = fixture.router().diagnostics();
+    ASSERT_EQ(diagnostics.topics.size(), 3u);
+    EXPECT_FALSE(diagnostics.topics[0].route_missing) << "battery keeps its route";
+    EXPECT_FALSE(diagnostics.topics[1].route_missing) << "cmd_vel keeps its route";
+    EXPECT_TRUE(diagnostics.topics[2].route_missing) << "the uncreatable route reports missing";
+    EXPECT_FALSE(diagnostics.topics[2].route_error.empty()) << "the missing route names its reason";
 }
 
 TEST_F(RouterNode, RejectsNonsenseParams)
