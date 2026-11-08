@@ -3,11 +3,17 @@
 // and converted payloads both directions.
 #include "r2s_bridge/router.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstring>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
+#include <rcl_interfaces/msg/parameter_descriptor.hpp>
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <rclcpp/create_generic_publisher.hpp>
 #include <rclcpp/create_generic_subscription.hpp>
 
@@ -55,6 +61,105 @@ const char *fail_name(ConvertFail fail)
     return "unknown";
 }
 
+// The parameters channel types ([PAR-2]) and the read-only flag ([PAR-4]).
+constexpr std::uint8_t kParamBool = 0u;
+constexpr std::uint8_t kParamI64 = 1u;
+constexpr std::uint8_t kParamF64 = 2u;
+constexpr std::uint8_t kParamString = 3u;
+constexpr std::uint8_t kParamReadOnly = 0x01u;
+
+// One walk type as its ROS counterpart. The walk keeps types 0 to 3
+// ([PAR-3]), so every index below names a valid entry.
+constexpr rclcpp::ParameterType kRosType[] = {
+    rclcpp::ParameterType::PARAMETER_BOOL, rclcpp::ParameterType::PARAMETER_INTEGER,
+    rclcpp::ParameterType::PARAMETER_DOUBLE, rclcpp::ParameterType::PARAMETER_STRING};
+
+// One MCU STATUS code as its log name. Codes 1 to 4 reach here: applied
+// stays quiet above, and the session drops anything past 4 ([PAR-5]).
+const char *param_status_name(std::uint8_t status)
+{
+    static constexpr const char *kNames[] = {"applied", "unknown index", "bad type or length", "read-only",
+                                             "out of range"};
+    return kNames[status];
+}
+
+// One varint length in minimal form, as [ENC-7] lays a string out.
+void put_varint(std::vector<std::uint8_t> &out, std::uint32_t value)
+{
+    do {
+        std::uint8_t byte = static_cast<std::uint8_t>(value & 0x7Fu);
+        value >>= 7u;
+        if (value != 0u) {
+            byte = static_cast<std::uint8_t>(byte | 0x80u);
+        }
+        out.push_back(byte);
+    } while (value != 0u);
+}
+
+// The MCU default as the ROS value to declare. The walk validated every
+// shape before keeping the entry ([PAR-1], [PAR-3]), so this only lays the
+// bytes out; the trailing throw names a type the walk should not have kept.
+rclcpp::ParameterValue decode_param_default(const ParamInfo &info)
+{
+    switch (info.type) {
+    case kParamBool:
+        return rclcpp::ParameterValue(info.default_value[0] != 0u);
+    case kParamI64:
+    case kParamF64: {
+        std::uint64_t bits = 0u;
+        for (std::size_t at = 0; at < 8u; ++at) {
+            bits |= static_cast<std::uint64_t>(info.default_value[at]) << (8u * at);
+        }
+        if (info.type == kParamI64) {
+            return rclcpp::ParameterValue(static_cast<std::int64_t>(bits));
+        }
+        double number = 0.0;
+        static_assert(sizeof(number) == sizeof(bits), "a host double carries 64 bits");
+        std::memcpy(&number, &bits, sizeof(number));
+        return rclcpp::ParameterValue(number);
+    }
+    case kParamString: {
+        // The length prefix ends at the first byte without its top bit, as
+        // the walk already checked.
+        std::size_t at = 0;
+        while ((info.default_value[at++] & 0x80u) != 0u) {
+        }
+        return rclcpp::ParameterValue(std::string(
+            info.default_value.begin() + static_cast<std::ptrdiff_t>(at), info.default_value.end()));
+    }
+    }
+    throw std::invalid_argument("unknown parameter type");
+}
+
+// One ROS value as its wire bytes ([PAR-1], [PAR-3]). The caller checked
+// the ROS type against the MCU type first: the middleware validates every
+// set, and the handshake re-push compares before encoding. The chain ends
+// in the string case because the walk keeps types 0 to 3 ([PAR-3]).
+void encode_param_value(std::uint8_t type, const rclcpp::Parameter &value, std::vector<std::uint8_t> &out)
+{
+    out.clear();
+    if (type == kParamBool) {
+        out.push_back(value.get_value<bool>() ? 1u : 0u);
+    } else if (type == kParamI64) {
+        const std::uint64_t bits = static_cast<std::uint64_t>(value.get_value<std::int64_t>());
+        for (int at = 0; at < 8; ++at) {
+            out.push_back(static_cast<std::uint8_t>((bits >> (8 * at)) & 0xFFu));
+        }
+    } else if (type == kParamF64) {
+        const double number = value.get_value<double>();
+        std::uint64_t bits = 0u;
+        static_assert(sizeof(number) == sizeof(bits), "a host double carries 64 bits");
+        std::memcpy(&bits, &number, sizeof(bits));
+        for (int at = 0; at < 8; ++at) {
+            out.push_back(static_cast<std::uint8_t>((bits >> (8 * at)) & 0xFFu));
+        }
+    } else {
+        const std::string &text = value.get_value<std::string>();
+        put_varint(out, static_cast<std::uint32_t>(text.size()));
+        out.insert(out.end(), text.begin(), text.end());
+    }
+}
+
 } // namespace
 
 std::map<std::string, double> parse_rate_overrides(const std::vector<std::string> &entries,
@@ -92,11 +197,13 @@ std::map<std::string, double> parse_rate_overrides(const std::vector<std::string
 struct Router::Impl {
     Impl(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr in_topics, TransportFactory in_open,
          const Clock &in_clock, const Clock &in_ros_clock, RouterParams in_params, LogSink in_sink,
-         SessionConfig session_config, LogSink in_mcu_sink)
+         SessionConfig session_config, LogSink in_mcu_sink,
+         rclcpp::node_interfaces::NodeParametersInterface::SharedPtr in_node_params)
         : topics(in_topics), params(std::move(in_params)), sink(std::move(in_sink)), clock(in_clock),
-          mcu_sink(std::move(in_mcu_sink)),
+          mcu_sink(std::move(in_mcu_sink)), node_params_(std::move(in_node_params)),
           session_(session_config, in_clock, in_ros_clock, std::move(in_open), resolve_topic_type,
-                   SessionEvents{log_event(), handshake_event(), user_event(), mcu_log_event(), {}})
+                   SessionEvents{log_event(), handshake_event(), user_event(), mcu_log_event(),
+                                 param_status_event()})
     {
         if (!sink) {
             throw std::invalid_argument("r2s_bridge::Router: a log sink is required");
@@ -118,6 +225,13 @@ struct Router::Impl {
                 throw std::invalid_argument("r2s_bridge::Router: a per-topic rate must not be negative");
             }
             (void)name;
+        }
+        // The on-set hook carries every ROS parameter set on the node; the
+        // handler answers only the MCU's own. Kept alive here, or the node
+        // unregisters it.
+        if (node_params_ != nullptr) {
+            param_hook_ = node_params_->add_on_set_parameters_callback(
+                [this](const std::vector<rclcpp::Parameter> &params) { return on_mcu_param_set(params); });
         }
     }
 
@@ -144,6 +258,11 @@ struct Router::Impl {
         return [this](bool identical) { on_handshake(identical); };
     }
 
+    std::function<void(std::uint8_t, std::uint8_t)> param_status_event()
+    {
+        return [this](std::uint8_t index, std::uint8_t status) { on_param_status(index, status); };
+    }
+
     std::function<void(std::uint8_t, const std::vector<std::uint8_t> &)> user_event()
     {
         return
@@ -168,14 +287,22 @@ struct Router::Impl {
 
     void on_handshake(bool identical)
     {
-        std::lock_guard<std::mutex> guard(mutex);
+        std::lock_guard<std::recursive_mutex> guard(mutex);
         if (identical && !routes.empty()) {
             // The endpoints stay, but the MCU's new limits may exceed the old
             // bucket: refresh the burst without touching the queues.
             scheduler_.set_max_burst(
                 static_cast<double>(Scheduler::encoded_frame_bound(session_.mcu_max_frame())));
-            return;
+        } else {
+            sync_routes();
         }
+        // Every handshake re-syncs the parameters: a reboot resets the MCU
+        // to its defaults, so the current values go out again ([PAR-9]).
+        sync_params();
+    }
+
+    void sync_routes()
+    {
         routes.clear();
         std::vector<SchedulerTopic> pacing;
         const double budget_bytes_per_sec =
@@ -215,11 +342,120 @@ struct Router::Impl {
         scheduler_.configure(std::move(pacing), budget_bytes_per_sec, burst);
     }
 
+    // One refused SET the MCU reported while connected ([PAR-5]): applied
+    // ones need no log, the reliable channel already acked them.
+    void on_param_status(std::uint8_t index, std::uint8_t status)
+    {
+        if (status == 0u) {
+            return;
+        }
+        std::lock_guard<std::recursive_mutex> guard(mutex);
+        std::string name = "#" + std::to_string(index);
+        for (const auto &entry : mcu_params_) {
+            if (entry.second.index == index) {
+                name = "'" + entry.first + "'";
+                break;
+            }
+        }
+        emit(SessionLog::kWarning,
+             "parameter " + name + ": the MCU refused the set (" + param_status_name(status) + ")");
+    }
+
+    // The parameters layer: the walk's DECLAREs become ROS parameters with
+    // the MCU defaults, and every current value that differs goes out with
+    // SET, on this handshake and every re-handshake ([PAR-9]).
+    void sync_params()
+    {
+        if (node_params_ == nullptr) {
+            return;
+        }
+        const std::vector<ParamInfo> announced = session_.params();
+        for (auto &entry : mcu_params_) {
+            const bool kept =
+                std::any_of(announced.begin(), announced.end(),
+                            [&entry](const ParamInfo &info) { return info.name == entry.first; });
+            if (!kept && !entry.second.stale) {
+                entry.second.stale = true;
+                emit(SessionLog::kWarning,
+                     "parameter '" + entry.first + "': no longer announced, its sets fail until it returns");
+            }
+        }
+        for (const ParamInfo &info : announced) {
+            if (info.name.empty()) {
+                emit(SessionLog::kWarning, "parameter index " + std::to_string(info.index) + ": no name");
+                continue;
+            }
+            if (mcu_params_.count(info.name) == 0u && node_params_->has_parameter(info.name)) {
+                emit(SessionLog::kWarning,
+                     "parameter '" + info.name + "': the node already has it, not tracked");
+                continue;
+            }
+            if (!node_params_->has_parameter(info.name)) {
+                try {
+                    rcl_interfaces::msg::ParameterDescriptor descriptor;
+                    descriptor.read_only = (info.flags & kParamReadOnly) != 0u;
+                    node_params_->declare_parameter(info.name, decode_param_default(info), descriptor);
+                } catch (const std::exception &error) {
+                    emit(SessionLog::kWarning,
+                         "parameter '" + info.name + "': not declared (" + error.what() + ")");
+                    continue;
+                }
+            }
+            // A returning name unstales: the entry below overwrites the flag.
+            mcu_params_[info.name] = McuParam{info.index, info.type, false};
+            // Declared above or already present: the get cannot miss.
+            const rclcpp::Parameter current = node_params_->get_parameter(info.name);
+            // The middleware fixes a ROS type at declare, so a mismatch
+            // means the MCU reflashed the type: nothing goes out ([PAR-9]).
+            if (current.get_type() != kRosType[info.type]) {
+                emit(SessionLog::kWarning, "parameter '" + info.name + "': type changed, not pushed");
+                continue;
+            }
+            std::vector<std::uint8_t> wire;
+            encode_param_value(info.type, current, wire);
+            if (wire != info.default_value) {
+                session_.send_param_set(info.index, wire);
+            }
+        }
+    }
+
+    // One ROS parameter set on the node: only the MCU's own parameters go
+    // out as SETs, everything else belongs to the node's own callbacks. The
+    // middleware already refused read-only and wrong-typed sets before
+    // calling, so only a stale entry or a down link still fails here. A
+    // rejection names its parameter; a set while disconnected fails, so
+    // `ros2 param set` reports the link instead of vanishing.
+    rcl_interfaces::msg::SetParametersResult on_mcu_param_set(const std::vector<rclcpp::Parameter> &params)
+    {
+        rcl_interfaces::msg::SetParametersResult result;
+        result.successful = true;
+        std::lock_guard<std::recursive_mutex> guard(mutex);
+        for (const rclcpp::Parameter &param : params) {
+            const auto found = mcu_params_.find(param.get_name());
+            if (found == mcu_params_.end()) {
+                continue;
+            }
+            if (found->second.stale) {
+                result.successful = false;
+                result.reason = "parameter '" + param.get_name() + "' is no longer announced by the MCU";
+                return result;
+            }
+            std::vector<std::uint8_t> wire;
+            encode_param_value(found->second.type, param, wire);
+            if (!session_.send_param_set(found->second.index, wire)) {
+                result.successful = false;
+                result.reason = "parameter '" + param.get_name() + "': the link is down";
+                return result;
+            }
+        }
+        return result;
+    }
+
     void on_user_frame(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload)
     {
         Route route;
         {
-            std::lock_guard<std::mutex> guard(mutex);
+            std::lock_guard<std::recursive_mutex> guard(mutex);
             const auto found = routes.find(topic_id);
             if (found == routes.end() || found->second.pub == nullptr) {
                 return;
@@ -240,7 +476,7 @@ struct Router::Impl {
                  "topic '" + route.info.topic_name + "': failed to serialize (" + error.what() + ")");
             // The route exists: only the poll thread mutates the table, so
             // the entry looked up above is still there.
-            std::lock_guard<std::mutex> guard(mutex);
+            std::lock_guard<std::recursive_mutex> guard(mutex);
             ++routes[topic_id].publish_failures;
             return;
         }
@@ -267,7 +503,7 @@ struct Router::Impl {
                  "topic '" + route.info.topic_name + "': failed to publish (" + error.what() + ")");
             // The route exists: only the poll thread mutates the table, so
             // the entry looked up above is still there.
-            std::lock_guard<std::mutex> guard(mutex);
+            std::lock_guard<std::recursive_mutex> guard(mutex);
             ++routes[topic_id].publish_failures;
             return;
             // GCOVR_EXCL_BR_STOP
@@ -278,7 +514,7 @@ struct Router::Impl {
     {
         Route route;
         {
-            std::lock_guard<std::mutex> guard(mutex);
+            std::lock_guard<std::recursive_mutex> guard(mutex);
             const auto found = routes.find(topic_id);
             if (found == routes.end() || found->second.sub == nullptr) {
                 return;
@@ -302,7 +538,7 @@ struct Router::Impl {
                                            " bytes, past the MCU max_frame " + std::to_string(limit));
             return;
         }
-        std::lock_guard<std::mutex> guard(mutex);
+        std::lock_guard<std::recursive_mutex> guard(mutex);
         scheduler_.submit(topic_id, std::move(packed));
     }
 
@@ -324,18 +560,35 @@ struct Router::Impl {
     LogSink sink;
     const Clock &clock;
     LogSink mcu_sink;
+    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params_;
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_hook_;
+    // One MCU parameter by ROS name: the SETs route by index. Only names
+    // the layer itself declared are tracked, so a colliding node
+    // parameter never sends MCU traffic.
+    struct McuParam {
+        std::uint8_t index = 0;
+        std::uint8_t type = 0;
+        // A stale entry left the announced table. The ROS parameter stays:
+        // a standard node cannot undeclare it, so its sets fail instead.
+        bool stale = false;
+    };
+    std::map<std::string, McuParam> mcu_params_;
     Converter converter_;
     Scheduler scheduler_;
     std::map<std::uint8_t, Route> routes;
-    std::mutex mutex;
+    // Recursive: declaring a ROS parameter reenters through the on-set
+    // hook on the same thread, which takes the guard again.
+    std::recursive_mutex mutex;
     Session session_;
 };
 
 Router::Router(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,
                const Clock &clock, const Clock &ros_clock, RouterParams params, LogSink sink,
-               SessionConfig session_config, LogSink mcu_sink)
+               SessionConfig session_config, LogSink mcu_sink,
+               rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params)
     : impl_(std::make_unique<Impl>(std::move(topics), std::move(open), clock, ros_clock, std::move(params),
-                                   std::move(sink), std::move(session_config), std::move(mcu_sink)))
+                                   std::move(sink), std::move(session_config), std::move(mcu_sink),
+                                   std::move(node_params)))
 {
 }
 
@@ -345,7 +598,7 @@ void Router::poll()
 {
     impl_->session_.poll();
     const std::chrono::nanoseconds now = impl_->clock.now();
-    std::lock_guard<std::mutex> guard(impl_->mutex);
+    std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
     impl_->scheduler_.poll(now, [this](std::uint8_t id, const std::vector<std::uint8_t> &payload) {
         return impl_->session_.send_user(id, payload);
     });
@@ -353,7 +606,7 @@ void Router::poll()
 
 std::size_t Router::publisher_count() const
 {
-    std::lock_guard<std::mutex> guard(impl_->mutex);
+    std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
     std::size_t count = 0;
     for (const auto &[id, route] : impl_->routes) {
         (void)id;
@@ -366,7 +619,7 @@ std::size_t Router::publisher_count() const
 
 std::size_t Router::subscription_count() const
 {
-    std::lock_guard<std::mutex> guard(impl_->mutex);
+    std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
     std::size_t count = 0;
     for (const auto &[id, route] : impl_->routes) {
         (void)id;
@@ -379,7 +632,7 @@ std::size_t Router::subscription_count() const
 
 std::optional<rclcpp::QoS> Router::endpoint_qos(std::uint8_t topic_id) const
 {
-    std::lock_guard<std::mutex> guard(impl_->mutex);
+    std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
     const auto found = impl_->routes.find(topic_id);
     if (found == impl_->routes.end()) {
         return std::nullopt;
@@ -395,19 +648,19 @@ std::optional<rclcpp::QoS> Router::endpoint_qos(std::uint8_t topic_id) const
 
 std::size_t Router::dropped(std::uint8_t topic_id) const
 {
-    std::lock_guard<std::mutex> guard(impl_->mutex);
+    std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
     return impl_->scheduler_.dropped(topic_id);
 }
 
 std::size_t Router::queued(std::uint8_t topic_id) const
 {
-    std::lock_guard<std::mutex> guard(impl_->mutex);
+    std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
     return impl_->scheduler_.queued(topic_id);
 }
 
 Router::Diagnostics Router::diagnostics() const
 {
-    std::lock_guard<std::mutex> guard(impl_->mutex);
+    std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
     Diagnostics out;
     out.link_state = link_state_name(impl_->session_.state());
     out.session_token = impl_->session_.token();
