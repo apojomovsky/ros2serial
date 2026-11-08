@@ -234,6 +234,15 @@ class Reader
         return pos_ == len_;
     }
 
+    // The bytes past what u8/u16/u32/string consumed, for a trailing value
+    // the caller shapes itself.
+    bool rest(std::vector<std::uint8_t> &out)
+    {
+        out.assign(data_ + pos_, data_ + len_);
+        pos_ = len_;
+        return true;
+    }
+
   private:
     std::uint16_t left() const
     {
@@ -494,6 +503,7 @@ struct Session::Impl {
     {
         awaiting_topic = false;
         awaiting_param_ = false;
+        collected_params.clear();
         if ((hello.features & kParamFeaturesBit) == 0u) {
             finish_handshake();
             return;
@@ -708,6 +718,7 @@ struct Session::Impl {
         // The first handshake has no previous table, so nothing can match it.
         const bool identical = had_handshake && collected == topics;
         topics = collected;
+        params = collected_params;
         had_handshake = true;
         state = SessionState::kConnected;
         hello.token = assign_token();
@@ -884,6 +895,51 @@ struct Session::Impl {
         }
     }
 
+    // One walk DECLARE kept for the parameters layer: the index, the PAR-2
+    // type, the PAR-4 flags, the name and the default in its wire form.
+    // Only a fully parseable DECLARE is kept: a short payload, an unknown
+    // type, reserved flag bits, a name the length overruns, or a default
+    // outside its type's shape ([PAR-3]) leaves no entry, while the walk
+    // still advances.
+    void collect_declare(const std::uint8_t *payload, std::uint16_t len)
+    {
+        // The caller only delivers walk answers of two bytes or more
+        // ([PAR-8]): the opcode and the declare index always parse.
+        ParamInfo info;
+        info.index = payload[1];
+        Reader reader(payload + 2u, static_cast<std::uint16_t>(len - 2u));
+        std::string name;
+        std::vector<std::uint8_t> def;
+        if (!reader.u8(info.type) || !reader.u8(info.flags) || !reader.string(name)) {
+            return;
+        }
+        reader.rest(def);
+        if (info.type > 3u || (info.flags & 0xFEu) != 0u) {
+            return;
+        }
+        if (info.type == 0u) {
+            if (def.size() != 1u || def[0] > 1u) {
+                return;
+            }
+        } else if (info.type == 1u || info.type == 2u) {
+            if (def.size() != 8u) {
+                return;
+            }
+        } else {
+            Reader tail(def.data(), static_cast<std::uint16_t>(def.size()));
+            std::string text;
+            if (!tail.string(text) || !tail.at_end()) {
+                return;
+            }
+            if (text.find('\0') != std::string::npos) {
+                return;
+            }
+        }
+        info.name = name;
+        info.default_value = def;
+        collected_params.push_back(info);
+    }
+
     // The parameters channel ([PAR-7], [PAR-8], [REL-3]). Walk answers
     // arrive while handshaking and are never acked; STATUS applies at most
     // once while connected, acked every time and reported to the
@@ -894,16 +950,18 @@ struct Session::Impl {
             return;
         }
         switch (payload[0]) {
-        case kParamDeclare:
-            // A DECLARE moves the walk to the next index. Its content is
-            // the parameters layer's (X5), and it is never acked ([PAR-8]).
+        case kParamDeclare: {
+            // A DECLARE moves the walk to the next index and is never acked
+            // ([PAR-8]). The parameters layer keeps a parseable one.
             if (state == SessionState::kHandshaking && awaiting_param_ && len >= 2u &&
                 payload[1] == param_index_) {
+                collect_declare(payload, len);
                 ++param_index_;
                 param_retries_ = 0;
                 send_param_req();
             }
             break;
+        }
         case kParamStatus:
             on_status(payload, len);
             break;
@@ -1404,6 +1462,10 @@ struct Session::Impl {
 
     std::vector<TopicInfo> collected;
     std::vector<TopicInfo> topics;
+    // The parameter walk's DECLAREs ([PAR-7]): the walk collects them and
+    // READY keeps them for the parameters layer.
+    std::vector<ParamInfo> collected_params;
+    std::vector<ParamInfo> params;
     Converter converter_;
     bool had_handshake = false;
     std::uint32_t next_token = 0u;
@@ -1462,6 +1524,12 @@ std::uint32_t Session::token() const
 const std::vector<TopicInfo> &Session::topics() const
 {
     return impl_->topics;
+}
+
+// The parameter walk's DECLAREs, in announcement order.
+const std::vector<ParamInfo> &Session::params() const
+{
+    return impl_->params;
 }
 
 McuCounters Session::mcu_counters() const

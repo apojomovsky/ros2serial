@@ -53,10 +53,12 @@ class Router
     // log sink.
     // session_config carries the H4 link timing; the pacing params above are
     // the RouterParams. mcu_sink carries the MCU's own log lines ([LOG-1])
-    // and defaults to the log sink.
+    // and defaults to the log sink. node_params carries the interface the
+    // parameters layer (X5) declares the MCU's parameters on; null skips it.
     Router(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,
            const Clock &clock, const Clock &ros_clock, RouterParams params, LogSink sink,
-           SessionConfig session_config = SessionConfig(), LogSink mcu_sink = LogSink());
+           SessionConfig session_config = SessionConfig(), LogSink mcu_sink = LogSink(),
+           rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params = nullptr);
     ~Router();
     Router(const Router &) = delete;
 

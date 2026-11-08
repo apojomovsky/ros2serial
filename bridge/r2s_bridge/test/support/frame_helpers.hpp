@@ -130,6 +130,18 @@ inline std::vector<std::uint8_t> helper_topic(std::uint8_t index, std::uint8_t t
     return p;
 }
 
+// One PARAM_DECLARE payload: the opcode, index, PAR-2 type, PAR-4 flags,
+// the name and the default in its wire form (PAR-1, PAR-3).
+inline std::vector<std::uint8_t> helper_declare(std::uint8_t index, std::uint8_t type, std::uint8_t flags,
+                                                const std::string &name, const std::vector<std::uint8_t> &def)
+{
+    std::vector<std::uint8_t> p{0x02u, index, type, flags};
+    p.push_back(static_cast<std::uint8_t>(name.size()));
+    p.insert(p.end(), name.begin(), name.end());
+    p.insert(p.end(), def.begin(), def.end());
+    return p;
+}
+
 // The session opens the test's own fake, so a reopen keeps its script and
 // capture. It never closes that fake.
 class HelperLink final : public Transport

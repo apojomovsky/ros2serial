@@ -142,7 +142,7 @@ void test_params_configure_refuses_a_table_it_cannot_announce(void)
     TEST_ASSERT_NULL(r2s_params_get(0));
 }
 
-/* covers: PAR-1, PAR-2, PAR-6 */
+/* covers: PAR-1, PAR-2, PAR-6, PAR-10 */
 void test_params_req_answers_declare_in_announcing(void)
 {
     const uint8_t req[] = {0x01u, 0x00u};
@@ -641,6 +641,7 @@ void test_reliable_ack_for_old_rel_leaves_the_outstanding_set(void)
     assert_tx(3, 4, 0, want, sizeof want);
 }
 
+/* covers: PAR-10 */
 void test_params_set_ignored_in_announcing(void)
 {
     const uint8_t set[] = {0x03u, 0x00u, 0x00u, 0x00u};
