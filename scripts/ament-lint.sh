@@ -67,6 +67,7 @@ echo "# package linter failing checked"
 attr() {
   grep -m1 -o "$2=\"[0-9]*\"" "$1" 2>/dev/null | grep -o "[0-9]*" || true
 }
+found=0
 row() {
   local file=$1 pkg=$2 linter=$3
   local tests failures errors skipped
@@ -74,6 +75,7 @@ row() {
     echo "$pkg $linter - -"
     return 0
   fi
+  found=$((found + 1))
   tests=$(attr "$file" tests)
   failures=$(attr "$file" failures)
   errors=$(attr "$file" errors)
@@ -89,4 +91,11 @@ done
 for linter in flake8 pep257 copyright xmllint; do
   row "$workspace/gen-results/${linter}.xml" r2s_gen "$linter"
 done
+# Advisory covers lint findings, not a silent no-run: with no result file
+# at all, the linters never executed, so fail loudly instead of reporting
+# an empty baseline.
+if [ "$found" -eq 0 ]; then
+  echo "ament-lint: no lint results were produced; the linters did not run" >&2
+  exit 1
+fi
 exit 0
