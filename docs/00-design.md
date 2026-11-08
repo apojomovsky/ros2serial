@@ -57,7 +57,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 
 ## Scope: parity with rosserial
 
-*Status (0.2.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++, the reliable channel, and rosserial-compatible runtime registration with the porting guide; specified: parameters in #133, services and actions in #316; planned: #155, #156 and #317 to #320.*
+*Status (0.2.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++, the reliable channel, and rosserial-compatible runtime registration with the porting guide; specified: parameters in #133, services and actions in #316; planned: #155, #156 and #318 to #320 (#317 generator support lands with X10a).*
 
 | Feature | Priority | Notes |
 | --- | --- | --- |
