@@ -9,6 +9,7 @@ job. The tests stub colcon, python3 and pytest, so they never build.
 """
 
 import os
+import re
 import stat
 import subprocess
 import xml.etree.ElementTree as ET
@@ -49,7 +50,8 @@ def test_cmake_wires_lint_auto_behind_the_advisory_option():
     for cmake in CMAKE_PACKAGES:
         text = cmake.read_text()
         assert "option(R2S_AMENT_LINT" in text, f"{cmake} misses the advisory option"
-        assert "OFF" in text.split("option(R2S_AMENT_LINT")[1].split(")")[0], f"{cmake} option is not off by default"
+        default = re.search(r'option\(R2S_AMENT_LINT\s+"[^"]*"\s+(\w+)\)', text)
+        assert default is not None and default.group(1) == "OFF", f"{cmake} option is not off by default"
         testing = text.index("if(BUILD_TESTING)")
         assert testing < text.index("find_package(ament_lint_auto REQUIRED)"), cmake
         assert testing < text.index("ament_lint_auto_find_test_dependencies()"), cmake
@@ -127,15 +129,16 @@ def test_advisory_run_enables_lint_selects_lint_tests_and_reports_a_baseline(tmp
     assert "r2s_bridge flake8 0 1" in out, f"flake8 count missing:\n{out}"
 
 
-def test_advisory_run_fails_without_colcon():
+def test_advisory_run_fails_without_colcon(tmp_path):
     assert SCRIPT.is_file(), "scripts/ament-lint.sh is missing"
+    # An empty PATH hides colcon; the absolute bash never needs the lookup.
     env = {
-        "PATH": "/usr/bin:/bin",
-        "HOME": "/tmp",
+        "PATH": str(tmp_path),
+        "HOME": str(tmp_path),
         "ROS_DISTRO": "jazzy",
         "AMENT_PREFIX_PATH": "/stub",
     }
-    result = subprocess.run(["bash", str(SCRIPT)], cwd=ROOT, capture_output=True, text=True, env=env)
+    result = subprocess.run(["/bin/bash", str(SCRIPT)], cwd=ROOT, capture_output=True, text=True, env=env)
     assert result.returncode != 0, "missing colcon must fail"
     assert "colcon not found" in result.stderr, result.stderr
 
