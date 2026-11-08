@@ -124,25 +124,87 @@ def resolve(ref, event, ref_name, outputs):
     return ref[1:-1]
 
 
-def runs(condition, event, ref, outputs):
-    for clause in str(condition).split("||"):
-        clause = clause.strip()
+def eval_condition(condition, event, ref, outputs, labels=()):
+    """Evaluate a ci.yml boolean expression, with pull request label support.
+
+    Beyond ==, !=, &&, || and parentheses this handles the label opt-in
+    the nightly caller uses: contains with the pull request label names.
+    """
+    body = str(condition).removeprefix("${{").removesuffix("}}").strip()
+    pos = 0
+
+    def skip():
+        nonlocal pos
+        while pos < len(body) and body[pos].isspace():
+            pos += 1
+
+    def parse_or():
+        nonlocal pos
+        value = parse_and()
+        while True:
+            skip()
+            if body.startswith("||", pos):
+                pos += 2
+                value = bool(parse_and()) or bool(value)
+                continue
+            return bool(value)
+
+    def parse_and():
+        nonlocal pos
+        value = parse_atom()
+        while True:
+            skip()
+            if body.startswith("&&", pos):
+                pos += 2
+                value = bool(parse_atom()) and bool(value)
+                continue
+            return bool(value)
+
+    def parse_atom():
+        nonlocal pos
+        skip()
+        if body.startswith("(", pos):
+            pos += 1
+            value = parse_or()
+            skip()
+            assert body.startswith(")", pos), f"missing ) in {condition}"
+            pos += 1
+            return value
+        if body.startswith("contains(", pos):
+            end = body.index(")", pos)
+            target, want = (part.strip() for part in body[pos + len("contains(") : end].split(",", 1))
+            pos = end + 1
+            assert target == "github.event.pull_request.labels.*.name", target
+            assert len(want) >= 2 and want[0] == want[-1] and want[0] in ("'", '"'), want
+            return want[1:-1] in labels
+        end = len(body)
+        for token in ("&&", "||", ")"):
+            found = body.find(token, pos)
+            if found != -1:
+                end = min(end, found)
+        text = body[pos:end].strip()
+        pos = end
         for op in ("==", "!="):
-            if op in clause:
-                left, right = clause.split(op, 1)
+            if op in text:
+                left, right = text.split(op, 1)
                 left = resolve(left, event, ref, outputs)
                 right = resolve(right, event, ref, outputs)
-                if (left == right) == (op == "=="):
-                    return True
-                break
-        else:
-            raise AssertionError(f"cannot evaluate {clause}")
-    return False
+                return (left == right) if op == "==" else (left != right)
+        raise AssertionError(f"cannot evaluate {text}")
+
+    value = parse_or()
+    skip()
+    assert pos == len(body), f"trailing text in {condition}"
+    return value
 
 
-def running_jobs(event, outputs, ref=PR_REF):
+def runs(condition, event, ref, outputs, labels=()):
+    return eval_condition(condition, event, ref, outputs, labels)
+
+
+def running_jobs(event, outputs, ref=PR_REF, labels=()):
     jobs = workflow()["jobs"]
-    return sorted(name for name, job in jobs.items() if "if" not in job or runs(job["if"], event, ref, outputs))
+    return sorted(name for name, job in jobs.items() if "if" not in job or runs(job["if"], event, ref, outputs, labels))
 
 
 def github_value(operand, event):
@@ -356,8 +418,8 @@ def run_statuses(repo, tmp_path):
     return dict(line.split("=", 1) for line in output.read_text().split())
 
 
-def selected_jobs(repo, tmp_path, event="pull_request", ref=PR_REF):
-    return running_jobs(event, run_statuses(repo, tmp_path), ref)
+def selected_jobs(repo, tmp_path, event="pull_request", ref=PR_REF, labels=()):
+    return running_jobs(event, run_statuses(repo, tmp_path), ref, labels)
 
 
 def jobs_without_saves():
@@ -475,6 +537,66 @@ def test_pull_requests_do_not_force_the_suite():
 def test_master_runs_force_the_suite():
     for event in ("push", "schedule", "workflow_dispatch"):
         assert workflow_env(event).get("R2S_FULL") == "1", event
+
+
+def nightly_call():
+    """The single ci.yml job calling the reusable nightly jobs."""
+    calls = {name: job for name, job in workflow()["jobs"].items() if "nightly-jobs.yml" in str(job.get("uses", ""))}
+    assert len(calls) == 1, f"ci.yml should call nightly-jobs.yml once: {sorted(calls)}"
+    return next(iter(calls.values()))
+
+
+def fuzz_long_runs(event, outputs, labels=()):
+    """Whether the nightly call enables the long fuzzing for an event."""
+    return eval_condition(str((nightly_call().get("with") or {}).get("fuzz", "")), event, PR_REF, outputs, labels)
+
+
+def test_a_fuzz_edit_runs_fuzz_smoke_but_not_fuzz_long_without_the_label(tmp_path):
+    """The long fuzzing stays off pull requests: fuzz sources select the smoke, never the two hours."""
+    repo = test_taskfile.fixture(tmp_path)
+    establish(repo)
+    (repo / "core" / "probe").write_text("probe\nprobe again\n")
+    (repo / "tests" / "e2e" / "test_isolation.py").write_text("probe\nprobe again\n")
+    outputs = run_statuses(repo, tmp_path)
+    assert outputs["fuzz"] == "1"
+    assert outputs["nightly"] == "1"
+    jobs = running_jobs("pull_request", outputs)
+    assert "fuzz-smoke" in jobs
+    assert "nightly" in jobs
+    assert not fuzz_long_runs("pull_request", outputs)
+
+
+def test_the_fuzz_long_label_opts_a_fuzz_edit_into_the_nightly_caller(tmp_path):
+    """The opt-in runs the long fuzzing even when the plan selects no nightly scope."""
+    repo = test_taskfile.fixture(tmp_path)
+    establish(repo)
+    (repo / "core" / "probe").write_text("probe\nprobe again\n")
+    outputs = run_statuses(repo, tmp_path)
+    assert outputs["fuzz"] == "1"
+    assert outputs["nightly"] == ""
+    assert "nightly" not in running_jobs("pull_request", outputs)
+    labelled = running_jobs("pull_request", outputs, labels=("fuzz-long",))
+    assert "nightly" in labelled
+    assert fuzz_long_runs("pull_request", outputs, labels=("fuzz-long",))
+
+
+def test_push_and_dispatch_keep_the_fuzz_selection_for_the_long_fuzzing():
+    """Master and manual runs keep fuzz-long: only pull requests need the label."""
+    for event in ("push", "workflow_dispatch"):
+        assert fuzz_long_runs(event, {"fuzz": "1"})
+        assert not fuzz_long_runs(event, {"fuzz": ""})
+
+
+def test_the_schedule_keeps_the_long_fuzzing_and_the_release_skips_it():
+    """nightly.yml leaves the fuzz input at its default; the tag publish still skips the time-boxed run."""
+    nightly = yaml.safe_load((ROOT / ".github" / "workflows" / "nightly.yml").read_text())
+    calls = [job for job in nightly["jobs"].values() if "nightly-jobs.yml" in str(job.get("uses", ""))]
+    assert len(calls) == 1
+    assert "fuzz" not in (calls[0].get("with") or {})
+    release = yaml.safe_load((ROOT / ".github" / "workflows" / "release.yml").read_text())
+    gated = [job for job in release["jobs"].values() if "nightly-jobs.yml" in str(job.get("uses", ""))]
+    assert len(gated) == 1
+    assert gated[0].get("with", {}).get("fuzz") is False
 
 
 def test_the_budgets_job_posts_no_pull_request_comment():
