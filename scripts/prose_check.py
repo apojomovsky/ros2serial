@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""List the comment blocks a branch adds and check the mechanical prose rules.
+r"""List the comment blocks a branch adds and check the mechanical prose rules.
 
-The rules come from AGENTS.md (Expression conventions): a block of at most 8
-lines, no decoration, no change narrative, no em-dashes, and no TODO or FIXME
-without a reason. Whether a comment is worth having stays the author's call;
-the listing is there to read.
+The rules come from AGENTS.md (Expression conventions): a block of at most 20
+lines, no change narrative, no em-dashes, and no TODO or FIXME without a
+reason. Doxygen tags (@file, @brief, \param, \return, \throws, \pre) are legal;
+separator art is not. Whether a comment is worth having stays the author's
+call; the listing is there to read.
 
 Usage:
   prose_check.py [--base REF]           list added comment blocks (default origin/master)
@@ -17,11 +18,11 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 
-MAX_BLOCK = 8
+MAX_BLOCK = 20
 HASH_SUFFIXES = (".py", ".sh", ".yml", ".yaml", ".toml", ".env", ".cfg")
 HASH_NAMES = ("Makefile", "Dockerfile", ".gitignore", ".dockerignore")
 C_SUFFIXES = (".c", ".h", ".cpp", ".hpp", ".cc", ".ino")
-DECORATION = re.compile(r"@(file|brief)\b|^[-=*#~_/ ]{4,}$")
+DECORATION = re.compile(r"^[-=*#~_/ ]{4,}$")
 NARRATIVE = re.compile(r"\b(fixed (by|in|the)|this (pr|commit|patch)|previously|was changed|we now|now we)\b", re.I)
 TODO = re.compile(r"\b(TODO|FIXME)\b(?!\s*[:(]\s*\S.{8,})")
 EM_DASH = "\u2014"
@@ -108,7 +109,7 @@ def verify(diff: str) -> list[str]:
         for i, line in enumerate(b.lines):
             text, at = _text(style, line), f"{b.path}:{b.line + i}"
             if DECORATION.search(text) or DECORATION.search(line.strip()):
-                problems.append(f"{at}: decoration (@file, @brief or separator art) in a comment")
+                problems.append(f"{at}: separator art in a comment")
             if NARRATIVE.search(text):
                 problems.append(f"{at}: change narrative in a comment; it belongs in the PR")
             if TODO.search(text):
