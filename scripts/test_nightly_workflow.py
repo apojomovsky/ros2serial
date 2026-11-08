@@ -87,11 +87,21 @@ def test_pr_ci_runs_the_reusable_nightly_jobs_when_the_plan_selects_nightly():
     assert "needs.plan.outputs.nightly" in condition
 
 
-def test_pr_ci_leaves_out_the_long_fuzzing_unless_fuzz_is_selected():
+def test_pr_ci_runs_the_nightly_caller_for_the_fuzz_long_label():
+    job = ci_nightly_call()
+    condition = str(job.get("if", ""))
+    assert "contains(github.event.pull_request.labels.*.name, 'fuzz-long')" in condition
+
+
+def test_pr_ci_leaves_out_the_long_fuzzing_without_the_label():
     job = ci_nightly_call()
     assert "timeout-minutes" not in job
     fuzz = (job.get("with") or {}).get("fuzz")
-    assert str(fuzz).strip() == "${{ needs.plan.outputs.fuzz == '1' }}"
+    assert str(fuzz).strip() == (
+        "${{ (github.event_name != 'pull_request' && needs.plan.outputs.fuzz == '1')"
+        " || (github.event_name == 'pull_request'"
+        " && contains(github.event.pull_request.labels.*.name, 'fuzz-long')) }}"
+    )
 
 
 def test_the_release_call_skips_the_long_fuzzing():

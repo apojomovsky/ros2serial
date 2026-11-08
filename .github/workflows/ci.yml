@@ -584,16 +584,21 @@ jobs:
           path: .task/checksum/fuzz
           key: r2s-task-fuzz-refs/heads/master-${{ github.sha }}
   # The nightly jobs on a pull request that touches them: the plan selects
-  # NIGHTLY for the isolation pairs, and the long fuzzing stays off unless
-  # the same plan also selects FUZZ. The soak never runs here: two hours is
-  # a schedule-only wait. A reusable workflow call takes no timeout-minutes;
-  # the called jobs carry theirs.
+  # NIGHTLY for the isolation pairs. The long fuzzing would hold every
+  # core pull request for two hours, so it stays off there unless the
+  # fuzz-long label opts in; the label is read from the event, so adding
+  # it takes effect on the next push or rerun. The soak never runs here:
+  # two hours is a schedule-only wait. A reusable workflow call takes no
+  # timeout-minutes; the called jobs carry theirs.
   nightly:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.nightly == '1'
+    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.nightly == '1' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'fuzz-long'))
     uses: ./.github/workflows/nightly-jobs.yml
     with:
-      fuzz: ${{ needs.plan.outputs.fuzz == '1' }}
+      # Schedule, master and manual runs follow the FUZZ selection; a pull
+      # request runs the long fuzzing only when it carries the fuzz-long
+      # label, so the two hours never gate an unlabeled pull request.
+      fuzz: ${{ (github.event_name != 'pull_request' && needs.plan.outputs.fuzz == '1') || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'fuzz-long')) }}
       soak: false
       # Mutation testing is nightly-only: it never runs in a pull request.
       mutation: false
