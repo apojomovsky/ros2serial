@@ -29,7 +29,7 @@ TEST(ManualClock, DoesNotMoveOnItsOwn)
     ManualClock clock;
     const auto start = clock.now();
     for (int read = 0; read < 3; ++read) {
-        EXPECT_EQ(clock.now(), start);
+    EXPECT_EQ(clock.now(), start);
     }
 }
 
@@ -48,6 +48,6 @@ TEST(ManualClock, RejectsABackwardsAdvance)
     EXPECT_EQ(clock.now(), std::chrono::seconds(5));
 }
 
-} // namespace
-} // namespace test
-} // namespace r2s_bridge
+}  // namespace
+}  // namespace test
+}  // namespace r2s_bridge

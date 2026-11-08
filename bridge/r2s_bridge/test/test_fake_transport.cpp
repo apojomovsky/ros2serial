@@ -29,11 +29,13 @@ TEST(FakeTransport, ReturnsScriptedChunksInOrder)
 
     const IoResult first = transport.read(buffer, sizeof buffer);
     ASSERT_EQ(first, (IoResult{3, IoStatus::kOk}));
-    EXPECT_EQ(std::vector<std::uint8_t>(buffer, buffer + first.bytes), (std::vector<std::uint8_t>{1, 2, 3}));
+    EXPECT_EQ(std::vector<std::uint8_t>(buffer, buffer + first.bytes),
+    (std::vector<std::uint8_t>{1, 2, 3}));
 
     const IoResult second = transport.read(buffer, sizeof buffer);
     ASSERT_EQ(second, (IoResult{2, IoStatus::kOk}));
-    EXPECT_EQ(std::vector<std::uint8_t>(buffer, buffer + second.bytes), (std::vector<std::uint8_t>{4, 5}));
+    EXPECT_EQ(std::vector<std::uint8_t>(buffer, buffer + second.bytes),
+    (std::vector<std::uint8_t>{4, 5}));
 
     EXPECT_EQ(transport.read(buffer, sizeof buffer), (IoResult{0, IoStatus::kWouldBlock}));
 }
@@ -126,7 +128,7 @@ TEST(FakeTransport, CapsEachWriteAtTheLimit)
     EXPECT_EQ(transport.write(bytes.data() + 4, 1), (IoResult{1, IoStatus::kOk}));
 
     EXPECT_EQ(transport.writes(),
-              (std::vector<std::vector<std::uint8_t>>{{0x01, 0x02}, {0x03, 0x04}, {0x05}}));
+    (std::vector<std::vector<std::uint8_t>>{{0x01, 0x02}, {0x03, 0x04}, {0x05}}));
 }
 
 TEST(FakeTransport, ReportsWouldBlockWhenTheWriteLimitIsZero)
@@ -169,6 +171,6 @@ TEST(FakeTransport, RejectsReadsAndWritesAfterClose)
     EXPECT_TRUE(transport.writes().empty());
 }
 
-} // namespace
-} // namespace test
-} // namespace r2s_bridge
+}  // namespace
+}  // namespace test
+}  // namespace r2s_bridge

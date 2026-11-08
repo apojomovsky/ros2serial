@@ -11,13 +11,13 @@ namespace r2s_bridge
 
 class SteadyClock final : public Clock
 {
-  public:
-    std::chrono::nanoseconds now() const override
-    {
-        return std::chrono::steady_clock::now().time_since_epoch();
-    }
+public:
+  std::chrono::nanoseconds now() const override
+  {
+    return std::chrono::steady_clock::now().time_since_epoch();
+  }
 };
 
-} // namespace r2s_bridge
+}  // namespace r2s_bridge
 
-#endif // R2S_BRIDGE__STEADY_CLOCK_HPP_
+#endif  // R2S_BRIDGE__STEADY_CLOCK_HPP_

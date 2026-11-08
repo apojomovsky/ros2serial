@@ -3,6 +3,9 @@
 // session values as key/value pairs.
 #include <gtest/gtest.h>
 
+#include <pty.h>
+#include <unistd.h>
+
 #include <chrono>
 #include <cstddef>
 #include <cstring>
@@ -12,9 +15,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-
-#include <pty.h>
-#include <unistd.h>
 
 #include <diagnostic_msgs/msg/diagnostic_array.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -33,72 +33,72 @@ namespace
 // master side. Throws when the pair cannot be made.
 class Pty
 {
-  public:
-    Pty()
-    {
-        if (openpty(&master_, &slave_, nullptr, nullptr, nullptr) != 0) {
-            throw std::runtime_error(std::string("openpty failed: ") + std::strerror(errno));
-        }
-        char name[64];
-        if (ptsname_r(master_, name, sizeof name) != 0) {
-            throw std::runtime_error(std::string("ptsname_r failed: ") + std::strerror(errno));
-        }
-        path_ = name;
-        ::close(slave_);
-        slave_ = -1;
+public:
+  Pty()
+  {
+    if (openpty(&master_, &slave_, nullptr, nullptr, nullptr) != 0) {
+      throw std::runtime_error(std::string("openpty failed: ") + std::strerror(errno));
     }
-    ~Pty()
-    {
-        if (master_ >= 0) {
-            ::close(master_);
-        }
+    char name[64];
+    if (ptsname_r(master_, name, sizeof name) != 0) {
+      throw std::runtime_error(std::string("ptsname_r failed: ") + std::strerror(errno));
     }
-    Pty(const Pty &) = delete;
-    Pty &operator=(const Pty &) = delete;
+    path_ = name;
+    ::close(slave_);
+    slave_ = -1;
+  }
+  ~Pty()
+  {
+    if (master_ >= 0) {
+      ::close(master_);
+    }
+  }
+  Pty(const Pty &) = delete;
+  Pty & operator=(const Pty &) = delete;
 
-    const std::string &path() const
-    {
-        return path_;
-    }
+  const std::string & path() const
+  {
+    return path_;
+  }
 
-    void write_all(const std::vector<std::uint8_t> &bytes)
-    {
-        std::size_t offset = 0;
-        while (offset < bytes.size()) {
-            const ssize_t done = ::write(master_, bytes.data() + offset, bytes.size() - offset);
-            if (done <= 0) {
-                throw std::runtime_error(std::string("pty write failed: ") + std::strerror(errno));
-            }
-            offset += static_cast<std::size_t>(done);
-        }
+  void write_all(const std::vector<std::uint8_t> & bytes)
+  {
+    std::size_t offset = 0;
+    while (offset < bytes.size()) {
+      const ssize_t done = ::write(master_, bytes.data() + offset, bytes.size() - offset);
+      if (done <= 0) {
+        throw std::runtime_error(std::string("pty write failed: ") + std::strerror(errno));
+      }
+      offset += static_cast<std::size_t>(done);
     }
+  }
 
-  private:
-    int master_ = -1;
-    int slave_ = -1;
-    std::string path_;
+private:
+  int master_ = -1;
+  int slave_ = -1;
+  std::string path_;
 };
 
-std::map<std::string, std::string> values_of(const diagnostic_msgs::msg::DiagnosticArray &message)
+std::map<std::string, std::string> values_of(const diagnostic_msgs::msg::DiagnosticArray & message)
 {
-    std::map<std::string, std::string> out;
-    for (const diagnostic_msgs::msg::KeyValue &value : message.status[0].values) {
-        out[value.key] = value.value;
-    }
-    return out;
+  std::map<std::string, std::string> out;
+  for (const diagnostic_msgs::msg::KeyValue & value : message.status[0].values) {
+    out[value.key] = value.value;
+  }
+  return out;
 }
 
 class BridgeDiagnostics : public ::testing::Test
 {
-  protected:
-    static void SetUpTestSuite()
-    {
-        rclcpp::init(0, nullptr);
-    }
-    static void TearDownTestSuite()
-    {
-        rclcpp::shutdown();
-    }
+protected:
+  static void SetUpTestSuite()
+  {
+    rclcpp::init(0, nullptr);
+  }
+  static void TearDownTestSuite()
+  {
+    rclcpp::shutdown();
+  }
 };
 
 TEST_F(BridgeDiagnostics, PublishesBootWaitThenHandshaking)
@@ -106,20 +106,20 @@ TEST_F(BridgeDiagnostics, PublishesBootWaitThenHandshaking)
     Pty pty;
     rclcpp::NodeOptions options;
     options.parameter_overrides(
-        {rclcpp::Parameter("port", pty.path()), rclcpp::Parameter("boot_wait_ms", 60000)});
+    {rclcpp::Parameter("port", pty.path()), rclcpp::Parameter("boot_wait_ms", 60000)});
     auto bridge = std::make_shared<r2s_bridge::Bridge>(options);
     auto probe = std::make_shared<rclcpp::Node>("diag_probe");
     std::vector<diagnostic_msgs::msg::DiagnosticArray> received;
     auto sub = probe->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
         "/diagnostics", 10,
-        [&received](diagnostic_msgs::msg::DiagnosticArray msg) { received.push_back(std::move(msg)); });
+    [&received](diagnostic_msgs::msg::DiagnosticArray msg) {received.push_back(std::move(msg));});
     const auto both = [&bridge, &probe]() {
-        rclcpp::spin_some(bridge);
-        rclcpp::spin_some(probe);
+      rclcpp::spin_some(bridge);
+      rclcpp::spin_some(probe);
     };
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while (received.empty() && std::chrono::steady_clock::now() < deadline) {
-        both();
+    both();
     }
     ASSERT_FALSE(received.empty()) << "the bridge publishes /diagnostics on its poll timer";
     // boot_wait_ms outlasts any loaded poll loop, so the first message still
@@ -134,15 +134,16 @@ TEST_F(BridgeDiagnostics, PublishesBootWaitThenHandshaking)
     decoded.insert(decoded.end(), hello.begin(), hello.end());
     pty.write_all(helper_wire_of(helper_with_check(decoded)));
     const auto shaking = [&received]() {
-        return !received.empty() && received.back().status[0].message == "handshaking";
+      return !received.empty() && received.back().status[0].message == "handshaking";
     };
     const auto moved = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while (!shaking() && std::chrono::steady_clock::now() < moved) {
-        both();
+    both();
     }
     ASSERT_TRUE(shaking()) << "a HELLO moves the published link state";
     const std::map<std::string, std::string> values = values_of(received.back());
-    EXPECT_EQ(values.at("session token"), "7") << "the MCU echo is reported until READY assigns one";
+    EXPECT_EQ(values.at("session token"),
+          "7") << "the MCU echo is reported until READY assigns one";
     EXPECT_EQ(values.at("resets"), "0");
     EXPECT_EQ(received.back().status[0].hardware_id, pty.path());
 }
@@ -151,20 +152,21 @@ TEST_F(BridgeDiagnostics, PublishesBootWaitThenHandshaking)
 // teardown race that takes the typed publish down on a later rclcpp.
 class ThrowingBridge : public r2s_bridge::Bridge
 {
-  public:
-    explicit ThrowingBridge(const rclcpp::NodeOptions &options) : Bridge(options)
-    {
-    }
-    bool fail_publish = false;
+public:
+  explicit ThrowingBridge(const rclcpp::NodeOptions & options)
+  : Bridge(options)
+  {
+  }
+  bool fail_publish = false;
 
-  protected:
-    void publish_diagnostics(const diagnostic_msgs::msg::DiagnosticArray &message) override
-    {
-        if (fail_publish) {
-            throw std::runtime_error("injected diagnostics failure");
-        }
-        Bridge::publish_diagnostics(message);
+protected:
+  void publish_diagnostics(const diagnostic_msgs::msg::DiagnosticArray & message) override
+  {
+    if (fail_publish) {
+      throw std::runtime_error("injected diagnostics failure");
     }
+    Bridge::publish_diagnostics(message);
+  }
 };
 
 TEST_F(BridgeDiagnostics, ThrowingDiagnosticsPublishIsSurvived)
@@ -177,11 +179,11 @@ TEST_F(BridgeDiagnostics, ThrowingDiagnosticsPublishIsSurvived)
     std::vector<diagnostic_msgs::msg::DiagnosticArray> received;
     auto sub = probe->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
         "/diagnostics", 10,
-        [&received](diagnostic_msgs::msg::DiagnosticArray msg) { received.push_back(std::move(msg)); });
+    [&received](diagnostic_msgs::msg::DiagnosticArray msg) {received.push_back(std::move(msg));});
     bridge->poll();
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while (received.empty() && std::chrono::steady_clock::now() < deadline) {
-        rclcpp::spin_some(probe);
+    rclcpp::spin_some(probe);
     }
     ASSERT_FALSE(received.empty()) << "the bridge publishes /diagnostics while healthy";
     // The injected failure stands in for the teardown race: the poll entry
@@ -196,11 +198,11 @@ TEST_F(BridgeDiagnostics, ThrowingDiagnosticsPublishIsSurvived)
     bridge->poll();
     const auto again = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while (received.size() == before && std::chrono::steady_clock::now() < again) {
-        rclcpp::spin_some(probe);
+    rclcpp::spin_some(probe);
     }
     EXPECT_GT(received.size(), before) << "the bridge keeps reporting after the failure";
 }
 
-} // namespace
-} // namespace test
-} // namespace r2s_bridge
+}  // namespace
+}  // namespace test
+}  // namespace r2s_bridge

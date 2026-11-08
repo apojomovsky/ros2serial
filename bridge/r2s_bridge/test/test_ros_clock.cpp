@@ -21,11 +21,11 @@ TEST(RosClock, RejectsAMissingTimeSource)
 
 TEST(RosClock, PropagatesASourceFailure)
 {
-    RosClock clock([]() -> std::int64_t { throw std::runtime_error("the source is gone"); });
+    RosClock clock([]() -> std::int64_t {throw std::runtime_error("the source is gone");});
 
     EXPECT_THROW((void)clock.now(), std::runtime_error);
 }
 
-} // namespace
-} // namespace test
-} // namespace r2s_bridge
+}  // namespace
+}  // namespace test
+}  // namespace r2s_bridge

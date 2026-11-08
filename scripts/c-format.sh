@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Check (default) or apply (--fix) clang-format on the tracked C and C++ files,
-# or on the files given. Vendored code under */vendor/ is never touched.
+# or on the files given. Vendored code under */vendor/ is never touched, and
+# neither is the bridge: it follows the ament uncrustify style instead (#509).
 # Usage: c-format.sh [--fix] [FILE...]
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -11,8 +12,8 @@ command -v clang-format >/dev/null 2>&1 || { echo "clang-format not found: run i
 if [ "$#" -gt 0 ]; then
   files=("$@")
 else
-  mapfile -t files < <(git ls-files -- '*.c' '*.h' '*.cpp' '*.hpp' '*.cc' ':!:*/vendor/*')
+  mapfile -t files < <(git ls-files -- '*.c' '*.h' '*.cpp' '*.hpp' '*.cc' ':!:*/vendor/*' ':!:bridge/**')
 fi
-mapfile -t files < <(printf '%s\n' "${files[@]}" | grep -Ev '(^|/)vendor/' | grep -E '\.(c|h|cpp|hpp|cc)$')
+mapfile -t files < <(printf '%s\n' "${files[@]}" | grep -Ev '(^|/)vendor/|^bridge/' | grep -E '\.(c|h|cpp|hpp|cc)$')
 [ "${#files[@]}" -gt 0 ] || exit 0
 clang-format "${mode[@]}" -- "${files[@]}"

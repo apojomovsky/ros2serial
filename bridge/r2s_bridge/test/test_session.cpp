@@ -1,11 +1,13 @@
 // The host session: the transcript vectors replayed step by step, plus the
 // deadlines, retries and reset rules that a transcript cannot pin to a
 // millisecond. Time is the manual clock's alone.
-// covers: SES-12, SES-13, SES-14, SES-15, SES-16, SES-17, SES-18, SES-19, SES-20, SES-21, CTL-3, CTL-9
-// covers: CTL-13, SES-32, SES-33
+// covers: SES-12, SES-13, SES-14, SES-15, SES-16, SES-17, SES-18, SES-19, SES-20, SES-21, CTL-3
+// covers: CTL-9, CTL-13, SES-32, SES-33
 // covers: LOG-1, LOG-2, LOG-3, LOG-4, ENC-14
 // covers: ERR-1, ERR-2, ERR-5, ERR-6
 #include <gtest/gtest.h>
+
+#include <yaml-cpp/yaml.h>
 
 #include <algorithm>
 #include <array>
@@ -20,8 +22,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <yaml-cpp/yaml.h>
 
 #include "fake_transport.hpp"
 #include "manual_clock.hpp"
@@ -43,166 +43,171 @@ constexpr std::chrono::milliseconds kTick{1};
 constexpr std::uint8_t kControl = 0u;
 constexpr std::uint8_t kHeartbeat = 4u;
 
-std::vector<std::uint8_t> bytes_of(const std::string &hex)
+std::vector<std::uint8_t> bytes_of(const std::string & hex)
 {
-    std::vector<std::uint8_t> bytes;
-    std::istringstream in(hex);
-    std::string pair;
-    while (in >> pair) {
-        bytes.push_back(static_cast<std::uint8_t>(std::stoul(pair, nullptr, 16)));
-    }
-    return bytes;
+  std::vector<std::uint8_t> bytes;
+  std::istringstream in(hex);
+  std::string pair;
+  while (in >> pair) {
+    bytes.push_back(static_cast<std::uint8_t>(std::stoul(pair, nullptr, 16)));
+  }
+  return bytes;
 }
 
-std::string hex_of(const std::vector<std::uint8_t> &bytes)
+std::string hex_of(const std::vector<std::uint8_t> & bytes)
 {
-    std::ostringstream out;
-    for (std::size_t i = 0; i < bytes.size(); ++i) {
-        if (i != 0) {
-            out << ' ';
-        }
-        out << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(bytes[i]);
+  std::ostringstream out;
+  for (std::size_t i = 0; i < bytes.size(); ++i) {
+    if (i != 0) {
+      out << ' ';
     }
-    return out.str();
+    out << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(bytes[i]);
+  }
+  return out.str();
 }
 
 // The wire form of a decoded frame: rCOBS and the delimiter, which is exactly
 // what a transcript's frame bytes are.
-std::vector<std::uint8_t> wire_of(const std::vector<std::uint8_t> &decoded)
+std::vector<std::uint8_t> wire_of(const std::vector<std::uint8_t> & decoded)
 {
-    std::vector<std::uint8_t> wire;
-    r2s_rcobs_encoder_t encoder{};
-    r2s_rcobs_encoder_init(&encoder);
-    std::uint8_t chunk[R2S_RCOBS_MAX_EMIT]{};
-    for (const std::uint8_t byte : decoded) {
-        const std::uint8_t produced = r2s_rcobs_encode_byte(&encoder, byte, chunk);
-        wire.insert(wire.end(), chunk, chunk + produced);
-    }
-    const std::uint8_t produced = r2s_rcobs_encode_end(&encoder, chunk);
+  std::vector<std::uint8_t> wire;
+  r2s_rcobs_encoder_t encoder{};
+  r2s_rcobs_encoder_init(&encoder);
+  std::uint8_t chunk[R2S_RCOBS_MAX_EMIT]{};
+  for (const std::uint8_t byte : decoded) {
+    const std::uint8_t produced = r2s_rcobs_encode_byte(&encoder, byte, chunk);
     wire.insert(wire.end(), chunk, chunk + produced);
-    wire.push_back(0x00u);
-    return wire;
+  }
+  const std::uint8_t produced = r2s_rcobs_encode_end(&encoder, chunk);
+  wire.insert(wire.end(), chunk, chunk + produced);
+  wire.push_back(0x00u);
+  return wire;
 }
 
 // A control payload as the decoded frame that carries it.
-std::vector<std::uint8_t> with_topic_frame(const std::vector<std::uint8_t> &payload)
+std::vector<std::uint8_t> with_topic_frame(const std::vector<std::uint8_t> & payload)
 {
-    std::vector<std::uint8_t> frame{kControl, 0u};
-    frame.insert(frame.end(), payload.begin(), payload.end());
-    return frame;
+  std::vector<std::uint8_t> frame{kControl, 0u};
+  frame.insert(frame.end(), payload.begin(), payload.end());
+  return frame;
 }
 
 // A decoded frame without its check, now with it ([CHK-3]).
 std::vector<std::uint8_t> with_check(std::vector<std::uint8_t> frame)
 {
-    const std::uint16_t crc =
-        r2s_crc16_update_buf(R2S_CRC16_INIT, frame.data(), static_cast<std::uint16_t>(frame.size()));
-    frame.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
-    frame.push_back(static_cast<std::uint8_t>(crc >> 8u));
-    return frame;
+  const std::uint16_t crc =
+    r2s_crc16_update_buf(R2S_CRC16_INIT, frame.data(), static_cast<std::uint16_t>(frame.size()));
+  frame.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+  frame.push_back(static_cast<std::uint8_t>(crc >> 8u));
+  return frame;
 }
 // The wire form of a time-channel frame carrying the payload.
-std::vector<std::uint8_t> time_wire(std::uint8_t seq, const std::vector<std::uint8_t> &payload)
+std::vector<std::uint8_t> time_wire(std::uint8_t seq, const std::vector<std::uint8_t> & payload)
 {
-    std::vector<std::uint8_t> decoded{0x01u, seq};
-    decoded.insert(decoded.end(), payload.begin(), payload.end());
-    return wire_of(with_check(decoded));
+  std::vector<std::uint8_t> decoded{0x01u, seq};
+  decoded.insert(decoded.end(), payload.begin(), payload.end());
+  return wire_of(with_check(decoded));
 }
 
 // The decoded frame behind one wire unit, checked: rCOBS without the
 // delimiter, exactly what the session wrote.
 std::vector<std::uint8_t> decoded_of(std::vector<std::uint8_t> unit)
 {
-    if (unit.empty() || unit.back() != 0x00u) {
-        throw std::invalid_argument("decoded_of needs one delimited unit");
-    }
-    unit.pop_back();
-    uint8_t *decoded = nullptr;
-    uint16_t decoded_len = 0;
-    if (r2s_rcobs_decode(unit.data(), static_cast<std::uint16_t>(unit.size()), &decoded, &decoded_len) != 0) {
-        throw std::invalid_argument("decoded_of refuses a bad encoding");
-    }
-    return std::vector<std::uint8_t>(decoded, decoded + decoded_len);
+  if (unit.empty() || unit.back() != 0x00u) {
+    throw std::invalid_argument("decoded_of needs one delimited unit");
+  }
+  unit.pop_back();
+  uint8_t *decoded = nullptr;
+  uint16_t decoded_len = 0;
+  if (r2s_rcobs_decode(unit.data(), static_cast<std::uint16_t>(unit.size()), &decoded,
+          &decoded_len) != 0)
+  {
+    throw std::invalid_argument("decoded_of refuses a bad encoding");
+  }
+  return std::vector<std::uint8_t>(decoded, decoded + decoded_len);
 }
 
-std::vector<std::vector<std::uint8_t>> units_of(const std::vector<std::uint8_t> &bytes)
+std::vector<std::vector<std::uint8_t>> units_of(const std::vector<std::uint8_t> & bytes)
 {
-    std::vector<std::vector<std::uint8_t>> units;
-    std::vector<std::uint8_t> current;
-    for (const std::uint8_t byte : bytes) {
-        current.push_back(byte);
-        if (byte == 0x00u) {
-            units.push_back(current);
-            current.clear();
-        }
+  std::vector<std::vector<std::uint8_t>> units;
+  std::vector<std::uint8_t> current;
+  for (const std::uint8_t byte : bytes) {
+    current.push_back(byte);
+    if (byte == 0x00u) {
+      units.push_back(current);
+      current.clear();
     }
-    if (!current.empty()) {
-        units.push_back(current);
-    }
-    return units;
+  }
+  if (!current.empty()) {
+    units.push_back(current);
+  }
+  return units;
 }
 
 // One HELLO payload: the fields of [CTL-16], with the defaults a compliant
 // MCU announces. The token is what the MCU echoes from RAM: 0 before the
 // host assigns one.
-std::vector<std::uint8_t> hello_payload(std::uint32_t token, std::uint8_t topics, std::uint8_t version = 4u,
-                                        std::uint8_t features = 0u, std::uint32_t tick_hz = 1000000u)
+std::vector<std::uint8_t> hello_payload(
+  std::uint32_t token, std::uint8_t topics, std::uint8_t version = 4u,
+  std::uint8_t features = 0u, std::uint32_t tick_hz = 1000000u)
 {
-    std::vector<std::uint8_t> p{0x02u, version, 0x00u};
-    const auto put_le = [&p](std::uint32_t value, int bytes) {
-        for (int i = 0; i < bytes; ++i) {
-            p.push_back(static_cast<std::uint8_t>((value >> (8 * i)) & 0xFFu));
-        }
+  std::vector<std::uint8_t> p{0x02u, version, 0x00u};
+  const auto put_le = [&p](std::uint32_t value, int bytes) {
+      for (int i = 0; i < bytes; ++i) {
+        p.push_back(static_cast<std::uint8_t>((value >> (8 * i)) & 0xFFu));
+      }
     };
-    put_le(token, 4);
-    put_le(512, 2); // max_frame
-    put_le(515, 2); // rx_capacity
-    put_le(tick_hz, 4);
-    p.push_back(features);
-    p.push_back(topics);
-    const std::string name = "node";
-    p.push_back(static_cast<std::uint8_t>(name.size()));
-    p.insert(p.end(), name.begin(), name.end());
-    return p;
+  put_le(token, 4);
+  put_le(512, 2);   // max_frame
+  put_le(515, 2);   // rx_capacity
+  put_le(tick_hz, 4);
+  p.push_back(features);
+  p.push_back(topics);
+  const std::string name = "node";
+  p.push_back(static_cast<std::uint8_t>(name.size()));
+  p.insert(p.end(), name.begin(), name.end());
+  return p;
 }
 
-std::vector<std::uint8_t> topic_payload(std::uint8_t index, std::uint8_t topic_id, const std::string &name,
-                                        std::uint8_t flags = 0x00u)
+std::vector<std::uint8_t> topic_payload(
+  std::uint8_t index, std::uint8_t topic_id, const std::string & name,
+  std::uint8_t flags = 0x00u)
 {
-    std::vector<std::uint8_t> p{0x04u, index, topic_id, flags};
-    for (std::uint8_t i = 0; i < 8u; ++i) {
-        p.push_back(i);
-    }
-    const std::string type = "std_msgs/msg/Float32";
-    p.push_back(static_cast<std::uint8_t>(type.size()));
-    p.insert(p.end(), type.begin(), type.end());
-    p.push_back(static_cast<std::uint8_t>(name.size()));
-    p.insert(p.end(), name.begin(), name.end());
-    return p;
+  std::vector<std::uint8_t> p{0x04u, index, topic_id, flags};
+  for (std::uint8_t i = 0; i < 8u; ++i) {
+    p.push_back(i);
+  }
+  const std::string type = "std_msgs/msg/Float32";
+  p.push_back(static_cast<std::uint8_t>(type.size()));
+  p.insert(p.end(), type.begin(), type.end());
+  p.push_back(static_cast<std::uint8_t>(name.size()));
+  p.insert(p.end(), name.begin(), name.end());
+  return p;
 }
 
 // The session opens the test's own fake, so a reopen keeps its script and
 // capture. It never closes that fake.
 class Link final : public Transport
 {
-  public:
-    explicit Link(FakeTransport &inner) : inner_(inner)
-    {
-    }
-    IoResult read(std::uint8_t *buffer, std::size_t capacity) override
-    {
-        return inner_.read(buffer, capacity);
-    }
-    IoResult write(const std::uint8_t *data, std::size_t size) override
-    {
-        return inner_.write(data, size);
-    }
-    void close() override
-    {
-    }
+public:
+  explicit Link(FakeTransport & inner)
+  : inner_(inner)
+  {
+  }
+  IoResult read(std::uint8_t *buffer, std::size_t capacity) override
+  {
+    return inner_.read(buffer, capacity);
+  }
+  IoResult write(const std::uint8_t *data, std::size_t size) override
+  {
+    return inner_.write(data, size);
+  }
+  void close() override
+  {
+  }
 
-  private:
-    FakeTransport &inner_;
+private:
+  FakeTransport & inner_;
 };
 
 // A session over the test's own fake link, driven by the test's clocks only.
@@ -210,97 +215,107 @@ class Link final : public Transport
 // is the estimator's own, in test_time_sync.cpp.
 class Fixture
 {
-  public:
-    explicit Fixture(
-        TopicResolver resolve = [](const TopicInfo &) { return std::uint8_t{0}; },
-        SessionConfig config = SessionConfig(), SessionEvents events = SessionEvents())
-    {
-        session_ = std::make_unique<Session>(
-            config, clock_, ros_clock_, [this]() { return std::unique_ptr<Transport>(new Link(transport_)); },
-            std::move(resolve), std::move(events));
-    }
+public:
+  explicit Fixture(
+    TopicResolver resolve = [] (const TopicInfo &) {return std::uint8_t{0};},
+    SessionConfig config = SessionConfig(), SessionEvents events = SessionEvents())
+  {
+    session_ = std::make_unique<Session>(
+      config,
+      clock_,
+      ros_clock_,
+      [this]() {
+        return std::unique_ptr<Transport>(new Link(transport_));
+      },
+      std::move(resolve),
+      std::move(events));
+  }
 
     // Moves time one tick at a time, polling after each, so a timer fires on
     // the first tick at which its deadline has passed.
-    void advance_to(std::uint32_t ms)
-    {
-        while (now_ms_ < ms) {
-            clock_.advance(kTick);
-            ros_clock_.advance(kTick);
-            ++now_ms_;
-            session_->poll();
-        }
+  void advance_to(std::uint32_t ms)
+  {
+    while (now_ms_ < ms) {
+      clock_.advance(kTick);
+      ros_clock_.advance(kTick);
+      ++now_ms_;
+      session_->poll();
     }
+  }
 
-    void deliver(const std::vector<std::uint8_t> &decoded)
-    {
-        transport_.script_read(wire_of(decoded));
-        session_->poll();
-    }
+  void deliver(const std::vector<std::uint8_t> & decoded)
+  {
+    transport_.script_read(wire_of(decoded));
+    session_->poll();
+  }
 
     // Delivers one decoded frame: the caller passes topic, seq and payload,
     // and the check is appended here, as [CHK-3] lays it out.
-    void deliver_frame(std::uint8_t topic_id, std::uint8_t seq, const std::vector<std::uint8_t> &payload)
-    {
-        std::vector<std::uint8_t> decoded{topic_id, seq};
-        decoded.insert(decoded.end(), payload.begin(), payload.end());
-        const std::uint16_t crc =
-            r2s_crc16_update_buf(R2S_CRC16_INIT, decoded.data(), static_cast<std::uint16_t>(decoded.size()));
-        decoded.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
-        decoded.push_back(static_cast<std::uint8_t>(crc >> 8u));
-        deliver(decoded);
-    }
+  void deliver_frame(
+    std::uint8_t topic_id, std::uint8_t seq,
+    const std::vector<std::uint8_t> & payload)
+  {
+    std::vector<std::uint8_t> decoded{topic_id, seq};
+    decoded.insert(decoded.end(), payload.begin(), payload.end());
+    const std::uint16_t crc =
+      r2s_crc16_update_buf(R2S_CRC16_INIT, decoded.data(),
+            static_cast<std::uint16_t>(decoded.size()));
+    decoded.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+    decoded.push_back(static_cast<std::uint8_t>(crc >> 8u));
+    deliver(decoded);
+  }
 
     // The host frames written since the last drain.
-    std::vector<std::vector<std::uint8_t>> drain_units()
-    {
-        std::vector<std::uint8_t> all;
-        for (const auto &write : transport_.writes()) {
-            all.insert(all.end(), write.begin(), write.end());
-        }
-        transport_.discard_writes();
-        return units_of(all);
+  std::vector<std::vector<std::uint8_t>> drain_units()
+  {
+    std::vector<std::uint8_t> all;
+    for (const auto & write : transport_.writes()) {
+      all.insert(all.end(), write.begin(), write.end());
     }
+    transport_.discard_writes();
+    return units_of(all);
+  }
 
     // Caps the link so every write blocks, or opens it again. Pending frames
     // stay queued while blocked, which is how the tests wedge the link.
-    void block_writes()
-    {
-        transport_.limit_write(0u);
-    }
+  void block_writes()
+  {
+    transport_.limit_write(0u);
+  }
 
-    void allow_writes()
-    {
-        transport_.limit_write(1000000u);
-    }
+  void allow_writes()
+  {
+    transport_.limit_write(1000000u);
+  }
 
     // Queues one scripted write outcome on the fake link.
-    void script_write(IoResult outcome)
-    {
-        transport_.script_write(outcome);
-    }
+  void script_write(IoResult outcome)
+  {
+    transport_.script_write(outcome);
+  }
 
-    Session &session()
-    {
-        return *session_;
-    }
-    std::uint32_t now_ms() const
-    {
-        return now_ms_;
-    }
+  Session & session()
+  {
+    return *session_;
+  }
+  std::uint32_t now_ms() const
+  {
+    return now_ms_;
+  }
 
-  private:
-    ManualClock clock_;
-    ManualClock ros_clock_;
-    FakeTransport transport_;
-    std::uint32_t now_ms_ = 0;
-    std::unique_ptr<Session> session_;
+private:
+  ManualClock clock_;
+  ManualClock ros_clock_;
+  FakeTransport transport_;
+  std::uint32_t now_ms_ = 0;
+  std::unique_ptr<Session> session_;
 };
 
-struct Step {
-    bool from_host = false;
-    std::vector<std::uint8_t> decoded;
-    std::uint32_t at_ms = 0;
+struct Step
+{
+  bool from_host = false;
+  std::vector<std::uint8_t> decoded;
+  std::uint32_t at_ms = 0;
 };
 
 // Transcripts with their own replay below: the walk pair carries no PING
@@ -310,31 +325,31 @@ struct Step {
 // in X6 (services) and X10c/X10d (actions). The stock replay covers the rest.
 std::vector<std::string> transcript_vectors()
 {
-    static const std::set<std::string> own_replay = {"param_walk.yaml",
-                                                     "param_walk_retry.yaml",
-                                                     "param_set_reliable.yaml",
-                                                     "param_set_giveup.yaml",
-                                                     "param_rehandshake.yaml",
-                                                     "service_walk.yaml",
-                                                     "service_not_connected.yaml",
-                                                     "service_call.yaml",
-                                                     "action_walk.yaml",
-                                                     "action_goal.yaml",
-                                                     "action_cancel.yaml",
-                                                     "action_second_goal.yaml",
-                                                     "action_reset_abort.yaml"};
-    std::vector<std::string> files;
-    for (const auto &entry : std::filesystem::directory_iterator(R2S_SESSION_VECTOR_DIR)) {
-        if (entry.path().extension() != ".yaml") {
-            continue;
-        }
-        if (own_replay.count(entry.path().filename().string()) != 0u) {
-            continue;
-        }
-        files.push_back(entry.path().string());
+  static const std::set<std::string> own_replay = {"param_walk.yaml",
+    "param_walk_retry.yaml",
+    "param_set_reliable.yaml",
+    "param_set_giveup.yaml",
+    "param_rehandshake.yaml",
+    "service_walk.yaml",
+    "service_not_connected.yaml",
+    "service_call.yaml",
+    "action_walk.yaml",
+    "action_goal.yaml",
+    "action_cancel.yaml",
+    "action_second_goal.yaml",
+    "action_reset_abort.yaml"};
+  std::vector<std::string> files;
+  for (const auto & entry : std::filesystem::directory_iterator(R2S_SESSION_VECTOR_DIR)) {
+    if (entry.path().extension() != ".yaml") {
+      continue;
     }
-    std::sort(files.begin(), files.end());
-    return files;
+    if (own_replay.count(entry.path().filename().string()) != 0u) {
+      continue;
+    }
+    files.push_back(entry.path().string());
+  }
+  std::sort(files.begin(), files.end());
+  return files;
 }
 
 class SessionTranscript : public ::testing::TestWithParam<std::string>
@@ -344,72 +359,72 @@ class SessionTranscript : public ::testing::TestWithParam<std::string>
 // Replays one transcript through the host session: every MCU step arrives at
 // its own time, and the host answers with exactly the transcript's frames.
 // Parses one transcript file into its name and steps.
-std::pair<std::string, std::vector<Step>> load_steps(const std::string &path)
+std::pair<std::string, std::vector<Step>> load_steps(const std::string & path)
 {
-    const YAML::Node root = YAML::LoadFile(path);
-    const std::string name = root["name"].as<std::string>();
-    std::vector<Step> steps;
+  const YAML::Node root = YAML::LoadFile(path);
+  const std::string name = root["name"].as<std::string>();
+  std::vector<Step> steps;
     // A step without its own time runs with the previous one: the walk
     // vectors leave it off the same-tick answers.
-    std::uint32_t at_ms = 0;
-    for (const auto &node : root["steps"]) {
-        Step step;
-        step.from_host = node["from"].as<std::string>() == "host";
-        step.decoded = bytes_of(node["frame"].as<std::string>());
-        if (node["at_ms"]) {
-            at_ms = node["at_ms"].as<std::uint32_t>();
-        }
-        step.at_ms = at_ms;
-        steps.push_back(std::move(step));
+  std::uint32_t at_ms = 0;
+  for (const auto & node : root["steps"]) {
+    Step step;
+    step.from_host = node["from"].as<std::string>() == "host";
+    step.decoded = bytes_of(node["frame"].as<std::string>());
+    if (node["at_ms"]) {
+      at_ms = node["at_ms"].as<std::uint32_t>();
     }
-    return {name, steps};
+    step.at_ms = at_ms;
+    steps.push_back(std::move(step));
+  }
+  return {name, steps};
 }
 
-void replay_transcript(const std::string &path, SessionConfig config = SessionConfig())
+void replay_transcript(const std::string & path, SessionConfig config = SessionConfig())
 {
-    ASSERT_TRUE(std::filesystem::exists(path)) << path << ": the transcript is missing";
-    const auto [name, steps] = load_steps(path);
-    ASSERT_FALSE(steps.empty()) << name;
+  ASSERT_TRUE(std::filesystem::exists(path)) << path << ": the transcript is missing";
+  const auto [name, steps] = load_steps(path);
+  ASSERT_FALSE(steps.empty()) << name;
 
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, config};
-    std::vector<std::size_t> expected;
-    for (std::size_t i = 0; i < steps.size(); ++i) {
-        if (steps[i].from_host) {
-            expected.push_back(i);
-        }
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config};
+  std::vector<std::size_t> expected;
+  for (std::size_t i = 0; i < steps.size(); ++i) {
+    if (steps[i].from_host) {
+      expected.push_back(i);
     }
+  }
 
-    std::size_t next = 0;
-    for (std::size_t i = 0; i < steps.size(); ++i) {
-        const Step &step = steps[i];
-        SCOPED_TRACE(name + " step " + std::to_string(i));
-        fixture.advance_to(step.at_ms);
-        if (!step.from_host) {
-            fixture.deliver(step.decoded);
-        }
-        const std::vector<std::vector<std::uint8_t>> written = fixture.drain_units();
-        for (const auto &unit : written) {
-            ASSERT_LT(next, expected.size()) << name << ": the session wrote more than the transcript";
-            const Step &want = steps[expected[next]];
+  std::size_t next = 0;
+  for (std::size_t i = 0; i < steps.size(); ++i) {
+    const Step & step = steps[i];
+    SCOPED_TRACE(name + " step " + std::to_string(i));
+    fixture.advance_to(step.at_ms);
+    if (!step.from_host) {
+      fixture.deliver(step.decoded);
+    }
+    const std::vector<std::vector<std::uint8_t>> written = fixture.drain_units();
+    for (const auto & unit : written) {
+      ASSERT_LT(next, expected.size()) << name << ": the session wrote more than the transcript";
+      const Step & want = steps[expected[next]];
             // The capture is the wire form, and so is a transcript step's bytes.
-            EXPECT_EQ(hex_of(unit), hex_of(wire_of(want.decoded)))
+      EXPECT_EQ(hex_of(unit), hex_of(wire_of(want.decoded)))
                 << name << " host step " << expected[next] << " at " << fixture.now_ms() << " ms";
-            ++next;
-        }
+      ++next;
     }
+  }
 
     // A transcript may end on a host frame the session has not sent yet: the
     // timer is due, so give it the tick it waits for.
-    if (next < expected.size()) {
-        fixture.advance_to(steps.back().at_ms + 500);
-        for (const auto &unit : fixture.drain_units()) {
-            ASSERT_LT(next, expected.size()) << name << ": the session wrote more than the transcript";
-            EXPECT_EQ(hex_of(unit), hex_of(wire_of(steps[expected[next]].decoded)))
+  if (next < expected.size()) {
+    fixture.advance_to(steps.back().at_ms + 500);
+    for (const auto & unit : fixture.drain_units()) {
+      ASSERT_LT(next, expected.size()) << name << ": the session wrote more than the transcript";
+      EXPECT_EQ(hex_of(unit), hex_of(wire_of(steps[expected[next]].decoded)))
                 << name << " host step " << expected[next];
-            ++next;
-        }
+      ++next;
     }
-    EXPECT_EQ(next, expected.size()) << name << ": the transcript's host frames did not all go out";
+  }
+  EXPECT_EQ(next, expected.size()) << name << ": the transcript's host frames did not all go out";
 }
 
 TEST_P(SessionTranscript, ReplaysTheTranscriptInOrder)
@@ -432,7 +447,7 @@ TEST(SessionState, McuLimitsAreZeroBeforeTheHello)
 
 TEST(SessionConfig, RejectsAPeriodThatIsNotPositive)
 {
-    const auto resolve = [](const TopicInfo &) { return std::uint8_t{0}; };
+    const auto resolve = [](const TopicInfo &) {return std::uint8_t{0};};
     SessionConfig reconnect = SessionConfig();
     reconnect.reconnect_period_ms = 0;
     EXPECT_THROW(Fixture(resolve, reconnect), std::invalid_argument);
@@ -563,10 +578,10 @@ TEST(SessionConnected, CallsTheUserFrameHandler)
 {
     SessionEvents events;
     std::vector<std::pair<std::uint8_t, std::vector<std::uint8_t>>> received;
-    events.user_frame = [&](std::uint8_t id, const std::vector<std::uint8_t> &payload) {
-        received.emplace_back(id, payload);
+    events.user_frame = [&](std::uint8_t id, const std::vector<std::uint8_t> & payload) {
+      received.emplace_back(id, payload);
     };
-    Fixture fixture([](const TopicInfo &) { return std::uint8_t{0}; }, SessionConfig(), events);
+    Fixture fixture([](const TopicInfo &) {return std::uint8_t{0};}, SessionConfig(), events);
     fixture.advance_to(100);
     fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u));
     fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
@@ -660,10 +675,10 @@ TEST(SessionHandshake, RetriesTopicReqAfter200msUpToThreeTimes)
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
     EXPECT_EQ(fixture.drain_units().size(), 1u) << "the first TOPIC_REQ";
     for (int retry = 1; retry <= 3; ++retry) {
-        fixture.advance_to(100 + 200u * static_cast<std::uint32_t>(retry) - 1u);
-        EXPECT_TRUE(fixture.drain_units().empty()) << "retry " << retry << " came early";
-        fixture.advance_to(100 + 200u * static_cast<std::uint32_t>(retry));
-        EXPECT_EQ(fixture.drain_units().size(), 1u) << "retry " << retry;
+    fixture.advance_to(100 + 200u * static_cast<std::uint32_t>(retry) - 1u);
+    EXPECT_TRUE(fixture.drain_units().empty()) << "retry " << retry << " came early";
+    fixture.advance_to(100 + 200u * static_cast<std::uint32_t>(retry));
+    EXPECT_EQ(fixture.drain_units().size(), 1u) << "retry " << retry;
     }
     fixture.advance_to(100 + 200u * 4u);
     const auto units = fixture.drain_units();
@@ -675,13 +690,13 @@ TEST(SessionHandshake, RefusesAHelloOfAnotherProtocolVersion)
 {
     std::vector<std::string> logged;
     SessionEvents events;
-    events.log = [&logged](SessionLog, const std::string &text) { logged.push_back(text); };
+    events.log = [&logged](SessionLog, const std::string & text) {logged.push_back(text);};
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, clock,
-        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
-        [](const TopicInfo &) { return std::uint8_t{0}; }, events);
+    SessionConfig{}, clock, clock,
+    [&transport]() {return std::unique_ptr<Transport>(new Link(transport));},
+    [](const TopicInfo &) {return std::uint8_t{0};}, events);
     const std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u, 1u);
     std::vector<std::uint8_t> frame{kControl, 0u};
     frame.insert(frame.end(), hello.begin(), hello.end());
@@ -761,8 +776,8 @@ TEST(SessionHandshake, IgnoresARepeatHelloWithTheRecordedToken)
 
 TEST(SessionHandshake, RejectsOneTopicAndKeepsTheOthers)
 {
-    Fixture fixture([](const TopicInfo &info) {
-        return info.topic_id == 0x10u ? kTopicStatusHashMismatch : kTopicStatusOk;
+    Fixture fixture([](const TopicInfo & info) {
+      return info.topic_id == 0x10u ? kTopicStatusHashMismatch : kTopicStatusOk;
     });
     fixture.advance_to(10);
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 2u));
@@ -785,7 +800,7 @@ TEST(SessionHandshake, RejectsOneTopicAndKeepsTheOthers)
 
 TEST(SessionHandshake, AnswersUnknownTypeWithStatus1)
 {
-    Fixture fixture([](const TopicInfo &) { return kTopicStatusUnknownType; });
+    Fixture fixture([](const TopicInfo &) {return kTopicStatusUnknownType;});
     fixture.advance_to(10);
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
     fixture.drain_units();
@@ -803,21 +818,21 @@ TEST(SessionHandshake, ReportsWhetherTheNewTableMatchesTheOldOne)
 {
     std::vector<bool> identical;
     SessionEvents events;
-    events.handshake_completed = [&identical](bool same) { identical.push_back(same); };
+    events.handshake_completed = [&identical](bool same) {identical.push_back(same);};
     ManualClock clock;
     FakeTransport transport;
     std::uint32_t now = 0;
     Session session(
-        SessionConfig{}, clock, clock,
-        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
-        [](const TopicInfo &) { return std::uint8_t{0}; }, events);
+    SessionConfig{}, clock, clock,
+    [&transport]() {return std::unique_ptr<Transport>(new Link(transport));},
+    [](const TopicInfo &) {return std::uint8_t{0};}, events);
 
     const auto advance = [&clock, &session, &now](std::uint32_t ms) {
-        while (now < ms) {
-            clock.advance(kTick);
-            ++now;
-            session.poll();
-        }
+      while (now < ms) {
+        clock.advance(kTick);
+        ++now;
+        session.poll();
+      }
     };
     // One topic, then the same one again after a reset, then a different one.
     advance(10);
@@ -890,11 +905,12 @@ TEST(SessionConnected, ATopicFrameKeepsTheLinkAlive)
     fixture.advance_to(100);
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u));
     for (std::uint32_t t = 1100; t <= 2000; t += 100) {
-        fixture.advance_to(t);
-        fixture.deliver_frame(0x10u, 0u, std::vector<std::uint8_t>{1u, 2u, 3u, 4u});
+    fixture.advance_to(t);
+    fixture.deliver_frame(0x10u, 0u, std::vector<std::uint8_t>{1u, 2u, 3u, 4u});
     }
     fixture.advance_to(2050);
-    EXPECT_EQ(fixture.session().state(), SessionState::kConnected) << "user traffic is host traffic too";
+    EXPECT_EQ(fixture.session().state(),
+          SessionState::kConnected) << "user traffic is host traffic too";
 }
 
 TEST(SessionConnected, ResetsOnAHelloWithTheSameToken)
@@ -935,7 +951,8 @@ TEST(SessionConnected, RecordsTheMcuCountersFromAHeartbeat)
     Fixture fixture;
     fixture.advance_to(100);
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u));
-    fixture.deliver_frame(kHeartbeat, 0u, std::vector<std::uint8_t>{1u, 0u, 2u, 0u, 3u, 0u, 4u, 0u});
+    fixture.deliver_frame(kHeartbeat, 0u,
+          std::vector<std::uint8_t>{1u, 0u, 2u, 0u, 3u, 0u, 4u, 0u});
     const McuCounters counters = fixture.session().mcu_counters();
     EXPECT_EQ(counters.rx_frames, 1u);
     EXPECT_EQ(counters.crc_errors, 2u);
@@ -949,7 +966,7 @@ TEST(SessionHandshake, StartsTheHandshakeOverWhenTheRetriesAreSpent)
     fixture.advance_to(100);
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
     for (std::uint32_t t = 100; t < 900; t += 100) {
-        fixture.advance_to(t);
+    fixture.advance_to(t);
     }
     fixture.advance_to(900);
     EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
@@ -957,8 +974,9 @@ TEST(SessionHandshake, StartsTheHandshakeOverWhenTheRetriesAreSpent)
     // The walk is abandoned, so the cadence is HELLO_REQ's again: no TOPIC_REQ
     // in between, and the request lands 500 ms later.
     for (std::uint32_t t = 901; t < 1400; ++t) {
-        fixture.advance_to(t);
-        EXPECT_TRUE(fixture.drain_units().empty()) << "nothing but HELLO_REQ at 500 ms, got a frame at " << t;
+    fixture.advance_to(t);
+    EXPECT_TRUE(fixture.drain_units().empty()) <<
+      "nothing but HELLO_REQ at 500 ms, got a frame at " << t;
     }
     fixture.advance_to(1400);
     const auto units = fixture.drain_units();
@@ -976,7 +994,8 @@ TEST(SessionHandshake, AcceptsTheHelloThatAnswersTheRestart)
     // One tick past the restart, the abandoned walk would fire its stale
     // deadline; only a disarmed walk stays silent here.
     fixture.advance_to(901);
-    EXPECT_TRUE(fixture.drain_units().empty()) << "the abandoned walk sends nothing after the restart";
+    EXPECT_TRUE(fixture.drain_units().empty()) <<
+          "the abandoned walk sends nothing after the restart";
     // The restart's HELLO_REQ is answered, so the walk begins again from it.
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
     const auto units = fixture.drain_units();
@@ -995,17 +1014,17 @@ TEST(SessionLink, DoesNotResumeAWalkOnAReopenedLink)
     std::unique_ptr<Session> session;
     session = std::make_unique<Session>(
         SessionConfig{}, clock, clock,
-        [&opens, &first, &second]() -> std::unique_ptr<Transport> {
-            ++opens;
-            return std::unique_ptr<Transport>(new Link(opens == 1 ? first : second));
+    [&opens, &first, &second]() -> std::unique_ptr<Transport> {
+      ++opens;
+      return std::unique_ptr<Transport>(new Link(opens == 1 ? first : second));
         },
-        [](const TopicInfo &) { return std::uint8_t{0}; });
+    [](const TopicInfo &) {return std::uint8_t{0};});
     const auto advance = [&clock, &session, &now](std::uint32_t ms) {
-        while (now < ms) {
-            clock.advance(kTick);
-            ++now;
-            session->poll();
-        }
+      while (now < ms) {
+        clock.advance(kTick);
+        ++now;
+        session->poll();
+      }
     };
     advance(100);
     first.script_read(wire_of(with_check(with_topic_frame(hello_payload(0x1000u, 2u)))));
@@ -1019,8 +1038,8 @@ TEST(SessionLink, DoesNotResumeAWalkOnAReopenedLink)
     EXPECT_EQ(session->state(), SessionState::kHandshaking);
     const std::vector<std::vector<std::uint8_t>> units = units_of([&second]() {
         std::vector<std::uint8_t> all;
-        for (const auto &write : second.writes()) {
-            all.insert(all.end(), write.begin(), write.end());
+        for (const auto & write : second.writes()) {
+          all.insert(all.end(), write.begin(), write.end());
         }
         return all;
     }());
@@ -1032,7 +1051,7 @@ TEST(SessionConnected, UsesTheConfiguredHeartbeatPeriod)
 {
     SessionConfig config;
     config.heartbeat_period_ms = 100;
-    Fixture fixture([](const TopicInfo &) { return std::uint8_t{0}; }, config);
+    Fixture fixture([](const TopicInfo &) {return std::uint8_t{0};}, config);
     fixture.advance_to(10);
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u));
     fixture.drain_units();
@@ -1047,7 +1066,7 @@ TEST(SessionHandshake, RefusesAMaxFrameAboveTheProtocolLimit)
     Fixture fixture;
     fixture.advance_to(10);
     std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u);
-    hello[7] = 0xFEu; // max_frame low byte: 65278, one above 65277
+    hello[7] = 0xFEu;  // max_frame low byte: 65278, one above 65277
     hello[8] = 0xFEu;
     fixture.deliver_frame(kControl, 0u, hello);
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
@@ -1059,7 +1078,7 @@ TEST(SessionHandshake, RefusesACompactHandshake)
     Fixture fixture;
     fixture.advance_to(10);
     std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u);
-    hello[2] = 0x01u; // the handshake mode byte ([CTL-1])
+    hello[2] = 0x01u;  // the handshake mode byte ([CTL-1])
     fixture.deliver_frame(kControl, 0u, hello);
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
 }
@@ -1080,7 +1099,7 @@ TEST(SessionHandshake, RefusesANodeNameWithBytesLeftOver)
     Fixture fixture;
     fixture.advance_to(10);
     std::vector<std::uint8_t> hello = hello_payload(0x1000u, 0u);
-    hello.push_back(0x00u); // a byte after the name
+    hello.push_back(0x00u);  // a byte after the name
     fixture.deliver_frame(kControl, 0u, hello);
     EXPECT_EQ(fixture.session().state(), SessionState::kBootWait);
 }
@@ -1104,15 +1123,15 @@ TEST(SessionLink, ReopensThePortWhenItIsNotThereYet)
     int opens = 0;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, clock,
-        [&opens, &transport]() -> std::unique_ptr<Transport> {
-            ++opens;
-            if (opens == 1) {
-                return nullptr;
-            }
-            return std::unique_ptr<Transport>(new Link(transport));
-        },
-        [](const TopicInfo &) { return std::uint8_t{0}; });
+    SessionConfig{}, clock, clock,
+    [&opens, &transport]() -> std::unique_ptr<Transport> {
+      ++opens;
+      if (opens == 1) {
+        return nullptr;
+      }
+      return std::unique_ptr<Transport>(new Link(transport));
+    },
+    [](const TopicInfo &) {return std::uint8_t{0};});
     EXPECT_EQ(session.state(), SessionState::kDisconnected);
     EXPECT_EQ(opens, 1);
     clock.advance(std::chrono::milliseconds(999));
@@ -1134,34 +1153,35 @@ TEST(SessionLink, ReturnsToDisconnectedOnAWriteError)
     // Reads reach the fake, writes fail: the port died while the host was
     // answering the HELLO with its TOPIC_REQ.
     class FailingWrites final : public Transport
+  {
+public:
+    explicit FailingWrites(FakeTransport & inner)
+    : inner_(inner)
     {
-      public:
-        explicit FailingWrites(FakeTransport &inner) : inner_(inner)
-        {
-        }
-        IoResult read(std::uint8_t *buffer, std::size_t capacity) override
-        {
-            return inner_.read(buffer, capacity);
-        }
-        IoResult write(const std::uint8_t *, std::size_t) override
-        {
-            return {0u, IoStatus::kError};
-        }
-        void close() override
-        {
-        }
+    }
+    IoResult read(std::uint8_t *buffer, std::size_t capacity) override
+    {
+      return inner_.read(buffer, capacity);
+    }
+    IoResult write(const std::uint8_t *, std::size_t) override
+    {
+      return {0u, IoStatus::kError};
+    }
+    void close() override
+    {
+    }
 
-      private:
-        FakeTransport &inner_;
+private:
+    FakeTransport & inner_;
     };
     Session session(
-        SessionConfig{}, clock, clock,
-        [&incoming]() { return std::unique_ptr<Transport>(new FailingWrites(incoming)); },
-        [](const TopicInfo &) { return std::uint8_t{0}; });
+    SessionConfig{}, clock, clock,
+    [&incoming]() {return std::unique_ptr<Transport>(new FailingWrites(incoming));},
+    [](const TopicInfo &) {return std::uint8_t{0};});
     while (now < 100) {
-        clock.advance(kTick);
-        ++now;
-        session.poll();
+    clock.advance(kTick);
+    ++now;
+    session.poll();
     }
     incoming.script_read(wire_of(with_check(with_topic_frame(hello_payload(0x1000u, 1u)))));
     // A second frame waits behind the one being answered: the loop must stop
@@ -1177,9 +1197,9 @@ TEST(SessionLink, ReturnsToDisconnectedOnAPortError)
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, clock,
-        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
-        [](const TopicInfo &) { return std::uint8_t{0}; });
+    SessionConfig{}, clock, clock,
+    [&transport]() {return std::unique_ptr<Transport>(new Link(transport));},
+    [](const TopicInfo &) {return std::uint8_t{0};});
     clock.advance(std::chrono::milliseconds(100));
     session.poll();
     transport.script_read(IoStatus::kError);
@@ -1193,20 +1213,22 @@ TEST(SessionLink, RefusesANonPositivePeriod)
     SessionConfig config;
     config.link_timeout_ms = 0;
     EXPECT_THROW(Session(
-                     config, clock, clock, []() { return std::unique_ptr<Transport>(); },
-                     [](const TopicInfo &) { return std::uint8_t{0}; }),
+                     config, clock, clock, []() {return std::unique_ptr<Transport>();},
+      [](const TopicInfo &) {return std::uint8_t{0};}),
                  std::invalid_argument);
 }
 // A decoded wire unit back to its frame, through the stateless decoder.
 std::vector<std::uint8_t> decoded_unit(std::vector<std::uint8_t> unit)
 {
-    unit.pop_back();
-    std::uint8_t *at = nullptr;
-    std::uint16_t len = 0;
-    if (r2s_rcobs_decode(unit.data(), static_cast<std::uint16_t>(unit.size()), &at, &len) != R2S_RCOBS_OK) {
-        return {};
-    }
-    return {at, at + len};
+  unit.pop_back();
+  std::uint8_t *at = nullptr;
+  std::uint16_t len = 0;
+  if (r2s_rcobs_decode(unit.data(), static_cast<std::uint16_t>(unit.size()), &at,
+          &len) != R2S_RCOBS_OK)
+  {
+    return {};
+  }
+  return {at, at + len};
 }
 
 TEST(SessionTopics, DuplicateNameInOneDirectionIsAConflict)
@@ -1219,12 +1241,14 @@ TEST(SessionTopics, DuplicateNameInOneDirectionIsAConflict)
     fixture.drain_units();
     fixture.deliver_frame(kControl, 2u, topic_payload(1u, 17u, "dup"));
     bool refused = false;
-    for (const auto &unit : fixture.drain_units()) {
-        const std::vector<std::uint8_t> decoded = decoded_unit(unit);
-        if (decoded.size() >= 5u && decoded[0] == kControl && decoded[2] == 0x05u && decoded[3] == 17u &&
-            decoded[4] == kTopicStatusNameConflict) {
-            refused = true;
-        }
+    for (const auto & unit : fixture.drain_units()) {
+    const std::vector<std::uint8_t> decoded = decoded_unit(unit);
+    if (decoded.size() >= 5u && decoded[0] == kControl && decoded[2] == 0x05u &&
+      decoded[3] == 17u &&
+      decoded[4] == kTopicStatusNameConflict)
+    {
+      refused = true;
+    }
     }
     EXPECT_TRUE(refused) << "the second TOPIC_STATUS carries the conflict verdict";
     ASSERT_EQ(fixture.session().topics().size(), 2u);
@@ -1243,12 +1267,14 @@ TEST(SessionTopics, DuplicateNameAcrossDirectionsIsAConflict)
     fixture.drain_units();
     fixture.deliver_frame(kControl, 2u, topic_payload(1u, 17u, "dup", 0x01u));
     bool refused = false;
-    for (const auto &unit : fixture.drain_units()) {
-        const std::vector<std::uint8_t> decoded = decoded_unit(unit);
-        if (decoded.size() >= 5u && decoded[0] == kControl && decoded[2] == 0x05u && decoded[3] == 17u &&
-            decoded[4] == kTopicStatusNameConflict) {
-            refused = true;
-        }
+    for (const auto & unit : fixture.drain_units()) {
+    const std::vector<std::uint8_t> decoded = decoded_unit(unit);
+    if (decoded.size() >= 5u && decoded[0] == kControl && decoded[2] == 0x05u &&
+      decoded[3] == 17u &&
+      decoded[4] == kTopicStatusNameConflict)
+    {
+      refused = true;
+    }
     }
     EXPECT_TRUE(refused) << "the second TOPIC_STATUS carries the conflict verdict";
     ASSERT_EQ(fixture.session().topics().size(), 2u);
@@ -1259,8 +1285,8 @@ TEST(SessionTopics, DuplicateNameAcrossDirectionsIsAConflict)
 
 TEST(SessionTopics, AnUnknownTypeKeepsItsVerdictOverARepeatedName)
 {
-    Fixture fixture([](const TopicInfo &info) {
-        return info.topic_id == 17u ? kTopicStatusUnknownType : kTopicStatusOk;
+    Fixture fixture([](const TopicInfo & info) {
+      return info.topic_id == 17u ? kTopicStatusUnknownType : kTopicStatusOk;
     });
     fixture.advance_to(10);
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 2u));
@@ -1269,12 +1295,14 @@ TEST(SessionTopics, AnUnknownTypeKeepsItsVerdictOverARepeatedName)
     fixture.drain_units();
     fixture.deliver_frame(kControl, 2u, topic_payload(1u, 17u, "dup", 0x01u));
     bool refused = false;
-    for (const auto &unit : fixture.drain_units()) {
-        const std::vector<std::uint8_t> decoded = decoded_unit(unit);
-        if (decoded.size() >= 5u && decoded[0] == kControl && decoded[2] == 0x05u && decoded[3] == 17u &&
-            decoded[4] == kTopicStatusUnknownType) {
-            refused = true;
-        }
+    for (const auto & unit : fixture.drain_units()) {
+    const std::vector<std::uint8_t> decoded = decoded_unit(unit);
+    if (decoded.size() >= 5u && decoded[0] == kControl && decoded[2] == 0x05u &&
+      decoded[3] == 17u &&
+      decoded[4] == kTopicStatusUnknownType)
+    {
+      refused = true;
+    }
     }
     EXPECT_TRUE(refused) << "the unknown type keeps verdict 1 over the repeated name";
     ASSERT_EQ(fixture.session().topics().size(), 2u);
@@ -1287,9 +1315,9 @@ TEST(SessionSend, RefusesFramesPastTheMcuCapacity)
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, clock,
-        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
-        [](const TopicInfo &) { return std::uint8_t{0}; });
+    SessionConfig{}, clock, clock,
+    [&transport]() {return std::unique_ptr<Transport>(new Link(transport));},
+    [](const TopicInfo &) {return std::uint8_t{0};});
     clock.advance(std::chrono::milliseconds(10));
     session.poll();
     std::vector<std::uint8_t> hello{kControl, 0u};
@@ -1310,12 +1338,12 @@ TEST(SessionSend, RefusesFramesPastTheMcuCapacity)
     std::size_t accepted = 0;
     bool refused = false;
     for (int i = 0; i < 200; ++i) {
-        if (session.send_user(16u, {0x01, 0x02, 0x03, 0x04})) {
-            ++accepted;
-        } else {
-            refused = true;
-            break;
-        }
+    if (session.send_user(16u, {0x01, 0x02, 0x03, 0x04})) {
+      ++accepted;
+    } else {
+      refused = true;
+      break;
+    }
     }
     EXPECT_GT(accepted, 0u) << "the frame in flight always goes out";
     EXPECT_TRUE(refused) << "a wedged link stops the pacer instead of growing the heap";
@@ -1354,8 +1382,8 @@ TEST(SessionControl, CoalescesHeartbeatsWhenWritesBlock)
     // with ten of its own, one every 500 ms, all wedged.
     const std::vector<std::uint8_t> counters(8u, 0u);
     for (std::uint32_t at = 1000; at <= 5000; at += 1000) {
-        fixture.advance_to(at);
-        fixture.deliver_frame(kHeartbeat, 0u, counters);
+    fixture.advance_to(at);
+    fixture.deliver_frame(kHeartbeat, 0u, counters);
     }
     fixture.advance_to(5110);
     fixture.allow_writes();
@@ -1381,14 +1409,14 @@ TEST(SessionControl, CoalescesTopicStatusPerTopicWhenWritesBlock)
     fixture.session().poll();
     std::size_t ready = 0;
     std::size_t status16 = 0;
-    for (const auto &unit : fixture.drain_units()) {
-        const std::vector<std::uint8_t> decoded = decoded_unit(unit);
-        if (decoded[0] == kControl && decoded[2] == 0x06u) {
-            ++ready;
-        }
-        if (decoded[0] == kControl && decoded[2] == 0x05u && decoded[3] == 16u) {
-            ++status16;
-        }
+    for (const auto & unit : fixture.drain_units()) {
+    const std::vector<std::uint8_t> decoded = decoded_unit(unit);
+    if (decoded[0] == kControl && decoded[2] == 0x06u) {
+      ++ready;
+    }
+    if (decoded[0] == kControl && decoded[2] == 0x05u && decoded[3] == 16u) {
+      ++status16;
+    }
     }
     EXPECT_EQ(status16, 1u) << "one TOPIC_STATUS per topic id";
     EXPECT_EQ(ready, 1u) << "READY is one pending frame, not one per verdict";
@@ -1408,12 +1436,12 @@ TEST(SessionControl, CoalescesTopicReqRetriesWhenWritesBlock)
     fixture.session().poll();
     std::size_t requests = 0;
     std::size_t frames = 0;
-    for (const auto &unit : fixture.drain_units()) {
-        ++frames;
-        const std::vector<std::uint8_t> decoded = decoded_unit(unit);
-        if (decoded[0] == kControl && decoded[2] == 0x03u) {
-            ++requests;
-        }
+    for (const auto & unit : fixture.drain_units()) {
+    ++frames;
+    const std::vector<std::uint8_t> decoded = decoded_unit(unit);
+    if (decoded[0] == kControl && decoded[2] == 0x03u) {
+      ++requests;
+    }
     }
     EXPECT_EQ(requests, 1u) << "the retries replace one TOPIC_REQ slot";
     EXPECT_EQ(frames, 3u) << "the TOPIC_REQ, the TOPIC_STATUS and READY";
@@ -1456,20 +1484,20 @@ TEST(SessionControl, BoundsPendingControlOverALongBlockedStretch)
     const std::vector<std::uint8_t> counters(8u, 0u);
     std::uint8_t seq = 0;
     for (std::uint32_t at = 1010; at <= 311010; at += 1000) {
-        fixture.advance_to(at);
-        fixture.deliver_frame(kHeartbeat, seq++, counters);
-        if ((at - 1010u) % 30000u == 0u) {
-            fixture.deliver_frame(kControl, seq++, hello_payload(0x2000u, 2u));
-            fixture.deliver_frame(kControl, seq++, topic_payload(0u, 16u, "a"));
-            fixture.deliver_frame(kControl, seq++, topic_payload(1u, 17u, "b"));
-        }
+    fixture.advance_to(at);
+    fixture.deliver_frame(kHeartbeat, seq++, counters);
+    if ((at - 1010u) % 30000u == 0u) {
+      fixture.deliver_frame(kControl, seq++, hello_payload(0x2000u, 2u));
+      fixture.deliver_frame(kControl, seq++, topic_payload(0u, 16u, "a"));
+      fixture.deliver_frame(kControl, seq++, topic_payload(1u, 17u, "b"));
+    }
     }
     EXPECT_LE(fixture.session().pending_bytes(), 128u);
     fixture.allow_writes();
     fixture.session().poll();
     std::size_t bytes = 0;
-    for (const auto &unit : fixture.drain_units()) {
-        bytes += unit.size();
+    for (const auto & unit : fixture.drain_units()) {
+    bytes += unit.size();
     }
     // One slot per singleton plus one TOPIC_STATUS per topic id is below 64
     // bytes for two topics; 128 leaves margin without hiding growth.
@@ -1489,11 +1517,12 @@ TEST(SessionControl, CountsReplacedControlFrames)
     fixture.block_writes();
     const std::vector<std::uint8_t> counters(8u, 0u);
     for (std::uint32_t at = 1000; at <= 5000; at += 1000) {
-        fixture.advance_to(at);
-        fixture.deliver_frame(kHeartbeat, 0u, counters);
+    fixture.advance_to(at);
+    fixture.deliver_frame(kHeartbeat, 0u, counters);
     }
     fixture.advance_to(5110);
-    EXPECT_EQ(fixture.session().control_coalesced(), 9u) << "nine of ten heartbeats replaced one slot";
+    EXPECT_EQ(fixture.session().control_coalesced(),
+          9u) << "nine of ten heartbeats replaced one slot";
     EXPECT_LE(fixture.session().pending_bytes(), 16u) << "one heartbeat frame stays queued";
     fixture.allow_writes();
     fixture.session().poll();
@@ -1505,58 +1534,59 @@ TEST(SessionControl, CountsReplacedControlFrames)
 // covers: SES-22, SES-23, SES-25
 std::vector<std::uint8_t> pong_payload(std::uint8_t id, std::uint32_t tick)
 {
-    std::vector<std::uint8_t> payload{0x02u, id};
-    for (int shift = 0; shift < 32; shift += 8) {
-        payload.push_back(static_cast<std::uint8_t>((tick >> shift) & 0xFFu));
-    }
-    return payload;
+  std::vector<std::uint8_t> payload{0x02u, id};
+  for (int shift = 0; shift < 32; shift += 8) {
+    payload.push_back(static_cast<std::uint8_t>((tick >> shift) & 0xFFu));
+  }
+  return payload;
 }
 
-std::uint32_t le32(const std::vector<std::uint8_t> &bytes, std::size_t i)
+std::uint32_t le32(const std::vector<std::uint8_t> & bytes, std::size_t i)
 {
-    return static_cast<std::uint32_t>(bytes[i]) | (static_cast<std::uint32_t>(bytes[i + 1u]) << 8u) |
-           (static_cast<std::uint32_t>(bytes[i + 2u]) << 16u) |
-           (static_cast<std::uint32_t>(bytes[i + 3u]) << 24u);
+  return static_cast<std::uint32_t>(bytes[i]) | (static_cast<std::uint32_t>(bytes[i + 1u]) << 8u) |
+         (static_cast<std::uint32_t>(bytes[i + 2u]) << 16u) |
+         (static_cast<std::uint32_t>(bytes[i + 3u]) << 24u);
 }
 
-void connect_empty(Fixture &fixture)
+void connect_empty(Fixture & fixture)
 {
     // The time bit ([CTL-2]) tells the host the MCU answers PINGs.
-    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u, 4u, 0x01u));
-    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+  fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u, 4u, 0x01u));
+  ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
 }
 
 // The PONGs answering one burst: 2 ms after each PING, the 1 MHz tick
 // stamped at the arrival, so the round trip is symmetric.
-void answer_pings(Fixture &fixture, std::uint32_t ready_at)
+void answer_pings(Fixture & fixture, std::uint32_t ready_at)
 {
-    for (std::uint8_t k = 0; k < 8; ++k) {
-        const std::uint32_t at = ready_at + 50u * k + 2u;
-        fixture.advance_to(at);
-        fixture.deliver_frame(0x01u, k, pong_payload(k, (ready_at + 50u * k + 1u) * 1000u));
-    }
+  for (std::uint8_t k = 0; k < 8; ++k) {
+    const std::uint32_t at = ready_at + 50u * k + 2u;
+    fixture.advance_to(at);
+    fixture.deliver_frame(0x01u, k, pong_payload(k, (ready_at + 50u * k + 1u) * 1000u));
+  }
 }
 
 // Topic, seq and payload of the time-channel units since the last drain,
 // without their check; other topics are skipped.
-struct TimeFrame {
-    std::uint8_t seq = 0;
-    std::vector<std::uint8_t> payload;
+struct TimeFrame
+{
+  std::uint8_t seq = 0;
+  std::vector<std::uint8_t> payload;
 };
 
-std::vector<TimeFrame> drain_time(Fixture &fixture, std::uint8_t opcode = 0xFFu)
+std::vector<TimeFrame> drain_time(Fixture & fixture, std::uint8_t opcode = 0xFFu)
 {
-    std::vector<TimeFrame> out;
-    for (auto &unit : fixture.drain_units()) {
-        const std::vector<std::uint8_t> decoded = decoded_unit(unit);
-        if (decoded.size() >= 4u && decoded[0] == 0x01u && (opcode == 0xFFu || decoded[2] == opcode)) {
-            TimeFrame frame;
-            frame.seq = decoded[1];
-            frame.payload.assign(decoded.begin() + 2, decoded.end() - 2);
-            out.push_back(frame);
-        }
+  std::vector<TimeFrame> out;
+  for (auto & unit : fixture.drain_units()) {
+    const std::vector<std::uint8_t> decoded = decoded_unit(unit);
+    if (decoded.size() >= 4u && decoded[0] == 0x01u && (opcode == 0xFFu || decoded[2] == opcode)) {
+      TimeFrame frame;
+      frame.seq = decoded[1];
+      frame.payload.assign(decoded.begin() + 2, decoded.end() - 2);
+      out.push_back(frame);
     }
-    return out;
+  }
+  return out;
 }
 
 TEST(SessionTimeSync, SendsEightPings50msApartAfterReady)
@@ -1569,11 +1599,11 @@ TEST(SessionTimeSync, SendsEightPings50msApartAfterReady)
     ASSERT_EQ(first.size(), 2u);
     EXPECT_EQ(hex_of(first[1]), hex_of(time_wire(0u, {0x01u, 0u})));
     for (std::uint8_t k = 1; k < 8; ++k) {
-        fixture.advance_to(100u + 50u * k);
-        const auto units = drain_time(fixture);
-        ASSERT_EQ(units.size(), 1u) << "PING " << static_cast<int>(k);
-        EXPECT_EQ(units[0].seq, k);
-        EXPECT_EQ(units[0].payload, std::vector<std::uint8_t>({0x01u, k}));
+    fixture.advance_to(100u + 50u * k);
+    const auto units = drain_time(fixture);
+    ASSERT_EQ(units.size(), 1u) << "PING " << static_cast<int>(k);
+    EXPECT_EQ(units[0].seq, k);
+    EXPECT_EQ(units[0].payload, std::vector<std::uint8_t>({0x01u, k}));
     }
     fixture.advance_to(500);
     EXPECT_TRUE(drain_time(fixture).empty()) << "the burst is eight PINGs";
@@ -1586,7 +1616,7 @@ TEST(SessionTimeSync, PacesSteadyPingsThenTheConfiguredPeriod)
     // The cadence is what this pins down; a generous timeout keeps the
     // session connected while no MCU frame arrives.
     config.link_timeout_ms = 3600000;
-    Fixture fixture([](const TopicInfo &) { return std::uint8_t{0}; }, config);
+    Fixture fixture([](const TopicInfo &) {return std::uint8_t{0};}, config);
     fixture.advance_to(100);
     connect_empty(fixture);
     fixture.drain_units();
@@ -1594,10 +1624,10 @@ TEST(SessionTimeSync, PacesSteadyPingsThenTheConfiguredPeriod)
     EXPECT_EQ(drain_time(fixture).size(), 7u) << "the rest of the burst";
     const std::uint32_t steady[] = {1450u, 2450u, 3450u, 4450u, 5450u, 6450u, 7450u, 8450u, 9450u};
     for (std::uint32_t at : steady) {
-        fixture.advance_to(at);
-        const auto units = drain_time(fixture);
-        ASSERT_EQ(units.size(), 1u) << "steady PING at " << at;
-        EXPECT_EQ(units[0].payload[0], 0x01u);
+    fixture.advance_to(at);
+    const auto units = drain_time(fixture);
+    ASSERT_EQ(units.size(), 1u) << "steady PING at " << at;
+    EXPECT_EQ(units[0].payload[0], 0x01u);
     }
     fixture.advance_to(10449);
     EXPECT_TRUE(drain_time(fixture).empty());
@@ -1618,7 +1648,7 @@ TEST(SessionTimeSync, CorrectsAfterTheBurstFromPongs)
     answer_pings(fixture, 100);
     const auto corrections = drain_time(fixture, 0x03u);
     ASSERT_EQ(corrections.size(), 1u) << "one CORRECTION once the burst is done";
-    const TimeFrame &correction = corrections[0];
+    const TimeFrame & correction = corrections[0];
     EXPECT_EQ(correction.seq, 8u);
     ASSERT_EQ(correction.payload.size(), 15u);
     EXPECT_EQ(correction.payload[0], 0x03u);
@@ -1626,7 +1656,7 @@ TEST(SessionTimeSync, CorrectsAfterTheBurstFromPongs)
     EXPECT_EQ(le32(correction.payload, 5u), 0u) << "sec";
     EXPECT_EQ(le32(correction.payload, 9u), 451000000u) << "nanosec: the arrival midpoint";
     const std::int16_t drift = static_cast<std::int16_t>(
-        correction.payload[13u] | (static_cast<std::uint16_t>(correction.payload[14u]) << 8u));
+    correction.payload[13u] | (static_cast<std::uint16_t>(correction.payload[14u]) << 8u));
     EXPECT_EQ(drift, 0);
     EXPECT_TRUE(fixture.session().time_available());
     EXPECT_EQ(fixture.session().time_offset_ns(), 0);
@@ -1668,9 +1698,9 @@ TEST(SessionTimeSync, ResendsTheCorrectionOnAMoveAndEvery5s)
     // Sixteen jumped samples settle the window: the slope returns to zero
     // and the last correction anchors the latest arrival midpoint exactly.
     for (std::uint8_t k = 1; k < 16; ++k) {
-        const std::uint32_t at = 1450u + 1000u * k + 2u;
-        fixture.advance_to(at);
-        fixture.deliver_frame(0x01u, k, pong_payload(8u + k, (at - 1u) * 1000u + 300u));
+    const std::uint32_t at = 1450u + 1000u * k + 2u;
+    fixture.advance_to(at);
+    fixture.deliver_frame(0x01u, k, pong_payload(8u + k, (at - 1u) * 1000u + 300u));
     }
     auto moved = drain_time(fixture, 0x03u);
     EXPECT_GE(moved.size(), 1u) << "the jump corrects again";
@@ -1685,15 +1715,15 @@ TEST(SessionTimeSync, ResendsTheCorrectionOnAMoveAndEvery5s)
     std::uint8_t hb_seq = 0;
     const std::vector<std::uint8_t> counters(8u, 0u);
     for (std::uint32_t t = 16453; t <= 26453 && !resent; ++t) {
-        fixture.advance_to(t);
-        if (t % 1000u == 0u) {
-            fixture.deliver_frame(kHeartbeat, hb_seq++, counters);
-        }
-        auto more = drain_time(fixture, 0x03u);
-        if (!more.empty()) {
-            floor_correction = more.back();
-            resent = true;
-        }
+    fixture.advance_to(t);
+    if (t % 1000u == 0u) {
+      fixture.deliver_frame(kHeartbeat, hb_seq++, counters);
+    }
+    auto more = drain_time(fixture, 0x03u);
+    if (!more.empty()) {
+      floor_correction = more.back();
+      resent = true;
+    }
     }
     EXPECT_TRUE(resent) << "a CORRECTION at least every 5 s";
     EXPECT_EQ(floor_correction.payload, moved.back().payload);
@@ -1765,14 +1795,14 @@ TEST(SessionTimeSync, SendsNothingWhenDisabled)
 {
     SessionConfig config;
     config.time_sync_enabled = false;
-    Fixture fixture([](const TopicInfo &) { return std::uint8_t{0}; }, config);
+    Fixture fixture([](const TopicInfo &) {return std::uint8_t{0};}, config);
     fixture.advance_to(100);
     connect_empty(fixture);
     // A PONG answers nothing while disabled.
     fixture.deliver_frame(0x01u, 0u, pong_payload(0u, 100000u));
     fixture.advance_to(2100);
-    for (auto &unit : fixture.drain_units()) {
-        EXPECT_NE(decoded_unit(unit)[0], 0x01u) << "no PING and no CORRECTION";
+    for (auto & unit : fixture.drain_units()) {
+    EXPECT_NE(decoded_unit(unit)[0], 0x01u) << "no PING and no CORRECTION";
     }
     EXPECT_FALSE(fixture.session().time_available());
 }
@@ -1787,8 +1817,8 @@ TEST(SessionTimeSync, SendsNothingWhenTheMcuLacksTheTimeBit)
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
     fixture.drain_units();
     fixture.advance_to(2100);
-    for (auto &unit : fixture.drain_units()) {
-        EXPECT_NE(decoded_unit(unit)[0], 0x01u) << "no PING without the time bit";
+    for (auto & unit : fixture.drain_units()) {
+    EXPECT_NE(decoded_unit(unit)[0], 0x01u) << "no PING without the time bit";
     }
     EXPECT_FALSE(fixture.session().time_available());
 }
@@ -1798,17 +1828,18 @@ TEST(SessionTimeSync, RefusesAPeriodOutside1To5000ms)
     ManualClock clock;
     ManualClock ros;
     FakeTransport transport;
-    const auto open = [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); };
-    const auto resolve = [](const TopicInfo &) { return std::uint8_t{0}; };
+    const auto open = [&transport]() {return std::unique_ptr<Transport>(new Link(transport));};
+    const auto resolve = [](const TopicInfo &) {return std::uint8_t{0};};
     for (int bad : {0, -1, 6000}) {
-        SessionConfig config;
-        config.time_sync_period_ms = bad;
-        EXPECT_THROW(Session(config, clock, ros, open, resolve), std::invalid_argument) << "period " << bad;
+    SessionConfig config;
+    config.time_sync_period_ms = bad;
+    EXPECT_THROW(Session(config, clock, ros, open, resolve),
+            std::invalid_argument) << "period " << bad;
     }
     for (int good : {1, 5000}) {
-        SessionConfig config;
-        config.time_sync_period_ms = good;
-        EXPECT_NO_THROW(Session(config, clock, ros, open, resolve)) << "period " << good;
+    SessionConfig config;
+    config.time_sync_period_ms = good;
+    EXPECT_NO_THROW(Session(config, clock, ros, open, resolve)) << "period " << good;
     }
 }
 
@@ -1831,91 +1862,95 @@ TEST(SessionTimeSync, RestartsBurstAndEstimateOnReset)
 
 // One log payload ([LOG-1]): the level, the text as a string, the value kind,
 // then the value bytes. Short texts fit one varint byte.
-std::vector<std::uint8_t> log_payload(std::uint8_t level, const std::string &text, std::uint8_t kind = 0u,
-                                      const std::vector<std::uint8_t> &value = {})
+std::vector<std::uint8_t> log_payload(
+  std::uint8_t level, const std::string & text, std::uint8_t kind = 0u,
+  const std::vector<std::uint8_t> & value = {})
 {
-    std::vector<std::uint8_t> payload{level, static_cast<std::uint8_t>(text.size())};
-    payload.insert(payload.end(), text.begin(), text.end());
-    payload.push_back(kind);
-    payload.insert(payload.end(), value.begin(), value.end());
-    return payload;
+  std::vector<std::uint8_t> payload{level, static_cast<std::uint8_t>(text.size())};
+  payload.insert(payload.end(), text.begin(), text.end());
+  payload.push_back(kind);
+  payload.insert(payload.end(), value.begin(), value.end());
+  return payload;
 }
 
 // A session whose MCU log lines are captured with their severity.
 class LogFixture
 {
-  public:
-    LogFixture()
-    {
-        SessionEvents events;
-        events.mcu_log = [this](SessionLog level, const std::string &text) {
-            lines_.emplace_back(level, text);
-        };
-        session_ = std::make_unique<Session>(
+public:
+  LogFixture()
+  {
+    SessionEvents events;
+    events.mcu_log = [this](SessionLog level, const std::string & text) {
+        lines_.emplace_back(level, text);
+      };
+    session_ = std::make_unique<Session>(
             SessionConfig{}, clock_, clock_,
-            [this]() { return std::unique_ptr<Transport>(new Link(transport_)); },
-            [](const TopicInfo &) { return std::uint8_t{0}; }, events);
-    }
+      [this]() {return std::unique_ptr<Transport>(new Link(transport_));},
+      [](const TopicInfo &) {return std::uint8_t{0};}, events);
+  }
 
-    void deliver_log(const std::vector<std::uint8_t> &payload)
-    {
-        std::vector<std::uint8_t> frame{kLogTopic, 0u};
-        frame.insert(frame.end(), payload.begin(), payload.end());
-        transport_.script_read(wire_of(with_check(frame)));
-        session_->poll();
-    }
+  void deliver_log(const std::vector<std::uint8_t> & payload)
+  {
+    std::vector<std::uint8_t> frame{kLogTopic, 0u};
+    frame.insert(frame.end(), payload.begin(), payload.end());
+    transport_.script_read(wire_of(with_check(frame)));
+    session_->poll();
+  }
 
-    const std::vector<std::pair<SessionLog, std::string>> &lines() const
-    {
-        return lines_;
-    }
+  const std::vector<std::pair<SessionLog, std::string>> & lines() const
+  {
+    return lines_;
+  }
 
-  private:
-    static constexpr std::uint8_t kLogTopic = 2u;
-    ManualClock clock_;
-    FakeTransport transport_;
-    std::unique_ptr<Session> session_;
-    std::vector<std::pair<SessionLog, std::string>> lines_;
+private:
+  static constexpr std::uint8_t kLogTopic = 2u;
+  ManualClock clock_;
+  FakeTransport transport_;
+  std::unique_ptr<Session> session_;
+  std::vector<std::pair<SessionLog, std::string>> lines_;
 };
 
 TEST(SessionLog, ForwardsEachLevelWithItsSeverity)
 {
-    struct Case {
-        std::uint8_t wire;
-        SessionLog severity;
+    struct Case
+  {
+    std::uint8_t wire;
+    SessionLog severity;
     };
     const Case cases[] = {{10u, SessionLog::kDebug},
-                          {20u, SessionLog::kInfo},
-                          {30u, SessionLog::kWarning},
-                          {40u, SessionLog::kError},
-                          {50u, SessionLog::kFatal}};
-    for (const Case &line : cases) {
-        LogFixture fixture;
-        fixture.deliver_log(log_payload(line.wire, "line"));
-        ASSERT_EQ(fixture.lines().size(), 1u) << "level " << static_cast<int>(line.wire);
-        EXPECT_EQ(fixture.lines()[0].first, line.severity) << "level " << static_cast<int>(line.wire);
-        EXPECT_EQ(fixture.lines()[0].second, "line") << "level " << static_cast<int>(line.wire);
+    {20u, SessionLog::kInfo},
+    {30u, SessionLog::kWarning},
+    {40u, SessionLog::kError},
+    {50u, SessionLog::kFatal}};
+    for (const Case & line : cases) {
+    LogFixture fixture;
+    fixture.deliver_log(log_payload(line.wire, "line"));
+    ASSERT_EQ(fixture.lines().size(), 1u) << "level " << static_cast<int>(line.wire);
+    EXPECT_EQ(fixture.lines()[0].first, line.severity) << "level " << static_cast<int>(line.wire);
+    EXPECT_EQ(fixture.lines()[0].second, "line") << "level " << static_cast<int>(line.wire);
     }
 }
 
 TEST(SessionLog, AppendsEachValueKindAfterTheText)
 {
-    struct Case {
-        std::uint8_t kind;
-        std::vector<std::uint8_t> bytes;
-        std::string rendered;
+    struct Case
+  {
+    std::uint8_t kind;
+    std::vector<std::uint8_t> bytes;
+    std::string rendered;
     };
     const Case cases[] = {{1u, {0x34u, 0x12u}, "v=4660"},
-                          {2u, {0xFEu, 0xFFu}, "v=-2"},
-                          {3u, {0x78u, 0x56u, 0x34u, 0x12u}, "v=305419896"},
-                          {4u, {0xFFu, 0xFFu, 0xFFu, 0xFFu}, "v=-1"},
-                          {5u, {0x00u, 0x00u, 0xC0u, 0x3Fu}, "v=1.5"}};
-    for (const Case &line : cases) {
-        LogFixture fixture;
-        fixture.deliver_log(log_payload(20u, "v=", line.kind, line.bytes));
-        ASSERT_EQ(fixture.lines().size(), 1u) << "kind " << static_cast<int>(line.kind);
-        EXPECT_EQ(fixture.lines()[0].first, SessionLog::kInfo) << "kind " << static_cast<int>(line.kind);
-        EXPECT_EQ(fixture.lines()[0].second, line.rendered) << "kind " << static_cast<int>(line.kind);
+    {2u, {0xFEu, 0xFFu}, "v=-2"},
+    {3u, {0x78u, 0x56u, 0x34u, 0x12u}, "v=305419896"},
+    {4u, {0xFFu, 0xFFu, 0xFFu, 0xFFu}, "v=-1"},
+    {5u, {0x00u, 0x00u, 0xC0u, 0x3Fu}, "v=1.5"}};
+    for (const Case & line : cases) {
+    LogFixture fixture;
+    fixture.deliver_log(log_payload(20u, "v=", line.kind, line.bytes));
+    ASSERT_EQ(fixture.lines().size(), 1u) << "kind " << static_cast<int>(line.kind);
+    EXPECT_EQ(fixture.lines()[0].first,
+            SessionLog::kInfo) << "kind " << static_cast<int>(line.kind);
+    EXPECT_EQ(fixture.lines()[0].second, line.rendered) << "kind " << static_cast<int>(line.kind);
     }
 }
 
@@ -1935,42 +1970,44 @@ TEST(SessionLog, DropsALogFrameWithAnUnknownLevel)
 
 TEST(SessionLog, DropsATruncatedLogFrame)
 {
-    struct Case {
-        std::vector<std::uint8_t> payload;
+    struct Case
+  {
+    std::vector<std::uint8_t> payload;
     };
     const Case cases[] = {{{}},
-                          {{20u}},
-                          {{20u, 2u, 'v', '='}},
-                          {log_payload(20u, "v=", 1u, {0x34u})},
-                          {log_payload(20u, "v=", 2u, {0x34u})},
-                          {log_payload(20u, "v=", 3u, {0x34u, 0x12u, 0x00u})},
-                          {log_payload(20u, "v=", 4u, {0x34u, 0x12u, 0x00u})},
-                          {log_payload(20u, "v=", 5u, {0x00u, 0x00u, 0xC0u})}};
-    for (const Case &line : cases) {
-        LogFixture fixture;
-        fixture.deliver_log(line.payload);
-        EXPECT_TRUE(fixture.lines().empty()) << "a short payload forwards nothing";
+    {{20u}},
+    {{20u, 2u, 'v', '='}},
+    {log_payload(20u, "v=", 1u, {0x34u})},
+    {log_payload(20u, "v=", 2u, {0x34u})},
+    {log_payload(20u, "v=", 3u, {0x34u, 0x12u, 0x00u})},
+    {log_payload(20u, "v=", 4u, {0x34u, 0x12u, 0x00u})},
+    {log_payload(20u, "v=", 5u, {0x00u, 0x00u, 0xC0u})}};
+    for (const Case & line : cases) {
+    LogFixture fixture;
+    fixture.deliver_log(line.payload);
+    EXPECT_TRUE(fixture.lines().empty()) << "a short payload forwards nothing";
     }
 }
 
 TEST(SessionLog, DropsALogFrameWithTrailingBytes)
 {
-    struct Case {
-        std::uint8_t kind;
-        std::vector<std::uint8_t> bytes;
+    struct Case
+  {
+    std::uint8_t kind;
+    std::vector<std::uint8_t> bytes;
     };
     const Case cases[] = {{0u, {}},
-                          {1u, {0x34u, 0x12u}},
-                          {2u, {0xFEu, 0xFFu}},
-                          {3u, {0x78u, 0x56u, 0x34u, 0x12u}},
-                          {4u, {0xFFu, 0xFFu, 0xFFu, 0xFFu}},
-                          {5u, {0x00u, 0x00u, 0xC0u, 0x3Fu}}};
-    for (const Case &line : cases) {
-        std::vector<std::uint8_t> bytes = line.bytes;
-        bytes.push_back(0x00u);
-        LogFixture fixture;
-        fixture.deliver_log(log_payload(20u, "v=", line.kind, bytes));
-        EXPECT_TRUE(fixture.lines().empty()) << "kind " << static_cast<int>(line.kind);
+    {1u, {0x34u, 0x12u}},
+    {2u, {0xFEu, 0xFFu}},
+    {3u, {0x78u, 0x56u, 0x34u, 0x12u}},
+    {4u, {0xFFu, 0xFFu, 0xFFu, 0xFFu}},
+    {5u, {0x00u, 0x00u, 0xC0u, 0x3Fu}}};
+    for (const Case & line : cases) {
+    std::vector<std::uint8_t> bytes = line.bytes;
+    bytes.push_back(0x00u);
+    LogFixture fixture;
+    fixture.deliver_log(log_payload(20u, "v=", line.kind, bytes));
+    EXPECT_TRUE(fixture.lines().empty()) << "kind " << static_cast<int>(line.kind);
     }
 }
 
@@ -1978,13 +2015,13 @@ TEST(SessionLog, IgnoresLogLinesWithoutAMcuSink)
 {
     std::vector<std::string> logged;
     SessionEvents events;
-    events.log = [&logged](SessionLog, const std::string &text) { logged.push_back(text); };
+    events.log = [&logged](SessionLog, const std::string & text) {logged.push_back(text);};
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, clock,
-        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
-        [](const TopicInfo &) { return std::uint8_t{0}; }, events);
+    SessionConfig{}, clock, clock,
+    [&transport]() {return std::unique_ptr<Transport>(new Link(transport));},
+    [](const TopicInfo &) {return std::uint8_t{0};}, events);
     std::vector<std::uint8_t> frame{2u, 0u};
     const std::vector<std::uint8_t> payload = log_payload(20u, "line");
     frame.insert(frame.end(), payload.begin(), payload.end());
@@ -2005,48 +2042,48 @@ TEST(SessionLog, DropsALogTextWithAnEmbeddedNul)
 // covers: ERR-1, ERR-2, ERR-6
 class ErrorFixture
 {
-  public:
-    ErrorFixture()
-    {
-        SessionEvents events;
-        events.mcu_log = [this](SessionLog level, const std::string &text) {
-            lines_.emplace_back(level, text);
-        };
-        session_ = std::make_unique<Session>(
+public:
+  ErrorFixture()
+  {
+    SessionEvents events;
+    events.mcu_log = [this](SessionLog level, const std::string & text) {
+        lines_.emplace_back(level, text);
+      };
+    session_ = std::make_unique<Session>(
             SessionConfig{}, clock_, clock_,
-            [this]() { return std::unique_ptr<Transport>(new Link(transport_)); },
-            [](const TopicInfo &) { return std::uint8_t{0}; }, events);
-    }
+      [this]() {return std::unique_ptr<Transport>(new Link(transport_));},
+      [](const TopicInfo &) {return std::uint8_t{0};}, events);
+  }
 
-    void deliver_report(const std::vector<std::uint8_t> &payload)
-    {
-        std::vector<std::uint8_t> frame{kErrorTopic, 0u};
-        frame.insert(frame.end(), payload.begin(), payload.end());
-        transport_.script_read(wire_of(with_check(frame)));
-        session_->poll();
-    }
+  void deliver_report(const std::vector<std::uint8_t> & payload)
+  {
+    std::vector<std::uint8_t> frame{kErrorTopic, 0u};
+    frame.insert(frame.end(), payload.begin(), payload.end());
+    transport_.script_read(wire_of(with_check(frame)));
+    session_->poll();
+  }
 
-    const std::vector<std::pair<SessionLog, std::string>> &lines() const
-    {
-        return lines_;
-    }
+  const std::vector<std::pair<SessionLog, std::string>> & lines() const
+  {
+    return lines_;
+  }
 
-    std::array<std::uint64_t, 6> error_sums() const
-    {
-        return session_->error_sums();
-    }
+  std::array<std::uint64_t, 6> error_sums() const
+  {
+    return session_->error_sums();
+  }
 
-    std::array<std::uint64_t, 6> error_counts(std::uint8_t topic_id) const
-    {
-        return session_->error_counts(topic_id);
-    }
+  std::array<std::uint64_t, 6> error_counts(std::uint8_t topic_id) const
+  {
+    return session_->error_counts(topic_id);
+  }
 
-  private:
-    static constexpr std::uint8_t kErrorTopic = 5u;
-    ManualClock clock_;
-    FakeTransport transport_;
-    std::unique_ptr<Session> session_;
-    std::vector<std::pair<SessionLog, std::string>> lines_;
+private:
+  static constexpr std::uint8_t kErrorTopic = 5u;
+  ManualClock clock_;
+  FakeTransport transport_;
+  std::unique_ptr<Session> session_;
+  std::vector<std::pair<SessionLog, std::string>> lines_;
 };
 
 TEST(SessionError, ForwardsACodeWithItsTopicAndCount)
@@ -2055,7 +2092,7 @@ TEST(SessionError, ForwardsACodeWithItsTopicAndCount)
     fixture.deliver_report({6u, 16u, 42u, 0u, 0xFFu});
     ASSERT_EQ(fixture.lines().size(), 1u) << "one report forwards one line";
     EXPECT_EQ(fixture.lines()[0].first, SessionLog::kWarning);
-    const std::string &line = fixture.lines()[0].second;
+    const std::string & line = fixture.lines()[0].second;
     EXPECT_NE(line.find("code 6"), std::string::npos) << line;
     EXPECT_NE(line.find("16"), std::string::npos) << line;
     EXPECT_NE(line.find("42"), std::string::npos) << line;
@@ -2116,9 +2153,10 @@ TEST(SessionError, AccumulatesAcrossAWrappedCount)
 TEST(SessionError, DropsAReportWithAnUnknownCode)
 {
     for (const std::uint8_t code : {0u, 7u, 0xFFu}) {
-        ErrorFixture fixture;
-        fixture.deliver_report({code, 16u, 1u, 0u, 0xFFu});
-        EXPECT_TRUE(fixture.lines().empty()) << "code " << static_cast<int>(code) << " forwards nothing";
+    ErrorFixture fixture;
+    fixture.deliver_report({code, 16u, 1u, 0u, 0xFFu});
+    EXPECT_TRUE(fixture.lines().empty()) << "code " << static_cast<int>(code) <<
+      " forwards nothing";
     }
 }
 
@@ -2160,7 +2198,8 @@ TEST(SessionError, UsesTheSingularOccurrenceForACountOfOne)
     ErrorFixture fixture;
     fixture.deliver_report({2u, 20u, 1u, 0u, 0xFFu});
     ASSERT_EQ(fixture.lines().size(), 1u) << "one report forwards one line";
-    EXPECT_NE(fixture.lines()[0].second.find("1 occurrence"), std::string::npos) << fixture.lines()[0].second;
+    EXPECT_NE(fixture.lines()[0].second.find("1 occurrence"),
+          std::string::npos) << fixture.lines()[0].second;
     EXPECT_EQ(fixture.lines()[0].second.find("1 occurrences"), std::string::npos)
         << fixture.lines()[0].second;
 }
@@ -2170,19 +2209,21 @@ TEST(SessionError, NamesTheTopicAndFieldPathWhenTheyResolve)
 {
     std::vector<std::pair<SessionLog, std::string>> lines;
     SessionEvents events;
-    events.mcu_log = [&lines](SessionLog level, const std::string &text) { lines.emplace_back(level, text); };
+    events.mcu_log = [&lines](SessionLog level, const std::string & text) {
+      lines.emplace_back(level, text);
+    };
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, clock,
-        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
-        [](const TopicInfo &) { return std::uint8_t{0}; }, events);
+    SessionConfig{}, clock, clock,
+    [&transport]() {return std::unique_ptr<Transport>(new Link(transport));},
+    [](const TopicInfo &) {return std::uint8_t{0};}, events);
     const auto deliver = [&transport, &session](std::uint8_t topic_id, std::uint8_t seq,
-                                                const std::vector<std::uint8_t> &payload) {
-        std::vector<std::uint8_t> decoded{topic_id, seq};
-        decoded.insert(decoded.end(), payload.begin(), payload.end());
-        transport.script_read(wire_of(with_check(decoded)));
-        session.poll();
+    const std::vector<std::uint8_t> & payload) {
+      std::vector<std::uint8_t> decoded{topic_id, seq};
+      decoded.insert(decoded.end(), payload.begin(), payload.end());
+      transport.script_read(wire_of(with_check(decoded)));
+      session.poll();
     };
     deliver(0u, 0u, hello_payload(0x1000u, 1u));
     deliver(0u, 1u, topic_payload(0u, 0x10u, "battery"));
@@ -2200,19 +2241,21 @@ TEST(SessionError, NamesAKnownTopicForAnotherCode)
 {
     std::vector<std::pair<SessionLog, std::string>> lines;
     SessionEvents events;
-    events.mcu_log = [&lines](SessionLog level, const std::string &text) { lines.emplace_back(level, text); };
+    events.mcu_log = [&lines](SessionLog level, const std::string & text) {
+      lines.emplace_back(level, text);
+    };
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, clock,
-        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
-        [](const TopicInfo &) { return std::uint8_t{0}; }, events);
+    SessionConfig{}, clock, clock,
+    [&transport]() {return std::unique_ptr<Transport>(new Link(transport));},
+    [](const TopicInfo &) {return std::uint8_t{0};}, events);
     const auto deliver = [&transport, &session](std::uint8_t topic_id, std::uint8_t seq,
-                                                const std::vector<std::uint8_t> &payload) {
-        std::vector<std::uint8_t> decoded{topic_id, seq};
-        decoded.insert(decoded.end(), payload.begin(), payload.end());
-        transport.script_read(wire_of(with_check(decoded)));
-        session.poll();
+    const std::vector<std::uint8_t> & payload) {
+      std::vector<std::uint8_t> decoded{topic_id, seq};
+      decoded.insert(decoded.end(), payload.begin(), payload.end());
+      transport.script_read(wire_of(with_check(decoded)));
+      session.poll();
     };
     deliver(0u, 0u, hello_payload(0x1000u, 1u));
     deliver(0u, 1u, topic_payload(0u, 0x10u, "battery"));
@@ -2229,19 +2272,21 @@ TEST(SessionError, OmitsTheFieldWhenTheRuleNamesNone)
 {
     std::vector<std::pair<SessionLog, std::string>> lines;
     SessionEvents events;
-    events.mcu_log = [&lines](SessionLog level, const std::string &text) { lines.emplace_back(level, text); };
+    events.mcu_log = [&lines](SessionLog level, const std::string & text) {
+      lines.emplace_back(level, text);
+    };
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, clock,
-        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
-        [](const TopicInfo &) { return std::uint8_t{0}; }, events);
+    SessionConfig{}, clock, clock,
+    [&transport]() {return std::unique_ptr<Transport>(new Link(transport));},
+    [](const TopicInfo &) {return std::uint8_t{0};}, events);
     const auto deliver = [&transport, &session](std::uint8_t topic_id, std::uint8_t seq,
-                                                const std::vector<std::uint8_t> &payload) {
-        std::vector<std::uint8_t> decoded{topic_id, seq};
-        decoded.insert(decoded.end(), payload.begin(), payload.end());
-        transport.script_read(wire_of(with_check(decoded)));
-        session.poll();
+    const std::vector<std::uint8_t> & payload) {
+      std::vector<std::uint8_t> decoded{topic_id, seq};
+      decoded.insert(decoded.end(), payload.begin(), payload.end());
+      transport.script_read(wire_of(with_check(decoded)));
+      session.poll();
     };
     deliver(0u, 0u, hello_payload(0x1000u, 1u));
     deliver(0u, 1u, topic_payload(0u, 0x10u, "battery"));
@@ -2257,19 +2302,21 @@ TEST(SessionError, NamesAnUnknownTopicWhenTopicsAreKnown)
 {
     std::vector<std::pair<SessionLog, std::string>> lines;
     SessionEvents events;
-    events.mcu_log = [&lines](SessionLog level, const std::string &text) { lines.emplace_back(level, text); };
+    events.mcu_log = [&lines](SessionLog level, const std::string & text) {
+      lines.emplace_back(level, text);
+    };
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, clock,
-        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
-        [](const TopicInfo &) { return std::uint8_t{0}; }, events);
+    SessionConfig{}, clock, clock,
+    [&transport]() {return std::unique_ptr<Transport>(new Link(transport));},
+    [](const TopicInfo &) {return std::uint8_t{0};}, events);
     const auto deliver = [&transport, &session](std::uint8_t topic_id, std::uint8_t seq,
-                                                const std::vector<std::uint8_t> &payload) {
-        std::vector<std::uint8_t> decoded{topic_id, seq};
-        decoded.insert(decoded.end(), payload.begin(), payload.end());
-        transport.script_read(wire_of(with_check(decoded)));
-        session.poll();
+    const std::vector<std::uint8_t> & payload) {
+      std::vector<std::uint8_t> decoded{topic_id, seq};
+      decoded.insert(decoded.end(), payload.begin(), payload.end());
+      transport.script_read(wire_of(with_check(decoded)));
+      session.poll();
     };
     deliver(0u, 0u, hello_payload(0x1000u, 1u));
     deliver(0u, 1u, topic_payload(0u, 0x10u, "battery"));
@@ -2285,19 +2332,21 @@ TEST(SessionError, FallsBackToTheFieldIndexWhenThePathMisses)
 {
     std::vector<std::pair<SessionLog, std::string>> lines;
     SessionEvents events;
-    events.mcu_log = [&lines](SessionLog level, const std::string &text) { lines.emplace_back(level, text); };
+    events.mcu_log = [&lines](SessionLog level, const std::string & text) {
+      lines.emplace_back(level, text);
+    };
     ManualClock clock;
     FakeTransport transport;
     Session session(
-        SessionConfig{}, clock, clock,
-        [&transport]() { return std::unique_ptr<Transport>(new Link(transport)); },
-        [](const TopicInfo &) { return std::uint8_t{0}; }, events);
+    SessionConfig{}, clock, clock,
+    [&transport]() {return std::unique_ptr<Transport>(new Link(transport));},
+    [](const TopicInfo &) {return std::uint8_t{0};}, events);
     const auto deliver = [&transport, &session](std::uint8_t topic_id, std::uint8_t seq,
-                                                const std::vector<std::uint8_t> &payload) {
-        std::vector<std::uint8_t> decoded{topic_id, seq};
-        decoded.insert(decoded.end(), payload.begin(), payload.end());
-        transport.script_read(wire_of(with_check(decoded)));
-        session.poll();
+    const std::vector<std::uint8_t> & payload) {
+      std::vector<std::uint8_t> decoded{topic_id, seq};
+      decoded.insert(decoded.end(), payload.begin(), payload.end());
+      transport.script_read(wire_of(with_check(decoded)));
+      session.poll();
     };
     deliver(0u, 0u, hello_payload(0x1000u, 1u));
     deliver(0u, 1u, topic_payload(0u, 0x10u, "battery"));
@@ -2313,10 +2362,11 @@ TEST(SessionHandshake, RefusesATruncatedHelloAtEveryField)
     fixture.advance_to(10);
     const std::vector<std::uint8_t> full = hello_payload(0x1000u, 1u);
     for (std::size_t len = 1u; len < full.size(); ++len) {
-        fixture.deliver_frame(kControl, 0u, std::vector<std::uint8_t>(full.begin(), full.begin() + len));
-        EXPECT_EQ(fixture.session().state(), SessionState::kBootWait)
+    fixture.deliver_frame(kControl, 0u,
+            std::vector<std::uint8_t>(full.begin(), full.begin() + len));
+    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait)
             << "a hello cut at " << len << " refuses";
-        EXPECT_FALSE(fixture.session().seen_hello()) << "a hello cut at " << len << " records nothing";
+    EXPECT_FALSE(fixture.session().seen_hello()) << "a hello cut at " << len << " records nothing";
     }
 }
 
@@ -2357,7 +2407,8 @@ TEST(SessionTime, IgnoresTimeFramesBeforeTheHandshake)
     Fixture fixture;
     fixture.advance_to(100);
     fixture.deliver(with_check({0x01u, 0u, 0x01u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
-    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait) << "time frames wait for the session";
+    EXPECT_EQ(fixture.session().state(),
+          SessionState::kBootWait) << "time frames wait for the session";
 }
 
 TEST(SessionTime, IgnoresNonPongTimeFrames)
@@ -2381,9 +2432,9 @@ TEST(SessionTime, SendsAPingOnceTimeSyncIsUp)
     fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
     bool pinged = false;
-    for (const auto &unit : fixture.drain_units()) {
-        const std::vector<std::uint8_t> decoded = decoded_of(unit);
-        pinged = pinged || (decoded.size() == 6u && decoded[0] == 0x01u && decoded[2] == 0x01u);
+    for (const auto & unit : fixture.drain_units()) {
+    const std::vector<std::uint8_t> decoded = decoded_of(unit);
+    pinged = pinged || (decoded.size() == 6u && decoded[0] == 0x01u && decoded[2] == 0x01u);
     }
     EXPECT_TRUE(pinged) << "the first connected poll sends a PING";
 }
@@ -2396,37 +2447,37 @@ TEST(SessionTime, PublishesACorrectionAfterEightPongs)
     fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
     EXPECT_FALSE(fixture.session().time_available()) << "no estimate before the first PONG";
-    const auto ping_id_of = [](const std::vector<std::uint8_t> &decoded) -> int {
-        if (decoded.size() == 6u && decoded[0] == 0x01u && decoded[2] == 0x01u) {
-            return decoded[3];
-        }
-        return -1;
+    const auto ping_id_of = [](const std::vector<std::uint8_t> & decoded) -> int {
+      if (decoded.size() == 6u && decoded[0] == 0x01u && decoded[2] == 0x01u) {
+        return decoded[3];
+      }
+      return -1;
     };
     std::uint32_t tick = 0;
     int answers = 0;
     for (int step = 0; step < 200 && answers < 8; ++step) {
-        fixture.advance_to(fixture.now_ms() + 10u);
-        for (const auto &unit : fixture.drain_units()) {
-            const int id = ping_id_of(decoded_of(unit));
-            if (id < 0) {
-                continue;
-            }
-            tick += 50000u;
-            std::vector<std::uint8_t> pong = with_check({0x01u, 0u, 0x02u, static_cast<std::uint8_t>(id),
-                                                         static_cast<std::uint8_t>(tick & 0xFFu),
-                                                         static_cast<std::uint8_t>((tick >> 8u) & 0xFFu),
-                                                         static_cast<std::uint8_t>((tick >> 16u) & 0xFFu),
-                                                         static_cast<std::uint8_t>((tick >> 24u) & 0xFFu)});
-            fixture.deliver(pong);
-            ++answers;
-        }
+    fixture.advance_to(fixture.now_ms() + 10u);
+    for (const auto & unit : fixture.drain_units()) {
+      const int id = ping_id_of(decoded_of(unit));
+      if (id < 0) {
+        continue;
+      }
+      tick += 50000u;
+      std::vector<std::uint8_t> pong = with_check({0x01u, 0u, 0x02u, static_cast<std::uint8_t>(id),
+            static_cast<std::uint8_t>(tick & 0xFFu),
+            static_cast<std::uint8_t>((tick >> 8u) & 0xFFu),
+            static_cast<std::uint8_t>((tick >> 16u) & 0xFFu),
+            static_cast<std::uint8_t>((tick >> 24u) & 0xFFu)});
+      fixture.deliver(pong);
+      ++answers;
+    }
     }
     ASSERT_EQ(answers, 8) << "every burst PING gets its PONG";
     EXPECT_TRUE(fixture.session().time_available()) << "eight consistent PONGs anchor a correction";
     bool corrected = false;
-    for (const auto &unit : fixture.drain_units()) {
-        const std::vector<std::uint8_t> decoded = decoded_of(unit);
-        corrected = corrected || (decoded.size() > 2u && decoded[0] == 0x01u && decoded[2] == 0x03u);
+    for (const auto & unit : fixture.drain_units()) {
+    const std::vector<std::uint8_t> decoded = decoded_of(unit);
+    corrected = corrected || (decoded.size() > 2u && decoded[0] == 0x01u && decoded[2] == 0x03u);
     }
     EXPECT_TRUE(corrected) << "the estimate goes out as a CORRECTION";
 }
@@ -2436,12 +2487,15 @@ TEST(SessionFrame, IgnoresARuntFrame)
     Fixture fixture;
     fixture.advance_to(100);
     fixture.deliver({0x10u, 0x00u, 0xAAu});
-    EXPECT_EQ(fixture.session().state(), SessionState::kBootWait) << "a frame under four bytes never parses";
+    EXPECT_EQ(fixture.session().state(),
+          SessionState::kBootWait) << "a frame under four bytes never parses";
 }
 
 TEST(SessionConnected, DropsAUserFrameWithNoRoute)
 {
-    Fixture fixture([](const TopicInfo &) { return std::uint8_t{0}; }, SessionConfig(), SessionEvents{});
+    Fixture fixture([](const TopicInfo &) {
+      return std::uint8_t{0};
+    }, SessionConfig(), SessionEvents{});
     fixture.advance_to(100);
     fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u));
     fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
@@ -2456,12 +2510,13 @@ TEST(SessionLink, TreatsAThrowingOpenAsAClosedPort)
 {
     ManualClock clock;
     Session session(
-        SessionConfig{}, clock, clock,
-        []() -> std::unique_ptr<Transport> { throw std::runtime_error("no port"); },
-        [](const TopicInfo &) { return std::uint8_t{0}; }, SessionEvents{});
+    SessionConfig{}, clock, clock,
+    []() -> std::unique_ptr<Transport> {throw std::runtime_error("no port");},
+    [](const TopicInfo &) {return std::uint8_t{0};}, SessionEvents{});
     session.poll();
     session.poll();
-    EXPECT_EQ(session.state(), SessionState::kDisconnected) << "a throwing open retries like a missing port";
+    EXPECT_EQ(session.state(),
+          SessionState::kDisconnected) << "a throwing open retries like a missing port";
 }
 
 TEST(SessionLink, TreatsAForeignThrowFromOpenAsAClosedPort)
@@ -2471,10 +2526,10 @@ TEST(SessionLink, TreatsAForeignThrowFromOpenAsAClosedPort)
     ManualClock clock;
     bool constructed = false;
     try {
-        Session session(
-            SessionConfig{}, clock, clock, []() -> std::unique_ptr<Transport> { throw 42; },
-            [](const TopicInfo &) { return std::uint8_t{0}; }, SessionEvents{});
-        constructed = true;
+    Session session(
+      SessionConfig{}, clock, clock, []() -> std::unique_ptr<Transport> {throw 42;},
+      [](const TopicInfo &) {return std::uint8_t{0};}, SessionEvents{});
+    constructed = true;
     } catch (int) {
     }
     EXPECT_FALSE(constructed) << "a foreign throw propagates instead of reading as a missing port";
@@ -2488,7 +2543,7 @@ TEST(SessionLink, KeepsUserFramesAcrossAHandshakeRestart)
     // timeout restarts the handshake over them.
     fixture.script_write({5u, IoStatus::kOk});
     for (int i = 0; i < 12000; ++i) {
-        fixture.script_write({0u, IoStatus::kWouldBlock});
+    fixture.script_write({0u, IoStatus::kWouldBlock});
     }
     fixture.advance_to(2600);
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
@@ -2500,8 +2555,10 @@ TEST(SessionLink, KeepsUserFramesAcrossAHandshakeRestart)
     fixture.advance_to(5000);
     EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking)
         << "silence past the link timeout restarts the walk";
-    EXPECT_LT(fixture.session().pending_bytes(), queued) << "the dead walk's control frames are gone";
-    EXPECT_GT(fixture.session().pending_bytes(), 0u) << "the half-written head and the user frame survive";
+    EXPECT_LT(fixture.session().pending_bytes(),
+          queued) << "the dead walk's control frames are gone";
+    EXPECT_GT(fixture.session().pending_bytes(),
+          0u) << "the half-written head and the user frame survive";
 }
 
 TEST(SessionLink, ScansQueuedControlsForANewSlot)
@@ -2530,20 +2587,20 @@ constexpr std::uint8_t kParamStatus = 0x04u;
 // reliable exchange, and heartbeats have their own tests and vectors.
 SessionConfig quiet_config()
 {
-    SessionConfig config;
-    config.heartbeat_period_ms = 3600000;
-    return config;
+  SessionConfig config;
+  config.heartbeat_period_ms = 3600000;
+  return config;
 }
 
 // Drains the host frames since the last drain as decoded frames, the way
 // the transcripts list them.
-std::vector<std::vector<std::uint8_t>> drain_decoded(Fixture &fixture)
+std::vector<std::vector<std::uint8_t>> drain_decoded(Fixture & fixture)
 {
-    std::vector<std::vector<std::uint8_t>> out;
-    for (const auto &unit : fixture.drain_units()) {
-        out.push_back(decoded_of(unit));
-    }
-    return out;
+  std::vector<std::vector<std::uint8_t>> out;
+  for (const auto & unit : fixture.drain_units()) {
+    out.push_back(decoded_of(unit));
+  }
+  return out;
 }
 
 // Drives one connected session with a parameter to walk: one topic and a
@@ -2551,38 +2608,40 @@ std::vector<std::vector<std::uint8_t>> drain_decoded(Fixture &fixture)
 // 6 stay at 0: the walk's PARAM_REQs carry their own walk-local seq, and no
 // SET goes out before the test triggers one. Time sync stays off, so no
 // PING disturbs the captures.
-void handshake_with_params(Fixture &fixture)
+void handshake_with_params(Fixture & fixture)
 {
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0x04u, 1000u));
-    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
-    fixture.deliver_frame(kParams, 0u, {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x03u, 'l', 'e', 'd', 0x01u});
-    fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x01u, 0x01u});
-    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
-    drain_decoded(fixture);
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0x04u, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u,
+    {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x03u, 'l', 'e', 'd', 0x01u});
+  fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x01u, 0x01u});
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+  drain_decoded(fixture);
 }
 
 // The host SETs of one transcript, one per rel seq: retransmits share their
 // first send's rel seq, so the unique ones are the sends.
-std::vector<std::vector<std::uint8_t>> reliable_sets(const std::vector<Step> &steps)
+std::vector<std::vector<std::uint8_t>> reliable_sets(const std::vector<Step> & steps)
 {
-    std::vector<std::vector<std::uint8_t>> out;
-    for (const auto &step : steps) {
-        if (step.from_host && step.decoded.size() > 5u && step.decoded[0] == kParams &&
-            step.decoded[2] == kParamSet) {
-            if (out.empty() || step.decoded[3] != out.back()[3]) {
-                out.push_back(step.decoded);
-            }
-        }
+  std::vector<std::vector<std::uint8_t>> out;
+  for (const auto & step : steps) {
+    if (step.from_host && step.decoded.size() > 5u && step.decoded[0] == kParams &&
+      step.decoded[2] == kParamSet)
+    {
+      if (out.empty() || step.decoded[3] != out.back()[3]) {
+        out.push_back(step.decoded);
+      }
     }
-    return out;
+  }
+  return out;
 }
 
 // Sends one transcript SET through the session: index and value travel after
 // the opcode and rel seq, so they sit at bytes 4 and 5, ahead of the check.
-void send_transcript_set(Fixture &fixture, const std::vector<std::uint8_t> &set)
+void send_transcript_set(Fixture & fixture, const std::vector<std::uint8_t> & set)
 {
-    ASSERT_GE(set.size(), 7u);
-    EXPECT_TRUE(fixture.session().send_param_set(set[4], {set.begin() + 5, set.end() - 2}));
+  ASSERT_GE(set.size(), 7u);
+  EXPECT_TRUE(fixture.session().send_param_set(set[4], {set.begin() + 5, set.end() - 2}));
 }
 
 // Replays one reliable-channel transcript after the scripted handshake: the
@@ -2593,79 +2652,82 @@ void send_transcript_set(Fixture &fixture, const std::vector<std::uint8_t> &set)
 // before the steps; otherwise it waits for the walk to connect, as a
 // re-handshake does. When chain is set, the first applied STATUS sends the
 // transcript's next SET, the way the parameters layer will.
-void replay_reliable(const std::string &filename, bool upfront, bool chain)
+void replay_reliable(const std::string & filename, bool upfront, bool chain)
 {
-    const std::string path = std::string(R2S_SESSION_VECTOR_DIR) + "/" + filename;
-    ASSERT_TRUE(std::filesystem::exists(path)) << path << ": the transcript is missing";
-    const auto [name, steps] = load_steps(path);
-    ASSERT_FALSE(steps.empty()) << name;
+  const std::string path = std::string(R2S_SESSION_VECTOR_DIR) + "/" + filename;
+  ASSERT_TRUE(std::filesystem::exists(path)) << path << ": the transcript is missing";
+  const auto [name, steps] = load_steps(path);
+  ASSERT_FALSE(steps.empty()) << name;
 
-    std::vector<std::pair<std::uint8_t, std::uint8_t>> statuses;
-    SessionEvents events;
-    events.param_status = [&statuses](std::uint8_t index, std::uint8_t status) {
-        statuses.emplace_back(index, status);
+  std::vector<std::pair<std::uint8_t, std::uint8_t>> statuses;
+  SessionEvents events;
+  events.param_status = [&statuses](std::uint8_t index, std::uint8_t status) {
+      statuses.emplace_back(index, status);
     };
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, SessionConfig(), events};
-    handshake_with_params(fixture);
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, SessionConfig(), events};
+  handshake_with_params(fixture);
 
-    const std::vector<std::vector<std::uint8_t>> sets = reliable_sets(steps);
-    ASSERT_FALSE(sets.empty()) << name << ": the transcript sends no SET";
-    std::size_t set_next = 0u;
-    bool chained = false;
-    const auto trigger = [&]() {
-        if (set_next == 0u && fixture.session().state() == SessionState::kConnected) {
-            send_transcript_set(fixture, sets[0]);
-            ++set_next;
-        }
-        if (chain && !chained && !statuses.empty() && statuses.back().second == 0u &&
-            set_next < sets.size()) {
-            send_transcript_set(fixture, sets[set_next]);
-            ++set_next;
-            chained = true;
-        }
+  const std::vector<std::vector<std::uint8_t>> sets = reliable_sets(steps);
+  ASSERT_FALSE(sets.empty()) << name << ": the transcript sends no SET";
+  std::size_t set_next = 0u;
+  bool chained = false;
+  const auto trigger = [&]() {
+      if (set_next == 0u && fixture.session().state() == SessionState::kConnected) {
+        send_transcript_set(fixture, sets[0]);
+        ++set_next;
+      }
+      if (chain && !chained && !statuses.empty() && statuses.back().second == 0u &&
+        set_next < sets.size())
+      {
+        send_transcript_set(fixture, sets[set_next]);
+        ++set_next;
+        chained = true;
+      }
     };
-    if (upfront) {
-        trigger();
-    }
+  if (upfront) {
+    trigger();
+  }
 
-    std::vector<std::size_t> expected;
-    for (std::size_t i = 0; i < steps.size(); ++i) {
-        if (steps[i].from_host && !steps[i].decoded.empty() &&
-            (steps[i].decoded[0] == kParams || steps[i].decoded[0] == kAck)) {
-            expected.push_back(i);
-        }
+  std::vector<std::size_t> expected;
+  for (std::size_t i = 0; i < steps.size(); ++i) {
+    if (steps[i].from_host && !steps[i].decoded.empty() &&
+      (steps[i].decoded[0] == kParams || steps[i].decoded[0] == kAck))
+    {
+      expected.push_back(i);
     }
+  }
     // Compares one decoded unit with the transcript's host steps, skipping
     // every other channel: the decoded unit starts with the topic id,
     // where a wire unit would start with an rCOBS distance code.
-    std::size_t next = 0;
-    const auto check = [&](const std::vector<std::uint8_t> &unit) {
-        if (unit.size() < 3u || (unit[0] != kParams && unit[0] != kAck)) {
-            return;
-        }
-        ASSERT_LT(next, expected.size()) << name << ": the session wrote more than the transcript";
-        EXPECT_EQ(unit, steps[expected[next]].decoded) << name << " host step " << expected[next];
-        ++next;
+  std::size_t next = 0;
+  const auto check = [&](const std::vector<std::uint8_t> & unit) {
+      if (unit.size() < 3u || (unit[0] != kParams && unit[0] != kAck)) {
+        return;
+      }
+      ASSERT_LT(next, expected.size()) << name << ": the session wrote more than the transcript";
+      EXPECT_EQ(unit, steps[expected[next]].decoded) << name << " host step " << expected[next];
+      ++next;
     };
-    for (std::size_t i = 0; i < steps.size(); ++i) {
-        const Step &step = steps[i];
-        SCOPED_TRACE(name + " step " + std::to_string(i));
-        fixture.advance_to(step.at_ms);
-        if (!step.from_host) {
-            fixture.deliver(step.decoded);
-        }
-        trigger();
-        for (const auto &unit : drain_decoded(fixture)) {
-            check(unit);
-        }
+  for (std::size_t i = 0; i < steps.size(); ++i) {
+    const Step & step = steps[i];
+    SCOPED_TRACE(name + " step " + std::to_string(i));
+    fixture.advance_to(step.at_ms);
+    if (!step.from_host) {
+      fixture.deliver(step.decoded);
     }
-    if (next < expected.size()) {
-        fixture.advance_to(steps.back().at_ms + 500);
-        for (const auto &unit : drain_decoded(fixture)) {
-            check(unit);
-        }
+    trigger();
+    for (const auto & unit : drain_decoded(fixture)) {
+      check(unit);
     }
-    EXPECT_EQ(next, expected.size()) << name << ": the transcript's reliable frames did not all go out";
+  }
+  if (next < expected.size()) {
+    fixture.advance_to(steps.back().at_ms + 500);
+    for (const auto & unit : drain_decoded(fixture)) {
+      check(unit);
+    }
+  }
+  EXPECT_EQ(next,
+          expected.size()) << name << ": the transcript's reliable frames did not all go out";
 }
 
 // covers: REL-1, REL-2, REL-3, REL-4, PAR-7, PAR-8
@@ -2746,7 +2808,7 @@ TEST(ReliableWalk, SkipsWhenTheMcuAnnouncesNoParameters)
     // would follow READY in the same poll.
     SessionConfig config;
     config.time_sync_enabled = false;
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, config};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config};
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x01u, 1000u));
     fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
     const auto units = drain_decoded(fixture);
@@ -2761,13 +2823,14 @@ TEST(ReliableWalk, CollectsDeclaresForTheParametersLayer)
     Fixture fixture;
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
     fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
-    fixture.deliver_frame(kParams, 0u, {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x03u, 'l', 'e', 'd', 0x01u});
+    fixture.deliver_frame(kParams, 0u,
+    {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x03u, 'l', 'e', 'd', 0x01u});
     fixture.deliver_frame(kParams, 1u,
-                          {kParamDeclare, 0x01u, 0x01u, 0x00u, 0x02u, 'h', 'z', 0x02u, 0x00u, 0x00u, 0x00u,
-                           0x00u, 0x00u, 0x00u, 0x00u});
+    {kParamDeclare, 0x01u, 0x01u, 0x00u, 0x02u, 'h', 'z', 0x02u, 0x00u, 0x00u, 0x00u,
+      0x00u, 0x00u, 0x00u, 0x00u});
     fixture.deliver_frame(kParams, 2u, {kParamStatus, 0x00u, 0x02u, 0x01u});
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
-    const std::vector<ParamInfo> &params = fixture.session().params();
+    const std::vector<ParamInfo> & params = fixture.session().params();
     ASSERT_EQ(params.size(), 2u);
     EXPECT_EQ(params[0].index, 0u);
     EXPECT_EQ(params[0].type, 0u);
@@ -2794,17 +2857,23 @@ TEST(ReliableWalk, SkipsUnparseableDeclares)
     fixture.deliver_frame(kParams, 1u, {kParamDeclare, 0x01u, 0x04u, 0x00u, 0x00u});
     fixture.deliver_frame(kParams, 2u, {kParamDeclare, 0x02u, 0x00u, 0x02u, 0x00u});
     fixture.deliver_frame(kParams, 3u, {kParamDeclare, 0x03u, 0x00u, 0x00u, 0x05u, 'a', 'b'});
-    fixture.deliver_frame(kParams, 4u, {kParamDeclare, 0x04u, 0x00u, 0x00u, 0x01u, 'c', 0x02u, 0x03u});
-    fixture.deliver_frame(kParams, 5u, {kParamDeclare, 0x05u, 0x03u, 0x00u, 0x01u, 'x', 0x01u, 0x00u});
-    fixture.deliver_frame(kParams, 6u, {kParamDeclare, 0x06u, 0x01u, 0x00u, 0x01u, 'y', 0x02u, 0x00u});
-    fixture.deliver_frame(kParams, 7u, {kParamDeclare, 0x07u, 0x00u, 0x00u, 0x02u, 'o', 'k', 0x00u});
+    fixture.deliver_frame(kParams, 4u,
+    {kParamDeclare, 0x04u, 0x00u, 0x00u, 0x01u, 'c', 0x02u, 0x03u});
+    fixture.deliver_frame(kParams, 5u,
+    {kParamDeclare, 0x05u, 0x03u, 0x00u, 0x01u, 'x', 0x01u, 0x00u});
+    fixture.deliver_frame(kParams, 6u,
+    {kParamDeclare, 0x06u, 0x01u, 0x00u, 0x01u, 'y', 0x02u, 0x00u});
+    fixture.deliver_frame(kParams, 7u,
+    {kParamDeclare, 0x07u, 0x00u, 0x00u, 0x02u, 'o', 'k', 0x00u});
     fixture.deliver_frame(kParams, 8u, {kParamDeclare, 0x08u, 0x00u});
-    fixture.deliver_frame(kParams, 9u, {kParamDeclare, 0x09u, 0x03u, 0x00u, 0x01u, 't', 0x05u, 'a'});
-    fixture.deliver_frame(kParams, 10u, {kParamDeclare, 0x0Au, 0x03u, 0x00u, 0x01u, 'u', 0x01u, 'z', 0xFFu});
+    fixture.deliver_frame(kParams, 9u,
+    {kParamDeclare, 0x09u, 0x03u, 0x00u, 0x01u, 't', 0x05u, 'a'});
+    fixture.deliver_frame(kParams, 10u,
+    {kParamDeclare, 0x0Au, 0x03u, 0x00u, 0x01u, 'u', 0x01u, 'z', 0xFFu});
     fixture.deliver_frame(kParams, 11u, {kParamDeclare, 0x0Bu, 0x00u, 0x00u, 0x01u, 'v', 0x02u});
     fixture.deliver_frame(kParams, 12u, {kParamStatus, 0x00u, 0x0Cu, 0x01u});
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
-    const std::vector<ParamInfo> &params = fixture.session().params();
+    const std::vector<ParamInfo> & params = fixture.session().params();
     ASSERT_EQ(params.size(), 1u);
     EXPECT_EQ(params[0].name, "ok");
 }
@@ -2817,10 +2886,10 @@ TEST(ReliableWalk, GivesUpAfterThreeRetries)
     fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
     EXPECT_EQ(drain_decoded(fixture).size(), 3u);
     for (int retry = 0; retry < 3; ++retry) {
-        fixture.advance_to(200u * static_cast<std::uint32_t>(retry + 1u));
-        const auto units = drain_decoded(fixture);
-        ASSERT_EQ(units.size(), 1u) << "retry " << retry;
-        EXPECT_EQ(units[0][2], kParamReq) << "the walk retries the REQ";
+    fixture.advance_to(200u * static_cast<std::uint32_t>(retry + 1u));
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 1u) << "retry " << retry;
+    EXPECT_EQ(units[0][2], kParamReq) << "the walk retries the REQ";
     }
     fixture.advance_to(800);
     const auto units = drain_decoded(fixture);
@@ -2877,13 +2946,14 @@ TEST(ReliableWalk, CoalescesParamReqBehindABlockedLink)
     fixture.session().poll();
     const auto units = drain_decoded(fixture);
     ASSERT_EQ(units.size(), 3u);
-    EXPECT_EQ(units[2], with_check({kParams, 0u, kParamReq, 0x00u})) << "the REQ keeps the first seq";
+    EXPECT_EQ(units[2],
+          with_check({kParams, 0u, kParamReq, 0x00u})) << "the REQ keeps the first seq";
 }
 
 // covers: REL-2
 TEST(ReliableSend, RetransmitsAndStopsOnAck)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
     auto units = drain_decoded(fixture);
@@ -2900,28 +2970,28 @@ TEST(ReliableSend, RetransmitsAndStopsOnAck)
     fixture.deliver_frame(kAck, 0u, {kParams, 0x00u});
     EXPECT_TRUE(drain_decoded(fixture).empty()) << "the ack clears the outstanding SET";
     fixture.advance_to(2500);
-    for (const auto &unit : drain_decoded(fixture)) {
-        EXPECT_NE(unit[0], kParams) << "no further SET goes out";
+    for (const auto & unit : drain_decoded(fixture)) {
+    EXPECT_NE(unit[0], kParams) << "no further SET goes out";
     }
 }
 
 // covers: REL-2
 TEST(ReliableSend, GivesUpAfterThreeRetries)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
     drain_decoded(fixture);
     for (int retry = 0; retry < 3; ++retry) {
-        fixture.advance_to(500u * static_cast<std::uint32_t>(retry + 1u));
-        EXPECT_EQ(drain_decoded(fixture).size(), 1u) << "retry " << retry;
+    fixture.advance_to(500u * static_cast<std::uint32_t>(retry + 1u));
+    EXPECT_EQ(drain_decoded(fixture).size(), 1u) << "retry " << retry;
     }
     // The link stays alive past the drop deadline: without MCU traffic the
     // link timeout at 2000 ms would re-handshake first.
     fixture.deliver_frame(kHeartbeat, 0u, {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u});
     fixture.advance_to(2500);
-    for (const auto &unit : drain_decoded(fixture)) {
-        EXPECT_NE(unit[0], kParams) << "the spent SET never goes out again";
+    for (const auto & unit : drain_decoded(fixture)) {
+    EXPECT_NE(unit[0], kParams) << "the spent SET never goes out again";
     }
     EXPECT_EQ(fixture.session().reliable_dropped(), 1u);
 }
@@ -2932,9 +3002,9 @@ TEST(ReliableReceive, AcksEveryStatusAndAppliesOnce)
     std::vector<std::pair<std::uint8_t, std::uint8_t>> statuses;
     SessionEvents events;
     events.param_status = [&statuses](std::uint8_t index, std::uint8_t status) {
-        statuses.emplace_back(index, status);
+      statuses.emplace_back(index, status);
     };
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, SessionConfig(), events};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, SessionConfig(), events};
     handshake_with_params(fixture);
     fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x00u});
     auto units = drain_decoded(fixture);
@@ -2957,7 +3027,7 @@ TEST(ReliableReceive, AcksEveryStatusAndAppliesOnce)
 // covers: REL-3
 TEST(ReliableReceive, IgnoresMalformedStatuses)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u});
     fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x00u, 0x05u});
@@ -2970,7 +3040,7 @@ TEST(ReliableReceive, IgnoresMalformedStatuses)
 // covers: REL-3
 TEST(ReliableReceive, AcksWithoutAnEventSink)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     fixture.deliver_frame(kParams, 0u, {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x00u});
     EXPECT_TRUE(drain_decoded(fixture).empty()) << "a DECLARE is never acked";
@@ -2996,7 +3066,7 @@ TEST(ReliableReceive, IgnoresReliableFramesBeforeTheHandshake)
 // covers: REL-2
 TEST(ReliableAck, IgnoresMismatchedAcks)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
     drain_decoded(fixture);
@@ -3016,7 +3086,7 @@ TEST(ReliableAck, IgnoresMismatchedAcks)
 // covers: REL-6
 TEST(ReliableAck, CoalescesBehindABlockedLink)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     fixture.block_writes();
     fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x00u});
@@ -3034,16 +3104,18 @@ TEST(ReliableAck, CoalescesBehindABlockedLink)
 // covers: REL-2
 TEST(ReliableSend, RefusesToSendWhileNotConnected)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
-    EXPECT_FALSE(fixture.session().send_param_set(0u, {0x00u})) << "no SET leaves a boot-waiting session";
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
+    EXPECT_FALSE(fixture.session().send_param_set(0u,
+    {0x00u})) << "no SET leaves a boot-waiting session";
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
-    EXPECT_FALSE(fixture.session().send_param_set(0u, {0x00u})) << "no SET leaves a handshaking session";
+    EXPECT_FALSE(fixture.session().send_param_set(0u,
+    {0x00u})) << "no SET leaves a handshaking session";
 }
 
 // covers: REL-7
 TEST(ReliableSend, RefusesToSendWhenTheLinkIsFull)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     fixture.block_writes();
     EXPECT_TRUE(fixture.session().send_user(16u, std::vector<std::uint8_t>(400u, 0xABu)));
@@ -3055,11 +3127,12 @@ TEST(ReliableSend, RefusesToSendWhenTheLinkIsFull)
 // covers: REL-7
 TEST(ReliableSend, QueuesOnePendingSetPerIndex)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
     EXPECT_TRUE(fixture.session().send_param_set(1u, {0x07u}));
-    EXPECT_EQ(fixture.session().reliable_replaced(), 0u) << "a new index pends beside the outstanding one";
+    EXPECT_EQ(fixture.session().reliable_replaced(),
+          0u) << "a new index pends beside the outstanding one";
     drain_decoded(fixture);
     fixture.deliver_frame(kAck, 0u, {kParams, 0x00u});
     const auto units = drain_decoded(fixture);
@@ -3070,7 +3143,7 @@ TEST(ReliableSend, QueuesOnePendingSetPerIndex)
 // covers: REL-2
 TEST(ReliableSend, HoldsTheRetryWhileTheLinkIsBlocked)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     fixture.block_writes();
     EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
@@ -3094,7 +3167,7 @@ TEST(ReliableSend, HoldsTheRetryWhileTheLinkIsBlocked)
 // covers: REL-2, REL-5
 TEST(ReliableSend, DropsQueuedSetsOnLinkTimeout)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     fixture.block_writes();
     EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
@@ -3105,8 +3178,8 @@ TEST(ReliableSend, DropsQueuedSetsOnLinkTimeout)
     fixture.session().poll();
     const auto units = drain_decoded(fixture);
     ASSERT_FALSE(units.empty());
-    for (const auto &unit : units) {
-        EXPECT_NE(unit[0], kParams) << "no SET survives the re-handshake";
+    for (const auto & unit : units) {
+    EXPECT_NE(unit[0], kParams) << "no SET survives the re-handshake";
     }
     EXPECT_EQ(units.back()[2], 0x01u) << "the handshake starts over";
 }
@@ -3114,7 +3187,7 @@ TEST(ReliableSend, DropsQueuedSetsOnLinkTimeout)
 // covers: REL-7
 TEST(ReliableSend, ReplacesAPendingSetForTheSameIndex)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
     EXPECT_TRUE(fixture.session().send_param_set(0u, {0x01u}));
@@ -3134,7 +3207,8 @@ TEST(ReliableWalk, IgnoresWalkFramesDuringTheTopicWalk)
 {
     Fixture fixture;
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
-    fixture.deliver_frame(kParams, 0u, {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x03u, 'l', 'e', 'd', 0x01u});
+    fixture.deliver_frame(kParams, 0u,
+    {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x03u, 'l', 'e', 'd', 0x01u});
     fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x00u, 0x00u});
     auto units = drain_decoded(fixture);
     ASSERT_EQ(units.size(), 1u) << "only the HELLO_REQ goes out before the topics";
@@ -3149,7 +3223,7 @@ TEST(ReliableWalk, IgnoresWalkFramesDuringTheTopicWalk)
 // covers: REL-3
 TEST(ReliableReceive, IgnoresAnEmptyParamsPayload)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     fixture.deliver_frame(kParams, 0u, {});
     EXPECT_TRUE(drain_decoded(fixture).empty()) << "an empty params frame earns no ack";
@@ -3162,7 +3236,7 @@ TEST(ReliableReceive, IgnoresAnEmptyParamsPayload)
 // covers: REL-2
 TEST(ReliableAck, IgnoresAWrongLengthAck)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
     drain_decoded(fixture);
@@ -3178,11 +3252,12 @@ TEST(ReliableAck, IgnoresAWrongLengthAck)
 // covers: REL-7
 TEST(ReliableSend, SendsWhileUserFramesAreQueued)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     fixture.block_writes();
     EXPECT_TRUE(fixture.session().send_user(16u, std::vector<std::uint8_t>(100u, 0xABu)));
-    EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u})) << "a SET fits beside queued user frames";
+    EXPECT_TRUE(fixture.session().send_param_set(0u,
+    {0x00u})) << "a SET fits beside queued user frames";
     fixture.allow_writes();
     fixture.session().poll();
     const auto units = drain_decoded(fixture);
@@ -3194,7 +3269,7 @@ TEST(ReliableSend, SendsWhileUserFramesAreQueued)
 // covers: REL-5
 TEST(ReliableSend, DropsAPartialSetOnLinkTimeout)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     // Two bytes of the SET go out, then the link blocks with the SET
     // partial at the front: the timeout drops it instead of finishing it.
@@ -3202,7 +3277,8 @@ TEST(ReliableSend, DropsAPartialSetOnLinkTimeout)
     fixture.block_writes();
     EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
     fixture.advance_to(2500);
-    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking) << "the silent link re-handshakes";
+    EXPECT_EQ(fixture.session().state(),
+          SessionState::kHandshaking) << "the silent link re-handshakes";
     EXPECT_EQ(fixture.session().reliable_dropped(), 0u) << "a timeout drops, it never gives up";
     fixture.allow_writes();
     fixture.session().poll();
@@ -3218,7 +3294,7 @@ TEST(ReliableSend, DropsAPartialSetOnLinkTimeout)
 // covers: REL-5
 TEST(ReliableSend, DropsTwoQueuedSetsOnLinkTimeout)
 {
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, quiet_config()};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
     handshake_with_params(fixture);
     fixture.block_writes();
     EXPECT_TRUE(fixture.session().send_param_set(0u, {0x00u}));
@@ -3227,14 +3303,15 @@ TEST(ReliableSend, DropsTwoQueuedSetsOnLinkTimeout)
     // SET frames queue, and the timeout drops both.
     fixture.deliver_frame(kAck, 0u, {kParams, 0x00u});
     fixture.advance_to(2500);
-    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking) << "the silent link re-handshakes";
+    EXPECT_EQ(fixture.session().state(),
+          SessionState::kHandshaking) << "the silent link re-handshakes";
     EXPECT_EQ(fixture.session().reliable_dropped(), 0u) << "a timeout drops, it never gives up";
     fixture.allow_writes();
     fixture.session().poll();
     const auto units = drain_decoded(fixture);
     ASSERT_FALSE(units.empty());
-    for (const auto &unit : units) {
-        EXPECT_NE(unit[0], kParams) << "no SET survives the re-handshake";
+    for (const auto & unit : units) {
+    EXPECT_NE(unit[0], kParams) << "no SET survives the re-handshake";
     }
     EXPECT_EQ(units.back()[2], 0x01u) << "the handshake starts over";
 }
@@ -3245,7 +3322,7 @@ TEST(ReliableWalk, KeepsAPartialReqAcrossTheLinkTimeout)
     SessionConfig config;
     config.heartbeat_period_ms = 3600000;
     config.time_sync_enabled = false;
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, config};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config};
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
     drain_decoded(fixture);
     // The topic answer flushes whole, the walk REQ wedges after two bytes,
@@ -3256,7 +3333,8 @@ TEST(ReliableWalk, KeepsAPartialReqAcrossTheLinkTimeout)
     fixture.block_writes();
     fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
     fixture.advance_to(2500);
-    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking) << "the silent link re-handshakes";
+    EXPECT_EQ(fixture.session().state(),
+          SessionState::kHandshaking) << "the silent link re-handshakes";
     EXPECT_EQ(fixture.session().reliable_dropped(), 0u) << "a REQ is not a SET";
     fixture.allow_writes();
     fixture.session().poll();
@@ -3274,13 +3352,14 @@ TEST(ReliableSend, KeepsAPartialAckAcrossTheLinkTimeout)
     SessionConfig config;
     config.heartbeat_period_ms = 3600000;
     config.time_sync_enabled = false;
-    Fixture fixture{[](const TopicInfo &) { return std::uint8_t{0}; }, config};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config};
     handshake_with_params(fixture);
     fixture.script_write({2u, IoStatus::kOk});
     fixture.block_writes();
     fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x00u});
     fixture.advance_to(2500);
-    EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking) << "the silent link re-handshakes";
+    EXPECT_EQ(fixture.session().state(),
+          SessionState::kHandshaking) << "the silent link re-handshakes";
     EXPECT_EQ(fixture.session().reliable_dropped(), 0u) << "an ack is not a SET";
     fixture.allow_writes();
     fixture.session().poll();
@@ -3290,6 +3369,6 @@ TEST(ReliableSend, KeepsAPartialAckAcrossTheLinkTimeout)
     EXPECT_EQ(units[1][2], 0x01u) << "and the handshake starts over";
 }
 
-} // namespace
-} // namespace test
-} // namespace r2s_bridge
+}  // namespace
+}  // namespace test
+}  // namespace r2s_bridge

@@ -16,15 +16,15 @@ namespace r2s_bridge
 // it to its node clock; tests bind it to a second manual clock.
 class RosClock final : public Clock
 {
-  public:
+public:
     // Throws std::invalid_argument without a source to read.
-    explicit RosClock(std::function<std::int64_t()> now_ns);
-    std::chrono::nanoseconds now() const override;
+  explicit RosClock(std::function<std::int64_t()> now_ns);
+  std::chrono::nanoseconds now() const override;
 
-  private:
-    std::function<std::int64_t()> now_ns_;
+private:
+  std::function<std::int64_t()> now_ns_;
 };
 
-} // namespace r2s_bridge
+}  // namespace r2s_bridge
 
-#endif // R2S_BRIDGE__ROS_CLOCK_HPP_
+#endif  // R2S_BRIDGE__ROS_CLOCK_HPP_

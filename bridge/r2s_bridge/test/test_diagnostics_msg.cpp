@@ -18,57 +18,57 @@ namespace test
 namespace
 {
 
-std::map<std::string, std::string> values_of(const diagnostic_msgs::msg::DiagnosticStatus &status)
+std::map<std::string, std::string> values_of(const diagnostic_msgs::msg::DiagnosticStatus & status)
 {
-    std::map<std::string, std::string> out;
-    for (const diagnostic_msgs::msg::KeyValue &value : status.values) {
-        out[value.key] = value.value;
-    }
-    return out;
+  std::map<std::string, std::string> out;
+  for (const diagnostic_msgs::msg::KeyValue & value : status.values) {
+    out[value.key] = value.value;
+  }
+  return out;
 }
 
 Router::Diagnostics connected_snapshot()
 {
-    Router::Diagnostics snapshot;
-    snapshot.time_sync_available = true;
-    snapshot.time_offset_ns = -1500;
-    snapshot.time_drift_ppm = 12;
-    snapshot.time_round_trip_ns = 2300000;
-    snapshot.link_state = "connected";
-    snapshot.session_token = 1u;
-    snapshot.resets = 2u;
-    snapshot.control_coalesced = 6u;
-    snapshot.protocol_version = 2u;
-    snapshot.mcu_counters.rx_frames = 10u;
-    snapshot.mcu_counters.crc_errors = 2u;
-    snapshot.mcu_counters.rx_overflows = 1u;
-    snapshot.mcu_counters.dropped_frames = 3u;
-    snapshot.mcu_error_sums = {{0u, 0u, 7u, 0u, 0u, 9u}};
-    Router::TopicDiagnostics battery;
-    battery.topic_id = 16u;
-    battery.topic_name = "battery";
-    battery.device_to_host = true;
-    battery.seq_gaps = 4u;
-    battery.dropped = 0u;
-    battery.publish_failures = 1u;
-    battery.mcu_errors = {{0u, 2u, 0u, 0u, 0u, 5u}};
-    snapshot.topics.push_back(battery);
-    Router::TopicDiagnostics cmd_vel;
-    cmd_vel.topic_id = 17u;
-    cmd_vel.topic_name = "cmd_vel";
-    cmd_vel.device_to_host = false;
-    cmd_vel.seq_gaps = 0u;
-    cmd_vel.dropped = 5u;
-    snapshot.topics.push_back(cmd_vel);
-    return snapshot;
+  Router::Diagnostics snapshot;
+  snapshot.time_sync_available = true;
+  snapshot.time_offset_ns = -1500;
+  snapshot.time_drift_ppm = 12;
+  snapshot.time_round_trip_ns = 2300000;
+  snapshot.link_state = "connected";
+  snapshot.session_token = 1u;
+  snapshot.resets = 2u;
+  snapshot.control_coalesced = 6u;
+  snapshot.protocol_version = 2u;
+  snapshot.mcu_counters.rx_frames = 10u;
+  snapshot.mcu_counters.crc_errors = 2u;
+  snapshot.mcu_counters.rx_overflows = 1u;
+  snapshot.mcu_counters.dropped_frames = 3u;
+  snapshot.mcu_error_sums = {{0u, 0u, 7u, 0u, 0u, 9u}};
+  Router::TopicDiagnostics battery;
+  battery.topic_id = 16u;
+  battery.topic_name = "battery";
+  battery.device_to_host = true;
+  battery.seq_gaps = 4u;
+  battery.dropped = 0u;
+  battery.publish_failures = 1u;
+  battery.mcu_errors = {{0u, 2u, 0u, 0u, 0u, 5u}};
+  snapshot.topics.push_back(battery);
+  Router::TopicDiagnostics cmd_vel;
+  cmd_vel.topic_id = 17u;
+  cmd_vel.topic_name = "cmd_vel";
+  cmd_vel.device_to_host = false;
+  cmd_vel.seq_gaps = 0u;
+  cmd_vel.dropped = 5u;
+  snapshot.topics.push_back(cmd_vel);
+  return snapshot;
 }
 
 TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
 {
     const diagnostic_msgs::msg::DiagnosticArray message =
-        diagnostics_message(connected_snapshot(), "test_node", "/dev/ttyACM0");
+    diagnostics_message(connected_snapshot(), "test_node", "/dev/ttyACM0");
     ASSERT_EQ(message.status.size(), 1u);
-    const diagnostic_msgs::msg::DiagnosticStatus &status = message.status[0];
+    const diagnostic_msgs::msg::DiagnosticStatus & status = message.status[0];
     EXPECT_EQ(status.name, "test_node: link");
     EXPECT_EQ(status.hardware_id, "/dev/ttyACM0");
     EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
@@ -128,7 +128,7 @@ TEST(DiagnosticsMessage, MissingRouteWarnsWithReason)
     echo.route_error = "no publisher or subscription: invalid topic name";
     snapshot.topics.push_back(echo);
     const diagnostic_msgs::msg::DiagnosticStatus status =
-        diagnostics_message(snapshot, "test_node", "").status[0];
+    diagnostics_message(snapshot, "test_node", "").status[0];
     EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
     const std::map<std::string, std::string> values = values_of(status);
     EXPECT_EQ(values.at("topic 16 battery route"), "ok");
@@ -143,15 +143,15 @@ TEST(DiagnosticsMessage, ReportsPerTopicStatus)
     const char *names[] = {"ok_topic", "unknown_topic", "mismatch_topic", "dup"};
     const std::uint8_t verdicts[] = {0u, 1u, 2u, 3u};
     for (int i = 0; i < 4; ++i) {
-        Router::TopicDiagnostics topic;
-        topic.topic_id = static_cast<std::uint8_t>(16u + i);
-        topic.topic_name = names[i];
-        topic.device_to_host = true;
-        topic.status = verdicts[i];
-        snapshot.topics.push_back(topic);
+    Router::TopicDiagnostics topic;
+    topic.topic_id = static_cast<std::uint8_t>(16u + i);
+    topic.topic_name = names[i];
+    topic.device_to_host = true;
+    topic.status = verdicts[i];
+    snapshot.topics.push_back(topic);
     }
     const std::map<std::string, std::string> values =
-        values_of(diagnostics_message(snapshot, "test_node", "").status[0]);
+    values_of(diagnostics_message(snapshot, "test_node", "").status[0]);
     EXPECT_EQ(values.at("topic 16 ok_topic status"), "ok");
     EXPECT_EQ(values.at("topic 17 unknown_topic status"), "unknown type");
     EXPECT_EQ(values.at("topic 18 mismatch_topic status"), "hash mismatch");
@@ -176,11 +176,12 @@ TEST(DiagnosticsMessage, SameNameTopicsKeepDistinctKeys)
     second.status = 3u;
     second.dropped = 5u;
     snapshot.topics.push_back(second);
-    const diagnostic_msgs::msg::DiagnosticArray message = diagnostics_message(snapshot, "test_node", "");
+    const diagnostic_msgs::msg::DiagnosticArray message = diagnostics_message(snapshot, "test_node",
+          "");
     ASSERT_EQ(message.status.size(), 1u);
     std::map<std::string, std::string> values;
-    for (const diagnostic_msgs::msg::KeyValue &value : message.status[0].values) {
-        ASSERT_TRUE(values.emplace(value.key, value.value).second) << "duplicate key " << value.key;
+    for (const diagnostic_msgs::msg::KeyValue & value : message.status[0].values) {
+    ASSERT_TRUE(values.emplace(value.key, value.value).second) << "duplicate key " << value.key;
     }
     EXPECT_EQ(values.at("topic 16 dup direction"), "device to host");
     EXPECT_EQ(values.at("topic 16 dup status"), "ok");
@@ -197,18 +198,19 @@ TEST(DiagnosticsMessage, DisambiguatesSameNameErrorKeysByTopicId)
     Router::Diagnostics snapshot;
     snapshot.link_state = "connected";
     for (const std::uint8_t id : {16u, 17u}) {
-        Router::TopicDiagnostics topic;
-        topic.topic_id = id;
-        topic.topic_name = "dup";
-        topic.device_to_host = true;
-        topic.mcu_errors = {{0u, 0u, 0u, 0u, 0u, static_cast<std::uint64_t>(id)}};
-        snapshot.topics.push_back(topic);
+    Router::TopicDiagnostics topic;
+    topic.topic_id = id;
+    topic.topic_name = "dup";
+    topic.device_to_host = true;
+    topic.mcu_errors = {{0u, 0u, 0u, 0u, 0u, static_cast<std::uint64_t>(id)}};
+    snapshot.topics.push_back(topic);
     }
-    const diagnostic_msgs::msg::DiagnosticArray message = diagnostics_message(snapshot, "test_node", "");
-    const diagnostic_msgs::msg::DiagnosticStatus &status = message.status[0];
+    const diagnostic_msgs::msg::DiagnosticArray message = diagnostics_message(snapshot, "test_node",
+          "");
+    const diagnostic_msgs::msg::DiagnosticStatus & status = message.status[0];
     std::vector<std::string> keys;
-    for (const diagnostic_msgs::msg::KeyValue &value : status.values) {
-        keys.push_back(value.key);
+    for (const diagnostic_msgs::msg::KeyValue & value : status.values) {
+    keys.push_back(value.key);
     }
     EXPECT_EQ(std::count(keys.begin(), keys.end(), "topic 16 dup mcu errors"), 1);
     EXPECT_EQ(std::count(keys.begin(), keys.end(), "topic 17 dup mcu errors"), 1);
@@ -224,7 +226,7 @@ TEST(DiagnosticsMessage, RendersHugeTimeSyncValues)
     snapshot.time_drift_ppm = -12345;
     snapshot.time_round_trip_ns = 9223372036854775807LL;
     const std::map<std::string, std::string> values =
-        values_of(diagnostics_message(snapshot, "test_node", "").status[0]);
+    values_of(diagnostics_message(snapshot, "test_node", "").status[0]);
     EXPECT_EQ(values.at("time sync offset"), "-9223372036854775807");
     EXPECT_EQ(values.at("time sync drift"), "-12345");
     EXPECT_EQ(values.at("time sync round trip"), "9223372036854775807");
@@ -236,7 +238,7 @@ TEST(DiagnosticsMessage, NamesTimeSyncKeysBeforeTheFirstCorrection)
     snapshot.link_state = "connected";
     snapshot.time_sync_available = false;
     const std::map<std::string, std::string> values =
-        values_of(diagnostics_message(snapshot, "test_node", "").status[0]);
+    values_of(diagnostics_message(snapshot, "test_node", "").status[0]);
     EXPECT_EQ(values.at("time sync offset"), "not available");
     EXPECT_EQ(values.at("time sync drift"), "not available");
     EXPECT_EQ(values.at("time sync round trip"), "not available");
@@ -246,8 +248,8 @@ TEST(DiagnosticsMessage, MapsLinkStateToLevel)
 {
     Router::Diagnostics down;
     down.link_state = "disconnected";
-    const auto named = [](const Router::Diagnostics &snapshot) {
-        return diagnostics_message(snapshot, "test_node", "").status[0];
+    const auto named = [](const Router::Diagnostics & snapshot) {
+      return diagnostics_message(snapshot, "test_node", "").status[0];
     };
     EXPECT_EQ(named(down).level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
     EXPECT_EQ(named(down).name, "test_node: link") << "a remapped bridge stays recognizable";
@@ -260,6 +262,6 @@ TEST(DiagnosticsMessage, MapsLinkStateToLevel)
     EXPECT_EQ(named(shaking).level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
 }
 
-} // namespace
-} // namespace test
-} // namespace r2s_bridge
+}  // namespace
+}  // namespace test
+}  // namespace r2s_bridge

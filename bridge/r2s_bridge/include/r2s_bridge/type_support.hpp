@@ -14,8 +14,8 @@ namespace r2s_bridge
 // hash matches, unknown type when the type does not load, hash mismatch
 // otherwise. Never throws; a failed load is verdict 1. Needs no node: it
 // opens the installed library and closes it again when done.
-std::uint8_t resolve_topic_type(const TopicInfo &info);
+std::uint8_t resolve_topic_type(const TopicInfo & info);
 
-} // namespace r2s_bridge
+}  // namespace r2s_bridge
 
-#endif // R2S_BRIDGE__TYPE_SUPPORT_HPP_
+#endif  // R2S_BRIDGE__TYPE_SUPPORT_HPP_
