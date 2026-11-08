@@ -238,6 +238,18 @@ jobs:
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
 
+  # Advisory ament_lint_common over the ROS packages: runs on every pull
+  # request, reports the per-linter baseline, and never fails, until the
+  # cleanup tickets land (#508).
+  ament-lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: bash scripts/ament-lint.sh
+
   # The SCRIPTS scope runs as one job per shard over the collected node
   # ids, spread round-robin in sorted order (scripts/shard_nodes.py). The
   # e2e isolation pairs run in the nightly workflow instead.
