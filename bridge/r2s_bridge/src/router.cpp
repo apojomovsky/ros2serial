@@ -25,8 +25,8 @@ namespace
 constexpr std::uint8_t kReliableFlag = 0x08u;
 
 // How often a poll retries a route missing despite an ok verdict, and how
-// many attempts one handshake episode gets before the next handshake renews
-// them: a transient creation failure heals within one spacing, while a
+// many poll attempts one handshake episode gets on top of the handshake's
+// own: a transient creation failure heals within one spacing, while a
 // deterministically uncreatable name stops retrying after its episode.
 constexpr int kRepairSpacingMs = 100;
 constexpr int kMaxRepairAttempts = 10;

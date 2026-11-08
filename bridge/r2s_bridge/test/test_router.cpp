@@ -620,6 +620,39 @@ TEST_F(RouterNode, MissingRouteIsRetriedOnLaterPolls)
     ASSERT_EQ(received.size(), 1u) << "the healthy route keeps flowing";
 }
 
+TEST_F(RouterNode, TwoMissingRoutesAreRetried)
+{
+    RouterFixture fixture("repairtwo", remapped(), RouterParams{});
+    const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
+    const std::array<std::uint8_t, 8> twist_hash = installed_hash("geometry_msgs/msg/Twist");
+    fixture.deliver_frame(kHelperControl, 0u, helper_hello(7u, 3u));
+    fixture.expect_topic_req(0u);
+    fixture.deliver_frame(
+        kHelperControl, 1u,
+        helper_topic(0u, kBattery, 0x00u, float_hash.data(), "std_msgs/msg/Float32", "battery"));
+    fixture.expect_topic_req(1u);
+    fixture.deliver_frame(
+        kHelperControl, 2u,
+        helper_topic(1u, kCmdVel, 0x01u, twist_hash.data(), "geometry_msgs/msg/Twist", "not a topic name"));
+    fixture.expect_topic_req(2u);
+    fixture.deliver_frame(
+        kHelperControl, 3u,
+        helper_topic(2u, kEchoVel, 0x00u, twist_hash.data(), "geometry_msgs/msg/Twist", "bad topic name!"));
+    fixture.drain();
+    EXPECT_EQ(fixture.router().publisher_count(), 1u);
+    EXPECT_EQ(fixture.router().subscription_count(), 0u);
+    fixture.advance(150u);
+    fixture.advance(150u);
+    fixture.advance(150u);
+    const auto count_named = [&fixture](const std::string &name) {
+        return std::count_if(
+            fixture.logged().begin(), fixture.logged().end(),
+            [&name](const std::string &line) { return line.find("'" + name + "'") != std::string::npos; });
+    };
+    EXPECT_GE(count_named("not a topic name"), 2u) << "the missing subscription is retried";
+    EXPECT_GE(count_named("bad topic name!"), 2u) << "the missing publisher is retried";
+}
+
 TEST_F(RouterNode, MissingRouteSurfacesInDiagnostics)
 {
     RouterFixture fixture("diagmissing", remapped(), RouterParams{});
