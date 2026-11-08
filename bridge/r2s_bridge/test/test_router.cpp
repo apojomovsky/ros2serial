@@ -210,11 +210,13 @@ class RouterFixture
 
     // One connected router with the handshake's parameters: led, rate,
     // gain, label and read-only ro with the defaults the tests assert.
-    // Without the full table only "led" is announced. Returns the writes
-    // the handshake's last step left: READY and whatever the parameters
-    // layer pushed, so the caller can inspect them.
+    // Without the full table only "led" is announced; with long_label the
+    // label default is 200 bytes. Returns the writes the handshake's last
+    // step left: READY and whatever the parameters layer pushed, so the
+    // caller can inspect them.
     std::vector<std::vector<std::uint8_t>> handshake_with_params(std::uint32_t token = 7u, bool full = true,
-                                                                 bool led_i64 = false)
+                                                                 bool led_i64 = false,
+                                                                 bool long_label = false)
     {
         deliver_frame(kHelperControl, 0u, helper_hello(token, 2u, max_frame_, 0x04u));
         expect_topic_req(0u);
@@ -248,7 +250,13 @@ class RouterFixture
                       helper_declare(2u, 0x02u, 0x00u, "gain",
                                      {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF8u, 0x3Fu}));
         expect_param_req(3u);
-        deliver_frame(kParamsTopic, 3u, helper_declare(3u, 0x03u, 0x00u, "label", {0x02u, 'h', 'i'}));
+        if (long_label) {
+            std::vector<std::uint8_t> wide{0xC8u, 0x01u};
+            wide.insert(wide.end(), 200u, 'x');
+            deliver_frame(kParamsTopic, 3u, helper_declare(3u, 0x03u, 0x00u, "label", wide));
+        } else {
+            deliver_frame(kParamsTopic, 3u, helper_declare(3u, 0x03u, 0x00u, "label", {0x02u, 'h', 'i'}));
+        }
         expect_param_req(4u);
         deliver_frame(
             kParamsTopic, 4u,
@@ -723,6 +731,22 @@ TEST_F(RouterNode, LongStringSetUsesMultiByteVarint)
     EXPECT_EQ(sets.at(3u).value, want);
 }
 
+// covers: PAR-1, PAR-3
+TEST_F(RouterNode, LongDefaultDecodesMultibyteVarint)
+{
+    // A 200 byte default exercises the two byte length prefix on the
+    // declare path, where the short defaults never loop ([ENC-7]).
+    RouterFixture fixture("longdefault", remapped(), RouterParams{});
+    const auto writes = fixture.handshake_with_params(7u, true, false, true);
+    ASSERT_TRUE(fixture.node()->has_parameter("label"));
+    EXPECT_EQ(fixture.node()->get_parameter("label").as_string(), std::string(200u, 'x'));
+    for (const auto &unit : writes) {
+        const std::vector<std::uint8_t> decoded = fixture.checked_decode(unit);
+        EXPECT_FALSE(decoded.size() >= 6u && decoded[0] == kParamsTopic && decoded[2] == 0x03u)
+            << "the matching default pushes nothing";
+    }
+}
+
 // covers: PAR-9
 TEST_F(RouterNode, LaunchOverrideIsPushedAfterTheHandshake)
 {
@@ -864,6 +888,8 @@ TEST_F(RouterNode, RefusedStatusNamesEachReason)
     fixture.deliver_frame(kParamsTopic, 0u, {0x04u, 0x00u, 0x00u, 0x01u});
     fixture.deliver_frame(kParamsTopic, 1u, {0x04u, 0x01u, 0x01u, 0x03u});
     fixture.deliver_frame(kParamsTopic, 2u, {0x04u, 0x02u, 0x02u, 0x04u});
+    fixture.deliver_frame(kParamsTopic, 3u, {0x04u, 0x03u, 0x09u, 0x02u});
+    EXPECT_TRUE(logged_has(fixture.logged(), "parameter #9: the MCU refused the set (bad type or length)"));
     EXPECT_TRUE(logged_has(fixture.logged(), "parameter 'led': the MCU refused the set (unknown index)"));
     EXPECT_TRUE(logged_has(fixture.logged(), "parameter 'rate': the MCU refused the set (read-only)"));
     EXPECT_TRUE(logged_has(fixture.logged(), "parameter 'gain': the MCU refused the set (out of range)"));

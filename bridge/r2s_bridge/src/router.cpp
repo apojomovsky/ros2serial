@@ -68,21 +68,19 @@ constexpr std::uint8_t kParamF64 = 2u;
 constexpr std::uint8_t kParamString = 3u;
 constexpr std::uint8_t kParamReadOnly = 0x01u;
 
+// One walk type as its ROS counterpart. The walk keeps types 0 to 3
+// ([PAR-3]), so every index below names a valid entry.
+constexpr rclcpp::ParameterType kRosType[] = {
+    rclcpp::ParameterType::PARAMETER_BOOL, rclcpp::ParameterType::PARAMETER_INTEGER,
+    rclcpp::ParameterType::PARAMETER_DOUBLE, rclcpp::ParameterType::PARAMETER_STRING};
+
+// One MCU STATUS code as its log name. Codes 1 to 4 reach here: applied
+// stays quiet above, and the session drops anything past 4 ([PAR-5]).
 const char *param_status_name(std::uint8_t status)
 {
-    switch (status) {
-    case 0u:
-        return "applied";
-    case 1u:
-        return "unknown index";
-    case 2u:
-        return "bad type or length";
-    case 3u:
-        return "read-only";
-    case 4u:
-        return "out of range";
-    }
-    return "reserved";
+    static constexpr const char *kNames[] = {"applied", "unknown index", "bad type or length", "read-only",
+                                             "out of range"};
+    return kNames[status];
 }
 
 // One varint length in minimal form, as [ENC-7] lays a string out.
@@ -133,32 +131,21 @@ rclcpp::ParameterValue decode_param_default(const ParamInfo &info)
     throw std::invalid_argument("unknown parameter type");
 }
 
-// One ROS value as its wire bytes ([PAR-1], [PAR-3]). False when the value
-// is not the MCU type, so a changed announcement never pushes garbage.
-bool encode_param_value(std::uint8_t type, const rclcpp::Parameter &value, std::vector<std::uint8_t> &out)
+// One ROS value as its wire bytes ([PAR-1], [PAR-3]). The caller checked
+// the ROS type against the MCU type first: the middleware validates every
+// set, and the handshake re-push compares before encoding. The chain ends
+// in the string case because the walk keeps types 0 to 3 ([PAR-3]).
+void encode_param_value(std::uint8_t type, const rclcpp::Parameter &value, std::vector<std::uint8_t> &out)
 {
     out.clear();
-    switch (type) {
-    case kParamBool:
-        if (value.get_type() != rclcpp::ParameterType::PARAMETER_BOOL) {
-            return false;
-        }
+    if (type == kParamBool) {
         out.push_back(value.get_value<bool>() ? 1u : 0u);
-        return true;
-    case kParamI64: {
-        if (value.get_type() != rclcpp::ParameterType::PARAMETER_INTEGER) {
-            return false;
-        }
+    } else if (type == kParamI64) {
         const std::uint64_t bits = static_cast<std::uint64_t>(value.get_value<std::int64_t>());
         for (int at = 0; at < 8; ++at) {
             out.push_back(static_cast<std::uint8_t>((bits >> (8 * at)) & 0xFFu));
         }
-        return true;
-    }
-    case kParamF64: {
-        if (value.get_type() != rclcpp::ParameterType::PARAMETER_DOUBLE) {
-            return false;
-        }
+    } else if (type == kParamF64) {
         const double number = value.get_value<double>();
         std::uint64_t bits = 0u;
         static_assert(sizeof(number) == sizeof(bits), "a host double carries 64 bits");
@@ -166,19 +153,11 @@ bool encode_param_value(std::uint8_t type, const rclcpp::Parameter &value, std::
         for (int at = 0; at < 8; ++at) {
             out.push_back(static_cast<std::uint8_t>((bits >> (8 * at)) & 0xFFu));
         }
-        return true;
-    }
-    case kParamString: {
-        if (value.get_type() != rclcpp::ParameterType::PARAMETER_STRING) {
-            return false;
-        }
+    } else {
         const std::string &text = value.get_value<std::string>();
         put_varint(out, static_cast<std::uint32_t>(text.size()));
         out.insert(out.end(), text.begin(), text.end());
-        return true;
     }
-    }
-    return false;
 }
 
 } // namespace
@@ -423,14 +402,17 @@ struct Router::Impl {
                 }
             }
             // A returning name unstales: the entry below overwrites the flag.
-            mcu_params_[info.name] = McuParam{info.index, info.type, info.flags, false};
+            mcu_params_[info.name] = McuParam{info.index, info.type, false};
             // Declared above or already present: the get cannot miss.
             const rclcpp::Parameter current = node_params_->get_parameter(info.name);
-            std::vector<std::uint8_t> wire;
-            if (!encode_param_value(info.type, current, wire)) {
+            // The middleware fixes a ROS type at declare, so a mismatch
+            // means the MCU reflashed the type: nothing goes out ([PAR-9]).
+            if (current.get_type() != kRosType[info.type]) {
                 emit(SessionLog::kWarning, "parameter '" + info.name + "': type changed, not pushed");
                 continue;
             }
+            std::vector<std::uint8_t> wire;
+            encode_param_value(info.type, current, wire);
             if (wire != info.default_value) {
                 session_.send_param_set(info.index, wire);
             }
@@ -438,7 +420,9 @@ struct Router::Impl {
     }
 
     // One ROS parameter set on the node: only the MCU's own parameters go
-    // out as SETs, everything else belongs to the node's own callbacks. A
+    // out as SETs, everything else belongs to the node's own callbacks. The
+    // middleware already refused read-only and wrong-typed sets before
+    // calling, so only a stale entry or a down link still fails here. A
     // rejection names its parameter; a set while disconnected fails, so
     // `ros2 param set` reports the link instead of vanishing.
     rcl_interfaces::msg::SetParametersResult on_mcu_param_set(const std::vector<rclcpp::Parameter> &params)
@@ -456,17 +440,8 @@ struct Router::Impl {
                 result.reason = "parameter '" + param.get_name() + "' is no longer announced by the MCU";
                 return result;
             }
-            if ((found->second.flags & kParamReadOnly) != 0u) {
-                result.successful = false;
-                result.reason = "parameter '" + param.get_name() + "' is read-only";
-                return result;
-            }
             std::vector<std::uint8_t> wire;
-            if (!encode_param_value(found->second.type, param, wire)) {
-                result.successful = false;
-                result.reason = "parameter '" + param.get_name() + "' has the wrong type";
-                return result;
-            }
+            encode_param_value(found->second.type, param, wire);
             if (!session_.send_param_set(found->second.index, wire)) {
                 result.successful = false;
                 result.reason = "parameter '" + param.get_name() + "': the link is down";
@@ -587,13 +562,12 @@ struct Router::Impl {
     LogSink mcu_sink;
     rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params_;
     rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_hook_;
-    // One MCU parameter by ROS name: the SETs route by index, and the flags
-    // carry read-only. Only names the layer itself declared are tracked, so
-    // a colliding node parameter never sends MCU traffic.
+    // One MCU parameter by ROS name: the SETs route by index. Only names
+    // the layer itself declared are tracked, so a colliding node
+    // parameter never sends MCU traffic.
     struct McuParam {
         std::uint8_t index = 0;
         std::uint8_t type = 0;
-        std::uint8_t flags = 0;
         // A stale entry left the announced table. The ROS parameter stays:
         // a standard node cannot undeclare it, so its sets fail instead.
         bool stale = false;

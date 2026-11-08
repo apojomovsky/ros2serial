@@ -903,15 +903,17 @@ struct Session::Impl {
     // still advances.
     void collect_declare(const std::uint8_t *payload, std::uint16_t len)
     {
-        Reader reader(payload, len);
-        std::uint8_t opcode = 0;
+        // The caller only delivers walk answers of two bytes or more
+        // ([PAR-8]): the opcode and the declare index always parse.
         ParamInfo info;
+        info.index = payload[1];
+        Reader reader(payload + 2u, static_cast<std::uint16_t>(len - 2u));
         std::string name;
         std::vector<std::uint8_t> def;
-        if (!reader.u8(opcode) || !reader.u8(info.index) || !reader.u8(info.type) || !reader.u8(info.flags) ||
-            !reader.string(name) || !reader.rest(def)) {
+        if (!reader.u8(info.type) || !reader.u8(info.flags) || !reader.string(name)) {
             return;
         }
+        reader.rest(def);
         if (info.type > 3u || (info.flags & 0xFEu) != 0u) {
             return;
         }
