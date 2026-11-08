@@ -35,14 +35,13 @@ void add_topic(diagnostic_msgs::msg::DiagnosticStatus &status, const Router::Top
     add_value(status, head + " status", verdict);
     // A route missing despite an ok verdict is a degraded bridge, never a
     // silent one: the key names the reason, and the snapshot below warns
-    // until a repair poll heals it back to ok. An empty reason cannot happen
-    // through the router, which records every failed creation; the fallback
-    // names it anyway so a hand-built snapshot still reads precisely.
-    const std::string route =
-        topic.route_missing
-            ? "missing: " + (topic.route_error.empty() ? "endpoint creation failed" : topic.route_error)
-            : "ok";
-    add_value(status, head + " route", route);
+    // until a repair poll heals it back to ok. The router records every
+    // failed creation, so a missing route always carries its reason.
+    if (topic.route_missing) {
+        add_value(status, head + " route", "missing: " + topic.route_error);
+    } else {
+        add_value(status, head + " route", "ok");
+    }
     add_value(status, head + " seq gaps", std::to_string(topic.seq_gaps));
     add_value(status, head + " dropped", std::to_string(topic.dropped));
     // GCOVR_EXCL_BR_START: a unit test cannot throw out of this call
