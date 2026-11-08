@@ -601,10 +601,16 @@ TEST_F(RouterNode, MissingRouteIsRetriedOnLaterPolls)
     handshake_with_uncreatable_echo(fixture);
     EXPECT_EQ(fixture.router().publisher_count(), 1u);
     EXPECT_EQ(fixture.router().subscription_count(), 1u);
-    // Later polls retry the missing route instead of losing it silently.
+    // Later polls retry the missing route instead of losing it silently: a
+    // poll inside the spacing skips, and attempts stop after the episode's
+    // cap until the next handshake renews them.
+    fixture.advance(150u);
+    fixture.advance(50u);
     fixture.advance(150u);
     fixture.advance(150u);
-    fixture.advance(150u);
+    for (int i = 0; i < 8; ++i) {
+        fixture.advance(150u);
+    }
     const std::size_t echo_lines =
         std::count_if(fixture.logged().begin(), fixture.logged().end(), [](const std::string &line) {
             return line.find("not a topic name") != std::string::npos;

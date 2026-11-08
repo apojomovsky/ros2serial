@@ -136,6 +136,22 @@ TEST(DiagnosticsMessage, MissingRouteWarnsWithReason)
               "missing: no publisher or subscription: invalid topic name");
 }
 
+TEST(DiagnosticsMessage, MissingRouteWithoutReasonFallsBack)
+{
+    Router::Diagnostics snapshot;
+    snapshot.link_state = "connected";
+    Router::TopicDiagnostics echo;
+    echo.topic_id = 18u;
+    echo.topic_name = "echo_vel";
+    echo.device_to_host = true;
+    echo.route_missing = true;
+    snapshot.topics.push_back(echo);
+    const diagnostic_msgs::msg::DiagnosticStatus status =
+        diagnostics_message(snapshot, "test_node", "").status[0];
+    const std::map<std::string, std::string> values = values_of(status);
+    EXPECT_EQ(values.at("topic 18 echo_vel route"), "missing: endpoint creation failed");
+}
+
 TEST(DiagnosticsMessage, ReportsPerTopicStatus)
 {
     Router::Diagnostics snapshot;

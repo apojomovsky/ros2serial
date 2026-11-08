@@ -3,6 +3,7 @@
 // and converted payloads both directions.
 #include "r2s_bridge/router.hpp"
 
+#include <array>
 #include <cmath>
 #include <mutex>
 #include <optional>
@@ -231,6 +232,21 @@ struct Router::Impl {
         return paced;
     }
 
+    // Gives one ok topic its route and pacing, creating the endpoint when
+    // missing. Records a failed attempt for the repair schedule, so the
+    // handshake and the polls share one creation path.
+    void ensure_route(const TopicInfo &info, SessionLog failure_level)
+    {
+        std::string error;
+        auto route = make_route(info, failure_level, error);
+        if (!route) {
+            repairs_[info.topic_id].reason = error;
+            return;
+        }
+        scheduler_.add_topic(pacing_for(info));
+        routes[info.topic_id] = std::move(*route);
+    }
+
     // Retries routes missing despite an ok verdict: one transient creation
     // failure must not lose the topic forever while the handshake keeps
     // reporting it ok. Only connected polls repair, so a walk in progress
@@ -255,15 +271,7 @@ struct Router::Impl {
             }
             state.last_attempt = now;
             ++state.attempts;
-            std::string error;
-            auto route = make_route(info, SessionLog::kDebug, error);
-            if (!route) {
-                state.reason = error;
-                continue;
-            }
-            scheduler_.add_topic(pacing_for(info));
-            routes[info.topic_id] = std::move(*route);
-            repairs_.erase(info.topic_id);
+            ensure_route(info, SessionLog::kDebug);
         }
     }
 
@@ -272,7 +280,7 @@ struct Router::Impl {
         std::lock_guard<std::mutex> guard(mutex);
         // A new handshake renews the repair attempts: a still-missing route
         // retries from scratch instead of inheriting a spent episode.
-        repairs_.clear();
+        repairs_.fill(RepairState{});
         if (identical && !routes.empty()) {
             // The endpoints stay, but the MCU's new limits may exceed the old
             // bucket: refresh the burst without touching the queues.
@@ -281,24 +289,16 @@ struct Router::Impl {
             return;
         }
         routes.clear();
-        std::vector<SchedulerTopic> pacing;
         const double budget_bytes_per_sec =
             static_cast<double>(params.baud) / 10.0 * static_cast<double>(params.tx_budget_pct) / 100.0;
+        const double burst = static_cast<double>(Scheduler::encoded_frame_bound(session_.mcu_max_frame()));
+        scheduler_.configure({}, budget_bytes_per_sec, burst);
         for (const TopicInfo &info : session_.topics()) {
             if (info.status != kTopicStatusOk) {
                 continue;
             }
-            std::string error;
-            auto route = make_route(info, SessionLog::kError, error);
-            if (!route) {
-                repairs_[info.topic_id].reason = error;
-                continue;
-            }
-            pacing.push_back(pacing_for(info));
-            routes[info.topic_id] = std::move(*route);
+            ensure_route(info, SessionLog::kError);
         }
-        const double burst = static_cast<double>(Scheduler::encoded_frame_bound(session_.mcu_max_frame()));
-        scheduler_.configure(std::move(pacing), budget_bytes_per_sec, burst);
     }
 
     void on_user_frame(std::uint8_t topic_id, const std::vector<std::uint8_t> &payload)
@@ -406,7 +406,9 @@ struct Router::Impl {
     Converter converter_;
     Scheduler scheduler_;
     std::map<std::uint8_t, Route> routes;
-    std::map<std::uint8_t, RepairState> repairs_;
+    // Repair attempts by topic id: array indexing cannot miss, so the
+    // diagnostics snapshot below needs no fallback branch.
+    std::array<RepairState, 256> repairs_;
     std::mutex mutex;
     Session session_;
 };
@@ -509,10 +511,7 @@ Router::Diagnostics Router::diagnostics() const
         topic.publish_failures = route == impl_->routes.end() ? 0u : route->second.publish_failures;
         topic.route_missing = info.status == kTopicStatusOk && route == impl_->routes.end();
         if (topic.route_missing) {
-            const auto repair = impl_->repairs_.find(info.topic_id);
-            topic.route_error = repair == impl_->repairs_.end() || repair->second.reason.empty()
-                                    ? "endpoint creation failed"
-                                    : repair->second.reason;
+            topic.route_error = impl_->repairs_[info.topic_id].reason;
         }
         topic.mcu_errors = impl_->session_.error_counts(info.topic_id);
         out.topics.push_back(topic);
