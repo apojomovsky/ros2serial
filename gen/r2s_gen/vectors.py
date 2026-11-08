@@ -24,7 +24,9 @@ def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParse
         description="Encode one message with the reference codec and print its payload hex, "
         "in the form a message vector writes it.",
     )
-    parser.add_argument("--type", required=True, help="the message type as package/msg/Type")
+    parser.add_argument(
+        "--type", required=True, help="the message type as package/msg/Type or package/action/Name_Goal"
+    )
     parser.add_argument("--message", required=True, help="the message as YAML text, or @path to read it from a file")
     parser.add_argument(
         "--msg-path", action="append", default=[], metavar="DIR", help="search DIR for message packages; repeatable"

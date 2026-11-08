@@ -57,7 +57,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 
 ## Scope: parity with rosserial
 
-*Status (0.2.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++, the reliable channel, rosserial-compatible runtime registration with the porting guide, and parameters in #155; specified: services and actions in #316; planned: #156 and #317 to #320.*
+*Status (0.2.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++, the reliable channel, rosserial-compatible runtime registration with the porting guide, and parameters in #155; specified: services and actions in #316; planned: #156 and #318 to #320 (#317 generator support lands with X10a).*
 
 | Feature | Priority | Notes |
 | --- | --- | --- |
@@ -527,7 +527,7 @@ and `SetRemap` around the inclusion stay the equivalent scoping route.
 
 ## Code generator and packaging
 
-*Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling, plus the rosidl plugin wrapper (`gen/r2s_rosidl`); planned: `.action` support in #317.*
+*Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling, plus the rosidl plugin wrapper (`gen/r2s_rosidl`) and `.action` support with Goal, Result and Feedback hashes in #317.*
 
 `r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required). It parses the `.msg` grammar itself, since `rosidl_parser` ships only with a ROS installation and the bundled snapshots make the ROS-free path complete. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources, the optional C++ headers, and the compact-mode node map. It also builds the bundled Arduino library (common types with default bounds) that the X-macro path uses. Outputs are laid out to be usable as:
 

@@ -86,7 +86,8 @@ def test_a_type_without_a_package_names_the_expected_shapes(capsys):
     assert code == 1
     assert out == ""
     assert err == (
-        "r2s-gen: error: Float32: expected a type as 'package/Type' or 'package/msg/Type'; check the type name\n"
+        "r2s-gen: error: Float32: expected a type as 'package/Type', "
+        "'package/msg/Type' or 'package/action/Type'; check the type name\n"
     )
 
 

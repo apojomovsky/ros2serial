@@ -51,10 +51,25 @@ def _snapshot_distro() -> str | None:
     return None
 
 
+ACTION_TYPES = (
+    "tf2_msgs/action/LookupTransform_Goal",
+    "tf2_msgs/action/LookupTransform_Result",
+    "tf2_msgs/action/LookupTransform_Feedback",
+)
+
+
 def _installed_hash(prefix: Path, type_name: str) -> str | None:
     """The installed hash_string for `type_name` under `prefix`, if present."""
-    package, _, name = type_name.partition("/msg/")
-    document = prefix / "share" / package / "msg" / f"{name}.json"
+    if "/action/" in type_name:
+        package, _, name = type_name.partition("/action/")
+        for suffix_text in ("_Goal", "_Result", "_Feedback"):
+            if name.endswith(suffix_text):
+                name = name[: -len(suffix_text)]
+                break
+        document = prefix / "share" / package / "action" / f"{name}.json"
+    else:
+        package, _, name = type_name.partition("/msg/")
+        document = prefix / "share" / package / "msg" / f"{name}.json"
     if not document.is_file():
         return None
     for entry in json.loads(document.read_text(encoding="utf-8"))["type_hashes"]:
@@ -98,6 +113,20 @@ def test_bundled_hashes_match_the_installed_type_support():
     # side and hide snapshot drift.
     repository = msgs.MessageRepository(distro=distro)
     generated = {type_name: typehash.type_hash(repository, type_name) for type_name in bundle.BUNDLED_TYPES}
+    mismatches = _mismatches(installed, generated)
+    assert not mismatches, f"hash drift on {distro}: " + "; ".join(mismatches)
+
+
+def test_bundled_action_hashes_match_the_installed_type_support():
+    prefixes = _prefixes()
+    installed = _collect_installed(prefixes, ACTION_TYPES)
+    distro = _snapshot_distro()
+    if distro is None:
+        pytest.skip("no supported ROS distro found: run in a ROS container (the bridge job does)")
+    missing = [type_name for type_name in ACTION_TYPES if type_name not in installed]
+    assert not missing, f"no installed type description for {missing} under {prefixes}"
+    repository = msgs.MessageRepository(distro=distro)
+    generated = {type_name: typehash.type_hash(repository, type_name) for type_name in ACTION_TYPES}
     mismatches = _mismatches(installed, generated)
     assert not mismatches, f"hash drift on {distro}: " + "; ".join(mismatches)
 

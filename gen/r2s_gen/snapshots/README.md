@@ -2,7 +2,8 @@
 
 r2s-gen resolves the bundled types without a ROS installation from these
 definitions. Each distro directory keeps the upstream package layout,
-`<package>/msg/<Type>.msg`, and the search path reads it like a message root.
+`<package>/msg/<Type>.msg` and `<package>/action/<Name>.action`, and the
+search path reads it like a message root.
 
 The files are copied from the ROS 2 common_interfaces,
 rcl_interfaces and geometry2 repositories at the commits below. The first two
@@ -11,9 +12,9 @@ are under the Apache 2.0 license
 [rcl_interfaces LICENSE](https://github.com/ros2/rcl_interfaces/blob/jazzy/LICENSE));
 geometry2 is under the BSD 3-Clause license
 ([geometry2 LICENSE](https://github.com/ros2/geometry2/blob/jazzy/LICENSE)).
-rcl_interfaces supplies `builtin_interfaces/Time`, which `std_msgs/Header`
-contains; geometry2 supplies `tf2_msgs/TFMessage`, which carries the
-`geometry_msgs/TransformStamped` array the tf broadcaster publishes.
+rcl_interfaces supplies `builtin_interfaces/Time` and `builtin_interfaces/Duration`;
+geometry2 supplies `tf2_msgs/TFMessage` and `tf2_msgs/action/LookupTransform`
+with its `tf2_msgs/TF2Error` dependency.
 
 | Distro | common_interfaces commit | rcl_interfaces commit | geometry2 commit |
 | --- | --- | --- | --- |
