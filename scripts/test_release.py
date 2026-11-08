@@ -14,6 +14,8 @@ STAMPED = [
     "gen/tests/golden/bundle/r2s_bundled.h",
     "gen/tests/golden/bundle/ros2serial.h",
     "gen/tests/golden/bundle/ros2serial.hpp",
+    "gen/tests/golden/actions/lookup_transform.hpp",
+    "gen/tests/golden/actions/spin.hpp",
     "gen/tests/golden/descriptors/float32_twist.c",
     "gen/tests/golden/layouts/library.properties",
     "gen/tests/golden/topics/posix.c",
@@ -261,6 +263,7 @@ def test_a_subject_that_is_not_a_release_commit_is_refused(tmp_path):
 
 VERSIONED_TESTS = [
     "gen/tests/test_version.py",
+    "gen/tests/test_actions.py",
     "gen/tests/test_emit_types.py",
     "gen/tests/test_emit_descriptors.py",
     "gen/tests/test_emit_topics.py",

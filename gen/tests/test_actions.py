@@ -291,7 +291,18 @@ def test_a_bundled_action_compiles_as_c99(tmp_path):
     source.write_text('#include "r2s_generated.h"\n\nint main(void)\n{\n    return 0;\n}\n', encoding="utf-8")
 
     compiled = subprocess.run(
-        ["cc", "-std=c99", "-pedantic", "-Werror", "-I", str(tmp_path), "-c", str(source)],
+        [
+            "cc",
+            "-std=c99",
+            "-pedantic",
+            "-Werror",
+            "-I",
+            str(tmp_path),
+            "-c",
+            str(source),
+            "-o",
+            str(tmp_path / "main.o"),
+        ],
         capture_output=True,
         text=True,
     )
