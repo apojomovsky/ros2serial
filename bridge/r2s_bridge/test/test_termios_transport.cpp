@@ -28,71 +28,71 @@ namespace
 // tty settings to it, so these tests never need a device.
 class Pty
 {
-  public:
-    Pty()
-    {
-        if (openpty(&master_, &slave_, nullptr, nullptr, nullptr) != 0) {
-            throw std::runtime_error(std::string("openpty failed: ") + std::strerror(errno));
-        }
-        char name[256]{};
-        if (ptsname_r(master_, name, sizeof name) != 0) {
-            throw std::runtime_error(std::string("ptsname_r failed: ") + std::strerror(errno));
-        }
-        name_ = name;
+public:
+  Pty()
+  {
+    if (openpty(&master_, &slave_, nullptr, nullptr, nullptr) != 0) {
+      throw std::runtime_error(std::string("openpty failed: ") + std::strerror(errno));
     }
+    char name[256]{};
+    if (ptsname_r(master_, name, sizeof name) != 0) {
+      throw std::runtime_error(std::string("ptsname_r failed: ") + std::strerror(errno));
+    }
+    name_ = name;
+  }
 
-    ~Pty()
-    {
-        close_master();
-        if (slave_ >= 0) {
-            ::close(slave_);
-        }
+  ~Pty()
+  {
+    close_master();
+    if (slave_ >= 0) {
+      ::close(slave_);
     }
+  }
 
-    Pty(const Pty &) = delete;
-    Pty &operator=(const Pty &) = delete;
+  Pty(const Pty &) = delete;
+  Pty & operator=(const Pty &) = delete;
 
-    const std::string &name() const
-    {
-        return name_;
-    }
-    int master() const
-    {
-        return master_;
-    }
-    int slave() const
-    {
-        return slave_;
-    }
+  const std::string & name() const
+  {
+    return name_;
+  }
+  int master() const
+  {
+    return master_;
+  }
+  int slave() const
+  {
+    return slave_;
+  }
 
-    void close_master()
-    {
-        if (master_ >= 0) {
-            ::close(master_);
-            master_ = -1;
-        }
+  void close_master()
+  {
+    if (master_ >= 0) {
+      ::close(master_);
+      master_ = -1;
     }
+  }
 
-  private:
-    int master_ = -1;
-    int slave_ = -1;
-    std::string name_;
+private:
+  int master_ = -1;
+  int slave_ = -1;
+  std::string name_;
 };
 
-TermiosOptions OptionsFor(const Pty &pty)
+TermiosOptions OptionsFor(const Pty & pty)
 {
-    TermiosOptions options;
-    options.port = pty.name();
-    return options;
+  TermiosOptions options;
+  options.port = pty.name();
+  return options;
 }
 
 termios AttributesOf(int fd)
 {
-    termios attributes{};
-    if (tcgetattr(fd, &attributes) != 0) {
-        throw std::runtime_error(std::string("tcgetattr failed: ") + std::strerror(errno));
-    }
-    return attributes;
+  termios attributes{};
+  if (tcgetattr(fd, &attributes) != 0) {
+    throw std::runtime_error(std::string("tcgetattr failed: ") + std::strerror(errno));
+  }
+  return attributes;
 }
 
 // A TermiosSyscalls that fails scripted calls with a scripted errno and
@@ -100,73 +100,73 @@ termios AttributesOf(int fd)
 // real pty while chosen calls fail on demand.
 class FaultySyscalls : public TermiosSyscalls
 {
-  public:
-    int get_attributes_errno = 0;
-    int set_attributes_errno = 0;
-    bool serial_get_ok = false;
-    mutable unsigned int serial_set_flags = 0;
-    mutable int serial_set_count = 0;
-    mutable std::size_t read_at = 0;
-    std::vector<std::pair<ssize_t, int>> reads;
-    mutable std::size_t write_at = 0;
-    std::vector<std::pair<ssize_t, int>> writes;
+public:
+  int get_attributes_errno = 0;
+  int set_attributes_errno = 0;
+  bool serial_get_ok = false;
+  mutable unsigned int serial_set_flags = 0;
+  mutable int serial_set_count = 0;
+  mutable std::size_t read_at = 0;
+  std::vector<std::pair<ssize_t, int>> reads;
+  mutable std::size_t write_at = 0;
+  std::vector<std::pair<ssize_t, int>> writes;
 
-    int get_attributes(int fd, termios *attributes) const noexcept override
-    {
-        if (get_attributes_errno != 0) {
-            errno = get_attributes_errno;
-            return -1;
-        }
-        return TermiosSyscalls::get_attributes(fd, attributes);
+  int get_attributes(int fd, termios *attributes) const noexcept override
+  {
+    if (get_attributes_errno != 0) {
+      errno = get_attributes_errno;
+      return -1;
     }
+    return TermiosSyscalls::get_attributes(fd, attributes);
+  }
 
-    int set_attributes(int fd, int action, const termios *attributes) const noexcept override
-    {
-        if (set_attributes_errno != 0) {
-            errno = set_attributes_errno;
-            return -1;
-        }
-        return TermiosSyscalls::set_attributes(fd, action, attributes);
+  int set_attributes(int fd, int action, const termios *attributes) const noexcept override
+  {
+    if (set_attributes_errno != 0) {
+      errno = set_attributes_errno;
+      return -1;
     }
+    return TermiosSyscalls::set_attributes(fd, action, attributes);
+  }
 
-    int serial_ioctl(int fd, unsigned long request, void *data) const noexcept override
-    {
+  int serial_ioctl(int fd, unsigned long request, void *data) const noexcept override
+  {
 #if defined(__linux__)
-        if (request == TIOCGSERIAL && serial_get_ok) {
-            return 0;
-        }
-        if (request == TIOCSSERIAL) {
-            ++serial_set_count;
-            serial_set_flags = static_cast<struct serial_struct *>(data)->flags;
-            return 0;
-        }
+    if (request == TIOCGSERIAL && serial_get_ok) {
+      return 0;
+    }
+    if (request == TIOCSSERIAL) {
+      ++serial_set_count;
+      serial_set_flags = static_cast<struct serial_struct *>(data)->flags;
+      return 0;
+    }
 #endif
-        return TermiosSyscalls::serial_ioctl(fd, request, data);
-    }
+    return TermiosSyscalls::serial_ioctl(fd, request, data);
+  }
 
-    ssize_t read_bytes(int fd, void *buffer, std::size_t capacity) const noexcept override
-    {
-        if (read_at < reads.size()) {
-            const std::pair<ssize_t, int> outcome = reads[read_at++];
-            if (outcome.first < 0) {
-                errno = outcome.second;
-            }
-            return outcome.first;
-        }
-        return TermiosSyscalls::read_bytes(fd, buffer, capacity);
+  ssize_t read_bytes(int fd, void *buffer, std::size_t capacity) const noexcept override
+  {
+    if (read_at < reads.size()) {
+      const std::pair<ssize_t, int> outcome = reads[read_at++];
+      if (outcome.first < 0) {
+        errno = outcome.second;
+      }
+      return outcome.first;
     }
+    return TermiosSyscalls::read_bytes(fd, buffer, capacity);
+  }
 
-    ssize_t write_bytes(int fd, const void *data, std::size_t size) const noexcept override
-    {
-        if (write_at < writes.size()) {
-            const std::pair<ssize_t, int> outcome = writes[write_at++];
-            if (outcome.first < 0) {
-                errno = outcome.second;
-            }
-            return outcome.first;
-        }
-        return TermiosSyscalls::write_bytes(fd, data, size);
+  ssize_t write_bytes(int fd, const void *data, std::size_t size) const noexcept override
+  {
+    if (write_at < writes.size()) {
+      const std::pair<ssize_t, int> outcome = writes[write_at++];
+      if (outcome.first < 0) {
+        errno = outcome.second;
+      }
+      return outcome.first;
     }
+    return TermiosSyscalls::write_bytes(fd, data, size);
+  }
 };
 
 TEST(TermiosTransport, ConfiguresThePortForRawNonBlockingIo)
@@ -231,14 +231,15 @@ TEST(TermiosTransport, ReadsWhatThePeerWrites)
     Pty pty;
     TermiosTransport transport(OptionsFor(pty));
     const std::uint8_t outgoing[] = {0x01, 0x02, 0x03};
-    ASSERT_EQ(::write(pty.master(), outgoing, sizeof outgoing), static_cast<ssize_t>(sizeof outgoing));
+    ASSERT_EQ(::write(pty.master(), outgoing, sizeof outgoing),
+        static_cast<ssize_t>(sizeof outgoing));
     std::uint8_t buffer[8]{};
 
     const IoResult result = transport.read(buffer, sizeof buffer);
 
     ASSERT_EQ(result, (IoResult{3, IoStatus::kOk}));
     EXPECT_EQ(std::vector<std::uint8_t>(buffer, buffer + result.bytes),
-              (std::vector<std::uint8_t>{0x01, 0x02, 0x03}));
+    (std::vector<std::uint8_t>{0x01, 0x02, 0x03}));
 }
 
 TEST(TermiosTransport, SplitsAReadAtTheCapacity)
@@ -246,18 +247,19 @@ TEST(TermiosTransport, SplitsAReadAtTheCapacity)
     Pty pty;
     TermiosTransport transport(OptionsFor(pty));
     const std::uint8_t outgoing[] = {0x01, 0x02, 0x03, 0x04, 0x05};
-    ASSERT_EQ(::write(pty.master(), outgoing, sizeof outgoing), static_cast<ssize_t>(sizeof outgoing));
+    ASSERT_EQ(::write(pty.master(), outgoing, sizeof outgoing),
+        static_cast<ssize_t>(sizeof outgoing));
     std::uint8_t buffer[2]{};
 
     const IoResult first = transport.read(buffer, sizeof buffer);
     ASSERT_EQ(first, (IoResult{2, IoStatus::kOk}));
     EXPECT_EQ(std::vector<std::uint8_t>(buffer, buffer + first.bytes),
-              (std::vector<std::uint8_t>{0x01, 0x02}));
+    (std::vector<std::uint8_t>{0x01, 0x02}));
 
     const IoResult second = transport.read(buffer, sizeof buffer);
     ASSERT_EQ(second, (IoResult{2, IoStatus::kOk}));
     EXPECT_EQ(std::vector<std::uint8_t>(buffer, buffer + second.bytes),
-              (std::vector<std::uint8_t>{0x03, 0x04}));
+    (std::vector<std::uint8_t>{0x03, 0x04}));
 }
 
 TEST(TermiosTransport, ReportsWouldBlockWhenTheLinkHasNoData)
@@ -278,9 +280,10 @@ TEST(TermiosTransport, WritesWhatThePeerReads)
     EXPECT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{3, IoStatus::kOk}));
 
     std::uint8_t received[8]{};
-    ASSERT_EQ(::read(pty.master(), received, sizeof received), static_cast<ssize_t>(sizeof outgoing));
+    ASSERT_EQ(::read(pty.master(), received, sizeof received),
+        static_cast<ssize_t>(sizeof outgoing));
     EXPECT_EQ(std::vector<std::uint8_t>(received, received + sizeof outgoing),
-              (std::vector<std::uint8_t>{0x11, 0x22, 0x33}));
+    (std::vector<std::uint8_t>{0x11, 0x22, 0x33}));
 }
 
 TEST(TermiosTransport, ReportsClosedAfterThePeerHangsUp)
@@ -332,10 +335,10 @@ TEST(TermiosTransport, RejectsAnUnsupportedBaudRate)
     options.baud = 12345;
 
     try {
-        TermiosTransport transport(options);
-        FAIL() << "a baud rate without a termios constant must be rejected";
-    } catch (const std::invalid_argument &error) {
-        EXPECT_NE(std::string(error.what()).find("12345"), std::string::npos);
+    TermiosTransport transport(options);
+    FAIL() << "a baud rate without a termios constant must be rejected";
+    } catch (const std::invalid_argument & error) {
+    EXPECT_NE(std::string(error.what()).find("12345"), std::string::npos);
     }
 }
 
@@ -345,10 +348,10 @@ TEST(TermiosTransport, RejectsAPortThatCannotBeOpened)
     options.port = "/nonexistent/r2s-test-port";
 
     try {
-        TermiosTransport transport(options);
-        FAIL() << "a port that cannot be opened must be reported";
-    } catch (const std::runtime_error &error) {
-        EXPECT_NE(std::string(error.what()).find(options.port), std::string::npos);
+    TermiosTransport transport(options);
+    FAIL() << "a port that cannot be opened must be reported";
+    } catch (const std::runtime_error & error) {
+    EXPECT_NE(std::string(error.what()).find(options.port), std::string::npos);
     }
 }
 
@@ -358,7 +361,8 @@ TEST(TermiosTransport, KeepsAPortThatRejectsLowLatencyUsable)
 {
     Pty pty;
 #if defined(__linux__)
-    struct serial_struct settings {
+    struct serial_struct settings
+  {
     };
     ASSERT_NE(::ioctl(pty.slave(), TIOCGSERIAL, &settings), 0)
         << "this test needs a pty that rejects TIOCGSERIAL";
@@ -398,11 +402,11 @@ TEST(TermiosTransport, ReportsUnreadablePortSettings)
     TermiosOptions options = OptionsFor(pty);
 
     try {
-        TermiosTransport transport(options, syscalls);
-        FAIL() << "settings that cannot be read must be reported";
-    } catch (const std::runtime_error &error) {
-        EXPECT_NE(std::string(error.what()).find("cannot read the settings of"), std::string::npos);
-        EXPECT_NE(std::string(error.what()).find(options.port), std::string::npos);
+    TermiosTransport transport(options, syscalls);
+    FAIL() << "settings that cannot be read must be reported";
+    } catch (const std::runtime_error & error) {
+    EXPECT_NE(std::string(error.what()).find("cannot read the settings of"), std::string::npos);
+    EXPECT_NE(std::string(error.what()).find(options.port), std::string::npos);
     }
 }
 
@@ -412,10 +416,10 @@ TEST(TermiosTransport, ReadsSettingsFromACharacterDevice)
     options.port = "/dev/null";
 
     try {
-        TermiosTransport transport(options);
-        FAIL() << "a device without settings must be reported";
-    } catch (const std::runtime_error &error) {
-        EXPECT_NE(std::string(error.what()).find("cannot read the settings of"), std::string::npos);
+    TermiosTransport transport(options);
+    FAIL() << "a device without settings must be reported";
+    } catch (const std::runtime_error & error) {
+    EXPECT_NE(std::string(error.what()).find("cannot read the settings of"), std::string::npos);
     }
 }
 
@@ -427,11 +431,11 @@ TEST(TermiosTransport, RejectsAnUnconfigurablePort)
     TermiosOptions options = OptionsFor(pty);
 
     try {
-        TermiosTransport transport(options, syscalls);
-        FAIL() << "settings that cannot be applied must be reported";
-    } catch (const std::runtime_error &error) {
-        EXPECT_NE(std::string(error.what()).find("cannot configure"), std::string::npos);
-        EXPECT_NE(std::string(error.what()).find(options.port), std::string::npos);
+    TermiosTransport transport(options, syscalls);
+    FAIL() << "settings that cannot be applied must be reported";
+    } catch (const std::runtime_error & error) {
+    EXPECT_NE(std::string(error.what()).find("cannot configure"), std::string::npos);
+    EXPECT_NE(std::string(error.what()).find(options.port), std::string::npos);
     }
 }
 
@@ -459,7 +463,8 @@ TEST(TermiosTransport, ReadRetriesAfterAnInterruptedRead)
     syscalls.reads.emplace_back(-1, EINTR);
     TermiosTransport transport(OptionsFor(pty), syscalls);
     const std::uint8_t outgoing[] = {0x01, 0x02};
-    ASSERT_EQ(::write(pty.master(), outgoing, sizeof outgoing), static_cast<ssize_t>(sizeof outgoing));
+    ASSERT_EQ(::write(pty.master(), outgoing, sizeof outgoing),
+        static_cast<ssize_t>(sizeof outgoing));
     std::uint8_t buffer[8]{};
 
     EXPECT_EQ(transport.read(buffer, sizeof buffer), (IoResult{2, IoStatus::kOk}));
@@ -501,7 +506,8 @@ TEST(TermiosTransport, WriteRetriesAfterAnInterruptedWrite)
     EXPECT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{2, IoStatus::kOk}));
 
     std::uint8_t received[8]{};
-    ASSERT_EQ(::read(pty.master(), received, sizeof received), static_cast<ssize_t>(sizeof outgoing));
+    ASSERT_EQ(::read(pty.master(), received, sizeof received),
+        static_cast<ssize_t>(sizeof outgoing));
     EXPECT_EQ(received[0], 0x11);
     EXPECT_EQ(received[1], 0x22);
 }
@@ -563,5 +569,5 @@ TEST(TermiosTransport, ReportsABrokenPipeWriteAsClosed)
     EXPECT_EQ(transport.write(outgoing, sizeof outgoing), (IoResult{0, IoStatus::kClosed}));
 }
 
-} // namespace
-} // namespace r2s_bridge
+}  // namespace
+}  // namespace r2s_bridge

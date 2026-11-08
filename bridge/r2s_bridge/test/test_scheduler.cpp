@@ -18,29 +18,30 @@ namespace
 {
 
 using ns = std::chrono::nanoseconds;
-struct Capture {
-    std::vector<std::pair<std::uint8_t, std::vector<std::uint8_t>>> sent;
-    bool refuse = false;
-    std::vector<std::uint8_t> attempted;
-    bool operator()(std::uint8_t id, const std::vector<std::uint8_t> &payload)
-    {
-        attempted.push_back(id);
-        if (refuse) {
-            return false;
-        }
-        sent.emplace_back(id, payload);
-        return true;
+struct Capture
+{
+  std::vector<std::pair<std::uint8_t, std::vector<std::uint8_t>>> sent;
+  bool refuse = false;
+  std::vector<std::uint8_t> attempted;
+  bool operator()(std::uint8_t id, const std::vector<std::uint8_t> & payload)
+  {
+    attempted.push_back(id);
+    if (refuse) {
+      return false;
     }
+    sent.emplace_back(id, payload);
+    return true;
+  }
 };
 
 SchedulerTopic queued_topic(std::uint8_t id)
 {
-    SchedulerTopic topic;
-    topic.topic_id = id;
-    topic.keep_latest = false;
-    topic.rate_hz = 0.0;
-    topic.queue_bound = 10;
-    return topic;
+  SchedulerTopic topic;
+  topic.topic_id = id;
+  topic.keep_latest = false;
+  topic.rate_hz = 0.0;
+  topic.queue_bound = 10;
+  return topic;
 }
 
 TEST(SchedulerKeepLatest, KeepsOnlyTheNewest)
@@ -165,7 +166,8 @@ TEST(SchedulerBackpressure, StopsThePassOnRefusal)
     Capture refusing;
     refusing.refuse = true;
     scheduler.poll(ns(0), std::ref(refusing));
-    EXPECT_EQ(refusing.attempted, (std::vector<std::uint8_t>{16u})) << "the pass stops at the first refusal";
+    EXPECT_EQ(refusing.attempted,
+    (std::vector<std::uint8_t>{16u})) << "the pass stops at the first refusal";
     EXPECT_EQ(scheduler.queued(16), 1u) << "the refused frame stays queued";
 
     Capture sent;
@@ -340,6 +342,6 @@ TEST(SchedulerAddTopic, RejectsANegativeRate)
     EXPECT_THROW(scheduler.add_topic(bad), std::invalid_argument);
 }
 
-} // namespace
-} // namespace test
-} // namespace r2s_bridge
+}  // namespace
+}  // namespace test
+}  // namespace r2s_bridge

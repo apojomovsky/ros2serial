@@ -19,19 +19,20 @@ namespace
 // The first 8 wire bytes of the RIHS01 hash the installed type support
 // reports for std_msgs/msg/Float32. The type has no dependencies, so its
 // hash cannot drift between the supported distros.
-constexpr std::array<std::uint8_t, 8> kFloat32Hash{0x71u, 0x70u, 0xd3u, 0xd8u, 0xf8u, 0x41u, 0xf7u, 0xbeu};
+constexpr std::array<std::uint8_t, 8> kFloat32Hash{0x71u, 0x70u, 0xd3u, 0xd8u, 0xf8u, 0x41u, 0xf7u,
+  0xbeu};
 
 TopicInfo announced(std::string type, std::array<std::uint8_t, 8> hash)
 {
-    TopicInfo info;
-    info.topic_id = 0x10u;
-    info.type_hash = hash;
-    info.type_name = std::move(type);
-    info.topic_name = "battery";
-    return info;
+  TopicInfo info;
+  info.topic_id = 0x10u;
+  info.type_hash = hash;
+  info.type_name = std::move(type);
+  info.topic_name = "battery";
+  return info;
 }
 
-} // namespace
+}  // namespace
 
 TEST(TypeSupport, AcceptsTheInstalledHash)
 {
@@ -41,16 +42,17 @@ TEST(TypeSupport, AcceptsTheInstalledHash)
 TEST(TypeSupport, RejectsAModifiedHash)
 {
     for (std::size_t i = 0; i < kFloat32Hash.size(); ++i) {
-        auto hash = kFloat32Hash;
-        hash[i] ^= 0x01u;
-        EXPECT_EQ(resolve_topic_type(announced("std_msgs/msg/Float32", hash)), kTopicStatusHashMismatch)
+    auto hash = kFloat32Hash;
+    hash[i] ^= 0x01u;
+    EXPECT_EQ(resolve_topic_type(announced("std_msgs/msg/Float32", hash)), kTopicStatusHashMismatch)
             << "flipping wire byte " << i << " must reject the topic";
     }
 }
 
 TEST(TypeSupport, RejectsAnUnknownPackage)
 {
-    EXPECT_EQ(resolve_topic_type(announced("no_such_pkg/msg/Nope", kFloat32Hash)), kTopicStatusUnknownType);
+    EXPECT_EQ(resolve_topic_type(announced("no_such_pkg/msg/Nope", kFloat32Hash)),
+      kTopicStatusUnknownType);
 }
 
 TEST(TypeSupport, RejectsAMalformedTypeName)
@@ -92,4 +94,4 @@ TEST(TopicStatus, CodesMatchTheSpec)
     EXPECT_EQ(kTopicStatusNameConflict, 3u);
 }
 
-} // namespace r2s_bridge
+}  // namespace r2s_bridge

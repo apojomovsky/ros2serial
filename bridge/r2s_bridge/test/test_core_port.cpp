@@ -65,12 +65,12 @@ TEST(CorePort, AttachPastACapacityTableThrows)
     std::vector<std::uint8_t> links;
 
     for (std::uint8_t n = 0; n < R2S_MAX_LINKS; n++) {
-        links.push_back(attach_core_port(transport, clock));
+    links.push_back(attach_core_port(transport, clock));
     }
     EXPECT_THROW(attach_core_port(transport, clock), std::logic_error);
 
     for (const std::uint8_t link : links) {
-        detach_core_port(link);
+    detach_core_port(link);
     }
 }
 
@@ -105,10 +105,10 @@ TEST(CorePort, PlainSeamReachesTheDefaultLink)
     std::vector<std::uint8_t> links;
 
     for (std::uint8_t n = 0; n < R2S_MAX_LINKS; n++) {
-        links.push_back(attach_core_port(transport, clock));
+    links.push_back(attach_core_port(transport, clock));
     }
     for (const std::uint8_t link : links) {
-        detach_core_port(link);
+    detach_core_port(link);
     }
     const std::uint8_t link = attach_core_port(transport, clock);
     EXPECT_EQ(link, 0u);
@@ -140,6 +140,6 @@ TEST(CorePort, EachSlotTicksItsOwnClock)
     detach_core_port(second);
 }
 
-} // namespace
-} // namespace test
-} // namespace r2s_bridge
+}  // namespace
+}  // namespace test
+}  // namespace r2s_bridge

@@ -8,16 +8,17 @@
 namespace r2s_bridge
 {
 
-RosClock::RosClock(std::function<std::int64_t()> now_ns) : now_ns_(std::move(now_ns))
+RosClock::RosClock(std::function<std::int64_t()> now_ns)
+: now_ns_(std::move(now_ns))
 {
-    if (!now_ns_) {
-        throw std::invalid_argument("r2s_bridge::RosClock: a time source is required");
-    }
+  if (!now_ns_) {
+    throw std::invalid_argument("r2s_bridge::RosClock: a time source is required");
+  }
 }
 
 std::chrono::nanoseconds RosClock::now() const
 {
-    return std::chrono::nanoseconds(now_ns_());
+  return std::chrono::nanoseconds(now_ns_());
 }
 
-} // namespace r2s_bridge
+}  // namespace r2s_bridge

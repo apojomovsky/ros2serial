@@ -26,72 +26,74 @@ constexpr std::int64_t kScenarioBoundNs = 1000000;
 // A drifting MCU on a symmetric link: the tick advances (1 + drift) per
 // steady nanosecond, ROS trails steady by a fixed skew, every PONG takes the
 // same round trip on the wire.
-struct SimMcu {
-    double drift = 0.0;
-    std::int64_t skew_ns = 0;
+struct SimMcu
+{
+  double drift = 0.0;
+  std::int64_t skew_ns = 0;
     // The ROS clock's own rate error: its nanoseconds per steady nanosecond
     // minus one, for the sim-time case where ROS and steady disagree.
-    double ros_drift = 0.0;
-    std::int64_t rtt_ns = 2000000;
+  double ros_drift = 0.0;
+  std::int64_t rtt_ns = 2000000;
 
-    std::uint32_t tick_at(std::int64_t steady_ns) const
-    {
-        return static_cast<std::uint32_t>(std::llround(steady_ns / kTickNs * (1.0 + drift)));
-    }
+  std::uint32_t tick_at(std::int64_t steady_ns) const
+  {
+    return static_cast<std::uint32_t>(std::llround(steady_ns / kTickNs * (1.0 + drift)));
+  }
 
-    std::int64_t ros_at(std::int64_t steady_ns) const
-    {
-        return static_cast<std::int64_t>(std::llround(steady_ns * (1.0 + ros_drift))) + skew_ns;
-    }
+  std::int64_t ros_at(std::int64_t steady_ns) const
+  {
+    return static_cast<std::int64_t>(std::llround(steady_ns * (1.0 + ros_drift))) + skew_ns;
+  }
 
     // One PONG answered at steady_ns, fed straight into the estimator. The
     // tick is stamped at the arrival, halfway through the round trip.
-    void sample(TimeSync &sync, std::int64_t steady_ns) const
-    {
-        sync.add_sample(steady_ns, steady_ns + rtt_ns, ros_at(steady_ns + rtt_ns),
+  void sample(TimeSync & sync, std::int64_t steady_ns) const
+  {
+    sync.add_sample(steady_ns, steady_ns + rtt_ns, ros_at(steady_ns + rtt_ns),
                         tick_at(steady_ns + rtt_ns / 2));
-    }
+  }
 
-    std::int64_t true_ros(std::uint32_t tick) const
-    {
-        return static_cast<std::int64_t>(std::llround(tick * kTickNs / (1.0 + drift) * (1.0 + ros_drift))) +
-               skew_ns;
-    }
+  std::int64_t true_ros(std::uint32_t tick) const
+  {
+    return static_cast<std::int64_t>(std::llround(tick * kTickNs / (1.0 + drift) *
+           (1.0 + ros_drift))) +
+           skew_ns;
+  }
 };
 
 // The section 7.2 arithmetic, mirroring r2s_gen.reference.time.compute: the
 // ROS time the MCU reads under a correction, or false past the anchor.
 // The correction as one nanosecond count, for the estimate checks.
-std::int64_t ros_ns_of(const TimeCorrection &correction)
+std::int64_t ros_ns_of(const TimeCorrection & correction)
 {
-    return static_cast<std::int64_t>(correction.sec) * 1000000000 + correction.nanosec;
+  return static_cast<std::int64_t>(correction.sec) * 1000000000 + correction.nanosec;
 }
 
-bool mcu_time(const TimeCorrection &c, std::uint32_t tick, std::int64_t &sec, std::int64_t &nsec)
+bool mcu_time(const TimeCorrection & c, std::uint32_t tick, std::int64_t & sec, std::int64_t & nsec)
 {
-    const std::uint32_t k = kTickHz / 1000u;
-    const std::uint32_t e = tick - c.tick0;
-    const std::uint32_t ms = e / k;
-    if (ms > 10000u) {
-        return false;
-    }
-    const std::uint32_t p = 1000000u / k;
-    sec = c.sec + static_cast<std::int64_t>(ms / 1000u);
-    std::int64_t ns = static_cast<std::int64_t>(c.nanosec) +
-                      static_cast<std::int64_t>((ms % 1000u) * 1000000u + (e % k) * p);
-    sec += ns / 1000000000;
-    ns %= 1000000000;
-    ns += static_cast<std::int64_t>(ms) * c.drift_ppm;
-    while (ns < 0) {
-        ns += 1000000000;
-        --sec;
-    }
-    while (ns >= 1000000000) {
-        ns -= 1000000000;
-        ++sec;
-    }
-    nsec = ns;
-    return true;
+  const std::uint32_t k = kTickHz / 1000u;
+  const std::uint32_t e = tick - c.tick0;
+  const std::uint32_t ms = e / k;
+  if (ms > 10000u) {
+    return false;
+  }
+  const std::uint32_t p = 1000000u / k;
+  sec = c.sec + static_cast<std::int64_t>(ms / 1000u);
+  std::int64_t ns = static_cast<std::int64_t>(c.nanosec) +
+    static_cast<std::int64_t>((ms % 1000u) * 1000000u + (e % k) * p);
+  sec += ns / 1000000000;
+  ns %= 1000000000;
+  ns += static_cast<std::int64_t>(ms) * c.drift_ppm;
+  while (ns < 0) {
+    ns += 1000000000;
+    --sec;
+  }
+  while (ns >= 1000000000) {
+    ns -= 1000000000;
+    ++sec;
+  }
+  nsec = ns;
+  return true;
 }
 
 TEST(TimeSyncConfig, RejectsATickHzOutsideCtl8)
@@ -146,7 +148,7 @@ TEST(TimeSyncEstimate, CorrectsExactlyOnASymmetricLinkWithoutDrift)
     TimeSync sync(kTickHz);
     SimMcu mcu;
     for (int i = 0; i < 8; ++i) {
-        mcu.sample(sync, static_cast<std::int64_t>(i) * 50000000);
+    mcu.sample(sync, static_cast<std::int64_t>(i) * 50000000);
     }
     // Symmetric delay puts the arrival midpoint exactly on the PONG tick,
     // which the MCU stamps halfway through the round trip.
@@ -166,7 +168,7 @@ TEST(TimeSyncEstimate, FollowsAFixedRosSkew)
     SimMcu mcu;
     mcu.skew_ns = 2000000000;
     for (int i = 0; i < 8; ++i) {
-        mcu.sample(sync, static_cast<std::int64_t>(i) * 50000000);
+    mcu.sample(sync, static_cast<std::int64_t>(i) * 50000000);
     }
     TimeCorrection out;
     ASSERT_TRUE(sync.correction(out));
@@ -182,7 +184,7 @@ TEST(TimeSyncEstimate, Tracks5000ppmOfDriftInsideTheScenarioBound)
     mcu.skew_ns = 500000000;
     // Sixteen PINGs five seconds apart: the full SES-24 window of drift.
     for (int i = 0; i < 16; ++i) {
-        mcu.sample(sync, static_cast<std::int64_t>(i) * 5000000000);
+    mcu.sample(sync, static_cast<std::int64_t>(i) * 5000000000);
     }
     TimeCorrection out;
     ASSERT_TRUE(sync.correction(out));
@@ -211,7 +213,7 @@ TEST(TimeSyncEstimate, TracksTheRosRateNotTheSteadyRate)
     // carries is the ROS rate, +10000 ppm ([TIM-4]).
     mcu.ros_drift = 0.01;
     for (int i = 0; i < 8; ++i) {
-        mcu.sample(sync, static_cast<std::int64_t>(i) * 50000000);
+    mcu.sample(sync, static_cast<std::int64_t>(i) * 50000000);
     }
     TimeCorrection out;
     ASSERT_TRUE(sync.correction(out));
@@ -230,7 +232,7 @@ TEST(TimeSyncEstimate, ForgetsSamplesPastTheWindow)
     TimeSync sync(kTickHz);
     SimMcu mcu;
     for (int i = 0; i < 16; ++i) {
-        mcu.sample(sync, static_cast<std::int64_t>(i) * 5000000000);
+    mcu.sample(sync, static_cast<std::int64_t>(i) * 5000000000);
     }
     TimeCorrection still;
     ASSERT_TRUE(sync.correction(still));
@@ -238,7 +240,7 @@ TEST(TimeSyncEstimate, ForgetsSamplesPastTheWindow)
     SimMcu fast = mcu;
     fast.drift = 8000.0 / 1000000.0;
     for (int i = 16; i < 32; ++i) {
-        fast.sample(sync, static_cast<std::int64_t>(i) * 5000000000);
+    fast.sample(sync, static_cast<std::int64_t>(i) * 5000000000);
     }
     TimeCorrection out;
     ASSERT_TRUE(sync.correction(out));
@@ -253,13 +255,13 @@ TEST(TimeSyncEstimate, TheLowestRoundTripSamplesSetTheOffset)
     // Even samples fly symmetric in 1 ms; odd samples queue 5 ms extra on the
     // way back, biasing their midpoint by half of that.
     for (int i = 0; i < 16; ++i) {
-        const std::int64_t at = static_cast<std::int64_t>(i) * 5000000000;
-        if (i % 2 == 0) {
-            mcu.sample(sync, at);
-        } else {
-            sync.add_sample(at, at + mcu.rtt_ns + 5000000, mcu.ros_at(at + mcu.rtt_ns + 5000000),
+    const std::int64_t at = static_cast<std::int64_t>(i) * 5000000000;
+    if (i % 2 == 0) {
+      mcu.sample(sync, at);
+    } else {
+      sync.add_sample(at, at + mcu.rtt_ns + 5000000, mcu.ros_at(at + mcu.rtt_ns + 5000000),
                             mcu.tick_at(at));
-        }
+    }
     }
     TimeCorrection out;
     ASSERT_TRUE(sync.correction(out));
@@ -275,9 +277,9 @@ TEST(TimeSyncEstimate, SurvivesATickWraparound)
     // the wrap.
     const std::uint32_t start = 0xFFFFFFFFu - 999u;
     for (int i = 0; i < 8; ++i) {
-        const std::uint32_t tick = start + static_cast<std::uint32_t>(i) * 1000u;
-        const std::int64_t at = static_cast<std::int64_t>(i) * 1000000;
-        sync.add_sample(at, at + mcu.rtt_ns, mcu.ros_at(at + mcu.rtt_ns), tick);
+    const std::uint32_t tick = start + static_cast<std::uint32_t>(i) * 1000u;
+    const std::int64_t at = static_cast<std::int64_t>(i) * 1000000;
+    sync.add_sample(at, at + mcu.rtt_ns, mcu.ros_at(at + mcu.rtt_ns), tick);
     }
     TimeCorrection out;
     ASSERT_TRUE(sync.correction(out));
@@ -293,7 +295,7 @@ TEST(TimeSyncEstimate, ClampsTheDriftTo20000ppm)
     SimMcu mcu;
     mcu.drift = 50000.0 / 1000000.0;
     for (int i = 0; i < 16; ++i) {
-        mcu.sample(fast, static_cast<std::int64_t>(i) * 5000000000);
+    mcu.sample(fast, static_cast<std::int64_t>(i) * 5000000000);
     }
     TimeCorrection out;
     ASSERT_TRUE(fast.correction(out));
@@ -301,7 +303,7 @@ TEST(TimeSyncEstimate, ClampsTheDriftTo20000ppm)
     TimeSync slow(kTickHz);
     mcu.drift = -50000.0 / 1000000.0;
     for (int i = 0; i < 16; ++i) {
-        mcu.sample(slow, static_cast<std::int64_t>(i) * 5000000000);
+    mcu.sample(slow, static_cast<std::int64_t>(i) * 5000000000);
     }
     ASSERT_TRUE(slow.correction(out));
     EXPECT_EQ(out.drift_ppm, 20000);
@@ -312,7 +314,7 @@ TEST(TimeSyncEstimate, ReportsMovedPast100us)
     TimeSync sync(kTickHz);
     SimMcu mcu;
     for (int i = 0; i < 8; ++i) {
-        mcu.sample(sync, static_cast<std::int64_t>(i) * 50000000);
+    mcu.sample(sync, static_cast<std::int64_t>(i) * 50000000);
     }
     TimeCorrection sent;
     ASSERT_TRUE(sync.correction(sent));
@@ -322,20 +324,20 @@ TEST(TimeSyncEstimate, ReportsMovedPast100us)
     SimMcu jumped = mcu;
     jumped.skew_ns += 3 * kMoveNs;
     for (int i = 8; i < 12; ++i) {
-        jumped.sample(sync, static_cast<std::int64_t>(i) * 50000000);
+    jumped.sample(sync, static_cast<std::int64_t>(i) * 50000000);
     }
     EXPECT_TRUE(sync.moved_since(sent));
     // An 80 us jump stays under the bar.
     TimeSync small(kTickHz);
     for (int i = 0; i < 8; ++i) {
-        mcu.sample(small, static_cast<std::int64_t>(i) * 50000000);
+    mcu.sample(small, static_cast<std::int64_t>(i) * 50000000);
     }
     TimeCorrection base;
     ASSERT_TRUE(small.correction(base));
     SimMcu drifted = mcu;
     drifted.skew_ns += 80000;
     for (int i = 8; i < 12; ++i) {
-        drifted.sample(small, static_cast<std::int64_t>(i) * 50000000);
+    drifted.sample(small, static_cast<std::int64_t>(i) * 50000000);
     }
     EXPECT_FALSE(small.moved_since(base));
 }
@@ -352,6 +354,6 @@ TEST(TimeSyncEstimate, ResetClearsTheEstimate)
     EXPECT_FALSE(sync.correction(out));
 }
 
-} // namespace
-} // namespace test
-} // namespace r2s_bridge
+}  // namespace
+}  // namespace test
+}  // namespace r2s_bridge

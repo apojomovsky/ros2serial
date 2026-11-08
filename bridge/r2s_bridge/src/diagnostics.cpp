@@ -9,105 +9,113 @@ namespace r2s_bridge
 namespace
 {
 
-void add_value(diagnostic_msgs::msg::DiagnosticStatus &status, const std::string &key,
-               const std::string &value)
+void add_value(
+  diagnostic_msgs::msg::DiagnosticStatus & status, const std::string & key,
+  const std::string & value)
 {
-    diagnostic_msgs::msg::KeyValue entry;
-    entry.key = key;
-    entry.value = value;
-    status.values.push_back(entry);
+  diagnostic_msgs::msg::KeyValue entry;
+  entry.key = key;
+  entry.value = value;
+  status.values.push_back(entry);
 }
 
-void add_topic(diagnostic_msgs::msg::DiagnosticStatus &status, const Router::TopicDiagnostics &topic)
+void add_topic(
+  diagnostic_msgs::msg::DiagnosticStatus & status,
+  const Router::TopicDiagnostics & topic)
 {
     // The id disambiguates two announced topics sharing one name: the
     // snapshot lists refused topics too, so names alone collide.
-    const std::string head = "topic " + std::to_string(topic.topic_id) + " " + topic.topic_name;
-    add_value(status, head + " direction", topic.device_to_host ? "device to host" : "host to device");
-    const char *verdict = "ok";
-    if (topic.status == 1u) {
-        verdict = "unknown type";
-    } else if (topic.status == 2u) {
-        verdict = "hash mismatch";
-    } else if (topic.status == 3u) {
-        verdict = "name conflict";
-    }
-    add_value(status, head + " status", verdict);
+  const std::string head = "topic " + std::to_string(topic.topic_id) + " " + topic.topic_name;
+  add_value(status, head + " direction",
+        topic.device_to_host ? "device to host" : "host to device");
+  const char *verdict = "ok";
+  if (topic.status == 1u) {
+    verdict = "unknown type";
+  } else if (topic.status == 2u) {
+    verdict = "hash mismatch";
+  } else if (topic.status == 3u) {
+    verdict = "name conflict";
+  }
+  add_value(status, head + " status", verdict);
     // A route missing despite an ok verdict is a degraded bridge, never a
     // silent one: the key names the reason, and the snapshot below warns
     // until a repair poll heals it back to ok. The router records every
     // failed creation, so a missing route always carries its reason.
-    if (topic.route_missing) {
-        add_value(status, head + " route", "missing: " + topic.route_error);
-    } else {
-        add_value(status, head + " route", "ok");
-    }
-    add_value(status, head + " seq gaps", std::to_string(topic.seq_gaps));
-    add_value(status, head + " dropped", std::to_string(topic.dropped));
+  if (topic.route_missing) {
+    add_value(status, head + " route", "missing: " + topic.route_error);
+  } else {
+    add_value(status, head + " route", "ok");
+  }
+  add_value(status, head + " seq gaps", std::to_string(topic.seq_gaps));
+  add_value(status, head + " dropped", std::to_string(topic.dropped));
     // GCOVR_EXCL_BR_START: a unit test cannot throw out of this call
-    add_value(status, head + " publish failures", std::to_string(topic.publish_failures));
+  add_value(status, head + " publish failures", std::to_string(topic.publish_failures));
     // GCOVR_EXCL_BR_STOP
     // The id heads this key under #271's approved scheme, so two announced
     // topics sharing one name still render distinct keys.
-    const std::string id_head = "topic " + std::to_string(topic.topic_id) + " " + topic.topic_name;
-    std::string errors;
-    for (std::uint8_t code = 1u; code <= 6u; ++code) {
-        if (code != 1u) {
-            errors += " ";
-        }
-        errors += std::to_string(code) + "=" + std::to_string(topic.mcu_errors[code - 1u]);
+  const std::string id_head = "topic " + std::to_string(topic.topic_id) + " " + topic.topic_name;
+  std::string errors;
+  for (std::uint8_t code = 1u; code <= 6u; ++code) {
+    if (code != 1u) {
+      errors += " ";
     }
-    add_value(status, id_head + " mcu errors", errors);
+    errors += std::to_string(code) + "=" + std::to_string(topic.mcu_errors[code - 1u]);
+  }
+  add_value(status, id_head + " mcu errors", errors);
 }
-} // namespace
+}  // namespace
 
-diagnostic_msgs::msg::DiagnosticArray diagnostics_message(const Router::Diagnostics &snapshot,
-                                                          const std::string &node_name,
-                                                          const std::string &hardware_id)
+diagnostic_msgs::msg::DiagnosticArray diagnostics_message(
+  const Router::Diagnostics & snapshot,
+  const std::string & node_name,
+  const std::string & hardware_id)
 {
-    diagnostic_msgs::msg::DiagnosticArray out;
-    diagnostic_msgs::msg::DiagnosticStatus status;
-    status.name = node_name + ": " + kDiagnosticsTaskName;
-    status.hardware_id = hardware_id;
+  diagnostic_msgs::msg::DiagnosticArray out;
+  diagnostic_msgs::msg::DiagnosticStatus status;
+  status.name = node_name + ": " + kDiagnosticsTaskName;
+  status.hardware_id = hardware_id;
     // A silent link is an error; a link mid-handshake is transient. A
     // connected link missing a route is degraded: it warns instead of
     // reporting ok while a topic it announced has no endpoint.
-    if (snapshot.link_state == "connected") {
-        const bool degraded =
-            std::any_of(snapshot.topics.begin(), snapshot.topics.end(),
-                        [](const Router::TopicDiagnostics &topic) { return topic.route_missing; });
-        status.level = degraded ? diagnostic_msgs::msg::DiagnosticStatus::WARN
-                                : diagnostic_msgs::msg::DiagnosticStatus::OK;
-    } else if (snapshot.link_state == "disconnected") {
-        status.level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
-    } else {
-        status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
-    }
-    status.message = snapshot.link_state;
-    add_value(status, "session token", std::to_string(snapshot.session_token));
-    add_value(status, "resets", std::to_string(snapshot.resets));
-    add_value(status, "control coalesced", std::to_string(snapshot.control_coalesced));
-    add_value(status, "protocol version", std::to_string(snapshot.protocol_version));
-    add_value(status, "mcu rx frames", std::to_string(snapshot.mcu_counters.rx_frames));
-    add_value(status, "mcu crc errors", std::to_string(snapshot.mcu_counters.crc_errors));
-    add_value(status, "mcu rx overflows", std::to_string(snapshot.mcu_counters.rx_overflows));
-    add_value(status, "mcu dropped frames", std::to_string(snapshot.mcu_counters.dropped_frames));
-    for (std::uint8_t code = 1u; code <= 6u; ++code) {
-        add_value(status, "mcu error code " + std::to_string(code),
+  if (snapshot.link_state == "connected") {
+    const bool degraded =
+      std::any_of(snapshot.topics.begin(), snapshot.topics.end(),
+        [](const Router::TopicDiagnostics & topic) {return topic.route_missing;});
+    status.level = degraded ? diagnostic_msgs::msg::DiagnosticStatus::WARN :
+      diagnostic_msgs::msg::DiagnosticStatus::OK;
+  } else if (snapshot.link_state == "disconnected") {
+    status.level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
+  } else {
+    status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+  }
+  status.message = snapshot.link_state;
+  add_value(status, "session token", std::to_string(snapshot.session_token));
+  add_value(status, "resets", std::to_string(snapshot.resets));
+  add_value(status, "control coalesced", std::to_string(snapshot.control_coalesced));
+  add_value(status, "protocol version", std::to_string(snapshot.protocol_version));
+  add_value(status, "mcu rx frames", std::to_string(snapshot.mcu_counters.rx_frames));
+  add_value(status, "mcu crc errors", std::to_string(snapshot.mcu_counters.crc_errors));
+  add_value(status, "mcu rx overflows", std::to_string(snapshot.mcu_counters.rx_overflows));
+  add_value(status, "mcu dropped frames", std::to_string(snapshot.mcu_counters.dropped_frames));
+  for (std::uint8_t code = 1u; code <= 6u; ++code) {
+    add_value(status, "mcu error code " + std::to_string(code),
                   std::to_string(snapshot.mcu_error_sums[code - 1u]));
-    }
-    for (const Router::TopicDiagnostics &topic : snapshot.topics) {
-        add_topic(status, topic);
-    }
+  }
+  for (const Router::TopicDiagnostics & topic : snapshot.topics) {
+    add_topic(status, topic);
+  }
     // Until the first CORRECTION the keys stay put with no value, so a
     // consumer can rely on their names.
-    add_value(status, "time sync offset",
-              snapshot.time_sync_available ? std::to_string(snapshot.time_offset_ns) : "not available");
-    add_value(status, "time sync drift",
-              snapshot.time_sync_available ? std::to_string(snapshot.time_drift_ppm) : "not available");
-    add_value(status, "time sync round trip",
-              snapshot.time_sync_available ? std::to_string(snapshot.time_round_trip_ns) : "not available");
-    out.status.push_back(status);
-    return out;
+  add_value(status, "time sync offset",
+              snapshot.time_sync_available ? std::to_string(snapshot.time_offset_ns) :
+      "not available");
+  add_value(status, "time sync drift",
+              snapshot.time_sync_available ? std::to_string(snapshot.time_drift_ppm) :
+      "not available");
+  add_value(status, "time sync round trip",
+              snapshot.time_sync_available ? std::to_string(snapshot.time_round_trip_ns) :
+      "not available");
+  out.status.push_back(status);
+  return out;
 }
-} // namespace r2s_bridge
+}  // namespace r2s_bridge

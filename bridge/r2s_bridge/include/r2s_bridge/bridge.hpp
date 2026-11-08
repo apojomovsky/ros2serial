@@ -21,29 +21,29 @@ namespace r2s_bridge
 
 class Bridge : public rclcpp::Node
 {
-  public:
-    explicit Bridge(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
-    ~Bridge() override;
+public:
+  explicit Bridge(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+  ~Bridge() override;
 
     // The poll entry the wall timer calls: polls the router and emits one
     // /diagnostics message when the period elapses. Public so tests drive it
     // without waiting on the timer.
-    void poll();
+  void poll();
 
-  protected:
+protected:
     // Publishes one /diagnostics message. Virtual so tests inject a failure.
-    virtual void publish_diagnostics(const diagnostic_msgs::msg::DiagnosticArray &message);
+  virtual void publish_diagnostics(const diagnostic_msgs::msg::DiagnosticArray & message);
 
-  private:
-    SteadyClock clock_;
-    RosClock ros_clock_;
-    std::unique_ptr<Router> router_;
-    rclcpp::TimerBase::SharedPtr timer_;
-    rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_pub_;
-    std::string diagnostics_hardware_id_;
-    std::chrono::nanoseconds last_diagnostics_{0};
+private:
+  SteadyClock clock_;
+  RosClock ros_clock_;
+  std::unique_ptr<Router> router_;
+  rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_pub_;
+  std::string diagnostics_hardware_id_;
+  std::chrono::nanoseconds last_diagnostics_{0};
 };
 
-} // namespace r2s_bridge
+}  // namespace r2s_bridge
 
-#endif // R2S_BRIDGE__BRIDGE_HPP_
+#endif  // R2S_BRIDGE__BRIDGE_HPP_

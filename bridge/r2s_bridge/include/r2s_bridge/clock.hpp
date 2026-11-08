@@ -11,14 +11,14 @@ namespace r2s_bridge
 
 class Clock
 {
-  public:
-    virtual ~Clock() = default;
+public:
+  virtual ~Clock() = default;
 
     // Time since a fixed, arbitrary origin, in nanoseconds. Successive calls on
     // one instance never go backwards.
-    virtual std::chrono::nanoseconds now() const = 0;
+  virtual std::chrono::nanoseconds now() const = 0;
 };
 
-} // namespace r2s_bridge
+}  // namespace r2s_bridge
 
-#endif // R2S_BRIDGE__CLOCK_HPP_
+#endif  // R2S_BRIDGE__CLOCK_HPP_

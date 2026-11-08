@@ -30,24 +30,26 @@ class Converter;
 using LogSink = std::function<void(SessionLog, const std::string &)>;
 
 // The bridge parameters behind the pacing (docs/00-design.md, E4).
-struct RouterParams {
-    double rate_default_hz = 0.0;
-    std::map<std::string, double> rate_limits;
-    int tx_budget_pct = 50;
-    std::size_t qos_depth = 10;
-    int baud = 115200;
+struct RouterParams
+{
+  double rate_default_hz = 0.0;
+  std::map<std::string, double> rate_limits;
+  int tx_budget_pct = 50;
+  std::size_t qos_depth = 10;
+  int baud = 115200;
 };
 
 // Parses "<topic>=<hz>" entries. A malformed entry is reported through the
 // sink and skipped, and a negative rate is malformed too.
-std::map<std::string, double> parse_rate_overrides(const std::vector<std::string> &entries,
-                                                   const LogSink &sink);
+std::map<std::string, double> parse_rate_overrides(
+  const std::vector<std::string> & entries,
+  const LogSink & sink);
 
 // Routes one link. Single-threaded apart from the subscription callbacks, so
 // one mutex guards the pacer and the routes; the converter is thread-safe.
 class Router
 {
-  public:
+public:
     // Throws std::invalid_argument on a nonsense param (no QoS depth, a
     // budget outside 0 to 100, no baud, a negative default rate) or a missing
     // log sink.
@@ -55,15 +57,16 @@ class Router
     // the RouterParams. mcu_sink carries the MCU's own log lines ([LOG-1])
     // and defaults to the log sink. node_params carries the interface the
     // parameters layer (X5) declares the MCU's parameters on; null skips it.
-    Router(rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,
-           const Clock &clock, const Clock &ros_clock, RouterParams params, LogSink sink,
-           SessionConfig session_config = SessionConfig(), LogSink mcu_sink = LogSink(),
-           rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params = nullptr);
-    ~Router();
-    Router(const Router &) = delete;
+  Router(
+    rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,
+    const Clock & clock, const Clock & ros_clock, RouterParams params, LogSink sink,
+    SessionConfig session_config = SessionConfig(), LogSink mcu_sink = LogSink(),
+    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params = nullptr);
+  ~Router();
+  Router(const Router &) = delete;
 
     // Advances the session and flushes due host-to-MCU frames.
-    void poll();
+  void poll();
 
     // One announced topic's H8 values: the announced name and direction, the
     // host's TOPIC_STATUS verdict for it ([CTL-13]), the MCU-to-host frames
@@ -73,70 +76,72 @@ class Router
     // uses reads 0. Every announced topic is listed in announcement order,
     // including one the host refused: its verdict says why it carries no
     // traffic.
-    struct TopicDiagnostics {
-        std::uint8_t topic_id = 0;
-        std::string topic_name;
-        bool device_to_host = true;
-        std::uint8_t status = 0;
-        std::uint32_t seq_gaps = 0;
-        std::size_t dropped = 0;
+  struct TopicDiagnostics
+  {
+    std::uint8_t topic_id = 0;
+    std::string topic_name;
+    bool device_to_host = true;
+    std::uint8_t status = 0;
+    std::uint32_t seq_gaps = 0;
+    std::size_t dropped = 0;
         // Converted device-to-host frames the serialized publish refused,
         // logged and counted instead of aborting.
-        std::size_t publish_failures = 0;
+    std::size_t publish_failures = 0;
         // MCU error report counts naming this topic id ([ERR-6]): slot 0
         // carries code 1 through slot 5 code 6. Zeros when no report named
         // this id.
-        std::array<std::uint64_t, 6> mcu_errors{};
+    std::array<std::uint64_t, 6> mcu_errors{};
         // Whether the verdict is ok but no route serves the topic: the
         // endpoint creation failed and later polls keep retrying it. False
         // for refused topics, which correctly serve nothing, and once a
         // retry heals the route.
-        bool route_missing = false;
+    bool route_missing = false;
         // Why the route is missing, meaningful only when route_missing holds.
-        std::string route_error;
-    };
+    std::string route_error;
+  };
     // The H8 snapshot: link state is one of disconnected, boot_wait,
     // handshaking or connected; the time sync values are real once a
     // CORRECTION anchors the estimator, and read 0 with available false
     // before that.
-    struct Diagnostics {
-        std::string link_state;
-        std::uint32_t session_token = 0;
-        std::uint32_t resets = 0;
+  struct Diagnostics
+  {
+    std::string link_state;
+    std::uint32_t session_token = 0;
+    std::uint32_t resets = 0;
         // Control frames a newer frame of the same slot replaced while the link
         // could not take bytes ([SES-33]).
-        std::uint32_t control_coalesced = 0;
-        std::uint8_t protocol_version = 0;
-        McuCounters mcu_counters;
+    std::uint32_t control_coalesced = 0;
+    std::uint8_t protocol_version = 0;
+    McuCounters mcu_counters;
         // Running MCU error report sums per code ([ERR-6]): slot 0 carries
         // code 1 through slot 5 code 6, counting targeted and untargeted
         // reports alike. Zeros before the first report.
-        std::array<std::uint64_t, 6> mcu_error_sums{};
-        std::vector<TopicDiagnostics> topics;
-        bool time_sync_available = false;
-        std::int64_t time_offset_ns = 0;
-        std::int16_t time_drift_ppm = 0;
-        std::int64_t time_round_trip_ns = 0;
-    };
+    std::array<std::uint64_t, 6> mcu_error_sums{};
+    std::vector<TopicDiagnostics> topics;
+    bool time_sync_available = false;
+    std::int64_t time_offset_ns = 0;
+    std::int16_t time_drift_ppm = 0;
+    std::int64_t time_round_trip_ns = 0;
+  };
 
-    std::size_t publisher_count() const;
-    std::size_t subscription_count() const;
+  std::size_t publisher_count() const;
+  std::size_t subscription_count() const;
     // The negotiated QoS of one routed topic, for tests and the H8
     // diagnostics. Empty when the topic is not routed.
-    std::optional<rclcpp::QoS> endpoint_qos(std::uint8_t topic_id) const;
+  std::optional<rclcpp::QoS> endpoint_qos(std::uint8_t topic_id) const;
     // Pacer drops for one MCU topic id, for the H8 diagnostics.
-    std::size_t dropped(std::uint8_t topic_id) const;
+  std::size_t dropped(std::uint8_t topic_id) const;
     // Queued frames for one MCU topic id, so the H8 test can wait for every
     // scripted message to arrive before it checks the drops.
-    std::size_t queued(std::uint8_t topic_id) const;
+  std::size_t queued(std::uint8_t topic_id) const;
     // The H8 values after scripted losses and errors, for /diagnostics.
-    Diagnostics diagnostics() const;
+  Diagnostics diagnostics() const;
 
-  private:
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
+private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
 };
 
-} // namespace r2s_bridge
+}  // namespace r2s_bridge
 
-#endif // R2S_BRIDGE__ROUTER_HPP_
+#endif  // R2S_BRIDGE__ROUTER_HPP_
