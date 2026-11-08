@@ -6,10 +6,11 @@ fields. The calls stay the same: `initNode`, `advertise`, `subscribe`,
 and the `log*` diagnostics. This guide covers what is on `master`:
 the aliases from [#145](https://github.com/apojomovsky/ros2serial/issues/145)
 and the rest of the handle surface from
-[#417](https://github.com/apojomovsky/ros2serial/issues/417).
-The `tf` broadcaster and services are not there yet; see
-[Not yet](#not-yet) for what waits on
-[#418](https://github.com/apojomovsky/ros2serial/issues/418).
+[#417](https://github.com/apojomovsky/ros2serial/issues/417),
+plus the `tf` broadcaster from
+[#418](https://github.com/apojomovsky/ros2serial/issues/418)
+(see [Broadcast tf](#broadcast-tf)). Services are not there yet; see
+[Not yet](#not-yet).
 
 What does not change: the wiring, the bridge launch, and the ROS 2
 side. The sketch still opens the serial port at 115200 baud, the
@@ -335,13 +336,38 @@ Run it exactly as the README runs the example: start the firmware on
 simavr (or flash it), launch the bridge on the port, and watch the
 topic. The bridge default baud is 115200, matching `initNode`.
 
+## Broadcast tf
+
+The `tf::TransformBroadcaster` keeps its ros_lib shape (`init` and
+`sendTransform`) over the compatibility publisher, announcing `/tf`
+carrying `TFMessage`:
+
+```cpp
+#include <ros2serial.h>
+#include <ros2serial/ros.h>
+#include <ros2serial/geometry_msgs/TransformStamped.h>
+#include <ros2serial/tf/transform_broadcaster.h>
+
+ros::NodeHandle nh;
+tf::TransformBroadcaster broadcaster;
+geometry_msgs::TransformStamped transform;
+
+void setup()
+{
+    nh.initNode();
+    broadcaster.init(nh);
+}
+
+void loop()
+{
+    broadcaster.sendTransform(transform);
+    (void)nh.spinOnce();
+}
+```
+
 ## Not yet
 
-Two ros_lib pieces have no counterpart yet and wait on
-[#418](https://github.com/apojomovsky/ros2serial/issues/418): the
-`tf::TransformBroadcaster` (`init` and `sendTransform`) and services
-(`advertiseService` and `serviceClient`, which will fail to compile
-with a message naming the services ticket until services land).
-Leave that code out of the port for now. The same ticket tracks the
-remaining proof: every end to end scenario passing on the
-compatibility path.
+Services have no counterpart yet: `advertiseService` and
+`serviceClient` fail to compile with a message naming the services
+work item (X6, [#156](https://github.com/apojomovsky/ros2serial/issues/156))
+until services land. Leave that code out of the port for now.
