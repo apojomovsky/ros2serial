@@ -96,6 +96,7 @@ log="$R2S_TASK_LOG"
 [ -n "${CORE:-}" ] && echo "stub CORE=$CORE" >> "$log"
 [ -n "${GEN:-}" ] && echo "stub GEN=$GEN" >> "$log"
 [ -n "${BRIDGE:-}" ] && echo "stub BRIDGE=$BRIDGE" >> "$log"
+[ -n "${AMENT_LINT:-}" ] && echo "stub AMENT_LINT=$AMENT_LINT" >> "$log"
 [ -n "${CPP:-}" ] && echo "stub CPP=$CPP" >> "$log"
 [ -n "${E2E:-}" ] && echo "stub E2E=$E2E" >> "$log"
 [ -n "${COVERAGE:-}" ] && echo "stub COVERAGE=$COVERAGE" >> "$log"
@@ -151,6 +152,7 @@ LEAKY_VARS = (
     "CORE",
     "GEN",
     "BRIDGE",
+    "AMENT_LINT",
     "CPP",
     "E2E",
     "COVERAGE",
@@ -206,16 +208,17 @@ def test_a_gen_test_edit_reruns_gen_and_coverage_besides_the_standing_gates(tmp_
     assert gen_tests, "the gen task lists no gen test inputs"
     edited = probe_for(gen_tests[0])
     for name, task in tasks().items():
-        if name in ("default", "local", "gen", "coverage", "lint", "commits"):
+        if name in ("default", "local", "gen", "coverage", "ament_lint", "lint", "commits"):
             continue
         assert not matches(task, edited), f"{edited} also matches {name}"
     (repo / edited).write_text("probe\nprobe again\n")
     reran = run_task(repo)
     assert "GEN=1" in reran, reran
     assert "COVERAGE=1" in reran, reran
+    assert "AMENT_LINT=1" in reran, reran
     assert "LINT=1" in reran, reran
     assert "COMMITS=1" in reran, reran
-    assert sorted(reran) == ["COMMITS=1", "COVERAGE=1", "GEN=1", "LINT=1"], reran
+    assert sorted(reran) == ["AMENT_LINT=1", "COMMITS=1", "COVERAGE=1", "GEN=1", "LINT=1"], reran
 
 
 def test_a_mutation_script_edit_reruns_scripts_but_no_suite_task():

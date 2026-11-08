@@ -149,5 +149,19 @@ def test_ci_runs_the_advisory_job_that_reports_without_failing():
     assert job is not None, "ci.yml has no ament-lint job"
     assert job.get("continue-on-error") is True, "the lint gate must stay advisory"
     assert job.get("timeout-minutes", 0) >= 30, "the job builds, so it keeps the 30 minute floor"
+    needs = job.get("needs", [])
+    needs = needs if isinstance(needs, list) else [needs]
+    assert "plan" in needs, "the job must gate on the plan like every section"
+    assert "needs.plan.outputs.ament_lint" in job.get("if", ""), "the job must run only when its task is stale"
     steps = job.get("steps", [])
     assert any("scripts/ament-lint.sh" in str(step.get("run", "")) for step in steps), "the job runs nothing"
+
+
+def test_the_taskfile_runs_the_advisory_section_through_the_suite():
+    taskfile = yaml.safe_load((ROOT / "Taskfile.yml").read_text())
+    task = taskfile["tasks"].get("ament_lint")
+    assert task is not None, "Taskfile has no ament_lint task"
+    assert task["cmds"] == ["AMENT_LINT=1 bash scripts/ci-test.sh"], task["cmds"]
+    assert "scripts/ament-lint.sh" in task["sources"], "the runner is not a task input"
+    for aggregate in ("default", "local"):
+        assert "ament_lint" in taskfile["tasks"][aggregate]["deps"], f"{aggregate} skips the advisory section"

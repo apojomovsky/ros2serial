@@ -34,6 +34,7 @@ OUTPUTS = (
     "core",
     "gen",
     "bridge",
+    "ament_lint",
     "cpp",
     "e2e",
     "esp32",
@@ -61,6 +62,7 @@ SECTION_SCOPE = {
     "readme": "readme",
     "coverage": "coverage",
     "bridge": "bridge",
+    "ament-lint": "ament_lint",
     "fuzz-smoke": "fuzz",
     "build-matrix": "examples",
     "esp32": "esp32",
@@ -90,6 +92,7 @@ TASKS_WITH_CHECKSUMS = (
     "core",
     "gen",
     "bridge",
+    "ament_lint",
     "cpp",
     "coverage",
     "docs",
@@ -291,6 +294,7 @@ def test_section_jobs_save_their_checksums_on_master():
     assert saves["e2e-avr"] == ".task/checksum/e2e-avr"
     assert saves["scripts-save"] == ".task/checksum/scripts"
     assert saves["bridge-save"] == ".task/checksum/bridge"
+    assert saves["ament-lint"] == ".task/checksum/ament_lint"
     assert saves["e2e-posix-save"] == ".task/checksum/e2e-posix"
     assert "lint" not in saves, "lint writes no checksum: it always runs"
     assert "bridge-images" not in saves, "bridge-images is setup, not a section"
@@ -409,7 +413,7 @@ def test_a_gen_test_edit_runs_gen_and_coverage_besides_lint(tmp_path):
     repo = test_taskfile.fixture(tmp_path)
     establish(repo)
     (repo / "gen" / "tests" / "probe").write_text("probe\nprobe again\n")
-    assert selected_jobs(repo, tmp_path) == ["bridge-images", "coverage", "gen", "lint", "plan"]
+    assert selected_jobs(repo, tmp_path) == ["ament-lint", "bridge-images", "coverage", "gen", "lint", "plan"]
 
 
 def test_an_esp32_script_edit_runs_esp32_budgets_and_scripts_besides_lint(tmp_path):

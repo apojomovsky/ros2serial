@@ -48,6 +48,7 @@ SCOPES = (
     "CORE",
     "GEN",
     "BRIDGE",
+    "AMENT_LINT",
     "CPP",
     "E2E",
     "COVERAGE",
