@@ -82,7 +82,7 @@ exit 1
 """
 
 
-def run_advisory(tmp_path, colcon_stub=COLCON_STUB, python_stub=PYTHON_STUB):
+def run_advisory(tmp_path, colcon_stub=COLCON_STUB, python_stub=PYTHON_STUB, with_results=True):
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
     (bindir / "colcon").write_text(colcon_stub)
@@ -92,14 +92,15 @@ def run_advisory(tmp_path, colcon_stub=COLCON_STUB, python_stub=PYTHON_STUB):
         path.chmod(stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH | path.stat().st_mode)
     # Pre-existing results the summary reads: copyright fails twice of
     # three checks, flake8 is clean, rosidl has none.
-    results = tmp_path / "build" / "ament-lint" / "build" / "r2s_bridge" / "test_results" / "r2s_bridge"
-    results.mkdir(parents=True)
-    (results / "copyright.xunit.xml").write_text(
-        '<testsuite name="copyright" tests="3" failures="2" errors="0" skipped="0"></testsuite>\n'
-    )
-    (results / "flake8.xunit.xml").write_text(
-        '<testsuite name="flake8" tests="1" failures="0" errors="0" skipped="0"></testsuite>\n'
-    )
+    if with_results:
+        results = tmp_path / "build" / "ament-lint" / "build" / "r2s_bridge" / "test_results" / "r2s_bridge"
+        results.mkdir(parents=True)
+        (results / "copyright.xunit.xml").write_text(
+            '<testsuite name="copyright" tests="3" failures="2" errors="0" skipped="0"></testsuite>\n'
+        )
+        (results / "flake8.xunit.xml").write_text(
+            '<testsuite name="flake8" tests="1" failures="0" errors="0" skipped="0"></testsuite>\n'
+        )
     env = {
         "PATH": os.pathsep.join([str(bindir), "/usr/bin", "/bin"]),
         "HOME": str(tmp_path),
@@ -129,6 +130,12 @@ def test_advisory_run_enables_lint_selects_lint_tests_and_reports_a_baseline(tmp
     assert "r2s_bridge flake8 0 1" in out, f"flake8 count missing:\n{out}"
 
 
+def test_advisory_run_fails_loudly_when_no_linter_ran(tmp_path):
+    result = run_advisory(tmp_path, with_results=False)
+    assert result.returncode != 0, "a silent no-run must fail, not report an empty baseline"
+    assert "no lint results" in result.stderr, result.stderr
+
+
 def test_advisory_run_fails_without_colcon(tmp_path):
     assert SCRIPT.is_file(), "scripts/ament-lint.sh is missing"
     # An empty PATH hides colcon; the absolute bash never needs the lookup.
@@ -154,7 +161,9 @@ def test_ci_runs_the_advisory_job_that_reports_without_failing():
     assert "plan" in needs, "the job must gate on the plan like every section"
     assert "needs.plan.outputs.ament_lint" in job.get("if", ""), "the job must run only when its task is stale"
     steps = job.get("steps", [])
-    assert any("scripts/ament-lint.sh" in str(step.get("run", "")) for step in steps), "the job runs nothing"
+    assert any("make test AMENT_LINT=1" in str(step.get("run", "")) for step in steps), (
+        "the job must run the section through make, so the dev image provides colcon"
+    )
 
 
 def test_the_taskfile_runs_the_advisory_section_through_the_suite():

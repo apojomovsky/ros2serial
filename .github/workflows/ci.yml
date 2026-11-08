@@ -247,7 +247,8 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
 
   # Advisory ament_lint_common over the ROS packages: reports the per-linter
-  # baseline and never fails, until the cleanup tickets land (#508).
+  # baseline and never fails, until the cleanup tickets land (#508). Runs
+  # through make, so the dev image provides colcon and the ROS underlay.
   ament-lint:
     needs: plan
     if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.ament_lint == '1'
@@ -257,7 +258,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
-      - run: bash scripts/ament-lint.sh
+      - run: make test AMENT_LINT=1
       - if: github.ref == 'refs/heads/master'
         uses: actions/cache/save@v4.2.2
         with:
