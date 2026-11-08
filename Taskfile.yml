@@ -15,7 +15,7 @@ use_gitignore: true
 tasks:
   default:
     desc: Run every section whose inputs changed.
-    deps: [lint, commits, scripts, core, gen, bridge, cpp, coverage, docs, examples, esp32, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
+    deps: [lint, commits, scripts, core, gen, bridge, ament_lint, cpp, coverage, docs, examples, esp32, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
 
   # What the pre-push hook and the takeoff run: the default set without the
   # CI-only sections. The end-to-end ones (e2e-avr, e2e-posix and the nightly
@@ -24,7 +24,7 @@ tasks:
   # job. CI runs all of them on every pull request.
   local:
     desc: Run every stale section but the CI-only ones, which CI runs.
-    deps: [lint, commits, scripts, core, gen, bridge, cpp, coverage, docs, examples, budgets, readme, fuzz]
+    deps: [lint, commits, scripts, core, gen, bridge, ament_lint, cpp, coverage, docs, examples, budgets, readme, fuzz]
 
   # The standing cheap gates: unlistable inputs must never skip them.
   lint:
@@ -189,6 +189,34 @@ tasks:
       - exclude: tests/e2e/test_isolation.py
     cmds:
       - BRIDGE=1 bash scripts/ci-test.sh
+
+  ament_lint:
+    desc: Runs ament_lint_common on the ROS packages, advisory.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/pass-vars.list
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/ament-lint.sh
+      - bridge/r2s_bridge/**
+      - gen/r2s_gen/**
+      - gen/r2s_rosidl/**
+      - gen/tests/**
+      - gen/package.xml
+      - gen/pyproject.toml
+      - gen/setup.py
+      - gen/setup.cfg
+      - gen/resource/**
+    cmds:
+      - AMENT_LINT=1 bash scripts/ci-test.sh
 
   cpp:
     desc: Runs the host builds and avr compile tests.
