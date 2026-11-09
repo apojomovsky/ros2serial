@@ -169,7 +169,7 @@ flowchart LR
     BR <--> ROS["ROS 2 graph"]
 ```
 
-The generator runs once at build time and produces the firmware headers. At runtime the sketch and the core run on the MCU, exchange frames over the serial link with the bridge, and the bridge publishes and subscribes on the ROS 2 graph. The full map, from the sketch to the ROS 2 graph, lives in [`docs/02-architecture.md`](docs/02-architecture.md); the design rationale in [`docs/00-design.md`](docs/00-design.md).
+The generator runs once at build time and produces the firmware headers. At runtime the sketch and the core run on the MCU, exchange frames over the serial link with the bridge, and the bridge publishes and subscribes on the ROS 2 graph. The full map, from the sketch to the ROS 2 graph, lives in [`docs/02-architecture.md`](docs/02-architecture.md); the design rationale in [`docs/00-design.md`](docs/00-design.md). The published site mirrors these pages, with the final port guide: [ros2serial docs](https://apojomovsky.github.io/ros2serial/).
 
 ## What works today
 
