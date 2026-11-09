@@ -418,14 +418,14 @@ def build_site(root: Path, outdir: Path, pages: tuple[Page, ...] = PAGES) -> lis
                 wrap(page.title, nav, f'<h1>{html.escape(page.title)}</h1>\n<pre>{text}</pre>'),
                 encoding='utf-8',
             )
-    index_body = (
-        '<h1>ros2serial documentation</h1>\n<ul>'
-        + ''.join(
-            f'<li><a href="{page.output}">{html.escape(page.title)}</a> - {html.escape(page.blurb)}</li>'
-            for page in pages
-        )
-        + '</ul>'
-    )
+
+    def entry(page) -> str:
+        title = html.escape(page.title)
+        blurb = html.escape(page.blurb)
+        return f'<li><a href="{page.output}">{title}</a> - {blurb}</li>'
+
+    head = '<h1>ros2serial documentation</h1>\n<ul>'
+    index_body = head + ''.join(entry(page) for page in pages) + '</ul>'
     (outdir / 'index.html').write_text(wrap('Documentation', nav, index_body), encoding='utf-8')
     return problems
 

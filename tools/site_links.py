@@ -29,7 +29,8 @@ import argparse
 import sys
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urldefrag, urlparse
+from urllib.parse import urldefrag
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 
