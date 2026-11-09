@@ -688,6 +688,95 @@ void test_actions_host_ack_stops_the_retry(void)
     TEST_ASSERT_EQUAL_UINT16(6, fake_port_tx_frame_count());
 }
 
+/* covers: REL-2 */
+void test_actions_full_slots_hold_the_goal_for_retry(void)
+{
+    /* GOAL rel 0, goal 0, order 5; RESULT rel 1, succeeded. */
+    const uint8_t first[] = {0x04u, 0x00u, 0x00u, 0x00u, 0x05u, 0x00u, 0x00u, 0x00u};
+    const uint8_t result[] = {0x00u};
+    /* GOAL rel 1, goal 1, order 6. */
+    const uint8_t second[] = {0x04u, 0x01u, 0x01u, 0x00u, 0x06u, 0x00u, 0x00u, 0x00u};
+    /* A TX_BUSY report names the actions channel and the held action. */
+    const uint8_t busy[] = {0x06u, 0x08u, 0x01u, 0x00u, 0x00u};
+    const uint8_t ack_resp[] = {0x08u, 0x00u};
+    const uint8_t ack_result[] = {0x08u, 0x01u};
+    const uint8_t accepted[] = {0x05u, 0x02u, 0x01u, 0x00u};
+
+    configure();
+    resolve_walk();
+    connect();
+    fake_port_tx_clear();
+    feed_host(8, 0, first, sizeof first);
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_result(0u, 0u, R2S_ACT_SUCCEEDED, result, sizeof result));
+    TEST_ASSERT_EQUAL_UINT8(R2S_ACT_IDLE, r2s_actions_state(0));
+    /* A second past the busy window: the retry timer resends the
+     * outstanding response and the heartbeat goes out with it. */
+    fake_port_advance(1000);
+    fake_port_tx_clear();
+    {
+        const uint8_t retried[] = {0x05u, 0x00u, 0x00u, 0x00u};
+        const uint8_t heartbeat[] = {0x04u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
+
+        feed_host(8, 1, second, sizeof second);
+        TEST_ASSERT_EQUAL_UINT8(1, g_goal_calls);
+        TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_frame_count());
+        assert_tx(0, 8, 2, retried, sizeof retried);
+        assert_tx(1, 4, 0, heartbeat, sizeof heartbeat);
+        assert_tx(2, 5, 0, busy, sizeof busy);
+    }
+    /* The acks free both slots; the retried goal then runs at once. */
+    feed_host(6, 0, ack_resp, sizeof ack_resp);
+    feed_host(6, 1, ack_result, sizeof ack_result);
+    fake_port_tx_clear();
+    feed_host(8, 1, second, sizeof second);
+    TEST_ASSERT_EQUAL_UINT8(2, g_goal_calls);
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+    assert_tx(1, 8, 4, accepted, sizeof accepted);
+    TEST_ASSERT_EQUAL_UINT8(R2S_ACT_EXECUTING, r2s_actions_state(0));
+    TEST_ASSERT_EQUAL_UINT8(1, r2s_actions_goal_seq(0));
+}
+
+/* covers: ACT-8 */
+void test_actions_feedback_and_result_refuse_a_foreign_goal_seq(void)
+{
+    const uint8_t feedback[] = {0x00u};
+    const uint8_t result[] = {0x00u};
+
+    start_goal();
+    fake_port_tx_clear();
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_actions_feedback(0u, 7u, feedback, sizeof feedback));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS,
+                           r2s_actions_result(0u, 7u, R2S_ACT_SUCCEEDED, result, sizeof result));
+    TEST_ASSERT_EQUAL_UINT8(R2S_ACT_EXECUTING, r2s_actions_state(0));
+    TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+}
+
+/* covers: ACT-4, ACT-5 */
+void test_actions_answers_refuse_a_goal_the_state_no_longer_holds(void)
+{
+    const uint8_t result[] = {0x00u};
+
+    start_goal();
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_actions_answer_goal(0u, 0u, R2S_ACT_ACCEPTED));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_actions_answer_cancel(0u, 7u, R2S_ACT_CANCEL_ACCEPTED));
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+    TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_result(0u, 0u, R2S_ACT_SUCCEEDED, result, sizeof result));
+    TEST_ASSERT_EQUAL_UINT8(R2S_ACT_IDLE, r2s_actions_state(0));
+    TEST_ASSERT_EQUAL_UINT8(0u, r2s_actions_goal_seq(0));
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_actions_answer_cancel(0u, 0u, R2S_ACT_CANCEL_ACCEPTED));
+}
+
+/* covers: SES-3 */
+void test_actions_empty_frame_in_announcing_is_answered_with_hello(void)
+{
+    const uint8_t empty[1] = {0u};
+
+    configure();
+    fake_port_tx_clear();
+    feed_host(8, 0, empty, 0);
+    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+}
+
 /* covers: ACT-9, REL-5 */
 void test_actions_reset_returns_to_idle_with_fresh_seqs(void)
 {

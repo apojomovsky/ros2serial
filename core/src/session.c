@@ -928,8 +928,8 @@ static void on_frame(const r2s_frame_t *frame)
         /* The walk answers in ANNOUNCING; any other non-handshake frame is
          * answered like one ([SES-3]). In CONNECTED the actions layer owns
          * the channel. */
-        if (session.state == ANNOUNCING && payload_len != 0u && payload[0] != R2S_ACT_OP_QUERY &&
-            payload[0] != R2S_ACT_OP_STATUS) {
+        if (session.state == ANNOUNCING &&
+            (payload_len == 0u || (payload[0] != R2S_ACT_OP_QUERY && payload[0] != R2S_ACT_OP_STATUS))) {
             answer_with_hello(frame->tick);
         } else {
             r2s_actions_on_frame(payload, payload_len, frame->tick, session.state == CONNECTED);

@@ -301,7 +301,7 @@ r2s_status_t r2s_actions_answer_cancel(uint8_t index, uint8_t goal_seq, uint8_t 
         r2s_error_note(R2S_ERROR_NOT_CONNECTED, 8u, 0xFFu, 1u);
         return R2S_ERR_NOT_CONNECTED;
     }
-    if (index >= act.count) {
+    if (index >= act.count || act.state[index] == R2S_ACT_IDLE || act.goal_seq[index] != goal_seq) {
         return R2S_ERR_BOUNDS;
     }
     if (response_slot_free() == 0u) {
@@ -375,6 +375,7 @@ r2s_status_t r2s_actions_result(uint8_t index, uint8_t goal_seq, uint8_t outcome
     }
     queue_response(R2S_ACT_OP_RESULT, goal_seq, outcome, payload, len, r2s_port_tick());
     act.state[index] = R2S_ACT_IDLE;
+    act.goal_seq[index] = 0u;
     return R2S_OK;
 }
 
@@ -520,10 +521,20 @@ static void on_exchange(const uint8_t *payload, uint16_t len, uint32_t now)
         /* Every reliable frame is acked, duplicates included, and the payload
          * applies at most once: only the expected rel_seq applies and
          * advances the counter (REL-3). */
-        r2s_session_send_ack(8u, rel);
         if (rel != act.rx_rel_expected) {
+            r2s_session_send_ack(8u, rel);
             return;
         }
+        /* The answer rides the same reliable stream: when both slots are
+         * full no answer can go out, so the frame stays unacked and the
+         * host's retry brings it back to a free slot (REL-2). Acking it
+         * first would consume the retry while the answer is lost. */
+        if (response_slot_free() == 0u) {
+            r2s_error_note(R2S_ERROR_TX_BUSY, 8u, index, 1u);
+            r2s_framer_count_refused();
+            return;
+        }
+        r2s_session_send_ack(8u, rel);
         act.rx_rel_expected++;
         if (index >= act.count || act.status[index] != R2S_ACT_STATUS_OK ||
             act.state[index] != R2S_ACT_IDLE) {
@@ -542,10 +553,18 @@ static void on_exchange(const uint8_t *payload, uint16_t len, uint32_t now)
         }
         rel = payload[1];
         goal_seq = payload[2];
-        r2s_session_send_ack(8u, rel);
         if (rel != act.rx_rel_expected) {
+            r2s_session_send_ack(8u, rel);
             return;
         }
+        /* As above: no answer can go out with both slots full, so the frame
+         * stays unacked for the host's retry. */
+        if (response_slot_free() == 0u) {
+            r2s_error_note(R2S_ERROR_TX_BUSY, 8u, 0xFFu, 1u);
+            r2s_framer_count_refused();
+            return;
+        }
+        r2s_session_send_ack(8u, rel);
         act.rx_rel_expected++;
         index = find_goal(goal_seq);
         if (index == 0xFFu) {
