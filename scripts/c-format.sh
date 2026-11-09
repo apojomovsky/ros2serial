@@ -24,21 +24,21 @@ fi
 mapfile -t files < <(printf '%s\n' "${files[@]}" | grep -Ev '(^|/)vendor/|^bridge/' | grep -E '\.(c|h|cpp|hpp|cc)$')
 [ "${#files[@]}" -gt 0 ] || exit 0
 status=0
+# The C++ layer and the Arduino port are C++ down to their headers, so they
+# format as C++ even where the suffix says C: uncrustify drops a required
+# semicolon after a template-id class head it parses as C. The generated
+# bundle header carries C++ namespaces, so it joins them wherever it lives.
+mapfile -t c_files < <(printf '%s\n' "${files[@]}" | grep -E '\.(c|cc|h|hh)$' \
+  | grep -Ev '^(cpp/|ports/arduino/)' | grep -Ev '^gen/tests/golden/bundle/ros2serial\.h$')
+mapfile -t cpp_files < <(printf '%s\n' "${files[@]}" | grep -E '\.(cpp|cxx|hpp|hxx)$')
+mapfile -t cxx_headers < <(printf '%s\n' "${files[@]}" \
+  | grep -E '^(cpp/|ports/arduino/).*\.(c|h)$|^gen/tests/golden/bundle/ros2serial\.h$')
+cpp_files+=("${cxx_headers[@]}")
 for lang in C CPP; do
   case $lang in
-    C) ext='(c|cc|h|hh)$' ;;
-    CPP) ext='(cpp|cxx|hpp|hxx)$' ;;
+    C) lang_files=("${c_files[@]}") ;;
+    CPP) lang_files=("${cpp_files[@]}") ;;
   esac
-  mapfile -t lang_files < <(printf '%s\n' "${files[@]}" | grep -E "\.$ext")
-  # The C++ layer and the Arduino port are C++ down to their headers, so
-  # they format as C++ even where the suffix says C: uncrustify drops a
-  # required semicolon after a template-id class head it parses as C.
-  if [ "$lang" = C ]; then
-    mapfile -t lang_files < <(printf '%s\n' "${lang_files[@]}" | grep -Ev '^(cpp/|ports/arduino/)')
-  else
-    mapfile -t cpp_files < <(printf '%s\n' "${files[@]}" | grep -E '^cpp/.*\.(c|h)$|^ports/arduino/.*\.(c|h)$')
-    lang_files+=("${cpp_files[@]}")
-  fi
   [ "${#lang_files[@]}" -gt 0 ] || continue
   # One process per file: a single uncrustify call over many files can leak
   # parser state from one file into the next, so a batch check can pass a
