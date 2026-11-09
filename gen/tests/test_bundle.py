@@ -13,14 +13,18 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from r2s_gen import bundle, cli, cpp, msgs, typehash
+from r2s_gen import bundle
+from r2s_gen import cli
+from r2s_gen import cpp
+from r2s_gen import msgs
+from r2s_gen import typehash
 from r2s_gen.reference import messages
 from r2s_gen.version import __version__
 
-GOLDEN = Path(__file__).parent / "golden" / "bundle"
-CORE = Path(__file__).resolve().parents[2] / "core"
-CORE_INCLUDE = CORE / "include"
-CORE_SRC = CORE / "src"
+GOLDEN = Path(__file__).parent / 'golden' / 'bundle'
+CORE = Path(__file__).resolve().parents[2] / 'core'
+CORE_INCLUDE = CORE / 'include'
+CORE_SRC = CORE / 'src'
 
 SKETCH_TOPICS = """\
 #define R2S_NODE_NAME "test_bundle"
@@ -40,31 +44,31 @@ C_SKETCH_TOPICS = """\
 """
 
 
-def files(distro="jazzy"):
+def files(distro='jazzy'):
     return bundle.bundle(distro)
 
 
 def test_files_for_names_the_exact_bundle_set():
     assert bundle.files_for() == (
-        "library.properties",
-        "src/ros2serial.h",
-        "src/ros2serial.hpp",
-        "src/r2s_bundled.h",
-        "src/r2s_bundled.c",
-        "src/builtin_interfaces/msg/time.hpp",
-        "src/geometry_msgs/msg/quaternion.hpp",
-        "src/geometry_msgs/msg/transform.hpp",
-        "src/geometry_msgs/msg/transform_stamped.hpp",
-        "src/geometry_msgs/msg/twist.hpp",
-        "src/geometry_msgs/msg/vector3.hpp",
-        "src/sensor_msgs/msg/imu.hpp",
-        "src/sensor_msgs/msg/joint_state.hpp",
-        "src/sensor_msgs/msg/range.hpp",
-        "src/std_msgs/msg/bool.hpp",
-        "src/std_msgs/msg/float32.hpp",
-        "src/std_msgs/msg/header.hpp",
-        "src/std_msgs/msg/string.hpp",
-        "src/tf2_msgs/msg/tf_message.hpp",
+        'library.properties',
+        'src/ros2serial.h',
+        'src/ros2serial.hpp',
+        'src/r2s_bundled.h',
+        'src/r2s_bundled.c',
+        'src/builtin_interfaces/msg/time.hpp',
+        'src/geometry_msgs/msg/quaternion.hpp',
+        'src/geometry_msgs/msg/transform.hpp',
+        'src/geometry_msgs/msg/transform_stamped.hpp',
+        'src/geometry_msgs/msg/twist.hpp',
+        'src/geometry_msgs/msg/vector3.hpp',
+        'src/sensor_msgs/msg/imu.hpp',
+        'src/sensor_msgs/msg/joint_state.hpp',
+        'src/sensor_msgs/msg/range.hpp',
+        'src/std_msgs/msg/bool.hpp',
+        'src/std_msgs/msg/float32.hpp',
+        'src/std_msgs/msg/header.hpp',
+        'src/std_msgs/msg/string.hpp',
+        'src/tf2_msgs/msg/tf_message.hpp',
     )
 
 
@@ -75,17 +79,17 @@ def test_bundle_returns_exactly_the_named_files():
 def test_every_file_carries_the_version_and_distro_but_no_digest():
     for name, text in files().items():
         assert __version__ in text, name
-        assert "distro jazzy" in text, name
-        assert not re.search(r"bundle [0-9a-f]{16}", text), name
+        assert 'distro jazzy' in text, name
+        assert not re.search(r'bundle [0-9a-f]{16}', text), name
 
 
 def test_the_digest_lives_only_in_the_bundled_header():
-    digest = bundle._digest("jazzy")
+    digest = bundle._digest('jazzy')
     for name, text in files().items():
-        if name == "src/r2s_bundled.h":
+        if name == 'src/r2s_bundled.h':
             assert f'#define R2S_BUNDLE_HASH "{digest}"' in text, name
         else:
-            assert "R2S_BUNDLE_HASH" not in text, name
+            assert 'R2S_BUNDLE_HASH' not in text, name
 
 
 def test_bundle_is_byte_identical_run_to_run():
@@ -93,125 +97,133 @@ def test_bundle_is_byte_identical_run_to_run():
 
 
 def test_each_distro_bundles_its_own_snapshot():
-    assert files("jazzy") != files("lyrical")
-    assert files("jazzy") != files("rolling")
+    assert files('jazzy') != files('lyrical')
+    assert files('jazzy') != files('rolling')
 
 
 def test_every_bundled_type_resolves_from_the_snapshot():
-    repository = msgs.MessageRepository(distro="jazzy")
+    repository = msgs.MessageRepository(distro='jazzy')
     for type_name in bundle.BUNDLED_TYPES:
         assert repository.load(type_name).type_name == type_name
 
 
 def test_an_unknown_distro_names_the_supported_ones():
     with pytest.raises(bundle.MessageError) as caught:
-        files("humble")
+        files('humble')
 
-    assert str(caught.value) == "--distro: unknown distro 'humble'; use one of: jazzy, lyrical, rolling"
+    assert (
+        str(caught.value)
+        == "--distro: unknown distro 'humble'; use one of: jazzy, lyrical, rolling"
+    )
 
 
 def test_the_golden_library_properties_are_emitted():
-    assert files()["library.properties"] == (GOLDEN / "library.properties").read_text(encoding="utf-8")
+    assert files()['library.properties'] == (GOLDEN / 'library.properties').read_text(
+        encoding='utf-8'
+    )
 
 
 def test_the_golden_sketch_header_is_emitted():
-    assert files()["src/ros2serial.h"] == (GOLDEN / "ros2serial.h").read_text(encoding="utf-8")
+    assert files()['src/ros2serial.h'] == (GOLDEN / 'ros2serial.h').read_text(encoding='utf-8')
 
 
 def test_the_golden_static_header_is_emitted():
-    assert files()["src/ros2serial.hpp"] == (GOLDEN / "ros2serial.hpp").read_text(encoding="utf-8")
+    assert files()['src/ros2serial.hpp'] == (GOLDEN / 'ros2serial.hpp').read_text(encoding='utf-8')
 
 
 def test_the_golden_bundled_header_is_emitted():
-    assert files()["src/r2s_bundled.h"] == (GOLDEN / "r2s_bundled.h").read_text(encoding="utf-8")
+    assert files()['src/r2s_bundled.h'] == (GOLDEN / 'r2s_bundled.h').read_text(encoding='utf-8')
 
 
 def test_the_golden_bundled_source_is_emitted():
-    assert files()["src/r2s_bundled.c"] == (GOLDEN / "r2s_bundled.c").read_text(encoding="utf-8")
+    assert files()['src/r2s_bundled.c'] == (GOLDEN / 'r2s_bundled.c').read_text(encoding='utf-8')
 
 
 def test_the_sketch_header_serves_the_runtime_api_without_a_topic_list():
-    header = files()["src/ros2serial.h"]
+    header = files()['src/ros2serial.h']
 
-    assert "#if defined(__cplusplus) && !defined(R2S_TOPICS)" in header
+    assert '#if defined(__cplusplus) && !defined(R2S_TOPICS)' in header
     assert '#include "r2s/runtime.hpp"' in header
 
 
 def test_the_sketch_header_refuses_a_c_sketch_without_a_topic_list():
-    header = files()["src/ros2serial.h"]
+    header = files()['src/ros2serial.h']
 
-    assert "#if !defined(R2S_TOPICS) && !defined(__cplusplus)" in header
-    assert "#error" in header
+    assert '#if !defined(R2S_TOPICS) && !defined(__cplusplus)' in header
+    assert '#error' in header
 
 
 def test_the_sketch_header_keeps_the_x_macro_expansion_for_a_topic_list():
-    header = files()["src/ros2serial.h"]
+    header = files()['src/ros2serial.h']
 
-    assert "#ifdef R2S_TOPICS" in header
-    assert "enum r2s_topic_slot { R2S_TOPICS(R2S_X_SLOT) R2S_SLOT_COUNT };" in header
-    assert "void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, uint16_t len)" in header
+    assert '#ifdef R2S_TOPICS' in header
+    assert 'enum r2s_topic_slot { R2S_TOPICS(R2S_X_SLOT) R2S_SLOT_COUNT };' in header
+    assert (
+        'void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, '
+        'uint16_t len)' in header
+    )
 
 
 def test_the_bundle_ships_the_cpp_message_headers():
-    files = bundle.bundle("jazzy")
+    files = bundle.bundle('jazzy')
 
     for type_name in bundle.BUNDLED_TYPES:
-        path = f"src/{cpp.message_path(type_name)}"
+        path = f'src/{cpp.message_path(type_name)}'
         assert path in files
-        assert "namespace r2s" in files[path]
+        assert 'namespace r2s' in files[path]
 
 
 def test_the_bundle_command_writes_the_library_files(tmp_path, capsys):
-    out = tmp_path / "out"
+    out = tmp_path / 'out'
 
-    assert cli.main(["bundle", "--distro", "jazzy", "--out", str(out)]) == 0
-    assert sorted(path.relative_to(out).as_posix() for path in out.rglob("*") if path.is_file()) == sorted(
-        bundle.files_for()
-    )
-    assert "src/ros2serial.h" in capsys.readouterr().out
+    assert cli.main(['bundle', '--distro', 'jazzy', '--out', str(out)]) == 0
+    assert sorted(
+        path.relative_to(out).as_posix() for path in out.rglob('*') if path.is_file()
+    ) == sorted(bundle.files_for())
+    assert 'src/ros2serial.h' in capsys.readouterr().out
 
 
 def test_the_bundle_command_defaults_to_jazzy(tmp_path):
-    out = tmp_path / "out"
+    out = tmp_path / 'out'
 
-    assert cli.main(["bundle", "--out", str(out)]) == 0
-    assert (out / "src" / "r2s_bundled.c").is_file()
+    assert cli.main(['bundle', '--out', str(out)]) == 0
+    assert (out / 'src' / 'r2s_bundled.c').is_file()
 
 
 def test_the_bundle_command_rejects_an_unknown_distro(tmp_path, capsys):
-    assert cli.main(["bundle", "--distro", "humble", "--out", str(tmp_path / "out")]) == 1
+    assert cli.main(['bundle', '--distro', 'humble', '--out', str(tmp_path / 'out')]) == 1
     assert "--distro: unknown distro 'humble'" in capsys.readouterr().err
 
 
 def sketch_dir(tmp_path, out_files):
-    root = tmp_path / "sketch"
+    root = tmp_path / 'sketch'
     for name, text in out_files.items():
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        path.write_text(text, encoding='utf-8')
     return root
 
 
 def compile_unit(root, source, extra=()):
-    obj = root / (Path(source).stem + ".o")
+    obj = root / (Path(source).stem + '.o')
     compiled = subprocess.run(
         [
-            "cc",
-            "-std=c99",
-            "-pedantic",
-            "-Werror",
-            "-Wall",
-            "-Wextra",
-            "-I",
+            'cc',
+            '-std=c99',
+            '-pedantic',
+            '-Werror',
+            '-Wall',
+            '-Wextra',
+            '-I',
             str(root),
-            "-I",
-            str(root / "src"),
-            "-I",
+            '-I',
+            str(root / 'src'),
+            '-I',
             str(CORE_INCLUDE),
             *extra,
-            "-c",
+            '-c',
             str(source),
-            "-o",
+            '-o',
             str(obj),
         ],
         capture_output=True,
@@ -223,24 +235,24 @@ def compile_unit(root, source, extra=()):
 
 def compile_cxx_unit(root, source):
     """Compile one sketch translation unit: rows name C++ types, so the proof builds as C++."""
-    obj = root / (Path(source).stem + ".o")
+    obj = root / (Path(source).stem + '.o')
     compiled = subprocess.run(
         [
-            "g++",
-            "-std=c++11",
-            "-pedantic",
-            "-Werror",
-            "-Wall",
-            "-Wextra",
-            "-I",
+            'g++',
+            '-std=c++11',
+            '-pedantic',
+            '-Werror',
+            '-Wall',
+            '-Wextra',
+            '-I',
             str(root),
-            "-I",
-            str(root / "src"),
-            "-I",
+            '-I',
+            str(root / 'src'),
+            '-I',
             str(CORE_INCLUDE),
-            "-c",
+            '-c',
             str(source),
-            "-o",
+            '-o',
             str(obj),
         ],
         capture_output=True,
@@ -254,11 +266,12 @@ def compile_sketch(root, sources, core_sources, extra=()):
     """Link the sketch: its translation units read the limits from the header,
     while the core ones take them as defines, as the Arduino build does."""
     objects = [
-        compile_cxx_unit(root, source) if source.endswith(".cpp") else compile_unit(root, source) for source in sources
+        compile_cxx_unit(root, source) if source.endswith('.cpp') else compile_unit(root, source)
+        for source in sources
     ]
     objects += [compile_unit(root, source, extra) for source in core_sources]
     linked = subprocess.run(
-        ["g++", *[str(obj) for obj in objects], "-o", str(root / "sketch")],
+        ['g++', *[str(obj) for obj in objects], '-o', str(root / 'sketch')],
         capture_output=True,
         text=True,
     )
@@ -266,37 +279,41 @@ def compile_sketch(root, sources, core_sources, extra=()):
 
 
 def c_bytes(payload):
-    return ", ".join(f"0x{byte:02x}" for byte in payload)
+    return ', '.join(f'0x{byte:02x}' for byte in payload)
 
 
 def proof_vectors():
     """The reference payloads and hashes every host proof checks against."""
-    repository = msgs.MessageRepository(distro="jazzy")
-    battery = messages.encode(repository, "std_msgs/msg/Float32", {"data": 1.5}, narrow=False)
-    greeting = messages.encode(repository, "std_msgs/msg/String", {"data": "hi"}, narrow=False)
+    repository = msgs.MessageRepository(distro='jazzy')
+    battery = messages.encode(repository, 'std_msgs/msg/Float32', {'data': 1.5}, narrow=False)
+    greeting = messages.encode(repository, 'std_msgs/msg/String', {'data': 'hi'}, narrow=False)
     twist = {
-        "linear": {"x": 1.0, "y": 2.0, "z": 3.0},
-        "angular": {"x": 4.0, "y": 5.0, "z": 6.0},
+        'linear': {'x': 1.0, 'y': 2.0, 'z': 3.0},
+        'angular': {'x': 4.0, 'y': 5.0, 'z': 6.0},
     }
-    twist_payload = messages.encode(repository, "geometry_msgs/msg/Twist", twist, narrow=False)
+    twist_payload = messages.encode(repository, 'geometry_msgs/msg/Twist', twist, narrow=False)
     joints = {
-        "header": {"stamp": {"sec": 1, "nanosec": 2}, "frame_id": "base"},
-        "name": ["a", "bb"],
-        "position": [1.0, 2.0],
-        "velocity": [3.0],
-        "effort": [],
+        'header': {'stamp': {'sec': 1, 'nanosec': 2}, 'frame_id': 'base'},
+        'name': ['a', 'bb'],
+        'position': [1.0, 2.0],
+        'velocity': [3.0],
+        'effort': [],
     }
-    joints_payload = messages.encode(repository, "sensor_msgs/msg/JointState", joints, narrow=False)
-    twist_narrow = messages.encode(repository, "geometry_msgs/msg/Twist", twist, narrow=True)
+    joints_payload = messages.encode(
+        repository, 'sensor_msgs/msg/JointState', joints, narrow=False
+    )
+    twist_narrow = messages.encode(repository, 'geometry_msgs/msg/Twist', twist, narrow=True)
     hashes = {}
     for type_name in (
-        "std_msgs/msg/Float32",
-        "std_msgs/msg/String",
-        "geometry_msgs/msg/Twist",
-        "sensor_msgs/msg/JointState",
+        'std_msgs/msg/Float32',
+        'std_msgs/msg/String',
+        'geometry_msgs/msg/Twist',
+        'sensor_msgs/msg/JointState',
     ):
         digest = typehash.type_hash(repository, type_name)
-        hashes[type_name] = ", ".join(f"0x{byte:02x}" for byte in bytes.fromhex(digest[len("RIHS01_") :])[:8])
+        hashes[type_name] = ', '.join(
+            f'0x{byte:02x}' for byte in bytes.fromhex(digest[len('RIHS01_') :])[:8]
+        )
     return battery, greeting, twist_payload, joints_payload, twist_narrow, hashes
 
 
@@ -312,8 +329,9 @@ def host_sketch(frame, nest):
 
 """
         + SKETCH_TOPICS
-        + f'#define EXPECTED_FRAME {frame}u\n#define EXPECTED_NEST {nest}u\n#include "ros2serial.h"\n'
-        + "static geometry_msgs::msg::Twist got_twist;\n"
+        + f'#define EXPECTED_FRAME {frame}u\n#define EXPECTED_NEST {nest}u\n'
+        + '#include "ros2serial.h"\n'
+        + 'static geometry_msgs::msg::Twist got_twist;\n'
         + """\
 static sensor_msgs::msg::JointState got_joints;
 static uint8_t got_twist_calls;
@@ -365,7 +383,7 @@ int main(void)
         + c_bytes(twist_narrow)
         + """};
     static const uint8_t float_hash[] = {"""
-        + hashes["std_msgs/msg/Float32"]
+        + hashes['std_msgs/msg/Float32']
         + """};
     std_msgs::msg::Float32 battery;
     std_msgs::msg::String greeting;
@@ -578,30 +596,30 @@ def test_the_expansion_matches_the_reference_on_the_host(tmp_path):
     root = sketch_dir(tmp_path, out_files)
     frame = frame_limit(out_files)
     nest = nest_limit(out_files)
-    (root / "sketch.cpp").write_text(host_sketch(frame, nest), encoding="utf-8")
-    (root / "stubs.c").write_text(STUBS, encoding="utf-8")
+    (root / 'sketch.cpp').write_text(host_sketch(frame, nest), encoding='utf-8')
+    (root / 'stubs.c').write_text(STUBS, encoding='utf-8')
 
     compile_sketch(
         root,
         [
-            str(root / "sketch.cpp"),
-            str(root / "stubs.c"),
-            str(root / "src" / "r2s_bundled.c"),
+            str(root / 'sketch.cpp'),
+            str(root / 'stubs.c'),
+            str(root / 'src' / 'r2s_bundled.c'),
         ],
         [
-            str(CORE_SRC / "codec.c"),
-            str(CORE_SRC / "varint.c"),
+            str(CORE_SRC / 'codec.c'),
+            str(CORE_SRC / 'varint.c'),
         ],
         extra=(
-            "-DR2S_WITH_CODEC",
-            f"-DR2S_MAX_FRAME={frame}",
-            f"-DR2S_MAX_NEST={nest}",
+            '-DR2S_WITH_CODEC',
+            f'-DR2S_MAX_FRAME={frame}',
+            f'-DR2S_MAX_NEST={nest}',
         ),
     )
-    run = subprocess.run([str(root / "sketch")], capture_output=True, text=True)
+    run = subprocess.run([str(root / 'sketch')], capture_output=True, text=True)
 
     assert run.returncode == 0, run.stdout + run.stderr
-    assert "bundle-host-ok" in run.stdout
+    assert 'bundle-host-ok' in run.stdout
 
 
 def host_sketch_c(frame, nest):
@@ -616,8 +634,9 @@ def host_sketch_c(frame, nest):
 
 """
         + C_SKETCH_TOPICS
-        + f'#define EXPECTED_FRAME {frame}u\n#define EXPECTED_NEST {nest}u\n#include "ros2serial.h"\n'
-        + "static geometry_msgs__msg__Twist got_twist;\n"
+        + f'#define EXPECTED_FRAME {frame}u\n#define EXPECTED_NEST {nest}u\n'
+        + '#include "ros2serial.h"\n'
+        + 'static geometry_msgs__msg__Twist got_twist;\n'
         + """\
 static sensor_msgs__msg__JointState got_joints;
 static uint8_t got_twist_calls;
@@ -669,7 +688,7 @@ int main(void)
         + c_bytes(twist_narrow)
         + """};
     static const uint8_t float_hash[] = {"""
-        + hashes["std_msgs/msg/Float32"]
+        + hashes['std_msgs/msg/Float32']
         + """};
     std_msgs__msg__Float32 battery;
     std_msgs__msg__String greeting;
@@ -789,59 +808,63 @@ def test_the_c_expansion_matches_the_reference_on_the_host(tmp_path):
     root = sketch_dir(tmp_path, out_files)
     frame = frame_limit(out_files)
     nest = nest_limit(out_files)
-    (root / "sketch.c").write_text(host_sketch_c(frame, nest), encoding="utf-8")
-    (root / "stubs.c").write_text(STUBS, encoding="utf-8")
+    (root / 'sketch.c').write_text(host_sketch_c(frame, nest), encoding='utf-8')
+    (root / 'stubs.c').write_text(STUBS, encoding='utf-8')
 
     compile_sketch(
         root,
         [
-            str(root / "sketch.c"),
-            str(root / "stubs.c"),
-            str(root / "src" / "r2s_bundled.c"),
+            str(root / 'sketch.c'),
+            str(root / 'stubs.c'),
+            str(root / 'src' / 'r2s_bundled.c'),
         ],
         [
-            str(CORE_SRC / "codec.c"),
-            str(CORE_SRC / "varint.c"),
+            str(CORE_SRC / 'codec.c'),
+            str(CORE_SRC / 'varint.c'),
         ],
         extra=(
-            "-DR2S_WITH_CODEC",
-            f"-DR2S_MAX_FRAME={frame}",
-            f"-DR2S_MAX_NEST={nest}",
+            '-DR2S_WITH_CODEC',
+            f'-DR2S_MAX_FRAME={frame}',
+            f'-DR2S_MAX_NEST={nest}',
         ),
     )
-    run = subprocess.run([str(root / "sketch")], capture_output=True, text=True)
+    run = subprocess.run([str(root / 'sketch')], capture_output=True, text=True)
 
     assert run.returncode == 0, run.stdout + run.stderr
-    assert "bundle-host-c-ok" in run.stdout
+    assert 'bundle-host-c-ok' in run.stdout
 
 
 def frame_limit(out_files):
-    match = re.search(r"^#define R2S_MAX_FRAME ([0-9]+)u$", out_files["src/r2s_bundled.h"], re.MULTILINE)
+    match = re.search(
+        r'^#define R2S_MAX_FRAME ([0-9]+)u$', out_files['src/r2s_bundled.h'], re.MULTILINE
+    )
     assert match is not None
     return match.group(1)
 
 
 def nest_limit(out_files):
-    match = re.search(r"^#define R2S_MAX_NEST ([0-9]+)u$", out_files["src/r2s_bundled.h"], re.MULTILINE)
+    match = re.search(
+        r'^#define R2S_MAX_NEST ([0-9]+)u$', out_files['src/r2s_bundled.h'], re.MULTILINE
+    )
     assert match is not None
     return match.group(1)
 
 
 def compile_case(root, body):
-    (root / "case.c").write_text(body, encoding="utf-8")
+    (root / 'case.c').write_text(body, encoding='utf-8')
 
     return subprocess.run(
         [
-            "cc",
-            "-std=c99",
-            "-fsyntax-only",
-            "-I",
+            'cc',
+            '-std=c99',
+            '-fsyntax-only',
+            '-I',
             str(root),
-            "-I",
-            str(root / "src"),
-            "-I",
+            '-I',
+            str(root / 'src'),
+            '-I',
             str(CORE_INCLUDE),
-            str(root / "case.c"),
+            str(root / 'case.c'),
         ],
         capture_output=True,
         text=True,
@@ -849,20 +872,20 @@ def compile_case(root, body):
 
 
 def compile_case_cxx(root, body):
-    (root / "case.cpp").write_text(body, encoding="utf-8")
+    (root / 'case.cpp').write_text(body, encoding='utf-8')
 
     return subprocess.run(
         [
-            "g++",
-            "-std=c++11",
-            "-fsyntax-only",
-            "-I",
+            'g++',
+            '-std=c++11',
+            '-fsyntax-only',
+            '-I',
             str(root),
-            "-I",
-            str(root / "src"),
-            "-I",
+            '-I',
+            str(root / 'src'),
+            '-I',
             str(CORE_INCLUDE),
-            str(root / "case.cpp"),
+            str(root / 'case.cpp'),
         ],
         capture_output=True,
         text=True,
@@ -871,7 +894,7 @@ def compile_case_cxx(root, body):
 
 def case_with_rows(rows):
     """One topic list, as a sketch writes it: the header brings the message types."""
-    return "#define R2S_TOPICS(X) " + rows + '\n#include "ros2serial.h"\n'
+    return '#define R2S_TOPICS(X) ' + rows + '\n#include "ros2serial.h"\n'
 
 
 def test_an_unknown_type_in_the_list_fails_naming_it(tmp_path):
@@ -881,8 +904,8 @@ def test_an_unknown_type_in_the_list_fails_naming_it(tmp_path):
     compiled = compile_case_cxx(root, body)
 
     assert compiled.returncode != 0
-    assert "foo_msgs" in compiled.stderr
-    assert "Bar" in compiled.stderr
+    assert 'foo_msgs' in compiled.stderr
+    assert 'Bar' in compiled.stderr
 
 
 def test_a_missing_list_fails_naming_it(tmp_path):
@@ -891,8 +914,8 @@ def test_a_missing_list_fails_naming_it(tmp_path):
     compiled = compile_case(root, '#include "ros2serial.h"\n')
 
     assert compiled.returncode != 0
-    assert "R2S_TOPICS" in compiled.stderr
-    assert "pkg__msg__Type" in compiled.stderr
+    assert 'R2S_TOPICS' in compiled.stderr
+    assert 'pkg__msg__Type' in compiled.stderr
 
 
 def test_a_c_list_with_cxx_rows_names_the_c_spelling(tmp_path):
@@ -903,7 +926,7 @@ def test_a_c_list_with_cxx_rows_names_the_c_spelling(tmp_path):
     compiled = compile_case(root, body)
 
     assert compiled.returncode != 0
-    assert "pkg__msg__Type" in compiled.stderr
+    assert 'pkg__msg__Type' in compiled.stderr
 
 
 def test_a_cxx_list_with_underscore_rows_names_the_cxx_spelling(tmp_path):
@@ -914,47 +937,47 @@ def test_a_cxx_list_with_underscore_rows_names_the_cxx_spelling(tmp_path):
     compiled = compile_case_cxx(root, body)
 
     assert compiled.returncode != 0
-    assert "double_colon" in compiled.stderr
+    assert 'double_colon' in compiled.stderr
 
 
 def test_an_unknown_c_type_in_the_list_fails_naming_it(tmp_path):
     root = sketch_dir(tmp_path, files())
     body = '#define R2S_TOPICS(X) X(Subscription, foo_msgs__msg__Bar, x, "x", on_x)\n'
     body += '#include "ros2serial.h"\n'
-    body += "void on_x(const foo_msgs__msg__Bar *msg)\n{\n    (void)msg;\n}\n"
+    body += 'void on_x(const foo_msgs__msg__Bar *msg)\n{\n    (void)msg;\n}\n'
 
     compiled = compile_case(root, body)
 
     assert compiled.returncode != 0
-    assert "R2S_CTYPE_HASH_foo_msgs__msg__Bar" in compiled.stderr
+    assert 'R2S_CTYPE_HASH_foo_msgs__msg__Bar' in compiled.stderr
 
 
 def test_an_empty_list_fails_in_cxx(tmp_path):
     root = sketch_dir(tmp_path, files())
-    (root / "case.cpp").write_text(
+    (root / 'case.cpp').write_text(
         '#define R2S_TOPICS(X)\n#include "ros2serial.h"\nint main()\n{\n    return 0;\n}\n',
-        encoding="utf-8",
+        encoding='utf-8',
     )
 
     compiled = subprocess.run(
         [
-            "g++",
-            "-std=c++11",
-            "-fsyntax-only",
-            "-I",
+            'g++',
+            '-std=c++11',
+            '-fsyntax-only',
+            '-I',
             str(root),
-            "-I",
-            str(root / "src"),
-            "-I",
+            '-I',
+            str(root / 'src'),
+            '-I',
             str(CORE_INCLUDE),
-            str(root / "case.cpp"),
+            str(root / 'case.cpp'),
         ],
         capture_output=True,
         text=True,
     )
 
     assert compiled.returncode != 0
-    assert "a node with no topics has nothing to announce" in compiled.stderr
+    assert 'a node with no topics has nothing to announce' in compiled.stderr
 
 
 def test_an_unknown_direction_in_the_list_fails(tmp_path):
@@ -964,7 +987,7 @@ def test_an_unknown_direction_in_the_list_fails(tmp_path):
     compiled = compile_case_cxx(root, body)
 
     assert compiled.returncode != 0
-    assert "FOO" in compiled.stderr
+    assert 'FOO' in compiled.stderr
 
 
 def test_an_old_pub_row_fails_naming_the_new_shape(tmp_path):
@@ -974,7 +997,7 @@ def test_an_old_pub_row_fails_naming_the_new_shape(tmp_path):
     compiled = compile_case_cxx(root, body)
 
     assert compiled.returncode != 0
-    assert "R2S_error_rows_must_read_X_Publisher_or_X_Subscription" in compiled.stderr
+    assert 'R2S_error_rows_must_read_X_Publisher_or_X_Subscription' in compiled.stderr
 
 
 def test_an_old_sub_row_fails_naming_the_new_shape(tmp_path):
@@ -984,7 +1007,7 @@ def test_an_old_sub_row_fails_naming_the_new_shape(tmp_path):
     compiled = compile_case_cxx(root, body)
 
     assert compiled.returncode != 0
-    assert "R2S_error_rows_must_read_X_Publisher_or_X_Subscription" in compiled.stderr
+    assert 'R2S_error_rows_must_read_X_Publisher_or_X_Subscription' in compiled.stderr
 
 
 def test_a_publish_only_list_compiles_cleanly(tmp_path):
@@ -996,37 +1019,39 @@ def test_a_publish_only_list_compiles_cleanly(tmp_path):
 
 def test_a_subscribe_only_list_compiles_cleanly(tmp_path):
     root = sketch_dir(tmp_path, files())
-    body = case_with_rows('X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)')
-    body += "void on_cmd_vel(const geometry_msgs::msg::Twist &msg)\n{\n    (void)msg;\n}\n"
+    body = case_with_rows(
+        'X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)'
+    )
+    body += 'void on_cmd_vel(const geometry_msgs::msg::Twist &msg)\n{\n    (void)msg;\n}\n'
 
     assert compile_strict_cxx(root, body).returncode == 0
 
 
 def compile_strict_cxx(root, body):
     """A list that compiles warning-free: what a `-Werror` sketch build needs."""
-    (root / "case.cpp").write_text(body, encoding="utf-8")
+    (root / 'case.cpp').write_text(body, encoding='utf-8')
 
     return subprocess.run(
         [
-            "g++",
-            "-std=c++11",
-            "-pedantic",
-            "-Werror",
-            "-Wall",
-            "-Wextra",
-            "-Wconversion",
-            "-Wshadow",
-            "-Wundef",
-            "-I",
+            'g++',
+            '-std=c++11',
+            '-pedantic',
+            '-Werror',
+            '-Wall',
+            '-Wextra',
+            '-Wconversion',
+            '-Wshadow',
+            '-Wundef',
+            '-I',
             str(root),
-            "-I",
-            str(root / "src"),
-            "-I",
+            '-I',
+            str(root / 'src'),
+            '-I',
             str(CORE_INCLUDE),
-            "-c",
-            str(root / "case.cpp"),
-            "-o",
-            str(root / "case.o"),
+            '-c',
+            str(root / 'case.cpp'),
+            '-o',
+            str(root / 'case.o'),
         ],
         capture_output=True,
         text=True,
@@ -1036,38 +1061,39 @@ def compile_strict_cxx(root, body):
 def test_a_cxx_sketch_links_against_the_c_library(tmp_path):
     """A C++ sketch resolves the tables and dispatch with C linkage, as the Arduino build does."""
     root = sketch_dir(tmp_path, files())
-    (root / "case.cpp").write_text(
+    (root / 'case.cpp').write_text(
         '#define R2S_NODE_NAME "test_cpp"\n'
-        + '#define R2S_TOPICS(X) X(Subscription, geometry_msgs::msg::Twist, cmd_vel_sub, "cmd_vel", on_cmd_vel)\n'
+        + '#define R2S_TOPICS(X) X(Subscription, geometry_msgs::msg::Twist, '
+        + 'cmd_vel_sub, "cmd_vel", on_cmd_vel)\n'
         + '#include "ros2serial.h"\n'
-        + "void on_cmd_vel(const geometry_msgs::msg::Twist &msg)\n"
-        + "{\n"
-        + "    (void)msg;\n"
-        + "}\n"
-        + "int main()\n"
-        + "{\n"
-        + "    return 0;\n"
-        + "}\n",
-        encoding="utf-8",
+        + 'void on_cmd_vel(const geometry_msgs::msg::Twist &msg)\n'
+        + '{\n'
+        + '    (void)msg;\n'
+        + '}\n'
+        + 'int main()\n'
+        + '{\n'
+        + '    return 0;\n'
+        + '}\n',
+        encoding='utf-8',
     )
 
     compiled = subprocess.run(
         [
-            "g++",
-            "-std=c++11",
-            "-Werror",
-            "-Wall",
-            "-Wextra",
-            "-I",
+            'g++',
+            '-std=c++11',
+            '-Werror',
+            '-Wall',
+            '-Wextra',
+            '-I',
             str(root),
-            "-I",
-            str(root / "src"),
-            "-I",
+            '-I',
+            str(root / 'src'),
+            '-I',
             str(CORE_INCLUDE),
-            "-c",
-            str(root / "case.cpp"),
-            "-o",
-            str(root / "case.o"),
+            '-c',
+            str(root / 'case.cpp'),
+            '-o',
+            str(root / 'case.o'),
         ],
         capture_output=True,
         text=True,
@@ -1075,14 +1101,19 @@ def test_a_cxx_sketch_links_against_the_c_library(tmp_path):
 
     assert compiled.returncode == 0, compiled.stderr
 
-    (root / "stubs.c").write_text(STUBS, encoding="utf-8")
-    objects = [root / "case.o"]
+    (root / 'stubs.c').write_text(STUBS, encoding='utf-8')
+    objects = [root / 'case.o']
     objects += [
         compile_unit(root, str(root / name))
-        for name in ("stubs.c", "src/r2s_bundled.c", str(CORE_SRC / "codec.c"), str(CORE_SRC / "varint.c"))
+        for name in (
+            'stubs.c',
+            'src/r2s_bundled.c',
+            str(CORE_SRC / 'codec.c'),
+            str(CORE_SRC / 'varint.c'),
+        )
     ]
     linked = subprocess.run(
-        ["g++", *[str(obj) for obj in objects], "-o", str(root / "case")],
+        ['g++', *[str(obj) for obj in objects], '-o', str(root / 'case')],
         capture_output=True,
         text=True,
     )

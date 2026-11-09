@@ -11,7 +11,7 @@ import sys
 def is_session_close_timeout(error):
     """Whether error is the known slow session close, not a real failure."""
     message = str(error).lower()
-    return isinstance(error, RuntimeError) and "session" in message and "close" in message
+    return isinstance(error, RuntimeError) and 'session' in message and 'close' in message
 
 
 def shutdown(shutdown_fn=None):
@@ -25,4 +25,7 @@ def shutdown(shutdown_fn=None):
     except RuntimeError as error:
         if not is_session_close_timeout(error):
             raise
-        print("r2s-e2e: ignoring zenoh session-close timeout in teardown: " + str(error), file=sys.stderr)
+        print(
+            'r2s-e2e: ignoring zenoh session-close timeout in teardown: ' + str(error),
+            file=sys.stderr,
+        )

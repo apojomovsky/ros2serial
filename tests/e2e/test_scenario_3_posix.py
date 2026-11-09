@@ -19,20 +19,23 @@ import launch_testing.markers
 import rclpy
 from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, firmware, teardown
+from e2e_support import checks
+from e2e_support import firmware
+from e2e_support import teardown
 from e2e_support.relay import PtyRelay
 from geometry_msgs.msg import Twist
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import QoSProfile
+from rclpy.qos import ReliabilityPolicy
 
 # covers: SES-9, SES-18, SES-31
 
 ECHO_COUNT = 5
 FLOW_TIMEOUT = 20.0
 # The bridge reports announced names without the graph's leading slash.
-HANDSHAKE_TOPICS = ["battery", "cmd_vel", "echo_vel", "log_text", "time_now"]
+HANDSHAKE_TOPICS = ['battery', 'cmd_vel', 'echo_vel', 'log_text', 'time_now']
 TOPIC_BUDGET = 3.0
 # Both directions of the echo path, as the graph names them.
-ECHO_TOPICS = ["/cmd_vel", "/echo_vel"]
+ECHO_TOPICS = ['/cmd_vel', '/echo_vel']
 
 _SCRATCH = None
 _FIRMWARE = None
@@ -79,9 +82,11 @@ def _is_prime(msg):
 
 def _prepare():
     global _SCRATCH, _FIRMWARE, _RELAY, _PARAMS
-    _SCRATCH = tempfile.TemporaryDirectory(prefix="r2s-e2e-3-")
+    _SCRATCH = tempfile.TemporaryDirectory(prefix='r2s-e2e-3-')
     scratch = Path(_SCRATCH.name)
-    _FIRMWARE = firmware.from_run_script() if "R2S_E2E_FW" in os.environ else firmware.build(scratch)
+    _FIRMWARE = (
+        firmware.from_run_script() if 'R2S_E2E_FW' in os.environ else firmware.build(scratch)
+    )
     _RELAY = PtyRelay()
     _RELAY.start()
     _PARAMS = bridge_support.example_params_file()
@@ -111,10 +116,12 @@ def _wait_link_ready(node, received, since):
     runs from the later of the ready line and this return.
     """
     while True:
-        if received and received[-1].status[0].message not in ("disconnected", "boot_wait"):
+        if received and received[-1].status[0].message not in ('disconnected', 'boot_wait'):
             return max(since, time.monotonic())
         took = time.monotonic() - since
-        assert took < bridge_support.HANDSHAKE_TIMEOUT, f"link never left boot wait after {took:.1f} s"
+        assert took < bridge_support.HANDSHAKE_TIMEOUT, (
+            f'link never left boot wait after {took:.1f} s'
+        )
         rclpy.spin_once(node, timeout_sec=0.5)
 
 
@@ -129,20 +136,22 @@ class TestScenario3(unittest.TestCase):
 
     def test_published_twists_come_back_on_the_echo_topic(self):
         global _SPAWNED
-        self.assertTrue(all(not _is_prime(msg) for msg in SENT), "prime collides with the sequence")
-        node = rclpy.create_node("e2e_s3_probe")
+        self.assertTrue(
+            all(not _is_prime(msg) for msg in SENT), 'prime collides with the sequence'
+        )
+        node = rclpy.create_node('e2e_s3_probe')
         try:
             bridge_support.wait_for_bridge(node)
             # Matched before the firmware boots, so the handshake wait below
             # observes bridge state, not DDS discovery of the new topics.
             received = []
-            node.create_subscription(DiagnosticArray, "/diagnostics", received.append, 10)
+            node.create_subscription(DiagnosticArray, '/diagnostics', received.append, 10)
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
             while not received:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
+                self.assertLess(time.monotonic(), deadline, 'no /diagnostics flow from the bridge')
             received.clear()
-            _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
+            _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ('--rate', '10'))
             # The boot wait is the bridge's own delay before the handshake
             # starts, so it waits on the generous timeout and the 3 s
             # budget runs from the later of the ready line and its end.
@@ -152,11 +161,11 @@ class TestScenario3(unittest.TestCase):
                 HANDSHAKE_TOPICS,
                 link_ready_at,
                 TOPIC_BUDGET,
-                "handshake",
+                'handshake',
                 lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
                 clock=time.monotonic,
             )
-            self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
+            self.assertLessEqual(took, TOPIC_BUDGET, 'handshake took longer than 3 s')
             # The echo path needs both directions matched: the bridge's
             # endpoints appear on the graph once the handshake above completes,
             # so this waits out DDS discovery instead of spending the priming
@@ -168,29 +177,33 @@ class TestScenario3(unittest.TestCase):
                 ECHO_TOPICS,
                 handshake_done_at,
                 checks.DISCOVERY_TIMEOUT,
-                "echo topics",
+                'echo topics',
                 lambda: rclpy.spin_once(node, timeout_sec=bridge_support.DISCOVERY_SPIN),
             )
             # The bridge forwards MCU traffic best effort in both directions,
             # so both ends of the probe match that; reliable ends never match.
             best_effort = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
             arrived = []
-            node.create_subscription(Twist, "echo_vel", arrived.append, best_effort)
-            pub = node.create_publisher(Twist, "cmd_vel", best_effort)
+            node.create_subscription(Twist, 'echo_vel', arrived.append, best_effort)
+            pub = node.create_publisher(Twist, 'cmd_vel', best_effort)
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
             while not arrived:
                 pub.publish(PRIME)
                 rclpy.spin_once(node, timeout_sec=0.2)
-                self.assertLess(time.monotonic(), deadline, "no echo flow on echo_vel")
+                self.assertLess(time.monotonic(), deadline, 'no echo flow on echo_vel')
             for msg in SENT:
                 pub.publish(msg)
                 time.sleep(0.2)
             deadline = time.monotonic() + FLOW_TIMEOUT
             sequence = []
             while len(sequence) < ECHO_COUNT:
-                self.assertLess(time.monotonic(), deadline, f"echo_vel: only {len(sequence)} of {ECHO_COUNT} arrived")
+                self.assertLess(
+                    time.monotonic(),
+                    deadline,
+                    f'echo_vel: only {len(sequence)} of {ECHO_COUNT} arrived',
+                )
                 rclpy.spin_once(node, timeout_sec=0.2)
                 sequence = [msg for msg in arrived if not _is_prime(msg)]
-            checks.check_twist_echo(SENT, sequence[:ECHO_COUNT], "echo_vel")
+            checks.check_twist_echo(SENT, sequence[:ECHO_COUNT], 'echo_vel')
         finally:
             node.destroy_node()

@@ -18,10 +18,10 @@ BATTERY_ID = 16
 CMD_VEL_ID = 17
 
 _COUNTER_FIELDS = [
-    ("rx_frames", ctypes.c_uint16),
-    ("crc_errors", ctypes.c_uint16),
-    ("rx_overflows", ctypes.c_uint16),
-    ("dropped_frames", ctypes.c_uint16),
+    ('rx_frames', ctypes.c_uint16),
+    ('crc_errors', ctypes.c_uint16),
+    ('rx_overflows', ctypes.c_uint16),
+    ('dropped_frames', ctypes.c_uint16),
 ]
 
 
@@ -30,50 +30,60 @@ class _Counters(ctypes.Structure):
 
 
 class _Battery(ctypes.Structure):
-    _fields_ = [("data", ctypes.c_float)]
+    _fields_ = [('data', ctypes.c_float)]
 
 
 class _ParamInit(ctypes.Union):
-    _fields_ = [("b", ctypes.c_uint8), ("i", ctypes.c_int64), ("f", ctypes.c_double), ("s", ctypes.c_char_p)]  # type: ignore[assignment]
+    _fields_ = [
+        ('b', ctypes.c_uint8),
+        ('i', ctypes.c_int64),
+        ('f', ctypes.c_double),
+        ('s', ctypes.c_char_p),
+    ]  # type: ignore[assignment]
 
 
 class _ParamValue(ctypes.Union):
-    _fields_ = [("b", ctypes.c_uint8), ("i", ctypes.c_int64), ("f", ctypes.c_double), ("s", ctypes.c_char_p)]  # type: ignore[assignment]
+    _fields_ = [
+        ('b', ctypes.c_uint8),
+        ('i', ctypes.c_int64),
+        ('f', ctypes.c_double),
+        ('s', ctypes.c_char_p),
+    ]  # type: ignore[assignment]
 
 
 class _Param(ctypes.Structure):
     _fields_ = [  # type: ignore[assignment]
-        ("name", ctypes.c_char_p),
-        ("type", ctypes.c_uint8),
-        ("flags", ctypes.c_uint8),
-        ("bound", ctypes.c_uint16),
-        ("initial", _ParamInit),
-        ("value", _ParamValue),
+        ('name', ctypes.c_char_p),
+        ('type', ctypes.c_uint8),
+        ('flags', ctypes.c_uint8),
+        ('bound', ctypes.c_uint16),
+        ('initial', _ParamInit),
+        ('value', _ParamValue),
     ]
 
 
 def default_lib_dir() -> Path:
     """Where build-host-lib.sh puts the libraries, without arguments."""
-    override = os.environ.get("R2S_HOST_LIB_DIR")
+    override = os.environ.get('R2S_HOST_LIB_DIR')
     if override:
         return Path(override)
-    build = os.environ.get("R2S_BUILD_DIR")
+    build = os.environ.get('R2S_BUILD_DIR')
     if not build:
         top = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True
+            ['git', 'rev-parse', '--show-toplevel'], capture_output=True, text=True, check=True
         ).stdout.strip()
-        build = str(Path.home() / ".cache" / "ros2serial" / f"build{top.replace('/', '-')}")
-    return Path(build) / "host"
+        build = str(Path.home() / '.cache' / 'ros2serial' / f'build{top.replace("/", "-")}')
+    return Path(build) / 'host'
 
 
-def find_library(name: str = "libr2s_host.so", lib_dir: Path | None = None) -> Path:
+def find_library(name: str = 'libr2s_host.so', lib_dir: Path | None = None) -> Path:
     """The library path, or a precise error when it is not built yet."""
     directory = lib_dir if lib_dir is not None else default_lib_dir()
     path = directory / name
     if not path.is_file():
         raise FileNotFoundError(
-            f"{path} is missing: run scripts/build-host-lib.sh {directory} first "
-            "(the GEN suite section builds it before pytest runs)"
+            f'{path} is missing: run scripts/build-host-lib.sh {directory} first '
+            '(the GEN suite section builds it before pytest runs)'
         )
     return path
 
@@ -199,18 +209,18 @@ class HostSession:
         """Every observable the tests compare after a step."""
         counters = self.lib.r2s_framer_counters().contents
         return {
-            "connected": int(self.lib.r2s_connected()),
-            "token": int(self.lib.r2s_session_token()),
-            "status": [int(self.lib.r2s_session_topic_status(i)) for i in range(4)],
-            "counters": (
+            'connected': int(self.lib.r2s_connected()),
+            'token': int(self.lib.r2s_session_token()),
+            'status': [int(self.lib.r2s_session_topic_status(i)) for i in range(4)],
+            'counters': (
                 int(counters.rx_frames),
                 int(counters.crc_errors),
                 int(counters.rx_overflows),
                 int(counters.dropped_frames),
             ),
-            "tx_seq": [int(self.lib.r2s_session_tx_seq(i)) for i in range(4)],
-            "rx_lost": [int(self.lib.r2s_session_rx_lost(i)) for i in range(4)],
-            "params": self.param_values(),
+            'tx_seq': [int(self.lib.r2s_session_tx_seq(i)) for i in range(4)],
+            'rx_lost': [int(self.lib.r2s_session_rx_lost(i)) for i in range(4)],
+            'params': self.param_values(),
         }
 
     def topic_flags(self, index: int) -> int:

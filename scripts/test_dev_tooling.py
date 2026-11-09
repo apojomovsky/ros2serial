@@ -16,30 +16,30 @@ def run(args, cwd=ROOT, env=None, check=False):
 
 
 def copy_tag_inputs(dest: Path) -> Path:
-    for name in ["Dockerfile", "ci/versions.env", "scripts/dev-image-tag.sh"]:
+    for name in ['Dockerfile', 'ci/versions.env', 'scripts/dev-image-tag.sh']:
         (dest / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / name, dest / name)
     return dest
 
 
 def tag_of(root: Path) -> str:
-    return run(["bash", "scripts/dev-image-tag.sh"], cwd=root, check=True).stdout.strip()
+    return run(['bash', 'scripts/dev-image-tag.sh'], cwd=root, check=True).stdout.strip()
 
 
 def test_image_tag_is_deterministic_and_content_addressed(tmp_path):
     root = copy_tag_inputs(tmp_path)
     first = tag_of(root)
-    assert re.fullmatch(r"ros2serial-dev:[0-9a-f]{12}", first), first
+    assert re.fullmatch(r'ros2serial-dev:[0-9a-f]{12}', first), first
     assert tag_of(root) == first
-    (root / "Dockerfile").write_text((root / "Dockerfile").read_text() + "\n# changed\n")
+    (root / 'Dockerfile').write_text((root / 'Dockerfile').read_text() + '\n# changed\n')
     second = tag_of(root)
     assert second != first
-    (root / "ci/versions.env").write_text((root / "ci/versions.env").read_text() + "X=1\n")
+    (root / 'ci/versions.env').write_text((root / 'ci/versions.env').read_text() + 'X=1\n')
     assert tag_of(root) != second
 
 
 def fake_bin(tmp_path: Path, names: list[str]) -> Path:
-    bindir = tmp_path / "bin"
+    bindir = tmp_path / 'bin'
     bindir.mkdir()
     for name in names:
         real = shutil.which(name)
@@ -48,76 +48,78 @@ def fake_bin(tmp_path: Path, names: list[str]) -> Path:
 
 
 def test_doctor_names_a_missing_dependency(tmp_path):
-    bindir = fake_bin(tmp_path, ["bash", "git", "make", "sha256sum", "grep", "cat", "cut", "dirname", "id"])
-    result = run(["bash", "scripts/doctor.sh"], env={"PATH": str(bindir), "HOME": str(tmp_path)})
+    bindir = fake_bin(
+        tmp_path, ['bash', 'git', 'make', 'sha256sum', 'grep', 'cat', 'cut', 'dirname', 'id']
+    )
+    result = run(['bash', 'scripts/doctor.sh'], env={'PATH': str(bindir), 'HOME': str(tmp_path)})
     assert result.returncode != 0
-    assert "docker" in result.stdout
+    assert 'docker' in result.stdout
 
 
 def make_repo_with_worktree(tmp_path: Path) -> Path:
-    repo = tmp_path / "repo"
+    repo = tmp_path / 'repo'
     repo.mkdir()
     for args in (
-        ["init", "-q", "-b", "master"],
-        ["config", "user.email", "t@example.com"],
-        ["config", "user.name", "t"],
-        ["commit", "-q", "--allow-empty", "-m", "chore: start"],
-        ["worktree", "add", "-q", ".worktrees/feat-1", "-b", "feat/1-x"],
+        ['init', '-q', '-b', 'master'],
+        ['config', 'user.email', 't@example.com'],
+        ['config', 'user.name', 't'],
+        ['commit', '-q', '--allow-empty', '-m', 'chore: start'],
+        ['worktree', 'add', '-q', '.worktrees/feat-1', '-b', 'feat/1-x'],
     ):
-        run(["git", *args], cwd=repo, check=True)
+        run(['git', *args], cwd=repo, check=True)
     return repo
 
 
 def test_guard_refuses_the_main_clone_while_worktrees_exist(tmp_path):
     repo = make_repo_with_worktree(tmp_path)
-    guard = str(ROOT / "scripts/check-main-clone-build.sh")
-    env = {k: v for k, v in os.environ.items() if k != "ALLOW_MAIN_CLONE"}
-    refused = run(["bash", guard], cwd=repo, env=env)
+    guard = str(ROOT / 'scripts/check-main-clone-build.sh')
+    env = {k: v for k, v in os.environ.items() if k != 'ALLOW_MAIN_CLONE'}
+    refused = run(['bash', guard], cwd=repo, env=env)
     assert refused.returncode != 0
-    assert ".worktrees" in refused.stdout
-    assert run(["bash", guard], cwd=repo / ".worktrees/feat-1", env=env).returncode == 0
-    assert run(["bash", guard], cwd=repo, env={**env, "ALLOW_MAIN_CLONE": "1"}).returncode == 0
+    assert '.worktrees' in refused.stdout
+    assert run(['bash', guard], cwd=repo / '.worktrees/feat-1', env=env).returncode == 0
+    assert run(['bash', guard], cwd=repo, env={**env, 'ALLOW_MAIN_CLONE': '1'}).returncode == 0
 
 
 def test_guard_allows_the_main_clone_without_worktrees(tmp_path):
-    repo = tmp_path / "solo"
+    repo = tmp_path / 'solo'
     repo.mkdir()
-    run(["git", "init", "-q", "-b", "master"], cwd=repo, check=True)
-    assert run(["bash", str(ROOT / "scripts/check-main-clone-build.sh")], cwd=repo).returncode == 0
+    run(['git', 'init', '-q', '-b', 'master'], cwd=repo, check=True)
+    assert run(['bash', str(ROOT / 'scripts/check-main-clone-build.sh')], cwd=repo).returncode == 0
 
 
 def test_build_lock_serializes_commands(tmp_path):
     """Two runs of one build directory take turns."""
-    lock, log = tmp_path / "build.lock", tmp_path / "log"
-    body = f"echo start >> {log}; sleep 0.3; echo end >> {log}"
-    script = str(ROOT / "scripts/with-build-lock.sh")
+    lock, log = tmp_path / 'build.lock', tmp_path / 'log'
+    body = f'echo start >> {log}; sleep 0.3; echo end >> {log}'
+    script = str(ROOT / 'scripts/with-build-lock.sh')
 
     def one(env=None):
-        return run(["bash", script, str(lock), "bash", "-c", body], env=env)
+        return run(['bash', script, str(lock), 'bash', '-c', body], env=env)
 
     threads = [threading.Thread(target=one) for _ in range(2)]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
-    assert log.read_text().split() == ["start", "end", "start", "end"]
+    assert log.read_text().split() == ['start', 'end', 'start', 'end']
 
 
 def test_build_lock_refuses_when_asked_not_to_wait(tmp_path):
     """Asked not to wait, a run that finds the lock held stops."""
-    lock, log = tmp_path / "build.lock", tmp_path / "log"
-    script = str(ROOT / "scripts/with-build-lock.sh")
+    lock, log = tmp_path / 'build.lock', tmp_path / 'log'
+    script = str(ROOT / 'scripts/with-build-lock.sh')
     holder = subprocess.Popen(
-        ["bash", script, str(lock), "bash", "-c", f"echo start >> {log}; sleep 5"],
+        ['bash', script, str(lock), 'bash', '-c', f'echo start >> {log}; sleep 5'],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     try:
         time.sleep(0.5)
-        env = {**os.environ, "R2S_LOCK_NOWAIT": "1"}
-        out = run(["bash", script, str(lock), "bash", "-c", "true"], env=env)
+        env = {**os.environ, 'R2S_LOCK_NOWAIT': '1'}
+        out = run(['bash', script, str(lock), 'bash', '-c', 'true'], env=env)
         assert out.returncode == 75
-        assert "busy" in out.stderr
+        assert 'busy' in out.stderr
         assert str(lock) in out.stderr
     finally:
         holder.kill()
@@ -125,28 +127,28 @@ def test_build_lock_refuses_when_asked_not_to_wait(tmp_path):
 
 
 def agents_targets() -> set[str]:
-    text = (ROOT / "AGENTS.md").read_text()
-    table = text[text.index("| Target | What |") : text.index("## Working on an issue")]
+    text = (ROOT / 'AGENTS.md').read_text()
+    table = text[text.index('| Target | What |') : text.index('## Working on an issue')]
     names = set()
-    for line in (ln for ln in table.splitlines()[2:] if ln.startswith("|")):
+    for line in (ln for ln in table.splitlines()[2:] if ln.startswith('|')):
         # Cells split on unescaped pipes: a target cell may contain `uno\|mega`.
-        first = re.split(r"(?<!\\)\|", line)[1]
-        names.update(re.findall(r"`([a-z][a-z0-9-]*)", first))
-    return names - {"Target"}
+        first = re.split(r'(?<!\\)\|', line)[1]
+        names.update(re.findall(r'`([a-z][a-z0-9-]*)', first))
+    return names - {'Target'}
 
 
 def test_make_help_lists_exactly_the_targets_in_agents_md():
-    out = run(["make", "help"], check=True).stdout
-    listed = set(re.findall(r"^  ([a-z][a-z0-9-]*)\s", out, re.MULTILINE))
+    out = run(['make', 'help'], check=True).stdout
+    listed = set(re.findall(r'^  ([a-z][a-z0-9-]*)\s', out, re.MULTILINE))
     assert listed == agents_targets()
 
 
 def test_make_test_reaches_the_task_runner_in_and_out_of_the_image():
-    inside = run(["make", "-n", "test", "R2S_IN_IMAGE=1"], check=True).stdout
-    assert "bash scripts/run-tasks.sh" in inside
-    assert "docker" not in inside
-    outside = run(["make", "-n", "test", "R2S_IN_IMAGE="], check=True).stdout
-    assert re.search(r"docker run .* bash scripts/run-tasks\.sh", outside), outside
+    inside = run(['make', '-n', 'test', 'R2S_IN_IMAGE=1'], check=True).stdout
+    assert 'bash scripts/run-tasks.sh' in inside
+    assert 'docker' not in inside
+    outside = run(['make', '-n', 'test', 'R2S_IN_IMAGE='], check=True).stdout
+    assert re.search(r'docker run .* bash scripts/run-tasks\.sh', outside), outside
 
 
 def test_the_suite_refuses_a_second_run_on_the_same_tree(tmp_path):
@@ -155,23 +157,28 @@ def test_the_suite_refuses_a_second_run_on_the_same_tree(tmp_path):
     The run happens in a copy of the tree, so the suite it starts does not
     run this test again.
     """
-    tree = tmp_path / "tree"
+    tree = tmp_path / 'tree'
     tree.mkdir()
-    (tree / "scripts").mkdir()
-    shutil.copy2(ROOT / "scripts/ci-test.sh", tree / "scripts/ci-test.sh")
-    shutil.copy2(ROOT / "scripts/suite-lock.sh", tree / "scripts/suite-lock.sh")
-    lock = tmp_path / "suite.lock"
-    env = {**os.environ, "R2S_SUITE_LOCK": str(lock), "R2S_SUITE_LOCK_TREE": str(tree), "LINT": "1"}
+    (tree / 'scripts').mkdir()
+    shutil.copy2(ROOT / 'scripts/ci-test.sh', tree / 'scripts/ci-test.sh')
+    shutil.copy2(ROOT / 'scripts/suite-lock.sh', tree / 'scripts/suite-lock.sh')
+    lock = tmp_path / 'suite.lock'
+    env = {
+        **os.environ,
+        'R2S_SUITE_LOCK': str(lock),
+        'R2S_SUITE_LOCK_TREE': str(tree),
+        'LINT': '1',
+    }
     holder = subprocess.Popen(
-        ["bash", str(ROOT / "scripts/with-build-lock.sh"), str(lock), "sleep", "5"],
+        ['bash', str(ROOT / 'scripts/with-build-lock.sh'), str(lock), 'sleep', '5'],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     try:
         time.sleep(0.5)
-        out = run(["bash", "scripts/ci-test.sh"], cwd=tree, env=env)
+        out = run(['bash', 'scripts/ci-test.sh'], cwd=tree, env=env)
         assert out.returncode == 75, out.stdout + out.stderr
-        assert "already running" in out.stderr
+        assert 'already running' in out.stderr
     finally:
         holder.kill()
         holder.wait()
@@ -183,37 +190,37 @@ def test_two_containers_do_not_share_the_lock_of_their_copies(tmp_path):
     Each container's copy is its own tree, so the first container's suite must
     not refuse the second's, while a second run of one copy still must.
     """
-    tree = tmp_path / "tree"
-    (tree / "scripts").mkdir(parents=True)
-    for name in ("ci-test.sh", "suite-lock.sh"):
-        shutil.copy2(ROOT / "scripts" / name, tree / "scripts" / name)
+    tree = tmp_path / 'tree'
+    (tree / 'scripts').mkdir(parents=True)
+    for name in ('ci-test.sh', 'suite-lock.sh'):
+        shutil.copy2(ROOT / 'scripts' / name, tree / 'scripts' / name)
 
     def env(container):
         return {
             **os.environ,
-            "LINT": "1",
-            "R2S_HOST_MOUNT": str(tmp_path / "host"),
-            "TMPDIR": str(tmp_path / container / "tmp"),
+            'LINT': '1',
+            'R2S_HOST_MOUNT': str(tmp_path / 'host'),
+            'TMPDIR': str(tmp_path / container / 'tmp'),
         }
 
     def lock_of(container):
-        out = run(["bash", str(tree / "scripts" / "suite-lock.sh"), str(tree)], env=env(container))
+        out = run(['bash', str(tree / 'scripts' / 'suite-lock.sh'), str(tree)], env=env(container))
         assert out.returncode == 0, out.stderr
         return out.stdout.strip()
 
-    lock = lock_of("one")
+    lock = lock_of('one')
     holder = subprocess.Popen(
-        ["bash", str(ROOT / "scripts/with-build-lock.sh"), lock, "sleep", "5"],
+        ['bash', str(ROOT / 'scripts/with-build-lock.sh'), lock, 'sleep', '5'],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     try:
         time.sleep(0.5)
-        same = run(["bash", "scripts/ci-test.sh"], cwd=tree, env=env("one"))
+        same = run(['bash', 'scripts/ci-test.sh'], cwd=tree, env=env('one'))
         assert same.returncode == 75, same.stdout + same.stderr
-        other = run(["bash", "scripts/ci-test.sh"], cwd=tree, env=env("two"))
+        other = run(['bash', 'scripts/ci-test.sh'], cwd=tree, env=env('two'))
         assert other.returncode != 75, other.stdout + other.stderr
-        assert "already running" not in other.stderr
+        assert 'already running' not in other.stderr
     finally:
         holder.kill()
         holder.wait()
@@ -221,28 +228,28 @@ def test_two_containers_do_not_share_the_lock_of_their_copies(tmp_path):
 
 def test_the_suite_queues_when_asked(tmp_path):
     """Asked to wait, the second run waits and then runs."""
-    tree = tmp_path / "tree"
+    tree = tmp_path / 'tree'
     tree.mkdir()
-    (tree / "scripts").mkdir()
-    shutil.copy2(ROOT / "scripts/ci-test.sh", tree / "scripts/ci-test.sh")
-    shutil.copy2(ROOT / "scripts/suite-lock.sh", tree / "scripts/suite-lock.sh")
-    lock = tmp_path / "suite.lock"
+    (tree / 'scripts').mkdir()
+    shutil.copy2(ROOT / 'scripts/ci-test.sh', tree / 'scripts/ci-test.sh')
+    shutil.copy2(ROOT / 'scripts/suite-lock.sh', tree / 'scripts/suite-lock.sh')
+    lock = tmp_path / 'suite.lock'
     env = {
         **os.environ,
-        "R2S_SUITE_LOCK": str(lock),
-        "R2S_SUITE_LOCK_TREE": str(tree),
-        "LINT": "1",
-        "R2S_SUITE_LOCK_WAIT": "1",
+        'R2S_SUITE_LOCK': str(lock),
+        'R2S_SUITE_LOCK_TREE': str(tree),
+        'LINT': '1',
+        'R2S_SUITE_LOCK_WAIT': '1',
     }
     holder = subprocess.Popen(
-        ["bash", str(ROOT / "scripts/with-build-lock.sh"), str(lock), "sleep", "2"],
+        ['bash', str(ROOT / 'scripts/with-build-lock.sh'), str(lock), 'sleep', '2'],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     try:
         time.sleep(0.3)
-        out = run(["bash", "scripts/ci-test.sh"], cwd=tree, env=env)
-        assert "already running" not in out.stderr, out.stdout + out.stderr
+        out = run(['bash', 'scripts/ci-test.sh'], cwd=tree, env=env)
+        assert 'already running' not in out.stderr, out.stdout + out.stderr
     finally:
         holder.kill()
         holder.wait()
@@ -250,14 +257,26 @@ def test_the_suite_queues_when_asked(tmp_path):
 
 def test_the_suite_runs_without_flock(tmp_path):
     """A host without flock runs the suite unlocked, as the build lock does."""
-    stub = tmp_path / "bin"
+    stub = tmp_path / 'bin'
     stub.mkdir()
-    for name in ("bash", "cat", "dirname", "grep", "mkdir", "mktemp", "rm", "sed", "sha256sum", "tail", "tr"):
+    for name in (
+        'bash',
+        'cat',
+        'dirname',
+        'grep',
+        'mkdir',
+        'mktemp',
+        'rm',
+        'sed',
+        'sha256sum',
+        'tail',
+        'tr',
+    ):
         found = shutil.which(name)
         if found:
             (stub / name).symlink_to(found)
-    env = {**os.environ, "PATH": str(stub), "LINT": "1"}
-    out = run(["bash", str(ROOT / "scripts/ci-test.sh")], env=env)
+    env = {**os.environ, 'PATH': str(stub), 'LINT': '1'}
+    out = run(['bash', str(ROOT / 'scripts/ci-test.sh')], env=env)
     # The suite ran: it got as far as the lint, which has no ruff here.
-    assert "flock is not on this host" in out.stderr
-    assert "the suite lock cannot be" not in out.stderr
+    assert 'flock is not on this host' in out.stderr
+    assert 'the suite lock cannot be' not in out.stderr

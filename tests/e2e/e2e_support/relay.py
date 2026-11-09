@@ -27,7 +27,7 @@ class PtyRelay:
     def start(self):
         """Serve both directions until stop is called."""
         self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._run, name="pty-relay", daemon=True)
+        self._thread = threading.Thread(target=self._run, name='pty-relay', daemon=True)
         self._thread.start()
 
     def _forward(self, source, target):

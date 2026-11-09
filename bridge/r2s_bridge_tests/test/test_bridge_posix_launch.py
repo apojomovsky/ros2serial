@@ -22,12 +22,15 @@ import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchContext
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.actions import ExecuteProcess
+from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.utilities import perform_substitutions
 from launch_ros.substitutions import FindPackageShare
 from rcl_interfaces.srv import GetParameters
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import QoSProfile
+from rclpy.qos import ReliabilityPolicy
 from std_msgs.msg import Float32
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -39,8 +42,8 @@ def _load_relay():
     The bridge tests run under colcon without the framework on the import
     path, so the module loads by path instead of by package import.
     """
-    location = REPO_ROOT / "tests" / "e2e" / "e2e_support" / "relay.py"
-    spec = importlib.util.spec_from_file_location("e2e_relay", location)
+    location = REPO_ROOT / 'tests' / 'e2e' / 'e2e_support' / 'relay.py'
+    spec = importlib.util.spec_from_file_location('e2e_relay', location)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.PtyRelay
@@ -55,8 +58,8 @@ def _load_discovery_wait():
     It lives in the e2e framework the bridge tests cannot import, so it
     loads by path the same way.
     """
-    location = REPO_ROOT / "tests" / "e2e" / "e2e_support" / "bridge.py"
-    spec = importlib.util.spec_from_file_location("e2e_bridge_wait", location)
+    location = REPO_ROOT / 'tests' / 'e2e' / 'e2e_support' / 'bridge.py'
+    spec = importlib.util.spec_from_file_location('e2e_bridge_wait', location)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -64,21 +67,21 @@ def _load_discovery_wait():
 
 DOCUMENTED_PARAMETERS = frozenset(
     [
-        "port",
-        "baud",
-        "low_latency",
-        "hupcl",
-        "boot_wait_ms",
-        "node_map",
-        "reconnect_period_ms",
-        "heartbeat_period_ms",
-        "link_timeout_ms",
-        "time_sync.enabled",
-        "time_sync.period_ms",
-        "rate_limit.default_hz",
-        "rate_limit.overrides",
-        "tx_budget_pct",
-        "qos_depth",
+        'port',
+        'baud',
+        'low_latency',
+        'hupcl',
+        'boot_wait_ms',
+        'node_map',
+        'reconnect_period_ms',
+        'heartbeat_period_ms',
+        'link_timeout_ms',
+        'time_sync.enabled',
+        'time_sync.period_ms',
+        'rate_limit.default_hz',
+        'rate_limit.overrides',
+        'tx_budget_pct',
+        'qos_depth',
     ]
 )
 
@@ -89,16 +92,19 @@ FLOW_TIMEOUT = 20.0
 # description performs. The namespace and remapping entries pin the public
 # interface from #235: no other argument may appear.
 LAUNCH_ARGUMENT_DEFAULTS = {
-    "port": "/dev/ttyACM0",
-    "log_level": "info",
-    "mcu_log_level": "",
-    "namespace": "",
-    "remappings": "",
+    'port': '/dev/ttyACM0',
+    'log_level': 'info',
+    'mcu_log_level': '',
+    'namespace': '',
+    'remappings': '',
 }
 
-NAMESPACE_HELP = "ROS namespace for the bridge node and the MCU topics. Empty keeps the root namespace."
+NAMESPACE_HELP = (
+    'ROS namespace for the bridge node and the MCU topics. Empty keeps the root namespace.'
+)
 REMAPPINGS_HELP = (
-    "Comma-separated topic remappings as src:=dst pairs, for example battery:=cell_voltage. Empty applies none."
+    'Comma-separated topic remappings as src:=dst pairs, for example battery:=cell_voltage. '
+    'Empty applies none.'
 )
 
 _SCRATCH = None
@@ -111,9 +117,9 @@ def build_posix_firmware(scratch):
     """Build the posix virtual MCU into scratch with its own run script and
     return the firmware binary."""
     env = dict(os.environ)
-    env["R2S_BUILD_DIR"] = str(scratch)
+    env['R2S_BUILD_DIR'] = str(scratch)
     proc = subprocess.run(
-        ["bash", str(REPO_ROOT / "ports" / "posix" / "run.sh"), "--build-only"],
+        ['bash', str(REPO_ROOT / 'ports' / 'posix' / 'run.sh'), '--build-only'],
         capture_output=True,
         text=True,
         timeout=300,
@@ -121,25 +127,25 @@ def build_posix_firmware(scratch):
         check=False,
     )
     if proc.returncode != 0:
-        raise AssertionError("posix firmware build failed:\n" + proc.stderr[-4000:])
-    firmware = scratch / "ports" / "posix" / "r2s_posix_firmware"
+        raise AssertionError('posix firmware build failed:\n' + proc.stderr[-4000:])
+    firmware = scratch / 'ports' / 'posix' / 'r2s_posix_firmware'
     if not firmware.is_file():
-        raise AssertionError("posix firmware binary missing after build: " + str(firmware))
+        raise AssertionError('posix firmware binary missing after build: ' + str(firmware))
     return firmware
 
 
 def _example_params():
-    path = Path(get_package_share_directory("r2s_bridge")) / "config" / "r2s_bridge.params.yaml"
+    path = Path(get_package_share_directory('r2s_bridge')) / 'config' / 'r2s_bridge.params.yaml'
     with open(path) as handle:
-        return yaml.safe_load(handle)["r2s_bridge"]["ros__parameters"]
+        return yaml.safe_load(handle)['r2s_bridge']['ros__parameters']
 
 
-def _flatten(mapping, prefix=""):
+def _flatten(mapping, prefix=''):
     names = []
     for key, value in mapping.items():
         name = prefix + key
         if isinstance(value, dict):
-            names.extend(_flatten(value, name + "."))
+            names.extend(_flatten(value, name + '.'))
         else:
             names.append(name)
     return names
@@ -148,17 +154,17 @@ def _flatten(mapping, prefix=""):
 def _scratch_params(scratch):
     """Copy the installed example file to scratch with a non-default QoS
     depth, so the launch proves the params file reaches the bridge."""
-    source = Path(get_package_share_directory("r2s_bridge")) / "config" / "r2s_bridge.params.yaml"
+    source = Path(get_package_share_directory('r2s_bridge')) / 'config' / 'r2s_bridge.params.yaml'
     text = source.read_text()
-    assert text.count("qos_depth: 10") == 1
-    target = scratch / "r2s_bridge.params.yaml"
-    target.write_text(text.replace("qos_depth: 10", "qos_depth: 7"))
+    assert text.count('qos_depth: 10') == 1
+    target = scratch / 'r2s_bridge.params.yaml'
+    target.write_text(text.replace('qos_depth: 10', 'qos_depth: 7'))
     return target
 
 
 def _load_launch_module():
-    path = Path(get_package_share_directory("r2s_bridge")) / "launch" / "r2s_bridge.launch.py"
-    spec = importlib.util.spec_from_file_location("r2s_bridge_launch", path)
+    path = Path(get_package_share_directory('r2s_bridge')) / 'launch' / 'r2s_bridge.launch.py'
+    spec = importlib.util.spec_from_file_location('r2s_bridge_launch', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -166,7 +172,7 @@ def _load_launch_module():
 
 def _prepare():
     global _SCRATCH, _FIRMWARE, _RELAY, _PARAMS
-    _SCRATCH = tempfile.TemporaryDirectory(prefix="r2s-h9-")
+    _SCRATCH = tempfile.TemporaryDirectory(prefix='r2s-h9-')
     scratch = Path(_SCRATCH.name)
     _FIRMWARE = build_posix_firmware(scratch)
     _PARAMS = _scratch_params(scratch)
@@ -178,12 +184,14 @@ def _prepare():
 def generate_test_description():
     _prepare()
     bridge = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([FindPackageShare("r2s_bridge"), "/launch/r2s_bridge.launch.py"]),
-        launch_arguments={"port": _RELAY.host_port, "params_file": str(_PARAMS)}.items(),
+        PythonLaunchDescriptionSource(
+            [FindPackageShare('r2s_bridge'), '/launch/r2s_bridge.launch.py']
+        ),
+        launch_arguments={'port': _RELAY.host_port, 'params_file': str(_PARAMS)}.items(),
     )
     firmware = ExecuteProcess(
-        cmd=[str(_FIRMWARE), _RELAY.mcu_port, "--rate", "20"],
-        output="screen",
+        cmd=[str(_FIRMWARE), _RELAY.mcu_port, '--rate', '20'],
+        output='screen',
     )
     return launch.LaunchDescription([bridge, firmware, launch_testing.actions.ReadyToTest()])
 
@@ -205,15 +213,15 @@ class TestBridgePosixLaunch(unittest.TestCase):
         rclpy.shutdown()
 
     def test_handshake_announces_topics(self):
-        node = rclpy.create_node("h9_handshake_probe")
+        node = rclpy.create_node('h9_handshake_probe')
         try:
             wait = _load_discovery_wait()
             wait.wait_for_topics(
                 node,
-                ["/battery", "/cmd_vel"],
+                ['/battery', '/cmd_vel'],
                 time.monotonic(),
                 HANDSHAKE_TIMEOUT,
-                "bridge never announced battery and cmd_vel",
+                'bridge never announced battery and cmd_vel',
                 lambda: rclpy.spin_once(node, timeout_sec=wait.DISCOVERY_SPIN),
             )
         finally:
@@ -223,73 +231,81 @@ class TestBridgePosixLaunch(unittest.TestCase):
         # The scratch params file copies the example with qos_depth 7, while
         # port arrives through the launch argument: reading both back from
         # the bridge proves the file and the argument were applied.
-        node = rclpy.create_node("h9_param_probe")
+        node = rclpy.create_node('h9_param_probe')
         try:
-            client = node.create_client(GetParameters, "/r2s_bridge/get_parameters")
+            client = node.create_client(GetParameters, '/r2s_bridge/get_parameters')
             self.assertTrue(
                 client.wait_for_service(timeout_sec=HANDSHAKE_TIMEOUT),
-                "bridge parameter service never appeared",
+                'bridge parameter service never appeared',
             )
             request = GetParameters.Request()
-            request.names = ["qos_depth", "port", "baud"]
+            request.names = ['qos_depth', 'port', 'baud']
             future = client.call_async(request)
             rclpy.spin_until_future_complete(node, future, timeout_sec=FLOW_TIMEOUT)
-            self.assertTrue(future.done(), "bridge never answered the parameter query")
+            self.assertTrue(future.done(), 'bridge never answered the parameter query')
             pairs = zip(request.names, future.result().values, strict=True)
             values = {name: value for name, value in pairs}
-            self.assertEqual(values["qos_depth"].integer_value, 7)
-            self.assertEqual(values["port"].string_value, _RELAY.host_port)
-            self.assertEqual(values["baud"].integer_value, 115200)
+            self.assertEqual(values['qos_depth'].integer_value, 7)
+            self.assertEqual(values['port'].string_value, _RELAY.host_port)
+            self.assertEqual(values['baud'].integer_value, 115200)
         finally:
             node.destroy_node()
 
     def test_mcu_to_host_float_flow(self):
-        node = rclpy.create_node("h9_flow_probe")
+        node = rclpy.create_node('h9_flow_probe')
         received = []
         # The bridge publishes MCU topics best effort ([SES-31]), so the probe
         # subscribes best effort too; a reliable probe would never match.
         best_effort = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
-        node.create_subscription(Float32, "battery", lambda msg: received.append(msg.data), best_effort)
+        node.create_subscription(
+            Float32, 'battery', lambda msg: received.append(msg.data), best_effort
+        )
         try:
             deadline = time.monotonic() + FLOW_TIMEOUT
             while len(received) < 3:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                self.assertLess(time.monotonic(), deadline, "no Float32 flow on battery")
+                self.assertLess(time.monotonic(), deadline, 'no Float32 flow on battery')
             self.assertTrue(all(math.isfinite(value) for value in received))
             ordered = all(received[i] < received[i + 1] for i in range(len(received) - 1))
-            self.assertTrue(ordered, "battery values arrived out of order")
+            self.assertTrue(ordered, 'battery values arrived out of order')
         finally:
             node.destroy_node()
 
 
 class TestLaunchFileChecks(unittest.TestCase):
     def test_default_params_file_is_installed(self):
-        prefix = FindPackageShare("r2s_bridge").perform(LaunchContext())
-        params = Path(prefix) / "config" / "r2s_bridge.params.yaml"
-        self.assertTrue(params.is_file(), "example params file missing from the install: " + str(params))
+        prefix = FindPackageShare('r2s_bridge').perform(LaunchContext())
+        params = Path(prefix) / 'config' / 'r2s_bridge.params.yaml'
+        self.assertTrue(
+            params.is_file(), 'example params file missing from the install: ' + str(params)
+        )
 
     def test_example_names_the_documented_parameters(self):
         # An empty list carries no YAML type the parameter parser accepts, so
         # the example keeps rate_limit.overrides commented out.
         found = set(_flatten(_example_params()))
         self.assertEqual(found - DOCUMENTED_PARAMETERS, set())
-        self.assertEqual(DOCUMENTED_PARAMETERS - found, {"rate_limit.overrides"})
+        self.assertEqual(DOCUMENTED_PARAMETERS - found, {'rate_limit.overrides'})
 
     def test_overrides_example_uncomments_cleanly(self):
-        path = Path(get_package_share_directory("r2s_bridge")) / "config" / "r2s_bridge.params.yaml"
+        path = (
+            Path(get_package_share_directory('r2s_bridge')) / 'config' / 'r2s_bridge.params.yaml'
+        )
         lines = path.read_text().splitlines()
         commented = [line for line in lines if line.strip() == '# overrides: ["cmd_vel=20"]']
-        self.assertEqual(len(commented), 1, "overrides example line missing or duplicated")
+        self.assertEqual(len(commented), 1, 'overrides example line missing or duplicated')
         idx = lines.index(commented[0])
-        fixed = lines[:idx] + [commented[0].replace("# ", "", 1)] + lines[idx + 1 :]
-        doc = yaml.safe_load("\n".join(fixed))
-        self.assertEqual(doc["r2s_bridge"]["ros__parameters"]["rate_limit"]["overrides"], ["cmd_vel=20"])
+        fixed = lines[:idx] + [commented[0].replace('# ', '', 1)] + lines[idx + 1 :]
+        doc = yaml.safe_load('\n'.join(fixed))
+        self.assertEqual(
+            doc['r2s_bridge']['ros__parameters']['rate_limit']['overrides'], ['cmd_vel=20']
+        )
 
     def test_missing_params_file_fails_fast(self):
         module = _load_launch_module()
         context = LaunchContext()
-        context.launch_configurations["params_file"] = "/nonexistent/r2s.params.yaml"
-        with self.assertRaisesRegex(RuntimeError, "not a file"):
+        context.launch_configurations['params_file'] = '/nonexistent/r2s.params.yaml'
+        with self.assertRaisesRegex(RuntimeError, 'not a file'):
             module.check_params_file(context)
 
 
@@ -306,45 +322,47 @@ class TestLaunchNamespaceArguments(unittest.TestCase):
         # argument fails here instead of silently changing the interface.
         module = _load_launch_module()
         found = self._declared(module)
-        self.assertEqual(set(found), set(LAUNCH_ARGUMENT_DEFAULTS) | {"params_file"})
+        self.assertEqual(set(found), set(LAUNCH_ARGUMENT_DEFAULTS) | {'params_file'})
         context = LaunchContext()
         for name, default in LAUNCH_ARGUMENT_DEFAULTS.items():
             performed = perform_substitutions(context, found[name].default_value)
             self.assertEqual(performed, default)
-        params_default = perform_substitutions(context, found["params_file"].default_value)
-        self.assertTrue(params_default.endswith("/config/r2s_bridge.params.yaml"), params_default)
+        params_default = perform_substitutions(context, found['params_file'].default_value)
+        self.assertTrue(params_default.endswith('/config/r2s_bridge.params.yaml'), params_default)
 
     def test_launch_help_pins_the_new_arguments(self):
         module = _load_launch_module()
         found = self._declared(module)
-        self.assertEqual(found["namespace"].description, NAMESPACE_HELP)
-        self.assertEqual(found["remappings"].description, REMAPPINGS_HELP)
+        self.assertEqual(found['namespace'].description, NAMESPACE_HELP)
+        self.assertEqual(found['remappings'].description, REMAPPINGS_HELP)
 
     def test_parse_remappings_empty(self):
         module = _load_launch_module()
-        self.assertEqual(module.parse_remappings(""), [])
-        self.assertEqual(module.parse_remappings("   "), [])
+        self.assertEqual(module.parse_remappings(''), [])
+        self.assertEqual(module.parse_remappings('   '), [])
 
     def test_parse_remappings_pairs(self):
         module = _load_launch_module()
         self.assertEqual(
-            module.parse_remappings("battery:=cell_voltage,cmd_vel:=steer"),
-            [("battery", "cell_voltage"), ("cmd_vel", "steer")],
+            module.parse_remappings('battery:=cell_voltage,cmd_vel:=steer'),
+            [('battery', 'cell_voltage'), ('cmd_vel', 'steer')],
         )
 
     def test_parse_remappings_trims_whitespace(self):
         module = _load_launch_module()
-        self.assertEqual(module.parse_remappings(" battery := cell_voltage "), [("battery", "cell_voltage")])
+        self.assertEqual(
+            module.parse_remappings(' battery := cell_voltage '), [('battery', 'cell_voltage')]
+        )
 
     def test_parse_remappings_rejects_pair_without_separator(self):
         module = _load_launch_module()
-        with self.assertRaisesRegex(RuntimeError, "src:=dst"):
-            module.parse_remappings("battery:=cell_voltage,cmd_vel")
+        with self.assertRaisesRegex(RuntimeError, 'src:=dst'):
+            module.parse_remappings('battery:=cell_voltage,cmd_vel')
 
     def test_parse_remappings_rejects_empty_side(self):
         module = _load_launch_module()
-        with self.assertRaisesRegex(RuntimeError, "src:=dst"):
-            module.parse_remappings("battery:=cell_voltage,:=steer")
+        with self.assertRaisesRegex(RuntimeError, 'src:=dst'):
+            module.parse_remappings('battery:=cell_voltage,:=steer')
 
     def _add_bridge(self, module, configs):
         # The Node action resolves its namespace only while visited, so the
@@ -372,16 +390,16 @@ class TestLaunchNamespaceArguments(unittest.TestCase):
         seen = self._add_bridge(
             module,
             {
-                "port": "/dev/ttyACM0",
-                "params_file": "/tmp/r2s.params.yaml",
-                "log_level": "info",
-                "mcu_log_level": "",
-                "namespace": "robot1",
-                "remappings": "battery:=power/battery",
+                'port': '/dev/ttyACM0',
+                'params_file': '/tmp/r2s.params.yaml',
+                'log_level': 'info',
+                'mcu_log_level': '',
+                'namespace': 'robot1',
+                'remappings': 'battery:=power/battery',
             },
         )
-        self.assertEqual(seen.get("namespace"), "robot1")
-        self.assertEqual(seen.get("remappings"), [("battery", "power/battery")])
+        self.assertEqual(seen.get('namespace'), 'robot1')
+        self.assertEqual(seen.get('remappings'), [('battery', 'power/battery')])
 
     def test_bridge_node_omits_empty_namespace_and_remappings(self):
         # Empty values keep the Node construction the launch file always
@@ -390,13 +408,13 @@ class TestLaunchNamespaceArguments(unittest.TestCase):
         seen = self._add_bridge(
             module,
             {
-                "port": "/dev/ttyACM0",
-                "params_file": "/tmp/r2s.params.yaml",
-                "log_level": "info",
-                "mcu_log_level": "",
-                "namespace": "",
-                "remappings": "",
+                'port': '/dev/ttyACM0',
+                'params_file': '/tmp/r2s.params.yaml',
+                'log_level': 'info',
+                'mcu_log_level': '',
+                'namespace': '',
+                'remappings': '',
             },
         )
-        self.assertNotIn("namespace", seen)
-        self.assertNotIn("remappings", seen)
+        self.assertNotIn('namespace', seen)
+        self.assertNotIn('remappings', seen)

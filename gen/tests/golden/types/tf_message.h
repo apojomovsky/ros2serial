@@ -5,9 +5,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct {
-    uint8_t byte;
-    uint16_t following;
+typedef struct
+{
+  uint8_t byte;
+  uint16_t following;
 } r2s_generated_count_alignment_t;
 
 #define R2S_COUNT_ALIGNMENT offsetof(r2s_generated_count_alignment_t, following)
@@ -16,53 +17,62 @@ typedef struct {
 
 /* A count member sits where the compiler aligns a member that follows the
  * elements ([DSC-20]); the check below fails the build when it does not. */
-#define R2S_COUNT_CHECK(owner, field, count, alignment)                                                      \
-    typedef char                                                                                             \
-        r2s_count_check_##owner##__##field[((offsetof(owner, field.size) - offsetof(owner, field.data)) ==   \
-                                            R2S_ROUND_UP((count) * sizeof(((owner *)0)->field.data[0]),      \
-                                                         (alignment)))                                       \
-                                               ? 1                                                           \
-                                               : -1]
+#define R2S_COUNT_CHECK(owner, field, count, alignment) \
+  typedef char \
+    r2s_count_check_ ## owner ## __ ## field[((offsetof(owner, field.size) - offsetof(owner, \
+    field.data)) == \
+      R2S_ROUND_UP((count) * sizeof(((owner *) 0)->field.data[0]), \
+      (alignment))) \
+      ? 1 \
+      : -1]
 
-typedef struct builtin_interfaces__msg__Time {
-    int32_t sec;
-    uint32_t nanosec;
+typedef struct builtin_interfaces__msg__Time
+{
+  int32_t sec;
+  uint32_t nanosec;
 } builtin_interfaces__msg__Time;
 
-typedef struct geometry_msgs__msg__Quaternion {
-    double x;
-    double y;
-    double z;
-    double w;
+typedef struct geometry_msgs__msg__Quaternion
+{
+  double x;
+  double y;
+  double z;
+  double w;
 } geometry_msgs__msg__Quaternion;
 
-typedef struct geometry_msgs__msg__Vector3 {
-    double x;
-    double y;
-    double z;
+typedef struct geometry_msgs__msg__Vector3
+{
+  double x;
+  double y;
+  double z;
 } geometry_msgs__msg__Vector3;
 
-typedef struct geometry_msgs__msg__Transform {
-    geometry_msgs__msg__Vector3 translation;
-    geometry_msgs__msg__Quaternion rotation;
+typedef struct geometry_msgs__msg__Transform
+{
+  geometry_msgs__msg__Vector3 translation;
+  geometry_msgs__msg__Quaternion rotation;
 } geometry_msgs__msg__Transform;
 
-typedef struct std_msgs__msg__Header {
-    builtin_interfaces__msg__Time stamp;
-    char frame_id[25];
+typedef struct std_msgs__msg__Header
+{
+  builtin_interfaces__msg__Time stamp;
+  char frame_id[25];
 } std_msgs__msg__Header;
 
-typedef struct geometry_msgs__msg__TransformStamped {
-    std_msgs__msg__Header header;
-    char child_frame_id[25];
-    geometry_msgs__msg__Transform transform;
+typedef struct geometry_msgs__msg__TransformStamped
+{
+  std_msgs__msg__Header header;
+  char child_frame_id[25];
+  geometry_msgs__msg__Transform transform;
 } geometry_msgs__msg__TransformStamped;
 
-typedef struct tf2_msgs__msg__TFMessage {
-    struct {
-        geometry_msgs__msg__TransformStamped data[4];
-        uint8_t size;
-    } transforms;
+typedef struct tf2_msgs__msg__TFMessage
+{
+  struct
+  {
+    geometry_msgs__msg__TransformStamped data[4];
+    uint8_t size;
+  } transforms;
 } tf2_msgs__msg__TFMessage;
 
 R2S_COUNT_CHECK(tf2_msgs__msg__TFMessage, transforms, 4, 1);

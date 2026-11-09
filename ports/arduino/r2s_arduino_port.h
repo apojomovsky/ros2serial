@@ -8,19 +8,19 @@
 
 namespace r2s
 {
-  namespace detail
-  {
+namespace detail
+{
 // Serves port from now on; the glue defaults to Serial without this call.
-    void arduino_port_attach(Stream & port);
+void arduino_port_attach(Stream & port);
 
 // Starts port at baud and serves it; the baud reaches HardwareSerial and
 // USB CDC alike through the concrete type, while the glue keeps a Stream.
-    template < typename PortT > void arduino_port_begin(PortT & port, unsigned long baud)
-    {
-      port.begin(baud);
-      arduino_port_attach(port);
-    }
-  } // namespace detail
+template<typename PortT> void arduino_port_begin(PortT & port, unsigned long baud)
+{
+  port.begin(baud);
+  arduino_port_attach(port);
+}
+}   // namespace detail
 } // namespace r2s
 
 #ifdef R2S_TESTING

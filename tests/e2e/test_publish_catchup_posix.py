@@ -17,9 +17,12 @@ from pathlib import Path
 import launch_testing.markers
 import rclpy
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, firmware, teardown
+from e2e_support import checks
+from e2e_support import firmware
+from e2e_support import teardown
 from e2e_support.relay import PtyRelay
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import QoSProfile
+from rclpy.qos import ReliabilityPolicy
 from std_msgs.msg import Float32
 
 RATE_HZ = 50
@@ -42,9 +45,11 @@ _PARAMS = None
 
 def _prepare():
     global _SCRATCH, _FIRMWARE, _RELAY, _PARAMS
-    _SCRATCH = tempfile.TemporaryDirectory(prefix="r2s-e2e-catchup-")
+    _SCRATCH = tempfile.TemporaryDirectory(prefix='r2s-e2e-catchup-')
     scratch = Path(_SCRATCH.name)
-    _FIRMWARE = firmware.from_run_script() if "R2S_E2E_FW" in os.environ else firmware.build(scratch)
+    _FIRMWARE = (
+        firmware.from_run_script() if 'R2S_E2E_FW' in os.environ else firmware.build(scratch)
+    )
     _RELAY = PtyRelay()
     _RELAY.start()
     _PARAMS = bridge_support.example_params_file()
@@ -76,17 +81,21 @@ class TestPublishCatchup(unittest.TestCase):
 
     def test_stalled_publisher_keeps_its_count(self):
         global _SPAWNED
-        node = rclpy.create_node("e2e_catchup_probe")
+        node = rclpy.create_node('e2e_catchup_probe')
         try:
             bridge_support.wait_for_bridge(node)
-            _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", str(RATE_HZ), "--no-log-text"))
+            _SPAWNED = firmware.spawn(
+                _FIRMWARE, _RELAY.mcu_port, ('--rate', str(RATE_HZ), '--no-log-text')
+            )
             best_effort = QoSProfile(depth=100, reliability=ReliabilityPolicy.BEST_EFFORT)
             received = []
-            node.create_subscription(Float32, "battery", lambda msg: received.append(msg.data), best_effort)
+            node.create_subscription(
+                Float32, 'battery', lambda msg: received.append(msg.data), best_effort
+            )
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
             while not received:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                self.assertLess(time.monotonic(), deadline, "no Float32 flow on battery")
+                self.assertLess(time.monotonic(), deadline, 'no Float32 flow on battery')
             start = time.monotonic()
             while time.monotonic() < start + STALL_AT_S:
                 rclpy.spin_once(node, timeout_sec=0.5)
@@ -98,6 +107,8 @@ class TestPublishCatchup(unittest.TestCase):
             window_end = start + WINDOW_S
             while time.monotonic() < window_end:
                 rclpy.spin_once(node, timeout_sec=0.5)
-            checks.check_float_sequence(list(received), RECEIVE_FLOOR, LOSS_BUDGET, "battery at 50 Hz across a stall")
+            checks.check_float_sequence(
+                list(received), RECEIVE_FLOOR, LOSS_BUDGET, 'battery at 50 Hz across a stall'
+            )
         finally:
             node.destroy_node()

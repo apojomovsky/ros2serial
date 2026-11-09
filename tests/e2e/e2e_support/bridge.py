@@ -11,9 +11,11 @@ from pathlib import Path
 import launch
 import launch_testing.actions
 from ament_index_python.packages import get_package_share_directory
-from launch.actions import GroupAction, IncludeLaunchDescription
+from launch.actions import GroupAction
+from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch_ros.actions import PushRosNamespace, SetRemap
+from launch_ros.actions import PushRosNamespace
+from launch_ros.actions import SetRemap
 from launch_ros.substitutions import FindPackageShare
 from rcl_interfaces.srv import GetParameters
 
@@ -27,25 +29,29 @@ DISCOVERY_SPIN = 0.1
 
 def example_params_file():
     """Return the installed example parameter file."""
-    path = Path(get_package_share_directory("r2s_bridge")) / "config" / "r2s_bridge.params.yaml"
-    assert path.is_file(), "example params file missing from the install: " + str(path)
+    path = Path(get_package_share_directory('r2s_bridge')) / 'config' / 'r2s_bridge.params.yaml'
+    assert path.is_file(), 'example params file missing from the install: ' + str(path)
     return path
 
 
-def include_bridge(port, params_file, log_level="info", mcu_log_level=""):
+def include_bridge(port, params_file, log_level='info', mcu_log_level=''):
     """Include the bridge launch file with the scenario's port, file and log levels."""
     return IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([FindPackageShare("r2s_bridge"), "/launch/r2s_bridge.launch.py"]),
+        PythonLaunchDescriptionSource(
+            [FindPackageShare('r2s_bridge'), '/launch/r2s_bridge.launch.py']
+        ),
         launch_arguments={
-            "port": port,
-            "params_file": str(params_file),
-            "log_level": log_level,
-            "mcu_log_level": mcu_log_level,
+            'port': port,
+            'params_file': str(params_file),
+            'log_level': log_level,
+            'mcu_log_level': mcu_log_level,
         }.items(),
     )
 
 
-def scoped_include_bridge(port, params_file, namespace=None, remappings=(), log_level="info", mcu_log_level=""):
+def scoped_include_bridge(
+    port, params_file, namespace=None, remappings=(), log_level='info', mcu_log_level=''
+):
     """Include the bridge under standard scoping actions for scenario 4.
 
     PushRosNamespace and SetRemap are the user's own tools for placing
@@ -61,7 +67,9 @@ def scoped_include_bridge(port, params_file, namespace=None, remappings=(), log_
     return GroupAction(actions)
 
 
-def launch_bridge_only(port, params_file, namespace=None, remappings=(), log_level="info", mcu_log_level=""):
+def launch_bridge_only(
+    port, params_file, namespace=None, remappings=(), log_level='info', mcu_log_level=''
+):
     """A launch description with the bridge and nothing else.
 
     The scenarios spawn the firmware themselves once the bridge is up, so
@@ -69,17 +77,21 @@ def launch_bridge_only(port, params_file, namespace=None, remappings=(), log_lev
     """
     return launch.LaunchDescription(
         [
-            scoped_include_bridge(port, params_file, namespace, remappings, log_level, mcu_log_level),
+            scoped_include_bridge(
+                port, params_file, namespace, remappings, log_level, mcu_log_level
+            ),
             launch_testing.actions.ReadyToTest(),
         ]
     )
 
 
-def wait_for_bridge(node, service="/r2s_bridge/get_parameters", timeout=HANDSHAKE_TIMEOUT):
+def wait_for_bridge(node, service='/r2s_bridge/get_parameters', timeout=HANDSHAKE_TIMEOUT):
     """Block until the bridge answers its parameter service, proving it is up."""
     client = node.create_client(GetParameters, service)
     try:
-        assert client.wait_for_service(timeout_sec=timeout), "bridge parameter service never appeared"
+        assert client.wait_for_service(timeout_sec=timeout), (
+            'bridge parameter service never appeared'
+        )
     finally:
         node.destroy_client(client)
 
@@ -100,11 +112,14 @@ def wait_for_topics(node, wanted, since, budget, what, spin, clock=time.monotoni
         missing = set(wanted) - names
         if not missing:
             return clock() - since
-        graph = sorted(f"{name}: {', '.join(types)}" for name, types in names_and_types)
-        counts = {topic: (node.count_publishers(topic), node.count_subscribers(topic)) for topic in wanted}
+        graph = sorted(f'{name}: {", ".join(types)}' for name, types in names_and_types)
+        counts = {
+            topic: (node.count_publishers(topic), node.count_subscribers(topic))
+            for topic in wanted
+        }
         took = clock() - since
         assert took < budget, (
-            f"{what} missing after {budget:.1f} s: {sorted(missing)}; "
-            f"last graph: {graph}; endpoint counts (publishers, subscribers): {counts}"
+            f'{what} missing after {budget:.1f} s: {sorted(missing)}; '
+            f'last graph: {graph}; endpoint counts (publishers, subscribers): {counts}'
         )
         spin()

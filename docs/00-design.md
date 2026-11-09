@@ -507,11 +507,11 @@ The bridge creates its publishers and subscriptions under the names the MCU anno
 
 ```python
 Node(
-    package="r2s_bridge",
-    executable="bridge",
-    namespace="robot1",
-    parameters=[{"port": "/dev/ttyACM0", "baud": 115200}],
-    remappings=[("battery", "power/battery")],
+    package='r2s_bridge',
+    executable='bridge',
+    namespace='robot1',
+    parameters=[{'port': '/dev/ttyACM0', 'baud': 115200}],
+    remappings=[('battery', 'power/battery')],
 )
 ```
 

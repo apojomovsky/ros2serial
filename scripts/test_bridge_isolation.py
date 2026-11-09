@@ -33,16 +33,20 @@ class LegOutcome:
 
 def pair_build_dir(suffix):
     """One leg's R2S_BUILD_DIR: separate dirs lock separately, so the legs overlap."""
-    base = os.environ.get("R2S_BUILD_DIR", "")
+    base = os.environ.get('R2S_BUILD_DIR', '')
     if not base:
         # Mirrors the bridge-test.sh default; bridge-test.sh locks workspace/.lock.
-        base = os.path.join(os.path.expanduser("~"), ".cache", "ros2serial", "build" + str(ROOT).replace("/", "-"))
-    return base + "-bridge-iso-" + suffix
+        base = os.path.join(
+            os.path.expanduser('~'), '.cache', 'ros2serial', 'build' + str(ROOT).replace('/', '-')
+        )
+    return base + '-bridge-iso-' + suffix
 
 
 def start_leg(name, command, env):
     """Start one leg with its pipes held, so both legs run before either drains."""
-    return subprocess.Popen(command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
+    return subprocess.Popen(
+        command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
+    )
 
 
 def finish_leg(name, proc, timeout=LEG_TIMEOUT_SECONDS):
@@ -63,32 +67,41 @@ def run_leg(name, command, env=None, timeout=LEG_TIMEOUT_SECONDS):
 
 def domain_of(output):
     """The leased domain the run reports, failing the run that reports none."""
-    match = re.search(r"bridge isolation: ROS_DOMAIN_ID=(\d+)", output)
-    assert match is not None, "no leased domain in the last 4000 bytes:\n" + output[-4000:]
+    match = re.search(r'bridge isolation: ROS_DOMAIN_ID=(\d+)', output)
+    assert match is not None, 'no leased domain in the last 4000 bytes:\n' + output[-4000:]
     return int(match.group(1))
 
 
-@pytest.mark.skipif(shutil.which("colcon") is None, reason="colcon is not installed")
+@pytest.mark.skipif(shutil.which('colcon') is None, reason='colcon is not installed')
 def test_two_concurrent_bridge_sections_pass_without_crosstalk():
-    env_a = dict(os.environ, R2S_BUILD_DIR=pair_build_dir("a"))
-    env_b = dict(os.environ, R2S_BUILD_DIR=pair_build_dir("b"))
-    first = start_leg("first", ["bash", "scripts/bridge-test.sh"], env_a)
-    second = start_leg("second", ["bash", "scripts/bridge-test.sh"], env_b)
-    out1 = finish_leg("first", first)
-    out2 = finish_leg("second", second)
+    env_a = dict(os.environ, R2S_BUILD_DIR=pair_build_dir('a'))
+    env_b = dict(os.environ, R2S_BUILD_DIR=pair_build_dir('b'))
+    first = start_leg('first', ['bash', 'scripts/bridge-test.sh'], env_a)
+    second = start_leg('second', ['bash', 'scripts/bridge-test.sh'], env_b)
+    out1 = finish_leg('first', first)
+    out2 = finish_leg('second', second)
     for outcome in (out1, out2):
         assert not outcome.timed_out, (
-            f"{outcome.name} leg timed out after {LEG_TIMEOUT_SECONDS}s:\n" + outcome.output[-4000:]
+            f'{outcome.name} leg timed out after {LEG_TIMEOUT_SECONDS}s:\n'
+            + outcome.output[-4000:]
         )
-        assert outcome.returncode == 0, f"{outcome.name} section failed:\n" + outcome.output[-4000:]
-    assert domain_of(out1.output) != domain_of(out2.output), "both sections ran on one domain"
+        assert outcome.returncode == 0, (
+            f'{outcome.name} section failed:\n' + outcome.output[-4000:]
+        )
+    assert domain_of(out1.output) != domain_of(out2.output), 'both sections ran on one domain'
 
 
-@pytest.mark.skipif(shutil.which("colcon") is None, reason="colcon is not installed")
+@pytest.mark.skipif(shutil.which('colcon') is None, reason='colcon is not installed')
 def test_a_lone_bridge_run_keeps_domain_zero(tmp_path):
     env = dict(os.environ, R2S_CACHE_DIR=str(tmp_path))
     result = subprocess.run(
-        ["bash", "scripts/bridge-test.sh", "--build-only"], cwd=ROOT, capture_output=True, text=True, env=env
+        ['bash', 'scripts/bridge-test.sh', '--build-only'],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert domain_of(result.stdout) == 0, "a lone bridge run left domain 0:\n" + result.stdout[-4000:]
+    assert domain_of(result.stdout) == 0, (
+        'a lone bridge run left domain 0:\n' + result.stdout[-4000:]
+    )

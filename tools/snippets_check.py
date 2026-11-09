@@ -48,13 +48,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-MARKER = re.compile(r"^ {0,3}<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#([0-9]+)(?::[ \t]*(\S.*?))?[ \t]*-->\s*$")
-MARKER_LIKE = re.compile(r"^ {0,3}<!--[ \t]*snippet:.*-->\s*$")
-MARKER_EMPTY = re.compile(r"^ {0,3}<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#[0-9]+[ \t]*:[ \t]*-->\s*$")
+MARKER = re.compile(
+    r'^ {0,3}<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#([0-9]+)'
+    r'(?::[ \t]*(\S.*?))?[ \t]*-->\s*$'
+)
+MARKER_LIKE = re.compile(r'^ {0,3}<!--[ \t]*snippet:.*-->\s*$')
+MARKER_EMPTY = re.compile(
+    r'^ {0,3}<!--[ \t]*snippet:[ \t]*skip[ \t]+until[ \t]+#[0-9]+[ \t]*:[ \t]*-->\s*$'
+)
 GENERATED_FIXTURES = (
-    ("gen/tests/golden/topics/posix.h", "r2s_generated.h"),
-    ("gen/tests/golden/bundle/ros2serial.h", "ros2serial.h"),
-    ("gen/tests/golden/bundle/r2s_bundled.h", "r2s_bundled.h"),
+    ('gen/tests/golden/topics/posix.h', 'r2s_generated.h'),
+    ('gen/tests/golden/bundle/ros2serial.h', 'ros2serial.h'),
+    ('gen/tests/golden/bundle/r2s_bundled.h', 'r2s_bundled.h'),
 )
 # A fence opens at column 0 to 3 of its container: deeper is an indented code
 # block, literal text. The closer sits no deeper than three past the container;
@@ -63,15 +68,15 @@ GENERATED_FIXTURES = (
 # passing. Indentation is relative to list items, which the scan tracks; a
 # dedented line pops back out. A marker past column 3 of its container gets
 # its own diagnostic.
-FENCE = re.compile(r"^ *```")
-QUOTED_FENCE = re.compile(r"^\s*(?:>\s*|[*+-]\s+|\d{1,9}[.)]\s+)+```")
-MARKER_ANY = re.compile(r"^\s*<!--[ \t]*snippet:.*-->\s*$")
-SWEEP = re.compile(r"^\s*(?:>\s*|[*+-]\s+|\d{1,9}[.)]\s+)*```([A-Za-z0-9+#-]+)")
+FENCE = re.compile(r'^ *```')
+QUOTED_FENCE = re.compile(r'^\s*(?:>\s*|[*+-]\s+|\d{1,9}[.)]\s+)+```')
+MARKER_ANY = re.compile(r'^\s*<!--[ \t]*snippet:.*-->\s*$')
+SWEEP = re.compile(r'^\s*(?:>\s*|[*+-]\s+|\d{1,9}[.)]\s+)*```([A-Za-z0-9+#-]+)')
 STAGED_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]\s*(r2s_generated\.h|r2s_bundled\.h)\s*[">]')
 
-LANGUAGES = ("c", "cpp", "python")
-EXTENSION = {"c": ".c", "cpp": ".cpp", "python": ".py"}
-SKIPPED_TAGS = ("console", "json", "mermaid", "sh", "text", "yaml")
+LANGUAGES = ('c', 'cpp', 'python')
+EXTENSION = {'c': '.c', 'cpp': '.cpp', 'python': '.py'}
+SKIPPED_TAGS = ('console', 'json', 'mermaid', 'sh', 'text', 'yaml')
 
 
 @dataclass
@@ -99,19 +104,19 @@ def _reason(marker_line: str) -> str | None:
 def _dedent(line: str, width: int) -> str:
     # CommonMark strips up to the fence's own indentation from each body line.
     taken = 0
-    while taken < width and taken < len(line) and line[taken] == " ":
+    while taken < width and taken < len(line) and line[taken] == ' ':
         taken += 1
     return line[taken:]
 
 
 def _indent_of(line: str) -> int:
     taken = 0
-    while taken < len(line) and line[taken] == " ":
+    while taken < len(line) and line[taken] == ' ':
         taken += 1
     return taken
 
 
-LIST_ITEM = re.compile(r"( {0,3})([*+-]|\d{1,9}[.)])([ \t]*)")
+LIST_ITEM = re.compile(r'( {0,3})([*+-]|\d{1,9}[.)])([ \t]*)')
 
 
 def _list_content(line: str, base: int) -> int | None:
@@ -135,26 +140,26 @@ def _marker_kind(line: str, base: int) -> str:
     # usable, ticketless, empty of its reason, or literal text past column 3.
     rel = line[base:]
     if MARKER.match(rel):
-        return "ok"
+        return 'ok'
     if MARKER_EMPTY.match(rel):
-        return "empty"
+        return 'empty'
     if MARKER_LIKE.match(rel):
-        return "ticketless"
-    return "deep"
+        return 'ticketless'
+    return 'deep'
 
 
 def _marker_problem(kind: str) -> str:
-    if kind == "ok":
-        return "snippet marker above no fence"
-    if kind == "ticketless":
-        return "snippet marker without a ticket number"
-    if kind == "empty":
-        return "snippet marker reason is empty after the colon"
-    return "snippet marker starts past column 3, so it is literal text"
+    if kind == 'ok':
+        return 'snippet marker above no fence'
+    if kind == 'ticketless':
+        return 'snippet marker without a ticket number'
+    if kind == 'empty':
+        return 'snippet marker reason is empty after the colon'
+    return 'snippet marker starts past column 3, so it is literal text'
 
 
 def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
-    lines = path.read_text(encoding="utf-8").splitlines()
+    lines = path.read_text(encoding='utf-8').splitlines()
     snippets: list[Snippet] = []
     problems: list[str] = []
     markers: dict[int, str] = {}
@@ -191,7 +196,7 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
                 body.append(lines[i])
                 i += 1
             if i == len(lines):
-                problems.append(f"{rel}:{open_line}: fence never closes")
+                problems.append(f'{rel}:{open_line}: fence never closes')
                 break
             i += 1
             if not words:
@@ -206,24 +211,28 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
                 while probe and _indent_of(lines[j]) < probe[-1]:
                     probe.pop()
                 kind = _marker_kind(lines[j], probe[-1] if probe else 0)
-                if kind == "ok":
+                if kind == 'ok':
                     marker = lines[j][probe[-1] if probe else 0 :]
                     ticket = _ticket(marker)
                     reason = _reason(marker)
                 else:
-                    problems.append(f"{rel}:{j + 1}: {_marker_problem(kind)}")
+                    problems.append(f'{rel}:{j + 1}: {_marker_problem(kind)}')
                 used.add(j + 1)
             if len(words) > 1:
-                problems.append(f"{rel}:{open_line}: unexpected info string after {words[0]!r}")
+                problems.append(f'{rel}:{open_line}: unexpected info string after {words[0]!r}')
                 continue
             language = words[0]
             if language in SKIPPED_TAGS:
-                snippets.append(Snippet(rel, open_line, language, "", ticket, reason=reason, skipped_tag=language))
+                snippets.append(
+                    Snippet(
+                        rel, open_line, language, '', ticket, reason=reason, skipped_tag=language
+                    )
+                )
                 continue
             if language not in LANGUAGES:
-                problems.append(f"{rel}:{open_line}: unknown snippet language {language!r}")
+                problems.append(f'{rel}:{open_line}: unknown snippet language {language!r}')
                 continue
-            code = "\n".join(_dedent(body_line, indent) for body_line in body) + "\n"
+            code = '\n'.join(_dedent(body_line, indent) for body_line in body) + '\n'
             snippets.append(Snippet(rel, open_line, language, code, ticket, reason=reason))
             continue
         if QUOTED_FENCE.match(line):
@@ -232,7 +241,9 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
             # closer so the closer is not misread as a new fence.
             i += 1
             while i < len(lines):
-                if (FENCE.match(lines[i]) and _indent_of(lines[i]) - base <= 3) or QUOTED_FENCE.match(lines[i]):
+                if (
+                    FENCE.match(lines[i]) and _indent_of(lines[i]) - base <= 3
+                ) or QUOTED_FENCE.match(lines[i]):
                     break
                 i += 1
             if i < len(lines):
@@ -256,23 +267,27 @@ def extract(path: Path, rel: str) -> tuple[list[Snippet], list[str]]:
             if above >= 0 and MARKER.match(lines[above]):
                 used.add(above + 1)
                 language = tag.group(1)
-                snippets.append(Snippet(rel, number, language, "", _ticket(lines[above]), _reason(lines[above])))
+                snippets.append(
+                    Snippet(
+                        rel, number, language, '', _ticket(lines[above]), _reason(lines[above])
+                    )
+                )
                 continue
-            problems.append(f"{rel}:{number}: tagged fence never opened a snippet")
+            problems.append(f'{rel}:{number}: tagged fence never opened a snippet')
     for lineno, kind in markers.items():
         if lineno in used:
             continue
-        problems.append(f"{rel}:{lineno}: {_marker_problem(kind)}")
+        problems.append(f'{rel}:{lineno}: {_marker_problem(kind)}')
     return snippets, problems
 
 
 def _staged_headers(code: str) -> set[str]:
     # Staged generated headers the snippet really includes: an include inside
     # a C comment names no header, so a commented-out include stays silent.
-    bare = re.sub(r"/\*.*?\*/", "", code, flags=re.DOTALL)
+    bare = re.sub(r'/\*.*?\*/', '', code, flags=re.DOTALL)
     found = set()
     for line in bare.splitlines():
-        match = STAGED_INCLUDE.match(line.split("//", 1)[0])
+        match = STAGED_INCLUDE.match(line.split('//', 1)[0])
         if match:
             found.add(match.group(1))
     return found
@@ -291,42 +306,45 @@ def _stage_fixtures(root: Path, workdir: Path) -> None:
 
 
 def _compile_c(snippet: Snippet, root: Path, workdir: Path) -> str | None:
-    compiler = shutil.which("gcc" if snippet.language == "c" else "g++")
+    compiler = shutil.which('gcc' if snippet.language == 'c' else 'g++')
     if compiler is None:
-        return f"{snippet.path}:{snippet.line}: no compiler for {snippet.language}"
-    standard = "c99" if snippet.language == "c" else "c++11"
+        return f'{snippet.path}:{snippet.line}: no compiler for {snippet.language}'
+    standard = 'c99' if snippet.language == 'c' else 'c++11'
     # Almost the core's warning set (core/CMakeLists.txt), so a snippet that
     # passes here also passes the firmware build. The prototype flags stay
     # out: snippets define example functions without prior declarations.
-    warnings = ["-pedantic", "-Wall", "-Wextra", "-Werror", "-Wconversion", "-Wshadow", "-Wundef"]
-    src = workdir / f"snippet{EXTENSION[snippet.language]}"
+    warnings = ['-pedantic', '-Wall', '-Wextra', '-Werror', '-Wconversion', '-Wshadow', '-Wundef']
+    src = workdir / f'snippet{EXTENSION[snippet.language]}'
     src.write_text(snippet.code)
-    cmd = [compiler, f"-std={standard}", *warnings, "-fsyntax-only", str(src)]
+    cmd = [compiler, f'-std={standard}', *warnings, '-fsyntax-only', str(src)]
     # The staged generated-header fixtures live in the workdir, so a snippet
     # including r2s_generated.h, r2s_bundled.h or ros2serial.h finds them
     # there. The core's
     # headers and the C++ layer's own headers ride on -I, so the runtime
     # API and the message headers resolve too.
-    cmd += ["-I", str(workdir)]
-    for include in (root / "core" / "include", root / "cpp" / "include"):
+    cmd += ['-I', str(workdir)]
+    for include in (root / 'core' / 'include', root / 'cpp' / 'include'):
         if include.is_dir():
-            cmd += ["-I", str(include)]
+            cmd += ['-I', str(include)]
     done = subprocess.run(cmd, capture_output=True, text=True)
     if done.returncode != 0:
-        return f"{snippet.path}:{snippet.line}: {snippet.language} snippet does not compile:\n{done.stderr.strip()}"
+        return (
+            f'{snippet.path}:{snippet.line}: {snippet.language} snippet does not compile:'
+            f'\n{done.stderr.strip()}'
+        )
     return None
 
 
 def compile_snippet(snippet: Snippet, root: Path, workdir: Path) -> str | None:
     """Compile one snippet; None means it passed."""
-    if snippet.language in ("c", "cpp"):
+    if snippet.language in ('c', 'cpp'):
         return _compile_c(snippet, root, workdir)
-    src = workdir / f"snippet{EXTENSION[snippet.language]}"
+    src = workdir / f'snippet{EXTENSION[snippet.language]}'
     src.write_text(snippet.code)
     try:
         py_compile.compile(str(src), doraise=True)
     except py_compile.PyCompileError as exc:
-        return f"{snippet.path}:{snippet.line}: python snippet does not compile: {exc.msg}"
+        return f'{snippet.path}:{snippet.line}: python snippet does not compile: {exc.msg}'
     return None
 
 
@@ -334,11 +352,11 @@ def check_tree(root: Path) -> list[str]:
     """Check README.md and docs/*.md under root; problems, empty when green."""
     problems: list[str] = []
     files = []
-    readme = root / "README.md"
+    readme = root / 'README.md'
     if not readme.is_file():
-        return ["README.md: not found"]
+        return ['README.md: not found']
     files.append(readme)
-    files += sorted((root / "docs").rglob("*.md")) if (root / "docs").is_dir() else []
+    files += sorted((root / 'docs').rglob('*.md')) if (root / 'docs').is_dir() else []
     compiled = skipped = by_tag = 0
     with tempfile.TemporaryDirectory() as work:
         workdir = Path(work)
@@ -349,26 +367,32 @@ def check_tree(root: Path) -> list[str]:
             problems += found
             for snippet in snippets:
                 if snippet.skipped_tag is not None:
-                    extra = ""
+                    extra = ''
                     if snippet.ticket is not None:
-                        extra = f" (until #{snippet.ticket}"
-                        extra += f": {snippet.reason}" if snippet.reason else ""
-                        extra += ")"
-                    print(f"skip {rel}:{snippet.line} ({snippet.skipped_tag}): skipped by tag, not compiled{extra}")
+                        extra = f' (until #{snippet.ticket}'
+                        extra += f': {snippet.reason}' if snippet.reason else ''
+                        extra += ')'
+                    print(
+                        f'skip {rel}:{snippet.line} ({snippet.skipped_tag}): skipped by tag, '
+                        f'not compiled{extra}'
+                    )
                     by_tag += 1
                     continue
                 if snippet.ticket is not None:
-                    why = f": {snippet.reason}" if snippet.reason else ""
-                    print(f"skip {rel}:{snippet.line} ({snippet.language}) until #{snippet.ticket}{why}")
+                    why = f': {snippet.reason}' if snippet.reason else ''
+                    print(
+                        f'skip {rel}:{snippet.line} ({snippet.language}) until '
+                        f'#{snippet.ticket}{why}'
+                    )
                     skipped += 1
                     continue
-                if snippet.language in ("c", "cpp"):
+                if snippet.language in ('c', 'cpp'):
                     headers = sorted(_staged_headers(snippet.code))
                     if len(headers) > 1:
-                        both = " and ".join(headers)
+                        both = ' and '.join(headers)
                         problems.append(
-                            f"{snippet.path}:{snippet.line}: snippet includes both {both}; "
-                            "include at most one staged generated header"
+                            f'{snippet.path}:{snippet.line}: snippet includes both {both}; '
+                            'include at most one staged generated header'
                         )
                         continue
                 failed = compile_snippet(snippet, root, workdir)
@@ -376,19 +400,19 @@ def check_tree(root: Path) -> list[str]:
                     compiled += 1
                 else:
                     problems.append(failed)
-    print(f"docs snippets: {compiled} compiled, {skipped} skipped, {by_tag} skipped by tag")
+    print(f'docs snippets: {compiled} compiled, {skipped} skipped, {by_tag} skipped by tag')
     return problems
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Compile every code snippet fenced in README.md and docs/.",
-        epilog="Fences tagged c, cpp or python must compile. Fences tagged "
-        + ", ".join(SKIPPED_TAGS)
-        + " are usage or data and are skipped. Any other tag is an error. "
-        "A snippet that cannot compile yet carries its ticket alone on the "
-        "line above the fence: <!-- snippet: skip until #NN -->. A snippet "
-        "that never compiles keeps its ticket with the reason after a colon.",
+        description='Compile every code snippet fenced in README.md and docs/.',
+        epilog='Fences tagged c, cpp or python must compile. Fences tagged '
+        + ', '.join(SKIPPED_TAGS)
+        + ' are usage or data and are skipped. Any other tag is an error. '
+        'A snippet that cannot compile yet carries its ticket alone on the '
+        'line above the fence: <!-- snippet: skip until #NN -->. A snippet '
+        'that never compiles keeps its ticket with the reason after a colon.',
     )
     parser.parse_args(argv)
     problems = check_tree(ROOT)
@@ -397,5 +421,5 @@ def main(argv: list[str] | None = None) -> int:
     return 1 if problems else 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())

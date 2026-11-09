@@ -18,10 +18,11 @@ namespace geometry_msgs
 namespace msg
 {
 
-struct Vector3 {
-    double x;
-    double y;
-    double z;
+struct Vector3
+{
+  double x;
+  double y;
+  double z;
 };
 
 } // namespace msg
@@ -30,9 +31,10 @@ struct Vector3 {
 /* The codec writes into the C struct's bytes at the offsets the
  * descriptors give, so the C++ struct must hold them at the same
  * offsets and the same size. */
-#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), #cpp_type)
-#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field)                                                         \
-    static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
+#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), \
+    #cpp_type)
+#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field) \
+  static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
 
 R2S_CPP_SAME_SIZE(geometry_msgs::msg::Vector3, geometry_msgs__msg__Vector3);
 R2S_CPP_SAME_OFFSET(geometry_msgs::msg::Vector3, geometry_msgs__msg__Vector3, x);
@@ -53,29 +55,32 @@ extern const r2s_codec_table_t r2s_bundled_table_geometry_msgs_Vector3;
 
 /* The primary template the runtime layer declares; a message header
  * specializes it, so a sketch names a type and never a table. */
-template <typename T> struct msg_traits;
+template<typename T>
+struct msg_traits;
 
-template <> struct msg_traits<geometry_msgs::msg::Vector3> {
-    static const r2s_codec_table_t *table()
-    {
-        return &r2s_bundled_table_geometry_msgs_Vector3;
-    }
+template<>
+struct msg_traits<geometry_msgs::msg::Vector3>
+{
+  static const r2s_codec_table_t * table()
+  {
+    return &r2s_bundled_table_geometry_msgs_Vector3;
+  }
 
-    static uint16_t type_index()
-    {
-        return 0u;
-    }
+  static uint16_t type_index()
+  {
+    return 0u;
+  }
 
-    static const char *type_name()
-    {
-        return "geometry_msgs/msg/Vector3";
-    }
+  static const char * type_name()
+  {
+    return "geometry_msgs/msg/Vector3";
+  }
 
-    static const uint8_t *type_hash()
-    {
-        static const uint8_t hash[] = {0xccu, 0x12u, 0xfeu, 0x83u, 0xe4u, 0xc0u, 0x27u, 0x19u};
-        return hash;
-    }
+  static const uint8_t * type_hash()
+  {
+    static const uint8_t hash[] = {0xccu, 0x12u, 0xfeu, 0x83u, 0xe4u, 0xc0u, 0x27u, 0x19u};
+    return hash;
+  }
 };
 
 } // namespace r2s
