@@ -25,6 +25,7 @@
 #include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/int32_multi_array.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_srvs/srv/trigger.hpp>
 
 #include "frame_helpers.hpp"
 #include "manual_clock.hpp"
@@ -1354,6 +1355,184 @@ TEST_F(RouterNode, HoldsBackpressureOnAWedgedLink)
     ASSERT_EQ(user_units.size(), 4u) << "every queued frame flushes in order";
     EXPECT_EQ(user_units.front()[1], 0u) << "the first frame on a topic carries seq 0";
     EXPECT_EQ(user_units.back()[1], 3u) << "the refused frame goes out last with seq 3";
+}
+
+// The services proxy: MCU servers become ROS services, MCU calls become ROS
+// clients, over the reliable channel (spec/protocol.md, 7.8).
+// covers: SES-34, SVR-4, SVR-5, SVR-6, SVR-7
+
+std::array<std::uint8_t, 8> installed_service_hash(const std::string & type)
+{
+  const auto library = rclcpp::get_typesupport_library(type, "rosidl_typesupport_cpp");
+  const rosidl_service_type_support_t * handle =
+    rclcpp::get_service_typesupport_handle(type, "rosidl_typesupport_cpp", *library);
+  const rosidl_type_hash_t * hash = handle->get_type_hash_func(handle);
+  std::array<std::uint8_t, 8> out{};
+  std::copy(hash->value, hash->value + 8u, out.begin());
+  return out;
+}
+
+constexpr std::uint8_t kServicesTopic = 7u;
+
+// A handshake announcing one served Trigger "reset" and one called Trigger
+// "trigger", with the installed hashes.
+void handshake_with_services(RouterFixture & fixture)
+{
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 2u, 512u, 0x4Cu));
+  fixture.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  fixture.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x01u, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> hash = installed_service_hash("std_srvs/srv/Trigger");
+  fixture.deliver_frame(kServicesTopic, 0u,
+    helper_service_declare(0u, 0x00u, hash.data(), "std_srvs/srv/Trigger", "reset"));
+  fixture.deliver_frame(kServicesTopic, 1u,
+    helper_service_declare(1u, 0x01u, hash.data(), "std_srvs/srv/Trigger", "trigger"));
+  fixture.deliver_frame(kServicesTopic, 2u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x02u, 0x01u});
+}
+
+// covers: SES-34, SVR-4, SVR-5, SVR-6
+TEST_F(RouterNode, CallsTheMcuServiceAndReturnsItsAnswer)
+{
+  RouterFixture fixture("svc_call", remapped(), RouterParams{});
+  fixture.handshake_with_services();
+  auto client = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+  auto future =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  // Spin until the packed empty request reaches the wire.
+  const auto start = std::chrono::steady_clock::now();
+  std::uint8_t req = 0u;
+  bool found = false;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+      {
+        req = decoded[4];
+        found = true;
+      }
+    }
+    if (found) {
+      break;
+    }
+  }
+  ASSERT_TRUE(found) << "the REQUEST never reached the wire";
+  // The MCU answers ok with an empty message: packed true, empty string.
+  fixture.deliver_frame(kServicesTopic, 0u,
+    {kHelperSvcResponse, 0x00u, req, 0x00u, 0x01u, 0x00u});
+  EXPECT_EQ(future.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+  EXPECT_TRUE(future.get()->success);
+  EXPECT_TRUE(future.get()->message.empty());
+}
+
+// covers: SES-34, SVR-4, SVR-5
+TEST_F(RouterNode, ForwardsTheMcuCallAndAnswersIt)
+{
+  RouterFixture fixture("svc_forward", remapped(), RouterParams{});
+  bool called = false;
+  auto server = fixture.node()->create_service<std_srvs::srv::Trigger>("trigger",
+      [&called](
+        const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+        called = true;
+        response->success = true;
+        response->message = "ok";
+      });
+  fixture.handshake_with_services();
+  for (int i = 0; i < 50; ++i) {
+    rclcpp::spin_some(fixture.node());
+  }
+  auto probe = fixture.node()->create_client<std_srvs::srv::Trigger>("trigger");
+  ASSERT_TRUE(probe->wait_for_service(std::chrono::seconds(10)));
+  for (int i = 0; i < 50; ++i) {
+    rclcpp::spin_some(fixture.node());
+  }
+  // The MCU calls index 1 with an empty Trigger request under req 7.
+  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
+  const auto start = std::chrono::steady_clock::now();
+  bool answered = false;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    if (!called) {
+      continue;
+    }
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 7u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcResponse && decoded[4] == 0x07u && decoded[5] == 0x00u)
+      {
+        // Packed true and "ok".
+        const std::vector<std::uint8_t> want{0x01u, 0x02u, 'o', 'k'};
+        EXPECT_EQ(
+          std::vector<std::uint8_t>(decoded.begin() + 6u, decoded.end() - 2u), want);
+        answered = true;
+      }
+    }
+    if (answered) {
+      break;
+    }
+  }
+  EXPECT_TRUE(called) << "the ROS server never saw the call";
+  EXPECT_TRUE(answered) << "the RESPONSE never reached the wire";
+}
+
+// covers: SES-34, SVR-8
+TEST_F(RouterNode, TimesOutAnUnansweredMcuCall)
+{
+  RouterFixture fixture("svc_timeout", remapped(), RouterParams{});
+  fixture.handshake_with_services();
+  // No ROS server: the call goes out, and the host timeout answers busy.
+  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
+  for (int i = 0; i < 12; ++i) {
+    fixture.advance(500u);
+    rclcpp::spin_some(fixture.node());
+    fixture.deliver_frame(kAckTopic, static_cast<std::uint8_t>(i), {kServicesTopic, 0x00u});
+  }
+  bool busy = false;
+  for (const auto & unit : fixture.drain()) {
+    const auto decoded = fixture.checked_decode(unit);
+    if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+      decoded[2] == kHelperSvcResponse && decoded[4] == 0x07u && decoded[5] == 0x03u)
+    {
+      busy = true;
+    }
+  }
+  EXPECT_TRUE(busy) << "no busy RESPONSE after the timeout";
+}
+
+// covers: SES-34, SVR-7
+TEST_F(RouterNode, RefusesUnusableServices)
+{
+  // An unknown type is refused, and no ROS endpoint is created.
+  RouterFixture bad_type("svc_badtype", remapped(), RouterParams{});
+  bad_type.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 2u, 512u, 0x4Cu));
+  bad_type.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  bad_type.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x01u, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> zero{};
+  bad_type.deliver_frame(kServicesTopic, 0u,
+    helper_service_declare(0u, 0x00u, zero.data(), "nope/msg/Nope", "bad"));
+  bad_type.deliver_frame(kServicesTopic, 1u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x01u, 0x01u});
+  bool refused = false;
+  for (const auto & unit : bad_type.drain()) {
+    const auto decoded = bad_type.checked_decode(unit);
+    if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+      decoded[2] == kHelperSvcStatus && decoded[4] == 0x00u && decoded[5] == 0x01u)
+    {
+      refused = true;
+    }
+  }
+  EXPECT_TRUE(refused) << "no STATUS 1 for the unknown type";
+  auto probe = bad_type.node()->create_client<std_srvs::srv::Trigger>("bad");
+  EXPECT_FALSE(probe->wait_for_service(std::chrono::milliseconds(200)));
 }
 
 }  // namespace
