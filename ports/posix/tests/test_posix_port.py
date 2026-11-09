@@ -795,10 +795,17 @@ def collect_flood(fw, host):
         quiet = 0
         if fw.master in ready:
             try:
-                _topic, _seq, payload = read_frame(fw.master, want=16, timeout=KEEPALIVE_INTERVAL)
+                topic, _seq, payload = read_frame(fw.master, timeout=KEEPALIVE_INTERVAL)
             except AssertionError as error:
                 if "timed out" not in str(error):
                     raise
+                continue
+            # A HELLO after READY means the link timed out and the firmware
+            # left CONNECTED ([SES-7]); PONGs and heartbeats just pass by.
+            assert not (topic == 0 and payload[:1] == bytes((HELLO_OP,))), (
+                "the firmware returned to ANNOUNCING mid-flood"
+            )
+            if topic != 16:
                 continue
             assert len(payload) == 4
             values.append(struct.unpack("<f", payload)[0])
