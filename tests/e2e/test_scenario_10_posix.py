@@ -20,9 +20,12 @@ import launch_testing.markers
 import rclpy
 from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, firmware, teardown
+from e2e_support import checks
+from e2e_support import firmware
+from e2e_support import teardown
 from e2e_support.fault_proxy import FaultProxy
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import QoSProfile
+from rclpy.qos import ReliabilityPolicy
 from std_msgs.msg import Float32
 
 # covers: FRM-8, FRM-15, HB-2, HB-7
@@ -36,9 +39,9 @@ CLEAN_WINDOW_S = 6.0
 # post-fault heartbeats, given the 500 ms heartbeat and 1 Hz diagnostics.
 SETTLE_S = 3.0
 # The bridge reports announced names without the graph's leading slash.
-HANDSHAKE_TOPICS = ["battery", "cmd_vel", "echo_vel", "log_text", "time_now"]
+HANDSHAKE_TOPICS = ['battery', 'cmd_vel', 'echo_vel', 'log_text', 'time_now']
 TOPIC_BUDGET = 3.0
-BATTERY_TOPICS = ["/battery"]
+BATTERY_TOPICS = ['/battery']
 # About one frame in thirteen carries a corrupted byte at this rate, so half
 # the nominal flow still arriving proves delivery continued through faults.
 FLOW_FLOOR = int(RATE_HZ * FAULT_WINDOW_S * 0.5)
@@ -63,9 +66,11 @@ _PARAMS = None
 
 def _prepare():
     global _SCRATCH, _FIRMWARE, _PROXY, _PARAMS
-    _SCRATCH = tempfile.TemporaryDirectory(prefix="r2s-e2e-10-")
+    _SCRATCH = tempfile.TemporaryDirectory(prefix='r2s-e2e-10-')
     scratch = Path(_SCRATCH.name)
-    _FIRMWARE = firmware.from_run_script() if "R2S_E2E_FW" in os.environ else firmware.build(scratch)
+    _FIRMWARE = (
+        firmware.from_run_script() if 'R2S_E2E_FW' in os.environ else firmware.build(scratch)
+    )
     _PROXY = FaultProxy(seed=SEED)
     _PROXY.start()
     _PARAMS = bridge_support.example_params_file()
@@ -91,13 +96,13 @@ def _fresh_message(node, received, seen):
     deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
     while len(received) <= seen:
         rclpy.spin_once(node, timeout_sec=0.5)
-        assert time.monotonic() < deadline, "no fresh /diagnostics from the bridge"
+        assert time.monotonic() < deadline, 'no fresh /diagnostics from the bridge'
     return received[-1]
 
 
 def _connected_values(message):
     """Key/value pairs of a /diagnostics message on a connected link."""
-    assert message.status[0].message == "connected", "link left connected state"
+    assert message.status[0].message == 'connected', 'link left connected state'
     return {value.key: value.value for value in message.status[0].values}
 
 
@@ -105,9 +110,9 @@ def _user_gaps(values):
     """Seq gaps summed over device-to-host topics, whatever is announced."""
     total = 0
     for key, value in values.items():
-        if key.startswith("topic ") and key.endswith(" seq gaps"):
-            middle = key[len("topic ") : -len(" seq gaps")]
-            if values.get("topic " + middle + " direction") == "device to host":
+        if key.startswith('topic ') and key.endswith(' seq gaps'):
+            middle = key[len('topic ') : -len(' seq gaps')]
+            if values.get('topic ' + middle + ' direction') == 'device to host':
                 total += int(value)
     return total
 
@@ -124,10 +129,12 @@ def _wait_link_ready(node, received, seen, since):
     while True:
         message = _fresh_message(node, received, seen)
         seen = len(received)
-        if message.status[0].message not in ("disconnected", "boot_wait"):
+        if message.status[0].message not in ('disconnected', 'boot_wait'):
             return max(since, time.monotonic()), seen
         took = time.monotonic() - since
-        assert took < bridge_support.HANDSHAKE_TIMEOUT, f"link never left boot wait after {took:.1f} s"
+        assert took < bridge_support.HANDSHAKE_TIMEOUT, (
+            f'link never left boot wait after {took:.1f} s'
+        )
 
 
 class TestScenario10(unittest.TestCase):
@@ -141,18 +148,18 @@ class TestScenario10(unittest.TestCase):
 
     def test_corruption_costs_exactly_the_touched_frames_then_recovers(self):
         global _SPAWNED
-        node = rclpy.create_node("e2e_s10_probe")
+        node = rclpy.create_node('e2e_s10_probe')
         try:
             bridge_support.wait_for_bridge(node)
             # Matched before the firmware boots, so the handshake wait below
             # observes bridge state, not DDS discovery of the new topics.
             received = []
-            node.create_subscription(DiagnosticArray, "/diagnostics", received.append, 10)
+            node.create_subscription(DiagnosticArray, '/diagnostics', received.append, 10)
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
             while not received:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
-            _SPAWNED = firmware.spawn(_FIRMWARE, _PROXY.mcu_port, ("--rate", str(RATE_HZ)))
+                self.assertLess(time.monotonic(), deadline, 'no /diagnostics flow from the bridge')
+            _SPAWNED = firmware.spawn(_FIRMWARE, _PROXY.mcu_port, ('--rate', str(RATE_HZ)))
             # The boot wait is the bridge's own delay before the handshake
             # starts, so it waits on the generous timeout and the 3 s
             # budget runs from the later of the ready line and its end.
@@ -163,12 +170,12 @@ class TestScenario10(unittest.TestCase):
                 HANDSHAKE_TOPICS,
                 link_ready_at,
                 TOPIC_BUDGET,
-                "handshake",
+                'handshake',
                 lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
                 clock=time.monotonic,
             )
             seen = len(received)
-            self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
+            self.assertLessEqual(took, TOPIC_BUDGET, 'handshake took longer than 3 s')
             # The battery flow needs its endpoint matched: the bridge's
             # endpoints appear on the graph once the handshake above completes,
             # so this waits out DDS discovery instead of spending the flow
@@ -180,18 +187,20 @@ class TestScenario10(unittest.TestCase):
                 BATTERY_TOPICS,
                 handshake_done_at,
                 checks.DISCOVERY_TIMEOUT,
-                "battery topic",
+                'battery topic',
                 lambda: rclpy.spin_once(node, timeout_sec=bridge_support.DISCOVERY_SPIN),
             )
             # The bridge forwards MCU traffic best effort, so the probe
             # matches that; a reliable probe would never match.
             best_effort = QoSProfile(depth=100, reliability=ReliabilityPolicy.BEST_EFFORT)
             battery = []
-            node.create_subscription(Float32, "battery", lambda msg: battery.append(msg.data), best_effort)
+            node.create_subscription(
+                Float32, 'battery', lambda msg: battery.append(msg.data), best_effort
+            )
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
             while not battery:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                self.assertLess(time.monotonic(), deadline, "no Float32 flow on battery")
+                self.assertLess(time.monotonic(), deadline, 'no Float32 flow on battery')
             base_counts = _PROXY.counts()
             base_values = _connected_values(_fresh_message(node, received, seen))
             seen = len(received)
@@ -207,11 +216,11 @@ class TestScenario10(unittest.TestCase):
             # flush, which the frame counter proves, and past a drain for
             # the lag, so every boundary gap and its revealing frame are
             # inside the slice.
-            flushed = _PROXY.counts()["mcu_to_host"].frames
+            flushed = _PROXY.counts()['mcu_to_host'].frames
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
-            while _PROXY.counts()["mcu_to_host"].frames <= flushed:
+            while _PROXY.counts()['mcu_to_host'].frames <= flushed:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                self.assertLess(time.monotonic(), deadline, "proxy never flushed past the faults")
+                self.assertLess(time.monotonic(), deadline, 'proxy never flushed past the faults')
             drain_end = time.monotonic() + DRAIN_S
             while time.monotonic() < drain_end:
                 rclpy.spin_once(node, timeout_sec=0.5)
@@ -226,32 +235,48 @@ class TestScenario10(unittest.TestCase):
                     seen = len(received)
             final = _connected_values(_fresh_message(node, received, seen))
             fault_counts = _PROXY.counts()
-            self.assertIsNone(_SPAWNED.proc.poll(), "firmware died under corruption")
-            self.assertEqual(final.get("resets"), "0", "MCU rebooted mid-scenario")
-            mcu_dropped = int(final["mcu dropped frames"]) - int(base_values["mcu dropped frames"])
-            host_touched = fault_counts["host_to_mcu"].frames_touched - base_counts["host_to_mcu"].frames_touched
-            self.assertEqual(mcu_dropped, host_touched, "MCU drops do not match the injected faults")
+            self.assertIsNone(_SPAWNED.proc.poll(), 'firmware died under corruption')
+            self.assertEqual(final.get('resets'), '0', 'MCU rebooted mid-scenario')
+            mcu_dropped = int(final['mcu dropped frames']) - int(base_values['mcu dropped frames'])
+            host_touched = (
+                fault_counts['host_to_mcu'].frames_touched
+                - base_counts['host_to_mcu'].frames_touched
+            )
+            self.assertEqual(
+                mcu_dropped, host_touched, 'MCU drops do not match the injected faults'
+            )
             user_gaps = _user_gaps(final) - _user_gaps(base_values)
             mcu_touched = (
-                fault_counts["mcu_to_host"].user_frames_touched - base_counts["mcu_to_host"].user_frames_touched
+                fault_counts['mcu_to_host'].user_frames_touched
+                - base_counts['mcu_to_host'].user_frames_touched
             )
-            self.assertEqual(user_gaps, mcu_touched, "seq gaps do not match the injected faults")
-            gaps_key = checks.topic_key(final, "battery", "seq gaps")
+            self.assertEqual(user_gaps, mcu_touched, 'seq gaps do not match the injected faults')
+            gaps_key = checks.topic_key(final, 'battery', 'seq gaps')
             battery_gaps = int(final[gaps_key]) - int(base_values[gaps_key])
             fault_values = battery[fault_start:fault_end]
-            checks.check_float_sequence(fault_values, FLOW_FLOOR, battery_gaps + ROS_SLACK, "battery under faults")
+            checks.check_float_sequence(
+                fault_values, FLOW_FLOOR, battery_gaps + ROS_SLACK, 'battery under faults'
+            )
             span = int(fault_values[-1]) - int(fault_values[0]) + 1
             self.assertGreaterEqual(
-                span - len(fault_values), battery_gaps, "stream lost fewer frames than the counters report"
+                span - len(fault_values),
+                battery_gaps,
+                'stream lost fewer frames than the counters report',
             )
             clean_values = battery[fault_end:]
-            self.assertGreater(len(clean_values), RATE_HZ * CLEAN_WINDOW_S * 0.5, "clean flow stalled")
-            checks.check_float_sequence(clean_values, len(clean_values), CLEAN_SLACK, "battery after faults")
-            self.assertEqual(
-                int(final["mcu dropped frames"]) - int(settled["mcu dropped frames"]),
-                0,
-                "drops after the faults stopped",
+            self.assertGreater(
+                len(clean_values), RATE_HZ * CLEAN_WINDOW_S * 0.5, 'clean flow stalled'
             )
-            self.assertEqual(_user_gaps(final) - _user_gaps(settled), 0, "gaps after the faults stopped")
+            checks.check_float_sequence(
+                clean_values, len(clean_values), CLEAN_SLACK, 'battery after faults'
+            )
+            self.assertEqual(
+                int(final['mcu dropped frames']) - int(settled['mcu dropped frames']),
+                0,
+                'drops after the faults stopped',
+            )
+            self.assertEqual(
+                _user_gaps(final) - _user_gaps(settled), 0, 'gaps after the faults stopped'
+            )
         finally:
             node.destroy_node()

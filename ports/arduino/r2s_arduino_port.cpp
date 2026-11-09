@@ -12,12 +12,12 @@ namespace
 // a sketch that never selects still talks on the default port.
 Stream *s_selected;
 
-Stream &selected(void)
+Stream & selected(void)
 {
-    if (s_selected != nullptr) {
-        return *s_selected;
-    }
-    return Serial;
+  if (s_selected != nullptr) {
+    return *s_selected;
+  }
+  return Serial;
 }
 } // namespace
 
@@ -25,23 +25,23 @@ namespace r2s
 {
 namespace detail
 {
-void arduino_port_attach(Stream &port)
+void arduino_port_attach(Stream & port)
 {
-    s_selected = &port;
+  s_selected = &port;
 }
 } // namespace detail
 } // namespace r2s
 
 uint16_t r2s_port_read(uint8_t *buf, uint16_t max)
 {
-    Stream &port = selected();
-    uint16_t count = 0u;
+  Stream & port = selected();
+  uint16_t count = 0u;
 
-    while (count < max && port.available() > 0) {
-        buf[count] = (uint8_t)port.read();
-        count++;
-    }
-    return count;
+  while (count < max && port.available() > 0) {
+    buf[count] = (uint8_t)port.read();
+    count++;
+  }
+  return count;
 }
 
 #ifdef R2S_TEST_TX_CAP
@@ -57,9 +57,9 @@ static uint32_t s_tx_tick;
  * port header, so the public API stays what it was. */
 extern "C" void r2s_test_set_tx_cap(uint16_t cap)
 {
-    s_tx_cap = cap;
-    s_tx_left = cap;
-    s_tx_tick = r2s_port_tick();
+  s_tx_cap = cap;
+  s_tx_left = cap;
+  s_tx_tick = r2s_port_tick();
 }
 #endif
 
@@ -68,13 +68,13 @@ void r2s_port_write(const uint8_t *buf, uint16_t len)
 #ifdef R2S_TEST_TX_CAP
     /* Spend the budget the last tx_free report promised; the floor keeps
      * a short write from wrapping the count. */
-    if (s_tx_left >= len) {
-        s_tx_left = (uint16_t)(s_tx_left - len);
-    } else {
-        s_tx_left = 0u;
-    }
+  if (s_tx_left >= len) {
+    s_tx_left = (uint16_t)(s_tx_left - len);
+  } else {
+    s_tx_left = 0u;
+  }
 #endif
-    (void)selected().write(buf, (size_t)len);
+  (void)selected().write(buf, (size_t)len);
 }
 
 /* Serial.write blocks for space, so the port never refuses a byte: it reports
@@ -82,38 +82,38 @@ void r2s_port_write(const uint8_t *buf, uint16_t len)
 uint16_t r2s_port_tx_free(void)
 {
 #ifdef R2S_TEST_TX_CAP
-    uint32_t now;
+  uint32_t now;
 
-    if (s_tx_cap == 0xFFFFu) {
-        return 0xFFFFu;
-    }
+  if (s_tx_cap == 0xFFFFu) {
+    return 0xFFFFu;
+  }
     /* The budget refills when the tick moves, so one tick's flood cannot
      * borrow the next tick's bytes. */
-    now = r2s_port_tick();
-    if (now != s_tx_tick) {
-        s_tx_tick = now;
-        s_tx_left = s_tx_cap;
-    }
-    return s_tx_left;
+  now = r2s_port_tick();
+  if (now != s_tx_tick) {
+    s_tx_tick = now;
+    s_tx_left = s_tx_cap;
+  }
+  return s_tx_left;
 #else
-    return 0xFFFFu;
+  return 0xFFFFu;
 #endif
 }
 
 /* micros() resolves 4 us, fine for the 1 ms tick the core announces. */
 uint32_t r2s_port_tick(void)
 {
-    return (uint32_t)(micros() / 1000UL);
+  return (uint32_t)(micros() / 1000UL);
 }
 
 #ifdef R2S_TESTING
 void r2s_arduino_port_test_reset(void)
 {
-    s_selected = nullptr;
+  s_selected = nullptr;
 #ifdef R2S_TEST_TX_CAP
-    s_tx_cap = 0xFFFFu;
-    s_tx_left = 0xFFFFu;
-    s_tx_tick = 0u;
+  s_tx_cap = 0xFFFFu;
+  s_tx_left = 0xFFFFu;
+  s_tx_tick = 0u;
 #endif
 }
 #endif

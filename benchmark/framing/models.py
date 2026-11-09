@@ -68,17 +68,17 @@ def rcobs_encode(data: bytes) -> bytes:
 def rcobs_decode(enc: bytes) -> bytes:
     """rCOBS decoding after COB-4, naming COB-5 and COB-6 like the core."""
     if len(enc) == 0:
-        return b""
+        return b''
     if enc[-1] == 0xFF:
-        raise ValueError("COB-6: encoding ends in 0xFF")
+        raise ValueError('COB-6: encoding ends in 0xFF')
     if any(byte == 0x00 for byte in enc):
-        raise ValueError("COB-5: encoding holds 0x00")
+        raise ValueError('COB-5: encoding holds 0x00')
     groups = []
     read = len(enc)
     while read > 0:
         code = enc[read - 1]
         if code > read:
-            raise ValueError("COB-5: code overruns the input")
+            raise ValueError('COB-5: code overruns the input')
         groups.append((code, bytes(enc[read - code : read - 1])))
         read -= code
     out = bytearray()
@@ -116,14 +116,14 @@ def cobs_encode(data: bytes) -> bytes:
 def cobs_decode(enc: bytes) -> bytes:
     """Standard COBS decoding, front to back."""
     if any(byte == 0x00 for byte in enc):
-        raise ValueError("COBS: encoding holds 0x00")
+        raise ValueError('COBS: encoding holds 0x00')
     out = bytearray()
     index = 0
     size = len(enc)
     while index < size:
         code = enc[index]
         if code == 0x00 or index + code > size:
-            raise ValueError("COBS: code overruns the input")
+            raise ValueError('COBS: code overruns the input')
         out += enc[index + 1 : index + code]
         index += code
         if code < 0xFF and index < size:
@@ -148,21 +148,21 @@ def slip_encode(data: bytes) -> bytes:
 def slip_decode(segment: bytes) -> bytes:
     """SLIP decoding of one segment between END markers."""
     if any(byte == SLIP_END for byte in segment):
-        raise ValueError("SLIP: segment holds END")
+        raise ValueError('SLIP: segment holds END')
     out = bytearray()
     index = 0
     while index < len(segment):
         byte = segment[index]
         if byte == SLIP_ESC:
             if index + 1 >= len(segment):
-                raise ValueError("SLIP: trailing ESC")
+                raise ValueError('SLIP: trailing ESC')
             follower = segment[index + 1]
             if follower == SLIP_ESC_END:
                 out.append(SLIP_END)
             elif follower == SLIP_ESC_ESC:
                 out.append(SLIP_ESC)
             else:
-                raise ValueError("SLIP: bad escape")
+                raise ValueError('SLIP: bad escape')
             index += 2
         else:
             out.append(byte)
@@ -177,7 +177,9 @@ def rs_encode(topic: int, seq: int, payload: bytes) -> bytes:
     length_check = (-(length & 0xFF) - ((length >> 8) & 0xFF)) & 0xFF
     message_check = (-sum(body)) & 0xFF
     return (
-        bytes((RS_SYNC, RS_VERSION, length & 0xFF, (length >> 8) & 0xFF, length_check)) + body + bytes((message_check,))
+        bytes((RS_SYNC, RS_VERSION, length & 0xFF, (length >> 8) & 0xFF, length_check))
+        + body
+        + bytes((message_check,))
     )
 
 
@@ -224,7 +226,7 @@ def rs_scan(stream: bytes):
 
 def delimiter_of(framer: str) -> int:
     """The wire byte that ends a frame: 0x00, except SLIP which uses END."""
-    return SLIP_END if framer == "slip" else 0x00
+    return SLIP_END if framer == 'slip' else 0x00
 
 
 def delimited_split(stream: bytes, delimiter: int = 0x00):

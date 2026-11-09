@@ -6,42 +6,45 @@
 namespace ros
 {
 
-template <typename MReq, typename MRes, typename ObjT = void> class ServiceServer
+template<typename MReq, typename MRes, typename ObjT = void>
+class ServiceServer
 {
-  public:
-    typedef void (ObjT::*CallbackT)(const MReq &, MRes &);
+public:
+  typedef void (ObjT::*CallbackT)(const MReq &, MRes &);
 
-    ServiceServer(const char *topic_name, CallbackT callback, ObjT *obj)
-        : topic_(topic_name), callback_(callback), obj_(obj)
-    {
-    }
+  ServiceServer(const char *topic_name, CallbackT callback, ObjT *obj)
+  : topic_(topic_name), callback_(callback), obj_(obj)
+  {
+  }
 
-    const char *topic_;
+  const char *topic_;
 
-  private:
-    CallbackT callback_;
-    ObjT *obj_;
+private:
+  CallbackT callback_;
+  ObjT *obj_;
 
-    ServiceServer(const ServiceServer &);
-    ServiceServer &operator=(const ServiceServer &);
+  ServiceServer(const ServiceServer &);
+  ServiceServer & operator=(const ServiceServer &);
 };
 
-template <typename MReq, typename MRes> class ServiceServer<MReq, MRes, void>
+template<typename MReq, typename MRes>
+class ServiceServer<MReq, MRes, void>
 {
-  public:
-    typedef void (*CallbackT)(const MReq &, MRes &);
+public:
+  typedef void (*CallbackT)(const MReq &, MRes &);
 
-    ServiceServer(const char *topic_name, CallbackT callback) : topic_(topic_name), callback_(callback)
-    {
-    }
+  ServiceServer(const char *topic_name, CallbackT callback)
+  : topic_(topic_name), callback_(callback)
+  {
+  }
 
-    const char *topic_;
+  const char *topic_;
 
-  private:
-    CallbackT callback_;
+private:
+  CallbackT callback_;
 
-    ServiceServer(const ServiceServer &);
-    ServiceServer &operator=(const ServiceServer &);
+  ServiceServer(const ServiceServer &);
+  ServiceServer & operator=(const ServiceServer &);
 };
 
 } // namespace ros

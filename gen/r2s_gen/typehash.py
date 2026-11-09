@@ -22,20 +22,20 @@ _BOUNDED_SEQUENCE_OFFSET = 96
 _UNBOUNDED_SEQUENCE_OFFSET = 144
 
 _PRIMITIVE_TYPE_IDS = {
-    "bool": 15,
-    "byte": 16,
-    "char": 3,
-    "int8": 2,
-    "uint8": 3,
-    "int16": 4,
-    "uint16": 5,
-    "int32": 6,
-    "uint32": 7,
-    "int64": 8,
-    "uint64": 9,
-    "float32": 10,
-    "float64": 11,
-    "string": 17,
+    'bool': 15,
+    'byte': 16,
+    'char': 3,
+    'int8': 2,
+    'uint8': 3,
+    'int16': 4,
+    'uint16': 5,
+    'int32': 6,
+    'uint32': 7,
+    'int64': 8,
+    'uint64': 9,
+    'float32': 10,
+    'float64': 11,
+    'string': 17,
 }
 
 
@@ -51,36 +51,40 @@ def type_hash(repository: msgs.MessageRepository, type_name: str) -> str:
         message = repository.load(name)
         descriptions[name] = _individual_description(message)
         queue.extend(
-            field["type"]["nested_type_name"]
-            for field in descriptions[name]["fields"]
-            if field["type"]["nested_type_name"]
+            field['type']['nested_type_name']
+            for field in descriptions[name]['fields']
+            if field['type']['nested_type_name']
         )
     full = _full_description(canonical, descriptions)
-    digest = hashlib.sha256(json.dumps(full, separators=(", ", ": ")).encode("utf-8")).hexdigest()
-    return f"RIHS01_{digest}"
+    digest = hashlib.sha256(json.dumps(full, separators=(', ', ': ')).encode('utf-8')).hexdigest()
+    return f'RIHS01_{digest}'
 
 
 def _individual_description(message: msgs.Message) -> dict:
     fields = message.fields
     if not fields:
         # An empty .msg hashes as one uint8 member: the adapter's IDL template renders it so.
-        fields = (msgs.Field(name="structure_needs_at_least_one_member", type_name="uint8"),)
+        fields = (msgs.Field(name='structure_needs_at_least_one_member', type_name='uint8'),)
     return {
-        "type_name": message.type_name,
-        "fields": [{"name": field.name, "type": _field_type(field, message.type_name)} for field in fields],
+        'type_name': message.type_name,
+        'fields': [
+            {'name': field.name, 'type': _field_type(field, message.type_name)} for field in fields
+        ],
     }
 
 
 def _field_type(field: msgs.Field, where: str) -> dict:
     if field.type_name in msgs.WIDE_TYPES:
-        raise msgs.MessageError(where, f"'{field.name}' is a wide string", "use string or a bounded string")
+        raise msgs.MessageError(
+            where, f"'{field.name}' is a wide string", 'use string or a bounded string'
+        )
     if field.type_name in _PRIMITIVE_TYPE_IDS:
         base_id = _PRIMITIVE_TYPE_IDS[field.type_name]
-        nested_name = ""
+        nested_name = ''
     else:
         base_id = _NESTED_TYPE_ID
         nested_name = field.type_name
-    if field.type_name == "string" and field.string_bound is not None:
+    if field.type_name == 'string' and field.string_bound is not None:
         base_id = _BOUNDED_STRING_ID
     if field.array_length is not None:
         type_id = base_id + _ARRAY_OFFSET
@@ -95,10 +99,10 @@ def _field_type(field: msgs.Field, where: str) -> dict:
         type_id = base_id
         capacity = 0
     return {
-        "type_id": type_id,
-        "capacity": capacity,
-        "string_capacity": field.string_bound or 0,
-        "nested_type_name": nested_name,
+        'type_id': type_id,
+        'capacity': capacity,
+        'string_capacity': field.string_bound or 0,
+        'nested_type_name': nested_name,
     }
 
 
@@ -106,9 +110,9 @@ def _full_description(type_name: str, descriptions: dict[str, dict]) -> dict:
     """The type description with the transitively referenced types, sorted by name."""
     references: set[str] = set()
     queue = [
-        field["type"]["nested_type_name"]
-        for field in descriptions[type_name]["fields"]
-        if field["type"]["nested_type_name"]
+        field['type']['nested_type_name']
+        for field in descriptions[type_name]['fields']
+        if field['type']['nested_type_name']
     ]
     while queue:
         reference = queue.pop()
@@ -116,11 +120,11 @@ def _full_description(type_name: str, descriptions: dict[str, dict]) -> dict:
             continue
         references.add(reference)
         queue.extend(
-            field["type"]["nested_type_name"]
-            for field in descriptions[reference]["fields"]
-            if field["type"]["nested_type_name"]
+            field['type']['nested_type_name']
+            for field in descriptions[reference]['fields']
+            if field['type']['nested_type_name']
         )
     return {
-        "type_description": descriptions[type_name],
-        "referenced_type_descriptions": [descriptions[name] for name in sorted(references)],
+        'type_description': descriptions[type_name],
+        'referenced_type_descriptions': [descriptions[name] for name in sorted(references)],
     }

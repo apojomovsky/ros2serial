@@ -19,11 +19,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-SPEC = "spec/protocol.md"
-VECTORS = "spec/vectors/"
-MARKER = "(local)"
-RULE = re.compile(r"^\s*- \[([A-Z]{2,4}-\d+)\] (.*)$")
-HEADING = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
+SPEC = 'spec/protocol.md'
+VECTORS = 'spec/vectors/'
+MARKER = '(local)'
+RULE = re.compile(r'^\s*- \[([A-Z]{2,4}-\d+)\] (.*)$')
+HEADING = re.compile(r'^(#{1,6})\s+(.*\S)\s*$')
 
 
 def _rules(text: str) -> dict[str, tuple[bool, str]]:
@@ -46,19 +46,21 @@ def _rules(text: str) -> dict[str, tuple[bool, str]]:
 
 
 def _show(root: Path, ref: str) -> str | None:
-    result = subprocess.run(["git", "show", f"{ref}:{SPEC}"], cwd=root, capture_output=True)
+    result = subprocess.run(['git', 'show', f'{ref}:{SPEC}'], cwd=root, capture_output=True)
     if result.returncode != 0:
-        return ""
+        return ''
     try:
-        return result.stdout.decode("utf-8")
+        return result.stdout.decode('utf-8')
     except UnicodeDecodeError:
         return None
 
 
 def _changed(root: Path, base: str) -> list[str]:
-    result = subprocess.run(["git", "diff", "--name-only", f"{base}...HEAD"], cwd=root, capture_output=True, text=True)
+    result = subprocess.run(
+        ['git', 'diff', '--name-only', f'{base}...HEAD'], cwd=root, capture_output=True, text=True
+    )
     if result.returncode != 0:
-        raise SystemExit(f"spec sync: cannot compare {base} with HEAD: {result.stderr.strip()}")
+        raise SystemExit(f'spec sync: cannot compare {base} with HEAD: {result.stderr.strip()}')
     return [line for line in result.stdout.splitlines() if line]
 
 
@@ -71,25 +73,25 @@ def _unknown_covers(root: Path, changed: list[str]) -> list[str]:
     import yaml
 
     try:
-        defined = set(_rules((root / SPEC).read_text(encoding="utf-8")))
+        defined = set(_rules((root / SPEC).read_text(encoding='utf-8')))
     except (OSError, UnicodeDecodeError):
         return [SPEC]
     unknown = []
     for path in changed:
-        if not path.startswith(VECTORS) or path.endswith("/.gitkeep"):
+        if not path.startswith(VECTORS) or path.endswith('/.gitkeep'):
             continue
-        if not path.endswith(".yaml"):
+        if not path.endswith('.yaml'):
             unknown.append(path)
             continue
         try:
-            doc = yaml.safe_load((root / path).read_text(encoding="utf-8"))
+            doc = yaml.safe_load((root / path).read_text(encoding='utf-8'))
         except FileNotFoundError:
             # A deleted vector names nothing.
             continue
         except (OSError, UnicodeDecodeError, yaml.YAMLError):
             unknown.append(path)
             continue
-        covers = doc.get("covers") if isinstance(doc, dict) else None
+        covers = doc.get('covers') if isinstance(doc, dict) else None
         if not isinstance(covers, list) or not all(isinstance(rule, str) for rule in covers):
             unknown.append(path)
             continue
@@ -101,46 +103,61 @@ def check(root: Path, base: str) -> list[str]:
     changed = _changed(root, base)
     spec_changed = SPEC in changed
     # A .gitkeep carries no vector, so adding or removing one changes none.
-    vectors_changed = any(path.startswith(VECTORS) and not path.endswith("/.gitkeep") for path in changed)
+    vectors_changed = any(
+        path.startswith(VECTORS) and not path.endswith('/.gitkeep') for path in changed
+    )
     problems = []
     if spec_changed and not vectors_changed:
         try:
-            new_text: str | None = (root / SPEC).read_text(encoding="utf-8")
+            new_text: str | None = (root / SPEC).read_text(encoding='utf-8')
         except (OSError, UnicodeDecodeError):
             new_text = None
         old_text = _show(root, base)
         if new_text is None or old_text is None:
             # An unreadable spec names itself, as unreadable vectors do.
-            problems.append(f"{SPEC} changed without spec/vectors changes: {SPEC} crosses the wire")
+            problems.append(
+                f'{SPEC} changed without spec/vectors changes: {SPEC} crosses the wire'
+            )
         else:
             old = _rules(old_text)
             new = _rules(new_text)
             # A rule that is added, removed, reworded or moved between sections is
             # a change; only the wire ones need a vector to show them.
             wire = [rule for rule, entry in new.items() if not entry[0] and old.get(rule) != entry]
-            wire += [rule for rule, entry in old.items() if not entry[0] and (rule not in new or new[rule][0])]
+            wire += [
+                rule
+                for rule, entry in old.items()
+                if not entry[0] and (rule not in new or new[rule][0])
+            ]
             if wire:
-                problems.append(f"{SPEC} changed without spec/vectors changes: {', '.join(wire)} crosses the wire")
+                problems.append(
+                    f'{SPEC} changed without spec/vectors changes: '
+                    f'{", ".join(wire)} crosses the wire'
+                )
 
     if vectors_changed and not spec_changed:
         unknown = _unknown_covers(root, changed)
         if unknown:
-            problems.append(f"spec/vectors changed without {SPEC} changes: {', '.join(unknown)} names no rule")
+            problems.append(
+                f'spec/vectors changed without {SPEC} changes: {", ".join(unknown)} names no rule'
+            )
     if spec_changed and vectors_changed:
         try:
-            head_text: str | None = (root / SPEC).read_text(encoding="utf-8")
+            head_text: str | None = (root / SPEC).read_text(encoding='utf-8')
         except (OSError, UnicodeDecodeError):
             head_text = None
         if head_text is None or _show(root, base) is None:
             # A paired change proves nothing when either side cannot be read.
-            problems.append(f"{SPEC} changed with spec/vectors changes: {SPEC} is unreadable")
+            problems.append(f'{SPEC} changed with spec/vectors changes: {SPEC} is unreadable')
 
     return problems
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--base", default="origin/master")
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument('--base', default='origin/master')
     args = ap.parse_args()
     problems = check(Path.cwd(), args.base)
     for p in problems:
@@ -148,5 +165,5 @@ def main() -> int:
     return 1 if problems else 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())

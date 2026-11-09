@@ -15,8 +15,10 @@ import launch_testing.markers
 import rclpy
 from e2e_support import avr as avr_support
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, teardown
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from e2e_support import checks
+from e2e_support import teardown
+from rclpy.qos import QoSProfile
+from rclpy.qos import ReliabilityPolicy
 from std_msgs.msg import Float32
 
 RECEIVE_COUNT = 500
@@ -30,8 +32,8 @@ _PARAMS = None
 
 def _prepare():
     global _SCRATCH, _SPAWNED, _PARAMS
-    _SCRATCH = tempfile.TemporaryDirectory(prefix="r2s-e2e-avr-2-")
-    _SPAWNED = avr_support.spawn(os.environ.get("R2S_E2E_BOARD", "uno"))
+    _SCRATCH = tempfile.TemporaryDirectory(prefix='r2s-e2e-avr-2-')
+    _SPAWNED = avr_support.spawn(os.environ.get('R2S_E2E_BOARD', 'uno'))
     _PARAMS = bridge_support.example_params_file()
 
 
@@ -58,18 +60,20 @@ class TestScenario2(unittest.TestCase):
         teardown.shutdown()
 
     def test_50hz_flow_arrives_nearly_whole_with_correct_values(self):
-        node = rclpy.create_node("e2e_s2_avr_probe")
+        node = rclpy.create_node('e2e_s2_avr_probe')
         try:
             bridge_support.wait_for_bridge(node)
             # The bridge publishes MCU topics best effort, so the probe
             # subscribes best effort too; a reliable probe would never match.
             best_effort = QoSProfile(depth=100, reliability=ReliabilityPolicy.BEST_EFFORT)
             received = []
-            node.create_subscription(Float32, "battery", lambda msg: received.append(msg.data), best_effort)
+            node.create_subscription(
+                Float32, 'battery', lambda msg: received.append(msg.data), best_effort
+            )
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
             while not received:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                self.assertLess(time.monotonic(), deadline, "no Float32 flow on battery")
+                self.assertLess(time.monotonic(), deadline, 'no Float32 flow on battery')
             # The wall clock cannot gate the rate: simavr runs unpaced, so the
             # same 500 publishes take a wall time the host load decides. The
             # simulated clock is cycle counted, so 500 publishes at the
@@ -79,14 +83,20 @@ class TestScenario2(unittest.TestCase):
                 received,
                 RECEIVE_COUNT,
                 time.monotonic() + FLOW_TIMEOUT,
-                "battery at 50 Hz",
+                'battery at 50 Hz',
                 lambda: rclpy.spin_once(node, timeout_sec=0.5),
             )
-            checks.check_float_sequence(list(received), RECEIVE_COUNT, LOSS_BUDGET, "battery at 50 Hz")
-            self.assertEqual(_SPAWNED.stop(), 0, "the harness stopped dirty")
-            self.assertIn("simulated_ms", _SPAWNED.summary, "no stop summary from the harness")
-            sim_ms = _SPAWNED.summary["simulated_ms"]
-            self.assertGreaterEqual(sim_ms, 9_000, f"500 publishes in {sim_ms} ms simulated, faster than 50 Hz")
-            self.assertLessEqual(sim_ms, 45_000, f"500 publishes in {sim_ms} ms simulated, slower than 50 Hz")
+            checks.check_float_sequence(
+                list(received), RECEIVE_COUNT, LOSS_BUDGET, 'battery at 50 Hz'
+            )
+            self.assertEqual(_SPAWNED.stop(), 0, 'the harness stopped dirty')
+            self.assertIn('simulated_ms', _SPAWNED.summary, 'no stop summary from the harness')
+            sim_ms = _SPAWNED.summary['simulated_ms']
+            self.assertGreaterEqual(
+                sim_ms, 9_000, f'500 publishes in {sim_ms} ms simulated, faster than 50 Hz'
+            )
+            self.assertLessEqual(
+                sim_ms, 45_000, f'500 publishes in {sim_ms} ms simulated, slower than 50 Hz'
+            )
         finally:
             node.destroy_node()

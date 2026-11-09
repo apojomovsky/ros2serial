@@ -27,13 +27,15 @@ def check_float_sequence(values, expected_count, loss_budget, what):
     non-integer or a step back, and lost frames as a step forward. The
     budget counts lost frames only, so corruption always fails.
     """
-    assert len(values) >= expected_count, f"{what}: only {len(values)} of {expected_count} messages arrived"
+    assert len(values) >= expected_count, (
+        f'{what}: only {len(values)} of {expected_count} messages arrived'
+    )
     for value in values:
-        assert float(value).is_integer(), f"{what}: corrupt value {value!r}"
+        assert float(value).is_integer(), f'{what}: corrupt value {value!r}'
     for earlier, later in zip(values, values[1:], strict=False):
-        assert later > earlier, f"{what}: values out of order: {later!r} after {earlier!r}"
+        assert later > earlier, f'{what}: values out of order: {later!r} after {earlier!r}'
     span = int(values[-1]) - int(values[0]) + 1
-    assert span - len(values) <= loss_budget, f"{what}: lost {span - len(values)} of {span}"
+    assert span - len(values) <= loss_budget, f'{what}: lost {span - len(values)} of {span}'
 
 
 def check_twist_echo(sent, received, what, *, rel_tol=1e-9, abs_tol=0.0):
@@ -43,16 +45,22 @@ def check_twist_echo(sent, received, what, *, rel_tol=1e-9, abs_tol=0.0):
     exact. Narrow backends pass a tolerance instead; the comparison stays in
     one place for both.
     """
-    assert len(received) == len(sent), f"{what}: {len(received)} echoes for {len(sent)} publishes"
+    assert len(received) == len(sent), f'{what}: {len(received)} echoes for {len(sent)} publishes'
     for want, got in zip(sent, received, strict=True):
-        for axis in ("x", "y", "z"):
+        for axis in ('x', 'y', 'z'):
             assert math.isclose(
-                getattr(got.linear, axis), getattr(want.linear, axis), rel_tol=rel_tol, abs_tol=abs_tol
-            ), f"{what}: linear.{axis} differs"
-        for axis in ("x", "y", "z"):
+                getattr(got.linear, axis),
+                getattr(want.linear, axis),
+                rel_tol=rel_tol,
+                abs_tol=abs_tol,
+            ), f'{what}: linear.{axis} differs'
+        for axis in ('x', 'y', 'z'):
             assert math.isclose(
-                getattr(got.angular, axis), getattr(want.angular, axis), rel_tol=rel_tol, abs_tol=abs_tol
-            ), f"{what}: angular.{axis} differs"
+                getattr(got.angular, axis),
+                getattr(want.angular, axis),
+                rel_tol=rel_tol,
+                abs_tol=abs_tol,
+            ), f'{what}: angular.{axis} differs'
 
 
 def collect_until(values, count, deadline, what, spin):
@@ -62,7 +70,7 @@ def collect_until(values, count, deadline, what, spin):
     without it the subscription filling values would never fire.
     """
     while len(values) < count:
-        assert time.monotonic() < deadline, f"{what}: only {len(values)} of {count} arrived"
+        assert time.monotonic() < deadline, f'{what}: only {len(values)} of {count} arrived'
         spin()
 
 
@@ -77,11 +85,11 @@ def wait_for_handshake(received, wanted, since, budget, what, spin, clock=time.m
     stepped clock measure fake seconds. Returns the seconds from since.
     """
     while True:
-        missing = handshake_missing(received[-1], wanted) if received else ["link silent"]
+        missing = handshake_missing(received[-1], wanted) if received else ['link silent']
         took = clock() - since
         if not missing:
             return took
-        assert took < budget, f"{what} still missing {missing} after {took:.1f} s"
+        assert took < budget, f'{what} still missing {missing} after {took:.1f} s'
         spin()
 
 
@@ -92,8 +100,14 @@ def topic_key(values, name, field):
     topics sharing one name apart. Callers name the topic and field and
     this resolves the id, failing loudly on zero or several matches.
     """
-    matches = [key for key in values if key.startswith("topic ") and key.endswith(" " + name + " " + field)]
-    assert len(matches) == 1, f"expected one key for topic {name!r} field {field!r}, found {matches}"
+    matches = [
+        key
+        for key in values
+        if key.startswith('topic ') and key.endswith(' ' + name + ' ' + field)
+    ]
+    assert len(matches) == 1, (
+        f'expected one key for topic {name!r} field {field!r}, found {matches}'
+    )
     return matches[0]
 
 
@@ -106,14 +120,16 @@ def handshake_missing(message, wanted):
     the handshake did not finish that name.
     """
     status = message.status[0]
-    if status.message != "connected":
-        return ["link " + status.message]
+    if status.message != 'connected':
+        return ['link ' + status.message]
     values = {value.key: value.value for value in status.values}
     missing = []
     for name in wanted:
         verdicts = [
-            value for key, value in values.items() if key.startswith("topic ") and key.endswith(" " + name + " status")
+            value
+            for key, value in values.items()
+            if key.startswith('topic ') and key.endswith(' ' + name + ' status')
         ]
-        if not verdicts or any(verdict != "ok" for verdict in verdicts):
-            missing.append("topic " + name)
+        if not verdicts or any(verdict != 'ok' for verdict in verdicts):
+            missing.append('topic ' + name)
     return missing

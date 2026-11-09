@@ -16,17 +16,20 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
-from r2s_gen import bounds, config, msgs, topics
+from r2s_gen import bounds
+from r2s_gen import config
+from r2s_gen import msgs
+from r2s_gen import topics
 from r2s_gen.bounds import ResolvedMessage
 from r2s_gen.config import Config
 from r2s_gen.msgs import MessageError
 from r2s_gen.version import __version__
 
-LAYOUTS = ("arduino", "cmake")
+LAYOUTS = ('arduino', 'cmake')
 
 _FILES = {
-    "cmake": ("r2s_generated.h", "r2s_generated.c", "CMakeLists.txt"),
-    "arduino": ("library.properties", "src/r2s_generated.h", "src/r2s_generated.c"),
+    'cmake': ('r2s_generated.h', 'r2s_generated.c', 'CMakeLists.txt'),
+    'arduino': ('library.properties', 'src/r2s_generated.h', 'src/r2s_generated.c'),
 }
 
 
@@ -35,23 +38,25 @@ def files_for(layout: str) -> tuple[str, ...]:
     try:
         return _FILES[layout]
     except KeyError:
-        raise MessageError("--layout", f"unknown layout '{layout}'", "use one of: arduino, cmake") from None
+        raise MessageError(
+            '--layout', f"unknown layout '{layout}'", 'use one of: arduino, cmake'
+        ) from None
 
 
 def _defined(header: str, name: str) -> bool:
     """Whether the header names `name`, with or without a value."""
-    return re.search(rf"^#define {name}([ \t]|$)", header, re.MULTILINE) is not None
+    return re.search(rf'^#define {name}([ \t]|$)', header, re.MULTILINE) is not None
 
 
-def build_defines(header: str, source: str = "r2s_generated.h") -> list[str]:
+def build_defines(header: str, source: str = 'r2s_generated.h') -> list[str]:
     """The -D flags a non-CMake build needs: the codec flag plus the header's limits."""
-    defines = ["R2S_WITH_CODEC"]
-    for name in ("R2S_MAX_FRAME", "R2S_MAX_NEST", "R2S_TOPIC_MAX_COUNT"):
-        match = re.search(rf"^#define {name}[ \t]+([0-9]+)u$", header, re.MULTILINE)
+    defines = ['R2S_WITH_CODEC']
+    for name in ('R2S_MAX_FRAME', 'R2S_MAX_NEST', 'R2S_TOPIC_MAX_COUNT'):
+        match = re.search(rf'^#define {name}[ \t]+([0-9]+)u$', header, re.MULTILINE)
         if match is not None:
-            defines.append(f"{name}={match.group(1)}")
-        elif name != "R2S_TOPIC_MAX_COUNT" or _defined(header, name):
-            raise MessageError(source, f"no {name} limit", "regenerate the sources")
+            defines.append(f'{name}={match.group(1)}')
+        elif name != 'R2S_TOPIC_MAX_COUNT' or _defined(header, name):
+            raise MessageError(source, f'no {name} limit', 'regenerate the sources')
     return defines
 
 
@@ -60,118 +65,136 @@ def generate(
     resolved: Mapping[str, ResolvedMessage],
     repository: msgs.MessageRepository,
     layout: str,
-    source: str = "r2s.yaml",
+    source: str = 'r2s.yaml',
     cpp: bool = False,
 ) -> dict[str, str]:
     """The layout's files for `loaded`: relative path to file text, in build order."""
     files_for(layout)
     if cpp:
-        raise MessageError("--cpp", "C++ output is not emitted yet", "drop --cpp")
-    if loaded.handshake != "full":
+        raise MessageError('--cpp', 'C++ output is not emitted yet', 'drop --cpp')
+    if loaded.handshake != 'full':
         raise MessageError(
             source,
-            "compact handshakes need the node map, which generate does not emit yet",
-            "use handshake: full",
+            'compact handshakes need the node map, which generate does not emit yet',
+            'use handshake: full',
         )
     header, code = topics.generate(loaded, resolved, repository, source)
     digest = topics.config_hash(loaded)
-    if layout == "cmake":
+    if layout == 'cmake':
         return {
-            "r2s_generated.h": header,
-            "r2s_generated.c": code,
-            "CMakeLists.txt": _cmake_lists(source, digest),
+            'r2s_generated.h': header,
+            'r2s_generated.c': code,
+            'CMakeLists.txt': _cmake_lists(source, digest),
         }
     return {
-        "library.properties": _library_properties(loaded.node, source, digest),
-        "src/r2s_generated.h": header,
-        "src/r2s_generated.c": code,
+        'library.properties': _library_properties(loaded.node, source, digest),
+        'src/r2s_generated.h': header,
+        'src/r2s_generated.c': code,
     }
 
 
 def _cmake_lists(source: str, digest: str) -> str:
     lines = [
-        topics.banner("#", source, digest),
-        "cmake_minimum_required(VERSION 3.22)",
-        "project(r2s_generated C)",
-        "",
-        "set(CMAKE_C_STANDARD 99)",
-        "set(CMAKE_C_STANDARD_REQUIRED ON)",
-        "set(CMAKE_C_EXTENSIONS OFF)",
-        "",
-        "# The portable core this library builds: pass -DR2S_CORE_DIR=<dir> naming",
-        "# the checkout whose src/ holds the core sources and whose include/ holds r2s/.",
-        "if(NOT R2S_CORE_DIR)",
-        '  message(FATAL_ERROR "R2S_CORE_DIR names no core directory (pass -DR2S_CORE_DIR=<repo>/core)")',
-        "endif()",
+        topics.banner('#', source, digest),
+        'cmake_minimum_required(VERSION 3.22)',
+        'project(r2s_generated C)',
+        '',
+        'set(CMAKE_C_STANDARD 99)',
+        'set(CMAKE_C_STANDARD_REQUIRED ON)',
+        'set(CMAKE_C_EXTENSIONS OFF)',
+        '',
+        '# The portable core this library builds: pass -DR2S_CORE_DIR=<dir> naming',
+        '# the checkout whose src/ holds the core sources and whose include/ holds r2s/.',
+        'if(NOT R2S_CORE_DIR)',
+        '  message(FATAL_ERROR "R2S_CORE_DIR names no core directory '
+        '(pass -DR2S_CORE_DIR=<repo>/core)")',
+        'endif()',
         'file(GLOB R2S_CORE_SOURCES CONFIGURE_DEPENDS "${R2S_CORE_DIR}/src/*.c")',
         'list(REMOVE_ITEM R2S_CORE_SOURCES "${R2S_CORE_DIR}/src/test_reset.c")',
-        "",
-        "add_library(r2s_generated STATIC ${R2S_CORE_SOURCES} r2s_generated.c)",
-        'target_include_directories(r2s_generated PUBLIC "${R2S_CORE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}")',
-        "# The frame and nesting limits live in the generated header, but the core",
-        "# translation units never include it, so the build reads them out as defines.",
-        'file(STRINGS r2s_generated.h R2S_MAX_FRAME_LINE REGEX "^#define R2S_MAX_FRAME[ \\t]+[0-9]+u$")',
-        'file(STRINGS r2s_generated.h R2S_MAX_NEST_LINE REGEX "^#define R2S_MAX_NEST[ \\t]+[0-9]+u$")',
-        'file(STRINGS r2s_generated.h R2S_TOPIC_MAX_COUNT_LINE REGEX "^#define R2S_TOPIC_MAX_COUNT[ \\t]+[0-9]+u$")',
-        'file(STRINGS r2s_generated.h R2S_TOPIC_MAX_COUNT_ANY REGEX "^#define R2S_TOPIC_MAX_COUNT([ \\t]|$)")',
-        "if(NOT R2S_MAX_FRAME_LINE OR NOT R2S_MAX_NEST_LINE)",
+        '',
+        'add_library(r2s_generated STATIC ${R2S_CORE_SOURCES} r2s_generated.c)',
+        'target_include_directories(r2s_generated PUBLIC "${R2S_CORE_DIR}/include" '
+        '"${CMAKE_CURRENT_SOURCE_DIR}")',
+        '# The frame and nesting limits live in the generated header, but the core',
+        '# translation units never include it, so the build reads them out as defines.',
+        'file(STRINGS r2s_generated.h R2S_MAX_FRAME_LINE '
+        'REGEX "^#define R2S_MAX_FRAME[ \\t]+[0-9]+u$")',
+        'file(STRINGS r2s_generated.h R2S_MAX_NEST_LINE '
+        'REGEX "^#define R2S_MAX_NEST[ \\t]+[0-9]+u$")',
+        'file(STRINGS r2s_generated.h R2S_TOPIC_MAX_COUNT_LINE '
+        'REGEX "^#define R2S_TOPIC_MAX_COUNT[ \\t]+[0-9]+u$")',
+        'file(STRINGS r2s_generated.h R2S_TOPIC_MAX_COUNT_ANY '
+        'REGEX "^#define R2S_TOPIC_MAX_COUNT([ \\t]|$)")',
+        'if(NOT R2S_MAX_FRAME_LINE OR NOT R2S_MAX_NEST_LINE)',
         '  message(FATAL_ERROR "r2s_generated.h names no frame or nesting limit")',
-        "endif()",
-        "if(R2S_TOPIC_MAX_COUNT_ANY AND NOT R2S_TOPIC_MAX_COUNT_LINE)",
+        'endif()',
+        'if(R2S_TOPIC_MAX_COUNT_ANY AND NOT R2S_TOPIC_MAX_COUNT_LINE)',
         '  message(FATAL_ERROR "r2s_generated.h names a malformed topic limit")',
-        "endif()",
-        'string(REGEX MATCH "^#define R2S_MAX_FRAME[ \\t]+([0-9]+)u$" _ignored "${R2S_MAX_FRAME_LINE}")',
-        "set(R2S_GENERATED_DEFS R2S_WITH_CODEC R2S_MAX_FRAME=${CMAKE_MATCH_1})",
-        'string(REGEX MATCH "^#define R2S_MAX_NEST[ \\t]+([0-9]+)u$" _ignored "${R2S_MAX_NEST_LINE}")',
-        "list(APPEND R2S_GENERATED_DEFS R2S_MAX_NEST=${CMAKE_MATCH_1})",
-        "if(R2S_TOPIC_MAX_COUNT_LINE)",
+        'endif()',
+        'string(REGEX MATCH "^#define R2S_MAX_FRAME[ \\t]+([0-9]+)u$" _ignored '
+        '"${R2S_MAX_FRAME_LINE}")',
+        'set(R2S_GENERATED_DEFS R2S_WITH_CODEC R2S_MAX_FRAME=${CMAKE_MATCH_1})',
+        'string(REGEX MATCH "^#define R2S_MAX_NEST[ \\t]+([0-9]+)u$" _ignored '
+        '"${R2S_MAX_NEST_LINE}")',
+        'list(APPEND R2S_GENERATED_DEFS R2S_MAX_NEST=${CMAKE_MATCH_1})',
+        'if(R2S_TOPIC_MAX_COUNT_LINE)',
         '  string(REGEX MATCH "^#define R2S_TOPIC_MAX_COUNT[ \\t]+([0-9]+)u$" _ignored',
         '    "${R2S_TOPIC_MAX_COUNT_LINE}")',
-        "  list(APPEND R2S_GENERATED_DEFS R2S_TOPIC_MAX_COUNT=${CMAKE_MATCH_1})",
-        "endif()",
-        "target_compile_definitions(r2s_generated PUBLIC ${R2S_GENERATED_DEFS})",
-        "target_compile_options(r2s_generated PRIVATE",
-        "    -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow",
-        "    -Wstrict-prototypes -Wmissing-prototypes -Wundef)",
-        "",
+        '  list(APPEND R2S_GENERATED_DEFS R2S_TOPIC_MAX_COUNT=${CMAKE_MATCH_1})',
+        'endif()',
+        'target_compile_definitions(r2s_generated PUBLIC ${R2S_GENERATED_DEFS})',
+        'target_compile_options(r2s_generated PRIVATE',
+        '    -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow',
+        '    -Wstrict-prototypes -Wmissing-prototypes -Wundef)',
+        '',
     ]
-    return "\n".join(lines)
+    return '\n'.join(lines)
 
 
 def _library_properties(node: str, source: str, digest: str) -> str:
     """The Arduino library metadata for the generated sources, AVR and ESP32."""
     lines = [
-        topics.banner("#", source, digest),
-        f"name={node}",
-        f"version={__version__}",
-        "author=ros2serial contributors",
-        "maintainer=ros2serial contributors",
-        f"sentence=ros2serial firmware sources for {node}",
-        "paragraph=Generated by r2s-gen; pairs with the ros2serial bridge over a serial link.",
-        "category=Communication",
-        "url=https://github.com/apojomovsky/ros2serial",
-        "architectures=avr,esp32",
-        "includes=r2s_generated.h",
-        "",
+        topics.banner('#', source, digest),
+        f'name={node}',
+        f'version={__version__}',
+        'author=ros2serial contributors',
+        'maintainer=ros2serial contributors',
+        f'sentence=ros2serial firmware sources for {node}',
+        'paragraph=Generated by r2s-gen; pairs with the ros2serial bridge over a serial link.',
+        'category=Communication',
+        'url=https://github.com/apojomovsky/ros2serial',
+        'architectures=avr,esp32',
+        'includes=r2s_generated.h',
+        '',
     ]
-    return "\n".join(lines)
+    return '\n'.join(lines)
 
 
 def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
     """Add the `generate` subcommand to the command line."""
     parser = subparsers.add_parser(
-        "generate",
-        help="write the firmware sources and the layout wrapper for a config",
-        description="Generate the firmware sources for r2s.yaml plus the wrapper "
+        'generate',
+        help='write the firmware sources and the layout wrapper for a config',
+        description='Generate the firmware sources for r2s.yaml plus the wrapper '
         "the layout's toolchain reads, writing every file under the out directory.",
     )
-    parser.add_argument("--config", required=True, help="the r2s.yaml configuration file")
-    parser.add_argument("--out", required=True, help="the directory receiving the layout files")
+    parser.add_argument('--config', required=True, help='the r2s.yaml configuration file')
+    parser.add_argument('--out', required=True, help='the directory receiving the layout files')
     parser.add_argument(
-        "--msg-path", action="append", default=[], metavar="DIR", help="search DIR for message packages; repeatable"
+        '--msg-path',
+        action='append',
+        default=[],
+        metavar='DIR',
+        help='search DIR for message packages; repeatable',
     )
-    parser.add_argument("--layout", default="arduino", help="the wrapper to emit: arduino or cmake (default arduino)")
-    parser.add_argument("--cpp", action="store_true", help="also emit the C++ header (not emitted yet)")
+    parser.add_argument(
+        '--layout',
+        default='arduino',
+        help='the wrapper to emit: arduino or cmake (default arduino)',
+    )
+    parser.add_argument(
+        '--cpp', action='store_true', help='also emit the C++ header (not emitted yet)'
+    )
     parser.set_defaults(run=run)
     return parser
 
@@ -186,7 +209,7 @@ def run(args: argparse.Namespace) -> int:
         files = generate(loaded, resolved, repository, args.layout, args.config, args.cpp)
         _write(args.out, files)
     except (MessageError, OSError) as error:
-        print(f"r2s-gen: error: {error}", file=sys.stderr)
+        print(f'r2s-gen: error: {error}', file=sys.stderr)
         return 1
     for name in files:
         print(name)
@@ -195,8 +218,10 @@ def run(args: argparse.Namespace) -> int:
 
 def _repository(args: argparse.Namespace, distro: str) -> msgs.MessageRepository:
     """The repository from the message paths, the sourced ROS prefixes and the config distro."""
-    prefixes = [Path(entry) for entry in os.environ.get("AMENT_PREFIX_PATH", "").split(os.pathsep) if entry]
-    sourced = os.environ.get("ROS_DISTRO") or None
+    prefixes = [
+        Path(entry) for entry in os.environ.get('AMENT_PREFIX_PATH', '').split(os.pathsep) if entry
+    ]
+    sourced = os.environ.get('ROS_DISTRO') or None
     if not prefixes:
         sourced = None
     repository = msgs.MessageRepository(
@@ -206,7 +231,7 @@ def _repository(args: argparse.Namespace, distro: str) -> msgs.MessageRepository
         sourced_distro=sourced,
     )
     for warning in repository.warnings:
-        print(f"r2s-gen: warning: {warning}", file=sys.stderr)
+        print(f'r2s-gen: warning: {warning}', file=sys.stderr)
     return repository
 
 
@@ -217,6 +242,6 @@ def _write(out: str, files: dict[str, str]) -> None:
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            path.write_text(text, encoding="utf-8")
+            path.write_text(text, encoding='utf-8')
         except OSError as error:
-            raise OSError(f"cannot write {path} ({error}); check the out directory") from error
+            raise OSError(f'cannot write {path} ({error}); check the out directory') from error

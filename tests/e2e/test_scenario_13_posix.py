@@ -19,13 +19,15 @@ import launch_testing.markers
 import rclpy
 from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, firmware, teardown
+from e2e_support import checks
+from e2e_support import firmware
+from e2e_support import teardown
 from e2e_support.relay import PtyRelay
 from rclpy.parameter import Parameter
 from rclpy.parameter_client import AsyncParameterClient
 
-ANNOUNCED = ["/battery", "/cmd_vel", "/echo_vel", "/log_text", "/time_now"]
-HANDSHAKE_TOPICS = [name.removeprefix("/") for name in ANNOUNCED]
+ANNOUNCED = ['/battery', '/cmd_vel', '/echo_vel', '/log_text', '/time_now']
+HANDSHAKE_TOPICS = [name.removeprefix('/') for name in ANNOUNCED]
 TOPIC_BUDGET = 3.0
 PARAM_TIMEOUT = 20.0
 APPLIED_BUDGET = 10.0
@@ -39,9 +41,11 @@ _PARAMS = None
 
 def _prepare():
     global _SCRATCH, _FIRMWARE, _RELAY, _PARAMS
-    _SCRATCH = tempfile.TemporaryDirectory(prefix="r2s-e2e-13-")
+    _SCRATCH = tempfile.TemporaryDirectory(prefix='r2s-e2e-13-')
     scratch = Path(_SCRATCH.name)
-    _FIRMWARE = firmware.from_run_script() if "R2S_E2E_FW" in os.environ else firmware.build(scratch)
+    _FIRMWARE = (
+        firmware.from_run_script() if 'R2S_E2E_FW' in os.environ else firmware.build(scratch)
+    )
     _RELAY = PtyRelay()
     _RELAY.start()
     _PARAMS = bridge_support.example_params_file()
@@ -71,10 +75,12 @@ def _wait_link_ready(node, received, since):
     from the later of the ready line and this return.
     """
     while True:
-        if received and received[-1].status[0].message not in ("disconnected", "boot_wait"):
+        if received and received[-1].status[0].message not in ('disconnected', 'boot_wait'):
             return max(since, time.monotonic())
         took = time.monotonic() - since
-        assert took < bridge_support.HANDSHAKE_TIMEOUT, f"link never left boot wait after {took:.1f} s"
+        assert took < bridge_support.HANDSHAKE_TIMEOUT, (
+            f'link never left boot wait after {took:.1f} s'
+        )
         rclpy.spin_once(node, timeout_sec=0.5)
 
 
@@ -95,14 +101,14 @@ def _wait_ros_params(client, node, names, budget):
         except Exception:
             pass
         took = time.monotonic() - since
-        assert took < budget, f"bridge never declared MCU parameters: {sorted(names)}"
+        assert took < budget, f'bridge never declared MCU parameters: {sorted(names)}'
         rclpy.spin_once(node, timeout_sec=0.1)
 
 
 def _wait_applied_lines(proc, needles, budget):
     """Read the firmware's stderr until every needle landed, on the budget."""
     pending = list(needles)
-    seen = b""
+    seen = b''
     deadline = time.monotonic() + budget
     while pending and time.monotonic() < deadline:
         readable, _, _ = select.select([proc.stderr], [], [], 0.5)
@@ -113,7 +119,7 @@ def _wait_applied_lines(proc, needles, budget):
         for needle in list(pending):
             if needle.encode() in seen:
                 pending.remove(needle)
-    assert not pending, f"firmware never applied: {pending}"
+    assert not pending, f'firmware never applied: {pending}'
 
 
 class TestScenario13(unittest.TestCase):
@@ -127,16 +133,16 @@ class TestScenario13(unittest.TestCase):
 
     def test_ros_parameter_set_reaches_the_mcu(self):
         global _SPAWNED
-        node = rclpy.create_node("e2e_s13_probe")
+        node = rclpy.create_node('e2e_s13_probe')
         try:
             bridge_support.wait_for_bridge(node)
             received = []
-            node.create_subscription(DiagnosticArray, "/diagnostics", received.append, 10)
+            node.create_subscription(DiagnosticArray, '/diagnostics', received.append, 10)
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
             while not received:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
-            _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
+                self.assertLess(time.monotonic(), deadline, 'no /diagnostics flow from the bridge')
+            _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ('--rate', '10'))
             received.clear()
             link_ready_at = _wait_link_ready(node, received, _SPAWNED.ready_at)
             checks.wait_for_handshake(
@@ -144,20 +150,25 @@ class TestScenario13(unittest.TestCase):
                 HANDSHAKE_TOPICS,
                 link_ready_at,
                 TOPIC_BUDGET,
-                "handshake",
+                'handshake',
                 lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
                 clock=time.monotonic,
             )
-            client = AsyncParameterClient(node, "/r2s_bridge")
-            self.assertTrue(client.wait_for_services(timeout_sec=PARAM_TIMEOUT), "no parameter service")
-            _wait_ros_params(client, node, ["led", "rate"], PARAM_TIMEOUT)
+            client = AsyncParameterClient(node, '/r2s_bridge')
+            self.assertTrue(
+                client.wait_for_services(timeout_sec=PARAM_TIMEOUT), 'no parameter service'
+            )
+            _wait_ros_params(client, node, ['led', 'rate'], PARAM_TIMEOUT)
             future = client.set_parameters(
-                [Parameter("led", Parameter.Type.BOOL, False), Parameter("rate", Parameter.Type.INTEGER, 5)]
+                [
+                    Parameter('led', Parameter.Type.BOOL, False),
+                    Parameter('rate', Parameter.Type.INTEGER, 5),
+                ]
             )
             rclpy.spin_until_future_complete(node, future, timeout_sec=PARAM_TIMEOUT)
-            self.assertIsNotNone(future.result(), "parameter set never answered")
+            self.assertIsNotNone(future.result(), 'parameter set never answered')
             for result in future.result().results:
-                self.assertTrue(result.successful, f"parameter set refused: {result.reason}")
-            _wait_applied_lines(_SPAWNED.proc, ["param led = 0", "param rate = 5"], APPLIED_BUDGET)
+                self.assertTrue(result.successful, f'parameter set refused: {result.reason}')
+            _wait_applied_lines(_SPAWNED.proc, ['param led = 0', 'param rate = 5'], APPLIED_BUDGET)
         finally:
             node.destroy_node()

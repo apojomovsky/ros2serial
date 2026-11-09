@@ -6,11 +6,11 @@
 
 void setUp(void)
 {
-    r2s_test_reset();
-    fake_port_reset();
+  r2s_test_reset();
+  fake_port_reset();
 }
 
 void tearDown(void)
 {
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, fake_port_take_overruns(), "core wrote past tx_free");
+  TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, fake_port_take_overruns(), "core wrote past tx_free");
 }
