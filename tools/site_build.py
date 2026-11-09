@@ -401,7 +401,8 @@ def build_site(root: Path, outdir: Path, pages: tuple[Page, ...] = PAGES) -> lis
     index_body = (
         '<h1>ros2serial documentation</h1>\n<ul>'
         + ''.join(
-            f'<li><a href="{page.output}">{html.escape(page.title)}</a> - {html.escape(page.blurb)}</li>'
+            f'<li><a href="{page.output}">{html.escape(page.title)}</a> - '
+            f'{html.escape(page.blurb)}</li>'
             for page in pages
         )
         + '</ul>'
