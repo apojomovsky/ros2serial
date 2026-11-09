@@ -77,8 +77,9 @@ starts `rmw_zenohd` before the Zenoh leg. The Zenoh client and
 service creators are real implementations on both the `jazzy` and
 `lyrical` branches, not unsupported stubs. CycloneDDS carries the
 same entry points on both branches. Bridge CI builds on jazzy and
-lyrical; rolling is covered by the nightly job, so the rolling
-column needs re-verification there, not a one-time reading.
+lyrical; rolling coverage is assigned to the nightly job by the
+design but no such job exists yet, so the rolling column needs
+re-verification once it lands, not a one-time reading.
 
 ## What type-erased request and response handling looks like
 
