@@ -18,6 +18,7 @@ import subprocess
 import time
 from pathlib import Path
 
+import pytest
 from r2s_gen import bounds
 from r2s_gen import config
 from r2s_gen import msgs
@@ -792,6 +793,58 @@ def test_flood_without_tx_free_fails():
     assert '--flood' in error
 
 
+def collect_flood(fw, host):
+    """Drain one flood run until 60 samples and a TX_BUSY: returns (values, busy).
+
+    The loop pings every 0.5 s while it drains the pty and stderr together: a
+    collection slower than the 2 s link timeout ([SES-8]) would otherwise return
+    the firmware to ANNOUNCING ([SES-7]) and stop the flood."""
+    values = []
+    busy = 0
+    err = bytearray()
+    efd = fw._proc.stderr.fileno()
+    ping_id = 0
+    last_ping = time.monotonic()
+    quiet = 0
+    deadline = time.monotonic() + 30.0
+    while len(values) < 60 or busy == 0:
+        assert time.monotonic() < deadline, 'the flood left no flow or no busy count'
+        last_ping, ping_id = ping_due(host, last_ping, ping_id)
+        ready, _, _ = select.select([fw.master, efd], [], [], KEEPALIVE_INTERVAL)
+        if not ready:
+            quiet += 1
+            assert quiet < QUIET_LIMIT, 'the firmware went quiet mid-flood'
+            continue
+        quiet = 0
+        if fw.master in ready:
+            try:
+                topic, _seq, payload = read_frame(fw.master, timeout=KEEPALIVE_INTERVAL)
+            except AssertionError as error:
+                if 'timed out' not in str(error):
+                    raise
+                continue
+            # A HELLO after READY means the link timed out and the firmware
+            # left CONNECTED ([SES-7]); PONGs and heartbeats just pass by.
+            assert not (topic == 0 and payload[:1] == bytes((HELLO_OP,))), (
+                'the firmware returned to ANNOUNCING mid-flood'
+            )
+            if topic != 16:
+                continue
+            assert len(payload) == 4
+            values.append(struct.unpack('<f', payload)[0])
+        if efd in ready:
+            chunk = os.read(efd, 4096)
+            assert chunk, 'the firmware closed stderr mid-flood'
+            err += chunk
+            while b'\n' in err:
+                line, _, err = err.partition(b'\n')
+                text = line.decode()
+                if text.startswith('r2s_posix: flood sent='):
+                    parts = dict(part.split('=') for part in text.split()[2:])
+                    busy = int(parts['busy'])
+    return values, busy
+
+
 # covers: FRM-4, FRM-5, FRM-15, SES-7, SES-8
 def test_flood_sheds_samples_with_busy_and_whole_frames():
     """--flood with --tx-free publishes until the port refuses: a refused
@@ -811,44 +864,7 @@ def test_flood_sheds_samples_with_busy_and_whole_frames():
     )
     with Firmware(*args) as fw:
         _hello, _topics, host = do_handshake(fw)
-        values = []
-        busy = 0
-        err = bytearray()
-        efd = fw._proc.stderr.fileno()
-        ping_id = 0
-        last_ping = time.monotonic()
-        quiet = 0
-        deadline = time.monotonic() + 30.0
-        while len(values) < 60 or busy == 0:
-            assert time.monotonic() < deadline, 'the flood left no flow or no busy count'
-            last_ping, ping_id = ping_due(host, last_ping, ping_id)
-            ready, _, _ = select.select([fw.master, efd], [], [], KEEPALIVE_INTERVAL)
-            if not ready:
-                quiet += 1
-                assert quiet < QUIET_LIMIT, 'the firmware went quiet mid-flood'
-                continue
-            quiet = 0
-            if fw.master in ready:
-                try:
-                    _topic, _seq, payload = read_frame(
-                        fw.master, want=16, timeout=KEEPALIVE_INTERVAL
-                    )
-                except AssertionError as error:
-                    if 'timed out' not in str(error):
-                        raise
-                    continue
-                assert len(payload) == 4
-                values.append(struct.unpack('<f', payload)[0])
-            if efd in ready:
-                chunk = os.read(efd, 4096)
-                assert chunk, 'the firmware closed stderr mid-flood'
-                err += chunk
-                while b'\n' in err:
-                    line, _, err = err.partition(b'\n')
-                    text = line.decode()
-                    if text.startswith('r2s_posix: flood sent='):
-                        parts = dict(part.split('=') for part in text.split()[2:])
-                        busy = int(parts['busy'])
+        values, busy = collect_flood(fw, host)
     assert all(value == int(value) for value in values), 'a frame arrived corrupted'
     assert all(later > earlier for earlier, later in zip(values, values[1:], strict=False)), (
         'values went back'
@@ -856,6 +872,41 @@ def test_flood_sheds_samples_with_busy_and_whole_frames():
     ints = [int(value) for value in values]
     assert ints[-1] - ints[0] + 1 - len(ints) > 0, 'no sample was shed on a saturated link'
     assert busy > 0, 'no publish returned TX_BUSY on a saturated link'
+
+
+# covers: SES-7, SES-8
+def test_flood_disconnect_fails_fast():
+    """A firmware that times out the link re-announces instead of flooding:
+    the collection fails on the HELLO, not at the 30 s deadline."""
+    args = (
+        '--no-sub',
+        '--no-echo',
+        '--no-log-text',
+        '--no-time-now',
+        '--tx-free',
+        '16',
+        '--flood',
+    )
+    with Firmware(*args) as fw:
+        _hello, _topics, host = do_handshake(fw)
+        # Drain both fds without sending: the flood would wedge on a full pty
+        # or stderr pipe, and only an idle host trips the 2 s link timeout.
+        efd = fw._proc.stderr.fileno()
+        stop = time.monotonic() + 2.5
+        while True:
+            remaining = stop - time.monotonic()
+            if remaining <= 0:
+                break
+            ready, _, _ = select.select([fw.master, efd], [], [], remaining)
+            for fd in ready:
+                os.read(fd, 65536)
+        # Drop handshake leftovers the raw drain bypassed, so the collection
+        # starts at the re-announce.
+        _PENDING.clear()
+        start = time.monotonic()
+        with pytest.raises(AssertionError, match='ANNOUNCING'):
+            collect_flood(fw, host)
+        assert time.monotonic() - start < 20.0, 'the disconnect took the 30 s deadline'
 
 
 # covers: SES-7, SES-8
