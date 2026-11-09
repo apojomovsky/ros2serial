@@ -199,15 +199,18 @@ template <typename T> class Server
         case R2S_ERR_BOUNDS:
             r2s_error_note(R2S_ERROR_BOUND, 8u, index, 1u);
             r2s_framer_count_refused();
-            (void)r2s_actions_answer_goal(index, goal_seq, (uint8_t)GoalResponse::REJECT);
+            (void)r2s_actions_answer_goal(index, goal_seq, R2S_ACT_REJECTED);
             return;
         default:
             r2s_framer_count_refused();
-            (void)r2s_actions_answer_goal(index, goal_seq, (uint8_t)GoalResponse::REJECT);
+            (void)r2s_actions_answer_goal(index, goal_seq, R2S_ACT_REJECTED);
             return;
         }
+        /* The enumerators ride along by name, not value: the wire decision
+         * for accepted is 0, while the enum reads like rclcpp. */
         GoalResponse decision = self->m_goal_cb(self->m_goal);
-        if (r2s_actions_answer_goal(index, goal_seq, (uint8_t)decision) != R2S_OK) {
+        uint8_t wire = (decision == GoalResponse::ACCEPT_AND_EXECUTE) ? R2S_ACT_ACCEPTED : R2S_ACT_REJECTED;
+        if (r2s_actions_answer_goal(index, goal_seq, wire) != R2S_OK) {
             return;
         }
         if (decision == GoalResponse::ACCEPT_AND_EXECUTE) {
@@ -221,8 +224,10 @@ template <typename T> class Server
     {
         Server<T> *self = static_cast<Server<T> *>(record);
         CancelResponse decision = self->m_cancel_cb(self->m_goal);
+        uint8_t wire =
+            (decision == CancelResponse::ACCEPT) ? R2S_ACT_CANCEL_ACCEPTED : R2S_ACT_CANCEL_REJECTED;
 
-        if (r2s_actions_answer_cancel(index, goal_seq, (uint8_t)decision) != R2S_OK) {
+        if (r2s_actions_answer_cancel(index, goal_seq, wire) != R2S_OK) {
             return;
         }
         if (decision == CancelResponse::ACCEPT) {
