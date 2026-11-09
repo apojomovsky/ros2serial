@@ -3,12 +3,13 @@
 The bridge opens a stable symlink to the relay slave. Unplug stops the
 relay and the firmware and removes the link, so the bridge reads EIO,
 enters DISCONNECTED, and its reopen attempts fail. Replug brings a new
-relay, remakes the link, and boots a fresh firmware. The bound covers a
-reopen retry plus the boot wait plus the handshake, measured from the new
-firmware's ready line, never from the spawn. The initial handshake first
-waits out the boot wait on the generous timeout, then runs the unchanged
-3 s budget from the later of the ready line and the boot wait end, so a
-slow bridge open cannot spend the handshake budget.
+relay, remakes the link, and boots a fresh firmware. The replug first
+waits out the reopen retry and the boot wait on the generous timeout,
+then runs the 3 s budget from the handshake start, so a slow reopen
+under load cannot spend the reconnect budget. The initial handshake
+first waits out the boot wait on the generous timeout, then runs the
+unchanged 3 s budget from the later of the ready line and the boot wait
+end, so a slow bridge open cannot spend the handshake budget.
 """
 
 import os
@@ -23,7 +24,6 @@ from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
 from e2e_support import checks, firmware, teardown
 from e2e_support.relay import PtyRelay
-from rcl_interfaces.srv import GetParameters
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32
 
@@ -112,25 +112,6 @@ def _wait_link_ready(node, received, since):
         rclpy.spin_once(node, timeout_sec=0.5)
 
 
-def _boot_wait_s(node):
-    """The bridge's boot_wait_ms parameter in seconds, read off the node.
-
-    The reconnect bound carries the boot wait on top of the handshake budget,
-    so it tracks the params file instead of hardcoding it.
-    """
-    client = node.create_client(GetParameters, "/r2s_bridge/get_parameters")
-    try:
-        assert client.wait_for_service(timeout_sec=bridge_support.HANDSHAKE_TIMEOUT), "no bridge parameter service"
-        future = client.call_async(GetParameters.Request(names=["boot_wait_ms"]))
-        rclpy.spin_until_future_complete(node, future, timeout_sec=bridge_support.HANDSHAKE_TIMEOUT)
-        assert future.done(), "bridge parameter call timed out"
-        values = future.result().values
-        assert len(values) == 1, "bridge returned no boot_wait_ms"
-        return values[0].integer_value / 1000.0
-    finally:
-        node.destroy_client(client)
-
-
 class TestScenario6(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -212,17 +193,20 @@ class TestScenario6(unittest.TestCase):
             _RELAY.start()
             os.symlink(_RELAY.host_port, _LINK)
             _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
-            reconnect_budget = _boot_wait_s(node) + TOPIC_BUDGET
+            # The reopen retry and the boot wait ride the generous timeout
+            # like the initial handshake's, so only the handshake itself
+            # spends the 3 s budget.
+            link_ready_at = _wait_link_ready(node, received, _SPAWNED.ready_at)
             took = checks.wait_for_handshake(
                 received,
                 HANDSHAKE_TOPICS,
-                _SPAWNED.ready_at,
-                reconnect_budget,
+                link_ready_at,
+                TOPIC_BUDGET,
                 "reconnect",
                 lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
                 clock=time.monotonic,
             )
-            self.assertLessEqual(took, reconnect_budget, "reconnect took longer than boot wait plus 3 s")
+            self.assertLessEqual(took, TOPIC_BUDGET, "reconnect took longer than 3 s")
             final = _connected_values(received[-1])
             self.assertEqual(final.get("resets"), "0", "a clean replug is not an MCU reset")
             handshake_done_at = time.monotonic()
