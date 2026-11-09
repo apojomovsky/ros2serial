@@ -1,4 +1,5 @@
-"""The Python reference for CRC, rCOBS and varint.
+"""
+The Python reference for CRC, rCOBS and varint.
 
 Published values, properties, rejections, vectors.
 """

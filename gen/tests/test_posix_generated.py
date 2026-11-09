@@ -1,5 +1,9 @@
-"""The posix firmware builds from generated code: regenerating its sources
-from its configuration reproduces the checked-in pair byte for byte."""
+"""
+Build the posix firmware from generated code.
+
+Regenerating its sources from its configuration reproduces the checked-in
+pair byte for byte.
+"""
 
 from pathlib import Path
 

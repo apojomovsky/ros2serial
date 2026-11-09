@@ -1,4 +1,5 @@
-"""The reference message codec.
+"""
+The reference message codec.
 
 The message vectors, every bundled type, and the rules it enforces.
 """

@@ -1,6 +1,8 @@
-"""The shared sketch body on both declaration styles: the runtime objects and
-the X-macro list drive the same body, and the two firmwares print the same
-bytes and callback counts.
+"""
+The shared sketch body on both declaration styles.
+
+The runtime objects and the X-macro list drive the same body, and the two
+firmwares print the same bytes and callback counts.
 
 Covers the 1-to-1 map: the static sketch differs from the runtime sketch
 only in its declaration block, and everything after it behaves the same on
@@ -256,7 +258,7 @@ r2s_status_t r2s_session_configure_ram(
 
 
 def stage_bundle(tmp_path):
-    """The staged bundle, as a board library stages it."""
+    """Stage the bundle, as a board library stages it."""
     root = tmp_path / 'bundle'
     for name, text in bundle.bundle('jazzy').items():
         path = root / name
@@ -275,12 +277,12 @@ def bundle_limit(bundle_root, key):
 
 
 def frame_limit(bundle_root):
-    """The frame limit the staged bundle carries."""
+    """Read the frame limit the staged bundle carries."""
     return bundle_limit(bundle_root, 'R2S_MAX_FRAME')
 
 
 def nest_limit(bundle_root):
-    """The nesting limit the staged bundle carries."""
+    """Read the nesting limit the staged bundle carries."""
     return bundle_limit(bundle_root, 'R2S_MAX_NEST')
 
 
@@ -362,7 +364,7 @@ def compile_variant(tmp_path, bundle_root, decls, name, extra_sources):
 
 
 def run_variant(binary):
-    """The variant's printed bytes and callback counts."""
+    """Collect the variant's printed bytes and callback counts."""
     run = subprocess.run([str(binary)], capture_output=True, text=True)
 
     assert run.returncode == 0, run.stdout + run.stderr

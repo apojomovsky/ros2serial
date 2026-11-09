@@ -1,4 +1,5 @@
-"""C emission: the message structs a firmware includes.
+"""
+C emission: the message structs a firmware includes.
 
 Descriptors and the topic table come with later tickets, so this module only
 turns resolved types into C99 structs, a type always before the types that use it.
@@ -53,11 +54,16 @@ _ALIGNMENT_PROBE = """typedef struct
 
 
 def emit_types(resolved: Mapping[str, ResolvedMessage], max_nest: int | None = None) -> str:
-    """The generated header holding every type in `resolved`, dependencies first.
+    """
+    Emit the generated header holding every type in `resolved`, dependencies first.
 
     Fields must be resolved and bounded, which `bounds.resolve` guarantees; the
     output depends only on the data, not on the mapping's order. A given
     `max_nest` also configures the codec's nesting stack ([DSC-39]).
+
+    :param resolved: the resolved messages.
+    :param max_nest: the codec's nesting stack depth, if configured.
+    :return: the header text.
     """
     sequenced = _has_sequences(resolved)
     includes = (
@@ -149,11 +155,16 @@ def _field(field: ResolvedField) -> list[str]:
 
 
 def field_members(field: ResolvedField, spell) -> list[str]:
-    """The member declarations of a scalar or a fixed array, indented.
+    """
+    Emit the member declarations of a scalar or a fixed array, indented.
 
     The C and the C++ emission share it, so both hold the same members in the
     same order with the same storage, and the codec's offsets hold for both.
     `spell` names a message type in the target language.
+
+    :param field: the field to declare.
+    :param spell: how to spell a message type in the target language.
+    :return: the declaration lines.
     """
     string = field.type_name == 'string'
     elements = element_type(field, spell)
@@ -168,7 +179,7 @@ def field_members(field: ResolvedField, spell) -> list[str]:
 
 
 def sequence_members(field: ResolvedField, spell) -> list[str]:
-    """The members of a bounded array's struct: the elements and the count."""
+    """Return the members of a bounded array's struct: the elements and the count."""
     if field.type_name == 'string':
         data = f'char data[{field.array_bound}][{field.string_bound + 1}];'
     else:
@@ -177,12 +188,12 @@ def sequence_members(field: ResolvedField, spell) -> list[str]:
 
 
 def count_type(count: int) -> str:
-    """The type of a bounded array's count member: one byte up to 255, two above."""
+    """Return the type of a bounded array's count member: one byte up to 255, two above."""
     return 'uint8_t' if count <= 255 else 'uint16_t'
 
 
 def element_type(field: ResolvedField, spell) -> str:
-    """The type of a field's element, a message type spelled by `spell`."""
+    """Return the type of a field's element, a message type spelled by `spell`."""
     if field.type_name == 'string':
         return f'char[{field.string_bound + 1}]'
     if field.type_name in _SCALARS:
@@ -195,7 +206,7 @@ def _element(field: ResolvedField) -> str:
 
 
 def _c_name(type_name: str) -> str:
-    """A canonical type as the rosidl C identifier, such as `package__msg__Type`."""
+    """Spell a canonical type as the rosidl C identifier, such as `package__msg__Type`."""
     if '/action/' in type_name:
         package, _, name = type_name.partition('/action/')
         return f'{package}__action__{name}'

@@ -47,7 +47,7 @@ GOLDEN_CASES = [
 
 
 def repository_for(tmp_path: Path, definitions: dict[str, str]) -> msgs.MessageRepository:
-    """A repository whose message path holds `definitions`, keyed by canonical type name."""
+    """Build a repository whose message path holds `definitions`, keyed by canonical type name."""
     root = tmp_path / 'messages'
     for type_name, text in definitions.items():
         write_message(root, type_name, text)
@@ -60,7 +60,7 @@ def emit_type(
     default_string_bound: int | None = None,
     repository: msgs.MessageRepository | None = None,
 ) -> str:
-    """The generated header for one root type."""
+    """Emit the generated header for one root type."""
     resolved = bounds.resolve(
         repository or msgs.MessageRepository(),
         [type_name],

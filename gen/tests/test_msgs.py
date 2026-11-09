@@ -10,12 +10,12 @@ DISTROS = ['jazzy', 'lyrical', 'rolling']
 
 
 def source_tree(tmp_path: Path) -> Path:
-    """A directory of packages in a source tree layout: <root>/<package>/msg/<Type>.msg."""
+    """Make a directory of packages in a source tree layout: <root>/<package>/msg/<Type>.msg."""
     return tmp_path / 'messages'
 
 
 def installed_prefix(tmp_path: Path, type_name: str, text: str) -> Path:
-    """A ROS install prefix: <prefix>/share/<package>/msg/<Type>.msg."""
+    """Make a ROS install prefix: <prefix>/share/<package>/msg/<Type>.msg."""
     package, _, name = type_name.partition('/msg/')
     path = tmp_path / 'prefix' / 'share' / package / 'msg' / f'{name}.msg'
     path.parent.mkdir(parents=True, exist_ok=True)

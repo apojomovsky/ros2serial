@@ -1,4 +1,5 @@
-"""The session state machine: random event sequences against libr2s_host.
+"""
+The session state machine: random event sequences against libr2s_host.
 
 Each rule feeds one event to the C core and to the Python model and compares
 every observable after it. The event set covers the implemented session: the
@@ -29,7 +30,7 @@ VALID_MSS = [0, 1, 99, 100, 499, 500, 999, 1000, 1500, 1999, 2000, 2001, 5000]
 
 
 def valid_twist(narrow: bool) -> bytes:
-    """A decodable cmd_vel payload for the announced width."""
+    """Build a decodable cmd_vel payload for the announced width."""
     return bytes(24 if narrow else 48)
 
 
@@ -135,14 +136,14 @@ class SessionMachine(RuleBasedStateMachine):
 
     @rule()
     def param_set_duplicate(self) -> None:
-        """The last SET again: acked by both, applied by neither."""
+        """Replay the last SET: acked by both, applied by neither."""
         if self.last_set is None:
             return
         self.pair.feed_frame(3, self._seq(3), self.last_set)
 
     @rule()
     def param_set_future(self) -> None:
-        """A rel seq neither side expects: acked by both, applied by neither."""
+        """Send a rel seq neither side expects: acked by both, applied by neither."""
         self.pair.feed_frame(3, self._seq(3), bytes((PARAM_SET, (self.set_rel + 5) & 0xFF, 0, 0)))
 
     @rule()
@@ -195,7 +196,7 @@ class SessionMachine(RuleBasedStateMachine):
 
     @invariant()
     def encoded_tx_holds_no_zero(self) -> None:
-        """The rCOBS output of the last step carries no delimiter (COB-2)."""
+        """Check the rCOBS output of the last step carries no delimiter (COB-2)."""
         for frame in self.pair.last_host_tx + self.pair.last_model_tx:
             assert all(byte != 0 for byte in frame)
 
@@ -223,7 +224,7 @@ def test_session_matches_model():
 
 
 def handshake(pair: Pair, token: int = 1) -> None:
-    """The full handshake to CONNECTED, comparing after every step."""
+    """Run the full handshake to CONNECTED, comparing after every step."""
     pair.feed_frame(0, 0, bytes((model.OP_HELLO_REQ, model.PROTOCOL_VERSION)))
     for index in range(4):
         pair.feed_frame(0, 1 + index, bytes((model.OP_TOPIC_REQ, index)))

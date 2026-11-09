@@ -1,4 +1,5 @@
-"""C emission: the descriptor tables a firmware holds for its message types.
+"""
+C emission: the descriptor tables a firmware holds for its message types.
 
 `build` turns resolved types into the two tables of spec/protocol.md, section 9:
 one record per type, one entry per field, nested types numbered before the types
@@ -60,6 +61,8 @@ _ELEMENT_BYTES = {
 
 @dataclass(frozen=True)
 class FieldEntry:
+    """One descriptor entry: the field its owner holds and how the codec walks it."""
+
     owner: str
     field: str
     kind: int
@@ -71,6 +74,8 @@ class FieldEntry:
 
 @dataclass(frozen=True)
 class TypeRecord:
+    """One descriptor record: the type and where its entries start."""
+
     type_name: str
     size: str
     first_field: int
@@ -79,6 +84,8 @@ class TypeRecord:
 
 @dataclass(frozen=True)
 class DescriptorTable:
+    """The descriptor tables of section 9: one record per type, one entry per field."""
+
     records: tuple[TypeRecord, ...]
     entries: tuple[FieldEntry, ...]
     index_of: dict[str, int]
@@ -86,9 +93,15 @@ class DescriptorTable:
 
 
 def build(resolved: Mapping[str, ResolvedMessage], roots: Sequence[str]) -> DescriptorTable:
-    """The descriptor table for `roots` in configuration order.
+    """
+    Build the descriptor table for `roots` in configuration order.
 
     Validated as the loader rules require.
+
+    :param resolved: the resolved messages.
+    :param roots: the entry-point types.
+    :return: the descriptor table.
+    :raises MessageError: if a type breaks a rule named above.
     """
     names = [canonical_type_name(root) for root in roots]
     for name in names:
@@ -184,7 +197,8 @@ def _entry(
     owner: str,
     field: ResolvedField,
 ) -> FieldEntry:
-    """The field entry for `field`.
+    """
+    Build the field entry for `field`.
 
     Kinds, modes, counts and bounds are literals, the offset a C expression.
     """
@@ -240,7 +254,7 @@ def _entry(
 
 
 def _minimum_size(resolved: Mapping[str, ResolvedMessage], name: str, memo: dict[str, int]) -> int:
-    """A lower bound of the struct's size: padding only adds, so over 65535 the type never fits."""
+    """Return a lower bound of the struct's size: padding only adds, so over 65535 never fits."""
     if name in memo:
         return memo[name]
     total = 0
@@ -264,7 +278,8 @@ def _minimum_size(resolved: Mapping[str, ResolvedMessage], name: str, memo: dict
 
 
 def _depth(resolved: Mapping[str, ResolvedMessage], name: str, memo: dict[str, int]) -> int:
-    """The nesting depth of `name`.
+    """
+    Return the nesting depth of `name`.
 
     1 past the deepest nested type it fields, arrays adding no level.
     """
@@ -281,8 +296,12 @@ _BACKSLASH_COLUMN = 99
 
 
 def _check_lines(head: str, args: list, last: str, limit: int = 100) -> list:
-    """A check invocation uncrustify keeps: one line within the limit, else
-    the arguments packed greedily with continuations one level past the head."""
+    """
+    Format a check invocation uncrustify keeps.
+
+    One line within the limit, else the arguments packed greedily with
+    continuations one level past the head.
+    """
     single = f'{head}{", ".join(args)}{last}'
     if len(single) <= limit:
         return [single]
@@ -313,7 +332,7 @@ _FIELD_CHECK_DEFINE = [
 
 
 def record_lines(table: DescriptorTable) -> list[str]:
-    """One record's five bytes per type, in the layout `r2s_codec_table_t` walks."""
+    """Emit one record's five bytes per type, in the layout `r2s_codec_table_t` walks."""
     lines = []
     for record in table.records:
         c_name = _c_name(record.type_name)
@@ -326,7 +345,7 @@ def record_lines(table: DescriptorTable) -> list[str]:
 
 
 def entry_lines(table: DescriptorTable) -> list[str]:
-    """One entry's eight bytes per field, in the layout `r2s_codec_table_t` walks."""
+    """Emit one entry's eight bytes per field, in the layout `r2s_codec_table_t` walks."""
     lines = []
     for entry in table.entries:
         lines.append(f'  0x{entry.kind:02x},')
@@ -341,7 +360,8 @@ def entry_lines(table: DescriptorTable) -> list[str]:
 
 
 def emit_c(table: DescriptorTable) -> str:
-    """The C file holding the tables.
+    """
+    Emit the C file holding the tables.
 
     Records, entries, counts, the nesting bound and storage checks.
     """

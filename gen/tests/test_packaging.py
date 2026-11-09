@@ -20,7 +20,7 @@ def run(command, **kwargs):
 
 
 def copied_package(tmp_path: Path) -> Path:
-    """A copy of the package, so a build leaves its artifacts out of the repository."""
+    """Copy the package, so a build leaves its artifacts out of the repository."""
     package = tmp_path / 'gen'
     shutil.copytree(
         PACKAGE, package, ignore=shutil.ignore_patterns('__pycache__', '*.egg-info', 'build')

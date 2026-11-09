@@ -1,4 +1,5 @@
-"""Drive the real C session (libr2s_host) through ctypes.
+"""
+Drive the real C session (libr2s_host) through ctypes.
 
 The shared library is the core plus the fake port and the handwritten test
 firmware, built with R2S_TESTING by scripts/build-host-lib.sh. Each method
@@ -77,7 +78,14 @@ def default_lib_dir() -> Path:
 
 
 def find_library(name: str = 'libr2s_host.so', lib_dir: Path | None = None) -> Path:
-    """The library path, or a precise error when it is not built yet."""
+    """
+    Return the library path, or raise a precise error when it is not built yet.
+
+    :param name: the library file name.
+    :param lib_dir: the directory to look in, defaulting to `default_lib_dir`.
+    :return: the library path.
+    :raises FileNotFoundError: if the library is not built yet.
+    """
     directory = lib_dir if lib_dir is not None else default_lib_dir()
     path = directory / name
     if not path.is_file():
@@ -92,6 +100,11 @@ class HostSession:
     """The C session behind the fake port: feed bytes, spin, read state."""
 
     def __init__(self, lib_path: Path | None = None) -> None:
+        """
+        Open the C session behind the fake port for feeding, spinning, and reading.
+
+        :param lib_path: the library to load, defaulting to `find_library`.
+        """
         self.lib = ctypes.CDLL(str(find_library() if lib_path is None else lib_path))
         lib = self.lib
         lib.fake_port_reset.argtypes = []
@@ -138,7 +151,7 @@ class HostSession:
         lib.r2s_host_error.restype = ctypes.c_char_p
 
     def reset(self) -> None:
-        """The boot the model mirrors: blank port and counters, then HELLO."""
+        """Reset to the boot the model mirrors: blank port and counters, then HELLO."""
         self.lib.fake_port_reset()
         self.lib.r2s_test_reset()
         assert self.lib.r2s_handwritten_configure() == 0
@@ -173,7 +186,7 @@ class HostSession:
         return rc
 
     def take_tx(self) -> list[bytes]:
-        """The captured frames since the last call, without delimiters."""
+        """Take the captured frames since the last call, without delimiters."""
         out = []
         count = int(self.lib.fake_port_tx_frame_count())
         for i in range(count):
@@ -185,8 +198,10 @@ class HostSession:
         return out
 
     def param_values(self) -> list[tuple[int, object]]:
-        """The live parameter values: (type, value) per table entry, with
-        strings as the bytes up to their NUL terminator.
+        """
+        Return the live parameter values: (type, value) per table entry.
+
+        Strings come back as the bytes up to their NUL terminator.
         """
         out = []
         for index in range(int(self.lib.r2s_params_count())):
@@ -224,7 +239,7 @@ class HostSession:
         }
 
     def topic_flags(self, index: int) -> int:
-        """The announced CTL-4 flags of the topic at `index`."""
+        """Return the announced CTL-4 flags of the topic at `index`."""
         return int(self.lib.r2s_session_topic_flags(index))
 
     def check_error(self) -> None:
