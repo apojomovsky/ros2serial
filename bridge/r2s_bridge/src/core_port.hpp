@@ -33,20 +33,37 @@
 namespace r2s_bridge
 {
 
-// Installs the pair the indexed port functions read through and returns its
-// link id. Throws std::logic_error when every slot is taken, naming the
-// link limit.
+/// Installs the pair the indexed port functions read through.
+/**
+ * Returns its link id.
+ *
+ * \param[in] transport the link to read through.
+ * \param[in] clock the time source for the port ticks.
+ * \return The slot the pair was installed in.
+ * \throws std::logic_error when every slot is taken, naming the link limit.
+ */
 std::uint8_t attach_core_port(Transport & transport, const Clock & clock);
 
-// Removes the installed pair, so its slot serves the next link.
+/// Removes the installed pair, so its slot serves the next link.
+/**
+ * \param[in] link whose slot to free.
+ */
 void detach_core_port(std::uint8_t link);
 
-// True when a read through the slot's transport reported kClosed or kError
-// since the last clear_link_fault(). The core framer cannot tell an empty
-// link from a dead one, so the session asks here after polling it.
+/// A read through the slot's transport reported kClosed or kError.
+/**
+ * True since the last clear_link_fault(). The core framer cannot tell an
+ * empty link from a dead one, so the session asks here after polling it.
+ *
+ * \param[in] link whose fault to report.
+ * \return True when the slot faulted.
+ */
 bool link_faulted(std::uint8_t link);
 
-// Forgets the slot's fault, which the session does when it opens a link.
+/// Forgets the slot's fault, which the session does when it opens a link.
+/**
+ * \param[in] link whose fault to forget.
+ */
 void clear_link_fault(std::uint8_t link);
 
 }  // namespace r2s_bridge

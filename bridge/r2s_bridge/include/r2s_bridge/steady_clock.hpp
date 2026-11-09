@@ -29,9 +29,14 @@
 namespace r2s_bridge
 {
 
+/// The production clock: monotonic host time for the session and the pacer.
 class SteadyClock final : public Clock
 {
 public:
+  /// Reads the monotonic host time.
+  /**
+   * \return The steady clock time since its epoch, in nanoseconds.
+   */
   std::chrono::nanoseconds now() const override
   {
     return std::chrono::steady_clock::now().time_since_epoch();

@@ -30,10 +30,16 @@
 namespace r2s_bridge
 {
 
-// The TOPIC_STATUS verdict for one announced topic: ok when the installed
-// hash matches, unknown type when the type does not load, hash mismatch
-// otherwise. Never throws; a failed load is verdict 1. Needs no node: it
-// opens the installed library and closes it again when done.
+/// The TOPIC_STATUS verdict for one announced topic.
+/**
+ * ok when the installed hash matches, unknown type when the type does not
+ * load, hash mismatch otherwise. Never throws; a failed load is verdict
+ * 1. Needs no node: it opens the installed library and closes it again
+ * when done.
+ *
+ * \param[in] info the announced topic to judge.
+ * \return The verdict, one of the kTopicStatus codes.
+ */
 std::uint8_t resolve_topic_type(const TopicInfo & info);
 
 }  // namespace r2s_bridge
