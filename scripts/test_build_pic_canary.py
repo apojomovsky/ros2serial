@@ -134,6 +134,22 @@ def test_the_stubbed_toolchain_compiles_c_and_cpp_for_both_targets(tmp_path):
     assert '.c' in calls, f'no C translation unit compiled:\n{calls}'
 
 
+def test_a_failing_toolchain_fails_the_run(tmp_path):
+    # A nonzero compiler exit (the recorded ICEs) fails the section: the
+    # advisory job reports red instead of passing over a broken toolchain.
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    compiler = stub / 'epic-cc'
+    compiler.write_text('#!/usr/bin/env bash\nexit 1\n', encoding='utf-8')
+    compiler.chmod(compiler.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    result = run_script(
+        {'R2S_EPIC_CC_BIN': str(compiler), 'R2S_BUILD_DIR': str(tmp_path / 'build')},
+        tmp_path,
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert 'pic-canary' in result.stdout + result.stderr
+
+
 def test_the_run_without_a_toolchain_skips_instead_of_failing(tmp_path):
     # No override, an empty cache, and no downloader on PATH: the bundle
     # cannot be fetched, so the canary reports the skip and passes.
