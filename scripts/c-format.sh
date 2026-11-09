@@ -30,18 +30,30 @@ for lang in C CPP; do
     CPP) ext='(cpp|cxx|hpp|hxx)$' ;;
   esac
   mapfile -t lang_files < <(printf '%s\n' "${files[@]}" | grep -E "\.$ext")
-  [ "${#lang_files[@]}" -gt 0 ] || continue
-  if [ "$fix" = 1 ]; then
-    # Some files settle only on a second pass, so fix to a fixpoint: a file
-    # the check still flags after three passes needs a human, not a loop.
-    for _ in 1 2 3; do
-      uncrustify -c "$cfg" -l "$lang" --replace --no-backup -q "${lang_files[@]}" || status=1
-      uncrustify -c "$cfg" -l "$lang" --check "${lang_files[@]}" >/dev/null 2>&1 && break
-      status=1
-    done
-    uncrustify -c "$cfg" -l "$lang" --check "${lang_files[@]}" || status=1
+  # The C++ layer and the Arduino port are C++ down to their headers, so
+  # they format as C++ even where the suffix says C: uncrustify drops a
+  # required semicolon after a template-id class head it parses as C.
+  if [ "$lang" = C ]; then
+    mapfile -t lang_files < <(printf '%s\n' "${lang_files[@]}" | grep -Ev '^(cpp/|ports/arduino/)')
   else
-    uncrustify -c "$cfg" -l "$lang" --check "${lang_files[@]}" || status=1
+    mapfile -t cpp_files < <(printf '%s\n' "${files[@]}" | grep -E '^cpp/.*\.(c|h)$|^ports/arduino/.*\.(c|h)$')
+    lang_files+=("${cpp_files[@]}")
   fi
+  [ "${#lang_files[@]}" -gt 0 ] || continue
+  # One process per file: a single uncrustify call over many files can leak
+  # parser state from one file into the next, so a batch check can pass a
+  # file the same tool flags on its own.
+  for f in "${lang_files[@]}"; do
+    if [ "$fix" = 1 ]; then
+      # Some files settle only on a second pass, so fix to a fixpoint: a file
+      # the check still flags after three passes needs a human, not a loop.
+      for _ in 1 2 3; do
+        uncrustify -c "$cfg" -l "$lang" --replace --no-backup -q "$f" || status=1
+        uncrustify -c "$cfg" -l "$lang" --check "$f" >/dev/null 2>&1 && break
+        status=1
+      done
+    fi
+    uncrustify -c "$cfg" -l "$lang" --check "$f" || status=1
+  done
 done
 exit $status
