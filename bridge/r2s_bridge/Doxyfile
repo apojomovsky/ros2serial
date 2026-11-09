@@ -1,0 +1,23 @@
+# API reference for the host bridge, in the shape of rclcpp's own Doxyfile.
+# All settings not listed here use the Doxygen defaults. Run from this
+# directory so the relative INPUT below resolves: doxygen Doxyfile.
+# WARN_IF_UNDOCUMENTED stays on with EXTRACT_ALL off, so an undocumented
+# public symbol warns; scripts/rosdoc2.sh reports the count while the
+# bridge headers gain their Doxygen comments in #544, then gates it at zero
+# like the core. rosdoc2 finds this file on its own for the docs site build.
+
+PROJECT_NAME           = "r2s_bridge"
+PROJECT_BRIEF          = "Host bridge between a serial link and the ROS 2 graph."
+INPUT                  = ./include
+RECURSIVE              = YES
+OUTPUT_DIRECTORY       = doc_output
+
+SORT_MEMBER_DOCS       = NO
+
+GENERATE_LATEX         = NO
+
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+
+WARN_IF_UNDOCUMENTED   = YES

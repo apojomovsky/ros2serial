@@ -1,0 +1,22 @@
+# API reference for the C99 core, in the shape of rcl's own Doxyfile.
+# All settings not listed here use the Doxygen defaults. Run from this
+# directory so the relative INPUT below resolves: doxygen Doxyfile.
+# WARN_IF_UNDOCUMENTED stays on with EXTRACT_ALL off, so an undocumented
+# public symbol warns; scripts/rosdoc2.sh counts those warnings and fails
+# on any of them, and rosdoc2 reuses this file for the docs site build.
+
+PROJECT_NAME           = "r2s_core"
+PROJECT_BRIEF          = "Portable C99 core: framing, codecs and session for small MCUs."
+INPUT                  = ./include
+RECURSIVE              = YES
+OUTPUT_DIRECTORY       = doc_output
+
+SORT_MEMBER_DOCS       = NO
+
+GENERATE_LATEX         = NO
+
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+
+WARN_IF_UNDOCUMENTED   = YES
