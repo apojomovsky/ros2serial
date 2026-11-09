@@ -19,7 +19,6 @@ import time
 from pathlib import Path
 
 import pytest
-
 from r2s_gen import bounds, config, msgs, topics
 from r2s_gen.reference import frames as wire
 
@@ -859,6 +858,9 @@ def test_flood_disconnect_fails_fast():
             ready, _, _ = select.select([fw.master, efd], [], [], remaining)
             for fd in ready:
                 os.read(fd, 65536)
+        # Drop handshake leftovers the raw drain bypassed, so the collection
+        # starts at the re-announce.
+        _PENDING.clear()
         start = time.monotonic()
         with pytest.raises(AssertionError, match="ANNOUNCING"):
             collect_flood(fw, host)
