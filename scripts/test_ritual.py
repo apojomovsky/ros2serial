@@ -961,7 +961,7 @@ def test_pre_push_runs_the_same_suite_in_ci(tmp_path, monkeypatch):
 def strip_ambient_scopes(monkeypatch):
     """The runner's own scopes must not leak in as caller scopes.
 
-    R2S_FULL goes too: CI sets it on every master run, where it would force
+    R2S_FULL goes too: CI sets it on manual runs, where it would force
     the tasks these tests expect to see selected by name. So does R2S_LOCAL,
     which the pre-push hook sets around the suite these tests run in.
     """
@@ -989,7 +989,7 @@ def strip_ambient_scopes(monkeypatch):
 
 
 def test_strip_ambient_scopes_clears_the_master_force(monkeypatch):
-    """A master CI run exports R2S_FULL=1; the stripped environment must not."""
+    """A manual CI run exports R2S_FULL=1; the stripped environment must not."""
     monkeypatch.setenv('R2S_FULL', '1')
     strip_ambient_scopes(monkeypatch)
     assert 'R2S_FULL' not in os.environ

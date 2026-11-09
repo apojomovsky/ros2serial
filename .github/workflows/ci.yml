@@ -6,9 +6,11 @@ name: ci
 #
 # The plan job asks Task which ci-test.sh sections are stale and exposes
 # one output per section. Each section job needs the plan and runs only
-# when its task is stale; pushes to master and
-# workflow_dispatch run every job, and a FULL result runs every job. A job
-# skipped by its if still satisfies branch protection, so skipping is safe.
+# when its task is stale; workflow_dispatch runs every job, and a FULL
+# result runs every job. A job skipped by its if still satisfies branch
+# protection, so skipping is safe. Master pushes run the same selection
+# as a pull request on the same diff; the nightly full sweep keeps
+# whole-tree coverage.
 #
 # Timeouts: every job that builds or pulls an image carries at least 30
 # minutes. On a cold GHA cache the image step is slow, and its cache is
@@ -24,23 +26,26 @@ on:
 permissions:
   contents: read
 
-# Master runs force their sections: the landed tree is fully validated and
-# its checksums saved. Pull requests run the stale tasks only.
+# Manual runs force their sections. Pull requests and master pushes run the
+# stale tasks only; the nightly full sweep covers the whole tree.
 env:
-  R2S_FULL: ${{ github.event_name != 'pull_request' && '1' || '' }}
+  R2S_FULL: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
 
+# Pull request pushes supersede each other, so a stale review never waits
+# behind an old run. Master runs never cancel: every merged commit keeps
+# its own conclusion on the commits page.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Change detection by checksum: the plan restores each task's last
   # successful inputs from the latest master run and reports every section
   # whose inputs changed since. A cache miss runs everything; a task that
-  # Task itself cannot check fails the plan safe to FULL. Pushes to master
-  # run every job forced and save the checksums: single-job sections save
-  # their own, and each matrix section saves through a final job needing
-  # every leg, so one passing leg never marks its section fresh.
+  # Task itself cannot check fails the plan safe to FULL. Jobs that run on
+  # master save the checksums: single-job sections save their own, and
+  # each matrix section saves through a final job needing every leg, so
+  # one passing leg never marks its section fresh.
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -231,7 +236,7 @@ jobs:
 
   lint:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.lint == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.lint == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -251,7 +256,7 @@ jobs:
   # through make, so the dev image provides colcon and the ROS underlay.
   ament-lint:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.ament_lint == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.ament_lint == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     continue-on-error: true
@@ -270,7 +275,7 @@ jobs:
   # e2e isolation pairs run in the nightly workflow instead.
   scripts:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.scripts == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.scripts == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -292,7 +297,7 @@ jobs:
 
   # The scripts checksum, saved only when every shard passed: this job
   # needs the whole matrix, so a red shard skips the save and the
-  # section reruns on the next pull request.
+  # section reruns on the next run that selects it.
   scripts-save:
     needs: [plan, scripts]
     if: github.ref == 'refs/heads/master'
@@ -311,7 +316,7 @@ jobs:
 
   core:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.core == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.core == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -326,7 +331,7 @@ jobs:
 
   gen:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.gen == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.gen == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -340,7 +345,7 @@ jobs:
           key: r2s-task-gen-refs/heads/master-${{ github.sha }}
   cpp:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.cpp == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.cpp == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -354,7 +359,7 @@ jobs:
           key: r2s-task-cpp-refs/heads/master-${{ github.sha }}
   docs:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.docs == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.docs == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -371,7 +376,7 @@ jobs:
   # tool changes; make lint-docs runs the same command locally.
   mermaid:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.mermaid == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.mermaid == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -394,7 +399,7 @@ jobs:
           key: r2s-task-mermaid-refs/heads/master-${{ github.sha }}
   readme:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.readme == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.readme == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -408,7 +413,7 @@ jobs:
           key: r2s-task-readme-refs/heads/master-${{ github.sha }}
   coverage:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.coverage == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.coverage == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -430,7 +435,7 @@ jobs:
 
   e2e-avr:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.e2e == 'avr' || needs.plan.outputs.e2e == 'both'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.e2e == 'avr' || needs.plan.outputs.e2e == 'both'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -462,7 +467,7 @@ jobs:
   # jazzy job share a toolchain.
   bridge:
     needs: [plan, bridge-images]
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.bridge == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.bridge == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -490,7 +495,7 @@ jobs:
 
   # The bridge checksum, saved only when every distro passed: this job
   # needs the whole matrix, so a red distro skips the save and the
-  # section reruns on the next pull request.
+  # section reruns on the next run that selects it.
   bridge-save:
     needs: [plan, bridge]
     if: github.ref == 'refs/heads/master'
@@ -512,7 +517,7 @@ jobs:
   # runs the same run.sh locally, so each leg matches `make test E2E=posix`.
   e2e-posix:
     needs: [plan, bridge-images]
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.e2e == 'posix' || needs.plan.outputs.e2e == 'both'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.e2e == 'posix' || needs.plan.outputs.e2e == 'both'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -550,7 +555,7 @@ jobs:
 
   # The e2e-posix checksum, saved only when every leg passed: this job
   # needs the whole matrix, so a red leg skips the save and the section
-  # reruns on the next pull request.
+  # reruns on the next run that selects it.
   e2e-posix-save:
     needs: [plan, e2e-posix]
     if: github.ref == 'refs/heads/master'
@@ -571,7 +576,7 @@ jobs:
   # out of the required checks until then.
   fuzz-smoke:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.fuzz == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.fuzz == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -592,7 +597,7 @@ jobs:
   # timeout-minutes; the called jobs carry theirs.
   nightly:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.nightly == '1' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'fuzz-long'))
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.nightly == '1' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'fuzz-long'))
     uses: ./.github/workflows/nightly-jobs.yml
     with:
       # Schedule, master and manual runs follow the FUZZ selection; a pull
@@ -606,7 +611,7 @@ jobs:
       bigendian: false
   build-matrix:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.examples == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.examples == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     continue-on-error: true
@@ -626,7 +631,7 @@ jobs:
   # installs it into a cache directory the build script manages.
   esp32:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.esp32 == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.esp32 == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -646,7 +651,7 @@ jobs:
           key: r2s-task-esp32-refs/heads/master-${{ github.sha }}
   budgets:
     needs: plan
-    if: github.event_name != 'pull_request' || needs.plan.outputs.full == '1' || needs.plan.outputs.budgets == '1'
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.budgets == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

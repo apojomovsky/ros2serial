@@ -141,6 +141,19 @@ def test_the_isolation_job_runs_the_nightly_scope_with_both_envs():
     assert str(env.get('R2S_SYNC_BOUND_NS')) == '5000000'
 
 
+def test_the_isolation_job_collects_section_logs_on_any_outcome():
+    steps = steps_of(workflow(JOBS), 'e2e-isolation')
+    collects = [
+        step for step in steps if 'scripts/collect-isolation-logs.sh' in str(step.get('run', ''))
+    ]
+    assert len(collects) == 1
+    assert collects[0].get('if') == 'always()'
+    uploads = [step for step in steps if 'upload-artifact' in str(step.get('uses', ''))]
+    assert len(uploads) == 1
+    assert uploads[0].get('if') == 'always()'
+    assert 'isolation' in str(uploads[0].get('with', {}).get('name', ''))
+
+
 def test_ci_e2e_posix_keeps_the_shared_host_bound():
     runs = ' '.join(str(step.get('run', '')) for step in steps_of(workflow(CI), 'e2e-posix'))
     assert 'make test E2E=posix' in runs

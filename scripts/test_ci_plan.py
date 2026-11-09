@@ -206,11 +206,23 @@ def runs(condition, event, ref, outputs, labels=()):
 
 def running_jobs(event, outputs, ref=PR_REF, labels=()):
     jobs = workflow()['jobs']
-    return sorted(
+    runnable = {
         name
         for name, job in jobs.items()
         if 'if' not in job or runs(job['if'], event, ref, outputs, labels)
-    )
+    }
+    # A job whose need skips skips with it: the save jobs need their legs,
+    # so no run saves a section it never ran.
+    changed = True
+    while changed:
+        changed = False
+        for name in list(runnable):
+            needs = jobs[name].get('needs', [])
+            needs = needs if isinstance(needs, list) else [needs]
+            if any(need not in runnable for need in needs):
+                runnable.discard(name)
+                changed = True
+    return sorted(runnable)
 
 
 def github_value(operand, event):
@@ -547,12 +559,52 @@ def test_a_broken_taskfile_fails_safe_to_full(tmp_path):
     assert selected_jobs(repo, tmp_path) == jobs_without_saves()
 
 
-def test_master_push_runs_every_job(tmp_path):
+def test_concurrency_groups_runs_by_ref():
+    group = str(workflow()['concurrency']['group'])
+    assert 'github.ref' in group
+
+
+def test_only_pull_request_runs_cancel_in_progress():
+    """A merge landing while another master run is in flight must not cancel it."""
+    cancel = str(workflow()['concurrency']['cancel-in-progress'])
+    assert eval_condition(cancel, 'pull_request', PR_REF, {}) is True
+    assert eval_condition(cancel, 'push', MASTER_REF, {}) is False
+    assert eval_condition(cancel, 'workflow_dispatch', MASTER_REF, {}) is False
+
+
+def test_master_push_runs_only_the_plan_selected_sections(tmp_path):
+    """A master push builds what the merge touched, like a pull request does."""
     repo = test_taskfile.fixture(tmp_path)
-    test_taskfile.run_task(repo)
+    establish(repo)
+    (repo / 'docs' / 'notes.md').write_text('probe\n')
+    assert selected_jobs(repo, tmp_path, event='push', ref=MASTER_REF) == [
+        'bridge-images',
+        'docs',
+        'lint',
+        'mermaid',
+        'plan',
+    ]
+
+
+def test_a_cache_miss_on_master_runs_every_job(tmp_path):
+    repo = test_taskfile.fixture(tmp_path)
     assert selected_jobs(repo, tmp_path, event='push', ref=MASTER_REF) == sorted(
         workflow()['jobs']
     )
+
+
+def test_pull_request_and_master_push_select_the_same_sections(tmp_path):
+    """The same diff selects the same section jobs on a pull request and on master."""
+    repo = test_taskfile.fixture(tmp_path)
+    establish(repo)
+    (repo / 'docs' / 'notes.md').write_text('probe\n')
+    pr_jobs = [job for job in selected_jobs(repo, tmp_path) if job not in SECTION_SAVE.values()]
+    master_jobs = [
+        job
+        for job in selected_jobs(repo, tmp_path, event='push', ref=MASTER_REF)
+        if job not in SECTION_SAVE.values()
+    ]
+    assert master_jobs == pr_jobs
 
 
 def test_workflow_dispatch_runs_every_job(tmp_path):
@@ -567,9 +619,10 @@ def test_pull_requests_do_not_force_the_suite():
     assert workflow_env('pull_request').get('R2S_FULL', '') == ''
 
 
-def test_master_runs_force_the_suite():
-    for event in ('push', 'schedule', 'workflow_dispatch'):
-        assert workflow_env(event).get('R2S_FULL') == '1', event
+def test_only_manual_runs_force_the_suite():
+    assert workflow_env('workflow_dispatch').get('R2S_FULL') == '1'
+    for event in ('push', 'pull_request', 'schedule'):
+        assert workflow_env(event).get('R2S_FULL', '') == '', event
 
 
 def nightly_call():

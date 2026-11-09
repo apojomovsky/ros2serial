@@ -10,8 +10,10 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -146,6 +148,42 @@ def pair_build_dir(suffix):
     return base + '-iso-' + suffix
 
 
+def section_logs_dir():
+    """Where full section outputs land for the artifact collector."""
+    cache = os.environ.get(
+        'R2S_CACHE_DIR', os.path.join(os.path.expanduser('~'), '.cache', 'ros2serial')
+    )
+    return os.path.join(cache, 'e2e-section-logs')
+
+
+def write_section_log(name, output):
+    """Save one section's full output, returning its path."""
+    dest = os.path.join(section_logs_dir(), name + '.log')
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with open(dest, 'w', encoding='utf-8') as handle:
+        handle.write(output)
+    return dest
+
+
+class TestWriteSectionLog(unittest.TestCase):
+    def test_saves_the_full_output_under_the_shared_cache(self):
+        with tempfile.TemporaryDirectory() as cache:
+            with mock.patch.dict(os.environ, {'R2S_CACHE_DIR': cache}):
+                dest = write_section_log('posix-pair-a', 'section says hi\n')
+            self.assertEqual(dest, os.path.join(cache, 'e2e-section-logs', 'posix-pair-a.log'))
+            with open(dest, encoding='utf-8') as handle:
+                self.assertEqual(handle.read(), 'section says hi\n')
+
+    def test_overwrites_the_previous_run(self):
+        with tempfile.TemporaryDirectory() as cache:
+            with mock.patch.dict(os.environ, {'R2S_CACHE_DIR': cache}):
+                first = write_section_log('posix-pair-a', 'old\n')
+                second = write_section_log('posix-pair-a', 'new\n')
+            self.assertEqual(first, second)
+            with open(second, encoding='utf-8') as handle:
+                self.assertEqual(handle.read(), 'new\n')
+
+
 @pytest.mark.skipif(shutil.which('colcon') is None, reason='colcon is not installed')
 def test_two_concurrent_e2e_sections_pass_without_crosstalk():
     env_a = dict(
@@ -178,6 +216,8 @@ def test_two_concurrent_e2e_sections_pass_without_crosstalk():
     )
     out1, _ = first.communicate()
     out2, _ = second.communicate()
+    write_section_log('posix-pair-a', out1)
+    write_section_log('posix-pair-b', out2)
     assert first.returncode == 0, 'first section failed:\n' + section_report(out1)
     assert second.returncode == 0, 'second section failed:\n' + section_report(out2)
     assert domain_of(out1) != domain_of(out2), 'both sections ran on one domain'
@@ -209,6 +249,8 @@ def test_avr_and_posix_sections_pass_side_by_side():
     )
     out_avr, _ = avr.communicate()
     out_posix, _ = posix.communicate()
+    write_section_log('avr-side', out_avr)
+    write_section_log('posix-side', out_posix)
     assert avr.returncode == 0, 'avr section failed:\n' + section_report(out_avr)
     assert posix.returncode == 0, 'posix section failed:\n' + section_report(out_posix)
     assert domain_of(out_avr) != domain_of(out_posix), 'both sections ran on one domain'

@@ -25,6 +25,9 @@ if [ -z "${R2S_E2E_AVR_LOCKED:-}" ]; then
     bash "$root/tests/e2e/run-avr.sh" "$@"
 fi
 mkdir -p "$build" || exit 1
+# One log per scenario file, so a failure that prints no FAIL line still
+# leaves its own output behind for the report below to name.
+mkdir -p "$build/scenario-logs" || exit 1
 
 build_only=0
 if [ "${1:-}" = --build-only ]; then build_only=1; shift; fi
@@ -250,15 +253,22 @@ for rmw in $rmws; do
       case " ${R2S_E2E_SKIP:-} " in
         *" test_scenario_${scenario}_avr "*) echo "skip test_scenario_${scenario}_avr (R2S_E2E_SKIP)" ;;
         *)
-          timeout 300 launch_test "tests/e2e/test_scenario_${scenario}_avr.py"
-          code=$?
+          scenario_log=$build/scenario-logs/${board}.${rmw}.test_scenario_${scenario}_avr.log
+          timeout 300 launch_test "tests/e2e/test_scenario_${scenario}_avr.py" 2>&1 | tee "$scenario_log"
+          code=${PIPESTATUS[0]}
           # One line per failed scenario file, so a nonzero exit always
           # names its cause even when the failure scrolled out of the tail.
+          # A launch whose node died reports no FAIL line, so the report
+          # also prints the launch-layer naming lines and the failed
+          # scenario tail from its own log.
           if [ "$code" -ne 0 ]; then
             status=1
             line="e2e-failure: test_scenario_${scenario}_avr board=$board rmw=$rmw exit=$code"
             [ "$code" -eq 124 ] && line="$line (timeout)"
             echo "$line"
+            grep -E "^(FAIL|ERROR): |Processes under test stopped before tests completed|Process '.+' exited with [0-9]+" "$scenario_log" | head -20
+            echo "--- test_scenario_${scenario}_avr tail (board=$board rmw=$rmw) ---"
+            tail -30 "$scenario_log"
             failures="$failures$line
 "
           fi
@@ -277,15 +287,22 @@ for rmw in $rmws; do
         case " ${R2S_E2E_SKIP:-} " in
           *" test_baud_matrix_avr "*) echo "skip test_baud_matrix_avr (R2S_E2E_SKIP)" ;;
           *)
-            timeout 300 launch_test "tests/e2e/test_baud_matrix_avr.py"
-            code=$?
+            scenario_log=$build/scenario-logs/${board}.${rmw}.test_baud_matrix_avr@${baud}.log
+            timeout 300 launch_test "tests/e2e/test_baud_matrix_avr.py" 2>&1 | tee "$scenario_log"
+            code=${PIPESTATUS[0]}
             # Same per-failure line as the scenario loop, plus the baud:
             # one matrix row per baud per board shares the file name.
+            # A launch whose node died reports no FAIL line, so the report
+            # also prints the launch-layer naming lines and the row tail
+            # from its own log.
             if [ "$code" -ne 0 ]; then
               status=1
               line="e2e-failure: test_baud_matrix_avr board=$board baud=$baud rmw=$rmw exit=$code"
               [ "$code" -eq 124 ] && line="$line (timeout)"
               echo "$line"
+              grep -E "^(FAIL|ERROR): |Processes under test stopped before tests completed|Process '.+' exited with [0-9]+" "$scenario_log" | head -20
+              echo "--- test_baud_matrix_avr tail (board=$board baud=$baud rmw=$rmw) ---"
+              tail -30 "$scenario_log"
               failures="$failures$line
 "
             fi
