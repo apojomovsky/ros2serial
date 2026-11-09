@@ -24,7 +24,7 @@ public:
   virtual ~Print() = default;
 };
 
-class Stream: public Print
+class Stream : public Print
 {
 public:
   virtual int available(void) = 0;
@@ -34,7 +34,7 @@ public:
 
 /* A loopback stream: written bytes stay readable, so the test observes both
  * directions without a second peer. */
-class StubStream: public Stream
+class StubStream : public Stream
 {
 public:
   StubStream(void);
