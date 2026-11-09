@@ -13,6 +13,7 @@
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_session.h"
 #include "r2s/r2s_tx.h"
+#include "r2s/r2s_varint.h"
 #include "unity.h"
 
 /* One frame at the encoded limit, plus its delimiter. */
@@ -784,6 +785,437 @@ void test_actions_empty_frame_in_announcing_is_answered_with_hello(void)
   fake_port_tx_clear();
   feed_host(8, 0, empty, 0);
   TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+}
+
+/* The three-action table for the slot tests: direct answers need no walk. */
+static const r2s_action_t three_actions[] = {
+  {{0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u, 0x18u}, "test_msgs/action/Fibonacci",
+    "spin0"},
+  {{0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u, 0x18u}, "test_msgs/action/Fibonacci",
+    "spin1"},
+  {{0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u, 0x18u}, "test_msgs/action/Fibonacci",
+    "spin2"},
+};
+
+static void configure_three(void)
+{
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", one_topic, 1));
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_configure(three_actions, 3));
+  r2s_init();
+}
+
+/* covers: ACT-7 */
+void test_actions_ram_table_copies_from_ram(void)
+{
+  static r2s_action_t ram_table[] = {
+    {{0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u, 0x18u}, "test_msgs/action/Fibonacci",
+      "spin"},
+  };
+  r2s_action_t out;
+
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", one_topic, 1));
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_configure_ram(ram_table, 1));
+  TEST_ASSERT_EQUAL_UINT8(1, r2s_actions_count());
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_copy(0u, &out));
+  TEST_ASSERT_EQUAL_STRING("test_msgs/action/Fibonacci", out.type_name);
+  TEST_ASSERT_EQUAL_STRING("spin", out.action_name);
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_IDLE, r2s_actions_state(0u));
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_IDLE, r2s_actions_state(1u));
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_WALK_UNKNOWN, r2s_actions_status(0u));
+  TEST_ASSERT_EQUAL_UINT8(0, r2s_actions_goal_seq(0u));
+  TEST_ASSERT_EQUAL_UINT8(0, r2s_actions_goal_seq(1u));
+}
+
+/* covers: ACT-7 */
+void test_actions_configure_refuses_a_name_past_the_varint_limit(void)
+{
+  static char huge[R2S_VARINT_MAX + 2u];
+  static r2s_action_t huge_table[] = {
+    {{0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u, 0x18u}, "test_msgs/action/Fibonacci",
+      huge},
+  };
+
+  memset(huge, 'n', sizeof huge - 1u);
+  huge[sizeof huge - 1u] = '\0';
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_actions_configure(huge_table, 1));
+  TEST_ASSERT_EQUAL_UINT8(0, r2s_actions_count());
+}
+
+/* covers: ACT-7 */
+void test_actions_configure_refuses_a_type_past_the_varint_limit(void)
+{
+  static char huge[R2S_VARINT_MAX + 2u];
+  static r2s_action_t huge_table[] = {
+    {{0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u, 0x18u}, huge, "spin"},
+  };
+
+  memset(huge, 't', sizeof huge - 1u);
+  huge[sizeof huge - 1u] = '\0';
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_actions_configure(huge_table, 1));
+  TEST_ASSERT_EQUAL_UINT8(0, r2s_actions_count());
+}
+
+/* covers: ACT-9 */
+void test_actions_answer_goal_refuses_when_not_connected(void)
+{
+  configure();
+  TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_NOT_CONNECTED,
+                           r2s_actions_answer_goal(0u, 0u, R2S_ACT_ACCEPTED));
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_IDLE, r2s_actions_state(0));
+}
+
+/* covers: ACT-4, REL-2 */
+void test_actions_answer_goal_reports_busy_slots(void)
+{
+  configure_three();
+  connect();
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_answer_goal(0u, 0u, R2S_ACT_ACCEPTED));
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_answer_goal(1u, 1u, R2S_ACT_ACCEPTED));
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_TX_BUSY, r2s_actions_answer_goal(2u, 2u, R2S_ACT_ACCEPTED));
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_IDLE, r2s_actions_state(2u));
+  TEST_ASSERT_EQUAL_UINT8(0, r2s_actions_goal_seq(2u));
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+}
+
+/* covers: ACT-9 */
+void test_actions_answer_cancel_refuses_when_not_connected(void)
+{
+  configure();
+  TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_NOT_CONNECTED,
+                           r2s_actions_answer_cancel(0u, 0u, R2S_ACT_CANCEL_ACCEPTED));
+}
+
+/* covers: ACT-8, REL-2 */
+void test_actions_answer_cancel_reports_busy_slots(void)
+{
+  configure_three();
+  connect();
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS,
+                           r2s_actions_answer_cancel((uint8_t)(R2S_ACTION_MAX_COUNT + 1u),
+                                                       0u,
+                                                       R2S_ACT_CANCEL_ACCEPTED));
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS,
+                           r2s_actions_answer_cancel(2u, 0u, R2S_ACT_CANCEL_ACCEPTED));
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_answer_goal(0u, 0u, R2S_ACT_ACCEPTED));
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS,
+                           r2s_actions_answer_cancel(0u, 7u, R2S_ACT_CANCEL_ACCEPTED));
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_answer_goal(1u, 1u, R2S_ACT_ACCEPTED));
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_TX_BUSY,
+                           r2s_actions_answer_cancel(0u, 0u, R2S_ACT_CANCEL_ACCEPTED));
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_EXECUTING, r2s_actions_state(0u));
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+}
+
+/* covers: ACT-5, REL-2 */
+void test_actions_result_reports_busy_slots(void)
+{
+  configure_three();
+  connect();
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_answer_goal(0u, 0u, R2S_ACT_ACCEPTED));
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_answer_goal(1u, 1u, R2S_ACT_ACCEPTED));
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_TX_BUSY,
+                           r2s_actions_result(0u, 0u, R2S_ACT_SUCCEEDED, NULL, 0u));
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_EXECUTING, r2s_actions_state(0u));
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+}
+
+/* covers: ACT-5 */
+void test_actions_feedback_rejects_a_null_body(void)
+{
+  const uint8_t empty_feedback[] = {0x08u, 0x00u, 0x00u};
+
+  start_goal();
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_actions_feedback(0u, 0u, NULL, 1u));
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_actions_feedback(9u, 0u, NULL, 0u));
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_EXECUTING, r2s_actions_state(0u));
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    /* A null body with no bytes is an empty feedback. */
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_feedback(0u, 0u, NULL, 0u));
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+  assert_tx(0, 8, 2, empty_feedback, sizeof empty_feedback);
+}
+
+/* covers: ACT-5 */
+void test_actions_feedback_rejects_an_oversize_body(void)
+{
+  static uint8_t big[R2S_MAX_FRAME];
+  const uint8_t one[] = {0x00u};
+
+  start_goal();
+  fake_port_tx_clear();
+  memset(big, 0x11, sizeof big);
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_actions_feedback(0u, 0u, big, sizeof big));
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_feedback(0u, 0u, one, sizeof one));
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+}
+
+/* covers: ACT-5, REL-6 */
+void test_actions_feedback_fails_cleanly_without_tx_space(void)
+{
+  const uint8_t one[] = {0x00u};
+
+  start_goal();
+  fake_port_tx_clear();
+  fake_port_set_tx_free(0u);
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_TX_BUSY, r2s_actions_feedback(0u, 0u, one, sizeof one));
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+}
+
+/* covers: ACT-5 */
+void test_actions_feedback_refuses_without_a_goal(void)
+{
+  const uint8_t one[] = {0x00u};
+
+  configure();
+  resolve_walk();
+  connect();
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_actions_feedback(0u, 0u, one, sizeof one));
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+}
+
+/* covers: ACT-8 */
+void test_actions_second_cancel_while_canceling_stays_canceling(void)
+{
+    /* CANCEL rel 1, goal 0, then CANCEL rel 2, goal 0. */
+  const uint8_t cancel[] = {0x06u, 0x01u, 0x00u};
+  const uint8_t again[] = {0x06u, 0x02u, 0x00u};
+  const uint8_t goal_ack[] = {0x08u, 0x00u};
+  const uint8_t ack[] = {0x08u, 0x02u};
+
+  start_goal();
+  feed_host(6, 0, goal_ack, sizeof goal_ack);
+  fake_port_tx_clear();
+  feed_host(8, 1, cancel, sizeof cancel);
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_CANCELING, r2s_actions_state(0));
+  TEST_ASSERT_EQUAL_UINT8(1, g_cancel_calls);
+  fake_port_tx_clear();
+  feed_host(8, 2, again, sizeof again);
+  TEST_ASSERT_EQUAL_UINT8(2, g_cancel_calls);
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_CANCELING, r2s_actions_state(0));
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+  assert_tx(0, 6, 2, ack, sizeof ack);
+}
+
+/* covers: ACT-5 */
+void test_actions_result_rejects_a_null_body(void)
+{
+  start_goal();
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS,
+                           r2s_actions_result(0u, 0u, R2S_ACT_SUCCEEDED, NULL, 1u));
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_EXECUTING, r2s_actions_state(0u));
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+}
+
+/* covers: ACT-5 */
+void test_actions_result_reports_canceled_and_aborted(void)
+{
+  const uint8_t one[] = {0x00u};
+  const uint8_t ack_goal[] = {0x08u, 0x00u};
+  const uint8_t canceled[] = {0x09u, 0x01u, 0x00u, 0x05u, 0x00u};
+  const uint8_t aborted[] = {0x09u, 0x01u, 0x00u, 0x06u, 0x00u};
+
+  start_goal();
+  feed_host(6, 0, ack_goal, sizeof ack_goal);
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_result(0u, 0u, R2S_ACT_CANCELED, one, sizeof one));
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_IDLE, r2s_actions_state(0u));
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+  assert_tx(0, 8, 2, canceled, sizeof canceled);
+  start_goal();
+  feed_host(6, 0, ack_goal, sizeof ack_goal);
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_result(0u, 0u, R2S_ACT_ABORTED, one, sizeof one));
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_IDLE, r2s_actions_state(0u));
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+  assert_tx(0, 8, 2, aborted, sizeof aborted);
+}
+
+/* covers: ACT-5 */
+void test_actions_result_rejects_an_oversize_body(void)
+{
+  static uint8_t big[R2S_MAX_FRAME];
+  const uint8_t one[] = {0x00u};
+
+  start_goal();
+  fake_port_tx_clear();
+  memset(big, 0x11, sizeof big);
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS,
+                           r2s_actions_result(0u, 0u, R2S_ACT_SUCCEEDED, big, sizeof big));
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_result(0u, 0u, R2S_ACT_SUCCEEDED, one, sizeof one));
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_IDLE, r2s_actions_state(0u));
+}
+
+/* covers: ACT-7, REL-6 */
+void test_actions_declare_sends_nothing_without_tx_space(void)
+{
+  configure();
+  fake_port_tx_clear();
+  fake_port_set_tx_free(0u);
+  feed_host(8, 0, (const uint8_t[]) {0x01u, 0x00u}, 2);
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+}
+
+/* covers: ACT-7, REL-6 */
+void test_actions_status_sends_nothing_without_tx_space(void)
+{
+  configure();
+  fake_port_tx_clear();
+  fake_port_set_tx_free(0u);
+  feed_host(8, 0, (const uint8_t[]) {0x01u, 0x05u}, 2);
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+}
+
+/* covers: ACT-8, SYS-5 */
+void test_actions_cancel_with_a_long_frame_is_refused(void)
+{
+  const uint8_t long_cancel[] = {0x06u, 0x01u, 0x00u, 0xFFu};
+
+  start_goal();
+  fake_port_tx_clear();
+  feed_host(8, 1, long_cancel, sizeof long_cancel);
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+  TEST_ASSERT_EQUAL_UINT8(0, g_cancel_calls);
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_EXECUTING, r2s_actions_state(0));
+}
+
+/* covers: REL-2 */
+void test_actions_full_slots_hold_the_cancel_for_retry(void)
+{
+    /* GOAL rel 0, goal 0, order 5. CANCEL rel 1, goal 0. */
+  const uint8_t goal[] = {0x04u, 0x00u, 0x00u, 0x00u, 0x05u, 0x00u, 0x00u, 0x00u};
+  const uint8_t cancel[] = {0x06u, 0x01u, 0x00u};
+  const uint8_t retried[] = {0x05u, 0x00u, 0x00u, 0x00u};
+  const uint8_t heartbeat[] = {0x04u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u};
+    /* A TX_BUSY report names the actions channel without an action. */
+  const uint8_t busy[] = {0x06u, 0x08u, 0x01u, 0x00u, 0xFFu};
+  const uint8_t ack_resp[] = {0x08u, 0x00u};
+  const uint8_t ack_filler[] = {0x08u, 0x01u};
+  const uint8_t accepted_cancel[] = {0x07u, 0x02u, 0x00u, 0x00u};
+  const uint8_t one[] = {0x00u};
+
+  configure_three();
+  resolve_walk();
+  connect();
+  fake_port_tx_clear();
+  feed_host(8, 0, goal, sizeof goal);
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_answer_goal(1u, 5u, R2S_ACT_ACCEPTED));
+    /* A second past the busy window: the retry timer resends the
+     * outstanding response and the heartbeat goes out with it. */
+  fake_port_advance(1000);
+  fake_port_tx_clear();
+  feed_host(8, 1, cancel, sizeof cancel);
+  TEST_ASSERT_EQUAL_UINT8(0, g_cancel_calls);
+  TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_frame_count());
+  assert_tx(0, 8, 2, retried, sizeof retried);
+  assert_tx(1, 4, 0, heartbeat, sizeof heartbeat);
+  assert_tx(2, 5, 0, busy, sizeof busy);
+    /* The acks free both slots; the retried cancel then runs at once. */
+  feed_host(6, 0, ack_resp, sizeof ack_resp);
+  feed_host(6, 1, ack_filler, sizeof ack_filler);
+  fake_port_tx_clear();
+  feed_host(8, 1, cancel, sizeof cancel);
+  TEST_ASSERT_EQUAL_UINT8(1, g_cancel_calls);
+  TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+  assert_tx(1, 8, 4, accepted_cancel, sizeof accepted_cancel);
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_CANCELING, r2s_actions_state(0));
+    /* Feedback still flows while canceling. */
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_feedback(0u, 0u, one, sizeof one));
+  TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_frame_count());
+}
+
+/* covers: ACT-8 */
+void test_actions_cancel_for_an_unknown_goal_seq_answers_unknown(void)
+{
+  const uint8_t stranger[] = {0x06u, 0x01u, 0x07u};
+  const uint8_t ack_goal[] = {0x08u, 0x00u};
+  const uint8_t ack[] = {0x08u, 0x01u};
+  const uint8_t unknown[] = {0x07u, 0x01u, 0x07u, 0x02u};
+
+  start_goal();
+  feed_host(6, 0, ack_goal, sizeof ack_goal);
+  fake_port_tx_clear();
+  feed_host(8, 1, stranger, sizeof stranger);
+  TEST_ASSERT_EQUAL_UINT8(0, g_cancel_calls);
+  TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+  assert_tx(0, 6, 1, ack, sizeof ack);
+  assert_tx(1, 8, 2, unknown, sizeof unknown);
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_EXECUTING, r2s_actions_state(0));
+}
+
+/* covers: REL-3 */
+void test_actions_ack_without_a_match_is_ignored(void)
+{
+  const uint8_t empty[1] = {0u};
+  const uint8_t ack[] = {0x08u, 0x00u};
+  const uint8_t stray[] = {0x08u, 0x09u};
+  const uint8_t accepted[] = {0x05u, 0x00u, 0x00u, 0x00u};
+
+  configure();
+  resolve_walk();
+  connect();
+  fake_port_tx_clear();
+  feed_host(6, 0, ack, sizeof ack);
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+  start_goal();
+  fake_port_tx_clear();
+  feed_host(6, 0, stray, sizeof stray);
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_EXECUTING, r2s_actions_state(0));
+    /* The stray ack cleared nothing: the retry still goes out on time, next
+     * to the periodic heartbeat. */
+  fake_port_advance(500);
+  feed_host(4, 0, empty, 0);
+  TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+  assert_tx(0, 8, 2, accepted, sizeof accepted);
+}
+
+/* covers: ACT-7, ACT-8, SYS-5 */
+void test_actions_direct_frames_refuse_defensive_arms(void)
+{
+  const uint8_t goal[] = {0x04u, 0x00u, 0x00u, 0x00u, 0x05u, 0x00u, 0x00u, 0x00u};
+  const uint8_t not_query[] = {0x09u, 0x00u};
+  const uint8_t long_query[] = {0x01u, 0x00u, 0x00u, 0x00u};
+  const uint8_t bad_rel_status[] = {0x03u, 0x01u, 0x00u, 0x00u};
+
+  configure();
+  fake_port_tx_clear();
+  r2s_actions_on_frame((const uint8_t[]) {0x00u}, 0u, 0u, 0u);
+  r2s_actions_on_frame(goal, sizeof goal, 0u, 0u);
+  r2s_actions_on_frame(not_query, sizeof not_query, 0u, 0u);
+  r2s_actions_on_frame(long_query, sizeof long_query, 0u, 0u);
+  r2s_actions_on_frame(bad_rel_status, sizeof bad_rel_status, 0u, 0u);
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+  TEST_ASSERT_EQUAL_UINT8(0, g_goal_calls);
+}
+
+/* covers: REL-1, REL-2 */
+void test_actions_blocked_link_holds_the_response_for_retry(void)
+{
+    /* GOAL rel 0, goal 0, action 0, order 5. */
+  const uint8_t goal[] = {0x04u, 0x00u, 0x00u, 0x00u, 0x05u, 0x00u, 0x00u, 0x00u};
+  const uint8_t accepted[] = {0x05u, 0x00u, 0x00u, 0x00u};
+
+  configure();
+  resolve_walk();
+  connect();
+  fake_port_tx_clear();
+  fake_port_set_tx_free(0u);
+  feed_host(8, 0, goal, sizeof goal);
+  TEST_ASSERT_EQUAL_UINT8(1, g_goal_calls);
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    /* With space back the timer resends the response it never carried. */
+  fake_port_set_tx_free(0xFFFFu);
+  r2s_actions_poll(500u);
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+  assert_tx(0, 8, 1, accepted, sizeof accepted);
 }
 
 /* covers: ACT-9, REL-5 */
