@@ -19,11 +19,13 @@
 /* A type fits its record when its struct holds in 16 bits (DSC-22), and a field
  * lies inside its type when its storage ends at or before the struct end
  * (DSC-48). The sums run in 32 bits so they cannot wrap (DSC-21). */
-#define R2S_SIZE_CHECK(type) typedef char r2s_dsc22_size_check_##type[(sizeof(type) <= 0xffffu) ? 1 : -1]
+#define R2S_SIZE_CHECK(type) typedef char r2s_dsc22_size_check_ ## type[(sizeof(type) <= \
+      0xffffu) ? 1 : -1]
 
-#define R2S_FIELD_CHECK(type, field, end)                                                                    \
-    typedef char r2s_dsc48_storage_check_##type##__##field                                                   \
-        [((uint32_t)(offsetof(type, end) + sizeof(((type *)0)->end)) <= (uint32_t)(sizeof(type))) ? 1 : -1]
+#define R2S_FIELD_CHECK(type, field, end) \
+  typedef char r2s_dsc48_storage_check_ ## type ## __ ## field \
+    [((uint32_t)(offsetof(type, \
+    end) + sizeof(((type *) 0)->end)) <= (uint32_t)(sizeof(type))) ? 1 : -1]
 
 R2S_SIZE_CHECK(std_msgs__msg__Float32);
 R2S_SIZE_CHECK(geometry_msgs__msg__Vector3);
@@ -36,198 +38,198 @@ R2S_SIZE_CHECK(std_srvs__srv__Trigger_Request);
 R2S_SIZE_CHECK(std_srvs__srv__Trigger_Response);
 
 const uint8_t R2S_FLASH r2s_type_records[] = {
-    R2S_U16_LO(sizeof(std_msgs__msg__Float32)),
-    R2S_U16_HI(sizeof(std_msgs__msg__Float32)),
-    0x00,
-    0x00,
-    0x01, /* std_msgs/msg/Float32 */
-    R2S_U16_LO(sizeof(geometry_msgs__msg__Vector3)),
-    R2S_U16_HI(sizeof(geometry_msgs__msg__Vector3)),
-    0x01,
-    0x00,
-    0x03, /* geometry_msgs/msg/Vector3 */
-    R2S_U16_LO(sizeof(geometry_msgs__msg__Twist)),
-    R2S_U16_HI(sizeof(geometry_msgs__msg__Twist)),
-    0x04,
-    0x00,
-    0x02, /* geometry_msgs/msg/Twist */
-    R2S_U16_LO(sizeof(std_msgs__msg__String)),
-    R2S_U16_HI(sizeof(std_msgs__msg__String)),
-    0x06,
-    0x00,
-    0x01, /* std_msgs/msg/String */
-    R2S_U16_LO(sizeof(builtin_interfaces__msg__Time)),
-    R2S_U16_HI(sizeof(builtin_interfaces__msg__Time)),
-    0x07,
-    0x00,
-    0x02, /* builtin_interfaces/msg/Time */
-    R2S_U16_LO(sizeof(std_msgs__msg__Header)),
-    R2S_U16_HI(sizeof(std_msgs__msg__Header)),
-    0x09,
-    0x00,
-    0x02, /* std_msgs/msg/Header */
-    R2S_U16_LO(sizeof(sensor_msgs__msg__JointState)),
-    R2S_U16_HI(sizeof(sensor_msgs__msg__JointState)),
-    0x0b,
-    0x00,
-    0x05, /* sensor_msgs/msg/JointState */
-    R2S_U16_LO(sizeof(std_srvs__srv__Trigger_Request)),
-    R2S_U16_HI(sizeof(std_srvs__srv__Trigger_Request)),
-    0x10,
-    0x00,
-    0x00, /* std_srvs/srv/Trigger_Request */
-    R2S_U16_LO(sizeof(std_srvs__srv__Trigger_Response)),
-    R2S_U16_HI(sizeof(std_srvs__srv__Trigger_Response)),
-    0x10,
-    0x00,
-    0x02, /* std_srvs/srv/Trigger_Response */
+  R2S_U16_LO(sizeof(std_msgs__msg__Float32)),
+  R2S_U16_HI(sizeof(std_msgs__msg__Float32)),
+  0x00,
+  0x00,
+  0x01, /* std_msgs/msg/Float32 */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__Vector3)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__Vector3)),
+  0x01,
+  0x00,
+  0x03, /* geometry_msgs/msg/Vector3 */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__Twist)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__Twist)),
+  0x04,
+  0x00,
+  0x02, /* geometry_msgs/msg/Twist */
+  R2S_U16_LO(sizeof(std_msgs__msg__String)),
+  R2S_U16_HI(sizeof(std_msgs__msg__String)),
+  0x06,
+  0x00,
+  0x01, /* std_msgs/msg/String */
+  R2S_U16_LO(sizeof(builtin_interfaces__msg__Time)),
+  R2S_U16_HI(sizeof(builtin_interfaces__msg__Time)),
+  0x07,
+  0x00,
+  0x02, /* builtin_interfaces/msg/Time */
+  R2S_U16_LO(sizeof(std_msgs__msg__Header)),
+  R2S_U16_HI(sizeof(std_msgs__msg__Header)),
+  0x09,
+  0x00,
+  0x02, /* std_msgs/msg/Header */
+  R2S_U16_LO(sizeof(sensor_msgs__msg__JointState)),
+  R2S_U16_HI(sizeof(sensor_msgs__msg__JointState)),
+  0x0b,
+  0x00,
+  0x05, /* sensor_msgs/msg/JointState */
+  R2S_U16_LO(sizeof(std_srvs__srv__Trigger_Request)),
+  R2S_U16_HI(sizeof(std_srvs__srv__Trigger_Request)),
+  0x10,
+  0x00,
+  0x00, /* std_srvs/srv/Trigger_Request */
+  R2S_U16_LO(sizeof(std_srvs__srv__Trigger_Response)),
+  R2S_U16_HI(sizeof(std_srvs__srv__Trigger_Response)),
+  0x10,
+  0x00,
+  0x02, /* std_srvs/srv/Trigger_Response */
 };
 
 const uint8_t R2S_FLASH r2s_field_entries[] = {
-    0x09,
-    0x00,
-    R2S_U16_LO(offsetof(std_msgs__msg__Float32, data)),
-    R2S_U16_HI(offsetof(std_msgs__msg__Float32, data)),
-    0x00,
-    0x00,
-    0x00,
-    0x00, /* std_msgs/msg/Float32.data */
-    0x0a,
-    0x00,
-    R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, x)),
-    R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, x)),
-    0x00,
-    0x00,
-    0x00,
-    0x00, /* geometry_msgs/msg/Vector3.x */
-    0x0a,
-    0x00,
-    R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, y)),
-    R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, y)),
-    0x00,
-    0x00,
-    0x00,
-    0x00, /* geometry_msgs/msg/Vector3.y */
-    0x0a,
-    0x00,
-    R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, z)),
-    R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, z)),
-    0x00,
-    0x00,
-    0x00,
-    0x00, /* geometry_msgs/msg/Vector3.z */
-    0x0c,
-    0x00,
-    R2S_U16_LO(offsetof(geometry_msgs__msg__Twist, linear)),
-    R2S_U16_HI(offsetof(geometry_msgs__msg__Twist, linear)),
-    0x00,
-    0x00,
-    0x01,
-    0x00, /* geometry_msgs/msg/Twist.linear */
-    0x0c,
-    0x00,
-    R2S_U16_LO(offsetof(geometry_msgs__msg__Twist, angular)),
-    R2S_U16_HI(offsetof(geometry_msgs__msg__Twist, angular)),
-    0x00,
-    0x00,
-    0x01,
-    0x00, /* geometry_msgs/msg/Twist.angular */
-    0x0b,
-    0x00,
-    R2S_U16_LO(offsetof(std_msgs__msg__String, data)),
-    R2S_U16_HI(offsetof(std_msgs__msg__String, data)),
-    0x00,
-    0x00,
-    0x08,
-    0x00, /* std_msgs/msg/String.data */
-    0x06,
-    0x00,
-    R2S_U16_LO(offsetof(builtin_interfaces__msg__Time, sec)),
-    R2S_U16_HI(offsetof(builtin_interfaces__msg__Time, sec)),
-    0x00,
-    0x00,
-    0x00,
-    0x00, /* builtin_interfaces/msg/Time.sec */
-    0x05,
-    0x00,
-    R2S_U16_LO(offsetof(builtin_interfaces__msg__Time, nanosec)),
-    R2S_U16_HI(offsetof(builtin_interfaces__msg__Time, nanosec)),
-    0x00,
-    0x00,
-    0x00,
-    0x00, /* builtin_interfaces/msg/Time.nanosec */
-    0x0c,
-    0x00,
-    R2S_U16_LO(offsetof(std_msgs__msg__Header, stamp)),
-    R2S_U16_HI(offsetof(std_msgs__msg__Header, stamp)),
-    0x00,
-    0x00,
-    0x04,
-    0x00, /* std_msgs/msg/Header.stamp */
-    0x0b,
-    0x00,
-    R2S_U16_LO(offsetof(std_msgs__msg__Header, frame_id)),
-    R2S_U16_HI(offsetof(std_msgs__msg__Header, frame_id)),
-    0x00,
-    0x00,
-    0x10,
-    0x00, /* std_msgs/msg/Header.frame_id */
-    0x0c,
-    0x00,
-    R2S_U16_LO(offsetof(sensor_msgs__msg__JointState, header)),
-    R2S_U16_HI(offsetof(sensor_msgs__msg__JointState, header)),
-    0x00,
-    0x00,
-    0x05,
-    0x00, /* sensor_msgs/msg/JointState.header */
-    0x0b,
-    0x02,
-    R2S_U16_LO(offsetof(sensor_msgs__msg__JointState, name.data)),
-    R2S_U16_HI(offsetof(sensor_msgs__msg__JointState, name.data)),
-    0x06,
-    0x00,
-    0x10,
-    0x00, /* sensor_msgs/msg/JointState.name */
-    0x0a,
-    0x02,
-    R2S_U16_LO(offsetof(sensor_msgs__msg__JointState, position.data)),
-    R2S_U16_HI(offsetof(sensor_msgs__msg__JointState, position.data)),
-    0x06,
-    0x00,
-    0x00,
-    0x00, /* sensor_msgs/msg/JointState.position */
-    0x0a,
-    0x02,
-    R2S_U16_LO(offsetof(sensor_msgs__msg__JointState, velocity.data)),
-    R2S_U16_HI(offsetof(sensor_msgs__msg__JointState, velocity.data)),
-    0x06,
-    0x00,
-    0x00,
-    0x00, /* sensor_msgs/msg/JointState.velocity */
-    0x0a,
-    0x02,
-    R2S_U16_LO(offsetof(sensor_msgs__msg__JointState, effort.data)),
-    R2S_U16_HI(offsetof(sensor_msgs__msg__JointState, effort.data)),
-    0x06,
-    0x00,
-    0x00,
-    0x00, /* sensor_msgs/msg/JointState.effort */
-    0x00,
-    0x00,
-    R2S_U16_LO(offsetof(std_srvs__srv__Trigger_Response, success)),
-    R2S_U16_HI(offsetof(std_srvs__srv__Trigger_Response, success)),
-    0x00,
-    0x00,
-    0x00,
-    0x00, /* std_srvs/srv/Trigger_Response.success */
-    0x0b,
-    0x00,
-    R2S_U16_LO(offsetof(std_srvs__srv__Trigger_Response, message)),
-    R2S_U16_HI(offsetof(std_srvs__srv__Trigger_Response, message)),
-    0x00,
-    0x00,
-    0x08,
-    0x00, /* std_srvs/srv/Trigger_Response.message */
+  0x09,
+  0x00,
+  R2S_U16_LO(offsetof(std_msgs__msg__Float32, data)),
+  R2S_U16_HI(offsetof(std_msgs__msg__Float32, data)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* std_msgs/msg/Float32.data */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, x)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, x)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.x */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, y)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, y)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.y */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, z)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, z)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.z */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Twist, linear)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Twist, linear)),
+  0x00,
+  0x00,
+  0x01,
+  0x00, /* geometry_msgs/msg/Twist.linear */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Twist, angular)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Twist, angular)),
+  0x00,
+  0x00,
+  0x01,
+  0x00, /* geometry_msgs/msg/Twist.angular */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(std_msgs__msg__String, data)),
+  R2S_U16_HI(offsetof(std_msgs__msg__String, data)),
+  0x00,
+  0x00,
+  0x08,
+  0x00, /* std_msgs/msg/String.data */
+  0x06,
+  0x00,
+  R2S_U16_LO(offsetof(builtin_interfaces__msg__Time, sec)),
+  R2S_U16_HI(offsetof(builtin_interfaces__msg__Time, sec)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* builtin_interfaces/msg/Time.sec */
+  0x05,
+  0x00,
+  R2S_U16_LO(offsetof(builtin_interfaces__msg__Time, nanosec)),
+  R2S_U16_HI(offsetof(builtin_interfaces__msg__Time, nanosec)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* builtin_interfaces/msg/Time.nanosec */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(std_msgs__msg__Header, stamp)),
+  R2S_U16_HI(offsetof(std_msgs__msg__Header, stamp)),
+  0x00,
+  0x00,
+  0x04,
+  0x00, /* std_msgs/msg/Header.stamp */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(std_msgs__msg__Header, frame_id)),
+  R2S_U16_HI(offsetof(std_msgs__msg__Header, frame_id)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* std_msgs/msg/Header.frame_id */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(sensor_msgs__msg__JointState, header)),
+  R2S_U16_HI(offsetof(sensor_msgs__msg__JointState, header)),
+  0x00,
+  0x00,
+  0x05,
+  0x00, /* sensor_msgs/msg/JointState.header */
+  0x0b,
+  0x02,
+  R2S_U16_LO(offsetof(sensor_msgs__msg__JointState, name.data)),
+  R2S_U16_HI(offsetof(sensor_msgs__msg__JointState, name.data)),
+  0x06,
+  0x00,
+  0x10,
+  0x00, /* sensor_msgs/msg/JointState.name */
+  0x0a,
+  0x02,
+  R2S_U16_LO(offsetof(sensor_msgs__msg__JointState, position.data)),
+  R2S_U16_HI(offsetof(sensor_msgs__msg__JointState, position.data)),
+  0x06,
+  0x00,
+  0x00,
+  0x00, /* sensor_msgs/msg/JointState.position */
+  0x0a,
+  0x02,
+  R2S_U16_LO(offsetof(sensor_msgs__msg__JointState, velocity.data)),
+  R2S_U16_HI(offsetof(sensor_msgs__msg__JointState, velocity.data)),
+  0x06,
+  0x00,
+  0x00,
+  0x00, /* sensor_msgs/msg/JointState.velocity */
+  0x0a,
+  0x02,
+  R2S_U16_LO(offsetof(sensor_msgs__msg__JointState, effort.data)),
+  R2S_U16_HI(offsetof(sensor_msgs__msg__JointState, effort.data)),
+  0x06,
+  0x00,
+  0x00,
+  0x00, /* sensor_msgs/msg/JointState.effort */
+  0x00,
+  0x00,
+  R2S_U16_LO(offsetof(std_srvs__srv__Trigger_Response, success)),
+  R2S_U16_HI(offsetof(std_srvs__srv__Trigger_Response, success)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* std_srvs/srv/Trigger_Response.success */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(std_srvs__srv__Trigger_Response, message)),
+  R2S_U16_HI(offsetof(std_srvs__srv__Trigger_Response, message)),
+  0x00,
+  0x00,
+  0x08,
+  0x00, /* std_srvs/srv/Trigger_Response.message */
 };
 
 R2S_FIELD_CHECK(std_msgs__msg__Float32, data, data);
@@ -266,112 +268,116 @@ R2S_FIELD_CHECK(std_srvs__srv__Trigger_Response, message, message);
 /* The announced topics (CTL-4, CTL-12): the hashes are the first 8 bytes
  * of each type's RIHS01 hash, and R2S_NARROW_FLAG carries ENC-12. */
 const r2s_topic_t R2S_FLASH r2s_topics[R2S_TOPIC_COUNT] = {
-    {R2S_TOPIC_BATTERY_ID,
-     (uint8_t)(0x00u | R2S_NARROW_FLAG),
-     {0x71u, 0x70u, 0xd3u, 0xd8u, 0xf8u, 0x41u, 0xf7u, 0xbeu},
-     "std_msgs/msg/Float32",
-     "battery"},
-    {R2S_TOPIC_CMD_VEL_ID,
-     (uint8_t)(0x01u | R2S_NARROW_FLAG),
-     {0x9cu, 0x45u, 0xbfu, 0x16u, 0xfeu, 0x09u, 0x83u, 0xd8u},
-     "geometry_msgs/msg/Twist",
-     "cmd_vel"},
-    {R2S_TOPIC_ECHO_VEL_ID,
-     (uint8_t)(0x00u | R2S_NARROW_FLAG),
-     {0x9cu, 0x45u, 0xbfu, 0x16u, 0xfeu, 0x09u, 0x83u, 0xd8u},
-     "geometry_msgs/msg/Twist",
-     "echo_vel"},
-    {R2S_TOPIC_LOG_TEXT_ID,
-     (uint8_t)(0x00u | R2S_NARROW_FLAG),
-     {0xdfu, 0x66u, 0x8cu, 0x74u, 0x04u, 0x82u, 0xbbu, 0xd4u},
-     "std_msgs/msg/String",
-     "log_text"},
-    {R2S_TOPIC_TIME_NOW_ID,
-     (uint8_t)(0x00u | R2S_NARROW_FLAG),
-     {0xb1u, 0x06u, 0x23u, 0x5eu, 0x25u, 0xa4u, 0xc5u, 0xedu},
-     "builtin_interfaces/msg/Time",
-     "time_now"},
-    {R2S_TOPIC_JOINTS_ID,
-     (uint8_t)(0x01u | R2S_NARROW_FLAG),
-     {0xa1u, 0x3eu, 0xe3u, 0xa3u, 0x30u, 0xe3u, 0x46u, 0xc9u},
-     "sensor_msgs/msg/JointState",
-     "joints"},
+  {R2S_TOPIC_BATTERY_ID,
+    (uint8_t)(0x00u | R2S_NARROW_FLAG),
+    {0x71u, 0x70u, 0xd3u, 0xd8u, 0xf8u, 0x41u, 0xf7u, 0xbeu},
+    "std_msgs/msg/Float32",
+    "battery"},
+  {R2S_TOPIC_CMD_VEL_ID,
+    (uint8_t)(0x01u | R2S_NARROW_FLAG),
+    {0x9cu, 0x45u, 0xbfu, 0x16u, 0xfeu, 0x09u, 0x83u, 0xd8u},
+    "geometry_msgs/msg/Twist",
+    "cmd_vel"},
+  {R2S_TOPIC_ECHO_VEL_ID,
+    (uint8_t)(0x00u | R2S_NARROW_FLAG),
+    {0x9cu, 0x45u, 0xbfu, 0x16u, 0xfeu, 0x09u, 0x83u, 0xd8u},
+    "geometry_msgs/msg/Twist",
+    "echo_vel"},
+  {R2S_TOPIC_LOG_TEXT_ID,
+    (uint8_t)(0x00u | R2S_NARROW_FLAG),
+    {0xdfu, 0x66u, 0x8cu, 0x74u, 0x04u, 0x82u, 0xbbu, 0xd4u},
+    "std_msgs/msg/String",
+    "log_text"},
+  {R2S_TOPIC_TIME_NOW_ID,
+    (uint8_t)(0x00u | R2S_NARROW_FLAG),
+    {0xb1u, 0x06u, 0x23u, 0x5eu, 0x25u, 0xa4u, 0xc5u, 0xedu},
+    "builtin_interfaces/msg/Time",
+    "time_now"},
+  {R2S_TOPIC_JOINTS_ID,
+    (uint8_t)(0x01u | R2S_NARROW_FLAG),
+    {0xa1u, 0x3eu, 0xe3u, 0xa3u, 0x30u, 0xe3u, 0x46u, 0xc9u},
+    "sensor_msgs/msg/JointState",
+    "joints"},
 };
 
 const r2s_codec_table_t r2s_generated_table = {
-    r2s_type_records,
-    R2S_TYPE_COUNT,
-    r2s_field_entries,
-    R2S_FIELD_COUNT,
+  r2s_type_records,
+  R2S_TYPE_COUNT,
+  r2s_field_entries,
+  R2S_FIELD_COUNT,
 };
 
 /* One publish path for every wrapper: measures the payload, reserves
  * its wire form, then streams it, so a failed publish writes nothing. */
 static r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint16_t type, const void *msg)
 {
-    r2s_codec_out_t out = {NULL, 0u, 0u, 0u};
-    uint8_t narrow;
-    uint8_t field = 0xFFu;
-    uint8_t seq;
-    int8_t rc;
+  r2s_codec_out_t out = {NULL, 0u, 0u, 0u};
+  uint8_t narrow;
+  uint8_t field = 0xFFu;
+  uint8_t seq;
+  int8_t rc;
 
-    if (r2s_connected() == 0u) {
-        r2s_error_note(R2S_ERROR_NOT_CONNECTED, topic_id, 0xFFu, 1u);
-        return R2S_ERR_NOT_CONNECTED;
+  if (r2s_connected() == 0u) {
+    r2s_error_note(R2S_ERROR_NOT_CONNECTED, topic_id, 0xFFu, 1u);
+    return R2S_ERR_NOT_CONNECTED;
+  }
+  if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {
+    return R2S_ERR_TOPIC_REJECTED;
+  }
+  narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);
+  rc = r2s_codec_encode(&r2s_generated_table, type, msg, narrow, &out, &field);
+  if (rc != R2S_OK) {
+    return rc;
+  }
+  seq = r2s_session_tx_seq(index);
+  rc = r2s_tx_begin(topic_id, seq, out.len);
+  if (rc != R2S_OK) {
+    if (rc == R2S_ERR_TX_BUSY) {
+      r2s_error_note(R2S_ERROR_TX_BUSY, topic_id, 0xFFu, 1u);
     }
-    if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {
-        return R2S_ERR_TOPIC_REJECTED;
-    }
-    narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);
-    rc = r2s_codec_encode(&r2s_generated_table, type, msg, narrow, &out, &field);
-    if (rc != R2S_OK) {
-        return rc;
-    }
-    seq = r2s_session_tx_seq(index);
-    rc = r2s_tx_begin(topic_id, seq, out.len);
-    if (rc != R2S_OK) {
-        if (rc == R2S_ERR_TX_BUSY) {
-            r2s_error_note(R2S_ERROR_TX_BUSY, topic_id, 0xFFu, 1u);
-        }
-        return rc;
-    }
-    r2s_session_advance_tx_seq(index);
-    out.to_tx = 1u;
-    out.len = 0u;
-    (void)r2s_codec_encode(&r2s_generated_table, type, msg, narrow, &out, &field);
-    (void)r2s_tx_end();
-    return R2S_OK;
+    return rc;
+  }
+  r2s_session_advance_tx_seq(index);
+  out.to_tx = 1u;
+  out.len = 0u;
+  (void)r2s_codec_encode(&r2s_generated_table, type, msg, narrow, &out, &field);
+  (void)r2s_tx_end();
+  return R2S_OK;
 }
 
 r2s_status_t r2s_publish_battery(const std_msgs__msg__Float32 *msg)
 {
-    return r2s_publish_one(R2S_TOPIC_BATTERY_ID, r2s_session_find_topic(R2S_TOPIC_BATTERY_ID),
-                           R2S_TOPIC_BATTERY_TYPE, msg);
+  return r2s_publish_one(
+    R2S_TOPIC_BATTERY_ID, r2s_session_find_topic(R2S_TOPIC_BATTERY_ID), R2S_TOPIC_BATTERY_TYPE,
+    msg);
 }
 
 r2s_status_t r2s_publish_echo_vel(const geometry_msgs__msg__Twist *msg)
 {
-    return r2s_publish_one(R2S_TOPIC_ECHO_VEL_ID, r2s_session_find_topic(R2S_TOPIC_ECHO_VEL_ID),
-                           R2S_TOPIC_ECHO_VEL_TYPE, msg);
+  return r2s_publish_one(
+    R2S_TOPIC_ECHO_VEL_ID, r2s_session_find_topic(R2S_TOPIC_ECHO_VEL_ID), R2S_TOPIC_ECHO_VEL_TYPE,
+    msg);
 }
 
 r2s_status_t r2s_publish_log_text(const std_msgs__msg__String *msg)
 {
-    return r2s_publish_one(R2S_TOPIC_LOG_TEXT_ID, r2s_session_find_topic(R2S_TOPIC_LOG_TEXT_ID),
-                           R2S_TOPIC_LOG_TEXT_TYPE, msg);
+  return r2s_publish_one(
+    R2S_TOPIC_LOG_TEXT_ID, r2s_session_find_topic(R2S_TOPIC_LOG_TEXT_ID), R2S_TOPIC_LOG_TEXT_TYPE,
+    msg);
 }
 
 r2s_status_t r2s_publish_time_now(const builtin_interfaces__msg__Time *msg)
 {
-    return r2s_publish_one(R2S_TOPIC_TIME_NOW_ID, r2s_session_find_topic(R2S_TOPIC_TIME_NOW_ID),
-                           R2S_TOPIC_TIME_NOW_TYPE, msg);
+  return r2s_publish_one(
+    R2S_TOPIC_TIME_NOW_ID, r2s_session_find_topic(R2S_TOPIC_TIME_NOW_ID), R2S_TOPIC_TIME_NOW_TYPE,
+    msg);
 }
 
 /* One receive buffer shared by every subscription: only one dispatch
  * runs at a time, so one slot is enough. */
 typedef union r2s_rx_buf {
-    geometry_msgs__msg__Twist cmd_vel;
-    sensor_msgs__msg__JointState joints;
+  geometry_msgs__msg__Twist cmd_vel;
+  sensor_msgs__msg__JointState joints;
 } r2s_rx_buf_t;
 
 static r2s_rx_buf_t r2s_rx_buf;
@@ -380,77 +386,81 @@ static r2s_rx_buf_t r2s_rx_buf;
  * handler of the frame's topic; anything else is refused and counted. */
 void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, uint16_t len)
 {
-    uint8_t index;
-    uint8_t narrow;
-    uint8_t field = 0xFFu;
+  uint8_t index;
+  uint8_t narrow;
+  uint8_t field = 0xFFu;
 
-    switch (topic_id) {
+  switch (topic_id) {
     case R2S_TOPIC_CMD_VEL_ID: {
         index = r2s_session_find_topic(R2S_TOPIC_CMD_VEL_ID);
         if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {
-            r2s_framer_count_refused();
-            return;
+          r2s_framer_count_refused();
+          return;
         }
         narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);
         (void)r2s_session_note_rx_seq(index, seq);
-        switch (r2s_codec_decode(&r2s_generated_table, R2S_TOPIC_CMD_VEL_TYPE, payload, len, narrow,
-                                 &r2s_rx_buf.cmd_vel, &field)) {
-        case R2S_OK:
+        switch (r2s_codec_decode(
+          &r2s_generated_table, R2S_TOPIC_CMD_VEL_TYPE, payload, len, narrow, &r2s_rx_buf.cmd_vel,
+          &field))
+        {
+          case R2S_OK:
             break;
-        case R2S_ERR_BOUNDS:
+          case R2S_ERR_BOUNDS:
             r2s_error_note(R2S_ERROR_BOUND, topic_id, field, 1u);
             r2s_framer_count_refused();
             return;
-        default:
+          default:
             r2s_framer_count_refused();
             return;
         }
         r2s_on_cmd_vel(&r2s_rx_buf.cmd_vel);
         return;
-    }
+      }
     case R2S_TOPIC_JOINTS_ID: {
         index = r2s_session_find_topic(R2S_TOPIC_JOINTS_ID);
         if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {
-            r2s_framer_count_refused();
-            return;
+          r2s_framer_count_refused();
+          return;
         }
         narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);
         (void)r2s_session_note_rx_seq(index, seq);
-        switch (r2s_codec_decode(&r2s_generated_table, R2S_TOPIC_JOINTS_TYPE, payload, len, narrow,
-                                 &r2s_rx_buf.joints, &field)) {
-        case R2S_OK:
+        switch (r2s_codec_decode(
+          &r2s_generated_table, R2S_TOPIC_JOINTS_TYPE, payload, len, narrow, &r2s_rx_buf.joints,
+          &field))
+        {
+          case R2S_OK:
             break;
-        case R2S_ERR_BOUNDS:
+          case R2S_ERR_BOUNDS:
             r2s_error_note(R2S_ERROR_BOUND, topic_id, field, 1u);
             r2s_framer_count_refused();
             return;
-        default:
+          default:
             r2s_framer_count_refused();
             return;
         }
         r2s_on_joints(&r2s_rx_buf.joints);
         return;
-    }
+      }
     default: {
         if (r2s_session_find_topic(topic_id) == 0xFFu) {
-            r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);
+          r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);
         }
         r2s_framer_count_refused();
         return;
-    }
-    }
+      }
+  }
 }
 
 /* The announced services (SVR-2, SVR-7): the hashes are the first 8 bytes
  * of each service's RIHS01 hash, and the request and response types are
  * descriptor indices into the shared table. */
 const r2s_service_t R2S_FLASH r2s_services[R2S_SERVICE_COUNT] = {
-    {"std_srvs/srv/Trigger",
-     "reset",
-     R2S_SERVICE_RESET_ROLE,
-     {0xeeu, 0xffu, 0x2cu, 0xd6u, 0xfau, 0x5au, 0xd9u, 0xd2u}},
-    {"std_srvs/srv/Trigger",
-     "trigger",
-     R2S_SERVICE_TRIGGER_ROLE,
-     {0xeeu, 0xffu, 0x2cu, 0xd6u, 0xfau, 0x5au, 0xd9u, 0xd2u}},
+  {"std_srvs/srv/Trigger",
+    "reset",
+    R2S_SERVICE_RESET_ROLE,
+    {0xeeu, 0xffu, 0x2cu, 0xd6u, 0xfau, 0x5au, 0xd9u, 0xd2u}},
+  {"std_srvs/srv/Trigger",
+    "trigger",
+    R2S_SERVICE_TRIGGER_ROLE,
+    {0xeeu, 0xffu, 0x2cu, 0xd6u, 0xfau, 0x5au, 0xd9u, 0xd2u}},
 };

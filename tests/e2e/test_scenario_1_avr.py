@@ -19,13 +19,14 @@ import rclpy
 from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import avr as avr_support
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, teardown
+from e2e_support import checks
+from e2e_support import teardown
 
 # covers: SES-1, SES-2, SES-5, SES-6, SES-13, SES-16, SES-17
 
-ANNOUNCED = ["/battery", "/cmd_vel", "/echo_vel", "/log_text"]
+ANNOUNCED = ['/battery', '/cmd_vel', '/echo_vel', '/log_text']
 # The bridge reports announced names without the graph's leading slash.
-HANDSHAKE_TOPICS = [name.removeprefix("/") for name in ANNOUNCED]
+HANDSHAKE_TOPICS = [name.removeprefix('/') for name in ANNOUNCED]
 TOPIC_BUDGET = 3.0
 
 _SCRATCH = None
@@ -35,8 +36,8 @@ _PARAMS = None
 
 def _prepare():
     global _SCRATCH, _SPAWNED, _PARAMS
-    _SCRATCH = tempfile.TemporaryDirectory(prefix="r2s-e2e-avr-1-")
-    _SPAWNED = avr_support.spawn(os.environ.get("R2S_E2E_BOARD", "uno"))
+    _SCRATCH = tempfile.TemporaryDirectory(prefix='r2s-e2e-avr-1-')
+    _SPAWNED = avr_support.spawn(os.environ.get('R2S_E2E_BOARD', 'uno'))
     _PARAMS = bridge_support.example_params_file()
 
 
@@ -63,17 +64,17 @@ class TestScenario1(unittest.TestCase):
         teardown.shutdown()
 
     def test_handshake_announces_topics_within_3s_of_hello(self):
-        node = rclpy.create_node("e2e_s1_avr_probe")
+        node = rclpy.create_node('e2e_s1_avr_probe')
         try:
             bridge_support.wait_for_bridge(node)
             # The handshake wait below observes bridge state, not DDS
             # discovery of the new topics.
             received = []
-            node.create_subscription(DiagnosticArray, "/diagnostics", received.append, 10)
+            node.create_subscription(DiagnosticArray, '/diagnostics', received.append, 10)
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
             while not received:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
+                self.assertLess(time.monotonic(), deadline, 'no /diagnostics flow from the bridge')
             received.clear()
             # The boot HELLO predates the bridge, so the handshake budget runs
             # from bridge-up, when the parameter service answers.
@@ -87,11 +88,11 @@ class TestScenario1(unittest.TestCase):
                 HANDSHAKE_TOPICS,
                 _SPAWNED.ready_at,
                 TOPIC_BUDGET,
-                "handshake",
+                'handshake',
                 lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
                 clock=time.monotonic,
             )
-            self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
+            self.assertLessEqual(took, TOPIC_BUDGET, 'handshake took longer than 3 s')
             # Discovery starts when the bridge creates its endpoints at the
             # handshake, so the generous timeout runs from there, not from
             # bridge-up: a slow handshake must not spend it.
@@ -101,11 +102,11 @@ class TestScenario1(unittest.TestCase):
                 ANNOUNCED,
                 handshake_done_at,
                 checks.DISCOVERY_TIMEOUT,
-                "announced topics",
+                'announced topics',
                 lambda: rclpy.spin_once(node, timeout_sec=bridge_support.DISCOVERY_SPIN),
             )
             # launch_testing never calls tearDownModule, so the harness
             # stops here: its stop summary carries the painted peak.
-            self.assertEqual(_SPAWNED.stop(), 0, "the harness stopped dirty")
+            self.assertEqual(_SPAWNED.stop(), 0, 'the harness stopped dirty')
         finally:
             node.destroy_node()

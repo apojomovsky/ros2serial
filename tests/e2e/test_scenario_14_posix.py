@@ -19,23 +19,26 @@ import launch_testing.markers
 import rclpy
 from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, firmware, teardown
+from e2e_support import checks
+from e2e_support import firmware
+from e2e_support import teardown
 from e2e_support.relay import PtyRelay
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import QoSProfile
+from rclpy.qos import ReliabilityPolicy
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
 # covers: SVR-4, SVR-5, SVR-6
 
-ANNOUNCED = ["/battery", "/cmd_vel", "/echo_vel", "/log_text", "/time_now"]
+ANNOUNCED = ['/battery', '/cmd_vel', '/echo_vel', '/log_text', '/time_now']
 # The bridge reports announced names without the graph's leading slash.
-HANDSHAKE_TOPICS = [name.removeprefix("/") for name in ANNOUNCED]
+HANDSHAKE_TOPICS = [name.removeprefix('/') for name in ANNOUNCED]
 TOPIC_BUDGET = 3.0
 SERVICE_TIMEOUT = 20.0
 CALL_TIMEOUT = 10.0
 # The MCU reports its call's outcome as 8 hex digits on log_text, with the
 # status byte low: 5e000000 is the ok answer.
-MARKER_OK = "5e000000"
+MARKER_OK = '5e000000'
 
 _SCRATCH = None
 _FIRMWARE = None
@@ -46,9 +49,11 @@ _PARAMS = None
 
 def _prepare():
     global _SCRATCH, _FIRMWARE, _RELAY, _PARAMS
-    _SCRATCH = tempfile.TemporaryDirectory(prefix="r2s-e2e-14-")
+    _SCRATCH = tempfile.TemporaryDirectory(prefix='r2s-e2e-14-')
     scratch = Path(_SCRATCH.name)
-    _FIRMWARE = firmware.from_run_script() if "R2S_E2E_FW" in os.environ else firmware.build(scratch)
+    _FIRMWARE = (
+        firmware.from_run_script() if 'R2S_E2E_FW' in os.environ else firmware.build(scratch)
+    )
     _RELAY = PtyRelay()
     _RELAY.start()
     _PARAMS = bridge_support.example_params_file()
@@ -72,17 +77,19 @@ def tearDownModule():
 def _wait_link_ready(node, received, since):
     """Spin until the link leaves boot wait, within the generous timeout."""
     while True:
-        if received and received[-1].status[0].message not in ("disconnected", "boot_wait"):
+        if received and received[-1].status[0].message not in ('disconnected', 'boot_wait'):
             return max(since, time.monotonic())
         took = time.monotonic() - since
-        assert took < bridge_support.HANDSHAKE_TIMEOUT, f"link never left boot wait after {took:.1f} s"
+        assert took < bridge_support.HANDSHAKE_TIMEOUT, (
+            f'link never left boot wait after {took:.1f} s'
+        )
         rclpy.spin_once(node, timeout_sec=0.2)
 
 
 def _c_firmware():
     """Whether this leg boots the C firmware, the only shape serving services yet."""
-    given = os.environ.get("R2S_E2E_FW", "")
-    return not given or given.endswith("/r2s_posix_firmware")
+    given = os.environ.get('R2S_E2E_FW', '')
+    return not given or given.endswith('/r2s_posix_firmware')
 
 
 @unittest.skipUnless(
@@ -100,7 +107,7 @@ class TestScenario14(unittest.TestCase):
 
     def test_service_calls_round_trip_both_directions(self):
         global _SPAWNED
-        node = rclpy.create_node("e2e_s14_probe")
+        node = rclpy.create_node('e2e_s14_probe')
         try:
             bridge_support.wait_for_bridge(node)
             # The server exists before the firmware boots, and the bridge
@@ -109,7 +116,7 @@ class TestScenario14(unittest.TestCase):
             served = []
             server = node.create_service(
                 Trigger,
-                "/trigger",
+                '/trigger',
                 lambda request, response: served.append(request) or self._answer_trigger(response),
             )
             try:
@@ -119,51 +126,57 @@ class TestScenario14(unittest.TestCase):
                 # discovered yet.
                 best_effort = QoSProfile(depth=100, reliability=ReliabilityPolicy.BEST_EFFORT)
                 markers = []
-                node.create_subscription(String, "/log_text", lambda msg: markers.append(msg.data), best_effort)
+                node.create_subscription(
+                    String, '/log_text', lambda msg: markers.append(msg.data), best_effort
+                )
                 received = []
-                node.create_subscription(DiagnosticArray, "/diagnostics", received.append, 10)
+                node.create_subscription(DiagnosticArray, '/diagnostics', received.append, 10)
                 deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
                 while not received:
                     rclpy.spin_once(node, timeout_sec=0.5)
-                    self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
+                    self.assertLess(
+                        time.monotonic(), deadline, 'no /diagnostics flow from the bridge'
+                    )
                 received.clear()
-                _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10"))
+                _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ('--rate', '10'))
                 link_ready_at = _wait_link_ready(node, received, _SPAWNED.ready_at)
                 took = checks.wait_for_handshake(
                     received,
                     HANDSHAKE_TOPICS,
                     link_ready_at,
                     TOPIC_BUDGET,
-                    "handshake",
+                    'handshake',
                     lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
                     clock=time.monotonic,
                 )
-                self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
+                self.assertLessEqual(took, TOPIC_BUDGET, 'handshake took longer than 3 s')
                 handshake_done_at = time.monotonic()
                 bridge_support.wait_for_topics(
                     node,
                     ANNOUNCED,
                     handshake_done_at,
                     checks.DISCOVERY_TIMEOUT,
-                    "announced topics",
+                    'announced topics',
                     lambda: rclpy.spin_once(node, timeout_sec=bridge_support.DISCOVERY_SPIN),
                 )
                 # The ROS call reaches the MCU and comes back with content
                 # only the firmware produces.
-                client = node.create_client(Trigger, "/reset")
+                client = node.create_client(Trigger, '/reset')
                 try:
                     self.assertTrue(
                         client.wait_for_service(timeout_sec=SERVICE_TIMEOUT),
-                        "the reset service never appeared",
+                        'the reset service never appeared',
                     )
                     future = client.call_async(Trigger.Request())
                     deadline = time.monotonic() + CALL_TIMEOUT
                     while not future.done():
                         rclpy.spin_once(node, timeout_sec=0.2)
-                        self.assertLess(time.monotonic(), deadline, "the reset call never answered")
+                        self.assertLess(
+                            time.monotonic(), deadline, 'the reset call never answered'
+                        )
                     response = future.result()
-                    self.assertTrue(response.success, "the MCU refused reset")
-                    self.assertEqual(response.message, "ok", "the MCU answer carries its own text")
+                    self.assertTrue(response.success, 'the MCU refused reset')
+                    self.assertEqual(response.message, 'ok', 'the MCU answer carries its own text')
                 finally:
                     node.destroy_client(client)
                 # The MCU's call reaches the ROS server, whose answer reaches
@@ -171,8 +184,10 @@ class TestScenario14(unittest.TestCase):
                 deadline = time.monotonic() + CALL_TIMEOUT
                 while MARKER_OK not in markers:
                     rclpy.spin_once(node, timeout_sec=0.2)
-                    self.assertLess(time.monotonic(), deadline, "the MCU never reported its call outcome")
-                self.assertTrue(served, "the ROS server never saw the trigger call")
+                    self.assertLess(
+                        time.monotonic(), deadline, 'the MCU never reported its call outcome'
+                    )
+                self.assertTrue(served, 'the ROS server never saw the trigger call')
             finally:
                 node.destroy_service(server)
         finally:
@@ -181,5 +196,5 @@ class TestScenario14(unittest.TestCase):
     @staticmethod
     def _answer_trigger(response):
         response.success = True
-        response.message = "server-ok"
+        response.message = 'server-ok'
         return response

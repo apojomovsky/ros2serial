@@ -69,41 +69,53 @@ exit 3
 
 
 def fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
-    repo = tmp_path / "repo"
-    (repo / "scripts").mkdir(parents=True)
-    (repo / "tools").mkdir()
-    (repo / "bridge").mkdir()
-    shutil.copy(ROOT / "scripts" / "coverage-gate.sh", repo / "scripts" / "coverage-gate.sh")
-    shutil.copy(ROOT / "scripts" / "e2e-lease.sh", repo / "scripts" / "e2e-lease.sh")
-    shutil.copy(ROOT / "scripts" / "coverage-filters.sh", repo / "scripts" / "coverage-filters.sh")
-    shutil.copy(ROOT / "tools" / "coverage_gate.py", repo / "tools" / "coverage_gate.py")
-    (repo / "scripts" / "core-test.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
-    (repo / "scripts" / "build-host-lib.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
-    (repo / "bridge" / "dummy.txt").write_text("bridge sources live here on a real tree\n")
+    repo = tmp_path / 'repo'
+    (repo / 'scripts').mkdir(parents=True)
+    (repo / 'tools').mkdir()
+    (repo / 'bridge').mkdir()
+    shutil.copy(ROOT / 'scripts' / 'coverage-gate.sh', repo / 'scripts' / 'coverage-gate.sh')
+    shutil.copy(ROOT / 'scripts' / 'e2e-lease.sh', repo / 'scripts' / 'e2e-lease.sh')
+    shutil.copy(ROOT / 'scripts' / 'coverage-filters.sh', repo / 'scripts' / 'coverage-filters.sh')
+    shutil.copy(ROOT / 'tools' / 'coverage_gate.py', repo / 'tools' / 'coverage_gate.py')
+    (repo / 'scripts' / 'core-test.sh').write_text('#!/usr/bin/env bash\nexit 0\n')
+    (repo / 'scripts' / 'build-host-lib.sh').write_text('#!/usr/bin/env bash\nexit 0\n')
+    (repo / 'bridge' / 'dummy.txt').write_text('bridge sources live here on a real tree\n')
     for name in (
-        "scripts/coverage-gate.sh",
-        "scripts/e2e-lease.sh",
-        "scripts/core-test.sh",
-        "scripts/build-host-lib.sh",
+        'scripts/coverage-gate.sh',
+        'scripts/e2e-lease.sh',
+        'scripts/core-test.sh',
+        'scripts/build-host-lib.sh',
     ):
         path = repo / name
         path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    bindir = tmp_path / "bin"
+    bindir = tmp_path / 'bin'
     bindir.mkdir()
-    (bindir / "gcovr").write_text(GCOVR_STUB)
-    (bindir / "colcon").write_text(COLCON_STUB)
-    (bindir / "coverage").write_text(COVERAGE_STUB)
-    for name in ("gcovr", "colcon", "coverage"):
+    (bindir / 'gcovr').write_text(GCOVR_STUB)
+    (bindir / 'colcon').write_text(COLCON_STUB)
+    (bindir / 'coverage').write_text(COVERAGE_STUB)
+    for name in ('gcovr', 'colcon', 'coverage'):
         path = bindir / name
         path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    git = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
-    env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)}
-    subprocess.run([*git, "init", "-b", "master"], cwd=repo, env=env, check=True, capture_output=True)
-    subprocess.run([*git, "add", "-A"], cwd=repo, env=env, check=True, capture_output=True)
-    subprocess.run([*git, "commit", "-m", "base"], cwd=repo, env=env, check=True, capture_output=True)
-    subprocess.run([*git, "checkout", "--detach"], cwd=repo, env=env, check=True, capture_output=True)
-    subprocess.run([*git, "commit", "--allow-empty", "-m", "head"], cwd=repo, env=env, check=True, capture_output=True)
-    run_env = {"PATH": str(bindir), "HOME": str(tmp_path)}
+    git = ['git', '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false']
+    env = {'PATH': '/usr/bin:/bin', 'HOME': str(tmp_path)}
+    subprocess.run(
+        [*git, 'init', '-b', 'master'], cwd=repo, env=env, check=True, capture_output=True
+    )
+    subprocess.run([*git, 'add', '-A'], cwd=repo, env=env, check=True, capture_output=True)
+    subprocess.run(
+        [*git, 'commit', '-m', 'base'], cwd=repo, env=env, check=True, capture_output=True
+    )
+    subprocess.run(
+        [*git, 'checkout', '--detach'], cwd=repo, env=env, check=True, capture_output=True
+    )
+    subprocess.run(
+        [*git, 'commit', '--allow-empty', '-m', 'head'],
+        cwd=repo,
+        env=env,
+        check=True,
+        capture_output=True,
+    )
+    run_env = {'PATH': str(bindir), 'HOME': str(tmp_path)}
     return repo, run_env
 
 
@@ -113,103 +125,109 @@ def run_gate(
     head: str,
     base: str,
     extra: dict[str, str] | None = None,
-    gen_head: str = "96 91",
-    gen_base: str = "96 91",
+    gen_head: str = '96 91',
+    gen_base: str = '96 91',
 ) -> subprocess.CompletedProcess:
     env = {
         **os.environ,
-        "PATH": f"{run_env['PATH']}{os.pathsep}{os.environ.get('PATH', '/usr/bin:/bin')}",
-        "HOME": run_env["HOME"],
-        "ROS_DISTRO": "jazzy",
-        "AMENT_PREFIX_PATH": "/stub",
-        "COMMIT_RANGE": "master..HEAD",
-        "R2S_FIG_HEAD": head,
-        "R2S_FIG_BASE": base,
-        "R2S_COV_FIG_HEAD": gen_head,
-        "R2S_COV_FIG_BASE": gen_base,
+        'PATH': f'{run_env["PATH"]}{os.pathsep}{os.environ.get("PATH", "/usr/bin:/bin")}',
+        'HOME': run_env['HOME'],
+        'ROS_DISTRO': 'jazzy',
+        'AMENT_PREFIX_PATH': '/stub',
+        'COMMIT_RANGE': 'master..HEAD',
+        'R2S_FIG_HEAD': head,
+        'R2S_FIG_BASE': base,
+        'R2S_COV_FIG_HEAD': gen_head,
+        'R2S_COV_FIG_BASE': gen_base,
         **(extra or {}),
     }
-    return subprocess.run(["bash", "scripts/coverage-gate.sh"], cwd=repo, env=env, capture_output=True, text=True)
+    return subprocess.run(
+        ['bash', 'scripts/coverage-gate.sh'], cwd=repo, env=env, capture_output=True, text=True
+    )
 
 
 def commit_on_head(repo: Path, run_env: dict[str, str], name: str, text: str) -> None:
     (repo / name).write_text(text)
-    git = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
-    env = {"PATH": "/usr/bin:/bin", "HOME": run_env["HOME"]}
-    subprocess.run([*git, "add", "-A"], cwd=repo, env=env, check=True, capture_output=True)
-    subprocess.run([*git, "commit", "-m", "head"], cwd=repo, env=env, check=True, capture_output=True)
+    git = ['git', '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false']
+    env = {'PATH': '/usr/bin:/bin', 'HOME': run_env['HOME']}
+    subprocess.run([*git, 'add', '-A'], cwd=repo, env=env, check=True, capture_output=True)
+    subprocess.run(
+        [*git, 'commit', '-m', 'head'], cwd=repo, env=env, check=True, capture_output=True
+    )
 
 
 def test_the_gate_fails_when_head_lowers_coverage(tmp_path):
     repo, run_env = fixture(tmp_path)
-    result = run_gate(repo, run_env, "96 91", "97 92")
+    result = run_gate(repo, run_env, '96 91', '97 92')
     assert result.returncode != 0, result.stdout + result.stderr
-    assert "coverage: core line 96.00% is below base 97.00%" in result.stdout
+    assert 'coverage: core line 96.00% is below base 97.00%' in result.stdout
 
 
 def test_the_gate_passes_when_head_matches_base(tmp_path):
     repo, run_env = fixture(tmp_path)
-    result = run_gate(repo, run_env, "96 91", "96 91")
+    result = run_gate(repo, run_env, '96 91', '96 91')
     assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_the_gate_uses_the_base_filters_on_head(tmp_path):
     repo, run_env = fixture(tmp_path)
-    commit_on_head(repo, run_env, "scripts/coverage-filters.sh", "this is not bash\n")
-    result = run_gate(repo, run_env, "96 91", "96 91")
+    commit_on_head(repo, run_env, 'scripts/coverage-filters.sh', 'this is not bash\n')
+    result = run_gate(repo, run_env, '96 91', '96 91')
     assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_the_gate_excludes_throw_branches_from_every_measurement(tmp_path):
     repo, run_env = fixture(tmp_path)
-    log = tmp_path / "gcovr-args.log"
-    result = run_gate(repo, run_env, "96 91", "96 91", {"R2S_GCOVR_LOG": str(log)})
+    log = tmp_path / 'gcovr-args.log'
+    result = run_gate(repo, run_env, '96 91', '96 91', {'R2S_GCOVR_LOG': str(log)})
     assert result.returncode == 0, result.stdout + result.stderr
     calls = log.read_text().splitlines()
-    assert len(calls) == 4, "one gcovr call per measurement:\n" + "\n".join(calls)
+    assert len(calls) == 4, 'one gcovr call per measurement:\n' + '\n'.join(calls)
     for call in calls:
-        assert "--exclude-throw-branches" in call.split(), "throw edges measured:\n" + call
+        assert '--exclude-throw-branches' in call.split(), 'throw edges measured:\n' + call
 
 
 def test_the_gate_requires_the_bridge_floors(tmp_path):
     repo, run_env = fixture(tmp_path)
-    result = run_gate(repo, run_env, "71 51", "71 51")
+    result = run_gate(repo, run_env, '71 51', '71 51')
     assert result.returncode != 0, result.stdout + result.stderr
-    assert "coverage: bridge branch 51.00% is below the floor 80%" in result.stdout
-    assert "(advisory)" not in result.stdout
+    assert 'coverage: bridge branch 51.00% is below the floor 80%' in result.stdout
+    assert '(advisory)' not in result.stdout
 
 
 def test_the_gate_fails_when_gen_head_lowers_coverage(tmp_path):
     repo, run_env = fixture(tmp_path)
-    result = run_gate(repo, run_env, "96 91", "96 91", gen_head="94 89", gen_base="96 91")
+    result = run_gate(repo, run_env, '96 91', '96 91', gen_head='94 89', gen_base='96 91')
     assert result.returncode != 0, result.stdout + result.stderr
-    assert "coverage: gen line 94.00% is below base 96.00%" in result.stdout
+    assert 'coverage: gen line 94.00% is below base 96.00%' in result.stdout
 
 
 def test_the_gate_measures_gen_branches(tmp_path):
     repo, run_env = fixture(tmp_path)
-    log = tmp_path / "coverage-args.log"
-    result = run_gate(repo, run_env, "96 91", "96 91", {"R2S_COVERAGE_LOG": str(log)})
+    log = tmp_path / 'coverage-args.log'
+    result = run_gate(repo, run_env, '96 91', '96 91', {'R2S_COVERAGE_LOG': str(log)})
     assert result.returncode == 0, result.stdout + result.stderr
     calls = log.read_text().splitlines()
-    assert any("--branch" in call.split() for call in calls), "gen measured without branches:\n" + "\n".join(calls)
+    assert any('--branch' in call.split() for call in calls), (
+        'gen measured without branches:\n' + '\n'.join(calls)
+    )
 
 
 def test_the_gate_pins_the_gen_seed(tmp_path):
     repo, run_env = fixture(tmp_path)
-    log = tmp_path / "coverage-args.log"
-    result = run_gate(repo, run_env, "96 91", "96 91", {"R2S_COVERAGE_LOG": str(log)})
+    log = tmp_path / 'coverage-args.log'
+    result = run_gate(repo, run_env, '96 91', '96 91', {'R2S_COVERAGE_LOG': str(log)})
     assert result.returncode == 0, result.stdout + result.stderr
     calls = log.read_text().splitlines()
-    assert any("--hypothesis-seed=20261026" in call.split() for call in calls), (
-        "gen measured without a pinned seed:\n" + "\n".join(calls)
+    assert any('--hypothesis-seed=20261026' in call.split() for call in calls), (
+        'gen measured without a pinned seed:\n' + '\n'.join(calls)
     )
 
 
 def test_the_gate_runs_the_bridge_tests_under_a_lease(tmp_path):
     repo, run_env = fixture(tmp_path)
-    result = run_gate(repo, run_env, "96 91", "96 91")
+    result = run_gate(repo, run_env, '96 91', '96 91')
     assert result.returncode == 0, result.stdout + result.stderr
-    match = re.search(r"coverage isolation: ROS_DOMAIN_ID=(\d+)", result.stdout)
-    assert match is not None, "the gate ran with no leased domain:\n" + result.stdout
-    assert 0 <= int(match.group(1)) <= 31, "the domain is outside the bridge pool range"
+    match = re.search(r'coverage isolation: ROS_DOMAIN_ID=(\d+)', result.stdout)
+    assert match is not None, 'the gate ran with no leased domain:\n' + result.stdout
+    assert 0 <= int(match.group(1)) <= 31, 'the domain is outside the bridge pool range'

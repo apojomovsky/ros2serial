@@ -19,9 +19,12 @@ import rclpy
 from builtin_interfaces.msg import Time
 from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, firmware, teardown
+from e2e_support import checks
+from e2e_support import firmware
+from e2e_support import teardown
 from e2e_support.relay import PtyRelay
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import QoSProfile
+from rclpy.qos import ReliabilityPolicy
 
 # covers: SES-22, SES-23, SES-24, SES-25
 
@@ -35,11 +38,13 @@ DEFAULT_BOUND_NS = 5_000_000
 
 def _sync_bound_ns():
     """The median bound from R2S_SYNC_BOUND_NS, defaulting to 5 ms."""
-    raw = os.environ.get("R2S_SYNC_BOUND_NS", str(DEFAULT_BOUND_NS))
+    raw = os.environ.get('R2S_SYNC_BOUND_NS', str(DEFAULT_BOUND_NS))
     try:
         return int(raw)
     except ValueError as err:
-        raise ValueError(f"R2S_SYNC_BOUND_NS must be an integer number of nanoseconds, got {raw!r}") from err
+        raise ValueError(
+            f'R2S_SYNC_BOUND_NS must be an integer number of nanoseconds, got {raw!r}'
+        ) from err
 
 
 BOUND_NS = _sync_bound_ns()
@@ -64,7 +69,7 @@ DRIFT_BAND = 1000
 QUIET_TIMEOUT = 60.0
 QUIET_RTT_NS = 2000000
 # The bridge reports announced names without the graph's leading slash.
-HANDSHAKE_TOPICS = ["battery", "cmd_vel", "echo_vel", "log_text", "time_now"]
+HANDSHAKE_TOPICS = ['battery', 'cmd_vel', 'echo_vel', 'log_text', 'time_now']
 TOPIC_BUDGET = 3.0
 
 _SCRATCH = None
@@ -76,9 +81,11 @@ _PARAMS = None
 
 def _prepare():
     global _SCRATCH, _FIRMWARE, _RELAY, _PARAMS
-    _SCRATCH = tempfile.TemporaryDirectory(prefix="r2s-e2e-8-")
+    _SCRATCH = tempfile.TemporaryDirectory(prefix='r2s-e2e-8-')
     scratch = Path(_SCRATCH.name)
-    _FIRMWARE = firmware.from_run_script() if "R2S_E2E_FW" in os.environ else firmware.build(scratch)
+    _FIRMWARE = (
+        firmware.from_run_script() if 'R2S_E2E_FW' in os.environ else firmware.build(scratch)
+    )
     _RELAY = PtyRelay()
     _RELAY.start()
     _PARAMS = bridge_support.example_params_file()
@@ -115,17 +122,17 @@ class TestScenario8(unittest.TestCase):
 
     def test_skewed_mcu_time_stays_within_bound_of_host_time(self):
         global _SPAWNED
-        node = rclpy.create_node("e2e_s8_probe")
+        node = rclpy.create_node('e2e_s8_probe')
         try:
             bridge_support.wait_for_bridge(node)
             # Matched before the firmware boots, so the handshake wait below
             # observes bridge state, not DDS discovery of the new topics.
             received = []
-            node.create_subscription(DiagnosticArray, "/diagnostics", received.append, 10)
+            node.create_subscription(DiagnosticArray, '/diagnostics', received.append, 10)
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
             while not received:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
+                self.assertLess(time.monotonic(), deadline, 'no /diagnostics flow from the bridge')
             received.clear()
             # The bridge publishes MCU topics best effort, so the probe
             # subscribes best effort too; a reliable probe would never match.
@@ -133,11 +140,15 @@ class TestScenario8(unittest.TestCase):
             stamps = []
             node.create_subscription(
                 Time,
-                "time_now",
-                lambda msg: stamps.append((msg.sec * 1_000_000_000 + msg.nanosec, node.get_clock().now().nanoseconds)),
+                'time_now',
+                lambda msg: stamps.append(
+                    (msg.sec * 1_000_000_000 + msg.nanosec, node.get_clock().now().nanoseconds)
+                ),
                 best_effort,
             )
-            _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ("--rate", "10", "--tick-skew-ppm", str(SKEW_PPM)))
+            _SPAWNED = firmware.spawn(
+                _FIRMWARE, _RELAY.mcu_port, ('--rate', '10', '--tick-skew-ppm', str(SKEW_PPM))
+            )
             # /diagnostics publishes at 1 Hz, so the observed time can lag the
             # real handshake by up to one period; the bound still holds because
             # the handshake traffic itself is tens of milliseconds. The latest
@@ -147,35 +158,37 @@ class TestScenario8(unittest.TestCase):
                 HANDSHAKE_TOPICS,
                 _SPAWNED.ready_at,
                 TOPIC_BUDGET,
-                "handshake",
+                'handshake',
                 lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
                 clock=time.monotonic,
             )
-            self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
+            self.assertLessEqual(took, TOPIC_BUDGET, 'handshake took longer than 3 s')
             deadline = time.monotonic() + SYNC_TIMEOUT
             while True:
                 rclpy.spin_once(node, timeout_sec=0.5)
                 sync = _diagnostic_values(received)
-                if sync.get("time sync offset") != "not available":
+                if sync.get('time sync offset') != 'not available':
                     break
-                self.assertLess(time.monotonic(), deadline, "time sync never became available")
+                self.assertLess(time.monotonic(), deadline, 'time sync never became available')
             deadline = time.monotonic() + SETTLE_TIMEOUT
             history = []
             rtts = []
             last_sample = 0.0
             while True:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                self.assertLess(time.monotonic(), deadline, "drift never settled near the known skew")
+                self.assertLess(
+                    time.monotonic(), deadline, 'drift never settled near the known skew'
+                )
                 if time.monotonic() - last_sample < DRIFT_SAMPLE_DT:
                     continue
                 last_sample = time.monotonic()
                 sync = _diagnostic_values(received)
-                drift = sync.get("time sync drift")
-                if drift is None or not drift.lstrip("-").isdigit():
+                drift = sync.get('time sync drift')
+                if drift is None or not drift.lstrip('-').isdigit():
                     continue
                 history.append(int(drift))
                 history = history[-DRIFT_COUNT:]
-                rtt = sync.get("time sync round trip")
+                rtt = sync.get('time sync round trip')
                 if rtt is not None and rtt.isdigit():
                     rtts.append(int(rtt))
                 if (
@@ -187,7 +200,7 @@ class TestScenario8(unittest.TestCase):
             quiet_deadline = time.monotonic() + QUIET_TIMEOUT
             while True:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                rtt = _diagnostic_values(received).get("time sync round trip")
+                rtt = _diagnostic_values(received).get('time sync round trip')
                 if rtt is not None and rtt.isdigit() and int(rtt) < QUIET_RTT_NS:
                     break
                 if time.monotonic() >= quiet_deadline:
@@ -206,13 +219,17 @@ class TestScenario8(unittest.TestCase):
                 # spin would queue several stamps behind one wakeup and read
                 # the clock late for all but the first.
                 rclpy.spin_once(node, timeout_sec=0.05)
-                rtt = _diagnostic_values(received).get("time sync round trip")
+                rtt = _diagnostic_values(received).get('time sync round trip')
                 if rtt is not None and rtt.isdigit():
                     rtts.append(int(rtt))
-            self.assertGreaterEqual(len(stamps), MIN_STAMPS, "too few time_now stamps arrived")
-            self.assertGreaterEqual(len(rtts), 5, "too few round trips came back")
+            self.assertGreaterEqual(len(stamps), MIN_STAMPS, 'too few time_now stamps arrived')
+            self.assertGreaterEqual(len(rtts), 5, 'too few round trips came back')
             one_way_ns = min(rtts) // 2
             errors = sorted(abs(stamp_ns - (host_ns - one_way_ns)) for stamp_ns, host_ns in stamps)
-            self.assertLessEqual(errors[len(errors) // 2], BOUND_NS, f"the median stamp left the {BOUND_NS} ns bound")
+            self.assertLessEqual(
+                errors[len(errors) // 2],
+                BOUND_NS,
+                f'the median stamp left the {BOUND_NS} ns bound',
+            )
         finally:
             node.destroy_node()

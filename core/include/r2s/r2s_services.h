@@ -59,11 +59,12 @@ extern "C" {
 
 /* One service: the ROS type and service names, the role the MCU plays, and
  * the first 8 bytes of the type's RIHS01 hash. */
-typedef struct {
-    const char *type_name;
-    const char *service_name;
-    uint8_t role;
-    uint8_t type_hash[8];
+typedef struct
+{
+  const char *type_name;
+  const char *service_name;
+  uint8_t role;
+  uint8_t type_hash[8];
 } r2s_service_t;
 
 #ifdef R2S_WITH_SERVICES
@@ -92,7 +93,7 @@ uint8_t r2s_services_count(void);
  * \param[in] index the entry to read.
  * \return The entry, or NULL past the count.
  */
-const r2s_service_t *r2s_services_get(uint8_t index);
+const r2s_service_t * r2s_services_get(uint8_t index);
 
 /// The host's walk verdict for the entry at index, or 0xFF when the host
 /// answered nothing yet or the index is past the count.
@@ -145,8 +146,9 @@ r2s_status_t r2s_service_call(uint8_t index, const uint8_t *payload, uint16_t le
  * \param[out] len how many bytes the REQUEST carried.
  * \return R2S_OK with a request, R2S_SVC_EMPTY when nothing waits.
  */
-r2s_status_t r2s_service_take_request(uint8_t *index, uint8_t *req_id, uint8_t *payload, uint16_t cap,
-                                      uint16_t *len);
+r2s_status_t r2s_service_take_request(
+  uint8_t *index, uint8_t *req_id, uint8_t *payload, uint16_t cap,
+  uint16_t *len);
 
 /// Answers the taken REQUEST: streams a RESPONSE echoing req_id on the
 /// reliable channel.
@@ -165,7 +167,9 @@ r2s_status_t r2s_service_take_request(uint8_t *index, uint8_t *req_id, uint8_t *
  * R2S_ERR_BOUNDS as above.
  * \pre req_id came from r2s_service_take_request() and is still unanswered.
  */
-r2s_status_t r2s_service_send_response(uint8_t req_id, uint8_t status, const uint8_t *payload, uint16_t len);
+r2s_status_t r2s_service_send_response(
+  uint8_t req_id, uint8_t status, const uint8_t *payload,
+  uint16_t len);
 
 /// Takes one call outcome into the caller's buffer.
 /**
@@ -181,8 +185,9 @@ r2s_status_t r2s_service_send_response(uint8_t req_id, uint8_t status, const uin
  * \param[out] len how many bytes the outcome carried.
  * \return R2S_OK with an outcome, R2S_SVC_EMPTY when nothing waits.
  */
-r2s_status_t r2s_service_take_response(uint8_t *req_id, uint8_t *status, uint8_t *payload, uint16_t cap,
-                                       uint16_t *len);
+r2s_status_t r2s_service_take_response(
+  uint8_t *req_id, uint8_t *status, uint8_t *payload, uint16_t cap,
+  uint16_t *len);
 
 /// Records the host's walk verdict for one entry. The session calls this
 /// for every STATUS that answers a DECLARE.
@@ -215,8 +220,9 @@ void r2s_services_answer_query(uint8_t index);
  * \param[in] len how many bytes payload holds.
  * \return 1 stored, 0 duplicate, -1 slot full.
  */
-int r2s_services_apply_request(uint8_t rel_seq, uint8_t index, uint8_t req_id, const uint8_t *payload,
-                               uint16_t len);
+int r2s_services_apply_request(
+  uint8_t rel_seq, uint8_t index, uint8_t req_id, const uint8_t *payload,
+  uint16_t len);
 
 /// Applies one incoming RESPONSE the session already acked.
 /**
@@ -231,8 +237,9 @@ int r2s_services_apply_request(uint8_t rel_seq, uint8_t index, uint8_t req_id, c
  * \param[in] len how many bytes payload holds.
  * \return 1 consumed, 0 duplicate.
  */
-int r2s_services_apply_response(uint8_t rel_seq, uint8_t req_id, uint8_t status, const uint8_t *payload,
-                                uint16_t len);
+int r2s_services_apply_response(
+  uint8_t rel_seq, uint8_t req_id, uint8_t status, const uint8_t *payload,
+  uint16_t len);
 
 /// Clears the outstanding frame when its ack arrives. The session calls
 /// this for every channel 7 ack; anything else changes nothing [REL-2].

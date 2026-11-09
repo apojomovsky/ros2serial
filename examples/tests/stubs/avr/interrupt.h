@@ -3,15 +3,15 @@
 #ifndef AVR_INTERRUPT_H
 #define AVR_INTERRUPT_H
 
-#define ISR(vector)                                                                                          \
-    void vector(void);                                                                                       \
-    void vector(void)
+#define ISR(vector) \
+  void vector(void); \
+  void vector(void)
 
-#define sei()                                                                                                \
-    do {                                                                                                     \
-    } while (0)
-#define cli()                                                                                                \
-    do {                                                                                                     \
-    } while (0)
+#define sei() \
+  do { \
+  } while (0)
+#define cli() \
+  do { \
+  } while (0)
 
 #endif

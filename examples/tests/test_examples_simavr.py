@@ -26,11 +26,11 @@ from test_announce import read_string
 from test_echo import Harness
 
 PROTOCOL_VERSION = 4
-RUN_MS = ("--run-ms", "60000")
-HELLO_NODE = "hello"
-BLINK_NODE = "blink"
-HELLO_TOPICS = ((16, 0x02, "std_msgs/msg/String", "chatter"),)
-BLINK_TOPICS = ((16, 0x03, "std_msgs/msg/Bool", "led"),)
+RUN_MS = ('--run-ms', '60000')
+HELLO_NODE = 'hello'
+BLINK_NODE = 'blink'
+HELLO_TOPICS = ((16, 0x02, 'std_msgs/msg/String', 'chatter'),)
+BLINK_TOPICS = ((16, 0x03, 'std_msgs/msg/Bool', 'led'),)
 STRING_BOUND = 16
 STRING_MARGIN = 4
 OP_HELLO = 0x02
@@ -44,14 +44,14 @@ def next_unit(port, deadline):
     """The next decodable unit, skipping garbled ones until the deadline."""
     while True:
         remaining = deadline - time.monotonic()
-        assert remaining > 0, "no valid unit within the wait"
+        assert remaining > 0, 'no valid unit within the wait'
         unit = bytearray()
         unit_deadline = time.monotonic() + min(remaining, READ_TIMEOUT)
         while time.monotonic() < unit_deadline:
             unit += port.read(1)
-            if unit.endswith(b"\x00") and len(unit) > 1:
+            if unit.endswith(b'\x00') and len(unit) > 1:
                 break
-        if not unit.endswith(b"\x00"):
+        if not unit.endswith(b'\x00'):
             continue
         try:
             return frames.decode(bytes(unit))
@@ -65,10 +65,10 @@ def read_hello(port, deadline):
         topic_id, _, payload = next_unit(port, deadline)
         if topic_id == ERROR_TOPIC:
             continue  # the sketch publishes before it connects
-        assert topic_id == 0, f"unexpected topic {topic_id} while waiting for HELLO"
+        assert topic_id == 0, f'unexpected topic {topic_id} while waiting for HELLO'
         if payload[0] == OP_HELLO:
             return payload
-        raise AssertionError(f"unexpected op {payload[0]} while waiting for HELLO")
+        raise AssertionError(f'unexpected op {payload[0]} while waiting for HELLO')
 
 
 def solicit_hello(port, seq, node, topics):
@@ -77,7 +77,7 @@ def solicit_hello(port, seq, node, topics):
     payload = read_hello(port, time.monotonic() + READ_TIMEOUT)
     assert payload[1] == PROTOCOL_VERSION
     assert payload[2] == 0x00  # full handshake mode
-    assert int.from_bytes(payload[3:7], "little") == 0, "no token before the first READY"
+    assert int.from_bytes(payload[3:7], 'little') == 0, 'no token before the first READY'
     assert payload[16] == len(topics)
     name, _ = read_string(payload, 17)
     assert name == node
@@ -93,10 +93,10 @@ def read_topic(port, index, seq, topics, strict=False):
             continue  # SES-9: the connected heartbeat shares the link
         if topic_id == ERROR_TOPIC and not strict:
             continue  # the sketch publishes before it connects
-        assert topic_id == 0, f"unexpected topic {topic_id} while waiting for TOPIC"
+        assert topic_id == 0, f'unexpected topic {topic_id} while waiting for TOPIC'
         if payload[0] == OP_HELLO:
             continue  # SES-5: the unconnected repeat answers nothing
-        assert payload[0] == OP_TOPIC, f"unexpected op {payload[0]} while waiting for TOPIC"
+        assert payload[0] == OP_TOPIC, f'unexpected op {payload[0]} while waiting for TOPIC'
         break
     want_id, want_flags, want_type, want_name = topics[index]
     assert payload[1] == index
@@ -122,7 +122,7 @@ def complete_handshake(port, node, topics, seq=0):
 
 
 def test_hello_announces_its_chatter_topic():
-    with Harness("atmega328p", *RUN_MS, image="hello") as harness:
+    with Harness('atmega328p', *RUN_MS, image='hello') as harness:
         with serial.Serial(harness.pty, 115200, timeout=2) as port:
             solicit_hello(port, 0, HELLO_NODE, HELLO_TOPICS)
             read_topic(port, 0, 1, HELLO_TOPICS)
@@ -143,7 +143,7 @@ def read_varint(payload, at):
 
 
 def test_hello_publishes_strings_within_its_bound():
-    with Harness("atmega328p", *RUN_MS, image="hello") as harness:
+    with Harness('atmega328p', *RUN_MS, image='hello') as harness:
         with serial.Serial(harness.pty, 115200, timeout=2) as port:
             complete_handshake(port, HELLO_NODE, HELLO_TOPICS)
             seen = 0
@@ -154,7 +154,7 @@ def test_hello_publishes_strings_within_its_bound():
                     continue
                 if topic_id == ERROR_TOPIC:
                     continue  # a stale not-connected report from the backlog
-                assert topic_id == HELLO_TOPICS[0][0], f"unexpected topic {topic_id} after READY"
+                assert topic_id == HELLO_TOPICS[0][0], f'unexpected topic {topic_id} after READY'
                 length, at = read_varint(payload, 0)
                 assert length <= STRING_BOUND - STRING_MARGIN
                 assert at + length == len(payload)
@@ -163,7 +163,7 @@ def test_hello_publishes_strings_within_its_bound():
 
 
 def test_blink_answers_bool_without_an_error():
-    with Harness("atmega328p", *RUN_MS, image="blink") as harness:
+    with Harness('atmega328p', *RUN_MS, image='blink') as harness:
         with serial.Serial(harness.pty, 115200, timeout=2) as port:
             complete_handshake(port, BLINK_NODE, BLINK_TOPICS)
             port.write(frames.encode_wire(BLINK_TOPICS[0][0], 0, bytes((0x01,))))

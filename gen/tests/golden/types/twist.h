@@ -4,15 +4,17 @@
 
 #include <stdint.h>
 
-typedef struct geometry_msgs__msg__Vector3 {
-    double x;
-    double y;
-    double z;
+typedef struct geometry_msgs__msg__Vector3
+{
+  double x;
+  double y;
+  double z;
 } geometry_msgs__msg__Vector3;
 
-typedef struct geometry_msgs__msg__Twist {
-    geometry_msgs__msg__Vector3 linear;
-    geometry_msgs__msg__Vector3 angular;
+typedef struct geometry_msgs__msg__Twist
+{
+  geometry_msgs__msg__Vector3 linear;
+  geometry_msgs__msg__Vector3 angular;
 } geometry_msgs__msg__Twist;
 
 #endif

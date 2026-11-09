@@ -44,79 +44,80 @@ static const char *const kDefaultJoints = "joints";
 #define SKEW_MIN_PPM (-20000)
 #define SKEW_MAX_PPM 20000
 
-struct options {
-    const char *port;
-    const char *node;
-    const char *pub;
-    const char *sub;
-    const char *echo;
-    const char *log_text;
-    const char *time_now;
-    const char *joints;
-    int32_t skew_ppm;
-    unsigned rate;
-    uint16_t tx_cap;
-    uint8_t log_lines;
-    uint8_t flood;
+struct options
+{
+  const char *port;
+  const char *node;
+  const char *pub;
+  const char *sub;
+  const char *echo;
+  const char *log_text;
+  const char *time_now;
+  const char *joints;
+  int32_t skew_ppm;
+  unsigned rate;
+  uint16_t tx_cap;
+  uint8_t log_lines;
+  uint8_t flood;
 };
 
 /* The name a generated topic launches under: its command-line option, or
  * NULL with drop set to drop it. An entry the list below does not know keeps
  * the name the generator emitted, so a wider configuration still configures. */
-static const char *rename_for(const struct options *opts, const char *name, uint8_t *drop)
+static const char * rename_for(const struct options *opts, const char *name, uint8_t *drop)
 {
-    if (strcmp(name, kDefaultPub) == 0) {
-        *drop = (opts->pub == NULL);
-        return opts->pub;
-    }
-    if (strcmp(name, kDefaultSub) == 0) {
-        *drop = (opts->sub == NULL);
-        return opts->sub;
-    }
-    if (strcmp(name, kDefaultEcho) == 0) {
-        *drop = (opts->echo == NULL);
-        return opts->echo;
-    }
-    if (strcmp(name, kDefaultLogText) == 0) {
-        *drop = (opts->log_text == NULL);
-        return opts->log_text;
-    }
-    if (strcmp(name, kDefaultTimeNow) == 0) {
-        *drop = (opts->time_now == NULL);
-        return opts->time_now;
-    }
-    if (strcmp(name, kDefaultJoints) == 0) {
-        *drop = (opts->joints == NULL);
-        return opts->joints;
-    }
-    *drop = 0u;
-    return name;
+  if (strcmp(name, kDefaultPub) == 0) {
+    *drop = (opts->pub == NULL);
+    return opts->pub;
+  }
+  if (strcmp(name, kDefaultSub) == 0) {
+    *drop = (opts->sub == NULL);
+    return opts->sub;
+  }
+  if (strcmp(name, kDefaultEcho) == 0) {
+    *drop = (opts->echo == NULL);
+    return opts->echo;
+  }
+  if (strcmp(name, kDefaultLogText) == 0) {
+    *drop = (opts->log_text == NULL);
+    return opts->log_text;
+  }
+  if (strcmp(name, kDefaultTimeNow) == 0) {
+    *drop = (opts->time_now == NULL);
+    return opts->time_now;
+  }
+  if (strcmp(name, kDefaultJoints) == 0) {
+    *drop = (opts->joints == NULL);
+    return opts->joints;
+  }
+  *drop = 0u;
+  return name;
 }
 
 /* Copies the generated topic table, swapping in the command-line names. */
 static uint8_t fill_topics(const struct options *opts, r2s_topic_t *topics)
 {
-    uint8_t count = 0u;
-    uint8_t i;
+  uint8_t count = 0u;
+  uint8_t i;
 
-    for (i = 0u; i < R2S_TOPIC_COUNT; i++) {
-        const char *rename;
-        uint8_t drop;
+  for (i = 0u; i < R2S_TOPIC_COUNT; i++) {
+    const char *rename;
+    uint8_t drop;
 
-        topics[count] = r2s_topics[i];
-        rename = rename_for(opts, r2s_topics[i].topic_name, &drop);
-        if (drop != 0u) {
-            continue;
-        }
-        topics[count].topic_name = rename;
-        count++;
+    topics[count] = r2s_topics[i];
+    rename = rename_for(opts, r2s_topics[i].topic_name, &drop);
+    if (drop != 0u) {
+      continue;
     }
-    return count;
+    topics[count].topic_name = rename;
+    count++;
+  }
+  return count;
 }
 
 static void usage(FILE *out)
 {
-    fprintf(out, "Usage: r2s_posix_firmware PORT [--node NAME] [--rate HZ]\n"
+  fprintf(out, "Usage: r2s_posix_firmware PORT [--node NAME] [--rate HZ]\n"
                  "           [--pub NAME | --no-pub] [--sub NAME | --no-sub]\n"
                  "           [--echo NAME | --no-echo] [--time-now NAME | --no-time-now]\n"
                  "           [--joints NAME | --no-joints]\n"
@@ -124,73 +125,77 @@ static void usage(FILE *out)
                  "           [--tx-free N] [--flood]\n");
 }
 
-static const char *take_value(int argc, char **argv, int *i, const char *flag)
+static const char * take_value(int argc, char **argv, int *i, const char *flag)
 {
-    if (*i + 1 >= argc) {
-        fprintf(stderr, "r2s_posix: %s needs a value\n", flag);
-        usage(stderr);
-        exit(2);
-    }
-    (*i)++;
-    return argv[*i];
+  if (*i + 1 >= argc) {
+    fprintf(stderr, "r2s_posix: %s needs a value\n", flag);
+    usage(stderr);
+    exit(2);
+  }
+  (*i)++;
+  return argv[*i];
 }
 
 static unsigned take_rate(const char *text)
 {
-    char *end;
-    long rate;
+  char *end;
+  long rate;
 
-    errno = 0;
-    rate = strtol(text, &end, 10);
-    if (end == text || *end != '\0' || errno == ERANGE || rate < (long)RATE_MIN || rate > (long)RATE_MAX) {
-        fprintf(stderr, "r2s_posix: --rate needs %u..%u, got '%s'\n", RATE_MIN, RATE_MAX, text);
-        usage(stderr);
-        exit(2);
-    }
-    return (unsigned)rate;
+  errno = 0;
+  rate = strtol(text, &end, 10);
+  if (end == text || *end != '\0' || errno == ERANGE || rate < (long)RATE_MIN ||
+    rate > (long)RATE_MAX)
+  {
+    fprintf(stderr, "r2s_posix: --rate needs %u..%u, got '%s'\n", RATE_MIN, RATE_MAX, text);
+    usage(stderr);
+    exit(2);
+  }
+  return (unsigned)rate;
 }
 
 static int32_t take_skew(const char *text)
 {
-    char *end;
-    long skew;
+  char *end;
+  long skew;
 
-    errno = 0;
-    skew = strtol(text, &end, 10);
-    if (end == text || *end != '\0' || errno == ERANGE || skew < (long)SKEW_MIN_PPM ||
-        skew > (long)SKEW_MAX_PPM) {
-        fprintf(stderr, "r2s_posix: --tick-skew-ppm needs %d..%d, got '%s'\n", SKEW_MIN_PPM, SKEW_MAX_PPM,
+  errno = 0;
+  skew = strtol(text, &end, 10);
+  if (end == text || *end != '\0' || errno == ERANGE || skew < (long)SKEW_MIN_PPM ||
+    skew > (long)SKEW_MAX_PPM)
+  {
+    fprintf(stderr, "r2s_posix: --tick-skew-ppm needs %d..%d, got '%s'\n", SKEW_MIN_PPM,
+      SKEW_MAX_PPM,
                 text);
-        usage(stderr);
-        exit(2);
-    }
-    return (int32_t)skew;
+    usage(stderr);
+    exit(2);
+  }
+  return (int32_t)skew;
 }
 
 /* The per-tick byte budget: 1 to 65534, since 0 would wedge the link and
  * 0xFFFF is the uncapped value the flag's absence keeps. */
 static uint16_t take_tx_cap(const char *text)
 {
-    char *end;
-    long cap;
+  char *end;
+  long cap;
 
-    errno = 0;
-    cap = strtol(text, &end, 10);
-    if (end == text || *end != '\0' || errno == ERANGE || cap < 1L || cap > 65534L) {
-        fprintf(stderr, "r2s_posix: --tx-free needs 1..65534, got '%s'\n", text);
-        usage(stderr);
-        exit(2);
-    }
-    return (uint16_t)cap;
+  errno = 0;
+  cap = strtol(text, &end, 10);
+  if (end == text || *end != '\0' || errno == ERANGE || cap < 1L || cap > 65534L) {
+    fprintf(stderr, "r2s_posix: --tx-free needs 1..65534, got '%s'\n", text);
+    usage(stderr);
+    exit(2);
+  }
+  return (uint16_t)cap;
 }
 
 static void check_name(const char *flag, const char *name)
 {
-    if (name[0] == '\0') {
-        fprintf(stderr, "r2s_posix: %s needs a non-empty name\n", flag);
-        usage(stderr);
-        exit(2);
-    }
+  if (name[0] == '\0') {
+    fprintf(stderr, "r2s_posix: %s needs a non-empty name\n", flag);
+    usage(stderr);
+    exit(2);
+  }
 }
 
 /* Scratch entry the limit probe below binds: overlong candidates are refused,
@@ -203,18 +208,18 @@ static char s_probe_name[R2S_MAX_FRAME];
  * probe asks r2s_topics_configure_ram() itself instead of copying its sum. */
 static uint8_t probe_fits(const r2s_topic_t *entry, uint32_t len)
 {
-    uint32_t i;
+  uint32_t i;
 
-    if (len >= (uint32_t)R2S_MAX_FRAME) {
-        return 0u;
-    }
-    s_probe = *entry;
-    for (i = 0u; i < len; i++) {
-        s_probe_name[i] = 'x';
-    }
-    s_probe_name[len] = '\0';
-    s_probe.topic_name = s_probe_name;
-    return (uint8_t)(r2s_topics_configure_ram(&s_probe, 1u) == R2S_OK);
+  if (len >= (uint32_t)R2S_MAX_FRAME) {
+    return 0u;
+  }
+  s_probe = *entry;
+  for (i = 0u; i < len; i++) {
+    s_probe_name[i] = 'x';
+  }
+  s_probe_name[len] = '\0';
+  s_probe.topic_name = s_probe_name;
+  return (uint8_t)(r2s_topics_configure_ram(&s_probe, 1u) == R2S_OK);
 }
 
 /* Longest launch name for this entry the core gate still binds: a binary
@@ -222,22 +227,22 @@ static uint8_t probe_fits(const r2s_topic_t *entry, uint32_t len)
  * bound with no hidden headroom. */
 static size_t entry_name_limit(const r2s_topic_t *entry)
 {
-    uint32_t lo = 0u;
-    uint32_t hi = (uint32_t)R2S_MAX_FRAME;
+  uint32_t lo = 0u;
+  uint32_t hi = (uint32_t)R2S_MAX_FRAME;
 
-    if (probe_fits(entry, 0u) == 0u) {
-        return 0u;
-    }
-    while (lo + 1u < hi) {
-        uint32_t mid = lo + (hi - lo) / 2u;
+  if (probe_fits(entry, 0u) == 0u) {
+    return 0u;
+  }
+  while (lo + 1u < hi) {
+    uint32_t mid = lo + (hi - lo) / 2u;
 
-        if (probe_fits(entry, mid) != 0u) {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
+    if (probe_fits(entry, mid) != 0u) {
+      lo = mid;
+    } else {
+      hi = mid;
     }
-    return (size_t)lo;
+  }
+  return (size_t)lo;
 }
 
 /* A launch name that would not fit the announce entry is rejected here, with
@@ -247,30 +252,31 @@ static size_t entry_name_limit(const r2s_topic_t *entry)
  * rename would silently do nothing. */
 static void check_renamed_name(const char *flag, const char *name, const char *default_name)
 {
-    uint8_t i;
+  uint8_t i;
 
-    check_name(flag, name);
-    for (i = 0u; i < R2S_TOPIC_COUNT; i++) {
-        size_t len;
-        size_t limit;
+  check_name(flag, name);
+  for (i = 0u; i < R2S_TOPIC_COUNT; i++) {
+    size_t len;
+    size_t limit;
 
-        if (strcmp(r2s_topics[i].topic_name, default_name) != 0) {
-            continue;
-        }
-        len = strlen(name);
-        limit = entry_name_limit(&r2s_topics[i]);
-        if (len > limit) {
-            fprintf(stderr, "r2s_posix: %s topic name '%s' too long: %lu chars, limit %lu for type '%s'\n",
-                    flag, name, (unsigned long)len, (unsigned long)limit, r2s_topics[i].type_name);
-            usage(stderr);
-            exit(2);
-        }
-        return;
+    if (strcmp(r2s_topics[i].topic_name, default_name) != 0) {
+      continue;
     }
-    fprintf(stderr, "r2s_posix: %s names a topic the configuration does not carry: '%s'\n", flag,
+    len = strlen(name);
+    limit = entry_name_limit(&r2s_topics[i]);
+    if (len > limit) {
+      fprintf(stderr,
+        "r2s_posix: %s topic name '%s' too long: %lu chars, limit %lu for type '%s'\n",
+                    flag, name, (unsigned long)len, (unsigned long)limit, r2s_topics[i].type_name);
+      usage(stderr);
+      exit(2);
+    }
+    return;
+  }
+  fprintf(stderr, "r2s_posix: %s names a topic the configuration does not carry: '%s'\n", flag,
             default_name);
-    usage(stderr);
-    exit(2);
+  usage(stderr);
+  exit(2);
 }
 
 /* Scratch name the node probe below configures: overlong candidates are
@@ -282,16 +288,16 @@ static char s_node_probe[R2S_MAX_FRAME];
  * probe asks r2s_session_configure() itself instead of copying its sum. */
 static uint8_t node_probe_fits(uint32_t len)
 {
-    uint32_t i;
+  uint32_t i;
 
-    if (len >= (uint32_t)R2S_MAX_FRAME) {
-        return 0u;
-    }
-    for (i = 0u; i < len; i++) {
-        s_node_probe[i] = 'x';
-    }
-    s_node_probe[len] = '\0';
-    return (uint8_t)(r2s_session_configure(s_node_probe, NULL, 0u) == R2S_OK);
+  if (len >= (uint32_t)R2S_MAX_FRAME) {
+    return 0u;
+  }
+  for (i = 0u; i < len; i++) {
+    s_node_probe[i] = 'x';
+  }
+  s_node_probe[len] = '\0';
+  return (uint8_t)(r2s_session_configure(s_node_probe, NULL, 0u) == R2S_OK);
 }
 
 /* Longest node name the core gate still binds: a binary search finds the
@@ -299,151 +305,151 @@ static uint8_t node_probe_fits(uint32_t len)
  * headroom. */
 static size_t node_name_limit(void)
 {
-    uint32_t lo = 0u;
-    uint32_t hi = (uint32_t)R2S_MAX_FRAME;
+  uint32_t lo = 0u;
+  uint32_t hi = (uint32_t)R2S_MAX_FRAME;
 
-    if (node_probe_fits(0u) == 0u) {
-        return 0u;
-    }
-    while (lo + 1u < hi) {
-        uint32_t mid = lo + (hi - lo) / 2u;
+  if (node_probe_fits(0u) == 0u) {
+    return 0u;
+  }
+  while (lo + 1u < hi) {
+    uint32_t mid = lo + (hi - lo) / 2u;
 
-        if (node_probe_fits(mid) != 0u) {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
+    if (node_probe_fits(mid) != 0u) {
+      lo = mid;
+    } else {
+      hi = mid;
     }
-    return (size_t)lo;
+  }
+  return (size_t)lo;
 }
 
 /* A node name that would not fit the hello entry is rejected here, with its
  * length and the limit, instead of failing configure with no detail. */
 static void check_node_name(const char *flag, const char *name)
 {
-    size_t len;
-    size_t limit;
+  size_t len;
+  size_t limit;
 
-    check_name(flag, name);
-    len = strlen(name);
-    limit = node_name_limit();
-    if (len > limit) {
-        fprintf(stderr, "r2s_posix: %s node name '%s' too long: %lu chars, limit %lu\n", flag, name,
-                (unsigned long)len, (unsigned long)limit);
-        usage(stderr);
-        exit(2);
-    }
+  check_name(flag, name);
+  len = strlen(name);
+  limit = node_name_limit();
+  if (len > limit) {
+    fprintf(stderr, "r2s_posix: %s node name '%s' too long: %lu chars, limit %lu\n", flag, name,
+      (unsigned long)len, (unsigned long)limit);
+    usage(stderr);
+    exit(2);
+  }
 }
 
 static void parse_options(int argc, char **argv, struct options *opts)
 {
-    int i;
+  int i;
 
-    opts->port = argv[1];
-    opts->node = "r2s_posix";
-    opts->pub = kDefaultPub;
-    opts->sub = kDefaultSub;
-    opts->echo = kDefaultEcho;
-    opts->log_text = kDefaultLogText;
-    opts->time_now = kDefaultTimeNow;
-    opts->joints = kDefaultJoints;
-    opts->skew_ppm = 0;
-    opts->rate = 10u;
-    opts->tx_cap = 0xFFFFu;
-    opts->log_lines = 0u;
-    opts->flood = 0u;
-    for (i = 2; i < argc; i++) {
-        const char *arg = argv[i];
+  opts->port = argv[1];
+  opts->node = "r2s_posix";
+  opts->pub = kDefaultPub;
+  opts->sub = kDefaultSub;
+  opts->echo = kDefaultEcho;
+  opts->log_text = kDefaultLogText;
+  opts->time_now = kDefaultTimeNow;
+  opts->joints = kDefaultJoints;
+  opts->skew_ppm = 0;
+  opts->rate = 10u;
+  opts->tx_cap = 0xFFFFu;
+  opts->log_lines = 0u;
+  opts->flood = 0u;
+  for (i = 2; i < argc; i++) {
+    const char *arg = argv[i];
 
-        if (strcmp(arg, "--node") == 0) {
-            opts->node = take_value(argc, argv, &i, arg);
-        } else if (strcmp(arg, "--rate") == 0) {
-            opts->rate = take_rate(take_value(argc, argv, &i, arg));
-        } else if (strcmp(arg, "--pub") == 0) {
-            opts->pub = take_value(argc, argv, &i, arg);
-        } else if (strcmp(arg, "--sub") == 0) {
-            opts->sub = take_value(argc, argv, &i, arg);
-        } else if (strcmp(arg, "--echo") == 0) {
-            opts->echo = take_value(argc, argv, &i, arg);
-        } else if (strcmp(arg, "--log-text") == 0) {
-            opts->log_text = take_value(argc, argv, &i, arg);
-        } else if (strcmp(arg, "--time-now") == 0) {
-            opts->time_now = take_value(argc, argv, &i, arg);
-        } else if (strcmp(arg, "--joints") == 0) {
-            opts->joints = take_value(argc, argv, &i, arg);
-        } else if (strcmp(arg, "--tick-skew-ppm") == 0) {
-            opts->skew_ppm = take_skew(take_value(argc, argv, &i, arg));
-        } else if (strcmp(arg, "--tx-free") == 0) {
-            opts->tx_cap = take_tx_cap(take_value(argc, argv, &i, arg));
-        } else if (strcmp(arg, "--flood") == 0) {
-            opts->flood = 1u;
-        } else if (strcmp(arg, "--no-pub") == 0) {
-            opts->pub = NULL;
-        } else if (strcmp(arg, "--no-sub") == 0) {
-            opts->sub = NULL;
-        } else if (strcmp(arg, "--no-echo") == 0) {
-            opts->echo = NULL;
-        } else if (strcmp(arg, "--no-log-text") == 0) {
-            opts->log_text = NULL;
-        } else if (strcmp(arg, "--no-time-now") == 0) {
-            opts->time_now = NULL;
-        } else if (strcmp(arg, "--no-joints") == 0) {
-            opts->joints = NULL;
-        } else if (strcmp(arg, "--log-lines") == 0) {
-            opts->log_lines = 1u;
-        } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
-            usage(stdout);
-            exit(0);
-        } else {
-            fprintf(stderr, "r2s_posix: unknown option '%s'\n", arg);
-            usage(stderr);
-            exit(2);
-        }
+    if (strcmp(arg, "--node") == 0) {
+      opts->node = take_value(argc, argv, &i, arg);
+    } else if (strcmp(arg, "--rate") == 0) {
+      opts->rate = take_rate(take_value(argc, argv, &i, arg));
+    } else if (strcmp(arg, "--pub") == 0) {
+      opts->pub = take_value(argc, argv, &i, arg);
+    } else if (strcmp(arg, "--sub") == 0) {
+      opts->sub = take_value(argc, argv, &i, arg);
+    } else if (strcmp(arg, "--echo") == 0) {
+      opts->echo = take_value(argc, argv, &i, arg);
+    } else if (strcmp(arg, "--log-text") == 0) {
+      opts->log_text = take_value(argc, argv, &i, arg);
+    } else if (strcmp(arg, "--time-now") == 0) {
+      opts->time_now = take_value(argc, argv, &i, arg);
+    } else if (strcmp(arg, "--joints") == 0) {
+      opts->joints = take_value(argc, argv, &i, arg);
+    } else if (strcmp(arg, "--tick-skew-ppm") == 0) {
+      opts->skew_ppm = take_skew(take_value(argc, argv, &i, arg));
+    } else if (strcmp(arg, "--tx-free") == 0) {
+      opts->tx_cap = take_tx_cap(take_value(argc, argv, &i, arg));
+    } else if (strcmp(arg, "--flood") == 0) {
+      opts->flood = 1u;
+    } else if (strcmp(arg, "--no-pub") == 0) {
+      opts->pub = NULL;
+    } else if (strcmp(arg, "--no-sub") == 0) {
+      opts->sub = NULL;
+    } else if (strcmp(arg, "--no-echo") == 0) {
+      opts->echo = NULL;
+    } else if (strcmp(arg, "--no-log-text") == 0) {
+      opts->log_text = NULL;
+    } else if (strcmp(arg, "--no-time-now") == 0) {
+      opts->time_now = NULL;
+    } else if (strcmp(arg, "--no-joints") == 0) {
+      opts->joints = NULL;
+    } else if (strcmp(arg, "--log-lines") == 0) {
+      opts->log_lines = 1u;
+    } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
+      usage(stdout);
+      exit(0);
+    } else {
+      fprintf(stderr, "r2s_posix: unknown option '%s'\n", arg);
+      usage(stderr);
+      exit(2);
     }
-    if (opts->flood != 0u && opts->tx_cap == 0xFFFFu) {
-        fprintf(stderr, "r2s_posix: --flood needs --tx-free\n");
-        usage(stderr);
-        exit(2);
-    }
-    check_node_name("--node", opts->node);
-    if (opts->pub != NULL) {
-        check_renamed_name("--pub", opts->pub, kDefaultPub);
-    }
-    if (opts->sub != NULL) {
-        check_renamed_name("--sub", opts->sub, kDefaultSub);
-    }
-    if (opts->echo != NULL) {
-        check_renamed_name("--echo", opts->echo, kDefaultEcho);
-    }
-    if (opts->log_text != NULL) {
-        check_renamed_name("--log-text", opts->log_text, kDefaultLogText);
-    }
-    if (opts->time_now != NULL) {
-        check_renamed_name("--time-now", opts->time_now, kDefaultTimeNow);
-    }
-    if (opts->joints != NULL) {
-        check_renamed_name("--joints", opts->joints, kDefaultJoints);
-    }
+  }
+  if (opts->flood != 0u && opts->tx_cap == 0xFFFFu) {
+    fprintf(stderr, "r2s_posix: --flood needs --tx-free\n");
+    usage(stderr);
+    exit(2);
+  }
+  check_node_name("--node", opts->node);
+  if (opts->pub != NULL) {
+    check_renamed_name("--pub", opts->pub, kDefaultPub);
+  }
+  if (opts->sub != NULL) {
+    check_renamed_name("--sub", opts->sub, kDefaultSub);
+  }
+  if (opts->echo != NULL) {
+    check_renamed_name("--echo", opts->echo, kDefaultEcho);
+  }
+  if (opts->log_text != NULL) {
+    check_renamed_name("--log-text", opts->log_text, kDefaultLogText);
+  }
+  if (opts->time_now != NULL) {
+    check_renamed_name("--time-now", opts->time_now, kDefaultTimeNow);
+  }
+  if (opts->joints != NULL) {
+    check_renamed_name("--joints", opts->joints, kDefaultJoints);
+  }
 }
 
 static uint32_t s_cmd_vel_count;
 
 void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
 {
-    s_cmd_vel_count++;
-    fprintf(stderr, "r2s_posix: cmd_vel n=%lu\n", (unsigned long)s_cmd_vel_count);
+  s_cmd_vel_count++;
+  fprintf(stderr, "r2s_posix: cmd_vel n=%lu\n", (unsigned long)s_cmd_vel_count);
     /* Best effort echo for scenario 3: five messages on an idle link never
      * fill the port, so the return carries no signal the test would use. */
-    (void)r2s_publish_echo_vel(msg);
+  (void)r2s_publish_echo_vel(msg);
 }
 
 static uint32_t s_joints_count;
 
 void r2s_on_joints(const sensor_msgs__msg__JointState *msg)
 {
-    (void)msg;
-    s_joints_count++;
-    fprintf(stderr, "r2s_posix: joints n=%lu\n", (unsigned long)s_joints_count);
+  (void)msg;
+  s_joints_count++;
+  fprintf(stderr, "r2s_posix: joints n=%lu\n", (unsigned long)s_joints_count);
 }
 
 /* The reset answer: success with "ok". A fieldless request decodes to
@@ -465,89 +471,92 @@ static uint32_t s_marker_pending = 0xFFFFFFFFu;
 
 static r2s_status_t send_reset_answer(uint8_t req_id)
 {
-    std_srvs__srv__Trigger_Response response;
-    uint8_t payload[32];
-    r2s_codec_out_t out = {payload, (uint16_t)sizeof payload, 0u, 0u};
-    uint8_t field = 0xFFu;
+  std_srvs__srv__Trigger_Response response;
+  uint8_t payload[32];
+  r2s_codec_out_t out = {payload, (uint16_t)sizeof payload, 0u, 0u};
+  uint8_t field = 0xFFu;
 
-    memset(&response, 0, sizeof response);
-    response.success = 1u;
-    memcpy(response.message, "ok", 3u);
-    if (r2s_codec_encode(&r2s_generated_table, R2S_SERVICE_RESET_RESPONSE_TYPE, &response, 0u, &out,
-                         &field) != R2S_OK) {
-        return R2S_ERR_BOUNDS;
-    }
-    return r2s_service_send_response(req_id, R2S_SVC_OK, payload, out.len);
+  memset(&response, 0, sizeof response);
+  response.success = 1u;
+  memcpy(response.message, "ok", 3u);
+  if (r2s_codec_encode(&r2s_generated_table, R2S_SERVICE_RESET_RESPONSE_TYPE, &response, 0u, &out,
+                         &field) != R2S_OK)
+  {
+    return R2S_ERR_BOUNDS;
+  }
+  return r2s_service_send_response(req_id, R2S_SVC_OK, payload, out.len);
 }
 
 static void answer_reset(void)
 {
-    if (s_answer_req != 0xFFu) {
-        if (send_reset_answer(s_answer_req) != R2S_ERR_TX_BUSY) {
-            s_answer_req = 0xFFu;
-        }
-        return;
+  if (s_answer_req != 0xFFu) {
+    if (send_reset_answer(s_answer_req) != R2S_ERR_TX_BUSY) {
+      s_answer_req = 0xFFu;
     }
-    for (;;) {
-        uint8_t index;
-        uint8_t req;
-        uint8_t payload[SVC_TAKE_CAP];
-        uint16_t len = 0u;
+    return;
+  }
+  for (;; ) {
+    uint8_t index;
+    uint8_t req;
+    uint8_t payload[SVC_TAKE_CAP];
+    uint16_t len = 0u;
 
-        if (r2s_service_take_request(&index, &req, payload, (uint16_t)sizeof payload, &len) != R2S_OK) {
-            return;
-        }
-        if (index != R2S_SERVICE_RESET_ID) {
-            continue;
-        }
+    if (r2s_service_take_request(&index, &req, payload, (uint16_t)sizeof payload, &len) != R2S_OK) {
+      return;
+    }
+    if (index != R2S_SERVICE_RESET_ID) {
+      continue;
+    }
         /* A busy stream retries on a later tick; any other failure drops
          * the answer, since retrying it could never succeed. */
-        if (send_reset_answer(req) == R2S_ERR_TX_BUSY) {
-            s_answer_req = req;
-            return;
-        }
+    if (send_reset_answer(req) == R2S_ERR_TX_BUSY) {
+      s_answer_req = req;
+      return;
     }
+  }
 }
 
 static void call_trigger(void)
 {
-    if (s_trigger_called != 0u) {
-        return;
-    }
-    {
-        uint8_t req = 0xFFu;
+  if (s_trigger_called != 0u) {
+    return;
+  }
+  {
+    uint8_t req = 0xFFu;
 
-        if (r2s_service_call(R2S_SERVICE_TRIGGER_ID, NULL, 0u, &req) == R2S_OK) {
-            s_trigger_req = req;
-            s_trigger_called = 1u;
-        }
+    if (r2s_service_call(R2S_SERVICE_TRIGGER_ID, NULL, 0u, &req) == R2S_OK) {
+      s_trigger_req = req;
+      s_trigger_called = 1u;
     }
+  }
 }
 
 static void report_trigger_outcomes(void)
 {
-    for (;;) {
-        uint8_t req;
-        uint8_t status;
-        uint8_t payload[32];
-        uint16_t len = 0u;
+  for (;; ) {
+    uint8_t req;
+    uint8_t status;
+    uint8_t payload[32];
+    uint16_t len = 0u;
 
-        if (s_marker_pending == 0xFFFFFFFFu) {
-            if (r2s_service_take_response(&req, &status, payload, (uint16_t)sizeof payload, &len) != R2S_OK) {
-                return;
-            }
-            if (req != s_trigger_req) {
-                continue;
-            }
-            s_trigger_req = 0xFFu;
-            s_marker_pending = 0x5E000000u | (uint32_t)status;
-        }
-        if (publish_log_text(s_marker_pending) == R2S_OK) {
-            s_marker_pending = 0xFFFFFFFFu;
-        } else {
-            return;
-        }
+    if (s_marker_pending == 0xFFFFFFFFu) {
+      if (r2s_service_take_response(&req, &status, payload, (uint16_t)sizeof payload,
+        &len) != R2S_OK)
+      {
+        return;
+      }
+      if (req != s_trigger_req) {
+        continue;
+      }
+      s_trigger_req = 0xFFu;
+      s_marker_pending = 0x5E000000u | (uint32_t)status;
     }
+    if (publish_log_text(s_marker_pending) == R2S_OK) {
+      s_marker_pending = 0xFFFFFFFFu;
+    } else {
+      return;
+    }
+  }
 }
 
 /* Serves reset, calls trigger once per connection, and reports the call's
@@ -555,35 +564,35 @@ static void report_trigger_outcomes(void)
  * round trip in both directions. */
 static void service_tick(void)
 {
-    answer_reset();
-    call_trigger();
-    report_trigger_outcomes();
+  answer_reset();
+  call_trigger();
+  report_trigger_outcomes();
 }
 
 static void service_reset_link(void)
 {
-    s_answer_req = 0xFFu;
-    s_trigger_req = 0xFFu;
-    s_trigger_called = 0u;
-    s_marker_pending = 0xFFFFFFFFu;
+  s_answer_req = 0xFFu;
+  s_trigger_req = 0xFFu;
+  s_trigger_called = 0u;
+  s_marker_pending = 0xFFFFFFFFu;
 }
 
 /* One log_text line: the value as 8 hex digits. Fixed width fits the
  * handwritten String bound of 8 characters for every id. */
 static r2s_status_t publish_log_text(uint32_t value)
 {
-    std_msgs__msg__String msg;
-    uint8_t i;
+  std_msgs__msg__String msg;
+  uint8_t i;
 
-    memset(&msg, 0, sizeof msg);
-    for (i = 0u; i < 8u; i++) {
-        int digit = (int)((value >> 28u) & 0xFu);
+  memset(&msg, 0, sizeof msg);
+  for (i = 0u; i < 8u; i++) {
+    int digit = (int)((value >> 28u) & 0xFu);
 
-        msg.data[i] = (char)(digit < 10 ? '0' + digit : 'a' + (digit - 10));
-        value <<= 4u;
-    }
-    msg.data[8] = '\0';
-    return r2s_publish_log_text(&msg);
+    msg.data[i] = (char)(digit < 10 ? '0' + digit : 'a' + (digit - 10));
+    value <<= 4u;
+  }
+  msg.data[8] = '\0';
+  return r2s_publish_log_text(&msg);
 }
 
 /* One line per level every LOG_PERIOD_MS while connected, so the host log
@@ -592,177 +601,177 @@ static r2s_status_t publish_log_text(uint32_t value)
 
 static void emit_log_lines(void)
 {
-    R2S_LOG_DEBUG("r2s log debug");
-    R2S_LOG_INFO("r2s log info");
-    R2S_LOG_WARN("r2s log warn");
-    R2S_LOG_ERROR("r2s log error");
-    R2S_LOG_FATAL("r2s log fatal");
+  R2S_LOG_DEBUG("r2s log debug");
+  R2S_LOG_INFO("r2s log info");
+  R2S_LOG_WARN("r2s log warn");
+  R2S_LOG_ERROR("r2s log error");
+  R2S_LOG_FATAL("r2s log fatal");
 }
 
 static void sleep_1ms(void)
 {
-    const struct timespec req = {0, 1000000L};
+  const struct timespec req = {0, 1000000L};
 
-    (void)nanosleep(&req, NULL);
+  (void)nanosleep(&req, NULL);
 }
 
 static void publish_time_now(void)
 {
     /* The MCU's ROS time for the host to check: unsynced time reads zero,
      * so the caller only publishes once a correction anchors the clock. */
-    builtin_interfaces__msg__Time stamp;
-    r2s_time_t now = r2s_now();
+  builtin_interfaces__msg__Time stamp;
+  r2s_time_t now = r2s_now();
 
-    stamp.sec = now.sec;
-    stamp.nanosec = now.nanosec;
-    (void)r2s_publish_time_now(&stamp);
+  stamp.sec = now.sec;
+  stamp.nanosec = now.nanosec;
+  (void)r2s_publish_time_now(&stamp);
 }
 
 int main(int argc, char **argv)
 {
-    struct options opts;
-    r2s_topic_t topics[R2S_TOPIC_COUNT];
-    uint8_t count;
-    uint32_t interval;
-    uint32_t last_pub;
-    uint32_t last_time;
-    uint32_t last_log = 0u;
-    uint32_t last_flood = 0u;
-    uint32_t sent = 0u;
-    uint32_t busy = 0u;
-    uint8_t log_booted = 0u;
-    uint8_t cap_armed = 0u;
+  struct options opts;
+  r2s_topic_t topics[R2S_TOPIC_COUNT];
+  uint8_t count;
+  uint32_t interval;
+  uint32_t last_pub;
+  uint32_t last_time;
+  uint32_t last_log = 0u;
+  uint32_t last_flood = 0u;
+  uint32_t sent = 0u;
+  uint32_t busy = 0u;
+  uint8_t log_booted = 0u;
+  uint8_t cap_armed = 0u;
 
-    setvbuf(stderr, NULL, _IONBF, 0);
-    if (argc < 2) {
-        usage(stderr);
-        return 2;
-    }
-    if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
-        usage(stdout);
-        return 0;
-    }
-    parse_options(argc, argv, &opts);
-    r2s_posix_set_tick_skew_ppm(opts.skew_ppm);
-    if (r2s_posix_open(opts.port) < 0) {
-        fprintf(stderr, "r2s_posix: cannot open '%s': %s\n", opts.port, strerror(errno));
-        return 1;
-    }
-    count = fill_topics(&opts, topics);
+  setvbuf(stderr, NULL, _IONBF, 0);
+  if (argc < 2) {
+    usage(stderr);
+    return 2;
+  }
+  if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
+    usage(stdout);
+    return 0;
+  }
+  parse_options(argc, argv, &opts);
+  r2s_posix_set_tick_skew_ppm(opts.skew_ppm);
+  if (r2s_posix_open(opts.port) < 0) {
+    fprintf(stderr, "r2s_posix: cannot open '%s': %s\n", opts.port, strerror(errno));
+    return 1;
+  }
+  count = fill_topics(&opts, topics);
     /* A stack table renamed at launch: RAM, so the runtime entry point. */
-    if (r2s_session_configure_ram(opts.node, topics, count) != R2S_OK) {
-        fprintf(stderr, "r2s_posix: cannot configure node '%s'\n", opts.node);
-        return 2;
-    }
+  if (r2s_session_configure_ram(opts.node, topics, count) != R2S_OK) {
+    fprintf(stderr, "r2s_posix: cannot configure node '%s'\n", opts.node);
+    return 2;
+  }
     /* The parameter table the bridge walks after the topics. */
-    if (r2s_posix_params_init() != 0) {
-        fprintf(stderr, "r2s_posix: cannot configure parameters\n");
-        return 2;
-    }
+  if (r2s_posix_params_init() != 0) {
+    fprintf(stderr, "r2s_posix: cannot configure parameters\n");
+    return 2;
+  }
     /* The service table the bridge walks after the parameters. */
-    if (r2s_services_configure(r2s_services, R2S_SERVICE_COUNT) != R2S_OK) {
-        fprintf(stderr, "r2s_posix: cannot configure services\n");
-        return 2;
-    }
-    r2s_init();
-    fprintf(stderr, "r2s_posix: ready node=%s topics=%u rate=%u\n", opts.node, count, opts.rate);
-    interval = (uint32_t)(1000u / opts.rate);
-    last_pub = r2s_port_tick();
-    last_time = last_pub;
-    for (;;) {
-        uint32_t now;
+  if (r2s_services_configure(r2s_services, R2S_SERVICE_COUNT) != R2S_OK) {
+    fprintf(stderr, "r2s_posix: cannot configure services\n");
+    return 2;
+  }
+  r2s_init();
+  fprintf(stderr, "r2s_posix: ready node=%s topics=%u rate=%u\n", opts.node, count, opts.rate);
+  interval = (uint32_t)(1000u / opts.rate);
+  last_pub = r2s_port_tick();
+  last_time = last_pub;
+  for (;; ) {
+    uint32_t now;
 
-        r2s_spin_some();
-        now = r2s_port_tick();
-        if (r2s_connected() == 0u) {
+    r2s_spin_some();
+    now = r2s_port_tick();
+    if (r2s_connected() == 0u) {
             /* Offline there are no samples, so the clock resyncs instead of
              * queueing a burst for the reconnect. */
-            last_pub = now;
-            last_time = now;
-            service_reset_link();
-            if (cap_armed != 0u) {
-                cap_armed = 0u;
-                r2s_posix_set_tx_cap(0xFFFFu);
-            }
-            sleep_1ms();
-            continue;
-        }
-        if (opts.tx_cap != 0xFFFFu && cap_armed == 0u) {
+      last_pub = now;
+      last_time = now;
+      service_reset_link();
+      if (cap_armed != 0u) {
+        cap_armed = 0u;
+        r2s_posix_set_tx_cap(0xFFFFu);
+      }
+      sleep_1ms();
+      continue;
+    }
+    if (opts.tx_cap != 0xFFFFu && cap_armed == 0u) {
             /* The cap shapes steady-state traffic only: the handshake above
              * ran uncapped, so its longer frames always fit. */
-            r2s_posix_set_tx_cap(opts.tx_cap);
-            cap_armed = 1u;
-        }
+      r2s_posix_set_tx_cap(opts.tx_cap);
+      cap_armed = 1u;
+    }
         /* Applied SETs print here, so the suite reads the live values. */
-        r2s_posix_params_report();
-        service_tick();
-        if (opts.log_lines != 0u && (uint32_t)(now - last_log) >= LOG_PERIOD_MS) {
-            emit_log_lines();
-            last_log = now;
-        }
-        if (opts.log_text != NULL && log_booted == 0u) {
+    r2s_posix_params_report();
+    service_tick();
+    if (opts.log_lines != 0u && (uint32_t)(now - last_log) >= LOG_PERIOD_MS) {
+      emit_log_lines();
+      last_log = now;
+    }
+    if (opts.log_text != NULL && log_booted == 0u) {
             /* A boot line that fails to publish is retried until it sends.
              * It carries the assigned session token, so the host sees what
              * the firmware stored. */
-            if (publish_log_text(r2s_session_token()) == R2S_OK) {
-                log_booted = 1u;
-            }
-        }
-        if (opts.pub != NULL) {
-            if (opts.flood != 0u) {
+      if (publish_log_text(r2s_session_token()) == R2S_OK) {
+        log_booted = 1u;
+      }
+    }
+    if (opts.pub != NULL) {
+      if (opts.flood != 0u) {
                 /* Saturate the link: publish until the port refuses, one
                  * sample per attempt so the shed samples show as gaps in
                  * the received values. Bounded per pass, so a build that
                  * never refuses still returns to its tick. */
-                uint16_t n;
+        uint16_t n;
 
-                for (n = 0u; n < FLOOD_MAX_PER_PASS; n++) {
-                    std_msgs__msg__Float32 msg;
-                    r2s_status_t st;
+        for (n = 0u; n < FLOOD_MAX_PER_PASS; n++) {
+          std_msgs__msg__Float32 msg;
+          r2s_status_t st;
 
-                    msg.data = (float)sent;
-                    sent++;
-                    st = r2s_publish_battery(&msg);
-                    if (st == R2S_OK) {
-                        continue;
-                    }
-                    if (st == R2S_ERR_TX_BUSY) {
-                        busy++;
-                    }
-                    break;
-                }
-                if ((uint32_t)(now - last_flood) >= FLOOD_REPORT_MS) {
-                    fprintf(stderr, "r2s_posix: flood sent=%lu busy=%lu\n", (unsigned long)sent,
-                            (unsigned long)busy);
-                    last_flood = now;
-                }
-            } else {
+          msg.data = (float)sent;
+          sent++;
+          st = r2s_publish_battery(&msg);
+          if (st == R2S_OK) {
+            continue;
+          }
+          if (st == R2S_ERR_TX_BUSY) {
+            busy++;
+          }
+          break;
+        }
+        if ((uint32_t)(now - last_flood) >= FLOOD_REPORT_MS) {
+          fprintf(stderr, "r2s_posix: flood sent=%lu busy=%lu\n", (unsigned long)sent,
+            (unsigned long)busy);
+          last_flood = now;
+        }
+      } else {
                 /* Every missed tick is still owed: one frame per missed interval
                  * keeps the count whole when the host steals the firmware tick. */
-                while ((uint32_t)(now - last_pub) >= interval) {
-                    std_msgs__msg__Float32 msg;
+        while ((uint32_t)(now - last_pub) >= interval) {
+          std_msgs__msg__Float32 msg;
 
-                    msg.data = (float)sent;
-                    if (r2s_publish_battery(&msg) != R2S_OK) {
-                        break;
-                    }
-                    sent++;
-                    last_pub += interval;
-                    if (opts.log_text != NULL && sent % 10u == 0u) {
-                        (void)publish_log_text(sent);
-                    }
-                }
-            }
+          msg.data = (float)sent;
+          if (r2s_publish_battery(&msg) != R2S_OK) {
+            break;
+          }
+          sent++;
+          last_pub += interval;
+          if (opts.log_text != NULL && sent % 10u == 0u) {
+            (void)publish_log_text(sent);
+          }
         }
-        if (opts.time_now != NULL && r2s_time_synced() != 0u) {
+      }
+    }
+    if (opts.time_now != NULL && r2s_time_synced() != 0u) {
             /* One stamp per interval, no catch-up: a stalled link skips
              * samples the host would read as the past. */
-            if ((uint32_t)(now - last_time) >= interval) {
-                publish_time_now();
-                last_time = now;
-            }
-        }
-        sleep_1ms();
+      if ((uint32_t)(now - last_time) >= interval) {
+        publish_time_now();
+        last_time = now;
+      }
     }
-    return 0;
+    sleep_1ms();
+  }
+  return 0;
 }

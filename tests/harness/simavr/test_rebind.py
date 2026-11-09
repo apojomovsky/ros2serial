@@ -15,22 +15,24 @@ covers: SES-1, SES-2, CTL-4, CTL-12, CTL-15, CTL-16
 import pytest
 import serial
 from r2s_gen.reference import frames
-from test_announce import drain, read_string, read_unit
+from test_announce import drain
+from test_announce import read_string
+from test_announce import read_unit
 from test_echo import Harness
 
-NODE_NAME = "rebind"
+NODE_NAME = 'rebind'
 PROTOCOL_VERSION = 4
 READY_TOKEN = 0x2A
 FLASH_TOPICS = (
-    (16, 0x00, bytes(range(0x00, 0x08)), "std_msgs/msg/Float32", "battery"),
-    (17, 0x01, bytes(range(0x10, 0x18)), "geometry_msgs/msg/Twist", "cmd_vel"),
+    (16, 0x00, bytes(range(0x00, 0x08)), 'std_msgs/msg/Float32', 'battery'),
+    (17, 0x01, bytes(range(0x10, 0x18)), 'geometry_msgs/msg/Twist', 'cmd_vel'),
 )
-RAM_TOPICS = ((18, 0x01, bytes(range(0x20, 0x28)), "geometry_msgs/msg/Twist", "rebound"),)
+RAM_TOPICS = ((18, 0x01, bytes(range(0x20, 0x28)), 'geometry_msgs/msg/Twist', 'rebound'),)
 TRIGGER_TOPIC_ID = 17
 
 # Simulated time outruns the wall clock unpaced, so the run limit is generous:
 # the tests stop the harness themselves long before it expires.
-RUN_MS = ("--run-ms", "60000")
+RUN_MS = ('--run-ms', '60000')
 
 
 def solicit_hello(port, seq, want_count, want_token):
@@ -41,7 +43,7 @@ def solicit_hello(port, seq, want_count, want_token):
     assert payload[0] == 0x02  # OP_HELLO
     assert payload[1] == PROTOCOL_VERSION
     assert payload[2] == 0x00  # full handshake mode
-    assert int.from_bytes(payload[3:7], "little") == want_token
+    assert int.from_bytes(payload[3:7], 'little') == want_token
     assert payload[16] == want_count
     name, _ = read_string(payload, 17)
     assert name == NODE_NAME
@@ -82,9 +84,9 @@ def complete_handshake(port, seq=0):
     return next_seq + 1
 
 
-@pytest.mark.parametrize("mcu", ["atmega328p", "atmega2560"])
+@pytest.mark.parametrize('mcu', ['atmega328p', 'atmega2560'])
 def test_a_trigger_frame_rebinds_the_ram_table(mcu):
-    with Harness(mcu, *RUN_MS, image="rebind") as harness:
+    with Harness(mcu, *RUN_MS, image='rebind') as harness:
         with serial.Serial(harness.pty, 115200, timeout=2) as port:
             drain(port)
             next_seq = complete_handshake(port)
@@ -96,7 +98,7 @@ def test_a_trigger_frame_rebinds_the_ram_table(mcu):
 
 
 def test_an_out_of_range_request_after_the_rebind_still_answers():
-    with Harness("atmega328p", *RUN_MS, image="rebind") as harness:
+    with Harness('atmega328p', *RUN_MS, image='rebind') as harness:
         with serial.Serial(harness.pty, 115200, timeout=2) as port:
             drain(port)
             next_seq = complete_handshake(port)

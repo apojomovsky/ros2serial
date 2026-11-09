@@ -8,9 +8,9 @@ import pytest
 @pytest.mark.linter
 @pytest.mark.xmllint
 def test_xmllint():
-    if os.environ.get("R2S_AMENT_LINT") != "1":
-        pytest.skip("the ament linters run only in the advisory CI job")
+    if os.environ.get('R2S_AMENT_LINT') != '1':
+        pytest.skip('the ament linters run only in the advisory CI job')
     from ament_xmllint.main import main
 
     rc = main(argv=[])
-    assert rc == 0, "Found errors"
+    assert rc == 0, 'Found errors'

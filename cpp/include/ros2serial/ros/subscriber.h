@@ -16,111 +16,121 @@ namespace ros
 /* Member-function subscriber. Decodes into its own store, as ros_lib does,
  * then calls the object. No virtuals: subscribe() takes the concrete type,
  * so the layer never erases it. */
-template <typename MsgT, typename ObjT = void> class Subscriber
+template<typename MsgT, typename ObjT = void>
+class Subscriber
 {
-  public:
-    typedef void (ObjT::*CallbackT)(const MsgT &);
-    MsgT msg;
+public:
+  typedef void (ObjT::*CallbackT)(const MsgT &);
+  MsgT msg;
 
     /* Keeps the topic and the callback. The endpoint rides along for
      * sketches written against ros_lib and changes nothing announced; the
      * default is ros_lib's subscriber endpoint. */
-    Subscriber(const char *topic, CallbackT cb, ObjT *obj, int endpoint = 1)
-        : topic_(topic), id_(-1), m_callback(cb), m_object(obj), m_endpoint(endpoint)
-    {
-    }
+  Subscriber(const char *topic, CallbackT cb, ObjT *obj, int endpoint = 1)
+  : topic_(topic), id_(-1), m_callback(cb), m_object(obj), m_endpoint(endpoint)
+  {
+  }
 
-    int getEndpointType()
-    {
-        return m_endpoint;
-    }
+  int getEndpointType()
+  {
+    return m_endpoint;
+  }
 
-    const char *topic_;
+  const char *topic_;
     /* Set by NodeHandle when it subscribes; -1 until then. */
-    int id_;
+  int id_;
 
     /* Decodes the frame into the subscriber's store and calls it. Passed to
      * the registry, which keeps the subscriber's address as the record, so
      * the subscriber must outlive the spinning node. A bound violation
      * reports the field like the runtime path, then drops the message. */
-    static void dispatch(void *record, const uint8_t *payload, uint16_t len, uint8_t narrow, uint8_t topic)
+  static void dispatch(
+    void *record, const uint8_t *payload, uint16_t len, uint8_t narrow,
+    uint8_t topic)
+  {
+    Subscriber *self = static_cast<Subscriber *>(record);
+    uint8_t field = 0xFFu;
+
+    switch (r2s_codec_decode(r2s::msg_traits<MsgT>::table(), r2s::msg_traits<MsgT>::type_index(),
+        payload,
+                                 len, narrow, &self->msg, &field))
     {
-        Subscriber *self = static_cast<Subscriber *>(record);
-        uint8_t field = 0xFFu;
-
-        switch (r2s_codec_decode(r2s::msg_traits<MsgT>::table(), r2s::msg_traits<MsgT>::type_index(), payload,
-                                 len, narrow, &self->msg, &field)) {
-        case R2S_OK:
-            break;
-        case R2S_ERR_BOUNDS:
-            r2s_error_note(R2S_ERROR_BOUND, topic, field, 1u);
-            r2s_framer_count_refused();
-            return;
-        default:
-            r2s_framer_count_refused();
-            return;
-        }
-        (self->m_object->*self->m_callback)(self->msg);
+      case R2S_OK:
+        break;
+      case R2S_ERR_BOUNDS:
+        r2s_error_note(R2S_ERROR_BOUND, topic, field, 1u);
+        r2s_framer_count_refused();
+        return;
+      default:
+        r2s_framer_count_refused();
+        return;
     }
+    (self->m_object->*self->m_callback)(self->msg);
+  }
 
-  private:
-    CallbackT m_callback;
-    ObjT *m_object;
-    int m_endpoint;
+private:
+  CallbackT m_callback;
+  ObjT *m_object;
+  int m_endpoint;
 };
 
 /* Standalone-function subscriber. A capture-less lambda converts to the
  * function pointer the constructor takes. */
-template <typename MsgT> class Subscriber<MsgT, void>
+template<typename MsgT>
+class Subscriber<MsgT, void>
 {
-  public:
-    typedef void (*CallbackT)(const MsgT &);
-    MsgT msg;
+public:
+  typedef void (*CallbackT)(const MsgT &);
+  MsgT msg;
 
     /* Keeps the topic and the callback. The endpoint rides along for
      * sketches written against ros_lib and changes nothing announced; the
      * default is ros_lib's subscriber endpoint. */
-    Subscriber(const char *topic, CallbackT cb, int endpoint = 1)
-        : topic_(topic), id_(-1), m_callback(cb), m_endpoint(endpoint)
-    {
-    }
+  Subscriber(const char *topic, CallbackT cb, int endpoint = 1)
+  : topic_(topic), id_(-1), m_callback(cb), m_endpoint(endpoint)
+  {
+  }
 
-    int getEndpointType()
-    {
-        return m_endpoint;
-    }
+  int getEndpointType()
+  {
+    return m_endpoint;
+  }
 
-    const char *topic_;
+  const char *topic_;
     /* Set by NodeHandle when it subscribes; -1 until then. */
-    int id_;
+  int id_;
 
     /* Decodes the frame into the subscriber's store and calls it. Passed to
      * the registry, which keeps the subscriber's address as the record, so
      * the subscriber must outlive the spinning node. A bound violation
      * reports the field like the runtime path, then drops the message. */
-    static void dispatch(void *record, const uint8_t *payload, uint16_t len, uint8_t narrow, uint8_t topic)
+  static void dispatch(
+    void *record, const uint8_t *payload, uint16_t len, uint8_t narrow,
+    uint8_t topic)
+  {
+    Subscriber *self = static_cast<Subscriber *>(record);
+    uint8_t field = 0xFFu;
+
+    switch (r2s_codec_decode(r2s::msg_traits<MsgT>::table(), r2s::msg_traits<MsgT>::type_index(),
+        payload,
+                                 len, narrow, &self->msg, &field))
     {
-        Subscriber *self = static_cast<Subscriber *>(record);
-        uint8_t field = 0xFFu;
-
-        switch (r2s_codec_decode(r2s::msg_traits<MsgT>::table(), r2s::msg_traits<MsgT>::type_index(), payload,
-                                 len, narrow, &self->msg, &field)) {
-        case R2S_OK:
-            break;
-        case R2S_ERR_BOUNDS:
-            r2s_error_note(R2S_ERROR_BOUND, topic, field, 1u);
-            r2s_framer_count_refused();
-            return;
-        default:
-            r2s_framer_count_refused();
-            return;
-        }
-        self->m_callback(self->msg);
+      case R2S_OK:
+        break;
+      case R2S_ERR_BOUNDS:
+        r2s_error_note(R2S_ERROR_BOUND, topic, field, 1u);
+        r2s_framer_count_refused();
+        return;
+      default:
+        r2s_framer_count_refused();
+        return;
     }
+    self->m_callback(self->msg);
+  }
 
-  private:
-    CallbackT m_callback;
-    int m_endpoint;
+private:
+  CallbackT m_callback;
+  int m_endpoint;
 };
 
 } // namespace ros

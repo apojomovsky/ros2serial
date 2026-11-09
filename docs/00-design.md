@@ -507,11 +507,11 @@ The bridge creates its publishers and subscriptions under the names the MCU anno
 
 ```python
 Node(
-    package="r2s_bridge",
-    executable="bridge",
-    namespace="robot1",
-    parameters=[{"port": "/dev/ttyACM0", "baud": 115200}],
-    remappings=[("battery", "power/battery")],
+    package='r2s_bridge',
+    executable='bridge',
+    namespace='robot1',
+    parameters=[{'port': '/dev/ttyACM0', 'baud': 115200}],
+    remappings=[('battery', 'power/battery')],
 )
 ```
 
@@ -737,7 +737,7 @@ ros2serial/
 │   └── harness/              simavr UART-to-pty harness, fault-injecting pty proxy
 ├── tools/                    size_report.py, stack_report.py, budgets.yaml, vectors_check.py, zone_check.py
 ├── scratch/                  gitignored per-ticket experiments; nothing ships
-├── docs/                     user documentation (later the docs site)
+├── docs/                     user documentation (published as the docs site)
 └── .github/workflows/
 ```
 
@@ -749,7 +749,7 @@ ros2serial/
 
 | Area | Convention |
 | --- | --- |
-| C (core) | C99, `-std=c99 -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow`, `clang-format` (config in repo), `stdint.h` types only, no `int`/`long` in interfaces, no 64-bit types, no function pointers, no recursion, no malloc, no VLAs, no float arithmetic, no `printf` |
+| C (core) | C99, `-std=c99 -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow`, `uncrustify` (ament style, config in repo), `stdint.h` types only, no `int`/`long` in interfaces, no 64-bit types, no function pointers, no recursion, no malloc, no VLAs, no float arithmetic, no `printf` |
 | C++ (MCU layer) | C++11, the epic-cc subset (see Part I), `-fno-exceptions -fno-rtti`, no virtuals, stored callbacks only under `R2S_WITH_RUNTIME_TOPICS` |
 | Zone boundary | `tools/zone_check.py` fails CI if anything under `core/` includes from `cpp/`, uses a function pointer type, or calls a float operation (checked on the object files) |
 | C++ (bridge) | C++17 (Jazzy's baseline), `ament_lint_auto` (cpplint, uncrustify, cppcheck), ROS 2 style |
