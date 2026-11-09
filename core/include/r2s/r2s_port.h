@@ -57,13 +57,13 @@ uint32_t r2s_port_tick_link(uint8_t link);
  * framer names link 0, which these forward to the port. */
 static inline uint16_t r2s_port_read_link(uint8_t link, uint8_t *buf, uint16_t max)
 {
-    (void)link;
-    return r2s_port_read(buf, max);
+  (void)link;
+  return r2s_port_read(buf, max);
 }
 static inline uint32_t r2s_port_tick_link(uint8_t link)
 {
-    (void)link;
-    return r2s_port_tick();
+  (void)link;
+  return r2s_port_tick();
 }
 #endif
 

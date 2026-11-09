@@ -1,5 +1,9 @@
-"""r2s-gen: the ros2serial code generator, from message definitions and a config to firmware sources."""
+"""r2s-gen: the ros2serial code generator.
 
-from r2s_gen.version import PROTOCOL_VERSION, __version__
+From message definitions and a config to firmware sources.
+"""
 
-__all__ = ["PROTOCOL_VERSION", "__version__"]
+from r2s_gen.version import PROTOCOL_VERSION
+from r2s_gen.version import __version__
+
+__all__ = ['PROTOCOL_VERSION', '__version__']

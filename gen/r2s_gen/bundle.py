@@ -15,56 +15,64 @@ import hashlib
 import sys
 from collections.abc import Mapping
 
-from r2s_gen import bounds, cpp, descriptors, emit, layouts, msgs, static_api, topics, typehash
+from r2s_gen import bounds
+from r2s_gen import cpp
+from r2s_gen import descriptors
+from r2s_gen import emit
+from r2s_gen import layouts
+from r2s_gen import msgs
+from r2s_gen import static_api
+from r2s_gen import topics
+from r2s_gen import typehash
 from r2s_gen.bounds import ResolvedMessage
 from r2s_gen.msgs import MessageError
 from r2s_gen.version import __version__
 
 BUNDLED_TYPES = (
-    "builtin_interfaces/msg/Time",
-    "geometry_msgs/msg/Quaternion",
-    "geometry_msgs/msg/Transform",
-    "geometry_msgs/msg/TransformStamped",
-    "geometry_msgs/msg/Twist",
-    "geometry_msgs/msg/Vector3",
-    "sensor_msgs/msg/Imu",
-    "sensor_msgs/msg/JointState",
-    "sensor_msgs/msg/Range",
-    "std_msgs/msg/Bool",
-    "std_msgs/msg/Float32",
-    "std_msgs/msg/Header",
-    "std_msgs/msg/String",
-    "tf2_msgs/msg/TFMessage",
+    'builtin_interfaces/msg/Time',
+    'geometry_msgs/msg/Quaternion',
+    'geometry_msgs/msg/Transform',
+    'geometry_msgs/msg/TransformStamped',
+    'geometry_msgs/msg/Twist',
+    'geometry_msgs/msg/Vector3',
+    'sensor_msgs/msg/Imu',
+    'sensor_msgs/msg/JointState',
+    'sensor_msgs/msg/Range',
+    'std_msgs/msg/Bool',
+    'std_msgs/msg/Float32',
+    'std_msgs/msg/Header',
+    'std_msgs/msg/String',
+    'tf2_msgs/msg/TFMessage',
 )
 
 BUNDLE_BOUNDS = {
-    "std_msgs/msg/Header.frame_id": 16,
-    "geometry_msgs/msg/TransformStamped.child_frame_id": 16,
-    "sensor_msgs/msg/JointState.name": [6, 16],
-    "sensor_msgs/msg/JointState.position": 6,
-    "sensor_msgs/msg/JointState.velocity": 6,
-    "sensor_msgs/msg/JointState.effort": 6,
-    "tf2_msgs/msg/TFMessage.transforms": 1,
+    'std_msgs/msg/Header.frame_id': 16,
+    'geometry_msgs/msg/TransformStamped.child_frame_id': 16,
+    'sensor_msgs/msg/JointState.name': [6, 16],
+    'sensor_msgs/msg/JointState.position': 6,
+    'sensor_msgs/msg/JointState.velocity': 6,
+    'sensor_msgs/msg/JointState.effort': 6,
+    'tf2_msgs/msg/TFMessage.transforms': 1,
 }
 DEFAULT_STRING_BOUND = 16
-DISTROS = ("jazzy", "lyrical", "rolling")
+DISTROS = ('jazzy', 'lyrical', 'rolling')
 
 # Node and topic names the bundle frame covers; longer names fail configure
 # with the bounds error instead of sending a frame the firmware cannot hold.
 NAME_ALLOWANCE = 31
 
 _FILES = (
-    "library.properties",
-    "src/ros2serial.h",
-    "src/ros2serial.hpp",
-    "src/r2s_bundled.h",
-    "src/r2s_bundled.c",
+    'library.properties',
+    'src/ros2serial.h',
+    'src/ros2serial.hpp',
+    'src/r2s_bundled.h',
+    'src/r2s_bundled.c',
 )
 
 # The C++ message headers the library ships: one per bundled type, at the
 # rclcpp include path. The C++ runtime layer's own files are not here: they
 # live in the repository's cpp/ tree and the build stages them.
-_CPP_HEADERS = tuple(f"src/{cpp.message_path(name)}" for name in BUNDLED_TYPES)
+_CPP_HEADERS = tuple(f'src/{cpp.message_path(name)}' for name in BUNDLED_TYPES)
 
 
 def files_for() -> tuple[str, ...]:
@@ -74,64 +82,71 @@ def files_for() -> tuple[str, ...]:
 
 def _cname(type_name: str) -> str:
     """A canonical type as the bundle's suffix: `std_msgs/msg/Float32` to `std_msgs_Float32`."""
-    package, _, name = type_name.partition("/msg/")
-    return f"{package}_{name}"
+    package, _, name = type_name.partition('/msg/')
+    return f'{package}_{name}'
 
 
 def _digest(distro: str) -> str:
     """16 hex characters over the distro, the bundled types and their bounds."""
     lines = [distro, *BUNDLED_TYPES]
-    lines += [f"{key} {BUNDLE_BOUNDS[key]}" for key in sorted(BUNDLE_BOUNDS)]
+    lines += [f'{key} {BUNDLE_BOUNDS[key]}' for key in sorted(BUNDLE_BOUNDS)]
     lines.append(str(DEFAULT_STRING_BOUND))
-    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256('\n'.join(lines).encode('utf-8')).hexdigest()[:16]
 
 
-def bundle(distro: str = "jazzy") -> dict[str, str]:
+def bundle(distro: str = 'jazzy') -> dict[str, str]:
     """The library's files for `distro`: metadata, the sketch header and the bundled pair."""
     if distro not in DISTROS:
-        raise MessageError("--distro", f"unknown distro '{distro}'", "use one of: jazzy, lyrical, rolling")
+        raise MessageError(
+            '--distro', f"unknown distro '{distro}'", 'use one of: jazzy, lyrical, rolling'
+        )
     repository = msgs.MessageRepository(distro=distro)
     resolved = bounds.resolve(
-        repository, list(BUNDLED_TYPES), bounds=dict(BUNDLE_BOUNDS), default_string_bound=DEFAULT_STRING_BOUND
+        repository,
+        list(BUNDLED_TYPES),
+        bounds=dict(BUNDLE_BOUNDS),
+        default_string_bound=DEFAULT_STRING_BOUND,
     )
     tables = {name: descriptors.build(resolved, [name]) for name in BUNDLED_TYPES}
     digest = _digest(distro)
     max_nest = max(table.max_nest for table in tables.values())
     files = {
-        "library.properties": _library_properties(distro),
-        "src/ros2serial.h": _sketch_h(tables, repository, distro),
-        "src/ros2serial.hpp": static_api.emit(distro),
-        "src/r2s_bundled.h": _bundled_h(resolved, tables, repository, distro, digest, max_nest),
-        "src/r2s_bundled.c": _bundled_c(resolved, tables, distro),
+        'library.properties': _library_properties(distro),
+        'src/ros2serial.h': _sketch_h(tables, repository, distro),
+        'src/ros2serial.hpp': static_api.emit(distro),
+        'src/r2s_bundled.h': _bundled_h(resolved, tables, repository, distro, digest, max_nest),
+        'src/r2s_bundled.c': _bundled_c(resolved, tables, distro),
     }
     for name in BUNDLED_TYPES:
-        files[f"src/{cpp.message_path(name)}"] = cpp.emit_message_hpp(
+        files[f'src/{cpp.message_path(name)}'] = cpp.emit_message_hpp(
             resolved, name, repository=repository, distro=distro
         )
     return files
 
 
 def _banner(prefix: str, distro: str) -> str:
-    return f"{prefix} Generated by r2s-gen {__version__} from bundle (distro {distro}); do not edit."
+    return (
+        f'{prefix} Generated by r2s-gen {__version__} from bundle (distro {distro}); do not edit.'
+    )
 
 
 def _library_properties(distro: str) -> str:
     """The Arduino library metadata for the bundle, AVR and ESP32."""
     lines = [
-        _banner("#", distro),
-        "name=ros2serial",
-        f"version={__version__}",
-        "author=ros2serial contributors",
-        "maintainer=ros2serial contributors",
-        "sentence=ros2serial firmware library with bundled common types",
-        "paragraph=Bundled by r2s-gen; pairs with the ros2serial bridge over a serial link.",
-        "category=Communication",
-        "url=https://github.com/apojomovsky/ros2serial",
-        "architectures=avr,esp32",
-        "includes=ros2serial.h",
-        "",
+        _banner('#', distro),
+        'name=ros2serial',
+        f'version={__version__}',
+        'author=ros2serial contributors',
+        'maintainer=ros2serial contributors',
+        'sentence=ros2serial firmware library with bundled common types',
+        'paragraph=Bundled by r2s-gen; pairs with the ros2serial bridge over a serial link.',
+        'category=Communication',
+        'url=https://github.com/apojomovsky/ros2serial',
+        'architectures=avr,esp32',
+        'includes=ros2serial.h',
+        '',
     ]
-    return "\n".join(lines)
+    return '\n'.join(lines)
 
 
 def _max_frame(resolved: Mapping[str, ResolvedMessage]) -> int:
@@ -139,9 +154,13 @@ def _max_frame(resolved: Mapping[str, ResolvedMessage]) -> int:
     # The generator's own wire-size formula, so the bundle limit matches a
     # generated firmware's for the same payloads.
     memo: dict = {}
-    payload = max(topics._payload(resolved, name, narrow, memo) for name in BUNDLED_TYPES for narrow in (False, True))
+    payload = max(
+        topics._payload(resolved, name, narrow, memo)
+        for name in BUNDLED_TYPES
+        for narrow in (False, True)
+    )
     largest_type = max(topics._string_wire(name) for name in BUNDLED_TYPES)
-    allowance = topics._string_wire("x" * NAME_ALLOWANCE)
+    allowance = topics._string_wire('x' * NAME_ALLOWANCE)
     announced = 12 + largest_type + allowance
     hello = 17 + allowance
     return max(payload, announced, hello) + topics.FRAME_OVERHEAD
@@ -150,7 +169,7 @@ def _max_frame(resolved: Mapping[str, ResolvedMessage]) -> int:
 def _hash_bytes(repository: msgs.MessageRepository, type_name: str) -> str:
     """The first 8 bytes of the type's RIHS01 hash, as CTL-12 carries them."""
     digest = typehash.type_hash(repository, type_name)
-    return ", ".join(f"0x{byte:02x}u" for byte in bytes.fromhex(digest[len("RIHS01_") :])[:8])
+    return ', '.join(f'0x{byte:02x}u' for byte in bytes.fromhex(digest[len('RIHS01_') :])[:8])
 
 
 def _bundled_h(
@@ -163,44 +182,45 @@ def _bundled_h(
 ) -> str:
     """The bundled header: structs, the limits, and the per-type index, table and hash."""
     structs = emit.emit_types(resolved, max_nest)
-    guard = "R2S_GENERATED_H"
+    guard = 'R2S_GENERATED_H'
     assert structs.count(guard) == 2
-    header = structs.replace(guard, "R2S_BUNDLED_H")
+    header = structs.replace(guard, 'R2S_BUNDLED_H')
     lines = header.splitlines()
-    assert lines[0].startswith("/* Generated by r2s-gen ")
-    lines[0] = _banner("/*", distro) + " */"
-    at = lines.index("#define R2S_BUNDLED_H") + 1
+    assert lines[0].startswith('/* Generated by r2s-gen ')
+    lines[0] = _banner('/*', distro) + ' */'
+    at = lines.index('#define R2S_BUNDLED_H') + 1
     lines[at:at] = [
-        "",
+        '',
         "/* The bundle's content hash, kept in this one place so adding a type",
-        " * or bound does not rewrite every generated banner. */",
+        ' * or bound does not rewrite every generated banner. */',
         f'#define R2S_BUNDLE_HASH "{digest}"',
     ]
-    header = "\n".join(lines)
+    header = '\n'.join(lines)
     section = [
         "/* The bundle's frame limit: the largest payload any bundled type encodes,",
-        " * in either float64 width, plus headroom for the hello and announce frames",
-        " * of node and topic names to 31 characters. A longer name fails configure",
-        " * with the bounds error instead of announcing a frame the firmware drops. */",
-        "#ifndef R2S_MAX_FRAME",
-        f"#define R2S_MAX_FRAME {_max_frame(resolved)}u",
-        "#endif",
-        "",
+        ' * in either float64 width, plus headroom for the hello and announce frames',
+        ' * of node and topic names to 31 characters. A longer name fails configure',
+        ' * with the bounds error instead of announcing a frame the firmware drops. */',
+        '#ifndef R2S_MAX_FRAME',
+        f'#define R2S_MAX_FRAME {_max_frame(resolved)}u',
+        '#endif',
+        '',
     ]
     for name in BUNDLED_TYPES:
         cname = _cname(name)
         index = tables[name].index_of[name]
         section += [
-            f"/* Bundle index, table and hash of {name}: the sketch header maps each",
-            " * row to these facts through its package scope maps, so an unknown type fails naming the row. */",
-            f"#define R2S_BUNDLED_INDEX_{cname} {index}u",
-            f"#define R2S_BUNDLED_TABLE_{cname} r2s_bundled_table_{cname}",
-            f"#define R2S_BUNDLED_HASH_{cname} {_hash_bytes(repository, name)}",
-            "",
+            f'/* Bundle index, table and hash of {name}: the sketch header maps each',
+            ' * row to these facts through its package scope maps, so an unknown type fails '
+            'naming the row. */',
+            f'#define R2S_BUNDLED_INDEX_{cname} {index}u',
+            *_wrapped_define(f'#define R2S_BUNDLED_TABLE_{cname}', f'r2s_bundled_table_{cname}'),
+            *_wrapped_define(f'#define R2S_BUNDLED_HASH_{cname}', _hash_bytes(repository, name)),
+            '',
         ]
-    closing = "#endif"
+    closing = '#endif'
     assert header.endswith(closing)
-    return header[: -len(closing)] + "\n".join(section) + "\n" + closing + "\n"
+    return header[: -len(closing)] + '\n'.join(section) + '\n' + closing + '\n'
 
 
 def _bundled_c(
@@ -208,82 +228,93 @@ def _bundled_c(
     tables: Mapping[str, descriptors.DescriptorTable],
     distro: str,
 ) -> str:
-    """The bundled source: per-type records, entries and tables, so the linker drops unused types."""
+    """The bundled source.
+
+    Per-type records, entries and tables, so the linker drops unused types.
+    """
     lines = [
-        _banner("/*", distro) + " */",
+        _banner('/*', distro) + ' */',
         '#include "r2s_bundled.h"',
-        "",
+        '',
         '#include "r2s/r2s_codec.h"',
-        "#include <stddef.h>",
-        "#include <stdint.h>",
-        "",
-        "/* Type records and field entries (spec/protocol.md, section 9), one byte",
-        " * array pair per bundled type: a sketch links only the tables its topics",
-        " * name, and the linker drops the rest. Sizes and offsets come from the",
-        " * header above, so one file describes every build; multi-byte integers",
-        " * are little-endian (DSC-4). */",
-        "",
-        "#define R2S_U16_LO(value) ((uint8_t)((value) & 0xffu))",
-        "#define R2S_U16_HI(value) ((uint8_t)(((value) >> 8) & 0xffu))",
-        "",
-        "/* A type fits its record when its struct holds in 16 bits (DSC-22), and a field",
-        " * lies inside its type when its storage ends at or before the struct end",
-        " * (DSC-48). The sums run in 32 bits so they cannot wrap (DSC-21). */",
-        "#define R2S_SIZE_CHECK(type) typedef char r2s_dsc22_size_check_##type[(sizeof(type) <= 0xffffu) ? 1 : -1]",
-        "",
+        '#include <stddef.h>',
+        '#include <stdint.h>',
+        '',
+        '/* Type records and field entries (spec/protocol.md, section 9), one byte',
+        ' * array pair per bundled type: a sketch links only the tables its topics',
+        ' * name, and the linker drops the rest. Sizes and offsets come from the',
+        ' * header above, so one file describes every build; multi-byte integers',
+        ' * are little-endian (DSC-4). */',
+        '',
+        '#define R2S_U16_LO(value) ((uint8_t)((value) & 0xffu))',
+        '#define R2S_U16_HI(value) ((uint8_t)(((value) >> 8) & 0xffu))',
+        '',
+        '/* A type fits its record when its struct holds in 16 bits (DSC-22), and a field',
+        ' * lies inside its type when its storage ends at or before the struct end',
+        ' * (DSC-48). The sums run in 32 bits so they cannot wrap (DSC-21). */',
+        '#define R2S_SIZE_CHECK(type) typedef char r2s_dsc22_size_check_ ## type[(sizeof(type) '
+        '<= \\',
+        '      0xffffu) ? 1 : -1]',
+        '',
         *descriptors._FIELD_CHECK_DEFINE,
-        "",
+        '',
     ]
     for name in sorted(resolved):
-        lines.append(f"R2S_SIZE_CHECK({emit._c_name(name)});")
-    lines.append("")
+        lines.append(f'R2S_SIZE_CHECK({emit._c_name(name)});')
+    lines.append('')
     for name in BUNDLED_TYPES:
         table = tables[name]
         cname = _cname(name)
-        lines.append(f"const uint8_t R2S_FLASH r2s_bundled_records_{cname}[] = {{")
+        lines.append(f'const uint8_t R2S_FLASH r2s_bundled_records_{cname}[] = {{')
         lines.extend(descriptors.record_lines(table))
-        lines.append("};")
-        lines.append("")
+        lines.append('};')
+        lines.append('')
         if table.entries:
-            lines.append(f"const uint8_t R2S_FLASH r2s_bundled_entries_{cname}[] = {{")
+            lines.append(f'const uint8_t R2S_FLASH r2s_bundled_entries_{cname}[] = {{')
             lines.extend(descriptors.entry_lines(table))
-            lines.append("};")
+            lines.append('};')
         else:
-            lines.append("/* No entries: one unread byte keeps the table symbol defined. */")
-            lines.append(f"const uint8_t R2S_FLASH r2s_bundled_entries_{cname}[1] = {{ 0x00 }};")
-        lines.append("")
-        lines.append(f"const r2s_codec_table_t r2s_bundled_table_{cname} = {{")
-        lines.append(f"    r2s_bundled_records_{cname},")
-        lines.append(f"    {len(table.records)}u,")
-        lines.append(f"    r2s_bundled_entries_{cname},")
-        lines.append(f"    {len(table.entries)}u,")
-        lines.append("};")
-        lines.append("")
+            lines.append('/* No entries: one unread byte keeps the table symbol defined. */')
+            lines.append(f'const uint8_t R2S_FLASH r2s_bundled_entries_{cname}[1] = {{ 0x00 }};')
+        lines.append('')
+        lines.append(f'const r2s_codec_table_t r2s_bundled_table_{cname} = {{')
+        lines.append(f'  r2s_bundled_records_{cname},')
+        lines.append(f'  {len(table.records)}u,')
+        lines.append(f'  r2s_bundled_entries_{cname},')
+        lines.append(f'  {len(table.entries)}u,')
+        lines.append('};')
+        lines.append('')
     seen = set()
     for name in BUNDLED_TYPES:
         for entry in tables[name].entries:
             if (entry.owner, entry.field) in seen:
                 continue
             seen.add((entry.owner, entry.field))
-            member = entry.offset.split(", ", 1)[1][:-1]
+            member = entry.offset.split(', ', 1)[1][:-1]
             if entry.mode in (2, 0x82):
-                member = f"{entry.field}.size"
-            lines.append(f"R2S_FIELD_CHECK({emit._c_name(entry.owner)}, {entry.field}, {member});")
-    lines.append("")
-    return "\n".join(lines)
-
-
-def _cont(line: str) -> str:
-    """A macro continuation line padded to the column clang-format aligns backslashes to."""
-    return line.ljust(109) + "\\"
+                member = f'{entry.field}.size'
+            lines.extend(
+                descriptors._check_lines(
+                    'R2S_FIELD_CHECK(',
+                    [emit._c_name(entry.owner), entry.field, member],
+                    ');',
+                )
+            )
+    lines.append('')
+    return '\n'.join(lines)
 
 
 def _wrapped_define(head: str, value: str) -> list[str]:
-    """A #define clang-format keeps: one line within 110 columns, otherwise
-    the name padded to the backslash column with the value on its own line."""
-    if len(f"{head} {value}") <= 110:
-        return [f"{head} {value}"]
-    return [_cont(head), f"    {value}"]
+    """A #define uncrustify keeps: a comma list rides on one line within 88
+    columns, else the whole value rides on its own line, as does any other
+    value past 100 columns."""
+    if ',' in value:
+        if len(f'{head} {value}') <= 88:
+            return [f'{head} {value}']
+        return [f'{head} \\', f'  {value}']
+    if len(f'{head} {value}') <= 100:
+        return [f'{head} {value}']
+    return [f'{head} \\', f'  {value}']
 
 
 def _scope_maps(
@@ -300,24 +331,33 @@ def _scope_maps(
     """
     by_package: dict[str, list[tuple[str, str, int]]] = {}
     for name in BUNDLED_TYPES:
-        package, _, short = name.partition("/msg/")
-        by_package.setdefault(package, []).append((short, _cname(name), tables[name].index_of[name]))
+        package, _, short = name.partition('/msg/')
+        by_package.setdefault(package, []).append(
+            (short, _cname(name), tables[name].index_of[name])
+        )
     lines = [
-        "/* One scope map per package: a row names a C++ type, which the",
-        " * preprocessor cannot split, so the row pastes the package half and",
-        " * the trailing ::msg::Type resolves the entity it needs. */",
+        '/* One scope map per package: a row names a C++ type, which the',
+        ' * preprocessor cannot split, so the row pastes the package half and',
+        ' * the trailing ::msg::Type resolves the entity it needs. */',
     ]
     for package, entries in by_package.items():
-        lines += [f"namespace R2S_MAP_{package}", "{", "namespace msg", "{"]
+        lines += [f'namespace R2S_MAP_{package}', '{', 'namespace msg', '{']
         for short, cname, index in entries:
-            canonical = f"{package}/msg/{short}"
-            lines.append(f"/* {cpp.cpp_type(canonical)}: hash, table, index and wire name. */")
-            for byte_index, byte in enumerate(_hash_bytes(repository, canonical).split(", ")):
-                lines.append(f"constexpr uint8_t {short}_hash_{byte_index} = {byte};")
-            lines.append(f"constexpr const r2s_codec_table_t *{short}_table = &r2s_bundled_table_{cname};")
-            lines.append(f"constexpr uint16_t {short}_index = {index}u;")
+            canonical = f'{package}/msg/{short}'
+            lines.append(f'/* {cpp.cpp_type(canonical)}: hash, table, index and wire name. */')
+            for byte_index, byte in enumerate(_hash_bytes(repository, canonical).split(', ')):
+                lines.append(f'constexpr uint8_t {short}_hash_{byte_index} = {byte};')
+            table_line = (
+                f'constexpr const r2s_codec_table_t *{short}_table = &r2s_bundled_table_{cname};'
+            )
+            if len(table_line) <= 100:
+                lines.append(table_line)
+            else:
+                lines.append(f'constexpr const r2s_codec_table_t *{short}_table =')
+                lines.append(f'  &r2s_bundled_table_{cname};')
+            lines.append(f'constexpr uint16_t {short}_index = {index}u;')
             lines.append(f'constexpr const char {short}_name[] = "{canonical}";')
-        lines += ["} // namespace msg", f"}} // namespace R2S_MAP_{package}", ""]
+        lines += ['} // namespace msg', f'}} // namespace R2S_MAP_{package}', '']
     return lines
 
 
@@ -332,18 +372,22 @@ def _c_type_aliases(
     way the C++ scope maps do.
     """
     lines = [
-        "/* One alias per bundled type for the C row spelling: the row names",
-        " * the generated C struct, which pastes straight onto these. */",
+        '/* One alias per bundled type for the C row spelling: the row names',
+        ' * the generated C struct, which pastes straight onto these. */',
     ]
     for name in BUNDLED_TYPES:
-        ctype = name.replace("/msg/", "__msg__")
+        ctype = name.replace('/msg/', '__msg__')
         cname = _cname(name)
         index = tables[name].index_of[name]
-        lines.append(f"/* {ctype}: hash, table, index and wire name. */")
-        lines.extend(_wrapped_define(f"#define R2S_CTYPE_HASH_{ctype}", _hash_bytes(repository, name)))
-        lines.extend(_wrapped_define(f"#define R2S_CTYPE_TABLE_{ctype}", f"(&r2s_bundled_table_{cname})"))
-        lines.extend(_wrapped_define(f"#define R2S_CTYPE_INDEX_{ctype}", f"{index}u"))
-        lines.extend(_wrapped_define(f"#define R2S_CTYPE_NAME_{ctype}", f'"{name}"'))
+        lines.append(f'/* {ctype}: hash, table, index and wire name. */')
+        lines.extend(
+            _wrapped_define(f'#define R2S_CTYPE_HASH_{ctype}', _hash_bytes(repository, name))
+        )
+        lines.extend(
+            _wrapped_define(f'#define R2S_CTYPE_TABLE_{ctype}', f'(&r2s_bundled_table_{cname})')
+        )
+        lines.extend(_wrapped_define(f'#define R2S_CTYPE_INDEX_{ctype}', f'{index}u'))
+        lines.extend(_wrapped_define(f'#define R2S_CTYPE_NAME_{ctype}', f'"{name}"'))
     return lines
 
 
@@ -354,12 +398,14 @@ def _c_spelling_traps() -> list[str]:
     half here, so it fails naming the underscore spelling the C list uses.
     """
     lines = [
-        "/* A C row that spells its type with double colons pastes only the",
-        " * package half here, and fails naming the underscore spelling. */",
+        '/* A C row that spells its type with double colons pastes only the',
+        ' * package half here, and fails naming the underscore spelling. */',
     ]
-    for package in sorted({name.partition("/msg/")[0] for name in BUNDLED_TYPES}):
-        for kind in ("HASH", "TABLE", "INDEX", "NAME"):
-            lines.append(f"#define R2S_CTYPE_{kind}_{package} R2S_error_expected_c_row_pkg__msg__Type")
+    for package in sorted({name.partition('/msg/')[0] for name in BUNDLED_TYPES}):
+        for kind in ('HASH', 'TABLE', 'INDEX', 'NAME'):
+            lines.append(
+                f'#define R2S_CTYPE_{kind}_{package} R2S_error_expected_c_row_pkg__msg__Type'
+            )
     return lines
 
 
@@ -371,17 +417,18 @@ def _cxx_spelling_traps() -> list[str]:
     spelling the C++ list uses.
     """
     lines = [
-        "/* A C++ row that spells its type with underscores selects one of",
-        " * these instead of the scope maps above, and fails naming the",
-        " * double-colon spelling. */",
+        '/* A C++ row that spells its type with underscores selects one of',
+        ' * these instead of the scope maps above, and fails naming the',
+        ' * double-colon spelling. */',
     ]
     for name in BUNDLED_TYPES:
-        package, _, short = name.partition("/msg/")
-        key = f"{package}__msg__{short}"
-        for entity in [f"hash_{byte}" for byte in range(8)] + ["table", "index", "name"]:
+        package, _, short = name.partition('/msg/')
+        key = f'{package}__msg__{short}'
+        for entity in [f'hash_{byte}' for byte in range(8)] + ['table', 'index', 'name']:
             lines.extend(
                 _wrapped_define(
-                    f"#define R2S_MAP_{key}_{entity}", "R2S_error_cxx_rows_use_double_colon_not_underscores"
+                    f'#define R2S_MAP_{key}_{entity}',
+                    'R2S_error_cxx_rows_use_double_colon_not_underscores',
                 )
             )
     return lines
@@ -393,202 +440,209 @@ def _sketch_h_c(
 ) -> list[str]:
     """The C expansion for underscore rows: the table, the typed publish
     functions and dispatch in the sketch's own translation unit."""
-    p = _cont
     lines = [
-        "/* The bundled tables the passes below encode and decode with. */",
-        *[f"extern const r2s_codec_table_t r2s_bundled_table_{_cname(name)};" for name in BUNDLED_TYPES],
-        "",
+        '/* The bundled tables the passes below encode and decode with. */',
+        *[
+            f'extern const r2s_codec_table_t r2s_bundled_table_{_cname(name)};'
+            for name in BUNDLED_TYPES
+        ],
+        '',
         *_c_type_aliases(tables, repository),
         *_c_spelling_traps(),
-        "/* One slot per row, in configuration order: user topic IDs run from 16. */",
-        "#define R2S_X_SLOT(KIND, ...) R2S_X_SLOT_##KIND(__VA_ARGS__)",
-        "#define R2S_X_SLOT_Publisher(CTYPE, ONAME, TOPIC) R2S_SLOT_##ONAME,",
-        "#define R2S_X_SLOT_Subscription(CTYPE, ONAME, TOPIC, CB) R2S_SLOT_##ONAME,",
-        "#define R2S_X_SLOT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_SLOT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "enum r2s_topic_slot { R2S_TOPICS(R2S_X_SLOT) R2S_SLOT_COUNT };",
-        "",
-        "/* IDs run 16 to 255 in configuration order, and the table fits the session. */",
-        "typedef char r2s_slot_count_check[(R2S_SLOT_COUNT <= 240) ? 1 : -1];",
-        "typedef char r2s_slot_fit_check[(unsigned)R2S_SLOT_COUNT <= R2S_TOPIC_MAX_COUNT ? 1 : -1];",
-        "",
+        '/* One slot per row, in configuration order: user topic IDs run from 16. */',
+        '#define R2S_X_SLOT(KIND, ...) R2S_X_SLOT_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_SLOT_Publisher(CTYPE, ONAME, TOPIC) R2S_SLOT_ ## ONAME,',
+        '#define R2S_X_SLOT_Subscription(CTYPE, ONAME, TOPIC, CB) R2S_SLOT_ ## ONAME,',
+        '#define R2S_X_SLOT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_SLOT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        'enum r2s_topic_slot { R2S_TOPICS(R2S_X_SLOT) R2S_SLOT_COUNT };',
+        '',
+        '/* IDs run 16 to 255 in configuration order, and the table fits the session. */',
+        'typedef char r2s_slot_count_check[(R2S_SLOT_COUNT <= 240) ? 1 : -1];',
+        'typedef char r2s_slot_fit_check[(unsigned)R2S_SLOT_COUNT <= R2S_TOPIC_MAX_COUNT '
+        '? 1 : -1];',
+        '',
         "/* The sketch's topic count, for r2s_session_configure(). */",
-        "#define R2S_TOPIC_COUNT ((uint8_t)R2S_SLOT_COUNT)",
-        "",
-        "/* A build whose double is 32 bits travels narrow on every topic (ENC-12). */",
-        "#if DBL_MANT_DIG == FLT_MANT_DIG",
-        "#define R2S_NARROW_FLAG 0x02u",
-        "#else",
-        "#define R2S_NARROW_FLAG 0x00u",
-        "#endif",
-        "",
-        "#define R2S_ID(ONAME) ((uint8_t)(16u + R2S_SLOT_##ONAME))",
-        "",
-        "/* The announced topics (CTL-4, CTL-12), in configuration order. */",
-        "#define R2S_X_TABLE(KIND, ...) R2S_X_TABLE_##KIND(__VA_ARGS__)",
-        p("#define R2S_X_TABLE_Publisher(CTYPE, ONAME, TOPIC)"),
-        p("    {R2S_ID(ONAME),"),
-        p("     (uint8_t)(0x00u | R2S_NARROW_FLAG),"),
-        p("     {R2S_CTYPE_HASH_##CTYPE},"),
-        p("     R2S_CTYPE_NAME_##CTYPE,"),
-        "     TOPIC},",
-        p("#define R2S_X_TABLE_Subscription(CTYPE, ONAME, TOPIC, CB)"),
-        p("    {R2S_ID(ONAME),"),
-        p("     (uint8_t)(0x01u | R2S_NARROW_FLAG),"),
-        p("     {R2S_CTYPE_HASH_##CTYPE},"),
-        p("     R2S_CTYPE_NAME_##CTYPE,"),
-        "     TOPIC},",
-        "#define R2S_X_TABLE_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_TABLE_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "/* The sketch list never reaches the generator, so the header counts",
+        '#define R2S_TOPIC_COUNT ((uint8_t)R2S_SLOT_COUNT)',
+        '',
+        '/* A build whose double is 32 bits travels narrow on every topic (ENC-12). */',
+        '#if DBL_MANT_DIG == FLT_MANT_DIG',
+        '#define R2S_NARROW_FLAG 0x02u',
+        '#else',
+        '#define R2S_NARROW_FLAG 0x00u',
+        '#endif',
+        '',
+        '#define R2S_ID(ONAME) ((uint8_t)(16u + R2S_SLOT_ ## ONAME))',
+        '',
+        '/* The announced topics (CTL-4, CTL-12), in configuration order. */',
+        '#define R2S_X_TABLE(KIND, ...) R2S_X_TABLE_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_TABLE_Publisher(CTYPE, ONAME, TOPIC) \\',
+        '  {R2S_ID(ONAME), \\',
+        '    (uint8_t)(0x00u | R2S_NARROW_FLAG), \\',
+        '    {R2S_CTYPE_HASH_ ## CTYPE}, \\',
+        '    R2S_CTYPE_NAME_ ## CTYPE, \\',
+        '    TOPIC},',
+        '#define R2S_X_TABLE_Subscription(CTYPE, ONAME, TOPIC, CB) \\',
+        '  {R2S_ID(ONAME), \\',
+        '    (uint8_t)(0x01u | R2S_NARROW_FLAG), \\',
+        '    {R2S_CTYPE_HASH_ ## CTYPE}, \\',
+        '    R2S_CTYPE_NAME_ ## CTYPE, \\',
+        '    TOPIC},',
+        '#define R2S_X_TABLE_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_TABLE_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '/* The sketch list never reaches the generator, so the header counts',
         " * the rows itself: an empty list stops here with the generator's message. */",
-        "#define R2S_X_COUNT(KIND, ...) R2S_X_COUNT_##KIND(__VA_ARGS__)",
-        "#define R2S_X_COUNT_Publisher(CTYPE, ONAME, TOPIC) +1",
-        "#define R2S_X_COUNT_Subscription(CTYPE, ONAME, TOPIC, CB) +1",
-        "#define R2S_X_COUNT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_COUNT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_TOPIC_LIST_COUNT (0 R2S_TOPICS(R2S_X_COUNT))",
-        "#if R2S_TOPIC_LIST_COUNT == 0",
+        '#define R2S_X_COUNT(KIND, ...) R2S_X_COUNT_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_COUNT_Publisher(CTYPE, ONAME, TOPIC) + 1',
+        '#define R2S_X_COUNT_Subscription(CTYPE, ONAME, TOPIC, CB) + 1',
+        '#define R2S_X_COUNT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_COUNT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_TOPIC_LIST_COUNT (0 R2S_TOPICS(R2S_X_COUNT))',
+        '#if R2S_TOPIC_LIST_COUNT == 0',
         '#error "a node with no topics has nothing to announce; add at least one topic"',
-        "#endif",
-        "",
-        "const r2s_topic_t R2S_FLASH r2s_topics[] = {R2S_TOPICS(R2S_X_TABLE)};",
-        "",
-        "/* One publish path for every wrapper: measures the payload, reserves",
-        " * its wire form, then streams it, so a failed publish writes nothing.",
-        " * Inline, so a subscribe-only list leaves it unused without a warning. */",
-        "static inline r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint16_t type, const void *msg,",
-        "                                           const r2s_codec_table_t *table)",
-        "{",
-        "    r2s_codec_out_t out = {NULL, 0u, 0u, 0u};",
-        "    uint8_t narrow;",
-        "    uint8_t field = 0xFFu;",
-        "    uint8_t seq;",
-        "    int8_t rc;",
-        "",
-        "    if (r2s_connected() == 0u) {",
-        "        r2s_error_note(R2S_ERROR_NOT_CONNECTED, topic_id, 0xFFu, 1u);",
-        "        return R2S_ERR_NOT_CONNECTED;",
-        "    }",
-        "    if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {",
-        "        return R2S_ERR_TOPIC_REJECTED;",
-        "    }",
-        "    narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);",
-        "    rc = r2s_codec_encode(table, type, msg, narrow, &out, &field);",
-        "    if (rc != R2S_OK) {",
-        "        return rc;",
-        "    }",
-        "    seq = r2s_session_tx_seq(index);",
-        "    rc = r2s_tx_begin(topic_id, seq, out.len);",
-        "    if (rc != R2S_OK) {",
-        "        if (rc == R2S_ERR_TX_BUSY) {",
-        "            r2s_error_note(R2S_ERROR_TX_BUSY, topic_id, 0xFFu, 1u);",
-        "        }",
-        "        return rc;",
-        "    }",
-        "    r2s_session_advance_tx_seq(index);",
-        "    out.to_tx = 1u;",
-        "    out.len = 0u;",
-        "    (void)r2s_codec_encode(table, type, msg, narrow, &out, &field);",
-        "    (void)r2s_tx_end();",
-        "    return R2S_OK;",
-        "}",
-        "",
-        "#define R2S_X_PUBLISH(KIND, ...) R2S_X_PUBLISH_##KIND(__VA_ARGS__)",
-        p("#define R2S_X_PUBLISH_Publisher(CTYPE, ONAME, TOPIC)"),
-        p("    r2s_status_t r2s_publish_##ONAME(const CTYPE *msg)"),
-        p("    {"),
-        p("        return r2s_publish_one(R2S_ID(ONAME), r2s_session_find_topic(R2S_ID(ONAME)),"),
-        p("                               (uint16_t)R2S_CTYPE_INDEX_##CTYPE, msg, R2S_CTYPE_TABLE_##CTYPE);"),
-        "    }",
-        "#define R2S_X_PUBLISH_Subscription(CTYPE, ONAME, TOPIC, CB)",
-        "#define R2S_X_PUBLISH_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_PUBLISH_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "R2S_TOPICS(R2S_X_PUBLISH)",
-        "",
-        "/* The callback each subscription row names: declared here, so the sketch",
-        " * defines it with no extra declaration of its own. */",
-        "#define R2S_X_HANDLER(KIND, ...) R2S_X_HANDLER_##KIND(__VA_ARGS__)",
-        "#define R2S_X_HANDLER_Publisher(CTYPE, ONAME, TOPIC)",
-        "#define R2S_X_HANDLER_Subscription(CTYPE, ONAME, TOPIC, CB) void CB(const CTYPE *msg);",
-        "#define R2S_X_HANDLER_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_HANDLER_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "R2S_TOPICS(R2S_X_HANDLER)",
-        "",
-        "/* One receive buffer shared by every subscription: only one dispatch",
-        " * runs at a time, so one slot is enough. The spare member keeps a",
-        " * publish-only sketch a valid union. */",
-        "#define R2S_X_BUF(KIND, ...) R2S_X_BUF_##KIND(__VA_ARGS__)",
-        "#define R2S_X_BUF_Publisher(CTYPE, ONAME, TOPIC)",
-        "#define R2S_X_BUF_Subscription(CTYPE, ONAME, TOPIC, CB) CTYPE ONAME;",
-        "#define R2S_X_BUF_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_BUF_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "",
-        "typedef union r2s_rx_buf {",
-        "    uint8_t r2s_empty;",
-        "    R2S_TOPICS(R2S_X_BUF)",
-        "} r2s_rx_buf_t;",
-        "",
-        "static r2s_rx_buf_t r2s_rx_buf;",
-        "",
-        "#define R2S_X_DISPATCH(KIND, ...) R2S_X_DISPATCH_##KIND(__VA_ARGS__)",
-        "#define R2S_X_DISPATCH_Publisher(CTYPE, ONAME, TOPIC)",
-        p("#define R2S_X_DISPATCH_Subscription(CTYPE, ONAME, TOPIC, CB)"),
-        p("    case R2S_ID(ONAME): {"),
-        p("        index = r2s_session_find_topic(R2S_ID(ONAME));"),
-        p("        if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {"),
-        p("            r2s_framer_count_refused();"),
-        p("            return;"),
-        p("        }"),
-        p("        narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);"),
-        p("        (void)r2s_session_note_rx_seq(index, seq);"),
-        p("        switch (r2s_codec_decode(R2S_CTYPE_TABLE_##CTYPE, (uint16_t)R2S_CTYPE_INDEX_##CTYPE, payload, len,"),
-        p("                                 narrow, &r2s_rx_buf.ONAME, &field)) {"),
-        p("        case R2S_OK:"),
-        p("            break;"),
-        p("        case R2S_ERR_BOUNDS:"),
-        p("            r2s_error_note(R2S_ERROR_BOUND, topic_id, field, 1u);"),
-        p("            r2s_framer_count_refused();"),
-        p("            return;"),
-        p("        default:"),
-        p("            r2s_framer_count_refused();"),
-        p("            return;"),
-        p("        }"),
-        p("        CB(&r2s_rx_buf.ONAME);"),
-        p("        return;"),
-        "    }",
-        "#define R2S_X_DISPATCH_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_DISPATCH_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "",
-        "/* Decodes the subscribed topics into the buffer above and calls the",
-        " * callback the row names; anything else is refused and counted. */",
-        "void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, uint16_t len)",
-        "{",
-        "    uint8_t index;",
-        "    uint8_t narrow;",
-        "    uint8_t field = 0xFFu;",
-        "",
-        "    /* A publish-only list expands no case below, so every name here is",
-        "     * unused there; the casts keep that list warning-free. */",
-        "    (void)seq;",
-        "    (void)payload;",
-        "    (void)len;",
-        "    (void)index;",
-        "    (void)narrow;",
-        "    (void)field;",
-        "    (void)r2s_rx_buf;",
-        "",
-        "    switch (topic_id) {",
-        "        R2S_TOPICS(R2S_X_DISPATCH)",
-        "    default: {",
-        "        if (r2s_session_find_topic(topic_id) == 0xFFu) {",
-        "            r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);",
-        "        }",
-        "        r2s_framer_count_refused();",
-        "        return;",
-        "    }",
-        "    }",
-        "}",
+        '#endif',
+        '',
+        'const r2s_topic_t R2S_FLASH r2s_topics[] = {R2S_TOPICS(R2S_X_TABLE)};',
+        '',
+        '/* One publish path for every wrapper: measures the payload, reserves',
+        ' * its wire form, then streams it, so a failed publish writes nothing.',
+        ' * Inline, so a subscribe-only list leaves it unused without a warning. */',
+        'static inline r2s_status_t r2s_publish_one( \\',
+        '  uint8_t topic_id, uint8_t index, uint16_t type, const void *msg, \\',
+        '  const r2s_codec_table_t *table)',
+        '{',
+        '  r2s_codec_out_t out = {NULL, 0u, 0u, 0u};',
+        '  uint8_t narrow;',
+        '  uint8_t field = 0xFFu;',
+        '  uint8_t seq;',
+        '  int8_t rc;',
+        '',
+        '  if (r2s_connected() == 0u) {',
+        '    r2s_error_note(R2S_ERROR_NOT_CONNECTED, topic_id, 0xFFu, 1u);',
+        '    return R2S_ERR_NOT_CONNECTED;',
+        '  }',
+        '  if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {',
+        '    return R2S_ERR_TOPIC_REJECTED;',
+        '  }',
+        '  narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);',
+        '  rc = r2s_codec_encode(table, type, msg, narrow, &out, &field);',
+        '  if (rc != R2S_OK) {',
+        '    return rc;',
+        '  }',
+        '  seq = r2s_session_tx_seq(index);',
+        '  rc = r2s_tx_begin(topic_id, seq, out.len);',
+        '  if (rc != R2S_OK) {',
+        '    if (rc == R2S_ERR_TX_BUSY) {',
+        '      r2s_error_note(R2S_ERROR_TX_BUSY, topic_id, 0xFFu, 1u);',
+        '    }',
+        '    return rc;',
+        '  }',
+        '  r2s_session_advance_tx_seq(index);',
+        '  out.to_tx = 1u;',
+        '  out.len = 0u;',
+        '  (void)r2s_codec_encode(table, type, msg, narrow, &out, &field);',
+        '  (void)r2s_tx_end();',
+        '  return R2S_OK;',
+        '}',
+        '',
+        '#define R2S_X_PUBLISH(KIND, ...) R2S_X_PUBLISH_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_PUBLISH_Publisher(CTYPE, ONAME, TOPIC) \\',
+        '  r2s_status_t r2s_publish_ ## ONAME(const CTYPE * msg) \\',
+        '    { \\',
+        '    return r2s_publish_one(R2S_ID(ONAME), r2s_session_find_topic(R2S_ID(ONAME)), \\',
+        '             (uint16_t)R2S_CTYPE_INDEX_ ## CTYPE, msg, R2S_CTYPE_TABLE_ ## CTYPE); \\',
+        '  }',
+        '#define R2S_X_PUBLISH_Subscription(CTYPE, ONAME, TOPIC, CB)',
+        '#define R2S_X_PUBLISH_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_PUBLISH_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        'R2S_TOPICS(R2S_X_PUBLISH)',
+        '',
+        '/* The callback each subscription row names: declared here, so the sketch',
+        ' * defines it with no extra declaration of its own. */',
+        '#define R2S_X_HANDLER(KIND, ...) R2S_X_HANDLER_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_HANDLER_Publisher(CTYPE, ONAME, TOPIC)',
+        '#define R2S_X_HANDLER_Subscription(CTYPE, ONAME, TOPIC, CB) void CB(const CTYPE * msg);',
+        '#define R2S_X_HANDLER_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_HANDLER_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        'R2S_TOPICS(R2S_X_HANDLER)',
+        '',
+        '/* One receive buffer shared by every subscription: only one dispatch',
+        ' * runs at a time, so one slot is enough. The spare member keeps a',
+        ' * publish-only sketch a valid union. */',
+        '#define R2S_X_BUF(KIND, ...) R2S_X_BUF_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_BUF_Publisher(CTYPE, ONAME, TOPIC)',
+        '#define R2S_X_BUF_Subscription(CTYPE, ONAME, TOPIC, CB) CTYPE ONAME;',
+        '#define R2S_X_BUF_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_BUF_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '',
+        'typedef union r2s_rx_buf {',
+        '  uint8_t r2s_empty;',
+        '  R2S_TOPICS(R2S_X_BUF)',
+        '} r2s_rx_buf_t;',
+        '',
+        'static r2s_rx_buf_t r2s_rx_buf;',
+        '',
+        '#define R2S_X_DISPATCH(KIND, ...) R2S_X_DISPATCH_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_DISPATCH_Publisher(CTYPE, ONAME, TOPIC)',
+        '#define R2S_X_DISPATCH_Subscription(CTYPE, ONAME, TOPIC, CB) \\',
+        '    case R2S_ID(ONAME): { \\',
+        '        index = r2s_session_find_topic(R2S_ID(ONAME)); \\',
+        '        if (index == 0xFFu || r2s_session_topic_status(index) != 0u) { \\',
+        '          r2s_framer_count_refused(); \\',
+        '          return; \\',
+        '        } \\',
+        '        narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u); \\',
+        '        (void)r2s_session_note_rx_seq(index, seq); \\',
+        '        switch (r2s_codec_decode(R2S_CTYPE_TABLE_ ## CTYPE, (uint16_t)R2S_CTYPE_INDEX_ '
+        '## CTYPE, \\',
+        '      payload, len, \\',
+        '                                 narrow, &r2s_rx_buf.ONAME, &field)) { \\',
+        '          case R2S_OK: \\',
+        '            break; \\',
+        '          case R2S_ERR_BOUNDS: \\',
+        '            r2s_error_note(R2S_ERROR_BOUND, topic_id, field, 1u); \\',
+        '            r2s_framer_count_refused(); \\',
+        '            return; \\',
+        '          default: \\',
+        '            r2s_framer_count_refused(); \\',
+        '            return; \\',
+        '        } \\',
+        '        CB(&r2s_rx_buf.ONAME); \\',
+        '        return; \\',
+        '    }',
+        '#define R2S_X_DISPATCH_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_DISPATCH_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '',
+        '/* Decodes the subscribed topics into the buffer above and calls the',
+        ' * callback the row names; anything else is refused and counted. */',
+        'void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, '
+        'uint16_t len)',
+        '{',
+        '  uint8_t index;',
+        '  uint8_t narrow;',
+        '  uint8_t field = 0xFFu;',
+        '',
+        '    /* A publish-only list expands no case below, so every name here is',
+        '     * unused there; the casts keep that list warning-free. */',
+        '  (void)seq;',
+        '  (void)payload;',
+        '  (void)len;',
+        '  (void)index;',
+        '  (void)narrow;',
+        '  (void)field;',
+        '  (void)r2s_rx_buf;',
+        '',
+        '  switch (topic_id) {',
+        '  R2S_TOPICS(R2S_X_DISPATCH)',
+        '    default: {',
+        '        if (r2s_session_find_topic(topic_id) == 0xFFu) {',
+        '          r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);',
+        '        }',
+        '        r2s_framer_count_refused();',
+        '        return;',
+        '      }',
+        '  }',
+        '}',
     ]
     return lines
 
@@ -599,20 +653,19 @@ def _sketch_h(
     distro: str,
 ) -> str:
     """The sketch header: the `R2S_TOPICS` expansion into table, wrappers and dispatch."""
-    p = _cont
     lines = [
-        _banner("/*", distro) + " */",
-        "#ifndef ROS2SERIAL_H",
-        "#define ROS2SERIAL_H",
-        "",
-        "#include <float.h>",
-        "#include <stdint.h>",
-        "",
+        _banner('/*', distro) + ' */',
+        '#ifndef ROS2SERIAL_H',
+        '#define ROS2SERIAL_H',
+        '',
+        '#include <float.h>',
+        '#include <stdint.h>',
+        '',
         "/* The bundled types, tables and limits come first, so the sketch's",
         " * translation unit reads the bundle's frame and nesting limits rather",
-        " * than the core defaults below. */",
+        ' * than the core defaults below. */',
         '#include "r2s_bundled.h"',
-        "",
+        '',
         '#include "r2s/r2s_codec.h"',
         '#include "r2s/r2s_error.h"',
         '#include "r2s/r2s_framer.h"',
@@ -620,302 +673,318 @@ def _sketch_h(
         '#include "r2s/r2s_session.h"',
         '#include "r2s/r2s_topics.h"',
         '#include "r2s/r2s_tx.h"',
-        "",
-        "/* The bundled message types the rows name: included here so a sketch",
-        " * needs only this header, and after the bundled limits above so the",
+        '',
+        '/* The bundled message types the rows name: included here so a sketch',
+        ' * needs only this header, and after the bundled limits above so the',
         " * limits stay the bundle's on every toolchain. */",
-        "#ifdef __cplusplus",
-        "#include <builtin_interfaces/msg/time.hpp>",
-        "#include <geometry_msgs/msg/quaternion.hpp>",
-        "#include <geometry_msgs/msg/twist.hpp>",
-        "#include <geometry_msgs/msg/vector3.hpp>",
-        "#include <sensor_msgs/msg/imu.hpp>",
-        "#include <sensor_msgs/msg/joint_state.hpp>",
-        "#include <std_msgs/msg/float32.hpp>",
-        "#include <std_msgs/msg/header.hpp>",
-        "#include <std_msgs/msg/string.hpp>",
-        "#endif",
-        "",
-        "/* A C++ sketch without a topic list uses the runtime API: it declares",
-        " * its publishers and subscriptions as objects, and the header brings in",
-        " * the runtime layer that serves them. The static X-macro path below",
-        " * stays for the builds that want it, so a C++ sketch with a list keeps",
-        " * the expansion. */",
-        "#if defined(__cplusplus) && !defined(R2S_TOPICS)",
+        '#ifdef __cplusplus',
+        '#include <builtin_interfaces/msg/time.hpp>',
+        '#include <geometry_msgs/msg/quaternion.hpp>',
+        '#include <geometry_msgs/msg/twist.hpp>',
+        '#include <geometry_msgs/msg/vector3.hpp>',
+        '#include <sensor_msgs/msg/imu.hpp>',
+        '#include <sensor_msgs/msg/joint_state.hpp>',
+        '#include <std_msgs/msg/float32.hpp>',
+        '#include <std_msgs/msg/header.hpp>',
+        '#include <std_msgs/msg/string.hpp>',
+        '#endif',
+        '',
+        '/* A C++ sketch without a topic list uses the runtime API: it declares',
+        ' * its publishers and subscriptions as objects, and the header brings in',
+        ' * the runtime layer that serves them. The static X-macro path below',
+        ' * stays for the builds that want it, so a C++ sketch with a list keeps',
+        ' * the expansion. */',
+        '#if defined(__cplusplus) && !defined(R2S_TOPICS)',
         '#include "r2s/runtime.hpp"',
-        "#endif",
-        "",
-        "/* A sketch declares its topics as X-macro rows before including this",
-        " * header; the header expands them into the topic table, the typed publish",
+        '#endif',
+        '',
+        '/* A sketch declares its topics as X-macro rows before including this',
+        ' * header; the header expands them into the topic table, the typed publish',
         " * functions and dispatch in the sketch's own translation unit, while the",
-        " * descriptors stay in the library, which compiles without the list. A C++",
-        " * row spells the type with double colons and a C row with the generated",
+        ' * descriptors stay in the library, which compiles without the list. A C++',
+        ' * row spells the type with double colons and a C row with the generated',
         " * C struct name; each language rejects the other's spelling with a",
-        " * message naming its own. */",
-        "#if !defined(R2S_TOPICS) && !defined(__cplusplus)",
-        p("#error"),
-        '    "Define R2S_TOPICS(X) rows as X(Publisher|Subscription,'
+        ' * message naming its own. */',
+        '#if !defined(R2S_TOPICS) && !defined(__cplusplus)',
+        '#error \\',
+        '  "Define R2S_TOPICS(X) rows as X(Publisher|Subscription,'
         ' pkg__msg__Type, object[, callback]) before including <ros2serial.h>."',
-        "#endif",
-        "",
-        "/* A sketch defines its topic list above the include; the bundled message",
-        " * types are already included, so the list names them directly. The",
-        " * expansion below carries C linkage, so callback definitions keep it",
+        '#endif',
+        '',
+        '/* A sketch defines its topic list above the include; the bundled message',
+        ' * types are already included, so the list names them directly. The',
+        ' * expansion below carries C linkage, so callback definitions keep it',
         ' * with no extern "C" block of their own, and the port glue lives',
-        " * in the library. */",
-        "#ifdef R2S_TOPICS",
-        "#ifndef __cplusplus",
+        ' * in the library. */',
+        '#ifdef R2S_TOPICS',
+        '#ifndef __cplusplus',
         *_sketch_h_c(tables, repository),
-        "#else",
+        '#else',
         'extern "C" {',
-        "",
-        "/* The bundled tables the passes below encode and decode with. */",
-        *[f"extern const r2s_codec_table_t r2s_bundled_table_{_cname(name)};" for name in BUNDLED_TYPES],
-        "",
+        '',
+        '/* The bundled tables the passes below encode and decode with. */',
+        *[
+            f'extern const r2s_codec_table_t r2s_bundled_table_{_cname(name)};'
+            for name in BUNDLED_TYPES
+        ],
+        '',
         *_scope_maps(tables, repository),
         *_cxx_spelling_traps(),
-        "/* One slot per row, in configuration order: user topic IDs run from 16. */",
-        "#define R2S_X_SLOT(KIND, ...) R2S_X_SLOT_##KIND(__VA_ARGS__)",
-        "#define R2S_X_SLOT_Publisher(CTYPE, ONAME, TOPIC) R2S_SLOT_##ONAME,",
-        "#define R2S_X_SLOT_Subscription(CTYPE, ONAME, TOPIC, CB) R2S_SLOT_##ONAME,",
-        "#define R2S_X_SLOT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_SLOT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "enum r2s_topic_slot { R2S_TOPICS(R2S_X_SLOT) R2S_SLOT_COUNT };",
-        "",
-        "/* IDs run 16 to 255 in configuration order, and the table fits the session. */",
-        "typedef char r2s_slot_count_check[(R2S_SLOT_COUNT <= 240) ? 1 : -1];",
-        "typedef char r2s_slot_fit_check[(unsigned)R2S_SLOT_COUNT <= R2S_TOPIC_MAX_COUNT ? 1 : -1];",
-        "",
+        '/* One slot per row, in configuration order: user topic IDs run from 16. */',
+        '#define R2S_X_SLOT(KIND, ...) R2S_X_SLOT_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_SLOT_Publisher(CTYPE, ONAME, TOPIC) R2S_SLOT_ ## ONAME,',
+        '#define R2S_X_SLOT_Subscription(CTYPE, ONAME, TOPIC, CB) R2S_SLOT_ ## ONAME,',
+        '#define R2S_X_SLOT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_SLOT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        'enum r2s_topic_slot { R2S_TOPICS(R2S_X_SLOT) R2S_SLOT_COUNT };',
+        '',
+        '/* IDs run 16 to 255 in configuration order, and the table fits the session. */',
+        'typedef char r2s_slot_count_check[(R2S_SLOT_COUNT <= 240) ? 1 : -1];',
+        'typedef char r2s_slot_fit_check[(unsigned)R2S_SLOT_COUNT <= R2S_TOPIC_MAX_COUNT '
+        '? 1 : -1];',
+        '',
         "/* The sketch's topic count, for r2s_session_configure(). */",
-        "#define R2S_TOPIC_COUNT ((uint8_t)R2S_SLOT_COUNT)",
-        "",
-        "/* A build whose double is 32 bits travels narrow on every topic (ENC-12). */",
-        "#if DBL_MANT_DIG == FLT_MANT_DIG",
-        "#define R2S_NARROW_FLAG 0x02u",
-        "#else",
-        "#define R2S_NARROW_FLAG 0x00u",
-        "#endif",
-        "",
+        '#define R2S_TOPIC_COUNT ((uint8_t)R2S_SLOT_COUNT)',
+        '',
+        '/* A build whose double is 32 bits travels narrow on every topic (ENC-12). */',
+        '#if DBL_MANT_DIG == FLT_MANT_DIG',
+        '#define R2S_NARROW_FLAG 0x02u',
+        '#else',
+        '#define R2S_NARROW_FLAG 0x00u',
+        '#endif',
+        '',
         "/* One fact per paste: the row's type resolves its entity through the",
-        " * package scope above, since the preprocessor cannot split pkg::msg::Type. */",
-        "#define R2S_HASH_0_OF(CTYPE) R2S_MAP_##CTYPE##_hash_0",
-        "#define R2S_HASH_1_OF(CTYPE) R2S_MAP_##CTYPE##_hash_1",
-        "#define R2S_HASH_2_OF(CTYPE) R2S_MAP_##CTYPE##_hash_2",
-        "#define R2S_HASH_3_OF(CTYPE) R2S_MAP_##CTYPE##_hash_3",
-        "#define R2S_HASH_4_OF(CTYPE) R2S_MAP_##CTYPE##_hash_4",
-        "#define R2S_HASH_5_OF(CTYPE) R2S_MAP_##CTYPE##_hash_5",
-        "#define R2S_HASH_6_OF(CTYPE) R2S_MAP_##CTYPE##_hash_6",
-        "#define R2S_HASH_7_OF(CTYPE) R2S_MAP_##CTYPE##_hash_7",
-        "#define R2S_TABLE_OF(CTYPE) R2S_MAP_##CTYPE##_table",
-        "#define R2S_INDEX_OF(CTYPE) R2S_MAP_##CTYPE##_index",
-        "#define R2S_NAME_OF(CTYPE) R2S_MAP_##CTYPE##_name",
-        "#define R2S_ID(ONAME) ((uint8_t)(16u + R2S_SLOT_##ONAME))",
-        "",
-        "/* The announced topics (CTL-4, CTL-12), in configuration order. */",
-        "#define R2S_X_TABLE(KIND, ...) R2S_X_TABLE_##KIND(__VA_ARGS__)",
-        p("#define R2S_X_TABLE_Publisher(CTYPE, ONAME, TOPIC)"),
-        p("    {R2S_ID(ONAME),"),
-        p("     (uint8_t)(0x00u | R2S_NARROW_FLAG),"),
-        p("     {R2S_HASH_0_OF(CTYPE), R2S_HASH_1_OF(CTYPE), R2S_HASH_2_OF(CTYPE), R2S_HASH_3_OF(CTYPE),"),
-        p("      R2S_HASH_4_OF(CTYPE), R2S_HASH_5_OF(CTYPE), R2S_HASH_6_OF(CTYPE), R2S_HASH_7_OF(CTYPE)},"),
-        p("     R2S_NAME_OF(CTYPE),"),
-        "     TOPIC},",
-        p("#define R2S_X_TABLE_Subscription(CTYPE, ONAME, TOPIC, CB)"),
-        p("    {R2S_ID(ONAME),"),
-        p("     (uint8_t)(0x01u | R2S_NARROW_FLAG),"),
-        p("     {R2S_HASH_0_OF(CTYPE), R2S_HASH_1_OF(CTYPE), R2S_HASH_2_OF(CTYPE), R2S_HASH_3_OF(CTYPE),"),
-        p("      R2S_HASH_4_OF(CTYPE), R2S_HASH_5_OF(CTYPE), R2S_HASH_6_OF(CTYPE), R2S_HASH_7_OF(CTYPE)},"),
-        p("     R2S_NAME_OF(CTYPE),"),
-        "     TOPIC},",
-        "#define R2S_X_TABLE_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_TABLE_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "/* The sketch list never reaches the generator, so the header counts",
+        ' * package scope above, since the preprocessor cannot split pkg::msg::Type. */',
+        '#define R2S_HASH_0_OF(CTYPE) R2S_MAP_ ## CTYPE ## _hash_0',
+        '#define R2S_HASH_1_OF(CTYPE) R2S_MAP_ ## CTYPE ## _hash_1',
+        '#define R2S_HASH_2_OF(CTYPE) R2S_MAP_ ## CTYPE ## _hash_2',
+        '#define R2S_HASH_3_OF(CTYPE) R2S_MAP_ ## CTYPE ## _hash_3',
+        '#define R2S_HASH_4_OF(CTYPE) R2S_MAP_ ## CTYPE ## _hash_4',
+        '#define R2S_HASH_5_OF(CTYPE) R2S_MAP_ ## CTYPE ## _hash_5',
+        '#define R2S_HASH_6_OF(CTYPE) R2S_MAP_ ## CTYPE ## _hash_6',
+        '#define R2S_HASH_7_OF(CTYPE) R2S_MAP_ ## CTYPE ## _hash_7',
+        '#define R2S_TABLE_OF(CTYPE) R2S_MAP_ ## CTYPE ## _table',
+        '#define R2S_INDEX_OF(CTYPE) R2S_MAP_ ## CTYPE ## _index',
+        '#define R2S_NAME_OF(CTYPE) R2S_MAP_ ## CTYPE ## _name',
+        '#define R2S_ID(ONAME) ((uint8_t)(16u + R2S_SLOT_ ## ONAME))',
+        '',
+        '/* The announced topics (CTL-4, CTL-12), in configuration order. */',
+        '#define R2S_X_TABLE(KIND, ...) R2S_X_TABLE_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_TABLE_Publisher(CTYPE, ONAME, TOPIC) \\',
+        '  {R2S_ID(ONAME), \\',
+        '    (uint8_t)(0x00u | R2S_NARROW_FLAG), \\',
+        '    {R2S_HASH_0_OF(CTYPE), R2S_HASH_1_OF(CTYPE), R2S_HASH_2_OF(CTYPE), '
+        'R2S_HASH_3_OF(CTYPE), \\',
+        '      R2S_HASH_4_OF(CTYPE), R2S_HASH_5_OF(CTYPE), R2S_HASH_6_OF(CTYPE), '
+        'R2S_HASH_7_OF(CTYPE)}, \\',
+        '    R2S_NAME_OF(CTYPE), \\',
+        '    TOPIC},',
+        '#define R2S_X_TABLE_Subscription(CTYPE, ONAME, TOPIC, CB) \\',
+        '  {R2S_ID(ONAME), \\',
+        '    (uint8_t)(0x01u | R2S_NARROW_FLAG), \\',
+        '    {R2S_HASH_0_OF(CTYPE), R2S_HASH_1_OF(CTYPE), R2S_HASH_2_OF(CTYPE), '
+        'R2S_HASH_3_OF(CTYPE), \\',
+        '      R2S_HASH_4_OF(CTYPE), R2S_HASH_5_OF(CTYPE), R2S_HASH_6_OF(CTYPE), '
+        'R2S_HASH_7_OF(CTYPE)}, \\',
+        '    R2S_NAME_OF(CTYPE), \\',
+        '    TOPIC},',
+        '#define R2S_X_TABLE_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_TABLE_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '/* The sketch list never reaches the generator, so the header counts',
         " * the rows itself: an empty list stops here with the generator's message. */",
-        "#define R2S_X_COUNT(KIND, ...) R2S_X_COUNT_##KIND(__VA_ARGS__)",
-        "#define R2S_X_COUNT_Publisher(CTYPE, ONAME, TOPIC) +1",
-        "#define R2S_X_COUNT_Subscription(CTYPE, ONAME, TOPIC, CB) +1",
-        "#define R2S_X_COUNT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_COUNT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_TOPIC_LIST_COUNT (0 R2S_TOPICS(R2S_X_COUNT))",
-        "#if R2S_TOPIC_LIST_COUNT == 0",
+        '#define R2S_X_COUNT(KIND, ...) R2S_X_COUNT_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_COUNT_Publisher(CTYPE, ONAME, TOPIC) + 1',
+        '#define R2S_X_COUNT_Subscription(CTYPE, ONAME, TOPIC, CB) + 1',
+        '#define R2S_X_COUNT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_COUNT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_TOPIC_LIST_COUNT (0 R2S_TOPICS(R2S_X_COUNT))',
+        '#if R2S_TOPIC_LIST_COUNT == 0',
         '#error "a node with no topics has nothing to announce; add at least one topic"',
-        "#endif",
-        "",
-        "const r2s_topic_t R2S_FLASH r2s_topics[] = {R2S_TOPICS(R2S_X_TABLE)};",
-        "",
-        "/* One publish path for every wrapper: measures the payload, reserves",
-        " * its wire form, then streams it, so a failed publish writes nothing.",
-        " * Inline, so a subscribe-only list leaves it unused without a warning. */",
-        "static inline r2s_status_t r2s_publish_one(uint8_t topic_id, uint8_t index, uint16_t type, const void *msg,",
-        "                                           const r2s_codec_table_t *table)",
-        "{",
-        "    r2s_codec_out_t out = {NULL, 0u, 0u, 0u};",
-        "    uint8_t narrow;",
-        "    uint8_t field = 0xFFu;",
-        "    uint8_t seq;",
-        "    int8_t rc;",
-        "",
-        "    if (r2s_connected() == 0u) {",
-        "        r2s_error_note(R2S_ERROR_NOT_CONNECTED, topic_id, 0xFFu, 1u);",
-        "        return R2S_ERR_NOT_CONNECTED;",
-        "    }",
-        "    if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {",
-        "        return R2S_ERR_TOPIC_REJECTED;",
-        "    }",
-        "    narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);",
-        "    rc = r2s_codec_encode(table, type, msg, narrow, &out, &field);",
-        "    if (rc != R2S_OK) {",
-        "        return rc;",
-        "    }",
-        "    seq = r2s_session_tx_seq(index);",
-        "    rc = r2s_tx_begin(topic_id, seq, out.len);",
-        "    if (rc != R2S_OK) {",
-        "        if (rc == R2S_ERR_TX_BUSY) {",
-        "            r2s_error_note(R2S_ERROR_TX_BUSY, topic_id, 0xFFu, 1u);",
-        "        }",
-        "        return rc;",
-        "    }",
-        "    r2s_session_advance_tx_seq(index);",
-        "    out.to_tx = 1u;",
-        "    out.len = 0u;",
-        "    (void)r2s_codec_encode(table, type, msg, narrow, &out, &field);",
-        "    (void)r2s_tx_end();",
-        "    return R2S_OK;",
-        "}",
-        "",
-        "#define R2S_X_PUBLISH(KIND, ...) R2S_X_PUBLISH_##KIND(__VA_ARGS__)",
-        p("#define R2S_X_PUBLISH_Publisher(CTYPE, ONAME, TOPIC)"),
-        p("    r2s_status_t r2s_publish_##ONAME(const CTYPE *msg)"),
-        p("    {"),
-        p("        return r2s_publish_one(R2S_ID(ONAME), r2s_session_find_topic(R2S_ID(ONAME)),"),
-        p("                               (uint16_t)R2S_INDEX_OF(CTYPE), msg, R2S_TABLE_OF(CTYPE));"),
-        "    }",
-        "#define R2S_X_PUBLISH_Subscription(CTYPE, ONAME, TOPIC, CB)",
-        "#define R2S_X_PUBLISH_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_PUBLISH_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "R2S_TOPICS(R2S_X_PUBLISH)",
-        "",
-        "/* The callback each subscription row names: declared here, so the sketch",
+        '#endif',
+        '',
+        'const r2s_topic_t R2S_FLASH r2s_topics[] = {R2S_TOPICS(R2S_X_TABLE)};',
+        '',
+        '/* One publish path for every wrapper: measures the payload, reserves',
+        ' * its wire form, then streams it, so a failed publish writes nothing.',
+        ' * Inline, so a subscribe-only list leaves it unused without a warning. */',
+        'static inline r2s_status_t r2s_publish_one( \\',
+        '  uint8_t topic_id, uint8_t index, uint16_t type, const void *msg, \\',
+        '  const r2s_codec_table_t *table)',
+        '{',
+        '  r2s_codec_out_t out = {NULL, 0u, 0u, 0u};',
+        '  uint8_t narrow;',
+        '  uint8_t field = 0xFFu;',
+        '  uint8_t seq;',
+        '  int8_t rc;',
+        '',
+        '  if (r2s_connected() == 0u) {',
+        '    r2s_error_note(R2S_ERROR_NOT_CONNECTED, topic_id, 0xFFu, 1u);',
+        '    return R2S_ERR_NOT_CONNECTED;',
+        '  }',
+        '  if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {',
+        '    return R2S_ERR_TOPIC_REJECTED;',
+        '  }',
+        '  narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);',
+        '  rc = r2s_codec_encode(table, type, msg, narrow, &out, &field);',
+        '  if (rc != R2S_OK) {',
+        '    return rc;',
+        '  }',
+        '  seq = r2s_session_tx_seq(index);',
+        '  rc = r2s_tx_begin(topic_id, seq, out.len);',
+        '  if (rc != R2S_OK) {',
+        '    if (rc == R2S_ERR_TX_BUSY) {',
+        '      r2s_error_note(R2S_ERROR_TX_BUSY, topic_id, 0xFFu, 1u);',
+        '    }',
+        '    return rc;',
+        '  }',
+        '  r2s_session_advance_tx_seq(index);',
+        '  out.to_tx = 1u;',
+        '  out.len = 0u;',
+        '  (void)r2s_codec_encode(table, type, msg, narrow, &out, &field);',
+        '  (void)r2s_tx_end();',
+        '  return R2S_OK;',
+        '}',
+        '',
+        '#define R2S_X_PUBLISH(KIND, ...) R2S_X_PUBLISH_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_PUBLISH_Publisher(CTYPE, ONAME, TOPIC) \\',
+        '  r2s_status_t r2s_publish_ ## ONAME(const CTYPE * msg) \\',
+        '    { \\',
+        '    return r2s_publish_one(R2S_ID(ONAME), r2s_session_find_topic(R2S_ID(ONAME)), \\',
+        '             (uint16_t)R2S_INDEX_OF(CTYPE), msg, R2S_TABLE_OF(CTYPE)); \\',
+        '  }',
+        '#define R2S_X_PUBLISH_Subscription(CTYPE, ONAME, TOPIC, CB)',
+        '#define R2S_X_PUBLISH_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_PUBLISH_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        'R2S_TOPICS(R2S_X_PUBLISH)',
+        '',
+        '/* The callback each subscription row names: declared here, so the sketch',
         ' * defines it with no extern "C" block of its own, and the dispatch below',
-        " * calls it directly instead of through a stored pointer. */",
-        "#define R2S_X_HANDLER(KIND, ...) R2S_X_HANDLER_##KIND(__VA_ARGS__)",
-        "#define R2S_X_HANDLER_Publisher(CTYPE, ONAME, TOPIC)",
-        "#define R2S_X_HANDLER_Subscription(CTYPE, ONAME, TOPIC, CB) void CB(const CTYPE &msg);",
-        "#define R2S_X_HANDLER_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_HANDLER_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "R2S_TOPICS(R2S_X_HANDLER)",
-        "",
-        "/* One receive buffer shared by every subscription: only one dispatch",
-        " * runs at a time, so one slot is enough. The spare member keeps a",
-        " * publish-only sketch a valid union. */",
-        "#define R2S_X_BUF(KIND, ...) R2S_X_BUF_##KIND(__VA_ARGS__)",
-        "#define R2S_X_BUF_Publisher(CTYPE, ONAME, TOPIC)",
-        "#define R2S_X_BUF_Subscription(CTYPE, ONAME, TOPIC, CB) CTYPE ONAME;",
-        "#define R2S_X_BUF_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_BUF_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "",
-        "typedef union r2s_rx_buf {",
-        "    uint8_t r2s_empty;",
-        "    R2S_TOPICS(R2S_X_BUF)",
-        "} r2s_rx_buf_t;",
-        "",
-        "static r2s_rx_buf_t r2s_rx_buf;",
-        "",
-        "#define R2S_X_DISPATCH(KIND, ...) R2S_X_DISPATCH_##KIND(__VA_ARGS__)",
-        "#define R2S_X_DISPATCH_Publisher(CTYPE, ONAME, TOPIC)",
-        p("#define R2S_X_DISPATCH_Subscription(CTYPE, ONAME, TOPIC, CB)"),
-        p("    case R2S_ID(ONAME): {"),
-        p("        index = r2s_session_find_topic(R2S_ID(ONAME));"),
-        p("        if (index == 0xFFu || r2s_session_topic_status(index) != 0u) {"),
-        p("            r2s_framer_count_refused();"),
-        p("            return;"),
-        p("        }"),
-        p("        narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u);"),
-        p("        (void)r2s_session_note_rx_seq(index, seq);"),
-        p("        switch (r2s_codec_decode(R2S_TABLE_OF(CTYPE), (uint16_t)R2S_INDEX_OF(CTYPE), payload, len, narrow,"),
-        p("                                 &r2s_rx_buf.ONAME, &field)) {"),
-        p("        case R2S_OK:"),
-        p("            break;"),
-        p("        case R2S_ERR_BOUNDS:"),
-        p("            r2s_error_note(R2S_ERROR_BOUND, topic_id, field, 1u);"),
-        p("            r2s_framer_count_refused();"),
-        p("            return;"),
-        p("        default:"),
-        p("            r2s_framer_count_refused();"),
-        p("            return;"),
-        p("        }"),
-        p("        CB(r2s_rx_buf.ONAME);"),
-        p("        return;"),
-        "    }",
-        "#define R2S_X_DISPATCH_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_DISPATCH_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "",
-        "/* Decodes the subscribed topics into the buffer above and calls the",
-        " * callback the row names; anything else is refused and counted. */",
-        "void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, uint16_t len)",
-        "{",
-        "    uint8_t index;",
-        "    uint8_t narrow;",
-        "    uint8_t field = 0xFFu;",
-        "",
-        "    /* A publish-only list expands no case below, so every name here is",
-        "     * unused there; the casts keep that list warning-free. */",
-        "    (void)seq;",
-        "    (void)payload;",
-        "    (void)len;",
-        "    (void)index;",
-        "    (void)narrow;",
-        "    (void)field;",
-        "    (void)r2s_rx_buf;",
-        "",
-        "    switch (topic_id) {",
-        "        R2S_TOPICS(R2S_X_DISPATCH)",
-        "    default: {",
-        "        if (r2s_session_find_topic(topic_id) == 0xFFu) {",
-        "            r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);",
-        "        }",
-        "        r2s_framer_count_refused();",
-        "        return;",
-        "    }",
-        "    }",
-        "}",
-        "}",
-        "",
+        ' * calls it directly instead of through a stored pointer. */',
+        '#define R2S_X_HANDLER(KIND, ...) R2S_X_HANDLER_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_HANDLER_Publisher(CTYPE, ONAME, TOPIC)',
+        '#define R2S_X_HANDLER_Subscription(CTYPE, ONAME, TOPIC, CB) void CB(const CTYPE & msg);',
+        '#define R2S_X_HANDLER_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_HANDLER_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        'R2S_TOPICS(R2S_X_HANDLER)',
+        '',
+        '/* One receive buffer shared by every subscription: only one dispatch',
+        ' * runs at a time, so one slot is enough. The spare member keeps a',
+        ' * publish-only sketch a valid union. */',
+        '#define R2S_X_BUF(KIND, ...) R2S_X_BUF_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_BUF_Publisher(CTYPE, ONAME, TOPIC)',
+        '#define R2S_X_BUF_Subscription(CTYPE, ONAME, TOPIC, CB) CTYPE ONAME;',
+        '#define R2S_X_BUF_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_BUF_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '',
+        'typedef union r2s_rx_buf {',
+        '  uint8_t r2s_empty;',
+        '  R2S_TOPICS(R2S_X_BUF)',
+        '} r2s_rx_buf_t;',
+        '',
+        'static r2s_rx_buf_t r2s_rx_buf;',
+        '',
+        '#define R2S_X_DISPATCH(KIND, ...) R2S_X_DISPATCH_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_DISPATCH_Publisher(CTYPE, ONAME, TOPIC)',
+        '#define R2S_X_DISPATCH_Subscription(CTYPE, ONAME, TOPIC, CB) \\',
+        '    case R2S_ID(ONAME): { \\',
+        '        index = r2s_session_find_topic(R2S_ID(ONAME)); \\',
+        '        if (index == 0xFFu || r2s_session_topic_status(index) != 0u) { \\',
+        '          r2s_framer_count_refused(); \\',
+        '          return; \\',
+        '        } \\',
+        '        narrow = (uint8_t)(r2s_session_topic_flags(index) & 0x02u); \\',
+        '        (void)r2s_session_note_rx_seq(index, seq); \\',
+        '        switch (r2s_codec_decode(R2S_TABLE_OF(CTYPE), (uint16_t)R2S_INDEX_OF(CTYPE), '
+        'payload, len, \\',
+        '      narrow, \\',
+        '                                 &r2s_rx_buf.ONAME, &field)) { \\',
+        '          case R2S_OK: \\',
+        '            break; \\',
+        '          case R2S_ERR_BOUNDS: \\',
+        '            r2s_error_note(R2S_ERROR_BOUND, topic_id, field, 1u); \\',
+        '            r2s_framer_count_refused(); \\',
+        '            return; \\',
+        '          default: \\',
+        '            r2s_framer_count_refused(); \\',
+        '            return; \\',
+        '        } \\',
+        '        CB(r2s_rx_buf.ONAME); \\',
+        '        return; \\',
+        '    }',
+        '#define R2S_X_DISPATCH_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_DISPATCH_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '',
+        '/* Decodes the subscribed topics into the buffer above and calls the',
+        ' * callback the row names; anything else is refused and counted. */',
+        'void r2s_codec_dispatch(uint8_t topic_id, uint8_t seq, const uint8_t *payload, '
+        'uint16_t len)',
+        '{',
+        '  uint8_t index;',
+        '  uint8_t narrow;',
+        '  uint8_t field = 0xFFu;',
+        '',
+        '    /* A publish-only list expands no case below, so every name here is',
+        '     * unused there; the casts keep that list warning-free. */',
+        '  (void)seq;',
+        '  (void)payload;',
+        '  (void)len;',
+        '  (void)index;',
+        '  (void)narrow;',
+        '  (void)field;',
+        '  (void)r2s_rx_buf;',
+        '',
+        '  switch (topic_id) {',
+        '  R2S_TOPICS(R2S_X_DISPATCH)',
+        '    default: {',
+        '        if (r2s_session_find_topic(topic_id) == 0xFFu) {',
+        '          r2s_error_note(R2S_ERROR_UNKNOWN_TOPIC, topic_id, 0xFFu, 1u);',
+        '        }',
+        '        r2s_framer_count_refused();',
+        '        return;',
+        '      }',
+        '  }',
+        '}',
+        '}',
+        '',
         "/* The sketch's objects: each row expands to the global publisher or",
-        " * subscription the body uses. The classes come from the static header",
-        " * above, so a row names only the type, the object, the topic and the",
-        " * callback. */",
+        ' * subscription the body uses. The classes come from the static header',
+        ' * above, so a row names only the type, the object, the topic and the',
+        ' * callback. */',
         '#include "ros2serial.hpp"',
-        "",
-        "#define R2S_X_OBJECT(KIND, ...) R2S_X_OBJECT_##KIND(__VA_ARGS__)",
-        "#define R2S_X_OBJECT_Publisher(CTYPE, ONAME, TOPIC) r2s::Publisher<CTYPE> ONAME(R2S_ID(ONAME));",
-        "#define R2S_X_OBJECT_Subscription(CTYPE, ONAME, TOPIC, CB) r2s::Subscription<CTYPE> ONAME;",
-        "#define R2S_X_OBJECT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "#define R2S_X_OBJECT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription",
-        "R2S_TOPICS(R2S_X_OBJECT)",
-        "",
-        "#endif",
-        "",
-        "#endif",
-        "",
-        "#endif",
-        "",
+        '',
+        '#define R2S_X_OBJECT(KIND, ...) R2S_X_OBJECT_ ## KIND(__VA_ARGS__)',
+        '#define R2S_X_OBJECT_Publisher(CTYPE, ONAME, TOPIC) r2s::Publisher<CTYPE> '
+        'ONAME(R2S_ID(ONAME));',
+        '#define R2S_X_OBJECT_Subscription(CTYPE, ONAME, TOPIC, CB) r2s::Subscription<CTYPE> '
+        'ONAME;',
+        '#define R2S_X_OBJECT_PUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        '#define R2S_X_OBJECT_SUB(...) R2S_error_rows_must_read_X_Publisher_or_X_Subscription',
+        'R2S_TOPICS(R2S_X_OBJECT)',
+        '',
+        '#endif',
+        '',
+        '#endif',
+        '',
+        '#endif',
+        '',
     ]
-    return "\n".join(lines)
+    return '\n'.join(lines)
 
 
 def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
     """Add the `bundle` subcommand to the command line."""
     parser = subparsers.add_parser(
-        "bundle",
-        help="write the Arduino library with bundled common types",
-        description="Write the Arduino library with descriptors for the bundled common types "
-        "and the ros2serial.h X-macro header, writing every file under the out directory.",
+        'bundle',
+        help='write the Arduino library with bundled common types',
+        description='Write the Arduino library with descriptors for the bundled common types '
+        'and the ros2serial.h X-macro header, writing every file under the out directory.',
     )
     parser.add_argument(
-        "--distro", default="jazzy", help="the snapshot distro: jazzy, lyrical or rolling (default jazzy)"
+        '--distro',
+        default='jazzy',
+        help='the snapshot distro: jazzy, lyrical or rolling (default jazzy)',
     )
-    parser.add_argument("--out", required=True, help="the directory receiving the library files")
+    parser.add_argument('--out', required=True, help='the directory receiving the library files')
     parser.set_defaults(run=run)
     return parser
 
@@ -926,7 +995,7 @@ def run(args: argparse.Namespace) -> int:
         files = bundle(args.distro)
         layouts._write(args.out, files)
     except (MessageError, OSError) as error:
-        print(f"r2s-gen: error: {error}", file=sys.stderr)
+        print(f'r2s-gen: error: {error}', file=sys.stderr)
         return 1
     for name in files:
         print(name)

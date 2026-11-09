@@ -28,55 +28,55 @@ ISR(TIMER0_COMPA_vect)
 /* Starts UART0 at 115200 8-N-1 and the millisecond tick. */
 static void hardware_init(void)
 {
-    UBRR0 = (uint16_t)UBRR_VALUE;
-    UCSR0B = (uint8_t)((1 << RXEN0) | (1 << TXEN0));
-    UCSR0C = (uint8_t)((1 << UCSZ01) | (1 << UCSZ00));
-    TCCR0A = (uint8_t)(1 << WGM01);
-    TCCR0B = (uint8_t)((1 << CS01) | (1 << CS00));
-    OCR0A = (uint8_t)TIMER0_TOP;
-    TIMSK0 = (uint8_t)(1 << OCIE0A);
-    sei();
+  UBRR0 = (uint16_t)UBRR_VALUE;
+  UCSR0B = (uint8_t)((1 << RXEN0) | (1 << TXEN0));
+  UCSR0C = (uint8_t)((1 << UCSZ01) | (1 << UCSZ00));
+  TCCR0A = (uint8_t)(1 << WGM01);
+  TCCR0B = (uint8_t)((1 << CS01) | (1 << CS00));
+  OCR0A = (uint8_t)TIMER0_TOP;
+  TIMSK0 = (uint8_t)(1 << OCIE0A);
+  sei();
 }
 
 uint16_t r2s_port_read(uint8_t *buf, uint16_t max)
 {
-    uint16_t count = 0u;
+  uint16_t count = 0u;
 
-    while (count < max && (UCSR0A & (uint8_t)(1 << RXC0)) != 0u) {
-        buf[count] = UDR0;
-        count++;
-    }
-    return count;
+  while (count < max && (UCSR0A & (uint8_t)(1 << RXC0)) != 0u) {
+    buf[count] = UDR0;
+    count++;
+  }
+  return count;
 }
 
 void r2s_port_write(const uint8_t *buf, uint16_t len)
 {
-    uint16_t i;
+  uint16_t i;
 
-    for (i = 0u; i < len; i++) {
-        while ((UCSR0A & (uint8_t)(1 << UDRE0)) == 0u) {
-        }
-        UDR0 = buf[i];
+  for (i = 0u; i < len; i++) {
+    while ((UCSR0A & (uint8_t)(1 << UDRE0)) == 0u) {
     }
+    UDR0 = buf[i];
+  }
 }
 
 /* The write above polls for space, so it never refuses a byte. */
 uint16_t r2s_port_tx_free(void)
 {
-    return 0xFFFFu;
+  return 0xFFFFu;
 }
 
 /* The tick as milliseconds: read with interrupts off, since a 32-bit load
  * on AVR runs as four 8-bit loads that an interrupt could split. */
 uint32_t r2s_port_tick(void)
 {
-    uint8_t flags = SREG;
-    uint32_t now;
+  uint8_t flags = SREG;
+  uint32_t now;
 
-    cli();
-    now = s_ms;
-    SREG = flags;
-    return now;
+  cli();
+  now = s_ms;
+  SREG = flags;
+  return now;
 }
 
 static uint32_t s_cmd_vel_count;
@@ -84,8 +84,8 @@ static uint32_t s_cmd_vel_count;
 /* Handles cmd_vel; dispatch calls it from r2s_spin_some(). */
 void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
 {
-    (void)msg;
-    s_cmd_vel_count++;
+  (void)msg;
+  s_cmd_vel_count++;
 }
 
 static uint32_t s_last_pub;
@@ -101,37 +101,37 @@ void loop_once(void);
  * the posix test firmware owes every tick, which its count needs. */
 void loop_once(void)
 {
-    uint32_t now;
+  uint32_t now;
 
-    r2s_spin_some();
-    now = r2s_port_tick();
-    if (r2s_connected() == 0u) {
+  r2s_spin_some();
+  now = r2s_port_tick();
+  if (r2s_connected() == 0u) {
+    s_last_pub = now;
+    return;
+  }
+  if ((uint32_t)(now - s_last_pub) >= 100u) {
+    std_msgs__msg__Float32 msg;
+
+    msg.data = (float)s_sent;
+    if (r2s_publish_battery(&msg) == R2S_OK) {
+      s_sent++;
+      s_last_pub += 100u;
+      if ((uint32_t)(now - s_last_pub) >= 100u) {
         s_last_pub = now;
-        return;
+      }
     }
-    if ((uint32_t)(now - s_last_pub) >= 100u) {
-        std_msgs__msg__Float32 msg;
-
-        msg.data = (float)s_sent;
-        if (r2s_publish_battery(&msg) == R2S_OK) {
-            s_sent++;
-            s_last_pub += 100u;
-            if ((uint32_t)(now - s_last_pub) >= 100u) {
-                s_last_pub = now;
-            }
-        }
-    }
+  }
 }
 
 int main(void)
 {
-    hardware_init();
-    if (r2s_session_configure("hello_cmake", r2s_topics, R2S_TOPIC_COUNT) != R2S_OK) {
-        return 1;
-    }
-    r2s_init();
-    s_last_pub = r2s_port_tick();
-    for (;;) {
-        loop_once();
-    }
+  hardware_init();
+  if (r2s_session_configure("hello_cmake", r2s_topics, R2S_TOPIC_COUNT) != R2S_OK) {
+    return 1;
+  }
+  r2s_init();
+  s_last_pub = r2s_port_tick();
+  for (;; ) {
+    loop_once();
+  }
 }

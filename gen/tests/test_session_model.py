@@ -10,11 +10,18 @@ traffic stays out: P1 and P2 specify that behavior when they land.
 
 import struct
 
-from hypothesis import HealthCheck, settings
+from hypothesis import HealthCheck
+from hypothesis import settings
 from hypothesis import strategies as st
-from hypothesis.stateful import RuleBasedStateMachine, initialize, invariant, rule, run_state_machine_as_test
+from hypothesis.stateful import RuleBasedStateMachine
+from hypothesis.stateful import initialize
+from hypothesis.stateful import invariant
+from hypothesis.stateful import rule
+from hypothesis.stateful import run_state_machine_as_test
 from r2s_gen.reference import session as model
-from session_harness import TOPIC_IDS, Pair, wire
+from session_harness import TOPIC_IDS
+from session_harness import Pair
+from session_harness import wire
 
 MAX_EXAMPLES = 30
 
@@ -40,7 +47,7 @@ class SessionMachine(RuleBasedStateMachine):
         self.set_rel = 0
         self.status_rel = 0
         self.led = 1
-        self.name_value = b"hi"
+        self.name_value = b'hi'
         self.last_set: bytes | None = None
 
     @initialize()
@@ -50,7 +57,7 @@ class SessionMachine(RuleBasedStateMachine):
         self.set_rel = 0
         self.status_rel = 0
         self.led = 1
-        self.name_value = b"hi"
+        self.name_value = b'hi'
         self.last_set = None
 
     @rule()
@@ -61,27 +68,31 @@ class SessionMachine(RuleBasedStateMachine):
     def topic_req(self, index: int) -> None:
         self.pair.feed_frame(0, self._seq(0), bytes((model.OP_TOPIC_REQ, index)))
 
-    @rule(topic_id=st.sampled_from([16, 17, 18, 0x42]), status=st.sampled_from([0, 0, 0, 1, 2, 3, 4]))
+    @rule(
+        topic_id=st.sampled_from([16, 17, 18, 0x42]), status=st.sampled_from([0, 0, 0, 1, 2, 3, 4])
+    )
     def topic_status(self, topic_id: int, status: int) -> None:
         self.pair.feed_frame(0, self._seq(0), bytes((model.OP_TOPIC_STATUS, topic_id, status)))
 
     @rule(token=st.sampled_from([1, 0xAABBCCDD, 0, 0xFFFFFFFF]))
     def ready(self, token: int) -> None:
-        self.pair.feed_frame(0, self._seq(0), bytes((model.OP_READY,)) + token.to_bytes(4, "little"))
+        self.pair.feed_frame(
+            0, self._seq(0), bytes((model.OP_READY,)) + token.to_bytes(4, 'little')
+        )
 
     @rule(empty=st.booleans())
     def heartbeat(self, empty: bool) -> None:
-        self.pair.feed_frame(4, self._seq(4), b"" if empty else b"\x01")
+        self.pair.feed_frame(4, self._seq(4), b'' if empty else b'\x01')
 
-    @rule(kind=st.sampled_from(["valid", "short", "long", "gap"]))
+    @rule(kind=st.sampled_from(['valid', 'short', 'long', 'gap']))
     def cmd_vel(self, kind: str) -> None:
         narrow = bool(self.pair.model.topics[1].flags & 0x02)
-        if kind == "valid":
+        if kind == 'valid':
             payload = valid_twist(narrow)
-        elif kind == "short":
+        elif kind == 'short':
             payload = bytes(3)
-        elif kind == "long":
-            payload = valid_twist(narrow) + b"\x00" * 4
+        elif kind == 'long':
+            payload = valid_twist(narrow) + b'\x00' * 4
         else:
             payload = valid_twist(narrow)
             self.host_seq[17] = (self.host_seq[17] + 7) & 0xFF
@@ -110,13 +121,13 @@ class SessionMachine(RuleBasedStateMachine):
 
     @rule()
     def param_set_name(self) -> None:
-        self.name_value = b"xy" if self.name_value == b"hi" else b"hi"
+        self.name_value = b'xy' if self.name_value == b'hi' else b'hi'
         value = self.name_value
         self._send_set(bytes((PARAM_SET, self.set_rel, 2, len(value))) + value)
 
     @rule()
     def param_set_readonly(self) -> None:
-        self._send_set(bytes((PARAM_SET, self.set_rel, 1)) + (7).to_bytes(8, "little"))
+        self._send_set(bytes((PARAM_SET, self.set_rel, 1)) + (7).to_bytes(8, 'little'))
 
     @rule()
     def param_set_unknown_index(self) -> None:
@@ -143,13 +154,13 @@ class SessionMachine(RuleBasedStateMachine):
 
     @rule()
     def corrupt_crc(self) -> None:
-        frame = bytearray(wire(4, self._seq(4), b""))
+        frame = bytearray(wire(4, self._seq(4), b''))
         frame[2] ^= 0xFF
         self.pair.feed_raw(bytes(frame))
 
     @rule()
     def corrupt_rcobs(self) -> None:
-        self.pair.feed_raw(b"\x05\x01\x00")
+        self.pair.feed_raw(b'\x05\x01\x00')
 
     @rule()
     def truncated_frame(self) -> None:
@@ -158,11 +169,11 @@ class SessionMachine(RuleBasedStateMachine):
 
     @rule()
     def oversized_frame(self) -> None:
-        self.pair.feed_raw(bytes([0x41]) * 516 + b"\x00")
+        self.pair.feed_raw(bytes([0x41]) * 516 + b'\x00')
 
     @rule()
     def empty_frame(self) -> None:
-        self.pair.feed_raw(b"\x00")
+        self.pair.feed_raw(b'\x00')
 
     @rule(ms=st.sampled_from(VALID_MSS))
     def advance(self, ms: int) -> None:
@@ -179,7 +190,7 @@ class SessionMachine(RuleBasedStateMachine):
         self.set_rel = 0
         self.status_rel = 0
         self.led = 1
-        self.name_value = b"hi"
+        self.name_value = b'hi'
         self.last_set = None
 
     @invariant()
@@ -217,7 +228,7 @@ def handshake(pair: Pair, token: int = 1) -> None:
     for index in range(4):
         pair.feed_frame(0, 1 + index, bytes((model.OP_TOPIC_REQ, index)))
         pair.feed_frame(0, 5 + index, bytes((model.OP_TOPIC_STATUS, TOPIC_IDS[index], 0)))
-    pair.feed_frame(0, 9, bytes((model.OP_READY,)) + token.to_bytes(4, "little"))
+    pair.feed_frame(0, 9, bytes((model.OP_READY,)) + token.to_bytes(4, 'little'))
 
 
 # covers: SES-8, SES-9
@@ -228,15 +239,15 @@ def test_timer_boundaries_against_the_library():
     assert pair.host.take_tx() == []
     assert pair.model.take_tx() == []
     pair.advance(1)
-    pair.check("heartbeat at exactly 500 ms")
-    pair.feed_frame(4, 0, b"")
+    pair.check('heartbeat at exactly 500 ms')
+    pair.feed_frame(4, 0, b'')
     pair.advance(1999)
-    assert pair.host.snapshot()["connected"] == model.CONNECTED
-    pair.feed_frame(4, 1, b"")
+    assert pair.host.snapshot()['connected'] == model.CONNECTED
+    pair.feed_frame(4, 1, b'')
     pair.advance(1999)
-    assert pair.host.snapshot()["connected"] == model.CONNECTED
+    assert pair.host.snapshot()['connected'] == model.CONNECTED
     pair.advance(1)
-    pair.check("link timeout at exactly 2000 ms")
+    pair.check('link timeout at exactly 2000 ms')
 
 
 # covers: SES-11
@@ -246,13 +257,13 @@ def test_seq_restarts_after_rehandshake():
     pair.publish(1.5)
     pair.feed_frame(0, 10, bytes((model.OP_HELLO_REQ, model.PROTOCOL_VERSION)))
     pair.publish(1.5)
-    pair.check("publish after re-handshake reuses seq 0")
+    pair.check('publish after re-handshake reuses seq 0')
 
 
 # covers: ERR-3, ERR-6
 def test_not_connected_count_wraps_past_65535():
     pair = Pair()
-    payload = struct.pack("<f", 1.5)
+    payload = struct.pack('<f', 1.5)
     for _ in range(70000):
         assert pair.host.publish_battery(1.5) == model.ERR_NOT_CONNECTED
         assert pair.model.publish(16, payload) == model.ERR_NOT_CONNECTED
@@ -262,14 +273,14 @@ def test_not_connected_count_wraps_past_65535():
     for index in range(4):
         pair.feed_frame(0, 1 + index, bytes((model.OP_TOPIC_REQ, index)))
         pair.feed_frame(0, 5 + index, bytes((model.OP_TOPIC_STATUS, TOPIC_IDS[index], 0)))
-    pair.host.feed(wire(0, 9, bytes((model.OP_READY,)) + (1).to_bytes(4, "little")))
-    pair.model.feed(wire(0, 9, bytes((model.OP_READY,)) + (1).to_bytes(4, "little")))
+    pair.host.feed(wire(0, 9, bytes((model.OP_READY,)) + (1).to_bytes(4, 'little')))
+    pair.model.feed(wire(0, 9, bytes((model.OP_READY,)) + (1).to_bytes(4, 'little')))
     pair.host.spin_now()
     pair.model.spin()
     expected = [model.encode_frame(5, 0, bytes((5, 16, 0x6F, 0x11, 0xFF)))]
     assert pair.host.take_tx() == expected
     assert pair.model.take_tx() == expected
-    pair.check("wrapped count flushes on READY")
+    pair.check('wrapped count flushes on READY')
 
 
 # covers: SES-1
@@ -277,16 +288,16 @@ def test_spin_limit_holds_backlog_frames():
     pair = Pair()
     handshake(pair, token=9)
     for seq in range(10):
-        pair.host.queue(wire(4, seq, b""))
-        pair.model.feed(wire(4, seq, b""))
+        pair.host.queue(wire(4, seq, b''))
+        pair.model.feed(wire(4, seq, b''))
     pair.host.spin_now()
     pair.model.spin()
-    pair.check("eight of ten queued units processed")
-    assert pair.host.snapshot()["counters"][0] == 18
+    pair.check('eight of ten queued units processed')
+    assert pair.host.snapshot()['counters'][0] == 18
     pair.host.spin_now()
     pair.model.spin()
-    pair.check("the last two units processed")
-    assert pair.host.snapshot()["counters"][0] == 20
+    pair.check('the last two units processed')
+    assert pair.host.snapshot()['counters'][0] == 20
 
 
 # covers: FRM-4, FRM-5
@@ -295,17 +306,17 @@ def test_tx_seq_wraps_at_256():
     handshake(pair)
     for _ in range(256):
         pair.publish(1.5)
-    assert pair.host.snapshot()["tx_seq"] == [0, 0, 0, 0]
+    assert pair.host.snapshot()['tx_seq'] == [0, 0, 0, 0]
     pair.publish(1.5)
-    pair.check("publish after the seq wraps reuses seq 0")
+    pair.check('publish after the seq wraps reuses seq 0')
 
 
 # covers: SES-1, FRM-14
 def test_spin_budget_skips_dropped_units():
     pair = Pair()
     handshake(pair)
-    pair.feed_raw(b"\x00" * 8 + wire(4, 0, b""))
-    assert pair.host.snapshot()["counters"] == (11, 0, 0, 0)
+    pair.feed_raw(b'\x00' * 8 + wire(4, 0, b''))
+    assert pair.host.snapshot()['counters'] == (11, 0, 0, 0)
 
 
 # covers: PAR-1, PAR-2, PAR-6, PAR-7
@@ -316,7 +327,12 @@ def test_declare_answers_every_configured_type():
     pair.feed_frame(3, 2, bytes((PARAM_REQ, 2)))
     assert pair.last_model_tx == [
         model.encode_frame(
-            3, 2, bytes((model.OP_PARAM_DECLARE, 2, model.PARAM_STRING, 0, 4)) + b"name" + bytes((2,)) + b"ab"
+            3,
+            2,
+            bytes((model.OP_PARAM_DECLARE, 2, model.PARAM_STRING, 0, 4))
+            + b'name'
+            + bytes((2,))
+            + b'ab',
         )
     ]
     pair.feed_frame(3, 3, bytes((PARAM_REQ, 3)))
@@ -328,7 +344,7 @@ def test_declare_answers_every_configured_type():
 # covers: SES-10
 def test_reserved_channel_in_announcing_answers_hello():
     pair = Pair()
-    pair.feed_frame(2, 0, b"")
+    pair.feed_frame(2, 0, b'')
     assert len(pair.last_model_tx) == 1
 
 
@@ -355,46 +371,46 @@ def test_set_verdicts_cover_every_type_rule():
     pair = Pair()
     handshake(pair)
     seq3, seq6 = 0, 0
-    _send_set(pair, seq3, 0, 0, b"\x01")
+    _send_set(pair, seq3, 0, 0, b'\x01')
     seq3 += 1
-    assert pair.model.snapshot()["params"][0] == (model.PARAM_BOOL, 1)
+    assert pair.model.snapshot()['params'][0] == (model.PARAM_BOOL, 1)
     _send_ack(pair, seq6, 0)
     seq6 += 1
-    _send_set(pair, seq3, 1, 0, b"\x02")
+    _send_set(pair, seq3, 1, 0, b'\x02')
     seq3 += 1
-    _send_set(pair, seq3, 1, 0, b"")
+    _send_set(pair, seq3, 1, 0, b'')
     seq3 += 1
     _send_ack(pair, seq6, 1)
     seq6 += 1
-    _send_set(pair, seq3, 2, 1, b"\x01\x02\x03\x04")
+    _send_set(pair, seq3, 2, 1, b'\x01\x02\x03\x04')
     seq3 += 1
     _send_ack(pair, seq6, 2)
     seq6 += 1
-    _send_set(pair, seq3, 3, 1, (7).to_bytes(8, "little"))
+    _send_set(pair, seq3, 3, 1, (7).to_bytes(8, 'little'))
     seq3 += 1
     _send_ack(pair, seq6, 3)
     seq6 += 1
-    _send_set(pair, seq3, 4, 2, b"\x80")
+    _send_set(pair, seq3, 4, 2, b'\x80')
     seq3 += 1
-    _send_set(pair, seq3, 4, 2, b"\x03ab\x00")
+    _send_set(pair, seq3, 4, 2, b'\x03ab\x00')
     seq3 += 1
-    _send_set(pair, seq3, 4, 2, b"\x05ab")
+    _send_set(pair, seq3, 4, 2, b'\x05ab')
     seq3 += 1
-    _send_set(pair, seq3, 4, 2, b"\x08" + b"12345678")
+    _send_set(pair, seq3, 4, 2, b'\x08' + b'12345678')
     seq3 += 1
     _send_ack(pair, seq6, 4)
     seq6 += 1
-    _send_set(pair, seq3, 5, 2, b"\x02xy")
+    _send_set(pair, seq3, 5, 2, b'\x02xy')
     seq3 += 1
-    assert pair.model.snapshot()["params"][2] == (model.PARAM_STRING, b"xy")
+    assert pair.model.snapshot()['params'][2] == (model.PARAM_STRING, b'xy')
     _send_ack(pair, seq6, 5)
     seq6 += 1
-    _send_set(pair, seq3, 6, 9, b"\x00")
+    _send_set(pair, seq3, 6, 9, b'\x00')
     seq3 += 1
     _send_ack(pair, seq6, 6)
     seq6 += 1
-    _send_set(pair, seq3, 6, 9, b"\x00")
-    _send_set(pair, seq3 + 1, 11, 0, b"\x00")
+    _send_set(pair, seq3, 6, 9, b'\x00')
+    _send_set(pair, seq3 + 1, 11, 0, b'\x00')
 
 
 # covers: REL-1, REL-2, REL-4
@@ -408,16 +424,18 @@ def test_pending_retransmit_and_giveup():
     pair.feed_frame(6, 1, bytes((model.PARAM_CHANNEL + 1, 0)))
     pair.feed_frame(6, 2, bytes((model.PARAM_CHANNEL,)))
     pair.feed_frame(6, 3, bytes((model.PARAM_CHANNEL, 0)))
-    assert pair.last_model_tx == [model.encode_frame(3, 1, bytes((model.OP_PARAM_STATUS, 1, 0, 0)))]
+    assert pair.last_model_tx == [
+        model.encode_frame(3, 1, bytes((model.OP_PARAM_STATUS, 1, 0, 0)))
+    ]
     pair.advance(499)
     assert pair.last_model_tx == []
     pair.advance(1)
     assert model.encode_frame(3, 2, bytes((model.OP_PARAM_STATUS, 1, 0, 0))) in pair.last_model_tx
     seq4 = 0
     for _ in range(3):
-        pair.feed_frame(4, seq4, b"")
+        pair.feed_frame(4, seq4, b'')
         seq4 += 1
         pair.advance(500)
-    assert pair.model.snapshot()["counters"][3] == 1
+    assert pair.model.snapshot()['counters'][3] == 1
     pair.advance(500)
-    assert pair.model.snapshot()["counters"][3] == 1
+    assert pair.model.snapshot()['counters'][3] == 1

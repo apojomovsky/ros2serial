@@ -9,13 +9,13 @@
 
 int main(void)
 {
-    UBRR0 = (uint16_t)UBRR_VALUE;
-    UCSR0B = (1 << RXEN0) | (1 << TXEN0);
-    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
-    for (;;) {
-        loop_until_bit_is_set(UCSR0A, RXC0);
-        uint8_t byte = UDR0;
-        loop_until_bit_is_set(UCSR0A, UDRE0);
-        UDR0 = byte;
-    }
+  UBRR0 = (uint16_t)UBRR_VALUE;
+  UCSR0B = (1 << RXEN0) | (1 << TXEN0);
+  UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
+  for (;; ) {
+    loop_until_bit_is_set(UCSR0A, RXC0);
+    uint8_t byte = UDR0;
+    loop_until_bit_is_set(UCSR0A, UDRE0);
+    UDR0 = byte;
+  }
 }

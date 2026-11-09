@@ -64,10 +64,11 @@ extern "C" {
 
 /* One announced action: the first 8 bytes of its RIHS01 type hash and its
  * type and action names. */
-typedef struct {
-    uint8_t type_hash[8];
-    const char *type_name;
-    const char *action_name;
+typedef struct
+{
+  uint8_t type_hash[8];
+  const char *type_name;
+  const char *action_name;
 } r2s_action_t;
 
 #ifdef R2S_WITH_ACTIONS
@@ -91,7 +92,7 @@ uint8_t r2s_actions_count(void);
 /* The entry at index, or NULL past the count. Only dereference it for a RAM
  * table: a flash entry's bytes live in the flash address space on AVR. Copy
  * a flash entry out first. */
-const r2s_action_t *r2s_actions_get(uint8_t index);
+const r2s_action_t * r2s_actions_get(uint8_t index);
 
 /* A RAM copy of the entry at index, read through the bound table's own
  * readers. R2S_OK, or R2S_ERR_BOUNDS past the count or for a NULL out. */
@@ -131,14 +132,17 @@ r2s_status_t r2s_actions_answer_cancel(uint8_t index, uint8_t goal_seq, uint8_t 
  * while announcing [ACT-9], R2S_ERR_TX_BUSY when the link takes no bytes, or
  * R2S_ERR_BOUNDS past the count, on a goal_seq the action does not hold, or
  * outside EXECUTING and CANCELING [ACT-8], sending nothing in each case. */
-r2s_status_t r2s_actions_feedback(uint8_t index, uint8_t goal_seq, const uint8_t *payload, uint16_t len);
+r2s_status_t r2s_actions_feedback(
+  uint8_t index, uint8_t goal_seq, const uint8_t *payload,
+  uint16_t len);
 
 /* Sends this terminal result for the active goal over the reliable channel
  * [ACT-3]: the outcome is one of the RESULT codes and the payload is the
  * packed Result message. The goal returns to IDLE at once [ACT-8]. Same
  * errors as feedback, with outcomes outside the terminal codes refused. */
-r2s_status_t r2s_actions_result(uint8_t index, uint8_t goal_seq, uint8_t outcome, const uint8_t *payload,
-                                uint16_t len);
+r2s_status_t r2s_actions_result(
+  uint8_t index, uint8_t goal_seq, uint8_t outcome, const uint8_t *payload,
+  uint16_t len);
 
 /* The C++ layer's goal and cancel hooks: the core calls them while serving
  * IDLE goals and matching cancels, and they answer through the calls above.

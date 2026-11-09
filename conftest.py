@@ -10,13 +10,15 @@ import sys
 from pathlib import Path
 
 try:
-    _vars = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True).stdout.split()
+    _vars = subprocess.run(
+        ['git', 'rev-parse', '--local-env-vars'], capture_output=True, text=True
+    ).stdout.split()
 except FileNotFoundError:
     _vars = []  # no git, so nothing could have been exported for it
 for _var in _vars:
     os.environ.pop(_var, None)
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent / 'scripts'))
 
 import pytest  # noqa: E402
 import shard_nodes  # noqa: E402
@@ -24,14 +26,14 @@ import shard_nodes  # noqa: E402
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--shard",
+        '--shard',
         default=None,
-        help="run only one CI shard of the SCRIPTS scope: 0 to N-1",
+        help='run only one CI shard of the SCRIPTS scope: 0 to N-1',
     )
 
 
 def pytest_collection_modifyitems(config, items):
-    spec = config.getoption("shard")
+    spec = config.getoption('shard')
     if spec is None:
         return
     try:

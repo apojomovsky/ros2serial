@@ -4,8 +4,9 @@
 
 #include <stdint.h>
 
-typedef struct std_msgs__msg__Float32 {
-    float data;
+typedef struct std_msgs__msg__Float32
+{
+  float data;
 } std_msgs__msg__Float32;
 
 #endif

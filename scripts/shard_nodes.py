@@ -14,7 +14,7 @@ def parse_spec(spec, n=N_SHARDS):
     text = str(spec).strip()
     if text.isdigit() and 0 <= int(text) < n:
         return int(text)
-    raise ValueError(f"bad shard {spec!r}: expected 0 to {n - 1}")
+    raise ValueError(f'bad shard {spec!r}: expected 0 to {n - 1}')
 
 
 def shard_of(position, n=N_SHARDS):
@@ -25,4 +25,8 @@ def shard_of(position, n=N_SHARDS):
 def nodes_for_shard(node_ids, shard, n=N_SHARDS):
     """The node ids of one shard: the sorted ids dealt round-robin."""
     parse_spec(shard, n)
-    return [node_id for position, node_id in enumerate(sorted(node_ids)) if shard_of(position, n) == shard]
+    return [
+        node_id
+        for position, node_id in enumerate(sorted(node_ids))
+        if shard_of(position, n) == shard
+    ]

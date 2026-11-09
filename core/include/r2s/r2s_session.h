@@ -52,11 +52,15 @@ typedef r2s_topic_t r2s_session_topic_t;
  * r2s_session_configure_ram instead. Returns R2S_OK, or R2S_ERR_BOUNDS when
  * the node name is missing or does not fit the hello frame, or when the bind
  * refuses the table, leaving the previous configuration unchanged. */
-r2s_status_t r2s_session_configure(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count);
+r2s_status_t r2s_session_configure(
+  const char *node_name, const r2s_topic_t *topics,
+  uint8_t topic_count);
 
 /* Hands the session a RAM topic table, as the runtime registration path fills
  * one. The same gate as above, with plain table reads. */
-r2s_status_t r2s_session_configure_ram(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count);
+r2s_status_t r2s_session_configure_ram(
+  const char *node_name, const r2s_topic_t *topics,
+  uint8_t topic_count);
 
 /* The index of the configured topic with this user topic_id, or 0xFF when the
  * table names no such topic. The codec's dispatch and publish wrappers use it

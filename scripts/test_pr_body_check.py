@@ -1,6 +1,6 @@
 import pr_body_check
 
-GOOD = "Closes #1\n\n## Review\n\nNo findings.\n"
+GOOD = 'Closes #1\n\n## Review\n\nNo findings.\n'
 
 
 def test_a_good_body_passes_both_modes():
@@ -9,8 +9,8 @@ def test_a_good_body_passes_both_modes():
 
 
 def test_literal_newline_escapes_fail_in_ci_mode():
-    assert any("literal" in p for p in pr_body_check.check("one\\ntwo", full=False))
-    assert any("literal" in p for p in pr_body_check.check("one\\rtwo", full=False))
+    assert any('literal' in p for p in pr_body_check.check('one\\ntwo', full=False))
+    assert any('literal' in p for p in pr_body_check.check('one\\rtwo', full=False))
 
 
 def test_escapes_inside_code_are_allowed():
@@ -23,15 +23,15 @@ def test_ci_mode_does_not_require_the_ritual_sections():
 
 
 def test_full_mode_requires_closes_and_review():
-    problems = pr_body_check.check("Just text.", full=True)
-    assert any("Closes #N" in p for p in problems)
-    assert any("## Review" in p for p in problems)
+    problems = pr_body_check.check('Just text.', full=True)
+    assert any('Closes #N' in p for p in problems)
+    assert any('## Review' in p for p in problems)
 
 
 def test_a_body_needs_no_fenced_block():
     # The ritual asks for the claim and the review, not for a run of the
     # tests: the body says what the change is, not how the tests went.
-    body = "Closes #1\n\nThe thing, and why.\n\n## Review\n\nNo findings.\n"
+    body = 'Closes #1\n\nThe thing, and why.\n\n## Review\n\nNo findings.\n'
     assert pr_body_check.check(body, full=True) == []
 
 
@@ -41,4 +41,4 @@ def test_tilde_fences_and_indented_code_are_code():
 
 
 def test_closes_is_case_insensitive():
-    assert pr_body_check.check(GOOD.replace("Closes", "closes"), full=True) == []
+    assert pr_body_check.check(GOOD.replace('Closes', 'closes'), full=True) == []

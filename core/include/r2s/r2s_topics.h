@@ -24,12 +24,13 @@ extern "C" {
 
 /* One announced topic: its user topic_id, its CTL-4 flags, the first 8 bytes
  * of its RIHS01 type hash, and its type and topic names. */
-typedef struct {
-    uint8_t topic_id;
-    uint8_t flags;
-    uint8_t type_hash[8];
-    const char *type_name;
-    const char *topic_name;
+typedef struct
+{
+  uint8_t topic_id;
+  uint8_t flags;
+  uint8_t type_hash[8];
+  const char *type_name;
+  const char *topic_name;
 } r2s_topic_t;
 
 /* Binds the table the accessors read. The table outlives the call: the static
@@ -56,7 +57,7 @@ uint8_t r2s_topic_count(void);
  * the next configure or test reset. Only dereference it for a RAM table: a
  * flash entry's bytes live in the flash address space on AVR, where a plain
  * dereference fetches the wrong bytes. Copy a flash entry out first. */
-const r2s_topic_t *r2s_topic_get(uint8_t index);
+const r2s_topic_t * r2s_topic_get(uint8_t index);
 
 /* A RAM copy of the entry at index, read through the bound table's own
  * readers, so the announce path serves a flash table and a RAM table alike.

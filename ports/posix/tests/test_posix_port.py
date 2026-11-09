@@ -18,10 +18,13 @@ import subprocess
 import time
 from pathlib import Path
 
-from r2s_gen import bounds, config, msgs, topics
+from r2s_gen import bounds
+from r2s_gen import config
+from r2s_gen import msgs
+from r2s_gen import topics
 from r2s_gen.reference import frames as wire
 
-FIRMWARE = os.environ.get("R2S_POSIX_FW", "")
+FIRMWARE = os.environ.get('R2S_POSIX_FW', '')
 START_TIMEOUT = 10.0
 FRAME_TIMEOUT = 5.0
 STOP_TIMEOUT = 10.0
@@ -37,8 +40,8 @@ TOPIC_OP = 0x04
 
 
 def firmware_binary():
-    assert FIRMWARE, "R2S_POSIX_FW is unset: run ports/posix/run.sh, which builds it"
-    assert os.path.exists(FIRMWARE), f"no firmware at {FIRMWARE!r}: run ports/posix/run.sh"
+    assert FIRMWARE, 'R2S_POSIX_FW is unset: run ports/posix/run.sh, which builds it'
+    assert os.path.exists(FIRMWARE), f'no firmware at {FIRMWARE!r}: run ports/posix/run.sh'
     return FIRMWARE
 
 
@@ -54,15 +57,15 @@ def read_frame(master, want=None, timeout=FRAME_TIMEOUT):
     several frames."""
     deadline = time.monotonic() + timeout
     while True:
-        while _PENDING.find(b"\x00") < 0:
+        while _PENDING.find(b'\x00') < 0:
             remaining = deadline - time.monotonic()
-            assert remaining > 0, "timed out waiting for a frame"
+            assert remaining > 0, 'timed out waiting for a frame'
             ready, _, _ = select.select([master], [], [], remaining)
-            assert ready, "timed out waiting for a frame"
+            assert ready, 'timed out waiting for a frame'
             chunk = os.read(master, 4096)
-            assert chunk, "the firmware closed the pty"
+            assert chunk, 'the firmware closed the pty'
             _PENDING.extend(chunk)
-        end = _PENDING.find(b"\x00")
+        end = _PENDING.find(b'\x00')
         unit = bytes(_PENDING[: end + 1])
         del _PENDING[: end + 1]
         frame = wire.decode(unit)
@@ -76,58 +79,58 @@ def take_varint(payload, pos):
     value = 0
     shift = 0
     while True:
-        assert pos < len(payload), "the payload ends mid-varint"
+        assert pos < len(payload), 'the payload ends mid-varint'
         byte = payload[pos]
         pos += 1
         value |= (byte & 0x7F) << shift
         if byte < 0x80:
             return value, pos
         shift += 7
-        assert shift < 21, "a varint exceeds 3 bytes"
+        assert shift < 21, 'a varint exceeds 3 bytes'
 
 
 def take_string(payload, pos):
     length, pos = take_varint(payload, pos)
     end = pos + length
-    assert end <= len(payload), "the payload ends mid-string"
+    assert end <= len(payload), 'the payload ends mid-string'
     return payload[pos:end].decode(), end
 
 
 def parse_hello(payload):
     """The HELLO fields in [CTL-16] order, after the opcode."""
-    assert payload[0] == HELLO_OP, f"expected HELLO, got opcode {payload[0]:#04x}"
-    token = int.from_bytes(payload[3:7], "little")
-    max_frame = int.from_bytes(payload[7:9], "little")
-    rx_capacity = int.from_bytes(payload[9:11], "little")
-    tick_hz = int.from_bytes(payload[11:15], "little")
+    assert payload[0] == HELLO_OP, f'expected HELLO, got opcode {payload[0]:#04x}'
+    token = int.from_bytes(payload[3:7], 'little')
+    max_frame = int.from_bytes(payload[7:9], 'little')
+    rx_capacity = int.from_bytes(payload[9:11], 'little')
+    tick_hz = int.from_bytes(payload[11:15], 'little')
     node, end = take_string(payload, 17)
-    assert end == len(payload), "bytes after the node name"
+    assert end == len(payload), 'bytes after the node name'
     return {
-        "version": payload[1],
-        "mode": payload[2],
-        "token": token,
-        "max_frame": max_frame,
-        "rx_capacity": rx_capacity,
-        "tick_hz": tick_hz,
-        "features": payload[15],
-        "count": payload[16],
-        "node": node,
+        'version': payload[1],
+        'mode': payload[2],
+        'token': token,
+        'max_frame': max_frame,
+        'rx_capacity': rx_capacity,
+        'tick_hz': tick_hz,
+        'features': payload[15],
+        'count': payload[16],
+        'node': node,
     }
 
 
 def parse_topic(payload):
     """The TOPIC fields in [CTL-16] order, after the opcode."""
-    assert payload[0] == TOPIC_OP, f"expected TOPIC, got opcode {payload[0]:#04x}"
+    assert payload[0] == TOPIC_OP, f'expected TOPIC, got opcode {payload[0]:#04x}'
     type_name, pos = take_string(payload, 12)
     topic_name, pos = take_string(payload, pos)
-    assert pos == len(payload), "bytes after the topic name"
+    assert pos == len(payload), 'bytes after the topic name'
     return {
-        "index": payload[1],
-        "id": payload[2],
-        "flags": payload[3],
-        "hash": payload[4:12],
-        "type": type_name,
-        "topic": topic_name,
+        'index': payload[1],
+        'id': payload[2],
+        'flags': payload[3],
+        'hash': payload[4:12],
+        'type': type_name,
+        'topic': topic_name,
     }
 
 
@@ -159,7 +162,7 @@ class Firmware:
 
     def _read_error_line(self, timeout):
         deadline = time.monotonic() + timeout
-        while b"\n" not in self._error:
+        while b'\n' not in self._error:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return None
@@ -172,22 +175,22 @@ class Firmware:
             if not chunk:
                 return None
             self._error += chunk
-        line, _, self._error = self._error.partition(b"\n")
-        return line.decode() + "\n"
+        line, _, self._error = self._error.partition(b'\n')
+        return line.decode() + '\n'
 
     def _await_ready(self):
         deadline = time.monotonic() + START_TIMEOUT
         while True:
             remaining = deadline - time.monotonic()
-            assert remaining > 0, "the firmware never announced readiness"
+            assert remaining > 0, 'the firmware never announced readiness'
             line = self._read_error_line(remaining)
-            assert line is not None, "the firmware exited before announcing readiness"
-            if line.startswith("r2s_posix: ready"):
+            assert line is not None, 'the firmware exited before announcing readiness'
+            if line.startswith('r2s_posix: ready'):
                 return line.strip()
 
     def next_line(self, timeout=FRAME_TIMEOUT):
         line = self._read_error_line(timeout)
-        assert line is not None, "the firmware printed nothing"
+        assert line is not None, 'the firmware printed nothing'
         return line.strip()
 
     def stop(self):
@@ -198,7 +201,7 @@ class Firmware:
         except subprocess.TimeoutExpired:
             self._proc.kill()
             self._proc.communicate()
-            raise AssertionError("the firmware ignored SIGTERM") from None
+            raise AssertionError('the firmware ignored SIGTERM') from None
         os.close(self._master)
         _PENDING.clear()
         return self._proc.returncode
@@ -226,19 +229,19 @@ class Host:
         self.seq[topic] = (seq + 1) % 256
 
     def hello_req(self):
-        self.send(0, b"\x01\x02")
+        self.send(0, b'\x01\x02')
 
     def topic_req(self, index):
-        self.send(0, b"\x03" + bytes((index,)))
+        self.send(0, b'\x03' + bytes((index,)))
 
     def topic_status(self, topic_id, status=0):
-        self.send(0, b"\x05" + bytes((topic_id, status)))
+        self.send(0, b'\x05' + bytes((topic_id, status)))
 
     def ready(self):
         """READY with the next nonzero session token ([SES-10], [SES-17])."""
         token = self.next_token
         self.next_token = self.next_token % 0xFFFFFFFF + 1
-        self.send(0, b"\x06" + struct.pack("<I", token))
+        self.send(0, b'\x06' + struct.pack('<I', token))
         return token
 
     def ping(self, ping_id):
@@ -247,7 +250,7 @@ class Host:
 
     def correction(self, tick0, sec, nanosec, drift_ppm=0):
         """One CORRECTION anchoring tick0 to the given ROS time ([TIM-3])."""
-        self.send(1, b"\x03" + struct.pack("<IiIh", tick0, sec, nanosec, drift_ppm))
+        self.send(1, b'\x03' + struct.pack('<IiIh', tick0, sec, nanosec, drift_ppm))
 
 
 def do_handshake(fw, host=None):
@@ -261,16 +264,16 @@ def do_handshake(fw, host=None):
     hello = parse_hello(payload)
     host.hello_req()
     topics = []
-    for index in range(hello["count"]):
+    for index in range(hello['count']):
         host.topic_req(index)
         while True:
             _, _, payload = read_frame(fw.master, want=0)
             if payload[0] == TOPIC_OP:
                 break
         parsed = parse_topic(payload)
-        assert parsed["index"] == index, f"TOPIC answers index {parsed['index']}, not {index}"
+        assert parsed['index'] == index, f'TOPIC answers index {parsed["index"]}, not {index}'
         topics.append(parsed)
-        host.topic_status(parsed["id"])
+        host.topic_status(parsed['id'])
     host.ready()
     return hello, topics, host
 
@@ -290,89 +293,96 @@ def test_hello_announces_firmware(tmp_path):
     with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
         hello = parse_hello(payload)
-    assert hello["version"] == 4
-    assert hello["mode"] == 0
-    assert hello["token"] == 0, "no token before the first READY"
-    assert hello["max_frame"] == 279
-    assert hello["rx_capacity"] == 279 + 279 // 254 + 1
+    assert hello['version'] == 4
+    assert hello['mode'] == 0
+    assert hello['token'] == 0, 'no token before the first READY'
+    assert hello['max_frame'] == 279
+    assert hello['rx_capacity'] == 279 + 279 // 254 + 1
     # covers: CTL-8
-    assert hello["tick_hz"] == 1000
+    assert hello['tick_hz'] == 1000
     # covers: CTL-10
-    assert hello["max_frame"] <= 65277
+    assert hello['max_frame'] <= 65277
     # covers: CTL-2
-    assert hello["features"] & 0xC0 == 0
-    assert hello["count"] == 6
-    assert hello["node"] == "r2s_posix"
+    assert hello['features'] & 0xC0 == 0
+    assert hello['count'] == 6
+    assert hello['node'] == 'r2s_posix'
 
 
 # covers: SES-2, SES-6
 def test_handshake_reaches_connected(tmp_path):
-    with Firmware("--rate", "10") as fw:
+    with Firmware('--rate', '10') as fw:
         hello, topics, _host = do_handshake(fw)
-        assert [t["topic"] for t in topics] == ["battery", "cmd_vel", "echo_vel", "log_text", "time_now", "joints"]
-        assert [(t["type"], t["id"]) for t in topics] == [
-            ("std_msgs/msg/Float32", 16),
-            ("geometry_msgs/msg/Twist", 17),
-            ("geometry_msgs/msg/Twist", 18),
-            ("std_msgs/msg/String", 19),
-            ("builtin_interfaces/msg/Time", 20),
-            ("sensor_msgs/msg/JointState", 21),
+        assert [t['topic'] for t in topics] == [
+            'battery',
+            'cmd_vel',
+            'echo_vel',
+            'log_text',
+            'time_now',
+            'joints',
+        ]
+        assert [(t['type'], t['id']) for t in topics] == [
+            ('std_msgs/msg/Float32', 16),
+            ('geometry_msgs/msg/Twist', 17),
+            ('geometry_msgs/msg/Twist', 18),
+            ('std_msgs/msg/String', 19),
+            ('builtin_interfaces/msg/Time', 20),
+            ('sensor_msgs/msg/JointState', 21),
         ]
         # covers: FRM-3
-        assert all(16 <= t["id"] <= 255 for t in topics)
+        assert all(16 <= t['id'] <= 255 for t in topics)
         # covers: CTL-4
-        assert all(t["flags"] & 0xF0 == 0 for t in topics)
-        assert [t["flags"] & 0x01 for t in topics] == [0, 1, 0, 0, 0, 1]
+        assert all(t['flags'] & 0xF0 == 0 for t in topics)
+        assert [t['flags'] & 0x01 for t in topics] == [0, 1, 0, 0, 0, 1]
         _, _, payload = read_frame(fw.master, want=4, timeout=2.0)
-        assert len(payload) == 8, "the heartbeat carries four u16 counters"
-    assert hello["node"] == "r2s_posix"
+        assert len(payload) == 8, 'the heartbeat carries four u16 counters'
+    assert hello['node'] == 'r2s_posix'
 
 
 # covers: SES-10, SES-19, SES-21
 def test_restarted_firmware_is_detected_as_a_reset(tmp_path):
-    fw = Firmware("--rate", "20")
+    fw = Firmware('--rate', '20')
     hello, _topics, host = do_handshake(fw)
     assigned = host.next_token - 1
-    assert hello["token"] == 0, "no token before the first READY"
+    assert hello['token'] == 0, 'no token before the first READY'
     assert assigned != 0
     assert fw.stop() == -signal.SIGTERM
-    with Firmware("--rate", "20") as fw:
+    with Firmware('--rate', '20') as fw:
         _, _, payload = read_frame(fw.master, want=0)
         rebooted = parse_hello(payload)
-        assert rebooted["token"] == 0, "a reboot wipes the RAM token"
-        assert rebooted["token"] != assigned, "the host tells the reboot from a reconnect"
+        assert rebooted['token'] == 0, 'a reboot wipes the RAM token'
+        assert rebooted['token'] != assigned, 'the host tells the reboot from a reconnect'
         _hello, _topics, host = do_handshake(fw, host)
-        assert host.next_token - 1 != assigned, "the re-handshake assigns a fresh token"
+        assert host.next_token - 1 != assigned, 'the re-handshake assigns a fresh token'
         _topic, _seq, payload = read_frame(fw.master, want=16)
-        assert len(payload) == 4, "the re-handshake connects again"
+        assert len(payload) == 4, 'the re-handshake connects again'
 
 
 # covers: CTL-16
 def test_configured_topics(tmp_path):
-    args = ["--node", "custom", "--pub", "volt", "--sub", "drive", "--no-log-text"]
+    args = ['--node', 'custom', '--pub', 'volt', '--sub', 'drive', '--no-log-text']
     with Firmware(*args) as fw:
         hello, topics, _host = do_handshake(fw)
-        assert hello["node"] == "custom"
-        assert hello["count"] == 5
-        assert [(t["id"], t["topic"]) for t in topics] == [
-            (16, "volt"),
-            (17, "drive"),
-            (18, "echo_vel"),
-            (20, "time_now"),
-            (21, "joints"),
+        assert hello['node'] == 'custom'
+        assert hello['count'] == 5
+        assert [(t['id'], t['topic']) for t in topics] == [
+            (16, 'volt'),
+            (17, 'drive'),
+            (18, 'echo_vel'),
+            (20, 'time_now'),
+            (21, 'joints'),
         ]
 
 
 # covers: FRM-4, FRM-5
 def test_connected_publishes_battery(tmp_path):
-    with Firmware("--rate", "20") as fw:
+    with Firmware('--rate', '20') as fw:
         _hello, _topics, _host = do_handshake(fw)
         values = []
         seqs = []
         for _ in range(3):
             _topic, seq, payload = read_frame(fw.master, want=16)
             assert len(payload) == 4
-            values.append(struct.unpack("<f", payload)[0])
+            values.append(struct.unpack('<f', payload)[0])
             seqs.append(seq)
 
     assert values == [0.0, 1.0, 2.0]
@@ -381,42 +391,42 @@ def test_connected_publishes_battery(tmp_path):
 
 # covers: SES-9, SES-10
 def test_connected_publishes_log_text(tmp_path):
-    with Firmware("--rate", "20") as fw:
+    with Firmware('--rate', '20') as fw:
         _hello, _topics, host = do_handshake(fw)
         assigned = host.next_token - 1
         _topic, _seq, payload = read_frame(fw.master, want=19)
         text, end = take_string(payload, 0)
-        assert end == len(payload), "bytes after the log string"
-        assert text == format(assigned, "08x"), "the boot line carries the assigned token"
+        assert end == len(payload), 'bytes after the log string'
+        assert text == format(assigned, '08x'), 'the boot line carries the assigned token'
         batteries = 0
         while True:
             topic, _seq, payload = read_frame(fw.master)
             if topic == 19:
                 repeat, end = take_string(payload, 0)
-                assert end == len(payload), "bytes after the log string"
-                assert repeat, "the periodic log line is empty"
+                assert end == len(payload), 'bytes after the log string'
+                assert repeat, 'the periodic log line is empty'
                 return
             if topic == 16:
                 batteries += 1
-            assert batteries <= 10, "no periodic log_text within 10 battery publishes"
+            assert batteries <= 10, 'no periodic log_text within 10 battery publishes'
 
 
 # covers: SES-9
 def test_log_text_boot_line_retried_after_reject(tmp_path):
-    with Firmware("--rate", "20") as fw:
+    with Firmware('--rate', '20') as fw:
         host = Host(fw.master)
         _topic, _seq, payload = read_frame(fw.master, want=0)
         hello = parse_hello(payload)
         host.hello_req()
-        for index in range(hello["count"]):
+        for index in range(hello['count']):
             host.topic_req(index)
             while True:
                 _topic, _seq, payload = read_frame(fw.master, want=0)
                 if payload[0] == TOPIC_OP:
                     break
             parsed = parse_topic(payload)
-            assert parsed["index"] == index
-            host.topic_status(parsed["id"], 1 if parsed["id"] == 19 else 0)
+            assert parsed['index'] == index
+            host.topic_status(parsed['id'], 1 if parsed['id'] == 19 else 0)
         host.ready()
         quiet_until = time.monotonic() + 1.2
         while True:
@@ -426,48 +436,50 @@ def test_log_text_boot_line_retried_after_reject(tmp_path):
             try:
                 topic, _seq, _payload = read_frame(fw.master, timeout=remaining)
             except AssertionError as error:
-                assert "timed out" in str(error), f"lost the firmware: {error}"
+                assert 'timed out' in str(error), f'lost the firmware: {error}'
                 break
-            assert topic != 19, "log_text published while the host rejects it"
+            assert topic != 19, 'log_text published while the host rejects it'
         host.topic_status(19, 0)
         _topic, _seq, payload = read_frame(fw.master, want=19)
         text, end = take_string(payload, 0)
-        assert end == len(payload), "bytes after the log string"
-        assert text == format(host.next_token - 1, "08x")
+        assert end == len(payload), 'bytes after the log string'
+        assert text == format(host.next_token - 1, '08x')
 
 
 def test_subscribes_twist(tmp_path):
-    with Firmware("--rate", "1") as fw:
+    with Firmware('--rate', '1') as fw:
         _hello, _topics, host = do_handshake(fw)
-        host.send(17, struct.pack("<6d", 1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
-        assert fw.next_line() == "r2s_posix: cmd_vel n=1"
+        host.send(17, struct.pack('<6d', 1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
+        assert fw.next_line() == 'r2s_posix: cmd_vel n=1'
 
 
 def run_once(args):
     """One firmware run that must fail: returns (returncode, stderr) with no
     pty involved."""
-    cmd = [firmware_binary(), "/dev/pts/does-not-exist", *args]
-    proc = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=START_TIMEOUT)
+    cmd = [firmware_binary(), '/dev/pts/does-not-exist', *args]
+    proc = subprocess.run(
+        cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=START_TIMEOUT
+    )
     return proc.returncode, proc.stderr.decode()
 
 
 def test_unknown_option_fails(tmp_path):
-    code, error = run_once(["--bogus"])
+    code, error = run_once(['--bogus'])
     assert code == 2
-    assert "--bogus" in error
+    assert '--bogus' in error
 
 
 def test_bad_rate_fails(tmp_path):
-    code, error = run_once(["--rate", "0"])
+    code, error = run_once(['--rate', '0'])
     assert code == 2
-    assert "--rate" in error
+    assert '--rate' in error
 
 
 def test_bad_tick_skew_fails(tmp_path):
-    for bad in ("abc", "20001", "-20001"):
-        code, error = run_once(["--tick-skew-ppm", bad])
+    for bad in ('abc', '20001', '-20001'):
+        code, error = run_once(['--tick-skew-ppm', bad])
         assert code == 2
-        assert "--tick-skew-ppm" in error
+        assert '--tick-skew-ppm' in error
 
 
 # covers: TIM-1, TIM-2, TIM-3, TIM-6
@@ -475,36 +487,36 @@ def test_time_now_tracks_correction(tmp_path):
     """time_now stays silent until a correction anchors the clock, then
     publishes the anchored time: the PONG tick stands in for the publish
     tick, so a zero-drift correction pins the first stamp near its time."""
-    with Firmware("--rate", "20", "--no-log-text") as fw:
+    with Firmware('--rate', '20', '--no-log-text') as fw:
         _hello, _topics, host = do_handshake(fw)
         for _ in range(8):
             topic, _seq, _payload = read_frame(fw.master)
-            assert topic != 20, "time_now published while unsynced"
+            assert topic != 20, 'time_now published while unsynced'
         host.ping(7)
         _topic, _seq, payload = read_frame(fw.master, want=1)
-        assert payload[0] == 0x02, "the MCU answers a PING with a PONG"
-        assert payload[1] == 7, "the PONG carries the PING id"
-        tick0 = int.from_bytes(payload[2:6], "little")
+        assert payload[0] == 0x02, 'the MCU answers a PING with a PONG'
+        assert payload[1] == 7, 'the PONG carries the PING id'
+        tick0 = int.from_bytes(payload[2:6], 'little')
         host.correction(tick0, 1700000000, 0)
         stamps = []
         for _ in range(3):
             _topic, _seq, payload = read_frame(fw.master, want=20)
-            assert len(payload) == 8, "a Time payload carries sec and nanosec"
-            sec, nanosec = struct.unpack("<iI", payload)
+            assert len(payload) == 8, 'a Time payload carries sec and nanosec'
+            sec, nanosec = struct.unpack('<iI', payload)
             stamps.append(sec * 1_000_000_000 + nanosec)
         anchored = 1700000000 * 1_000_000_000
-        assert abs(stamps[0] - anchored) < 2_000_000_000, "the first stamp left its correction"
-        assert stamps[0] < stamps[1] < stamps[2], "the stamps stand still"
-        assert stamps[2] - stamps[0] < 2_000_000_000, "the stamps ran past their interval"
+        assert abs(stamps[0] - anchored) < 2_000_000_000, 'the first stamp left its correction'
+        assert stamps[0] < stamps[1] < stamps[2], 'the stamps stand still'
+        assert stamps[2] - stamps[0] < 2_000_000_000, 'the stamps ran past their interval'
 
 
 LAUNCH_NAME_TYPES = [
-    ("--pub", "std_msgs/msg/Float32"),
-    ("--sub", "geometry_msgs/msg/Twist"),
-    ("--echo", "geometry_msgs/msg/Twist"),
-    ("--log-text", "std_msgs/msg/String"),
-    ("--time-now", "builtin_interfaces/msg/Time"),
-    ("--joints", "sensor_msgs/msg/JointState"),
+    ('--pub', 'std_msgs/msg/Float32'),
+    ('--sub', 'geometry_msgs/msg/Twist'),
+    ('--echo', 'geometry_msgs/msg/Twist'),
+    ('--log-text', 'std_msgs/msg/String'),
+    ('--time-now', 'builtin_interfaces/msg/Time'),
+    ('--joints', 'sensor_msgs/msg/JointState'),
 ]
 
 
@@ -532,37 +544,40 @@ def launch_name_cases(tmp_path):
     announces, so the boundary tests track the generated limits (G8)."""
     with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
-        max_frame = parse_hello(payload)["max_frame"]
-    return [(flag, type_name, topic_name_limit(type_name, max_frame)) for flag, type_name in LAUNCH_NAME_TYPES]
+        max_frame = parse_hello(payload)['max_frame']
+    return [
+        (flag, type_name, topic_name_limit(type_name, max_frame))
+        for flag, type_name in LAUNCH_NAME_TYPES
+    ]
 
 
 def test_launch_topic_name_over_limit_fails(tmp_path):
     for flag, type_name, limit in launch_name_cases(tmp_path):
-        name = "n" * (limit + 1)
+        name = 'n' * (limit + 1)
         code, error = run_once([flag, name])
         assert code == 2
         assert flag in error
         assert name in error
         assert str(limit + 1) in error
-        assert f"limit {limit}" in error
+        assert f'limit {limit}' in error
         assert type_name in error
 
 
 def test_launch_topic_name_at_limit_passes_name_check(tmp_path):
     for flag, _, limit in launch_name_cases(tmp_path):
-        code, error = run_once([flag, "n" * limit])
+        code, error = run_once([flag, 'n' * limit])
         assert code == 1
-        assert "does-not-exist" in error
+        assert 'does-not-exist' in error
 
 
 def test_launch_topic_name_at_limit_is_announced(tmp_path):
     cases = launch_name_cases(tmp_path)
     args = []
     for flag, _, limit in cases:
-        args += [flag, "n" * limit]
+        args += [flag, 'n' * limit]
     with Firmware(*args) as fw:
         _, topics, _ = do_handshake(fw)
-        assert [t["topic"] for t in topics] == ["n" * limit for _, _, limit in cases]
+        assert [t['topic'] for t in topics] == ['n' * limit for _, _, limit in cases]
 
 
 def node_name_limit(max_frame):
@@ -578,33 +593,33 @@ def node_name_limit(max_frame):
 def test_launch_node_name_over_limit_fails(tmp_path):
     with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
-        limit = node_name_limit(parse_hello(payload)["max_frame"])
-    name = "n" * (limit + 1)
-    code, error = run_once(["--node", name])
+        limit = node_name_limit(parse_hello(payload)['max_frame'])
+    name = 'n' * (limit + 1)
+    code, error = run_once(['--node', name])
     assert code == 2
-    assert "--node" in error
+    assert '--node' in error
     assert name in error
     assert str(limit + 1) in error
-    assert f"limit {limit}" in error
+    assert f'limit {limit}' in error
 
 
 def test_launch_node_name_at_limit_passes_name_check(tmp_path):
     with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
-        limit = node_name_limit(parse_hello(payload)["max_frame"])
-    code, error = run_once(["--node", "n" * limit])
+        limit = node_name_limit(parse_hello(payload)['max_frame'])
+    code, error = run_once(['--node', 'n' * limit])
     assert code == 1
-    assert "does-not-exist" in error
+    assert 'does-not-exist' in error
 
 
 def test_launch_node_name_at_limit_is_announced(tmp_path):
     with Firmware() as fw:
         _, _, payload = read_frame(fw.master, want=0)
-        limit = node_name_limit(parse_hello(payload)["max_frame"])
-    name = "n" * limit
-    with Firmware("--node", name) as fw:
+        limit = node_name_limit(parse_hello(payload)['max_frame'])
+    name = 'n' * limit
+    with Firmware('--node', name) as fw:
         hello, _, _ = do_handshake(fw)
-        assert hello["node"] == name
+        assert hello['node'] == name
 
 
 # The Twist structs the dropped subscription's handler is declared with: the
@@ -627,7 +642,7 @@ typedef struct geometry_msgs__msg__Twist {
 
 def generated_define(header, name):
     for line in header.splitlines():
-        if line.startswith(f"#define {name} "):
+        if line.startswith(f'#define {name} '):
             return line.split()[2]
     return None
 
@@ -635,82 +650,88 @@ def generated_define(header, name):
 def build_firmware_without_cmd_vel(tmp_path):
     """A firmware binary built from the checked-in configuration minus cmd_vel."""
     root = Path(__file__).resolve().parents[3]
-    loaded = config.load(root / "ports" / "posix" / "r2s.yaml")
-    narrowed = dataclasses.replace(loaded, topics=tuple(t for t in loaded.topics if t.name != "cmd_vel"))
-    assert len(narrowed.topics) == len(loaded.topics) - 1, "r2s.yaml names no cmd_vel topic to omit"
+    loaded = config.load(root / 'ports' / 'posix' / 'r2s.yaml')
+    narrowed = dataclasses.replace(
+        loaded, topics=tuple(t for t in loaded.topics if t.name != 'cmd_vel')
+    )
+    assert len(narrowed.topics) == len(loaded.topics) - 1, (
+        'r2s.yaml names no cmd_vel topic to omit'
+    )
     repository = msgs.MessageRepository()
     roots = [topic.type_name for topic in narrowed.topics]
     resolved = bounds.resolve(repository, roots, bounds=dict(narrowed.bounds))
     header, source = topics.generate(narrowed, resolved, repository)
-    gen_dir = tmp_path / "narrowed"
+    gen_dir = tmp_path / 'narrowed'
     gen_dir.mkdir()
-    (gen_dir / "r2s_generated.h").write_text(header, encoding="utf-8")
-    (gen_dir / "r2s_generated.c").write_text(source, encoding="utf-8")
+    (gen_dir / 'r2s_generated.h').write_text(header, encoding='utf-8')
+    (gen_dir / 'r2s_generated.c').write_text(source, encoding='utf-8')
     # The handler for a dropped subscription still names its message type.
     # The echo topic keeps Twist in the narrowed header; without a topic of
     # that type the shim below supplies the structs instead.
-    needs_shim = "geometry_msgs__msg__Twist" not in header
+    needs_shim = 'geometry_msgs__msg__Twist' not in header
     if needs_shim:
-        (gen_dir / "twist_shim.h").write_text(TWIST_SHIM, encoding="utf-8")
+        (gen_dir / 'twist_shim.h').write_text(TWIST_SHIM, encoding='utf-8')
     # A quoted include resolves beside the including file first, so the port
     # sources build as copies next to the narrowed pair: otherwise they pick
     # up the checked-in generated headers from ports/posix/src/.
-    port_dir = root / "ports" / "posix" / "src"
+    port_dir = root / 'ports' / 'posix' / 'src'
     for name in (
-        "r2s_posix_port.c",
-        "r2s_posix_port.h",
-        "r2s_posix_params.c",
-        "r2s_posix_params.h",
-        "r2s_posix_firmware.c",
+        'r2s_posix_port.c',
+        'r2s_posix_port.h',
+        'r2s_posix_params.c',
+        'r2s_posix_params.h',
+        'r2s_posix_firmware.c',
     ):
         shutil.copy(port_dir / name, gen_dir / name)
-    core = root / "core" / "src"
-    sources = sorted(p for p in core.glob("*.c") if p.name != "test_reset.c")
+    core = root / 'core' / 'src'
+    sources = sorted(p for p in core.glob('*.c') if p.name != 'test_reset.c')
     sources += [
-        gen_dir / "r2s_posix_port.c",
-        gen_dir / "r2s_posix_params.c",
-        gen_dir / "r2s_posix_firmware.c",
-        gen_dir / "r2s_generated.c",
+        gen_dir / 'r2s_posix_port.c',
+        gen_dir / 'r2s_posix_params.c',
+        gen_dir / 'r2s_posix_firmware.c',
+        gen_dir / 'r2s_generated.c',
     ]
     command = [
-        "cc",
-        "-std=c99",
-        "-I",
+        'cc',
+        '-std=c99',
+        '-I',
         str(gen_dir),
-        "-I",
-        str(root / "core" / "include"),
-        "-I",
-        str(root / "ports" / "posix" / "src"),
-        "-DR2S_WITH_CODEC",
-        "-DR2S_WITH_TIME",
-        "-DR2S_WITH_PARAMS",
-        *(["-include", str(gen_dir / "twist_shim.h")] if needs_shim else []),
+        '-I',
+        str(root / 'core' / 'include'),
+        '-I',
+        str(root / 'ports' / 'posix' / 'src'),
+        '-DR2S_WITH_CODEC',
+        '-DR2S_WITH_TIME',
+        '-DR2S_WITH_PARAMS',
+        *(['-include', str(gen_dir / 'twist_shim.h')] if needs_shim else []),
         *[str(p) for p in sources],
-        "-o",
-        str(tmp_path / "r2s_posix_narrowed"),
+        '-o',
+        str(tmp_path / 'r2s_posix_narrowed'),
     ]
-    for name in ("R2S_MAX_FRAME", "R2S_MAX_NEST", "R2S_TOPIC_MAX_COUNT"):
+    for name in ('R2S_MAX_FRAME', 'R2S_MAX_NEST', 'R2S_TOPIC_MAX_COUNT'):
         value = generated_define(header, name)
         if value is not None:
-            command.insert(-3, f"-D{name}={value}")
+            command.insert(-3, f'-D{name}={value}')
     compiled = subprocess.run(command, capture_output=True, text=True, timeout=300)
     assert compiled.returncode == 0, compiled.stderr
-    return tmp_path / "r2s_posix_narrowed"
+    return tmp_path / 'r2s_posix_narrowed'
 
 
 def test_missing_default_topic_flag_fails(tmp_path):
     binary = build_firmware_without_cmd_vel(tmp_path)
-    command = [str(binary), "/dev/pts/does-not-exist"]
-    proc = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=START_TIMEOUT)
+    command = [str(binary), '/dev/pts/does-not-exist']
+    proc = subprocess.run(
+        command, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=START_TIMEOUT
+    )
     assert proc.returncode == 2
-    assert "r2s_posix: --sub names a topic" in proc.stderr
-    assert "cmd_vel" in proc.stderr
+    assert 'r2s_posix: --sub names a topic' in proc.stderr
+    assert 'cmd_vel' in proc.stderr
 
 
 def test_unopenable_port_fails(tmp_path):
     code, error = run_once([])
     assert code == 1
-    assert "does-not-exist" in error
+    assert 'does-not-exist' in error
 
 
 # covers: FRM-4
@@ -721,11 +742,11 @@ def test_host_seq_is_per_topic():
     read_fd, write_fd = os.pipe()
     try:
         host = Host(write_fd)
-        host.send(0, b"\x01\x01")
-        host.send(0, b"\x03\x00")
-        host.send(17, struct.pack("<6d", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
-        host.send(0, b"\x06")
-        host.send(17, struct.pack("<6d", 1.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+        host.send(0, b'\x01\x01')
+        host.send(0, b'\x03\x00')
+        host.send(17, struct.pack('<6d', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+        host.send(0, b'\x06')
+        host.send(17, struct.pack('<6d', 1.0, 0.0, 0.0, 0.0, 0.0, 0.0))
     finally:
         os.close(write_fd)
     frames = []
@@ -734,7 +755,7 @@ def test_host_seq_is_per_topic():
     while len(frames) < 5 and time.monotonic() < deadline:
         remaining = deadline - time.monotonic()
         ready, _, _ = select.select([read_fd], [], [], remaining)
-        assert ready, "timed out waiting for the harness frames"
+        assert ready, 'timed out waiting for the harness frames'
         for byte in os.read(read_fd, 4096):
             unit.append(byte)
             if byte == 0x00:
@@ -748,24 +769,27 @@ def test_host_seq_is_per_topic():
 
 def test_help_names_options():
     proc = subprocess.run(
-        [firmware_binary(), "--help"], stdin=subprocess.DEVNULL, capture_output=True, timeout=START_TIMEOUT
+        [firmware_binary(), '--help'],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        timeout=START_TIMEOUT,
     )
     assert proc.returncode == 0
-    assert "--node" in proc.stdout.decode()
-    assert "--echo" in proc.stdout.decode()
+    assert '--node' in proc.stdout.decode()
+    assert '--echo' in proc.stdout.decode()
 
 
 def test_bad_tx_free_fails():
-    for bad in ("0", "65535", "abc"):
-        code, error = run_once(["--tx-free", bad])
+    for bad in ('0', '65535', 'abc'):
+        code, error = run_once(['--tx-free', bad])
         assert code == 2
-        assert "--tx-free" in error
+        assert '--tx-free' in error
 
 
 def test_flood_without_tx_free_fails():
-    code, error = run_once(["--flood"])
+    code, error = run_once(['--flood'])
     assert code == 2
-    assert "--flood" in error
+    assert '--flood' in error
 
 
 # covers: FRM-4, FRM-5, FRM-15, SES-7, SES-8
@@ -776,7 +800,15 @@ def test_flood_sheds_samples_with_busy_and_whole_frames():
     every 0.5 s while it drains the pty and stderr together: a collection
     slower than the 2 s link timeout ([SES-8]) would otherwise return the
     firmware to ANNOUNCING ([SES-7]) and stop the flood."""
-    args = ("--no-sub", "--no-echo", "--no-log-text", "--no-time-now", "--tx-free", "16", "--flood")
+    args = (
+        '--no-sub',
+        '--no-echo',
+        '--no-log-text',
+        '--no-time-now',
+        '--tx-free',
+        '16',
+        '--flood',
+    )
     with Firmware(*args) as fw:
         _hello, _topics, host = do_handshake(fw)
         values = []
@@ -788,38 +820,42 @@ def test_flood_sheds_samples_with_busy_and_whole_frames():
         quiet = 0
         deadline = time.monotonic() + 30.0
         while len(values) < 60 or busy == 0:
-            assert time.monotonic() < deadline, "the flood left no flow or no busy count"
+            assert time.monotonic() < deadline, 'the flood left no flow or no busy count'
             last_ping, ping_id = ping_due(host, last_ping, ping_id)
             ready, _, _ = select.select([fw.master, efd], [], [], KEEPALIVE_INTERVAL)
             if not ready:
                 quiet += 1
-                assert quiet < QUIET_LIMIT, "the firmware went quiet mid-flood"
+                assert quiet < QUIET_LIMIT, 'the firmware went quiet mid-flood'
                 continue
             quiet = 0
             if fw.master in ready:
                 try:
-                    _topic, _seq, payload = read_frame(fw.master, want=16, timeout=KEEPALIVE_INTERVAL)
+                    _topic, _seq, payload = read_frame(
+                        fw.master, want=16, timeout=KEEPALIVE_INTERVAL
+                    )
                 except AssertionError as error:
-                    if "timed out" not in str(error):
+                    if 'timed out' not in str(error):
                         raise
                     continue
                 assert len(payload) == 4
-                values.append(struct.unpack("<f", payload)[0])
+                values.append(struct.unpack('<f', payload)[0])
             if efd in ready:
                 chunk = os.read(efd, 4096)
-                assert chunk, "the firmware closed stderr mid-flood"
+                assert chunk, 'the firmware closed stderr mid-flood'
                 err += chunk
-                while b"\n" in err:
-                    line, _, err = err.partition(b"\n")
+                while b'\n' in err:
+                    line, _, err = err.partition(b'\n')
                     text = line.decode()
-                    if text.startswith("r2s_posix: flood sent="):
-                        parts = dict(part.split("=") for part in text.split()[2:])
-                        busy = int(parts["busy"])
-    assert all(value == int(value) for value in values), "a frame arrived corrupted"
-    assert all(later > earlier for earlier, later in zip(values, values[1:], strict=False)), "values went back"
+                    if text.startswith('r2s_posix: flood sent='):
+                        parts = dict(part.split('=') for part in text.split()[2:])
+                        busy = int(parts['busy'])
+    assert all(value == int(value) for value in values), 'a frame arrived corrupted'
+    assert all(later > earlier for earlier, later in zip(values, values[1:], strict=False)), (
+        'values went back'
+    )
     ints = [int(value) for value in values]
-    assert ints[-1] - ints[0] + 1 - len(ints) > 0, "no sample was shed on a saturated link"
-    assert busy > 0, "no publish returned TX_BUSY on a saturated link"
+    assert ints[-1] - ints[0] + 1 - len(ints) > 0, 'no sample was shed on a saturated link'
+    assert busy > 0, 'no publish returned TX_BUSY on a saturated link'
 
 
 # covers: SES-7, SES-8
@@ -827,7 +863,15 @@ def test_flood_slow_host_keeps_battery(tmp_path):
     """A slow host that stays live keeps the flood: draining for 3 s leaves
     battery flowing, since every accepted host frame proves the host alive
     ([SES-8]) and only silence returns the firmware to ANNOUNCING ([SES-7])."""
-    args = ("--no-sub", "--no-echo", "--no-log-text", "--no-time-now", "--tx-free", "16", "--flood")
+    args = (
+        '--no-sub',
+        '--no-echo',
+        '--no-log-text',
+        '--no-time-now',
+        '--tx-free',
+        '16',
+        '--flood',
+    )
     with Firmware(*args) as fw:
         _hello, _topics, host = do_handshake(fw)
         ping_id = 0
@@ -835,7 +879,9 @@ def test_flood_slow_host_keeps_battery(tmp_path):
         stop = time.monotonic() + 3.0
         while time.monotonic() < stop:
             last_ping, ping_id = ping_due(host, last_ping, ping_id)
-            ready, _, _ = select.select([fw.master], [], [], min(KEEPALIVE_INTERVAL, stop - time.monotonic()))
+            ready, _, _ = select.select(
+                [fw.master], [], [], min(KEEPALIVE_INTERVAL, stop - time.monotonic())
+            )
             if ready:
                 os.read(fw.master, 65536)
         _topic, _seq, payload = read_frame(fw.master, want=16, timeout=2.0)
