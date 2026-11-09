@@ -115,15 +115,15 @@ def test_the_retry_job_can_rerun_failed_jobs():
     assert job.get("timeout-minutes") is not None, "a hung retry must fail with its logs"
     text = "\n".join(str(step.get("run", "")) for step in job.get("steps", []))
     assert "ci-infra-retry.sh" in text, "the retry delegates failed-job handling to the driver"
-    assert "--failed" in text, "the rerun covers only the failed jobs"
+    assert "--failed" in DRIVER.read_text(encoding="utf-8"), "the rerun covers only the failed jobs"
 
 
 def test_the_retry_keeps_write_where_it_acts():
     """The rerun needs actions:write; the decision stays in the classifier."""
     permissions = retry_workflow().get("permissions", {})
     assert permissions.get("actions") == "write", permissions
-    text = WORKFLOW.read_text(encoding="utf-8")
-    assert "ci_infra_retry" in text, "the driver decides through the classifier, not inline patterns"
+    driver = DRIVER.read_text(encoding="utf-8")
+    assert "ci_infra_retry" in driver, "the driver decides through the classifier, not inline patterns"
 
 
 def write_gh_stub(path, failed_ids, log_dir, record):

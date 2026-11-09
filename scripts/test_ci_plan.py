@@ -204,7 +204,19 @@ def runs(condition, event, ref, outputs, labels=()):
 
 def running_jobs(event, outputs, ref=PR_REF, labels=()):
     jobs = workflow()["jobs"]
-    return sorted(name for name, job in jobs.items() if "if" not in job or runs(job["if"], event, ref, outputs, labels))
+    runnable = {name for name, job in jobs.items() if "if" not in job or runs(job["if"], event, ref, outputs, labels)}
+    # A job whose need skips skips with it: the save jobs need their legs,
+    # so no run saves a section it never ran.
+    changed = True
+    while changed:
+        changed = False
+        for name in list(runnable):
+            needs = jobs[name].get("needs", [])
+            needs = needs if isinstance(needs, list) else [needs]
+            if any(need not in runnable for need in needs):
+                runnable.discard(name)
+                changed = True
+    return sorted(runnable)
 
 
 def github_value(operand, event):
@@ -545,9 +557,9 @@ def test_master_push_runs_only_the_plan_selected_sections(tmp_path):
     ]
 
 
-def test_a_cache_miss_on_master_runs_every_job_but_the_saves(tmp_path):
+def test_a_cache_miss_on_master_runs_every_job(tmp_path):
     repo = test_taskfile.fixture(tmp_path)
-    assert selected_jobs(repo, tmp_path, event="push", ref=MASTER_REF) == jobs_without_saves()
+    assert selected_jobs(repo, tmp_path, event="push", ref=MASTER_REF) == sorted(workflow()["jobs"])
 
 
 def test_pull_request_and_master_push_select_the_same_sections(tmp_path):
