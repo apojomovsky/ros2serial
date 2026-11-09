@@ -540,10 +540,10 @@ static void on_exchange(const uint8_t *payload, uint16_t len, uint32_t now)
         /* The answer rides the same reliable stream: when both slots are
          * full no answer can go out, so the frame stays unacked and the
          * host's retry brings it back to a free slot (REL-2). Acking it
-         * first would consume the retry while the answer is lost. */
+         * first would consume the retry while the answer is lost. A held
+         * frame is not a refused one: only the TX_BUSY note reports it. */
     if (response_slot_free() == 0u) {
       r2s_error_note(R2S_ERROR_TX_BUSY, 8u, index, 1u);
-      r2s_framer_count_refused();
       return;
     }
     r2s_session_send_ack(8u, rel);
@@ -571,10 +571,10 @@ static void on_exchange(const uint8_t *payload, uint16_t len, uint32_t now)
       return;
     }
         /* As above: no answer can go out with both slots full, so the frame
-         * stays unacked for the host's retry. */
+         * stays unacked for the host's retry. A held frame is not a
+         * refused one: only the TX_BUSY note reports it. */
     if (response_slot_free() == 0u) {
       r2s_error_note(R2S_ERROR_TX_BUSY, 8u, 0xFFu, 1u);
-      r2s_framer_count_refused();
       return;
     }
     r2s_session_send_ack(8u, rel);
