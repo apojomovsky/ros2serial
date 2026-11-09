@@ -6,7 +6,8 @@
 The header is the two-liner AGENTS.md agrees on: the line
 SPDX-License-Identifier: MIT followed by the copyright line
 Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors, with `#`
-in place of `//` for Python, shell, CMake and YAML sources. The old full MIT
+in place of `//` for Python, shell and CMake sources; a YAML source would
+take `#`, but none is scoped, so the fixtures stay exempt. The old full MIT
 block fails, and so does a file carrying both forms. The same header clears
 cpplint's legal/copyright on the C++ side, since that check only looks for
 a copyright line.
@@ -98,7 +99,9 @@ def first_block(text: str, style: str) -> str:
 
 def style_for(path: Path) -> str:
     """Hash comments for scripting sources, slashes for compiled ones."""
-    if path.suffix in ('.py', '.sh', '.cmake') or path.name == 'CMakeLists.txt':
+    if path.suffix in ('.py', '.sh', '.cmake', '.yaml', '.yml'):
+        return 'hash'
+    if path.name == 'CMakeLists.txt':
         return 'hash'
     return 'slash'
 

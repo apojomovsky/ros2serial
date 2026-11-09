@@ -80,6 +80,12 @@ def test_named_files_cover_paths_outside_the_scope(tmp_path):
     assert file.read_text(encoding='utf-8') == f'# {SPDX}\n# {HOLDER}\n\nx = 1\n'
 
 
+def test_named_yaml_takes_hash_comments(tmp_path):
+    file = write(tmp_path / 'ports' / 'posix' / 'r2s.yaml', old_block('#') + '\nkey: 1\n')
+    assert apply_headers.main([str(file)]) == 0
+    assert file.read_text(encoding='utf-8') == f'# {SPDX}\n# {HOLDER}\n\nkey: 1\n'
+
+
 def test_check_mode_reports_without_writing(tmp_path):
     file = write(tmp_path / 'core' / 'src' / 'old.c', old_block('//'))
     assert apply_headers.main(['--check', str(tmp_path)]) == 1
