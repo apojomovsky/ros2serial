@@ -93,6 +93,7 @@ function(r2s_cpp_unit_test source)
 endfunction()
 
 r2s_cpp_unit_test(tests/test_runtime.cpp r2s_runtime)
+r2s_cpp_unit_test(tests/test_action.cpp r2s_runtime)
 
 # The bundled tables the static test announces: the pinned generator output,
 # so the test speaks the tables the Arduino library ships. The frozen header
