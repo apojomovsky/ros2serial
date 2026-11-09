@@ -505,6 +505,14 @@ def test_the_golden_pair_is_uncrustify_clean():
     _uncrustify_clean([GOLDEN / 'posix.h', GOLDEN / 'posix.c'])
 
 
+def test_a_nested_call_packing_onto_its_line():
+    """A nested call that fits joins the open line instead of flushing it."""
+    assert topics._fill('  R2S_FOO(', '    ', ['bar', ('R2S_BAR', ['x' * 30], ')')], ');', 40) == [
+        '  R2S_FOO(bar, R2S_BAR(',
+        '    ' + 'x' * 30 + ')));',
+    ]
+
+
 def test_long_topic_names_emit_uncrustify_clean_code(tmp_path):
     """Long names wrap the way uncrustify wraps them, at every length."""
     entries = [

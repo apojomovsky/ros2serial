@@ -214,11 +214,6 @@ def _field(field) -> list[str]:
     return lines
 
 
-def _cont(line: str) -> str:
-    """A macro continuation line padded to the backslash column the style uses."""
-    return line.ljust(99) + '\\'
-
-
 def _one_per_line(head: str, args: list, last: str, limit: int = 100) -> list:
     """A check invocation uncrustify keeps: one line within the limit, else
     one argument per line one level past the head."""

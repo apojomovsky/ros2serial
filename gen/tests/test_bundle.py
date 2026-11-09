@@ -13,13 +13,16 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from r2s_gen import bounds
 from r2s_gen import bundle
 from r2s_gen import cli
 from r2s_gen import cpp
+from r2s_gen import descriptors
 from r2s_gen import msgs
 from r2s_gen import typehash
 from r2s_gen.reference import messages
 from r2s_gen.version import __version__
+from support import write_message
 
 GOLDEN = Path(__file__).parent / 'golden' / 'bundle'
 CORE = Path(__file__).resolve().parents[2] / 'core'
@@ -1056,6 +1059,33 @@ def compile_strict_cxx(root, body):
         capture_output=True,
         text=True,
     )
+
+
+def test_a_bundled_type_without_entries_keeps_its_table_defined(tmp_path, monkeypatch):
+    """A type with no fields still emits its table: one unread byte stands in for the entries."""
+    root = tmp_path / 'messages'
+    write_message(root, 'test_msgs/msg/Empty', '')
+    repository = msgs.MessageRepository(msg_paths=[root])
+    resolved = bounds.resolve(repository, ['test_msgs/msg/Empty'])
+    table = descriptors.build(resolved, ['test_msgs/msg/Empty'])
+    monkeypatch.setattr(bundle, 'BUNDLED_TYPES', ('test_msgs/msg/Empty',))
+    text = bundle._bundled_c(resolved, {'test_msgs/msg/Empty': table}, 'jazzy')
+
+    assert (
+        'const uint8_t R2S_FLASH r2s_bundled_entries_test_msgs_Empty[1] = { 0x00 };'
+        in text.splitlines()
+    )
+
+
+def test_a_long_comma_list_rides_on_its_own_line():
+    """A comma list past the limit keeps one line: the head carries the backslash."""
+    value = ', '.join(f'a{i}' for i in range(30))
+
+    assert bundle._wrapped_define('#define R2S_X', value) == [
+        '#define R2S_X \\',
+        f'  {value}',
+    ]
+    assert bundle._wrapped_define('#define R2S_X', 'a, b') == ['#define R2S_X a, b']
 
 
 def test_a_cxx_sketch_links_against_the_c_library(tmp_path):

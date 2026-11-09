@@ -665,6 +665,15 @@ def test_no_roots_make_an_empty_table_with_a_nesting_bound_of_one():
     assert '#define R2S_MAX_NEST 1u' in emit.emit_types({}, max_nest=table.max_nest)
 
 
+def test_empty_records_emit_a_single_unread_byte():
+    table = descriptors.build({}, [])
+
+    assert (
+        'const uint8_t R2S_FLASH r2s_type_records[1] = { 0x00 };'
+        in descriptors.emit_c(table).splitlines()
+    )
+
+
 def test_wide_values_match_the_hand_derivation(tmp_path):
     # covers: DSC-4, DSC-5, DSC-13, DSC-14, DSC-15, DSC-16, DSC-17, DSC-18, DSC-19
     repository = repository_for(
