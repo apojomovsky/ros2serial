@@ -53,6 +53,7 @@ def test_the_script_builds_the_core_c_sources_without_the_test_reset():
     text = SCRIPT.read_text(encoding="utf-8")
     assert "core/src" in text
     assert "test_reset" in text
+    assert "r2s_bundled.c" in text
 
 
 def test_the_script_builds_a_static_cpp_sketch():
@@ -72,6 +73,21 @@ def test_the_download_is_verified_before_it_runs():
     text = SCRIPT.read_text(encoding="utf-8")
     assert "releases/download" in text
     assert "sha256sum" in text
+
+
+def test_the_bundled_resource_headers_rejoin_the_search_path():
+    # epic-cc drives clang with -nostdinc, which also drops the compiler's
+    # own headers; without them the core's float.h include cannot resolve.
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "clang/lib/clang/" in text
+
+
+def test_the_extracted_driver_and_helpers_are_made_executable():
+    # The release zip carries no permission bits, so the driver and its
+    # bundled clang land non-executable and the compile fails with denied.
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "chmod +x" in text
+    assert "clang/bin/" in text
 
 
 def run_script(env_extra, tmp_path):
@@ -121,7 +137,7 @@ def test_the_run_without_a_toolchain_skips_instead_of_failing(tmp_path):
     # cannot be fetched, so the canary reports the skip and passes.
     path = tmp_path / "nodeload"
     path.mkdir()
-    for tool in ("bash", "mkdir", "rm", "cp", "grep", "cut", "python3", "sha256sum", "uname", "dirname"):
+    for tool in ("bash", "env", "mkdir", "rm", "cp", "grep", "cut", "python3", "sha256sum", "uname", "dirname"):
         source = Path("/usr/bin") / tool
         if not source.exists():
             source = Path("/bin") / tool

@@ -4,8 +4,8 @@
 # successful run. Naming no scope runs the default task, which holds every
 # section but the host-only mermaid check; with R2S_LOCAL=1 it runs the
 # local task instead, the same set without the CI-only sections: the
-# end-to-end ones plus esp32, whose Arduino core installs only in its CI
-# job (the pre-push hook and the takeoff set it). A named scope, E2E
+# end-to-end ones, esp32 and pic, whose toolchains install only in their
+# CI jobs (the pre-push hook and the takeoff set it). A named scope, E2E
 # included, still runs. R2S_FULL=1 forces all of them.
 # R2S_SUITE points the runner at another command (tests point it at a
 # recorder), which receives the task names as arguments; the scope
@@ -13,7 +13,7 @@
 set -uo pipefail
 
 names=()
-for scope in LINT COMMITS SCRIPTS CORE GEN BRIDGE AMENT_LINT CPP COVERAGE DOCS EXAMPLES ESP32 BUDGETS FUZZ README NIGHTLY SOAK; do
+for scope in LINT COMMITS SCRIPTS CORE GEN BRIDGE AMENT_LINT CPP COVERAGE DOCS EXAMPLES ESP32 PIC BUDGETS FUZZ README NIGHTLY SOAK; do
   [ -n "${!scope:-}" ] && names+=("$(printf '%s' "$scope" | tr '[:upper:]' '[:lower:]')")
 done
 case "${E2E:-}" in
