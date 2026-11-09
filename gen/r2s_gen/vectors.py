@@ -25,7 +25,9 @@ def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParse
         "in the form a message vector writes it.",
     )
     parser.add_argument(
-        "--type", required=True, help="the message type as package/msg/Type or package/action/Name_Goal"
+        "--type",
+        required=True,
+        help="the message type as package/msg/Type, package/srv/Name_Request or package/action/Name_Goal",
     )
     parser.add_argument("--message", required=True, help="the message as YAML text, or @path to read it from a file")
     parser.add_argument(

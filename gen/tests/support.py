@@ -39,6 +39,15 @@ def write_message(root: Path, type_name: str, text: str) -> Path:
     return path
 
 
+def write_service(root: Path, type_name: str, text: str) -> Path:
+    """Write `text` as the definition of `type_name` under a message root, and return its path."""
+    package, _, name = type_name.partition("/srv/")
+    path = root / package / "srv" / f"{name}.srv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
 def h(text: str) -> bytes:
     return bytes.fromhex(text)
 

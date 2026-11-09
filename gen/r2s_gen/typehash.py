@@ -60,6 +60,132 @@ def type_hash(repository: msgs.MessageRepository, type_name: str) -> str:
     return f"RIHS01_{digest}"
 
 
+def _event_description(service: msgs.Service) -> dict:
+    """The synthetic `Name_Event` message the service hash covers, as rosidl generates it."""
+    return {
+        "type_name": f"{service.type_name}_Event",
+        "fields": [
+            {
+                "name": "info",
+                "type": {
+                    "type_id": _NESTED_TYPE_ID,
+                    "capacity": 0,
+                    "string_capacity": 0,
+                    "nested_type_name": "service_msgs/msg/ServiceEventInfo",
+                },
+            },
+            {
+                "name": "request",
+                "type": {
+                    "type_id": _BOUNDED_SEQUENCE_OFFSET + _NESTED_TYPE_ID,
+                    "capacity": 1,
+                    "string_capacity": 0,
+                    "nested_type_name": service.request.type_name,
+                },
+            },
+            {
+                "name": "response",
+                "type": {
+                    "type_id": _BOUNDED_SEQUENCE_OFFSET + _NESTED_TYPE_ID,
+                    "capacity": 1,
+                    "string_capacity": 0,
+                    "nested_type_name": service.response.type_name,
+                },
+            },
+        ],
+    }
+
+
+def _event_info_description() -> dict:
+    """The `service_msgs/msg/ServiceEventInfo` message, fixed by the service event design."""
+    uint8 = {"type_id": 3, "capacity": 0, "string_capacity": 0, "nested_type_name": ""}
+    return {
+        "type_name": "service_msgs/msg/ServiceEventInfo",
+        "fields": [
+            {"name": "event_type", "type": dict(uint8)},
+            {
+                "name": "stamp",
+                "type": {
+                    "type_id": _NESTED_TYPE_ID,
+                    "capacity": 0,
+                    "string_capacity": 0,
+                    "nested_type_name": "builtin_interfaces/msg/Time",
+                },
+            },
+            {
+                "name": "client_gid",
+                "type": {
+                    "type_id": _ARRAY_OFFSET + 3,
+                    "capacity": 16,
+                    "string_capacity": 0,
+                    "nested_type_name": "",
+                },
+            },
+            {
+                "name": "sequence_number",
+                "type": {"type_id": 8, "capacity": 0, "string_capacity": 0, "nested_type_name": ""},
+            },
+        ],
+    }
+
+
+def service_hash(repository: msgs.MessageRepository, type_name: str) -> str:
+    """The `RIHS01_` hash of a `package/srv/Name`, equal to the installed service hash.
+
+    The service description names its request, response and synthetic event
+    messages; the event and its info are fixed by the service event design,
+    while the request, the response and every nested message load from the
+    repository like any other message.
+    """
+    service = repository.load_service(type_name)
+    root = {
+        "type_name": service.type_name,
+        "fields": [
+            {
+                "name": f"{lower}_message",
+                "type": {
+                    "type_id": _NESTED_TYPE_ID,
+                    "capacity": 0,
+                    "string_capacity": 0,
+                    "nested_type_name": f"{service.type_name}_{upper}",
+                },
+            }
+            for lower, upper in (("request", "Request"), ("response", "Response"), ("event", "Event"))
+        ],
+    }
+    descriptions: dict[str, dict] = {
+        service.type_name: root,
+        service.request.type_name: _individual_description(service.request),
+        service.response.type_name: _individual_description(service.response),
+        f"{service.type_name}_Event": _event_description(service),
+        "service_msgs/msg/ServiceEventInfo": _event_info_description(),
+        "builtin_interfaces/msg/Time": _individual_description(repository.load("builtin_interfaces/msg/Time")),
+    }
+    queue = [
+        field["type"]["nested_type_name"]
+        for name in (
+            service.request.type_name,
+            service.response.type_name,
+        )
+        for field in descriptions[name]["fields"]
+        if field["type"]["nested_type_name"]
+    ]
+    while queue:
+        name = queue.pop()
+        if name in descriptions:
+            continue
+        message = repository.load(name)
+        descriptions[name] = _individual_description(message)
+        queue.extend(
+            field["type"]["nested_type_name"]
+            for field in descriptions[name]["fields"]
+            if field["type"]["nested_type_name"]
+        )
+    full = _full_description(service.type_name, descriptions)
+    digest = hashlib.sha256(json.dumps(full, separators=(", ", ": ")).encode("utf-8")).hexdigest()
+    return f"RIHS01_{digest}"
+
+
 def _individual_description(message: msgs.Message) -> dict:
     fields = message.fields
     if not fields:

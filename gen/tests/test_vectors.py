@@ -60,6 +60,38 @@ def test_vectors_resolves_a_custom_type_through_msg_path(capsys, tmp_path):
     assert out == "07\n"
 
 
+def test_vectors_encodes_a_service_request_and_response(capsys, tmp_path):
+    from support import write_service
+
+    write_service(tmp_path / "messages", "demo_srvs/srv/Spin", "int32 order\n---\nint32[<=4] sequence\n")
+    args = ["--type", "demo_srvs/srv/Spin_Request", "--message", "{order: 3}", "--msg-path", str(tmp_path / "messages")]
+    code, out, err = run(capsys, *args)
+    assert code == 0, err
+    assert out == "03 00 00 00\n"
+    args = [
+        "--type",
+        "demo_srvs/srv/Spin_Response",
+        "--message",
+        "{sequence: [1, 2]}",
+        "--msg-path",
+        str(tmp_path / "messages"),
+    ]
+    code, out, err = run(capsys, *args)
+    assert code == 0, err
+    assert out == "02 01 00 00 00 02 00 00 00\n"
+
+
+def test_vectors_encodes_an_empty_service_request_as_the_dummy_byte(capsys, tmp_path):
+    from support import write_service
+
+    write_service(tmp_path / "messages", "demo_srvs/srv/Ping", "---\nint32 sequence\n")
+    args = ["--type", "demo_srvs/srv/Ping_Request", "--message", "{}", "--msg-path", str(tmp_path / "messages")]
+    code, out, err = run(capsys, *args)
+    assert code == 0, err
+    # A message with no fields encodes to no bytes (spec [ENC-1]).
+    assert out == "\n"
+
+
 def test_narrow_encodes_float64_as_binary32(capsys, tmp_path):
     write_message(tmp_path / "messages", "demo_msgs/msg/Wide", "float64 wide")
     args = ["--type", "demo_msgs/msg/Wide", "--message", "{wide: 0.1}", "--msg-path", str(tmp_path / "messages")]
@@ -86,8 +118,8 @@ def test_a_type_without_a_package_names_the_expected_shapes(capsys):
     assert code == 1
     assert out == ""
     assert err == (
-        "r2s-gen: error: Float32: expected a type as 'package/Type', "
-        "'package/msg/Type' or 'package/action/Type'; check the type name\n"
+        "r2s-gen: error: Float32: expected a type as 'package/Type', 'package/msg/Type', "
+        "'package/srv/Type' or 'package/action/Type'; check the type name\n"
     )
 
 

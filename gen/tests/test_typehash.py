@@ -6,7 +6,7 @@ description JSON files the ROS build installs for these types.
 
 import pytest
 from r2s_gen import msgs, typehash
-from support import write_message
+from support import write_message, write_service
 
 DISTROS = ["jazzy", "lyrical", "rolling"]
 
@@ -94,4 +94,16 @@ def test_a_parent_of_an_empty_message_matches_the_oracle(tmp_path):
     assert (
         typehash.type_hash(repository, "demo_msgs/msg/HasEmpty")
         == "RIHS01_b226f514d364b3d9c9e46d48a9a445044e450b4e87ccd5915408f9f72a174dc8"
+    )
+
+
+def test_a_service_hash_covers_request_response_and_event(tmp_path):
+    root = tmp_path / "messages"
+    write_message(root, "builtin_interfaces/msg/Time", "int32 sec\nuint32 nanosec\n")
+    write_service(root, "demo_srvs/srv/Spin", "int32 order\n---\nint32[] sequence\n")
+    repository = msgs.MessageRepository(msg_paths=[root])
+
+    assert (
+        typehash.service_hash(repository, "demo_srvs/srv/Spin")
+        == "RIHS01_1558adba0c7bf1f719e62a9d4cda324e99ec8f1de67c863afe24788d4e867faf"
     )

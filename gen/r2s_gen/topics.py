@@ -860,9 +860,16 @@ def generate(
     config: Config, resolved: Mapping[str, ResolvedMessage], repository: MessageRepository, source: str = "r2s.yaml"
 ) -> tuple[str, str]:
     """The firmware's header and source pair for `config`, descriptors first."""
+    from r2s_gen import services
+
     roots = [canonical_type_name(topic.type_name) for topic in config.topics]
+    roots.extend(services.roots(config))
     table = descriptors.build(resolved, roots)
     topic_table = build(config, resolved, repository, table, source)
+    service_h, service_c = "", ""
+    if config.services:
+        service_table = services.build(config, resolved, repository, table, source)
+        service_h, service_c = services.emit_h(service_table), services.emit_c(service_table)
     digest = config_hash(config)
     base = _stamped(emit.emit_types(resolved, max_nest=table.max_nest), source, digest)
     closing = "#endif\n"
@@ -873,6 +880,13 @@ def generate(
     assert base.count(anchor) == 1
     open = anchor + '\n#ifdef __cplusplus\nextern "C" {\n#endif\n'
     close = "\n#ifdef __cplusplus\n}\n#endif\n"
-    body = base[: -len(closing)] + emit_h(topic_table) + "\n" + close + "\n" + closing
+    middle = emit_h(topic_table)
+    if service_h:
+        middle += "\n" + service_h
+    body = base[: -len(closing)] + middle + "\n" + close + "\n" + closing
     header = body.replace(anchor, open, 1)
-    return header, _stamped(descriptors.emit_c(table) + emit_c(topic_table), source, digest)
+    return header, _stamped(
+        descriptors.emit_c(table) + emit_c(topic_table) + service_c,
+        source,
+        digest,
+    )

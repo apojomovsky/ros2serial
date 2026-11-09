@@ -1,0 +1,132 @@
+"""Service emission: the service table, IDs, roles, hashes and descriptor indices.
+
+Covers services past the descriptors: IDs from 0 in configuration order,
+request and response descriptor indices from the shared depth-first walk,
+RIHS01 service hashes, and the empty section when the config has none. The
+golden pair pins the exact bytes; the C compile test proves they are C99.
+"""
+
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+from r2s_gen import bounds, config, msgs, services
+from r2s_gen.config import Config, Service, Topic
+from support import write_message, write_service
+
+GOLDEN = Path(__file__).parent / "golden" / "services"
+ROOT = Path(__file__).resolve().parents[2]
+CORE_INCLUDE = ROOT / "core" / "include"
+
+CONFIG_TEXT = """\
+node: base_controller
+topics:
+  - name: battery
+    type: std_msgs/msg/Float32
+    direction: pub
+services:
+  - name: reset
+    type: demo_srvs/srv/Spin
+    role: server
+  - name: trigger
+    type: demo_srvs/srv/Spin
+    role: client
+bounds:
+  std_msgs/msg/String.data: 8
+  demo_srvs/srv/Spin_Response.sequence: 4
+"""
+
+SPIN_TEXT = "int32 order\n---\nint32[] sequence\n"
+TIME_TEXT = "int32 sec\nuint32 nanosec\n"
+
+
+def write_config(root: Path, text: str = CONFIG_TEXT):
+    path = root / "r2s.yaml"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def load_services(root: Path):
+    write_service(root / "messages", "demo_srvs/srv/Spin", SPIN_TEXT)
+    write_message(root / "messages", "builtin_interfaces/msg/Time", TIME_TEXT)
+    loaded = config.load(write_config(root))
+    repository = msgs.MessageRepository(msg_paths=[root / "messages"], distro="jazzy")
+    resolved = bounds.resolve(
+        repository, [topic.type_name for topic in loaded.topics] + services.roots(loaded), bounds=dict(loaded.bounds)
+    )
+    return loaded, resolved, repository
+
+
+def build_loaded(loaded, resolved, repository, source="r2s.yaml"):
+    return services.build(loaded, resolved, repository, source=source)
+
+
+def test_roles_map_to_serve_and_call_bytes(tmp_path):
+    loaded, resolved, repository = load_services(tmp_path)
+    table = build_loaded(loaded, resolved, repository)
+
+    assert [(entry.name, entry.role, entry.role_byte) for entry in table.entries] == [
+        ("reset", "server", 0),
+        ("trigger", "client", 1),
+    ]
+    assert [entry.service_id for entry in table.entries] == [0, 1]
+
+
+def test_request_and_response_share_one_descriptor_walk(tmp_path):
+    loaded, resolved, repository = load_services(tmp_path)
+    table = build_loaded(loaded, resolved, repository)
+
+    assert table.entries[0].type_index_request == table.entries[1].type_index_request
+    assert table.entries[0].type_index_response == table.entries[1].type_index_response
+    assert table.entries[0].type_index_request != table.entries[0].type_index_response
+
+
+def test_an_empty_service_section_emits_nothing(tmp_path):
+    loaded = Config(node="base_controller", topics=(), services=(), distro="jazzy")
+    table = services.build(loaded, {}, msgs.MessageRepository(msg_paths=[tmp_path]))
+
+    assert table.entries == ()
+    assert services.roots(loaded) == []
+
+
+def test_the_service_fragments_match_the_golden_pair(tmp_path):
+    loaded, resolved, repository = load_services(tmp_path)
+    table = build_loaded(loaded, resolved, repository)
+
+    assert services.emit_h(table) == (GOLDEN / "services.h").read_text(encoding="utf-8")
+    assert services.emit_c(table) == (GOLDEN / "services.c").read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(shutil.which("gcc") is None, reason="no host C compiler")
+def test_the_service_table_is_c99(tmp_path):
+    loaded, resolved, repository = load_services(tmp_path)
+    table = build_loaded(loaded, resolved, repository)
+    header = tmp_path / "r2s_services_gen.h"
+    source = tmp_path / "r2s_services_gen.c"
+    header.write_text(
+        "#ifndef R2S_SERVICES_GEN_H\n#define R2S_SERVICES_GEN_H\n"
+        '#include "r2s/r2s_services.h"\n' + services.emit_h(table) + "\n#endif\n",
+        encoding="utf-8",
+    )
+    source.write_text('#include "r2s_services_gen.h"\n' + services.emit_c(table) + "\n", encoding="utf-8")
+    compile = subprocess.run(
+        [
+            "gcc",
+            "-std=c99",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            f"-I{CORE_INCLUDE}",
+            f"-I{tmp_path}",
+            "-DR2S_WITH_SERVICES",
+            "-c",
+            str(source),
+            "-o",
+            str(tmp_path / "r2s_services_gen.o"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert compile.returncode == 0, compile.stderr
