@@ -152,7 +152,10 @@ void test_actions_get_copy_and_declare_len(void)
 
     configure();
     got = r2s_actions_get(0u);
-    TEST_ASSERT_NOT_NULL(got);
+    if (got == NULL) {
+        TEST_FAIL_MESSAGE("bound table entry missing");
+        return;
+    }
     TEST_ASSERT_EQUAL_STRING("test_msgs/action/Fibonacci", got->type_name);
     TEST_ASSERT_EQUAL_STRING("spin", got->action_name);
     TEST_ASSERT_EQUAL_UINT8_ARRAY(hash, got->type_hash, 8u);
