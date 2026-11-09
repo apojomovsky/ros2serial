@@ -52,9 +52,9 @@ target_compile_definitions(r2s_core_session PRIVATE R2S_TICK_HZ=1000000)
 # The session transcripts predate parameters and the reliable channel, and
 # frozen vectors never change for a new feature: the replay build leaves
 # those bits out, the way it leaves logging and time out. The parameter
-# walk and the reliable exchange are covered by unit tests and the bridge
-# replay instead.
-target_compile_options(r2s_core_session PRIVATE -UR2S_WITH_LOG -UR2S_WITH_TIME -UR2S_WITH_PARAMS)
+# walk, the reliable exchange and the actions channel are covered by unit
+# tests and the bridge replay instead.
+target_compile_options(r2s_core_session PRIVATE -UR2S_WITH_LOG -UR2S_WITH_TIME -UR2S_WITH_PARAMS -UR2S_WITH_ACTIONS)
 r2s_support_lib(r2s_session_support r2s_core_session)
 
 # The message vectors nest four deep (a Time in a Header in a TransformStamped

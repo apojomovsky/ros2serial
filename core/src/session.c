@@ -15,6 +15,9 @@
 #ifdef R2S_WITH_PARAMS
 #include "r2s/r2s_params.h"
 #endif
+#ifdef R2S_WITH_ACTIONS
+#include "r2s/r2s_actions.h"
+#endif
 
 #ifdef R2S_WITH_CODEC
 #include "r2s/r2s_codec.h"
@@ -46,8 +49,9 @@
 #define HELLO_NACK_MS 100u
 
 /* The CTL-2 feature bits this build sets: bit 0 for time, bit 1 for logging,
- * bits 2 and 3 for parameters and the reliable channel; bit 4 is
- * informational. Each bit rides on the switch of the calls it announces. */
+ * bits 2 and 3 for parameters and the reliable channel, bits 3 and 7 for
+ * actions and the reliable channel; bit 4 is informational. Each bit rides
+ * on the switch of the calls it announces. */
 #if DBL_MANT_DIG == FLT_MANT_DIG
 #define R2S_FEATURE_BASE 0x10u
 #else
@@ -68,7 +72,13 @@
 #else
 #define R2S_FEATURE_PARAMS 0x00u
 #endif
-#define R2S_FEATURE_BITS (R2S_FEATURE_BASE | R2S_FEATURE_LOG | R2S_FEATURE_TIME | R2S_FEATURE_PARAMS)
+#ifdef R2S_WITH_ACTIONS
+#define R2S_FEATURE_ACTIONS 0x88u
+#else
+#define R2S_FEATURE_ACTIONS 0x00u
+#endif
+#define R2S_FEATURE_BITS                                                                                     \
+    (R2S_FEATURE_BASE | R2S_FEATURE_LOG | R2S_FEATURE_TIME | R2S_FEATURE_PARAMS | R2S_FEATURE_ACTIONS)
 
 /* tick_hz is 1000 times a divisor of 10^6, so a tick converts to nanoseconds
  * with integer math alone (CTL-8). A failing build names the rule here. */
@@ -106,14 +116,18 @@ static struct {
     uint32_t last_hb_tick;
     uint32_t last_nack_tick;
     uint8_t heard;
-#ifdef R2S_WITH_PARAMS
-    /* The reliable channel (REL-1 to REL-5): the frame seqs of the parameter
-     * and ack channels, the next expected SET rel_seq and the next STATUS
-     * one, and the outstanding STATUS with its timer and retries. A second
-     * applied SET waits in the pending slot while the first is outstanding;
-     * a conforming host never fills it. */
-    uint8_t tx_seq_param;
+#if defined(R2S_WITH_PARAMS) || defined(R2S_WITH_ACTIONS)
+    /* The ack channel's frame seq, shared by every reliable channel: one
+     * counter serves the acks the parameters and the actions send (REL-4). */
     uint8_t tx_seq_ack;
+#endif
+#ifdef R2S_WITH_PARAMS
+    /* The reliable channel (REL-1 to REL-5): the frame seq of the parameter
+     * channel, the next expected SET rel_seq and the next STATUS one, and
+     * the outstanding STATUS with its timer and retries. A second applied
+     * SET waits in the pending slot while the first is outstanding; a
+     * conforming host never fills it. */
+    uint8_t tx_seq_param;
     uint8_t rx_rel_expected;
     uint8_t tx_rel_next;
     uint8_t rel_out_active;
@@ -269,6 +283,12 @@ static void enter_announcing(uint32_t now)
 #ifdef R2S_WITH_PARAMS
     drop_reliable();
 #endif
+#ifdef R2S_WITH_ACTIONS
+#if !defined(R2S_WITH_PARAMS)
+    session.tx_seq_ack = 0u;
+#endif
+    r2s_actions_note_reset();
+#endif
     session.last_hello_tick = now;
     session.last_nack_tick = now - ms_to_ticks(HELLO_NACK_MS);
 }
@@ -423,7 +443,7 @@ static void refuse(void)
  * calls it for frames that need no other answer. */
 static void answer_with_hello(uint32_t now);
 
-#ifdef R2S_WITH_PARAMS
+#if defined(R2S_WITH_PARAMS) || defined(R2S_WITH_ACTIONS)
 /* One ack for the reliable frame received, on the ack channel with the
  * channel and rel_seq it carried (REL-1). When the link cannot take bytes
  * the ack is dropped and the busy transmitter reported (REL-6): the
@@ -441,6 +461,17 @@ static void send_ack(uint8_t channel, uint8_t rel_seq)
     }
 }
 
+#ifdef R2S_WITH_ACTIONS
+/* The actions channel's ack: the single ack counter serves every reliable
+ * channel, so the actions layer sends through here instead of its own. */
+void r2s_session_send_ack(uint8_t channel, uint8_t rel_seq)
+{
+    send_ack(channel, rel_seq);
+}
+#endif
+#endif
+
+#ifdef R2S_WITH_PARAMS
 /* One STATUS frame from its payload, with the next parameter frame seq
  * (REL-4). A frame that finds no space stays outstanding and due at once,
  * without counting a retry the link never carried. */
@@ -649,6 +680,9 @@ static void on_params(const uint8_t *payload, uint16_t len, uint32_t now)
     queue_status(index, (uint8_t)code, now);
 }
 
+#endif
+
+#if defined(R2S_WITH_PARAMS) || defined(R2S_WITH_ACTIONS)
 static void on_ack(const uint8_t *payload, uint16_t len, uint32_t now)
 {
     /* A stale ack in ANNOUNCING is answered like any other non-handshake
@@ -661,12 +695,23 @@ static void on_ack(const uint8_t *payload, uint16_t len, uint32_t now)
     if (len != 2u) {
         return;
     }
+#ifdef R2S_WITH_PARAMS
     /* Channel 3 names the reliable exchange the ack answers. */
     if (payload[0] == 3u && session.rel_out_active != 0u && payload[1] == session.rel_out_rel) {
         session.rel_out_active = 0u;
         promote_status(now);
     }
+#endif
+#ifdef R2S_WITH_ACTIONS
+    /* Channel 8 names the actions exchange the ack answers. */
+    if (payload[0] == 8u) {
+        r2s_actions_on_ack(payload[1], now);
+    }
+#endif
 }
+#endif
+
+#ifdef R2S_WITH_PARAMS
 
 /* The 500 ms timer: resends the outstanding STATUS, or drops and counts it
  * after 3 retries (REL-2). A pending STATUS moves up either way, so an
@@ -865,6 +910,8 @@ static void on_frame(const r2s_frame_t *frame)
 #ifdef R2S_WITH_PARAMS
     } else if (topic == 3u) {
         on_params(payload, payload_len, frame->tick);
+#endif
+#if defined(R2S_WITH_PARAMS) || defined(R2S_WITH_ACTIONS)
     } else if (topic == 6u) {
         on_ack(payload, payload_len, frame->tick);
 #endif
@@ -876,6 +923,26 @@ static void on_frame(const r2s_frame_t *frame)
         if (session.state == ANNOUNCING) {
             answer_with_hello(frame->tick);
         }
+#ifdef R2S_WITH_ACTIONS
+    } else if (topic == 8u) {
+        /* The walk answers in ANNOUNCING; any other non-handshake frame is
+         * answered like one ([SES-3]). In CONNECTED the actions layer owns
+         * the channel. */
+        if (session.state == ANNOUNCING && payload_len != 0u && payload[0] != R2S_ACT_OP_QUERY &&
+            payload[0] != R2S_ACT_OP_STATUS) {
+            answer_with_hello(frame->tick);
+        } else {
+            r2s_actions_on_frame(payload, payload_len, frame->tick, session.state == CONNECTED);
+        }
+#else
+    } else if (topic == 8u) {
+        /* The actions channel in a build without it: accepted, and answered
+         * in ANNOUNCING like any other non-handshake frame, otherwise
+         * ignored. */
+        if (session.state == ANNOUNCING) {
+            answer_with_hello(frame->tick);
+        }
+#endif
     } else if (topic >= 16u) {
 #ifdef R2S_WITH_CODEC
         /* A configured topic dispatches while connected; in ANNOUNCING the
@@ -953,6 +1020,13 @@ void r2s_spin_some(void)
         params_poll(now);
     }
 #endif
+#ifdef R2S_WITH_ACTIONS
+    /* The actions retransmit joins the same slot: a due response goes out
+     * ahead of the periodic frame. */
+    if (session.state == CONNECTED) {
+        r2s_actions_poll(now);
+    }
+#endif
     if (session.state == ANNOUNCING) {
         if (session.heard == 0u &&
             (uint32_t)(now - session.last_hello_tick) >= ms_to_ticks(HELLO_REPEAT_MS)) {
@@ -988,6 +1062,12 @@ void r2s_session_test_reset(void)
     session.tx_seq_hb = 0u;
 #ifdef R2S_WITH_PARAMS
     drop_reliable();
+#endif
+#ifdef R2S_WITH_ACTIONS
+#if !defined(R2S_WITH_PARAMS)
+    session.tx_seq_ack = 0u;
+#endif
+    r2s_actions_note_reset();
 #endif
 #ifdef R2S_WITH_TIME
     session.tx_seq_time = 0u;
