@@ -159,7 +159,11 @@ if wants BRIDGE; then scope_now=BRIDGE; section bridge bash scripts/bridge-test.
 if wants AMENT_LINT; then scope_now=AMENT_LINT; section ament-lint bash scripts/ament-lint.sh; fi
 if wants CPP; then scope_now=CPP; section cpp bash scripts/cpp-test.sh; fi
 if wants COVERAGE; then scope_now=COVERAGE; section coverage bash scripts/coverage-gate.sh; fi
-if wants DOCS; then scope_now=DOCS; section docs python3 tools/snippets_check.py; fi
+if wants DOCS; then scope_now=DOCS
+  section docs python3 tools/snippets_check.py
+  section site python3 tools/site_build.py
+  section site-links python3 tools/site_links.py
+fi
 if wants EXAMPLES; then scope_now=EXAMPLES; section examples bash scripts/build-examples.sh; fi
 if wants ESP32; then scope_now=ESP32; section esp32 bash scripts/build-examples-esp32.sh; fi
 if wants BUDGETS; then scope_now=BUDGETS; section budgets bash scripts/budgets-check.sh; fi
