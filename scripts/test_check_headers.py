@@ -22,12 +22,12 @@ def write(path: Path, text: str) -> Path:
 
 
 def test_slash_header_passes(tmp_path):
-    file = write(tmp_path / "core" / "src" / "framer.c", f"// {HOLDER}\n//\n// {MIT_MARK}, free of charge\n")
+    write(tmp_path / "core" / "src" / "framer.c", f"// {HOLDER}\n//\n// {MIT_MARK}, free of charge\n")
     assert check_headers.check(tmp_path) == []
 
 
 def test_hash_header_passes_after_a_shebang(tmp_path):
-    file = write(
+    write(
         tmp_path / "tools" / "check.py",
         f"#!/usr/bin/env python3\n# {HOLDER}\n#\n# {MIT_MARK}, free of charge\n",
     )

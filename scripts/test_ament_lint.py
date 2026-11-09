@@ -97,9 +97,9 @@ def run_advisory(tmp_path, colcon_stub=COLCON_STUB, python_stub=PYTHON_STUB, wit
     if with_results:
         results = tmp_path / "build" / "ament-lint" / "build" / "r2s_bridge" / "test_results" / "r2s_bridge"
         results.mkdir(parents=True)
-        (results / "copyright.xunit.xml").write_text(
-            f'<testsuite name="copyright" tests="3" failures="{copyright_failures}" errors="0" skipped="0"></testsuite>\n'
-        )
+        suite = f'<testsuite name="copyright" tests="3" failures="{copyright_failures}"'
+        suite += ' errors="0" skipped="0"></testsuite>\n'
+        (results / "copyright.xunit.xml").write_text(suite)
         (results / "flake8.xunit.xml").write_text(
             '<testsuite name="flake8" tests="1" failures="0" errors="0" skipped="0"></testsuite>\n'
         )
