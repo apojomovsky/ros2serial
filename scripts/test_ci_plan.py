@@ -38,6 +38,7 @@ OUTPUTS = (
     "cpp",
     "e2e",
     "esp32",
+    "pic",
     "coverage",
     "docs",
     "mermaid",
@@ -66,6 +67,7 @@ SECTION_SCOPE = {
     "fuzz-smoke": "fuzz",
     "build-matrix": "examples",
     "esp32": "esp32",
+    "pic-canary": "pic",
     "budgets": "budgets",
     "nightly": "nightly",
     "e2e-avr": "e2e",
@@ -98,6 +100,7 @@ TASKS_WITH_CHECKSUMS = (
     "docs",
     "examples",
     "esp32",
+    "pic",
     "budgets",
     "readme",
     "fuzz",
@@ -364,6 +367,7 @@ def test_section_jobs_save_their_checksums_on_master():
     assert saves["fuzz-smoke"] == ".task/checksum/fuzz"
     assert saves["build-matrix"] == ".task/checksum/examples"
     assert saves["esp32"] == ".task/checksum/esp32"
+    assert saves["pic-canary"] == ".task/checksum/pic"
     assert saves["budgets"] == ".task/checksum/budgets"
     assert saves["e2e-avr"] == ".task/checksum/e2e-avr"
     assert saves["scripts-save"] == ".task/checksum/scripts"
@@ -499,6 +503,19 @@ def test_an_esp32_script_edit_runs_esp32_budgets_and_scripts_besides_lint(tmp_pa
         "budgets",
         "esp32",
         "lint",
+        "plan",
+        "scripts",
+    ]
+
+
+def test_a_pic_script_edit_runs_pic_besides_lint(tmp_path):
+    repo = test_taskfile.fixture(tmp_path)
+    establish(repo)
+    (repo / "scripts" / "build-pic-canary.sh").write_text("probe\nprobe again\n")
+    assert selected_jobs(repo, tmp_path) == [
+        "bridge-images",
+        "lint",
+        "pic-canary",
         "plan",
         "scripts",
     ]

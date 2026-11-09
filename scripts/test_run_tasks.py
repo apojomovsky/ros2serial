@@ -36,6 +36,7 @@ def run(tmp_path, script='echo "$*" > {args}; env > {env}', **env):
         "DOCS",
         "EXAMPLES",
         "ESP32",
+        "PIC",
         "BUDGETS",
         "FUZZ",
         "README",
@@ -95,6 +96,11 @@ def test_the_soak_scope_selects_its_task(tmp_path):
 def test_the_esp32_scope_selects_its_task(tmp_path):
     args, _ = select(tmp_path, ESP32="1")
     assert args == ["esp32"], args
+
+
+def test_the_pic_scope_selects_its_task(tmp_path):
+    args, _ = select(tmp_path, PIC="1")
+    assert args == ["pic"], args
 
 
 def test_full_forces_the_selected_tasks(tmp_path):
