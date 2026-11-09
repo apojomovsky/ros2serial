@@ -122,6 +122,7 @@ lint_workflows() { need actionlint && actionlint .github/workflows/*.yml; }
 if wants LINT; then scope_now=LINT
   section layout python3 scripts/check_layout.py
   section python-lint lint_python
+  section headers python3 scripts/check_headers.py
   section c-format bash scripts/c-format.sh
   section cppcheck bash scripts/cppcheck.sh
   section workflow-lint lint_workflows
