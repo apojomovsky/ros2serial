@@ -1460,7 +1460,7 @@ TEST_F(RouterNode, ForwardsTheMcuCallAndAnswersIt)
     rclcpp::spin_some(fixture.node());
   }
   // The MCU calls index 1 with an empty Trigger request under req 7.
-  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u, 0x00u});
+  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
   const auto start = std::chrono::steady_clock::now();
   bool answered = false;
   while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
@@ -1495,7 +1495,7 @@ TEST_F(RouterNode, TimesOutAnUnansweredMcuCall)
   RouterFixture fixture("svc_timeout", remapped(), RouterParams{});
   fixture.handshake_with_services();
   // No ROS server: the call goes out, and the host timeout answers busy.
-  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u, 0x00u});
+  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
   for (int i = 0; i < 12; ++i) {
     fixture.advance(500u);
     rclcpp::spin_some(fixture.node());

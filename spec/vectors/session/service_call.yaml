@@ -4,9 +4,9 @@ covers: [SVR-4, SVR-5, SVR-6, REL-3]
 # drives the host calls.
 steps:
   - from: host
-    frame: "07 00 04 00 00 00 00 87 99"
+    frame: "07 00 04 00 00 00 4d 66"
     at_ms: 0
-    note: "ROS call: REQUEST rel 0, req 0, index 0, the dummy byte of the empty Trigger request"
+    note: "ROS call: REQUEST rel 0, req 0, index 0, the empty Trigger request"
   - from: mcu
     frame: "06 00 07 00 b3 05"
     at_ms: 0
@@ -18,9 +18,9 @@ steps:
     frame: "06 00 07 00 b3 05"
     at_ms: 50
   - from: mcu
-    frame: "07 01 04 01 01 00 00 cb db"
+    frame: "07 01 04 01 01 00 0d 2e"
     at_ms: 100
-    note: "MCU call: REQUEST rel 1, req 1, index 0; its own rel stream"
+    note: "MCU call: REQUEST rel 1, req 1, index 0, the empty Trigger request; its own rel stream"
   - from: host
     frame: "06 01 07 01 e6 4e"
     at_ms: 100

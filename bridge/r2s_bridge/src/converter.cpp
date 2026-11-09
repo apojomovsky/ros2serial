@@ -413,11 +413,17 @@ bool build_ops(
     return false;
   }
   for (std::uint32_t i = 0; i < members->member_count_; ++i) {
+    const MessageMember & member = members->members_[i];
+    // rosidl renders an empty message with one uint8 padding member, which
+    // the wire never carries: the generator's descriptors and the reference
+    // codec both encode such a message as zero bytes (spec [ENC-1]).
+    if (std::strcmp(member.name_, "structure_needs_at_least_one_member") == 0) {
+      continue;
+    }
     if (count >= kMaxPlanFields) {
       return false;
     }
     ++count;
-    const MessageMember & member = members->members_[i];
     Op op;
     op.type = member.type_id_;
     op.offset = member.offset_;
