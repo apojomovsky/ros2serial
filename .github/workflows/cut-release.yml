@@ -5,7 +5,9 @@ name: cut-release
 # the version-stamped generated files, and opens a release PR set to
 # auto-merge; `tag` tags the merge when VERSION changes on master. The cut
 # runs in the dev image, where the generator is importable for the
-# regeneration. Both push with the
+# regeneration. The release commit is authored by the release token owner
+# (read with `gh api user`), so the commit author matches the pull request
+# author and the squash carries no co-author trailer. Both push with the
 # R2S_RELEASE_TOKEN secret (a personal access token): a PR or tag pushed with
 # the default GITHUB_TOKEN never triggers other workflows, so the release PR's
 # required checks would never run and release.yml would never start.
@@ -65,8 +67,11 @@ jobs:
           BUMP: ${{ inputs.bump }}
           GH_TOKEN: ${{ secrets.R2S_RELEASE_TOKEN }}
         run: |
-          git config user.name "release"
-          git config user.email "release@users.noreply.github.com"
+          release_owner=$(gh api user --jq .login)
+          release_id=$(gh api user --jq .id)
+          test -n "$release_owner" && test -n "$release_id" || { echo "gh api user printed no owner"; exit 1; }
+          git config user.name "$release_owner"
+          git config user.email "${release_id}+${release_owner}@users.noreply.github.com"
           set -o pipefail
           git switch -c release-cut
           make exec CMD="bash scripts/release.sh --bump $BUMP" | tee release.log
