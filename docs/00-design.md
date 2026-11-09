@@ -486,17 +486,68 @@ ROS 2-style aliases (`std_msgs::msg::Float32`) are always provided; rosserial-st
 
 The service and action APIs mirror `rclcpp` and `rclcpp_action`: the MCU runs a minimal action server and the bridge is the ROS 2 action server on its behalf. The wire is `spec/protocol.md` sections 7.8 and 7.9; the board side is:
 
-<!-- snippet: skip until #318: board service and action APIs land in X6 and X10b -->
+<!-- snippet: skip until #156: the board service API lands in X6 -->
 ```cpp
 r2s::Service<std_srvs::srv::Trigger> reset(node, "reset",
     [](const std_srvs::srv::Trigger::Request &, std_srvs::srv::Trigger::Response &res) {
         res.success = true;
     });
 r2s::Client<std_srvs::srv::Trigger> trigger(node, "trigger");
-r2s::action::Server<test_msgs::action::Fibonacci> fib(node, "spin",
-    [](const test_msgs::action::Fibonacci::Goal &) { return r2s::action::GoalResponse::ACCEPT_AND_EXECUTE; },
-    [](const test_msgs::action::Fibonacci::Goal &) { return r2s::action::CancelResponse::ACCEPT; },
-    [](r2s::action::ServerGoalHandle<test_msgs::action::Fibonacci> &handle) { /* run, then succeed/abort/canceled */ });
+```
+
+The action server is live: the sketch names its action struct, with the
+goal, result and feedback message types as nested types, and specializes
+`r2s::action::traits` with the action and type names and the first eight
+bytes of the type hash. The server registers when it is constructed, so the
+sketch keeps it alive while the node spins.
+
+```cpp
+#define R2S_WITH_ACTIONS
+#include <std_msgs/msg/float32.hpp>
+#include <r2s/action.hpp>
+struct Spin {
+    using Goal = std_msgs::msg::Float32;
+    using Result = std_msgs::msg::Float32;
+    using Feedback = std_msgs::msg::Float32;
+};
+namespace r2s
+{
+namespace action
+{
+template <> struct traits<Spin> {
+    static const char *action_name()
+    {
+        return "spin";
+    }
+    static const char *type_name()
+    {
+        return "test_msgs/action/Fibonacci";
+    }
+    static const uint8_t *type_hash()
+    {
+        static const uint8_t hash[8] = {0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u, 0x18u};
+        return hash;
+    }
+};
+} // namespace action
+} // namespace r2s
+r2s::action::GoalResponse on_spin_goal(const Spin::Goal &goal)
+{
+    if (goal.data > 10.0f) {
+        return r2s::action::GoalResponse::REJECT;
+    }
+    return r2s::action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+r2s::action::CancelResponse on_spin_cancel(const Spin::Goal &goal)
+{
+    (void)goal;
+    return r2s::action::CancelResponse::ACCEPT;
+}
+void on_spin_accepted(r2s::action::ServerGoalHandle<Spin> &handle)
+{
+    (void)handle;
+}
+r2s::action::Server<Spin> fib("spin", on_spin_goal, on_spin_cancel, on_spin_accepted);
 ```
 
 Services arrive as `r2s::Service<T>` and `r2s::Client<T>` mirroring `rclcpp::Service` and `rclcpp::Client`, with headers at the rclcpp include paths (`<pkg/srv/name.hpp>`). Actions arrive as `r2s::action::Server<T>` mirroring `rclcpp_action::Server`, with `handle_goal`, `handle_cancel` and `handle_accepted` callbacks returning `GoalResponse` and `CancelResponse`, and a `ServerGoalHandle<T>` with `publish_feedback`, `succeed`, `abort`, `canceled` and `is_canceling`, with headers at `<pkg/action/name.hpp>`. Each departure from rclcpp is named and justified: no heap and no `shared_ptr` anywhere, so requests, responses, goals and handles pass by reference and the server owns its single goal handle; no UUID parameter in the goal callbacks, since the bridge owns the goal UUIDs and the wire carries `goal_seq`; no `ACCEPT_AND_DEFER`, since one active goal per action leaves no queue; futures replaced by a response callback on the client, since dispatch happens in `spin_some` like the subscribers. Static X-macro rows map 1-to-1 to the runtime declarations, with `::` in C++ rows and generated C names in C rows. Callbacks live in the C++ layer as with the subscribers, so the core stays free of function pointers.
