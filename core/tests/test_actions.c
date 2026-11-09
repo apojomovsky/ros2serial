@@ -730,6 +730,9 @@ void test_actions_full_slots_hold_the_goal_for_retry(void)
     assert_tx(0, 8, 2, retried, sizeof retried);
     assert_tx(1, 4, 0, heartbeat, sizeof heartbeat);
     assert_tx(2, 5, 0, busy, sizeof busy);
+      /* A held frame is not a refused one: the hold reports TX_BUSY but
+       * drops nothing. */
+    TEST_ASSERT_EQUAL_UINT16(0, r2s_framer_counters()->dropped_frames);
   }
     /* The acks free both slots; the retried goal then runs at once. */
   feed_host(6, 0, ack_resp, sizeof ack_resp);
@@ -1117,6 +1120,9 @@ void test_actions_full_slots_hold_the_cancel_for_retry(void)
   assert_tx(0, 8, 2, retried, sizeof retried);
   assert_tx(1, 4, 0, heartbeat, sizeof heartbeat);
   assert_tx(2, 5, 0, busy, sizeof busy);
+    /* A held frame is not a refused one: the hold reports TX_BUSY but
+     * drops nothing. */
+  TEST_ASSERT_EQUAL_UINT16(0, r2s_framer_counters()->dropped_frames);
     /* The acks free both slots; the retried cancel then runs at once. */
   feed_host(6, 0, ack_resp, sizeof ack_resp);
   feed_host(6, 1, ack_filler, sizeof ack_filler);
