@@ -93,7 +93,7 @@ def test_vectors_encodes_a_service_request_and_response(capsys, tmp_path):
     assert out == '02 01 00 00 00 02 00 00 00\n'
 
 
-def test_vectors_encodes_an_empty_service_request_as_the_dummy_byte(capsys, tmp_path):
+def test_vectors_encodes_an_empty_service_request_as_zero_bytes(capsys, tmp_path):
     from support import write_service
 
     write_service(tmp_path / 'messages', 'demo_srvs/srv/Ping', '---\nint32 sequence\n')
