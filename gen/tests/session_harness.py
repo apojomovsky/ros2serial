@@ -53,7 +53,7 @@ def model_topics(flags: list[int]) -> list[model.Topic]:
 # The build flags scripts/build-host-lib.sh compiles the C library with:
 # logging and parameters, no time sync. The model carries the same features
 # so the boot HELLO agrees.
-MODEL_FEATURES = 0x02 | 0x04 | 0x08
+MODEL_FEATURES = 0x02 | 0x04 | 0x08 | 0x40
 
 
 def model_params() -> list[model.Param]:

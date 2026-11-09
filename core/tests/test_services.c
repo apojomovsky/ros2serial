@@ -439,7 +439,9 @@ void test_services_response_retransmits_then_gives_up_counted(void)
         assert_tx((uint16_t)(2u * retry), 7, (uint8_t)retry, response, sizeof response);
     }
     {
-        uint8_t want[8] = {6u, 0u, 0u, 0u, 0u, 0u, 1u, 0u};
+        /* The fed heartbeat is still in flight when the timer fires, so
+         * the report counts the five frames accepted before it. */
+        uint8_t want[8] = {5u, 0u, 0u, 0u, 0u, 0u, 1u, 0u};
 
         fake_port_advance(500);
         feed_host(4, 3, empty, 0);
@@ -479,9 +481,9 @@ void test_services_channels_keep_their_own_rel_seq(void)
      * heartbeat is the only frame that follows. */
     {
         const uint8_t empty[1] = {0u};
-        /* rx_frames counts READY, SET, REQUEST and the two acks, then this
-         * heartbeat; nothing was dropped. */
-        const uint8_t want[8] = {6u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
+        /* rx_frames counts READY, SET, REQUEST and the two acks; the fed
+         * heartbeat is still in flight, and nothing was dropped. */
+        const uint8_t want[8] = {5u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
 
         feed_host(6, 2, ack_param, sizeof ack_param);
         feed_host(6, 3, ack_svc, sizeof ack_svc);

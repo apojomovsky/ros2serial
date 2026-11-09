@@ -36,6 +36,13 @@ extern "C" {
 #define R2S_SVC_BAD_PAYLOAD 2u
 #define R2S_SVC_BUSY 3u
 
+/* How many verdicts the table may hold: the session stores the host's walk
+ * verdict per entry, so the count stops here. The generated configuration
+ * raises it together with the table when the firmware needs more. */
+#ifndef R2S_SERVICE_MAX_COUNT
+#define R2S_SERVICE_MAX_COUNT 8u
+#endif
+
 /* What the take calls return with nothing waiting: not an error, so the
  * application polls them every spin. */
 #define R2S_SVC_EMPTY 1
@@ -175,6 +182,79 @@ r2s_status_t r2s_service_send_response(uint8_t req_id, uint8_t status, const uin
  */
 r2s_status_t r2s_service_take_response(uint8_t *req_id, uint8_t *status, uint8_t *payload, uint16_t cap,
                                        uint16_t *len);
+
+/// Records the host's walk verdict for one entry. The session calls this
+/// for every STATUS that answers a DECLARE.
+/**
+ * Verdicts past the table or past R2S_SVC_STATUS_NAME_CONFLICT change
+ * nothing; the session refuses those frames before calling.
+ *
+ * \param[in] index the entry the verdict names.
+ * \param[in] status one of the R2S_SVC_STATUS_* verdicts.
+ */
+void r2s_services_note_status(uint8_t index, uint8_t status);
+
+/// Answers one QUERY: a DECLARE for an announced index, a plain STATUS 1
+/// past the table [SVR-7]. The session calls this in ANNOUNCING.
+/**
+ * \param[in] index the entry the QUERY names.
+ */
+void r2s_services_answer_query(uint8_t index);
+
+/// Applies one incoming REQUEST the session already acked.
+/**
+ * Only the expected rel_seq applies and advances the counter; any other is
+ * reported duplicate [REL-3]. A second REQUEST while the slot is full is
+ * reported refused, since a conforming peer never sends one.
+ *
+ * \param[in] rel_seq the rel_seq the frame carried.
+ * \param[in] index the served entry, already checked server-role.
+ * \param[in] req_id the req_id the RESPONSE must echo.
+ * \param[in] payload the packed request bytes.
+ * \param[in] len how many bytes payload holds.
+ * \return 1 stored, 0 duplicate, -1 slot full.
+ */
+int r2s_services_apply_request(uint8_t rel_seq, uint8_t index, uint8_t req_id, const uint8_t *payload,
+                               uint16_t len);
+
+/// Applies one incoming RESPONSE the session already acked.
+/**
+ * Only the expected rel_seq advances the counter [REL-3]. A RESPONSE
+ * answers only the call outstanding under its own req_id; any other is
+ * acked and dropped [SVR-5].
+ *
+ * \param[in] rel_seq the rel_seq the frame carried.
+ * \param[in] req_id the call the RESPONSE answers.
+ * \param[in] status the SVR-6 status, already checked on the wire.
+ * \param[in] payload the packed response bytes.
+ * \param[in] len how many bytes payload holds.
+ * \return 1 consumed, 0 duplicate.
+ */
+int r2s_services_apply_response(uint8_t rel_seq, uint8_t req_id, uint8_t status, const uint8_t *payload,
+                                uint16_t len);
+
+/// Clears the outstanding frame when its ack arrives. The session calls
+/// this for every channel 7 ack; anything else changes nothing [REL-2].
+/**
+ * \param[in] rel_seq the acked rel_seq.
+ */
+void r2s_services_note_ack(uint8_t rel_seq);
+
+/// Runs the retransmit timer: resends the outstanding frame, or drops and
+/// counts it after 3 retries [REL-2]. The session calls this while
+/// connected, ahead of the heartbeat.
+/**
+ * \param[in] now the tick the frame carries.
+ */
+void r2s_services_poll(uint32_t now);
+
+/// Drops the streams, the slots and the outstanding call: a re-handshake
+/// drops all reliable state on both sides [REL-5]. The session calls this
+/// on entering ANNOUNCING and on entering CONNECTED.
+/**
+ * A retired call reports nothing further; the take stays empty for it.
+ */
+void r2s_services_note_reconnect(void);
 #endif
 
 #ifdef R2S_TESTING
