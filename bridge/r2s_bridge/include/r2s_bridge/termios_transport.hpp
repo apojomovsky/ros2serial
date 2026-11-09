@@ -66,6 +66,8 @@ public:
   virtual int set_attributes(int fd, int action, const termios *attributes) const noexcept;
   virtual ssize_t read_bytes(int fd, void *buffer, std::size_t capacity) const noexcept;
   virtual ssize_t write_bytes(int fd, const void *data, std::size_t size) const noexcept;
+  // The request mirrors the POSIX ::ioctl signature, so the seam keeps unsigned long.
+  // NOLINTNEXTLINE(runtime/int)
   virtual int serial_ioctl(int fd, unsigned long request, void *data) const noexcept;
 };
 

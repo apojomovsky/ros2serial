@@ -62,6 +62,8 @@ ssize_t TermiosSyscalls::write_bytes(int fd, const void *data, std::size_t size)
   return ::write(fd, data, size);
 }
 
+// The request mirrors the POSIX ::ioctl signature, so the seam keeps unsigned long.
+// NOLINTNEXTLINE(runtime/int)
 int TermiosSyscalls::serial_ioctl(int fd, unsigned long request, void *data) const noexcept
 {
   return ::ioctl(fd, request, data);
