@@ -30,7 +30,7 @@ on:
 permissions:
   contents: read
 
-# Master runs force their sections, as in ci.yml; pull requests run stale ones.
+# Runs outside pull requests force their sections; pull requests run stale ones.
 env:
   R2S_FULL: ${{ github.event_name == 'pull_request' && '' || '1' }}
 
