@@ -11,10 +11,10 @@ if [ "${1:-}" = --fix ]; then fix=1; shift; fi
 command -v uncrustify >/dev/null 2>&1 || { echo "uncrustify not found: run it in the dev image"; exit 1; }
 version=$(uncrustify --version 2>/dev/null | grep -o '[0-9][0-9.]*' | head -n 1)
 [ "$version" = "0.78.1" ] || {
-  echo "uncrustify $version is not the pinned 0.78.1: refresh tools/ament_code_style.cfg"
+  echo "uncrustify $version is not the pinned 0.78.1: refresh tools/vendor/ament_code_style.cfg"
   exit 1
 }
-cfg="$root/tools/ament_code_style.cfg"
+cfg="$root/tools/vendor/ament_code_style.cfg"
 [ -f "$cfg" ] || { echo "missing config: $cfg"; exit 1; }
 if [ "$#" -gt 0 ]; then
   files=("$@")
@@ -32,7 +32,14 @@ for lang in C CPP; do
   mapfile -t lang_files < <(printf '%s\n' "${files[@]}" | grep -E "\.$ext")
   [ "${#lang_files[@]}" -gt 0 ] || continue
   if [ "$fix" = 1 ]; then
-    uncrustify -c "$cfg" -l "$lang" --replace --no-backup "${lang_files[@]}" || status=1
+    # Some files settle only on a second pass, so fix to a fixpoint: a file
+    # the check still flags after three passes needs a human, not a loop.
+    for _ in 1 2 3; do
+      uncrustify -c "$cfg" -l "$lang" --replace --no-backup -q "${lang_files[@]}" || status=1
+      uncrustify -c "$cfg" -l "$lang" --check "${lang_files[@]}" >/dev/null 2>&1 && break
+      status=1
+    done
+    uncrustify -c "$cfg" -l "$lang" --check "${lang_files[@]}" || status=1
   else
     uncrustify -c "$cfg" -l "$lang" --check "${lang_files[@]}" || status=1
   fi

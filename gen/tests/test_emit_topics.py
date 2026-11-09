@@ -492,7 +492,7 @@ def _uncrustify_clean(paths):
     binary = shutil.which('uncrustify')
     if binary is None:
         pytest.skip('uncrustify is not installed')
-    config = ROOT / 'tools' / 'ament_code_style.cfg'
+    config = ROOT / 'tools' / 'vendor' / 'ament_code_style.cfg'
     completed = subprocess.run(
         [binary, '-c', str(config), '-l', 'C', '--check', *(str(path) for path in paths)],
         capture_output=True,

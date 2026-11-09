@@ -38,7 +38,7 @@ UNLISTED = {
     'ports/epic-hal': 'no suite section builds this port yet',
     'ports/stm32': 'no suite section builds this port yet',
     # Read by the standing lint gate, which always runs, so no task lists them.
-    'tools/ament_code_style.cfg': 'read by the standing lint gate, which always runs',
+    'tools/vendor/ament_code_style.cfg': 'read by the standing lint gate, which always runs',
     'LICENSE': 'content pinned by the standing lint gate, which always runs',
     # Read by git at checkout; no section parses it.
     '.gitattributes': 'read by git at checkout, no section parses it',
