@@ -60,6 +60,15 @@ def test_missing_return_fails():
     assert len(problems) == 1 and 'return' in problems[0]
 
 
+def test_tags_without_body_fail():
+    text = (
+        '/// Encodes one value. \\param[in] value the value to encode.\n'
+        'uint8_t r2s_varint_encode(uint16_t value);\n'
+    )
+    problems = check(text)
+    assert len(problems) == 1 and 'body' in problems[0]
+
+
 def test_body_without_summary_fails():
     text = '/**\n * Body only.\n */\nvoid r2s_init(void);\n'
     problems = check(text)

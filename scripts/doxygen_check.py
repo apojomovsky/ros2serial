@@ -210,8 +210,8 @@ def _collect(text: str) -> list[Decl]:
     return decls
 
 
-def _doc_above(lines: list[str], start: int) -> tuple[str, str | None]:
-    """The doc text above 1-based line start: (doc, problem).
+def _doc_above(lines: list[str], start: int) -> tuple[str, bool, str | None]:
+    """The doc text above 1-based line start: (doc, has body, problem).
 
     The rcl form is a ``///`` summary above a ``/** */`` body, the body
     directly above the declaration.
@@ -220,20 +220,20 @@ def _doc_above(lines: list[str], start: int) -> tuple[str, str | None]:
     while i >= 0 and (lines[i].strip() == '' or lines[i].lstrip().startswith('#')):
         i -= 1
     if i < 0:
-        return '', 'undocumented public symbol'
+        return '', False, 'undocumented public symbol'
     body = ''
     if '/*' in lines[i] or '*/' in lines[i] or lines[i].lstrip().startswith('*'):
         end = i
         while i >= 0 and '/*' not in lines[i]:
             i -= 1
         if i < 0 or '/**' not in lines[i]:
-            return '', 'comment is not Doxygen form (/// or /** */)'
+            return '', False, 'comment is not Doxygen form (/// or /** */)'
         body = '\n'.join(lines[i : end + 1])
         i -= 1
         while i >= 0 and lines[i].strip() == '':
             i -= 1
         if i < 0 or not lines[i].lstrip().startswith('///'):
-            return '', 'missing /// one-line summary'
+            return '', False, 'missing /// one-line summary'
     if i >= 0 and lines[i].lstrip().startswith('///'):
         built = []
         while i >= 0 and lines[i].lstrip().startswith('///'):
@@ -241,13 +241,18 @@ def _doc_above(lines: list[str], start: int) -> tuple[str, str | None]:
             i -= 1
         summary = ' '.join(reversed(built)).strip()
         if not summary:
-            return '', 'missing /// one-line summary'
-        return (summary + '\n' + body).strip(), None
+            return '', False, 'missing /// one-line summary'
+        return (summary + '\n' + body).strip(), bool(body), None
     if body:
-        return '', 'missing /// one-line summary'
+        return '', False, 'missing /// one-line summary'
     if lines[i].lstrip().startswith('/*'):
-        return '', 'comment is not Doxygen form (/// or /** */)'
-    return '', 'undocumented public symbol'
+        return '', False, 'comment is not Doxygen form (/// or /** */)'
+    return '', False, 'undocumented public symbol'
+
+
+def _needs_tags(decl: Decl) -> bool:
+    """Whether the declaration carries parameters or a return value."""
+    return decl.kind == 'func' and bool(decl.params or not decl.returns_void)
 
 
 def check_text(label: str, text: str) -> list[str]:
@@ -255,11 +260,14 @@ def check_text(label: str, text: str) -> list[str]:
     problems = []
     lines = text.splitlines()
     for decl in _collect(text):
-        doc, problem = _doc_above(lines, decl.line)
+        doc, has_body, problem = _doc_above(lines, decl.line)
         if problem is not None:
             problems.append(f'{label}:{decl.line}: {decl.name}: {problem}')
             continue
         if decl.kind == 'func' or (decl.kind == 'macro' and decl.params):
+            if _needs_tags(decl) and not has_body:
+                problems.append(f'{label}:{decl.line}: {decl.name}: parameters need a /** */ body')
+                continue
             tagged = set(PARAM_RE.findall(doc))
             for pname in decl.params:
                 if pname not in tagged:
