@@ -261,19 +261,13 @@ inline bool registration_error()
 } // namespace r2s
 
 /* One static row: the server object the row declares, registering like the
- * runtime one. A test expands its own list with this macro in function
- * scope; a sketch declares R2S_ACTIONS rows and the header expands them.
- * Beside the runtime declaration `Server<Type> obj(name, ...)` the row
- * reads `X(Type, obj, name, ...)`. */
+ * runtime one. A sketch lists its actions as R2S_ACTIONS rows, then expands
+ * them once at file scope, after the traits specializations and callbacks
+ * the rows name: the expansion instantiates each server, so it needs the
+ * whole row. Beside the runtime declaration `Server<Type> obj(name, ...)`
+ * the row reads `X(Type, obj, name, ...)`. */
 #define R2S_ACTION_X_SERVER(Type, obj, name, goal_cb, cancel_cb, accepted_cb)                                \
     ::r2s::action::Server<Type> obj(name, goal_cb, cancel_cb, accepted_cb);
-
-/* A sketch with a static action list declares its rows before including this
- * header; the header expands them into the server objects. Each row maps
- * 1-to-1 to a runtime declaration. */
-#ifdef R2S_ACTIONS
-R2S_ACTIONS(R2S_ACTION_X_SERVER)
-#endif
 
 #ifdef R2S_TESTING
 /* Host test builds only: empties the registry, so one binary runs many
