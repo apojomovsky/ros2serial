@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "r2s/r2s.h"
+#include "r2s/r2s_error.h"
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_port.h"
 #include "r2s/r2s_session.h"
@@ -299,6 +300,9 @@ r2s_status_t r2s_service_call(uint8_t index, const uint8_t *payload, uint16_t le
     uint32_t now;
 
     if (r2s_connected() == 0u) {
+        /* A client send while not connected fails and sends nothing,
+         * reported once per connection like a publish (SVR-9, ERR-3). */
+        r2s_error_note(R2S_ERROR_NOT_CONNECTED, 7u, 0xFFu, 1u);
         return R2S_ERR_NOT_CONNECTED;
     }
     if (req_id == NULL || index >= services.count || services.table[index].role != R2S_SVC_CLIENT ||
@@ -350,6 +354,7 @@ r2s_status_t r2s_service_take_request(uint8_t *index, uint8_t *req_id, uint8_t *
 r2s_status_t r2s_service_send_response(uint8_t req_id, uint8_t status, const uint8_t *payload, uint16_t len)
 {
     if (r2s_connected() == 0u) {
+        r2s_error_note(R2S_ERROR_NOT_CONNECTED, 7u, 0xFFu, 1u);
         return R2S_ERR_NOT_CONNECTED;
     }
     if (status > R2S_SVC_BUSY || (payload == NULL && len > 0u) || len > SVC_MAX_CALL_PAYLOAD) {

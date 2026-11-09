@@ -118,8 +118,9 @@ uint16_t r2s_services_declare_len(uint8_t index);
  * with R2S_ERR_NOT_CONNECTED while not connected, with R2S_ERR_TX_BUSY
  * while a call or a reliable frame is still outstanding, and with
  * R2S_ERR_BOUNDS for an unknown index, a non-client entry, or a payload
- * the frame cannot carry; every failure sends nothing. The answer arrives
- * through r2s_service_take_response().
+ * the frame cannot carry; every failure sends nothing. The not-connected
+ * failure is reported once per connection like a publish (SVR-9, ERR-3).
+ * The answer arrives through r2s_service_take_response().
  *
  * \param[in] index the called service, a client-role entry.
  * \param[in] payload the packed request, or NULL for an empty request.

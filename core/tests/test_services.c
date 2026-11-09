@@ -334,26 +334,56 @@ void test_services_stale_response_is_acked_and_dropped(void)
                             r2s_service_take_response(&req_id, &status, payload, sizeof payload, &len));
 }
 
-/* covers: SVR-9 */
-void test_services_client_call_while_not_connected_fails(void)
+/* covers: SVR-9, ERR-3 */
+void test_services_client_call_while_not_connected_reports_once(void)
 {
+    /* code 5, services, one occurrence, no field. */
+    const uint8_t report[] = {0x05u, 0x07u, 0x01u, 0x00u, 0xFFu};
+    const uint8_t hello_req[] = {0x01u, 0x04u};
     uint8_t req_id = 0xFFu;
 
     configure();
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_NOT_CONNECTED, r2s_service_call(1, NULL, 0, &req_id));
-    /* Nothing was sent: only the boot HELLO is on the wire. */
-    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    /* The failure reports at once: boot HELLO, then the report. */
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+    assert_tx(1, 5, 0, report, sizeof report);
+    feed_host(0, 0, hello_req, sizeof hello_req);
+    TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_frame_count());
+    /* A second failure while still announcing counts without sending again. */
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_NOT_CONNECTED, r2s_service_call(1, NULL, 0, &req_id));
+    feed_host(0, 1, hello_req, sizeof hello_req);
+    TEST_ASSERT_EQUAL_UINT16(4, fake_port_tx_frame_count());
+}
+
+/* covers: SVR-9 */
+void test_services_client_call_while_not_connected_fails(void)
+{
+    /* code 5, services, one occurrence, no field. */
+    const uint8_t report[] = {0x05u, 0x07u, 0x01u, 0x00u, 0xFFu};
+    uint8_t req_id = 0xFFu;
+
+    configure();
+    TEST_ASSERT_EQUAL_INT8(R2S_ERR_NOT_CONNECTED, r2s_service_call(1, NULL, 0, &req_id));
+    /* Nothing was sent but the boot HELLO and the once-per-connection
+     * report. */
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+    assert_tx(1, 5, 0, report, sizeof report);
 }
 
 /* covers: SVR-9 */
 void test_services_send_response_while_not_connected_fails(void)
 {
+    /* code 5, services, one occurrence, no field. */
+    const uint8_t report[] = {0x05u, 0x07u, 0x01u, 0x00u, 0xFFu};
     const uint8_t answer[] = {0x01u};
 
     configure();
     TEST_ASSERT_EQUAL_INT8(R2S_ERR_NOT_CONNECTED,
                            r2s_service_send_response(0, R2S_SVC_OK, answer, sizeof answer));
-    TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    /* Nothing was sent but the boot HELLO and the once-per-connection
+     * report. */
+    TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+    assert_tx(1, 5, 0, report, sizeof report);
 }
 
 /* covers: SVR-10 */
