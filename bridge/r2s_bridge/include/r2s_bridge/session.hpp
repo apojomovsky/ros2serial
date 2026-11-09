@@ -263,7 +263,8 @@ struct SessionEvents
 {
   std::function<void(SessionLog, const std::string &)> log;  ///< A bridge log line.
   std::function<void(bool identical)> handshake_completed;  ///< A handshake finished [SES-20].
-  std::function<void(std::uint8_t, const std::vector<std::uint8_t> &)> user_frame;  ///< A decoded user payload.
+  /// A decoded user payload.
+  std::function<void(std::uint8_t, const std::vector<std::uint8_t> &)> user_frame;
   std::function<void(SessionLog, const std::string &)> mcu_log;  ///< An MCU log line [LOG-1].
   /// One PARAM_STATUS the MCU reported while connected.
   /**
