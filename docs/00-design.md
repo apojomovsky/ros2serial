@@ -749,7 +749,7 @@ ros2serial/
 
 | Area | Convention |
 | --- | --- |
-| C (core) | C99, `-std=c99 -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow`, `clang-format` (config in repo), `stdint.h` types only, no `int`/`long` in interfaces, no 64-bit types, no function pointers, no recursion, no malloc, no VLAs, no float arithmetic, no `printf` |
+| C (core) | C99, `-std=c99 -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow`, `uncrustify` (ament style, config in repo), `stdint.h` types only, no `int`/`long` in interfaces, no 64-bit types, no function pointers, no recursion, no malloc, no VLAs, no float arithmetic, no `printf` |
 | C++ (MCU layer) | C++11, the epic-cc subset (see Part I), `-fno-exceptions -fno-rtti`, no virtuals, stored callbacks only under `R2S_WITH_RUNTIME_TOPICS` |
 | Zone boundary | `tools/zone_check.py` fails CI if anything under `core/` includes from `cpp/`, uses a function pointer type, or calls a float operation (checked on the object files) |
 | C++ (bridge) | C++17 (Jazzy's baseline), `ament_lint_auto` (cpplint, uncrustify, cppcheck), ROS 2 style |

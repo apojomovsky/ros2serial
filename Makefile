@@ -91,7 +91,7 @@ ctest: guard-main-clone cache-dir ## Rerun core unit tests by name: make ctest A
 	@test -n "$(ARGS)" || { echo "usage: make ctest ARGS='<regex>'"; exit 2; }
 	@$(call in_image,bash scripts/ctest-one.sh '$(ARGS)')
 
-fmt: guard-main-clone cache-dir ## Format the tree (ruff, clang-format)
+fmt: guard-main-clone cache-dir ## Format the tree (ruff, uncrustify)
 	@$(call in_image,bash -c 'ruff format . && bash scripts/c-format.sh --fix')
 
 shell: guard-main-clone cache-dir ## Interactive shell inside the image
