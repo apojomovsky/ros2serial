@@ -22,7 +22,8 @@ add_compile_definitions(R2S_TESTING)
 add_compile_definitions(R2S_MAX_FRAME=512)
 # The test firmware configures topics with dispatch, and nests Twist two deep;
 # the generated configuration sets both per firmware.
-add_compile_definitions(R2S_WITH_CODEC R2S_MAX_NEST=2 R2S_WITH_LOG R2S_WITH_TIME R2S_WITH_PARAMS)
+add_compile_definitions(R2S_WITH_CODEC R2S_MAX_NEST=2 R2S_WITH_LOG R2S_WITH_TIME R2S_WITH_PARAMS
+                        R2S_WITH_SERVICES)
 # Host tests frame up to four links in one process, so the indexed port seam
 # is compiled in; firmware builds keep the default of one link.
 add_compile_definitions(R2S_MAX_LINKS=4)
