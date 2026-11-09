@@ -940,21 +940,14 @@ static void on_frame(const r2s_frame_t *frame)
   } else if (topic == 8u) {
         /* The walk answers in ANNOUNCING; any other non-handshake frame is
          * answered like one ([SES-3]). In CONNECTED the actions layer owns
-         * the channel. */
+         * the channel. Without the layer the channel stays unowned, so the
+         * reserved rule below applies instead. */
     if (session.state == ANNOUNCING &&
       (payload_len == 0u || (payload[0] != R2S_ACT_OP_QUERY && payload[0] != R2S_ACT_OP_STATUS)))
     {
       answer_with_hello(frame->tick);
     } else {
       r2s_actions_on_frame(payload, payload_len, frame->tick, session.state == CONNECTED);
-    }
-#else
-  } else if (topic == 8u) {
-        /* The actions channel in a build without it: accepted, and answered
-         * in ANNOUNCING like any other non-handshake frame, otherwise
-         * ignored. */
-    if (session.state == ANNOUNCING) {
-      answer_with_hello(frame->tick);
     }
 #endif
   } else if (topic >= 16u) {

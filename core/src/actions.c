@@ -313,9 +313,9 @@ r2s_status_t r2s_actions_answer_cancel(uint8_t index, uint8_t goal_seq, uint8_t 
     return R2S_ERR_TX_BUSY;
   }
   queue_response(R2S_ACT_OP_CANCEL_RESP, goal_seq, decision, NULL, 0u, r2s_port_tick());
-  if (decision == R2S_ACT_CANCEL_ACCEPTED && act.state[index] == R2S_ACT_EXECUTING &&
-    act.goal_seq[index] == goal_seq)
-  {
+    /* The checks above already matched the goal seq, so only the state can
+     * still refuse the transition. */
+  if (decision == R2S_ACT_CANCEL_ACCEPTED && act.state[index] == R2S_ACT_EXECUTING) {
     act.state[index] = R2S_ACT_CANCELING;
   }
   return R2S_OK;
@@ -596,12 +596,10 @@ void r2s_actions_on_frame(const uint8_t *payload, uint16_t len, uint32_t now, ui
     r2s_framer_count_refused();
     return;
   }
+    /* The walk owns every announcing frame: a non-walk opcode is refused
+     * there, next to the short and mispredicted ones. */
   if (connected == 0u) {
-    if (payload[0] == R2S_ACT_OP_QUERY || payload[0] == R2S_ACT_OP_STATUS) {
-      on_walk(payload, len);
-    } else {
-      r2s_framer_count_refused();
-    }
+    on_walk(payload, len);
     return;
   }
   on_exchange(payload, len, now);
