@@ -27,11 +27,11 @@ uint16_t fake_port_rx_pending_link(uint8_t link);
 /* Everything written so far, and the same split at each 0x00 delimiter into
  * encoded frames (still rCOBS-encoded, without the delimiter); an unterminated
  * tail is not a frame. Clearing starts a new capture. */
-const uint8_t *fake_port_tx(uint16_t *len);
+const uint8_t * fake_port_tx(uint16_t *len);
 void fake_port_tx_clear(void);
 uint16_t fake_port_tx_len(void);
 uint16_t fake_port_tx_frame_count(void);
-const uint8_t *fake_port_tx_frame(uint16_t index, uint16_t *len);
+const uint8_t * fake_port_tx_frame(uint16_t index, uint16_t *len);
 
 /* How many r2s_port_write() calls the core made since the reset or the last
  * fake_port_tx_clear(), and the longest of them. A core that writes in chunks

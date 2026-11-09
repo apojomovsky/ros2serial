@@ -11,18 +11,18 @@ static char host_error[160];
 
 void fake_port_fail(const char *message)
 {
-    size_t taken = strlen(message);
+  size_t taken = strlen(message);
 
-    if (taken > sizeof host_error - 1u) {
-        taken = sizeof host_error - 1u;
-    }
-    memcpy(host_error, message, taken);
-    host_error[taken] = '\0';
+  if (taken > sizeof host_error - 1u) {
+    taken = sizeof host_error - 1u;
+  }
+  memcpy(host_error, message, taken);
+  host_error[taken] = '\0';
 }
 
-const char *r2s_host_error(void)
+const char * r2s_host_error(void)
 {
-    return host_error;
+  return host_error;
 }
 
 /* Dispatch calls the handler on every valid cmd_vel frame; the model tests
@@ -30,12 +30,12 @@ const char *r2s_host_error(void)
  * nothing. */
 void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
 {
-    (void)msg;
+  (void)msg;
 }
 
 /* Dispatch calls the handler on every valid cmd_str frame; like cmd_vel it
  * keeps nothing the model tests would observe. */
 void r2s_on_cmd_str(const std_msgs__msg__String *msg)
 {
-    (void)msg;
+  (void)msg;
 }
