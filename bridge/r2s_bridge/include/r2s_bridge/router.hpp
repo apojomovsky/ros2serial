@@ -29,6 +29,17 @@ class Converter;
 // the node logger with its severity.
 using LogSink = std::function<void(SessionLog, const std::string &)>;
 
+// The node interfaces the service proxies need beyond topics: base for the
+// rcl handle behind the service server, graph for generic clients, services
+// to register a generic service where the distro has one. All null skips
+// the service proxies with a precise log, while topics keep routing.
+struct NodeServiceInterfaces
+{
+  rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base;
+  rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph;
+  rclcpp::node_interfaces::NodeServicesInterface::SharedPtr services;
+};
+
 // The bridge parameters behind the pacing (docs/00-design.md, E4).
 struct RouterParams
 {
@@ -61,7 +72,8 @@ public:
     rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,
     const Clock & clock, const Clock & ros_clock, RouterParams params, LogSink sink,
     SessionConfig session_config = SessionConfig(), LogSink mcu_sink = LogSink(),
-    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params = nullptr);
+    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params = nullptr,
+    NodeServiceInterfaces node_services = NodeServiceInterfaces());
   ~Router();
   Router(const Router &) = delete;
 

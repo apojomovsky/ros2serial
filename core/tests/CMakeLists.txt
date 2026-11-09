@@ -285,8 +285,10 @@ add_test(NAME vectors_session COMMAND vectors_session)
 # and the reliable channel; the bridge session tests of X4 (reliable
 # channel) and X5 (parameters) replay them. The service and action
 # transcripts exercise the host side of their walks and exchanges; the
-# bridge session tests of X6 (services) and X10c/X10d (actions) replay
-# them.
+# bridge session tests of X6 (services) replay the service walk, the
+# service call and the service refusal, and of X10c/X10d (actions) the
+# action walks. The transcripts stay host-owned: the core tests pin the
+# MCU side of each exchange.
 set(R2S_SESSION_HOST_NAMES
   refused_hello
   time_sync

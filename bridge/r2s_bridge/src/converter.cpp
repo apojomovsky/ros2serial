@@ -833,6 +833,56 @@ ConvertResult Converter::from_cdr(
   return ConvertResult{};
 }
 
+ConvertResult Converter::unpack_to_struct(
+  const std::string & type_name, bool narrow, const std::uint8_t *data,
+  std::size_t size, void *storage)
+{
+  if (storage == nullptr) {
+    return ConvertResult{ConvertFail::kUnsupportedField, 0xFFu};
+  }
+  ConvertFail why = ConvertFail::kNone;
+  const std::shared_ptr<Plan> plan = get_plan(type_name, why);
+  if (plan == nullptr) {
+    return ConvertResult{why, 0xFFu};
+  }
+  Reader reader{data, data + size};
+  std::uint32_t counter = 0;
+  std::uint8_t field = 0xFFu;
+  const ConvertFail fail = decode_ops(plan->fields, static_cast<std::uint8_t *>(storage), reader,
+      narrow, counter, field);
+  if (fail != ConvertFail::kNone) {
+    return ConvertResult{fail, field};
+  }
+  if (reader.at != reader.end) {
+    return ConvertResult{ConvertFail::kTrailing, 0xFFu};
+  }
+  return ConvertResult{};
+}
+
+ConvertResult Converter::pack_from_struct(
+  const std::string & type_name, bool narrow, const void *storage,
+  std::vector<std::uint8_t> & packed)
+{
+  packed.clear();
+  if (storage == nullptr) {
+    return ConvertResult{ConvertFail::kUnsupportedField, 0xFFu};
+  }
+  ConvertFail why = ConvertFail::kNone;
+  const std::shared_ptr<Plan> plan = get_plan(type_name, why);
+  if (plan == nullptr) {
+    return ConvertResult{why, 0xFFu};
+  }
+  std::uint32_t counter = 0;
+  std::uint8_t field = 0xFFu;
+  const ConvertFail fail = encode_ops(plan->fields, static_cast<const std::uint8_t *>(storage),
+      narrow, packed, counter, field);
+  if (fail != ConvertFail::kNone) {
+    packed.clear();
+    return ConvertResult{fail, field};
+  }
+  return ConvertResult{};
+}
+
 std::string Converter::field_path(const std::string & type_name, std::uint8_t index)
 {
   ConvertFail why = ConvertFail::kNone;

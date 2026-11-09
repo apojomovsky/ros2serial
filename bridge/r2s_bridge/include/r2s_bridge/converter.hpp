@@ -66,6 +66,23 @@ public:
     const std::string & type_name, bool narrow, const std::uint8_t *data,
     std::size_t size, std::vector<std::uint8_t> & cdr);
 
+    // Converts one packed payload of type_name into the caller's
+    // introspection struct in storage, which the caller initialized for the
+    // same type. The cached plan is shared with to_cdr, and narrow is the
+    // same per-call input; no middleware handle is needed, so
+    // hand-installed plans convert too.
+  ConvertResult unpack_to_struct(
+    const std::string & type_name, bool narrow, const std::uint8_t *data,
+    std::size_t size, void *storage);
+
+    // Converts one caller-owned introspection struct of type_name to a packed
+    // payload in packed, clearing packed first. The cached plan is shared
+    // with from_cdr, and narrow is the same per-call input; no middleware
+    // handle is needed, so hand-installed plans convert too.
+  ConvertResult pack_from_struct(
+    const std::string & type_name, bool narrow, const void *storage,
+    std::vector<std::uint8_t> & packed);
+
     // Converts one serialized CDR message of type_name to a packed payload in
     // packed, clearing packed first. narrow packs float64s as binary32. The
     // cached plan is shared with to_cdr. A CDR the middleware cannot read

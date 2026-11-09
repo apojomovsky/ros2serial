@@ -113,13 +113,17 @@ Bridge::Bridge(const rclcpp::NodeOptions & options)
   serial.low_latency = get_parameter("low_latency").as_bool();
   serial.hupcl = get_parameter("hupcl").as_bool();
 
+  NodeServiceInterfaces node_services;
+  node_services.base = get_node_base_interface();
+  node_services.graph = get_node_graph_interface();
+  node_services.services = get_node_services_interface();
   router_ = std::make_unique<Router>(
         get_node_topics_interface(),
     [serial]() {
       return std::unique_ptr<Transport>(new TermiosTransport(serial));
       }, clock_, ros_clock_,
         std::move(pacing), forward_log, std::move(link), forward_mcu_log,
-      get_node_parameters_interface());
+      get_node_parameters_interface(), std::move(node_services));
   diagnostics_hardware_id_ = serial.port;
   diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10);
   timer_ = create_wall_timer(kPollPeriod, [this]() {poll();});

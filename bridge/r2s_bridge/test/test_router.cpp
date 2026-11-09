@@ -56,6 +56,19 @@ std::array<std::uint8_t, 8> installed_hash(const std::string & type)
   return out;
 }
 
+std::array<std::uint8_t, 8> installed_service_hash(const std::string & type)
+{
+  const auto library = rclcpp::get_typesupport_library(type, "rosidl_typesupport_cpp");
+  const rosidl_service_type_support_t *handle =
+    rclcpp::get_service_typesupport_handle(type, "rosidl_typesupport_cpp", *library);
+  const rosidl_type_hash_t *hash = handle->get_type_hash_func(handle);
+  std::array<std::uint8_t, 8> out{};
+  std::copy(hash->value, hash->value + 8u, out.begin());
+  return out;
+}
+
+constexpr std::uint8_t kServicesTopic = 7u;
+
 bool logged_has(const std::vector<std::string> & logged, const std::string & part)
 {
   return std::any_of(logged.begin(), logged.end(),
@@ -77,6 +90,10 @@ public:
           mcu_.emplace_back(level, text);
         };
     }
+    NodeServiceInterfaces node_services;
+    node_services.base = node_->get_node_base_interface();
+    node_services.graph = node_->get_node_graph_interface();
+    node_services.services = node_->get_node_services_interface();
     router_ = std::make_unique<Router>(
       node_->get_node_topics_interface(),
       [this]() {return std::unique_ptr<Transport>(new HelperLink(transport_));},
@@ -88,7 +105,8 @@ public:
       },
       std::move(session_config),
       std::move(mcu_sink),
-      with_node_params ? node_->get_node_parameters_interface() : nullptr);
+      with_node_params ? node_->get_node_parameters_interface() : nullptr,
+      std::move(node_services));
   }
 
   void block_link()
@@ -306,6 +324,24 @@ public:
   rclcpp::Node::SharedPtr node()
   {
     return node_;
+  }
+
+    // A handshake announcing one served Trigger "reset" and one called
+    // Trigger "trigger", with the installed hashes.
+  void handshake_with_services()
+  {
+    deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0x4Cu));
+    deliver_frame(kHelperControl, 1u,
+      helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+        "std_msgs/msg/Float32", "battery"));
+    deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+    const std::array<std::uint8_t, 8> hash = installed_service_hash("std_srvs/srv/Trigger");
+    deliver_frame(kServicesTopic, 0u,
+      helper_service_declare(0u, 0x00u, hash.data(), "std_srvs/srv/Trigger", "reset"));
+    deliver_frame(kServicesTopic, 1u,
+      helper_service_declare(1u, 0x01u, hash.data(), "std_srvs/srv/Trigger", "trigger"));
+    deliver_frame(kServicesTopic, 2u,
+      std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x02u, 0x01u});
   }
   const std::vector<std::string> & logged() const
   {
@@ -1359,38 +1395,6 @@ TEST_F(RouterNode, HoldsBackpressureOnAWedgedLink)
 
 // The services proxy: MCU servers become ROS services, MCU calls become ROS
 // clients, over the reliable channel (spec/protocol.md, 7.8).
-// covers: SES-34, SVR-4, SVR-5, SVR-6, SVR-7
-
-std::array<std::uint8_t, 8> installed_service_hash(const std::string & type)
-{
-  const auto library = rclcpp::get_typesupport_library(type, "rosidl_typesupport_cpp");
-  const rosidl_service_type_support_t * handle =
-    rclcpp::get_service_typesupport_handle(type, "rosidl_typesupport_cpp", *library);
-  const rosidl_type_hash_t * hash = handle->get_type_hash_func(handle);
-  std::array<std::uint8_t, 8> out{};
-  std::copy(hash->value, hash->value + 8u, out.begin());
-  return out;
-}
-
-constexpr std::uint8_t kServicesTopic = 7u;
-
-// A handshake announcing one served Trigger "reset" and one called Trigger
-// "trigger", with the installed hashes.
-void handshake_with_services(RouterFixture & fixture)
-{
-  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 2u, 512u, 0x4Cu));
-  fixture.deliver_frame(kHelperControl, 1u,
-    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
-      "std_msgs/msg/Float32", "battery"));
-  fixture.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x01u, 0x00u, 0x00u, 0x01u});
-  const std::array<std::uint8_t, 8> hash = installed_service_hash("std_srvs/srv/Trigger");
-  fixture.deliver_frame(kServicesTopic, 0u,
-    helper_service_declare(0u, 0x00u, hash.data(), "std_srvs/srv/Trigger", "reset"));
-  fixture.deliver_frame(kServicesTopic, 1u,
-    helper_service_declare(1u, 0x01u, hash.data(), "std_srvs/srv/Trigger", "trigger"));
-  fixture.deliver_frame(kServicesTopic, 2u,
-    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x02u, 0x01u});
-}
 
 // covers: SES-34, SVR-4, SVR-5, SVR-6
 TEST_F(RouterNode, CallsTheMcuServiceAndReturnsItsAnswer)
@@ -1425,9 +1429,12 @@ TEST_F(RouterNode, CallsTheMcuServiceAndReturnsItsAnswer)
   // The MCU answers ok with an empty message: packed true, empty string.
   fixture.deliver_frame(kServicesTopic, 0u,
     {kHelperSvcResponse, 0x00u, req, 0x00u, 0x01u, 0x00u});
-  EXPECT_EQ(future.wait_for(std::chrono::seconds(10)), std::future_status::ready);
-  EXPECT_TRUE(future.get()->success);
-  EXPECT_TRUE(future.get()->message.empty());
+  // The answer needs one spin to reach the client future.
+  rclcpp::spin_some(fixture.node());
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+  const auto response = future.get();
+  EXPECT_TRUE(response->success);
+  EXPECT_TRUE(response->message.empty());
 }
 
 // covers: SES-34, SVR-4, SVR-5
@@ -1453,7 +1460,7 @@ TEST_F(RouterNode, ForwardsTheMcuCallAndAnswersIt)
     rclcpp::spin_some(fixture.node());
   }
   // The MCU calls index 1 with an empty Trigger request under req 7.
-  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
+  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u, 0x00u});
   const auto start = std::chrono::steady_clock::now();
   bool answered = false;
   while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
@@ -1488,7 +1495,7 @@ TEST_F(RouterNode, TimesOutAnUnansweredMcuCall)
   RouterFixture fixture("svc_timeout", remapped(), RouterParams{});
   fixture.handshake_with_services();
   // No ROS server: the call goes out, and the host timeout answers busy.
-  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
+  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u, 0x00u});
   for (int i = 0; i < 12; ++i) {
     fixture.advance(500u);
     rclcpp::spin_some(fixture.node());
@@ -1511,11 +1518,11 @@ TEST_F(RouterNode, RefusesUnusableServices)
 {
   // An unknown type is refused, and no ROS endpoint is created.
   RouterFixture bad_type("svc_badtype", remapped(), RouterParams{});
-  bad_type.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 2u, 512u, 0x4Cu));
+  bad_type.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0x4Cu));
   bad_type.deliver_frame(kHelperControl, 1u,
     helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
       "std_msgs/msg/Float32", "battery"));
-  bad_type.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x01u, 0x00u, 0x00u, 0x01u});
+  bad_type.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
   const std::array<std::uint8_t, 8> zero{};
   bad_type.deliver_frame(kServicesTopic, 0u,
     helper_service_declare(0u, 0x00u, zero.data(), "nope/msg/Nope", "bad"));

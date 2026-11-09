@@ -1,5 +1,7 @@
 // The topic verdict: loads the installed type support of one announced
 // topic and checks the MCU's hash against it ([SES-16], [CTL-12], [CTL-13]).
+// The service verdict below does the same for one announced service
+// ([SVR-7]).
 #ifndef R2S_BRIDGE__TYPE_SUPPORT_HPP_
 #define R2S_BRIDGE__TYPE_SUPPORT_HPP_
 
@@ -15,6 +17,12 @@ namespace r2s_bridge
 // otherwise. Never throws; a failed load is verdict 1. Needs no node: it
 // opens the installed library and closes it again when done.
 std::uint8_t resolve_topic_type(const TopicInfo & info);
+
+// The SVC_STATUS verdict for one announced service: ok when the installed
+// service hash matches, unknown type when the service type does not load,
+// hash mismatch otherwise. Never throws; a failed load is verdict 1. Needs
+// no node: it opens the installed library and closes it again when done.
+std::uint8_t resolve_service_type(const ServiceInfo & info);
 
 }  // namespace r2s_bridge
 

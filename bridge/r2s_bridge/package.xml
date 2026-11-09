@@ -24,6 +24,7 @@
   <test_depend>rcl_interfaces</test_depend>
   <test_depend>sensor_msgs</test_depend>
   <test_depend>std_msgs</test_depend>
+  <test_depend>std_srvs</test_depend>
   <test_depend>tf2_msgs</test_depend>
   <test_depend>yaml-cpp</test_depend>
 
