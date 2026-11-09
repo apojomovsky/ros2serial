@@ -11,10 +11,11 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from r2s_gen import bounds, cli, config, layouts, msgs, topics
+from r2s_gen import bounds, cli, config, layouts, msgs, services, topics
 from r2s_gen.config import Config, Topic
 from r2s_gen.msgs import MessageError
 from r2s_gen.version import __version__
+from support import write_service
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "core"
@@ -157,6 +158,49 @@ def test_the_generate_command_writes_the_cmake_layout(tmp_path, capsys):
         == 0
     )
     assert sorted(path.name for path in out.iterdir()) == ["CMakeLists.txt", "r2s_generated.c", "r2s_generated.h"]
+
+
+SERVICE_TEXT = """\
+node: r2s_svc
+topics:
+  - name: battery
+    type: std_msgs/msg/Float32
+    direction: pub
+services:
+  - name: reset
+    type: demo_srvs/srv/Spin
+    role: server
+bounds:
+  demo_srvs/srv/Spin_Response.sequence: 4
+"""
+
+SPIN_TEXT = "int32 order\n---\nint32[] sequence\n"
+
+
+def test_the_generate_command_resolves_service_roots(tmp_path, capsys):
+    write_service(tmp_path / "messages", "demo_srvs/srv/Spin", SPIN_TEXT)
+    out = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "generate",
+                "--config",
+                str(write_config(SERVICE_TEXT, tmp_path)),
+                "--out",
+                str(out),
+                "--layout",
+                "cmake",
+                "--msg-path",
+                str(tmp_path / "messages"),
+            ]
+        )
+        == 0
+    )
+    header = (out / "r2s_generated.h").read_text(encoding="utf-8")
+    source = (out / "r2s_generated.c").read_text(encoding="utf-8")
+    assert "demo_srvs__srv__Spin_Request" in header
+    assert "reset" in source
 
 
 def test_the_generate_command_rejects_an_unknown_layout(tmp_path, capsys):
