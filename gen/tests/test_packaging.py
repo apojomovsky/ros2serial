@@ -27,11 +27,12 @@ import sys
 from pathlib import Path
 
 import pytest
-from r2s_gen.version import PROTOCOL_VERSION, __version__
+from r2s_gen.version import PROTOCOL_VERSION
+from r2s_gen.version import __version__
 
 ROOT = Path(__file__).resolve().parents[2]
-PACKAGE = ROOT / "gen"
-CPP_TREE = ROOT / "cpp"
+PACKAGE = ROOT / 'gen'
+CPP_TREE = ROOT / 'cpp'
 
 
 def run(command, **kwargs):
@@ -40,107 +41,115 @@ def run(command, **kwargs):
 
 def copied_package(tmp_path: Path) -> Path:
     """A copy of the package, so a build leaves its artifacts out of the repository."""
-    package = tmp_path / "gen"
-    shutil.copytree(PACKAGE, package, ignore=shutil.ignore_patterns("__pycache__", "*.egg-info", "build"))
+    package = tmp_path / 'gen'
+    shutil.copytree(
+        PACKAGE, package, ignore=shutil.ignore_patterns('__pycache__', '*.egg-info', 'build')
+    )
     # The wheel ships the C++ layer's tree as package data, so the copy
     # carries it beside the package, where setup.py looks for it.
     if CPP_TREE.is_dir():
-        shutil.copytree(CPP_TREE, tmp_path / "cpp", ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copytree(CPP_TREE, tmp_path / 'cpp', ignore=shutil.ignore_patterns('__pycache__'))
     return package
 
 
 def clean_env(**overrides: str) -> dict:
-    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    env = {k: v for k, v in os.environ.items() if k != 'PYTHONPATH'}
     env.update(overrides)
     return env
 
 
 def test_pip_installs_the_generator_into_a_fresh_venv(tmp_path):
     # System site packages carry the pinned setuptools, so the build runs offline.
-    venv = tmp_path / "venv"
-    created = run([sys.executable, "-m", "venv", "--system-site-packages", str(venv)])
+    venv = tmp_path / 'venv'
+    created = run([sys.executable, '-m', 'venv', '--system-site-packages', str(venv)])
     assert created.returncode == 0, created.stderr
     installed = run(
         [
-            str(venv / "bin" / "pip"),
-            "install",
-            "--no-index",
-            "--no-build-isolation",
-            "--disable-pip-version-check",
+            str(venv / 'bin' / 'pip'),
+            'install',
+            '--no-index',
+            '--no-build-isolation',
+            '--disable-pip-version-check',
             str(copied_package(tmp_path)),
         ],
         env=clean_env(),
     )
     assert installed.returncode == 0, installed.stdout + installed.stderr
-    printed = run([str(venv / "bin" / "r2s-gen"), "version"], env=clean_env())
+    printed = run([str(venv / 'bin' / 'r2s-gen'), 'version'], env=clean_env())
     assert printed.returncode == 0, printed.stderr
-    assert f"r2s-gen {__version__}" in printed.stdout
-    assert f"protocol version {PROTOCOL_VERSION}" in printed.stdout
-    site_packages = next((venv / "lib").glob("python*/site-packages"))
-    assert (site_packages / "r2s_gen" / "snapshots" / "jazzy" / "sensor_msgs" / "msg" / "Imu.msg").is_file()
-    assert (site_packages / "r2s_gen" / "schema" / "r2s.schema.json").is_file()
+    assert f'r2s-gen {__version__}' in printed.stdout
+    assert f'protocol version {PROTOCOL_VERSION}' in printed.stdout
+    site_packages = next((venv / 'lib').glob('python*/site-packages'))
+    assert (
+        site_packages / 'r2s_gen' / 'snapshots' / 'jazzy' / 'sensor_msgs' / 'msg' / 'Imu.msg'
+    ).is_file()
+    assert (site_packages / 'r2s_gen' / 'schema' / 'r2s.schema.json').is_file()
 
 
 def test_the_wheel_ships_the_cpp_tree(tmp_path):
     # The C++ layer travels with the wheel, so an installed generator can
     # hand the message headers to a build without a checkout.
-    venv = tmp_path / "venv"
-    created = run([sys.executable, "-m", "venv", "--system-site-packages", str(venv)])
+    venv = tmp_path / 'venv'
+    created = run([sys.executable, '-m', 'venv', '--system-site-packages', str(venv)])
     assert created.returncode == 0, created.stderr
     installed = run(
         [
-            str(venv / "bin" / "pip"),
-            "install",
-            "--no-index",
-            "--no-build-isolation",
-            "--disable-pip-version-check",
+            str(venv / 'bin' / 'pip'),
+            'install',
+            '--no-index',
+            '--no-build-isolation',
+            '--disable-pip-version-check',
             str(copied_package(tmp_path)),
         ],
         env=clean_env(),
     )
     assert installed.returncode == 0, installed.stdout + installed.stderr
-    site_packages = next((venv / "lib").glob("python*/site-packages"))
-    cpp_tree = site_packages / "r2s_gen" / "cpp"
-    assert (cpp_tree / "include" / "std_msgs" / "msg" / "float32.hpp").is_file()
-    assert (cpp_tree / "include" / "r2s" / "runtime.hpp").is_file()
-    assert (cpp_tree / "include" / "r2s_bundled.h").is_file()
-    assert (cpp_tree / "include" / "ros2serial.h").is_file()
+    site_packages = next((venv / 'lib').glob('python*/site-packages'))
+    cpp_tree = site_packages / 'r2s_gen' / 'cpp'
+    assert (cpp_tree / 'include' / 'std_msgs' / 'msg' / 'float32.hpp').is_file()
+    assert (cpp_tree / 'include' / 'r2s' / 'runtime.hpp').is_file()
+    assert (cpp_tree / 'include' / 'r2s_bundled.h').is_file()
+    assert (cpp_tree / 'include' / 'ros2serial.h').is_file()
 
 
-@pytest.mark.skipif(shutil.which("colcon") is None, reason="colcon is not installed")
+@pytest.mark.skipif(shutil.which('colcon') is None, reason='colcon is not installed')
 def test_colcon_builds_the_ament_python_package(tmp_path):
     package = copied_package(tmp_path)
-    workspace = tmp_path / "ws"
+    workspace = tmp_path / 'ws'
     workspace.mkdir()
     built = run(
         [
-            "colcon",
-            "--log-base",
-            str(workspace / "log"),
-            "build",
-            "--base-paths",
+            'colcon',
+            '--log-base',
+            str(workspace / 'log'),
+            'build',
+            '--base-paths',
             str(package),
-            "--build-base",
-            str(workspace / "build"),
-            "--install-base",
-            str(workspace / "install"),
+            '--build-base',
+            str(workspace / 'build'),
+            '--install-base',
+            str(workspace / 'install'),
         ],
         cwd=workspace,
         env=clean_env(),
     )
     assert built.returncode == 0, built.stdout + built.stderr
-    installed = workspace / "install" / "r2s_gen"
-    assert (installed / "lib" / "r2s_gen" / "r2s-gen").is_file()
-    assert (installed / "share" / "ament_index" / "resource_index" / "packages" / "r2s_gen").is_file()
-    assert (installed / "share" / "r2s_gen" / "package.xml").is_file()
+    installed = workspace / 'install' / 'r2s_gen'
+    assert (installed / 'lib' / 'r2s_gen' / 'r2s-gen').is_file()
+    assert (
+        installed / 'share' / 'ament_index' / 'resource_index' / 'packages' / 'r2s_gen'
+    ).is_file()
+    assert (installed / 'share' / 'r2s_gen' / 'package.xml').is_file()
     # The entry script needs the workspace's site-packages, as the ament pythonpath hook sets it.
-    site_packages = next((installed / "lib").glob("python*/site-packages"))
-    assert (site_packages / "r2s_gen" / "snapshots" / "jazzy" / "std_msgs" / "msg" / "Header.msg").is_file()
-    assert (site_packages / "r2s_gen" / "schema" / "r2s.schema.json").is_file()
+    site_packages = next((installed / 'lib').glob('python*/site-packages'))
+    assert (
+        site_packages / 'r2s_gen' / 'snapshots' / 'jazzy' / 'std_msgs' / 'msg' / 'Header.msg'
+    ).is_file()
+    assert (site_packages / 'r2s_gen' / 'schema' / 'r2s.schema.json').is_file()
     printed = run(
-        [str(installed / "lib" / "r2s_gen" / "r2s-gen"), "version"],
+        [str(installed / 'lib' / 'r2s_gen' / 'r2s-gen'), 'version'],
         env=clean_env(PYTHONPATH=str(site_packages)),
     )
     assert printed.returncode == 0, printed.stderr
-    assert f"r2s-gen {__version__}" in printed.stdout
-    assert f"protocol version {PROTOCOL_VERSION}" in printed.stdout
+    assert f'r2s-gen {__version__}' in printed.stdout
+    assert f'protocol version {PROTOCOL_VERSION}' in printed.stdout

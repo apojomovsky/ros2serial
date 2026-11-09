@@ -25,5 +25,5 @@ so the wheel, the ROS manifest and VERSION always state the same number, and a
 test fails when they drift apart.
 """
 
-__version__ = "0.3.0"
+__version__ = '0.3.0'
 PROTOCOL_VERSION = 4

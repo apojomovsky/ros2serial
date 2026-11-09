@@ -71,22 +71,24 @@ extern "C" {
 
 /* The two descriptor tables ([DSC-1]): the type records and the field entries,
  * both little-endian ([DSC-4]) and read through R2S_FLASH_READ_BYTE. */
-typedef struct {
-    const uint8_t *types;
-    uint16_t type_count;
-    const uint8_t *fields;
-    uint16_t field_count;
+typedef struct
+{
+  const uint8_t *types;
+  uint16_t type_count;
+  const uint8_t *fields;
+  uint16_t field_count;
 } r2s_codec_table_t;
 
 /* Where an encode writes: measure mode (buf NULL, to_tx 0) reports the exact
  * payload length; buffer mode fills buf up to cap; transmit mode streams
  * through r2s_tx_byte. Buffer mode never truncates: a payload that does not
  * fit fails with the bounds error ([DSC-35]). */
-typedef struct {
-    uint8_t *buf;
-    uint16_t cap;
-    uint8_t to_tx;
-    uint16_t len;
+typedef struct
+{
+  uint8_t *buf;
+  uint16_t cap;
+  uint8_t to_tx;
+  uint16_t len;
 } r2s_codec_out_t;
 
 /* Encodes one message of the table's type into out, in declaration order
@@ -94,16 +96,18 @@ typedef struct {
  * Returns R2S_OK and sets out->len; on failure returns R2S_ERR_BOUNDS, sends
  * nothing on the wire, and names the offending entry in *field ([DSC-37]).
  * The table must be valid ([DSC-41]) and type one of its records. */
-int8_t r2s_codec_encode(const r2s_codec_table_t *table, uint16_t type, const void *msg, uint8_t narrow,
-                        r2s_codec_out_t *out, uint8_t *field);
+int8_t r2s_codec_encode(
+  const r2s_codec_table_t *table, uint16_t type, const void *msg, uint8_t narrow,
+  r2s_codec_out_t *out, uint8_t *field);
 
 /* Decodes one payload into msg, the encode's mirror image. Returns R2S_OK; on
  * failure drops the payload ([DSC-36]) with R2S_ERR_BOUNDS for a bound the
  * message exceeds ([ENC-16]) and R2S_ERR_DECODE for a payload that breaks an
  * encoding rule, naming the offending entry in *field, or 0xFF when no rule
  * names one ([ERR-4]). */
-int8_t r2s_codec_decode(const r2s_codec_table_t *table, uint16_t type, const uint8_t *payload, uint16_t len,
-                        uint8_t narrow, void *msg, uint8_t *field);
+int8_t r2s_codec_decode(
+  const r2s_codec_table_t *table, uint16_t type, const uint8_t *payload, uint16_t len,
+  uint8_t narrow, void *msg, uint8_t *field);
 
 /* Dispatches a user-topic frame received while connected: counts the gap
  * ([FRM-15]), decodes subscribed topics into their receive buffer and calls

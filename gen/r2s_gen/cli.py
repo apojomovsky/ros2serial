@@ -27,24 +27,30 @@ this module is the shell every one of them hangs off.
 import argparse
 import sys
 
-from r2s_gen import bundle, config, layouts, vectors
-from r2s_gen.version import PROTOCOL_VERSION, __version__
+from r2s_gen import bundle
+from r2s_gen import config
+from r2s_gen import layouts
+from r2s_gen import vectors
+from r2s_gen.version import PROTOCOL_VERSION
+from r2s_gen.version import __version__
 
 
 def _print_version(_args: argparse.Namespace) -> int:
-    print(f"r2s-gen {__version__}")
-    print(f"protocol version {PROTOCOL_VERSION}")
+    print(f'r2s-gen {__version__}')
+    print(f'protocol version {PROTOCOL_VERSION}')
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
     """The parser with every subcommand the tool has today."""
     parser = argparse.ArgumentParser(
-        prog="r2s-gen",
-        description="Generate the ros2serial firmware sources from .msg files and r2s.yaml.",
+        prog='r2s-gen',
+        description='Generate the ros2serial firmware sources from .msg files and r2s.yaml.',
     )
-    subparsers = parser.add_subparsers(dest="command", required=True, metavar="command")
-    version = subparsers.add_parser("version", help="print the generator version and the protocol version")
+    subparsers = parser.add_subparsers(dest='command', required=True, metavar='command')
+    version = subparsers.add_parser(
+        'version', help='print the generator version and the protocol version'
+    )
     version.set_defaults(run=_print_version)
     config.add_parser(subparsers)
     layouts.add_parser(subparsers)
@@ -54,7 +60,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the command line and return the exit code; a usage error is 2, as argparse reports it."""
+    """Run the command line and return the exit code.
+
+    A usage error is 2, as argparse reports it.
+    """
     try:
         args = build_parser().parse_args(argv)
     except SystemExit as error:
@@ -62,5 +71,5 @@ def main(argv: list[str] | None = None) -> int:
     return int(args.run(args))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())

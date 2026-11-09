@@ -18,8 +18,10 @@ import launch_testing.markers
 import rclpy
 from e2e_support import avr as avr_support
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, teardown
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from e2e_support import checks
+from e2e_support import teardown
+from rclpy.qos import QoSProfile
+from rclpy.qos import ReliabilityPolicy
 from std_msgs.msg import Float32
 
 # covers: SES-1, SES-2, SES-5, SES-6, SES-13, SES-16, SES-17
@@ -37,21 +39,21 @@ _PARAMS = None
 
 def _params_with_baud(scratch, baud):
     """A temp copy of the example params serving the matrix baud."""
-    assert baud.isdigit(), f"R2S_E2E_BAUD names no baud rate: {baud!r}"
-    text = Path(bridge_support.example_params_file()).read_text(encoding="utf-8")
-    updated, count = re.subn(r"(?m)^(\s*baud:\s*)\d+\s*$", rf"\g<1>{baud}", text)
-    assert count == 1, "the example params hold no single baud line"
-    path = Path(scratch) / "r2s_bridge.params.yaml"
-    path.write_text(updated, encoding="utf-8")
+    assert baud.isdigit(), f'R2S_E2E_BAUD names no baud rate: {baud!r}'
+    text = Path(bridge_support.example_params_file()).read_text(encoding='utf-8')
+    updated, count = re.subn(r'(?m)^(\s*baud:\s*)\d+\s*$', rf'\g<1>{baud}', text)
+    assert count == 1, 'the example params hold no single baud line'
+    path = Path(scratch) / 'r2s_bridge.params.yaml'
+    path.write_text(updated, encoding='utf-8')
     return path
 
 
 def _prepare():
     global _SCRATCH, _SPAWNED, _PARAMS
-    board = os.environ.get("R2S_E2E_BOARD", "uno")
-    baud = os.environ["R2S_E2E_BAUD"]
-    _SCRATCH = tempfile.TemporaryDirectory(prefix="r2s-e2e-avr-baud-")
-    _SPAWNED = avr_support.spawn(board, "slice", baud=baud)
+    board = os.environ.get('R2S_E2E_BOARD', 'uno')
+    baud = os.environ['R2S_E2E_BAUD']
+    _SCRATCH = tempfile.TemporaryDirectory(prefix='r2s-e2e-avr-baud-')
+    _SPAWNED = avr_support.spawn(board, 'slice', baud=baud)
     _PARAMS = _params_with_baud(_SCRATCH.name, baud)
 
 
@@ -78,28 +80,36 @@ class TestBaudMatrix(unittest.TestCase):
         teardown.shutdown()
 
     def test_50hz_flow_arrives_nearly_whole_at_the_matrix_baud(self):
-        node = rclpy.create_node("e2e_baud_avr_probe")
+        node = rclpy.create_node('e2e_baud_avr_probe')
         try:
             bridge_support.wait_for_bridge(node)
             best_effort = QoSProfile(depth=100, reliability=ReliabilityPolicy.BEST_EFFORT)
             received = []
-            node.create_subscription(Float32, "battery", lambda msg: received.append(msg.data), best_effort)
+            node.create_subscription(
+                Float32, 'battery', lambda msg: received.append(msg.data), best_effort
+            )
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
             while not received:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                self.assertLess(time.monotonic(), deadline, "no Float32 flow on battery")
+                self.assertLess(time.monotonic(), deadline, 'no Float32 flow on battery')
             checks.collect_until(
                 received,
                 RECEIVE_COUNT,
                 time.monotonic() + FLOW_TIMEOUT,
-                "battery at 50 Hz",
+                'battery at 50 Hz',
                 lambda: rclpy.spin_once(node, timeout_sec=0.5),
             )
-            checks.check_float_sequence(list(received), RECEIVE_COUNT, LOSS_BUDGET, "battery at 50 Hz")
-            self.assertEqual(_SPAWNED.stop(), 0, "the harness stopped dirty")
-            self.assertIn("simulated_ms", _SPAWNED.summary, "no stop summary from the harness")
-            sim_ms = _SPAWNED.summary["simulated_ms"]
-            self.assertGreaterEqual(sim_ms, 9_000, f"500 publishes in {sim_ms} ms simulated, faster than 50 Hz")
-            self.assertLessEqual(sim_ms, 45_000, f"500 publishes in {sim_ms} ms simulated, slower than 50 Hz")
+            checks.check_float_sequence(
+                list(received), RECEIVE_COUNT, LOSS_BUDGET, 'battery at 50 Hz'
+            )
+            self.assertEqual(_SPAWNED.stop(), 0, 'the harness stopped dirty')
+            self.assertIn('simulated_ms', _SPAWNED.summary, 'no stop summary from the harness')
+            sim_ms = _SPAWNED.summary['simulated_ms']
+            self.assertGreaterEqual(
+                sim_ms, 9_000, f'500 publishes in {sim_ms} ms simulated, faster than 50 Hz'
+            )
+            self.assertLessEqual(
+                sim_ms, 45_000, f'500 publishes in {sim_ms} ms simulated, slower than 50 Hz'
+            )
         finally:
             node.destroy_node()

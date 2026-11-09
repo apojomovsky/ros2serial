@@ -33,10 +33,10 @@ from pathlib import Path
 from r2s_gen import bundle
 
 ROOT = Path(__file__).resolve().parents[2]
-CORE_INCLUDE = ROOT / "core" / "include"
-CORE_SRC = ROOT / "core" / "src"
-CPP_INCLUDE = ROOT / "cpp" / "include"
-CPP_SRC = ROOT / "cpp" / "src"
+CORE_INCLUDE = ROOT / 'core' / 'include'
+CORE_SRC = ROOT / 'core' / 'src'
+CPP_INCLUDE = ROOT / 'cpp' / 'include'
+CPP_SRC = ROOT / 'cpp' / 'src'
 
 RUNTIME_DECLS = """\
 #include "ros2serial.h"
@@ -136,8 +136,8 @@ int main(void)
     loop();
     printf("configure %s %u\\n", stub_cfg_name, stub_cfg_count);
     if (r2s_codec_encode(r2s::msg_traits<geometry_msgs::msg::Twist>::table(),
-                         r2s::msg_traits<geometry_msgs::msg::Twist>::type_index(), &twist, 0u, &out,
-                         &field) != R2S_OK) {
+                         r2s::msg_traits<geometry_msgs::msg::Twist>::type_index(), &twist, 0u,
+                         &out, &field) != R2S_OK) {
         printf("encode failed\\n");
         return 1;
     }
@@ -253,7 +253,8 @@ uint32_t r2s_port_tick(void)
     return 0u;
 }
 
-r2s_status_t r2s_session_configure(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count)
+r2s_status_t r2s_session_configure(
+    const char *node_name, const r2s_topic_t *topics, uint8_t topic_count)
 {
     (void)topics;
     stub_cfg_name = node_name;
@@ -262,7 +263,8 @@ r2s_status_t r2s_session_configure(const char *node_name, const r2s_topic_t *top
     return R2S_OK;
 }
 
-r2s_status_t r2s_session_configure_ram(const char *node_name, const r2s_topic_t *topics, uint8_t topic_count)
+r2s_status_t r2s_session_configure_ram(
+    const char *node_name, const r2s_topic_t *topics, uint8_t topic_count)
 {
     (void)topics;
     stub_cfg_name = node_name;
@@ -275,69 +277,69 @@ r2s_status_t r2s_session_configure_ram(const char *node_name, const r2s_topic_t 
 
 def stage_bundle(tmp_path):
     """The staged bundle, as a board library stages it."""
-    root = tmp_path / "bundle"
-    for name, text in bundle.bundle("jazzy").items():
+    root = tmp_path / 'bundle'
+    for name, text in bundle.bundle('jazzy').items():
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        path.write_text(text, encoding='utf-8')
     return root
 
 
 def bundle_limit(bundle_root, key):
     """One limit the staged bundle carries, as the Arduino build reads it."""
-    text = (bundle_root / "src" / "r2s_bundled.h").read_text(encoding="utf-8")
+    text = (bundle_root / 'src' / 'r2s_bundled.h').read_text(encoding='utf-8')
     for line in text.splitlines():
-        if line.startswith(f"#define {key} "):
+        if line.startswith(f'#define {key} '):
             return line.split()[2]
-    raise AssertionError(f"staged bundle names no {key}")
+    raise AssertionError(f'staged bundle names no {key}')
 
 
 def frame_limit(bundle_root):
     """The frame limit the staged bundle carries."""
-    return bundle_limit(bundle_root, "R2S_MAX_FRAME")
+    return bundle_limit(bundle_root, 'R2S_MAX_FRAME')
 
 
 def nest_limit(bundle_root):
     """The nesting limit the staged bundle carries."""
-    return bundle_limit(bundle_root, "R2S_MAX_NEST")
+    return bundle_limit(bundle_root, 'R2S_MAX_NEST')
 
 
 def compile_variant(tmp_path, bundle_root, decls, name, extra_sources):
     """One shared-body variant: the declarations differ, the body does not."""
     root = tmp_path / name
     root.mkdir(parents=True, exist_ok=True)
-    (root / "sketch.cpp").write_text(decls + SHARED_BODY, encoding="utf-8")
-    (root / "stubs.c").write_text(STUBS, encoding="utf-8")
+    (root / 'sketch.cpp').write_text(decls + SHARED_BODY, encoding='utf-8')
+    (root / 'stubs.c').write_text(STUBS, encoding='utf-8')
     frame = frame_limit(bundle_root)
     nest = nest_limit(bundle_root)
     objects = []
     for source, compiler, std, extra in [
-        (root / "sketch.cpp", "g++", "c++11", ()),
-        (root / "stubs.c", "cc", "c99", ()),
-        (bundle_root / "src" / "r2s_bundled.c", "cc", "c99", ()),
+        (root / 'sketch.cpp', 'g++', 'c++11', ()),
+        (root / 'stubs.c', 'cc', 'c99', ()),
+        (bundle_root / 'src' / 'r2s_bundled.c', 'cc', 'c99', ()),
         *extra_sources,
     ]:
-        obj = root / (source.stem + ".o")
+        obj = root / (source.stem + '.o')
         compiled = subprocess.run(
             [
                 compiler,
-                f"-std={std}",
-                "-pedantic",
-                "-Werror",
-                "-Wall",
-                "-Wextra",
-                "-I",
+                f'-std={std}',
+                '-pedantic',
+                '-Werror',
+                '-Wall',
+                '-Wextra',
+                '-I',
                 str(root),
-                "-I",
-                str(bundle_root / "src"),
-                "-I",
+                '-I',
+                str(bundle_root / 'src'),
+                '-I',
                 str(CORE_INCLUDE),
-                "-I",
+                '-I',
                 str(CPP_INCLUDE),
                 *extra,
-                "-c",
+                '-c',
                 str(source),
-                "-o",
+                '-o',
                 str(obj),
             ],
             capture_output=True,
@@ -345,24 +347,24 @@ def compile_variant(tmp_path, bundle_root, decls, name, extra_sources):
         )
         assert compiled.returncode == 0, compiled.stderr
         objects.append(obj)
-    for source in (CORE_SRC / "codec.c", CORE_SRC / "varint.c"):
-        obj = root / (source.stem + ".o")
+    for source in (CORE_SRC / 'codec.c', CORE_SRC / 'varint.c'):
+        obj = root / (source.stem + '.o')
         compiled = subprocess.run(
             [
-                "cc",
-                "-std=c99",
-                "-pedantic",
-                "-Werror",
-                "-Wall",
-                "-Wextra",
-                "-I",
+                'cc',
+                '-std=c99',
+                '-pedantic',
+                '-Werror',
+                '-Wall',
+                '-Wextra',
+                '-I',
                 str(CORE_INCLUDE),
-                "-DR2S_WITH_CODEC",
-                f"-DR2S_MAX_FRAME={frame}",
-                f"-DR2S_MAX_NEST={nest}",
-                "-c",
+                '-DR2S_WITH_CODEC',
+                f'-DR2S_MAX_FRAME={frame}',
+                f'-DR2S_MAX_NEST={nest}',
+                '-c',
                 str(source),
-                "-o",
+                '-o',
                 str(obj),
             ],
             capture_output=True,
@@ -371,12 +373,12 @@ def compile_variant(tmp_path, bundle_root, decls, name, extra_sources):
         assert compiled.returncode == 0, compiled.stderr
         objects.append(obj)
     linked = subprocess.run(
-        ["g++", *[str(obj) for obj in objects], "-o", str(root / "sketch")],
+        ['g++', *[str(obj) for obj in objects], '-o', str(root / 'sketch')],
         capture_output=True,
         text=True,
     )
     assert linked.returncode == 0, linked.stderr
-    return root / "sketch"
+    return root / 'sketch'
 
 
 def run_variant(binary):
@@ -384,14 +386,14 @@ def run_variant(binary):
     run = subprocess.run([str(binary)], capture_output=True, text=True)
 
     assert run.returncode == 0, run.stdout + run.stderr
-    assert "publish" in run.stdout
+    assert 'publish' in run.stdout
     return run.stdout
 
 
 def test_the_shared_body_behaves_the_same_on_both_declaration_styles(tmp_path):
     bundle_root = stage_bundle(tmp_path)
-    runtime_sources = [(CPP_SRC / "runtime.cpp", "g++", "c++11", ())]
-    runtime = compile_variant(tmp_path, bundle_root, RUNTIME_DECLS, "runtime", runtime_sources)
-    statik = compile_variant(tmp_path, bundle_root, STATIC_DECLS, "static", [])
+    runtime_sources = [(CPP_SRC / 'runtime.cpp', 'g++', 'c++11', ())]
+    runtime = compile_variant(tmp_path, bundle_root, RUNTIME_DECLS, 'runtime', runtime_sources)
+    statik = compile_variant(tmp_path, bundle_root, STATIC_DECLS, 'static', [])
 
     assert run_variant(runtime) == run_variant(statik)

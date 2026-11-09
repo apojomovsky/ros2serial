@@ -42,151 +42,160 @@ OBJDUMP = """\
 
 def test_su_maps_functions_to_frame_sizes():
     assert stack_report.parse_su(SU) == {
-        "main": (48, "static"),
-        "setup": (32, "static"),
-        "r2s_spin": (64, "static"),
-        "grow": (16, "dynamic"),
+        'main': (48, 'static'),
+        'setup': (32, 'static'),
+        'r2s_spin': (64, 'static'),
+        'grow': (16, 'dynamic'),
     }
 
 
 def test_su_rejects_garbage():
     with pytest.raises(stack_report.StackError):
-        stack_report.parse_su("main:lots:static\n")
+        stack_report.parse_su('main:lots:static\n')
 
 
 def test_su_reads_location_lines():
-    text = "codec.c:244:15:emit_byte\t4\tstatic\ncodec.c:1:1:grow\t16\tdynamic\n"
-    assert stack_report.parse_su(text) == {"emit_byte": (4, "static"), "grow": (16, "dynamic")}
+    text = 'codec.c:244:15:emit_byte\t4\tstatic\ncodec.c:1:1:grow\t16\tdynamic\n'
+    assert stack_report.parse_su(text) == {'emit_byte': (4, 'static'), 'grow': (16, 'dynamic')}
 
 
 def test_su_reduces_cpp_signatures_to_names():
-    text = "sketch.ino:32:6:void setup()\t2\tstatic\n"
-    assert stack_report.parse_su(text) == {"setup": (2, "static")}
+    text = 'sketch.ino:32:6:void setup()\t2\tstatic\n'
+    assert stack_report.parse_su(text) == {'setup': (2, 'static')}
 
 
 def test_su_keeps_cpp_scope_operators():
-    text = "HardwareSerial.cpp:117:6:void HardwareSerial::begin(long unsigned int, byte)\t9\tstatic\n"
-    assert stack_report.parse_su(text) == {"HardwareSerial::begin": (9, "static")}
+    text = (
+        'HardwareSerial.cpp:117:6:void HardwareSerial::begin(long unsigned int, byte)\t9\tstatic\n'
+    )
+    assert stack_report.parse_su(text) == {'HardwareSerial::begin': (9, 'static')}
 
 
 def test_call_graph_strips_target_offsets():
-    text = "00000100 <loop>:\n 100:\t1c d1 \trcall\t.+56\t; 0x13a <r2s_framer_poll+0x16>\n"
-    assert stack_report.parse_calls(text) == {"loop": ["r2s_framer_poll"]}
+    text = '00000100 <loop>:\n 100:\t1c d1 \trcall\t.+56\t; 0x13a <r2s_framer_poll+0x16>\n'
+    assert stack_report.parse_calls(text) == {'loop': ['r2s_framer_poll']}
 
 
 def test_call_graph_demangles_callee_names(monkeypatch):
-    monkeypatch.setattr(stack_report, "_demangle", lambda names: {"_Z3foov": "foo()"})
-    text = "00000100 <_Z3foov>:\n 100:\t08 95 \tret\n00000200 <main>:\n 200:\t1c d1 \trcall\t.+0\t; 0x100\n"
-    assert stack_report.parse_calls(text) == {"main": ["foo"]}
+    monkeypatch.setattr(stack_report, '_demangle', lambda names: {'_Z3foov': 'foo()'})
+    text = (
+        '00000100 <_Z3foov>:\n 100:\t08 95 \tret\n00000200 <main>:\n 200:\t1c d1 '
+        '\trcall\t.+0\t; 0x100\n'
+    )
+    assert stack_report.parse_calls(text) == {'main': ['foo']}
 
 
 def test_call_graph_skips_a_folded_self_call():
     text = (
-        "00000100 <encode>:\n"
-        " 100:\t1c d1 \trcall\t.+0\t; 0x108 <encode+0x8>\n"
-        " 108:\t08 95 \tret\n"
-        "00000200 <loop>:\n"
-        " 200:\t2a d1 \trcall\t.+0\t; 0x100 <encode>\n"
+        '00000100 <encode>:\n'
+        ' 100:\t1c d1 \trcall\t.+0\t; 0x108 <encode+0x8>\n'
+        ' 108:\t08 95 \tret\n'
+        '00000200 <loop>:\n'
+        ' 200:\t2a d1 \trcall\t.+0\t; 0x100 <encode>\n'
     )
-    assert stack_report.parse_calls(text) == {"loop": ["encode"]}
+    assert stack_report.parse_calls(text) == {'loop': ['encode']}
 
 
 def test_call_graph_skips_a_relaxed_dead_call():
-    text = "00000400 <emit_varint>:\n 40c:\t00 d0 \trcall\t.+0\t; 0x40e <__LOCK_REGION_LENGTH__+0xe>\n"
+    text = (
+        '00000400 <emit_varint>:\n 40c:\t00 d0 '
+        '\trcall\t.+0\t; 0x40e <__LOCK_REGION_LENGTH__+0xe>\n'
+    )
     assert stack_report.parse_calls(text) == {}
 
 
 def test_call_graph_follows_rcall_targets():
-    assert stack_report.parse_calls(OBJDUMP) == {"main": ["setup"], "setup": ["r2s_spin"]}
+    assert stack_report.parse_calls(OBJDUMP) == {'main': ['setup'], 'setup': ['r2s_spin']}
 
 
 def test_worst_path_sums_the_deepest_chain():
-    sizes = {"main": (48, "static"), "setup": (32, "static"), "r2s_spin": (64, "static")}
-    calls = {"main": ["setup"], "setup": ["r2s_spin"]}
-    worst = stack_report.worst_stack(sizes, calls, ["main"])
-    assert worst["total"] == 144
-    assert worst["path"] == ["main", "setup", "r2s_spin"]
+    sizes = {'main': (48, 'static'), 'setup': (32, 'static'), 'r2s_spin': (64, 'static')}
+    calls = {'main': ['setup'], 'setup': ['r2s_spin']}
+    worst = stack_report.worst_stack(sizes, calls, ['main'])
+    assert worst['total'] == 144
+    assert worst['path'] == ['main', 'setup', 'r2s_spin']
 
 
 def test_worst_path_counts_unknown_frames_as_zero_and_lists_them():
-    worst = stack_report.worst_stack({"setup": (32, "static")}, {"main": ["setup"]}, ["main"])
-    assert worst["total"] == 32
-    assert worst["unknown"] == ["main"]
+    worst = stack_report.worst_stack({'setup': (32, 'static')}, {'main': ['setup']}, ['main'])
+    assert worst['total'] == 32
+    assert worst['unknown'] == ['main']
 
 
 def test_check_fails_on_a_breached_fixture():
-    data = {"uno": {"total": 144, "path": ["main"], "unknown": [], "dynamic": [], "cycles": []}}
-    budgets = {"firmware": {"uno": {"stack": 1}}}
+    data = {'uno': {'total': 144, 'path': ['main'], 'unknown': [], 'dynamic': [], 'cycles': []}}
+    budgets = {'firmware': {'uno': {'stack': 1}}}
     problems = stack_report.check_stacks(data, budgets)
     assert len(problems) == 1
-    assert "uno" in problems[0] and "stack" in problems[0]
+    assert 'uno' in problems[0] and 'stack' in problems[0]
 
 
 def test_check_fails_on_a_call_cycle():
-    data = {"uno": {"total": 0, "path": [], "unknown": [], "dynamic": [], "cycles": [["a", "a"]]}}
-    budgets = {"firmware": {"uno": {"stack": 10**9}}}
+    data = {'uno': {'total': 0, 'path': [], 'unknown': [], 'dynamic': [], 'cycles': [['a', 'a']]}}
+    budgets = {'firmware': {'uno': {'stack': 10**9}}}
     assert stack_report.check_stacks(data, budgets) != []
 
 
 def test_measured_table_reports_measured_next_to_static():
-    table = stack_report.measured_table({"slice-atmega328p": 144}, {"slice-atmega328p": 100})
+    table = stack_report.measured_table({'slice-atmega328p': 144}, {'slice-atmega328p': 100})
     assert table.splitlines()[:2] == [
-        "| firmware | static stack (non-LTO -fstack-usage rebuild) | measured stack (shipped LTO firmware) |",
-        "| --- | --- | --- |",
+        '| firmware | static stack (non-LTO -fstack-usage rebuild) | measured stack '
+        '(shipped LTO firmware) |',
+        '| --- | --- | --- |',
     ]
-    assert "| slice-atmega328p | 144 | 100 |" in table.splitlines()
+    assert '| slice-atmega328p | 144 | 100 |' in table.splitlines()
 
 
 def test_measured_table_marks_missing_measured_as_not_available():
-    table = stack_report.measured_table({"slice-atmega328p": 144, "flood-atmega328p": 160}, {})
-    assert "| flood-atmega328p | 160 | n/a |" in table.splitlines()
-    assert "| slice-atmega328p | 144 | n/a |" in table.splitlines()
+    table = stack_report.measured_table({'slice-atmega328p': 144, 'flood-atmega328p': 160}, {})
+    assert '| flood-atmega328p | 160 | n/a |' in table.splitlines()
+    assert '| slice-atmega328p | 144 | n/a |' in table.splitlines()
 
 
 def test_static_worst_sums_the_deepest_chain_from_su_files(tmp_path, monkeypatch):
-    (tmp_path / "firmware.su").write_text(SU)
-    monkeypatch.setattr(stack_report, "_run", lambda *args: OBJDUMP)
-    worst = stack_report.static_worst(str(tmp_path / "firmware.elf"), tmp_path)
-    assert worst["total"] == 144
-    assert worst["path"] == ["main", "setup", "r2s_spin"]
+    (tmp_path / 'firmware.su').write_text(SU)
+    monkeypatch.setattr(stack_report, '_run', lambda *args: OBJDUMP)
+    worst = stack_report.static_worst(str(tmp_path / 'firmware.elf'), tmp_path)
+    assert worst['total'] == 144
+    assert worst['path'] == ['main', 'setup', 'r2s_spin']
 
 
 def test_static_worst_rejects_a_build_without_su_files(tmp_path, monkeypatch):
-    monkeypatch.setattr(stack_report, "_run", lambda *args: OBJDUMP)
+    monkeypatch.setattr(stack_report, '_run', lambda *args: OBJDUMP)
     with pytest.raises(stack_report.StackError):
-        stack_report.static_worst(str(tmp_path / "firmware.elf"), tmp_path)
+        stack_report.static_worst(str(tmp_path / 'firmware.elf'), tmp_path)
 
 
 def test_collect_skips_xtensa_firmware(tmp_path, monkeypatch):
-    avr = tmp_path / "arduino_hello" / "uno"
+    avr = tmp_path / 'arduino_hello' / 'uno'
     avr.mkdir(parents=True)
-    (avr / "arduino_hello.ino.elf").write_bytes(b"")
-    esp = tmp_path / "arduino_hello" / "esp32"
+    (avr / 'arduino_hello.ino.elf').write_bytes(b'')
+    esp = tmp_path / 'arduino_hello' / 'esp32'
     esp.mkdir(parents=True)
     header = bytearray(64)
-    header[0:4] = b"\x7fELF"
+    header[0:4] = b'\x7fELF'
     header[4] = 1
     header[5] = 1
-    header[18:20] = (0x5E).to_bytes(2, "little")
-    (esp / "arduino_hello.ino.elf").write_bytes(bytes(header))
-    stacked = tmp_path / "stack" / "arduino_hello" / "uno"
+    header[18:20] = (0x5E).to_bytes(2, 'little')
+    (esp / 'arduino_hello.ino.elf').write_bytes(bytes(header))
+    stacked = tmp_path / 'stack' / 'arduino_hello' / 'uno'
     stacked.mkdir(parents=True)
-    (stacked / "arduino_hello.ino.elf").write_bytes(b"")
-    (stacked / "firmware.su").write_text(SU)
+    (stacked / 'arduino_hello.ino.elf').write_bytes(b'')
+    (stacked / 'firmware.su').write_text(SU)
     calls = []
-    monkeypatch.setattr(stack_report, "_run", lambda *args: calls.append(args[-1]) or OBJDUMP)
+    monkeypatch.setattr(stack_report, '_run', lambda *args: calls.append(args[-1]) or OBJDUMP)
     stacks = stack_report.collect(tmp_path)
-    assert sorted(stacks) == ["arduino_hello/uno/arduino_hello.ino.elf"]
-    assert all("esp32" not in elf for elf in calls)
+    assert sorted(stacks) == ['arduino_hello/uno/arduino_hello.ino.elf']
+    assert all('esp32' not in elf for elf in calls)
 
 
 def test_collect_skips_cmake_compiler_id_frames(tmp_path, monkeypatch):
-    fw = tmp_path / "fw"
+    fw = tmp_path / 'fw'
     fw.mkdir()
-    (fw / "firmware.elf").write_bytes(b"")
-    (fw / "firmware.su").write_text("main:48:static\n")
-    probe = fw / "zzz" / "CompilerIdC"
+    (fw / 'firmware.elf').write_bytes(b'')
+    (fw / 'firmware.su').write_text('main:48:static\n')
+    probe = fw / 'zzz' / 'CompilerIdC'
     probe.mkdir(parents=True)
-    (probe / "probe.su").write_text("CMakeCCompilerId.c:853:5:main\t10\tstatic\n")
-    monkeypatch.setattr(stack_report, "_run", lambda *args: OBJDUMP)
-    assert stack_report.collect(tmp_path)["fw/firmware.elf"]["total"] == 48
+    (probe / 'probe.su').write_text('CMakeCCompilerId.c:853:5:main\t10\tstatic\n')
+    monkeypatch.setattr(stack_report, '_run', lambda *args: OBJDUMP)
+    assert stack_report.collect(tmp_path)['fw/firmware.elf']['total'] == 48

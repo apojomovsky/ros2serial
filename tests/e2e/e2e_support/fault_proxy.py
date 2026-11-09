@@ -65,9 +65,9 @@ class _DirectionState:
 
 def _check_rate(name, value):
     if not isinstance(value, (int, float)) or isinstance(value, bool):
-        raise ValueError(f"{name} {value!r} is not a number")
+        raise ValueError(f'{name} {value!r} is not a number')
     if math.isnan(value) or not 0.0 <= value <= 1.0:
-        raise ValueError(f"{name} {value!r} is outside 0..1")
+        raise ValueError(f'{name} {value!r} is outside 0..1')
 
 
 class FaultProxy:
@@ -96,7 +96,9 @@ class FaultProxy:
         self._mcu_to_host.rng.seed(seed)
         self._host_to_mcu.rng.seed(seed)
 
-    def set_faults(self, *, drop_rate=0.0, dup_rate=0.0, corrupt_rate=0.0, framing_rate=0.0, seed=None):
+    def set_faults(
+        self, *, drop_rate=0.0, dup_rate=0.0, corrupt_rate=0.0, framing_rate=0.0, seed=None
+    ):
         """Replace the fault rates for both directions.
 
         A seed restarts both streams deterministically; without one the
@@ -104,10 +106,10 @@ class FaultProxy:
         corrupts code bytes and delimiters instead of data bytes, merging
         frames whose delimiter is replaced by a nonzero byte.
         """
-        _check_rate("drop_rate", drop_rate)
-        _check_rate("dup_rate", dup_rate)
-        _check_rate("corrupt_rate", corrupt_rate)
-        _check_rate("framing_rate", framing_rate)
+        _check_rate('drop_rate', drop_rate)
+        _check_rate('dup_rate', dup_rate)
+        _check_rate('corrupt_rate', corrupt_rate)
+        _check_rate('framing_rate', framing_rate)
         with self._lock:
             self._drop_rate = drop_rate
             self._dup_rate = dup_rate
@@ -122,14 +124,14 @@ class FaultProxy:
         """A snapshot of both directions' counters, keyed by direction."""
         with self._lock:
             return {
-                "mcu_to_host": self._mcu_to_host.counts.copy(),
-                "host_to_mcu": self._host_to_mcu.counts.copy(),
+                'mcu_to_host': self._mcu_to_host.counts.copy(),
+                'host_to_mcu': self._host_to_mcu.counts.copy(),
             }
 
     def start(self):
         """Serve both directions until stop is called."""
         self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._run, name="fault-proxy", daemon=True)
+        self._thread = threading.Thread(target=self._run, name='fault-proxy', daemon=True)
         self._thread.start()
 
     @staticmethod

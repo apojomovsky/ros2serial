@@ -12,16 +12,16 @@ import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-READY_MARK = "r2s_posix: ready"
+READY_MARK = 'r2s_posix: ready'
 READY_TIMEOUT = 20.0
 
 
 def build(scratch):
     """Build the posix firmware into scratch and return its path."""
     env = dict(os.environ)
-    env["R2S_BUILD_DIR"] = str(scratch)
+    env['R2S_BUILD_DIR'] = str(scratch)
     proc = subprocess.run(
-        ["bash", str(REPO_ROOT / "ports" / "posix" / "run.sh"), "--build-only"],
+        ['bash', str(REPO_ROOT / 'ports' / 'posix' / 'run.sh'), '--build-only'],
         capture_output=True,
         text=True,
         timeout=300,
@@ -29,18 +29,18 @@ def build(scratch):
         check=False,
     )
     if proc.returncode != 0:
-        raise AssertionError("posix firmware build failed:\n" + proc.stderr[-4000:])
-    firmware = Path(scratch) / "ports" / "posix" / "r2s_posix_firmware"
+        raise AssertionError('posix firmware build failed:\n' + proc.stderr[-4000:])
+    firmware = Path(scratch) / 'ports' / 'posix' / 'r2s_posix_firmware'
     if not firmware.is_file():
-        raise AssertionError("posix firmware binary missing after build: " + str(firmware))
+        raise AssertionError('posix firmware binary missing after build: ' + str(firmware))
     return firmware
 
 
 def from_run_script():
     """Return the firmware run.sh built, for tests launched by tests/e2e/run.sh."""
-    given = os.environ.get("R2S_E2E_FW", "")
-    assert given, "R2S_E2E_FW is unset: run tests/e2e/run.sh, which builds the firmware"
-    assert Path(given).is_file(), "no firmware at " + given + ": run tests/e2e/run.sh"
+    given = os.environ.get('R2S_E2E_FW', '')
+    assert given, 'R2S_E2E_FW is unset: run tests/e2e/run.sh, which builds the firmware'
+    assert Path(given).is_file(), 'no firmware at ' + given + ': run tests/e2e/run.sh'
     return Path(given)
 
 
@@ -62,7 +62,7 @@ class Spawned:
 
 
 def _drain_until_ready(proc, deadline):
-    pending = b""
+    pending = b''
     while time.monotonic() < deadline:
         readable, _, _ = select.select([proc.stderr], [], [], 0.5)
         if proc.stderr in readable:
@@ -72,8 +72,8 @@ def _drain_until_ready(proc, deadline):
         if READY_MARK.encode() in pending:
             return time.monotonic()
         if proc.poll() is not None:
-            raise AssertionError("firmware exited before its ready line")
-    raise AssertionError(f"firmware printed no ready line within {READY_TIMEOUT:.0f} s")
+            raise AssertionError('firmware exited before its ready line')
+    raise AssertionError(f'firmware printed no ready line within {READY_TIMEOUT:.0f} s')
 
 
 def spawn(firmware, port, args=()):

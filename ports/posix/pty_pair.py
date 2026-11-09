@@ -53,8 +53,8 @@ def _forward(source, target):
 def main():
     mcu_master, mcu_slave = pty.openpty()
     host_master, host_slave = pty.openpty()
-    print(f"MCU_PORT={os.ttyname(mcu_slave)}", flush=True)
-    print(f"HOST_PORT={os.ttyname(host_slave)}", flush=True)
+    print(f'MCU_PORT={os.ttyname(mcu_slave)}', flush=True)
+    print(f'HOST_PORT={os.ttyname(host_slave)}', flush=True)
     os.close(mcu_slave)
     os.close(host_slave)
     while True:
@@ -64,7 +64,7 @@ def main():
             _forward(source, target)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:

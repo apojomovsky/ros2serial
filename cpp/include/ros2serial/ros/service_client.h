@@ -6,18 +6,20 @@
 namespace ros
 {
 
-template <typename MReq, typename MRes> class ServiceClient
+template<typename MReq, typename MRes>
+class ServiceClient
 {
-  public:
-    ServiceClient(const char *service_name) : topic_(service_name)
-    {
-    }
+public:
+  ServiceClient(const char *service_name)
+  : topic_(service_name)
+  {
+  }
 
-    const char *topic_;
+  const char *topic_;
 
-  private:
-    ServiceClient(const ServiceClient &);
-    ServiceClient &operator=(const ServiceClient &);
+private:
+  ServiceClient(const ServiceClient &);
+  ServiceClient & operator=(const ServiceClient &);
 };
 
 } // namespace ros

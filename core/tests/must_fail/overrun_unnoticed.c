@@ -26,6 +26,6 @@
 
 void test_must_fail_an_unnoticed_overrun_fails_the_test(void)
 {
-    fake_port_set_tx_free(1);
-    r2s_port_write((const uint8_t *)"\x01\x02", 2);
+  fake_port_set_tx_free(1);
+  r2s_port_write((const uint8_t *)"\x01\x02", 2);
 }

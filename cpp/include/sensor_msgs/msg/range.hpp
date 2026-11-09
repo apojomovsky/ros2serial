@@ -20,14 +20,15 @@ namespace sensor_msgs
 namespace msg
 {
 
-struct Range {
-    std_msgs::msg::Header header;
-    uint8_t radiation_type;
-    float field_of_view;
-    float min_range;
-    float max_range;
-    float range;
-    float variance;
+struct Range
+{
+  std_msgs::msg::Header header;
+  uint8_t radiation_type;
+  float field_of_view;
+  float min_range;
+  float max_range;
+  float range;
+  float variance;
 };
 
 } // namespace msg
@@ -36,9 +37,10 @@ struct Range {
 /* The codec writes into the C struct's bytes at the offsets the
  * descriptors give, so the C++ struct must hold them at the same
  * offsets and the same size. */
-#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), #cpp_type)
-#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field)                                                         \
-    static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
+#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), \
+    #cpp_type)
+#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field) \
+  static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
 
 R2S_CPP_SAME_SIZE(sensor_msgs::msg::Range, sensor_msgs__msg__Range);
 R2S_CPP_SAME_OFFSET(sensor_msgs::msg::Range, sensor_msgs__msg__Range, header);
@@ -63,29 +65,32 @@ extern const r2s_codec_table_t r2s_bundled_table_sensor_msgs_Range;
 
 /* The primary template the runtime layer declares; a message header
  * specializes it, so a sketch names a type and never a table. */
-template <typename T> struct msg_traits;
+template<typename T>
+struct msg_traits;
 
-template <> struct msg_traits<sensor_msgs::msg::Range> {
-    static const r2s_codec_table_t *table()
-    {
-        return &r2s_bundled_table_sensor_msgs_Range;
-    }
+template<>
+struct msg_traits<sensor_msgs::msg::Range>
+{
+  static const r2s_codec_table_t * table()
+  {
+    return &r2s_bundled_table_sensor_msgs_Range;
+  }
 
-    static uint16_t type_index()
-    {
-        return 2u;
-    }
+  static uint16_t type_index()
+  {
+    return 2u;
+  }
 
-    static const char *type_name()
-    {
-        return "sensor_msgs/msg/Range";
-    }
+  static const char * type_name()
+  {
+    return "sensor_msgs/msg/Range";
+  }
 
-    static const uint8_t *type_hash()
-    {
-        static const uint8_t hash[] = {0xb4u, 0x2bu, 0x62u, 0x56u, 0x2eu, 0x93u, 0xcbu, 0xfeu};
-        return hash;
-    }
+  static const uint8_t * type_hash()
+  {
+    static const uint8_t hash[] = {0xb4u, 0x2bu, 0x62u, 0x56u, 0x2eu, 0x93u, 0xcbu, 0xfeu};
+    return hash;
+  }
 };
 
 } // namespace r2s

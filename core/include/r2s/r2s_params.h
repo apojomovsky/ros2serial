@@ -58,23 +58,24 @@ extern "C" {
 /* One parameter: its name, type and flags, its default and its live value.
  * Strings live in the caller's buffer of bound bytes plus the NUL; the
  * default points at the initial text. Scalars carry the default inline. */
-typedef struct {
-    const char *name;
-    uint8_t type;
-    uint8_t flags;
-    uint16_t bound;
-    union {
-        uint8_t b;
-        int64_t i;
-        double f;
-        const char *s;
-    } initial;
-    union {
-        uint8_t b;
-        int64_t i;
-        double f;
-        char *s;
-    } value;
+typedef struct
+{
+  const char *name;
+  uint8_t type;
+  uint8_t flags;
+  uint16_t bound;
+  union {
+    uint8_t b;
+    int64_t i;
+    double f;
+    const char *s;
+  } initial;
+  union {
+    uint8_t b;
+    int64_t i;
+    double f;
+    char *s;
+  } value;
 } r2s_param_t;
 
 #ifdef R2S_WITH_PARAMS
@@ -90,7 +91,7 @@ uint8_t r2s_params_count(void);
 
 /* The table entry at index, or NULL past the count. The caller reads the
  * live value the last applied SET left; the session writes it. */
-const r2s_param_t *r2s_params_get(uint8_t index);
+const r2s_param_t * r2s_params_get(uint8_t index);
 
 /* The verdict a SET value earns without applying it: one of the status
  * codes above, or -1 when the value breaks its type's rule and the session

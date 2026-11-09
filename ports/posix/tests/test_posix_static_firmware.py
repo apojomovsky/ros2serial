@@ -34,15 +34,15 @@ from pathlib import Path
 
 from r2s_gen.reference import frames as wire
 
-FIRMWARE = os.environ.get("R2S_POSIX_FW", "")
+FIRMWARE = os.environ.get('R2S_POSIX_FW', '')
 START_TIMEOUT = 10.0
 FRAME_TIMEOUT = 5.0
 
 
 def static_binary():
-    assert FIRMWARE, "R2S_POSIX_FW is unset: run ports/posix/run.sh, which builds it"
-    candidate = Path(FIRMWARE).parent / "r2s_posix_static_firmware"
-    assert candidate.is_file(), f"no static firmware at {candidate!r}: run ports/posix/run.sh"
+    assert FIRMWARE, 'R2S_POSIX_FW is unset: run ports/posix/run.sh, which builds it'
+    candidate = Path(FIRMWARE).parent / 'r2s_posix_static_firmware'
+    assert candidate.is_file(), f'no static firmware at {candidate!r}: run ports/posix/run.sh'
     return str(candidate)
 
 
@@ -59,31 +59,31 @@ def static_hello_max_frame():
     try:
         error = bytearray()
         deadline = time.monotonic() + START_TIMEOUT
-        while b"r2s_posix: ready" not in error:
+        while b'r2s_posix: ready' not in error:
             remaining = deadline - time.monotonic()
-            assert remaining > 0, "the static firmware printed no ready line"
+            assert remaining > 0, 'the static firmware printed no ready line'
             ready, _, _ = select.select([proc.stderr], [], [], remaining)
-            assert ready, "the static firmware printed no ready line"
+            assert ready, 'the static firmware printed no ready line'
             chunk = os.read(proc.stderr.fileno(), 4096)
-            assert chunk, "the static firmware exited before its ready line"
+            assert chunk, 'the static firmware exited before its ready line'
             error.extend(chunk)
         pending = bytearray()
         deadline = time.monotonic() + FRAME_TIMEOUT
         while True:
             remaining = deadline - time.monotonic()
-            assert remaining > 0, "the static firmware sent no HELLO"
+            assert remaining > 0, 'the static firmware sent no HELLO'
             ready, _, _ = select.select([master], [], [], remaining)
-            assert ready, "the static firmware sent no HELLO"
+            assert ready, 'the static firmware sent no HELLO'
             chunk = os.read(master, 4096)
-            assert chunk, "the static firmware closed the pty"
+            assert chunk, 'the static firmware closed the pty'
             pending.extend(chunk)
-            while pending.find(b"\x00") >= 0:
-                end = pending.find(b"\x00")
+            while pending.find(b'\x00') >= 0:
+                end = pending.find(b'\x00')
                 unit = bytes(pending[: end + 1])
                 del pending[: end + 1]
                 frame = wire.decode(unit)
                 if frame is not None and frame[0] == 0:
-                    return int.from_bytes(frame[2][7:9], "little")
+                    return int.from_bytes(frame[2][7:9], 'little')
     finally:
         proc.kill()
         proc.wait()
@@ -111,25 +111,27 @@ def node_name_limit(max_frame):
 def run_static_once(args):
     """One static firmware run that must fail: returns (returncode, stderr)
     with no pty involved."""
-    cmd = [static_binary(), "/dev/pts/does-not-exist", *args]
-    proc = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=START_TIMEOUT)
+    cmd = [static_binary(), '/dev/pts/does-not-exist', *args]
+    proc = subprocess.run(
+        cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=START_TIMEOUT
+    )
     return proc.returncode, proc.stderr.decode()
 
 
 def test_static_node_name_over_limit_fails():
     limit = node_name_limit(static_hello_max_frame())
-    name = "n" * (limit + 1)
-    code, error = run_static_once(["--node", name])
+    name = 'n' * (limit + 1)
+    code, error = run_static_once(['--node', name])
     assert code == 2
-    assert "--node" in error
+    assert '--node' in error
     assert name in error
     assert str(limit + 1) in error
-    assert f"limit {limit}" in error
-    assert "ready" not in error
+    assert f'limit {limit}' in error
+    assert 'ready' not in error
 
 
 def test_static_node_name_at_limit_passes_name_check():
     limit = node_name_limit(static_hello_max_frame())
-    code, error = run_static_once(["--node", "n" * limit])
+    code, error = run_static_once(['--node', 'n' * limit])
     assert code == 1
-    assert "does-not-exist" in error
+    assert 'does-not-exist' in error

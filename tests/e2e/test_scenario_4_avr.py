@@ -17,17 +17,18 @@ import rclpy
 from diagnostic_msgs.msg import DiagnosticArray
 from e2e_support import avr as avr_support
 from e2e_support import bridge as bridge_support
-from e2e_support import checks, teardown
+from e2e_support import checks
+from e2e_support import teardown
 
 # covers: SES-16, SES-27
 
-NAMESPACE = "e2e_ns"
-SERVICE = "/" + NAMESPACE + "/r2s_bridge/get_parameters"
-REMAPPINGS = (("battery", "cell_voltage"), ("cmd_vel", "steer"))
-WANTED = ["/" + NAMESPACE + "/cell_voltage", "/" + NAMESPACE + "/steer"]
-GONE = ["/battery", "/cmd_vel", "/" + NAMESPACE + "/battery", "/" + NAMESPACE + "/cmd_vel"]
+NAMESPACE = 'e2e_ns'
+SERVICE = '/' + NAMESPACE + '/r2s_bridge/get_parameters'
+REMAPPINGS = (('battery', 'cell_voltage'), ('cmd_vel', 'steer'))
+WANTED = ['/' + NAMESPACE + '/cell_voltage', '/' + NAMESPACE + '/steer']
+GONE = ['/battery', '/cmd_vel', '/' + NAMESPACE + '/battery', '/' + NAMESPACE + '/cmd_vel']
 # The bridge reports announced names without remapping or namespace.
-HANDSHAKE_TOPICS = ["battery", "cmd_vel", "echo_vel", "log_text"]
+HANDSHAKE_TOPICS = ['battery', 'cmd_vel', 'echo_vel', 'log_text']
 TOPIC_BUDGET = 3.0
 
 _SCRATCH = None
@@ -37,8 +38,8 @@ _PARAMS = None
 
 def _prepare():
     global _SCRATCH, _SPAWNED, _PARAMS
-    _SCRATCH = tempfile.TemporaryDirectory(prefix="r2s-e2e-avr-4-")
-    _SPAWNED = avr_support.spawn(os.environ.get("R2S_E2E_BOARD", "uno"))
+    _SCRATCH = tempfile.TemporaryDirectory(prefix='r2s-e2e-avr-4-')
+    _SPAWNED = avr_support.spawn(os.environ.get('R2S_E2E_BOARD', 'uno'))
     _PARAMS = bridge_support.example_params_file()
 
 
@@ -65,17 +66,17 @@ class TestScenario4(unittest.TestCase):
         teardown.shutdown()
 
     def test_remapping_and_namespace_apply_to_mcu_topics(self):
-        node = rclpy.create_node("e2e_s4_avr_probe")
+        node = rclpy.create_node('e2e_s4_avr_probe')
         try:
             bridge_support.wait_for_bridge(node, service=SERVICE)
             # The handshake wait below observes bridge state, not DDS
             # discovery of the new topics.
             received = []
-            node.create_subscription(DiagnosticArray, "/diagnostics", received.append, 10)
+            node.create_subscription(DiagnosticArray, '/diagnostics', received.append, 10)
             deadline = time.monotonic() + bridge_support.HANDSHAKE_TIMEOUT
             while not received:
                 rclpy.spin_once(node, timeout_sec=0.5)
-                self.assertLess(time.monotonic(), deadline, "no /diagnostics flow from the bridge")
+                self.assertLess(time.monotonic(), deadline, 'no /diagnostics flow from the bridge')
             received.clear()
             # The boot HELLO predates the bridge, so the handshake budget runs
             # from bridge-up, when the parameter service answers.
@@ -85,11 +86,11 @@ class TestScenario4(unittest.TestCase):
                 HANDSHAKE_TOPICS,
                 _SPAWNED.ready_at,
                 TOPIC_BUDGET,
-                "handshake",
+                'handshake',
                 lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
                 clock=time.monotonic,
             )
-            self.assertLessEqual(took, TOPIC_BUDGET, "handshake took longer than 3 s")
+            self.assertLessEqual(took, TOPIC_BUDGET, 'handshake took longer than 3 s')
             # Discovery starts when the bridge creates its endpoints at the
             # handshake, so the generous timeout runs from there, not from
             # bridge-up: a slow handshake must not spend it.
@@ -99,14 +100,14 @@ class TestScenario4(unittest.TestCase):
                 WANTED,
                 handshake_done_at,
                 checks.DISCOVERY_TIMEOUT,
-                "remapped topics",
+                'remapped topics',
                 lambda: rclpy.spin_once(node, timeout_sec=bridge_support.DISCOVERY_SPIN),
             )
             names = {name for name, _ in node.get_topic_names_and_types()}
             for gone in GONE:
-                self.assertNotIn(gone, names, "unmapped name still announced: " + gone)
+                self.assertNotIn(gone, names, 'unmapped name still announced: ' + gone)
             # launch_testing never calls tearDownModule, so the harness
             # stops here: its stop summary carries the painted peak.
-            self.assertEqual(_SPAWNED.stop(), 0, "the harness stopped dirty")
+            self.assertEqual(_SPAWNED.stop(), 0, 'the harness stopped dirty')
         finally:
             node.destroy_node()

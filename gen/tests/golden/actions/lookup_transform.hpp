@@ -23,14 +23,15 @@ namespace tf2_msgs
 namespace action
 {
 
-struct LookupTransform_Goal {
-    char target_frame[17];
-    char source_frame[17];
-    builtin_interfaces::msg::Time source_time;
-    builtin_interfaces::msg::Duration timeout;
-    builtin_interfaces::msg::Time target_time;
-    char fixed_frame[17];
-    uint8_t advanced;
+struct LookupTransform_Goal
+{
+  char target_frame[17];
+  char source_frame[17];
+  builtin_interfaces::msg::Time source_time;
+  builtin_interfaces::msg::Duration timeout;
+  builtin_interfaces::msg::Time target_time;
+  char fixed_frame[17];
+  uint8_t advanced;
 };
 
 } // namespace action
@@ -39,23 +40,33 @@ struct LookupTransform_Goal {
 /* The codec writes into the C struct's bytes at the offsets the
  * descriptors give, so the C++ struct must hold them at the same
  * offsets and the same size. */
-#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), #cpp_type)
-#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field)                                                         \
-    static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
+#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), \
+    #cpp_type)
+#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field) \
+  static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
 
 R2S_CPP_SAME_SIZE(tf2_msgs::action::LookupTransform_Goal, tf2_msgs__action__LookupTransform_Goal);
-R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Goal, tf2_msgs__action__LookupTransform_Goal,
-                    target_frame);
-R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Goal, tf2_msgs__action__LookupTransform_Goal,
-                    source_frame);
-R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Goal, tf2_msgs__action__LookupTransform_Goal,
-                    source_time);
-R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Goal, tf2_msgs__action__LookupTransform_Goal, timeout);
-R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Goal, tf2_msgs__action__LookupTransform_Goal,
-                    target_time);
-R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Goal, tf2_msgs__action__LookupTransform_Goal,
-                    fixed_frame);
-R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Goal, tf2_msgs__action__LookupTransform_Goal, advanced);
+R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Goal,
+  tf2_msgs__action__LookupTransform_Goal,
+  target_frame);
+R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Goal,
+  tf2_msgs__action__LookupTransform_Goal,
+  source_frame);
+R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Goal,
+  tf2_msgs__action__LookupTransform_Goal,
+  source_time);
+R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Goal,
+  tf2_msgs__action__LookupTransform_Goal,
+  timeout);
+R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Goal,
+  tf2_msgs__action__LookupTransform_Goal,
+  target_time);
+R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Goal,
+  tf2_msgs__action__LookupTransform_Goal,
+  fixed_frame);
+R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Goal,
+  tf2_msgs__action__LookupTransform_Goal,
+  advanced);
 
 #undef R2S_CPP_SAME_SIZE
 #undef R2S_CPP_SAME_OFFSET
@@ -71,29 +82,32 @@ extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_LookupTransform_Goal;
 
 /* The primary template the runtime layer declares; a message header
  * specializes it, so a sketch names a type and never a table. */
-template <typename T> struct msg_traits;
+template<typename T>
+struct msg_traits;
 
-template <> struct msg_traits<tf2_msgs::action::LookupTransform_Goal> {
-    static const r2s_codec_table_t *table()
-    {
-        return &r2s_bundled_table_tf2_msgs_LookupTransform_Goal;
-    }
+template<>
+struct msg_traits<tf2_msgs::action::LookupTransform_Goal>
+{
+  static const r2s_codec_table_t * table()
+  {
+    return &r2s_bundled_table_tf2_msgs_LookupTransform_Goal;
+  }
 
-    static uint16_t type_index()
-    {
-        return 2u;
-    }
+  static uint16_t type_index()
+  {
+    return 2u;
+  }
 
-    static const char *type_name()
-    {
-        return "tf2_msgs/action/LookupTransform_Goal";
-    }
+  static const char * type_name()
+  {
+    return "tf2_msgs/action/LookupTransform_Goal";
+  }
 
-    static const uint8_t *type_hash()
-    {
-        static const uint8_t hash[] = {0x81u, 0x5eu, 0xfcu, 0x29u, 0x4au, 0xd1u, 0x7cu, 0x81u};
-        return hash;
-    }
+  static const uint8_t * type_hash()
+  {
+    static const uint8_t hash[] = {0x81u, 0x5eu, 0xfcu, 0x29u, 0x4au, 0xd1u, 0x7cu, 0x81u};
+    return hash;
+  }
 };
 
 } // namespace r2s
@@ -103,9 +117,10 @@ namespace tf2_msgs
 namespace action
 {
 
-struct LookupTransform_Result {
-    geometry_msgs::msg::TransformStamped transform;
-    tf2_msgs::msg::TF2Error error;
+struct LookupTransform_Result
+{
+  geometry_msgs::msg::TransformStamped transform;
+  tf2_msgs::msg::TF2Error error;
 };
 
 } // namespace action
@@ -114,15 +129,19 @@ struct LookupTransform_Result {
 /* The codec writes into the C struct's bytes at the offsets the
  * descriptors give, so the C++ struct must hold them at the same
  * offsets and the same size. */
-#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), #cpp_type)
-#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field)                                                         \
-    static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
+#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), \
+    #cpp_type)
+#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field) \
+  static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
 
-R2S_CPP_SAME_SIZE(tf2_msgs::action::LookupTransform_Result, tf2_msgs__action__LookupTransform_Result);
-R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Result, tf2_msgs__action__LookupTransform_Result,
-                    transform);
-R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Result, tf2_msgs__action__LookupTransform_Result,
-                    error);
+R2S_CPP_SAME_SIZE(tf2_msgs::action::LookupTransform_Result,
+  tf2_msgs__action__LookupTransform_Result);
+R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Result,
+  tf2_msgs__action__LookupTransform_Result,
+  transform);
+R2S_CPP_SAME_OFFSET(tf2_msgs::action::LookupTransform_Result,
+  tf2_msgs__action__LookupTransform_Result,
+  error);
 
 #undef R2S_CPP_SAME_SIZE
 #undef R2S_CPP_SAME_OFFSET
@@ -138,29 +157,32 @@ extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_LookupTransform_Result
 
 /* The primary template the runtime layer declares; a message header
  * specializes it, so a sketch names a type and never a table. */
-template <typename T> struct msg_traits;
+template<typename T>
+struct msg_traits;
 
-template <> struct msg_traits<tf2_msgs::action::LookupTransform_Result> {
-    static const r2s_codec_table_t *table()
-    {
-        return &r2s_bundled_table_tf2_msgs_LookupTransform_Result;
-    }
+template<>
+struct msg_traits<tf2_msgs::action::LookupTransform_Result>
+{
+  static const r2s_codec_table_t * table()
+  {
+    return &r2s_bundled_table_tf2_msgs_LookupTransform_Result;
+  }
 
-    static uint16_t type_index()
-    {
-        return 9u;
-    }
+  static uint16_t type_index()
+  {
+    return 9u;
+  }
 
-    static const char *type_name()
-    {
-        return "tf2_msgs/action/LookupTransform_Result";
-    }
+  static const char * type_name()
+  {
+    return "tf2_msgs/action/LookupTransform_Result";
+  }
 
-    static const uint8_t *type_hash()
-    {
-        static const uint8_t hash[] = {0x06u, 0x1du, 0x44u, 0x23u, 0xafu, 0x53u, 0x52u, 0xffu};
-        return hash;
-    }
+  static const uint8_t * type_hash()
+  {
+    static const uint8_t hash[] = {0x06u, 0x1du, 0x44u, 0x23u, 0xafu, 0x53u, 0x52u, 0xffu};
+    return hash;
+  }
 };
 
 } // namespace r2s
@@ -170,8 +192,9 @@ namespace tf2_msgs
 namespace action
 {
 
-struct LookupTransform_Feedback {
-    uint8_t structure_needs_at_least_one_member;
+struct LookupTransform_Feedback
+{
+  uint8_t structure_needs_at_least_one_member;
 };
 
 } // namespace action
@@ -180,11 +203,13 @@ struct LookupTransform_Feedback {
 /* The codec writes into the C struct's bytes at the offsets the
  * descriptors give, so the C++ struct must hold them at the same
  * offsets and the same size. */
-#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), #cpp_type)
-#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field)                                                         \
-    static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
+#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), \
+    #cpp_type)
+#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field) \
+  static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
 
-R2S_CPP_SAME_SIZE(tf2_msgs::action::LookupTransform_Feedback, tf2_msgs__action__LookupTransform_Feedback);
+R2S_CPP_SAME_SIZE(tf2_msgs::action::LookupTransform_Feedback,
+  tf2_msgs__action__LookupTransform_Feedback);
 
 #undef R2S_CPP_SAME_SIZE
 #undef R2S_CPP_SAME_OFFSET
@@ -200,29 +225,32 @@ extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_LookupTransform_Feedba
 
 /* The primary template the runtime layer declares; a message header
  * specializes it, so a sketch names a type and never a table. */
-template <typename T> struct msg_traits;
+template<typename T>
+struct msg_traits;
 
-template <> struct msg_traits<tf2_msgs::action::LookupTransform_Feedback> {
-    static const r2s_codec_table_t *table()
-    {
-        return &r2s_bundled_table_tf2_msgs_LookupTransform_Feedback;
-    }
+template<>
+struct msg_traits<tf2_msgs::action::LookupTransform_Feedback>
+{
+  static const r2s_codec_table_t * table()
+  {
+    return &r2s_bundled_table_tf2_msgs_LookupTransform_Feedback;
+  }
 
-    static uint16_t type_index()
-    {
-        return 10u;
-    }
+  static uint16_t type_index()
+  {
+    return 10u;
+  }
 
-    static const char *type_name()
-    {
-        return "tf2_msgs/action/LookupTransform_Feedback";
-    }
+  static const char * type_name()
+  {
+    return "tf2_msgs/action/LookupTransform_Feedback";
+  }
 
-    static const uint8_t *type_hash()
-    {
-        static const uint8_t hash[] = {0x2du, 0xa0u, 0xb0u, 0x2fu, 0x99u, 0x0fu, 0x04u, 0x40u};
-        return hash;
-    }
+  static const uint8_t * type_hash()
+  {
+    static const uint8_t hash[] = {0x2du, 0xa0u, 0xb0u, 0x2fu, 0x99u, 0x0fu, 0x04u, 0x40u};
+    return hash;
+  }
 };
 
 } // namespace r2s

@@ -37,8 +37,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-PACKAGE = ROOT / "gen"
-PLUGIN = PACKAGE / "r2s_rosidl"
+PACKAGE = ROOT / 'gen'
+PLUGIN = PACKAGE / 'r2s_rosidl'
 
 GOOD_CONFIG = """\
 node: fw_fixture
@@ -93,11 +93,13 @@ def run(command, **kwargs):
 
 def distro() -> str | None:
     """The ROS distro under test, or None when it cannot be told."""
-    name = os.environ.get("ROS_DISTRO", "")
+    name = os.environ.get('ROS_DISTRO', '')
     if name:
         return name
     candidates = (
-        sorted(path.name for path in Path("/opt/ros").iterdir() if path.is_dir()) if Path("/opt/ros").is_dir() else []
+        sorted(path.name for path in Path('/opt/ros').iterdir() if path.is_dir())
+        if Path('/opt/ros').is_dir()
+        else []
     )
     if len(candidates) == 1:
         return candidates[0]
@@ -105,24 +107,30 @@ def distro() -> str | None:
 
 
 def needs_ros() -> str | None:
-    if shutil.which("colcon") is None:
-        return "colcon is not installed"
+    if shutil.which('colcon') is None:
+        return 'colcon is not installed'
     if distro() is None:
-        return "no ROS distro can be told"
+        return 'no ROS distro can be told'
     return None
 
 
 def ros_env() -> dict:
     """The environment with the underlay sourced, so ament_cmake resolves."""
     name = distro()
-    setup = Path(f"/opt/ros/{name}/setup.bash")
-    if "AMENT_PREFIX_PATH" not in os.environ and setup.is_file():
-        sourced = run(["bash", "-c", f"source {setup} && env"], cwd="/tmp")
+    setup = Path(f'/opt/ros/{name}/setup.bash')
+    if 'AMENT_PREFIX_PATH' not in os.environ and setup.is_file():
+        sourced = run(['bash', '-c', f'source {setup} && env'], cwd='/tmp')
         assert sourced.returncode == 0, sourced.stderr
         env = dict(os.environ)
         for line in sourced.stdout.splitlines():
-            key, _, value = line.partition("=")
-            if key in ("AMENT_PREFIX_PATH", "CMAKE_PREFIX_PATH", "PATH", "PYTHONPATH", "ROS_DISTRO"):
+            key, _, value = line.partition('=')
+            if key in (
+                'AMENT_PREFIX_PATH',
+                'CMAKE_PREFIX_PATH',
+                'PATH',
+                'PYTHONPATH',
+                'ROS_DISTRO',
+            ):
                 env[key] = value
         return env
     return dict(os.environ)
@@ -130,29 +138,33 @@ def ros_env() -> dict:
 
 def package_sources(workspace: Path) -> Path:
     """Copy the generator and the plugin into the workspace sources."""
-    src = workspace / "src"
-    package = src / "r2s_gen"
+    src = workspace / 'src'
+    package = src / 'r2s_gen'
     shutil.copytree(
         PACKAGE,
         package,
-        ignore=shutil.ignore_patterns("__pycache__", "*.egg-info", "build", "r2s_rosidl"),
+        ignore=shutil.ignore_patterns('__pycache__', '*.egg-info', 'build', 'r2s_rosidl'),
     )
-    plugin = src / "r2s_rosidl"
-    shutil.copytree(PLUGIN, plugin, ignore=shutil.ignore_patterns("__pycache__"))
+    plugin = src / 'r2s_rosidl'
+    shutil.copytree(PLUGIN, plugin, ignore=shutil.ignore_patterns('__pycache__'))
     return src
 
 
 def write_fixture(
-    src: Path, name: str, config: str, with_msg: bool, call: str = "r2s_generate_firmware(CONFIG r2s.yaml)"
+    src: Path,
+    name: str,
+    config: str,
+    with_msg: bool,
+    call: str = 'r2s_generate_firmware(CONFIG r2s.yaml)',
 ) -> Path:
     """Write a firmware package calling r2s_generate_firmware, returning its directory."""
     package = src / name
     package.mkdir(parents=True)
-    (package / "r2s.yaml").write_text(config, encoding="utf-8")
+    (package / 'r2s.yaml').write_text(config, encoding='utf-8')
     if with_msg:
-        (package / "msg").mkdir()
-        (package / "msg" / "Custom.msg").write_text(CUSTOM_MSG, encoding="utf-8")
-    (package / "package.xml").write_text(
+        (package / 'msg').mkdir()
+        (package / 'msg' / 'Custom.msg').write_text(CUSTOM_MSG, encoding='utf-8')
+    (package / 'package.xml').write_text(
         f"""\
 <?xml version="1.0"?>
 <package format="3">
@@ -169,9 +181,9 @@ def write_fixture(
   </export>
 </package>
 """,
-        encoding="utf-8",
+        encoding='utf-8',
     )
-    (package / "CMakeLists.txt").write_text(
+    (package / 'CMakeLists.txt').write_text(
         f"""\
 cmake_minimum_required(VERSION 3.22)
 project({name})
@@ -180,7 +192,7 @@ find_package(r2s_rosidl REQUIRED)
 {call}
 ament_package()
 """,
-        encoding="utf-8",
+        encoding='utf-8',
     )
     return package
 
@@ -189,20 +201,20 @@ def colcon_build(workspace: Path, *packages: str):
     """Build packages (with their dependencies) in the workspace, returning the result."""
     return run(
         [
-            "colcon",
-            "--log-base",
-            str(workspace / "log"),
-            "build",
-            "--base-paths",
-            str(workspace / "src"),
-            "--build-base",
-            str(workspace / "build"),
-            "--install-base",
-            str(workspace / "install"),
-            "--packages-up-to",
+            'colcon',
+            '--log-base',
+            str(workspace / 'log'),
+            'build',
+            '--base-paths',
+            str(workspace / 'src'),
+            '--build-base',
+            str(workspace / 'build'),
+            '--install-base',
+            str(workspace / 'install'),
+            '--packages-up-to',
             *packages,
-            "--event-handlers",
-            "console_direct+",
+            '--event-handlers',
+            'console_direct+',
         ],
         cwd=workspace,
         env=ros_env(),
@@ -211,110 +223,115 @@ def colcon_build(workspace: Path, *packages: str):
 
 def generated_files(out: Path) -> dict[str, bytes]:
     """The three cmake-layout files the wrapper writes under `out`."""
-    return {name: (out / name).read_bytes() for name in ("r2s_generated.h", "r2s_generated.c", "CMakeLists.txt")}
+    return {
+        name: (out / name).read_bytes()
+        for name in ('r2s_generated.h', 'r2s_generated.c', 'CMakeLists.txt')
+    }
 
 
-def check_wrapped_matches_direct(tmp_path: Path, workspace: Path, fixture: Path, out: Path, msg_path: Path) -> None:
+def check_wrapped_matches_direct(
+    tmp_path: Path, workspace: Path, fixture: Path, out: Path, msg_path: Path
+) -> None:
     """The wrapper output exists and is byte-identical to a direct r2s-gen run."""
     try:
         wrapped = generated_files(out)
     except FileNotFoundError as error:
-        pytest.fail(f"the wrapper generated nothing: {error}")
+        pytest.fail(f'the wrapper generated nothing: {error}')
     assert all(wrapped.values())
 
-    script = next((workspace / "install" / "r2s_gen" / "lib").glob("python*/site-packages"))
-    program = workspace / "install" / "r2s_gen" / "lib" / "r2s_gen" / "r2s-gen"
-    config = str(fixture / "r2s.yaml")
-    direct_dir = tmp_path / f"direct-{fixture.name}"
+    script = next((workspace / 'install' / 'r2s_gen' / 'lib').glob('python*/site-packages'))
+    program = workspace / 'install' / 'r2s_gen' / 'lib' / 'r2s_gen' / 'r2s-gen'
+    config = str(fixture / 'r2s.yaml')
+    direct_dir = tmp_path / f'direct-{fixture.name}'
     direct = run(
         [
             sys.executable,
             str(program),
-            "generate",
-            "--config",
+            'generate',
+            '--config',
             config,
-            "--out",
+            '--out',
             str(direct_dir),
-            "--layout",
-            "cmake",
-            "--msg-path",
+            '--layout',
+            'cmake',
+            '--msg-path',
             str(msg_path),
         ],
-        env={**ros_env(), "PYTHONPATH": str(script)},
+        env={**ros_env(), 'PYTHONPATH': str(script)},
     )
     assert direct.returncode == 0, direct.stdout + direct.stderr
     for name, text in wrapped.items():
         assert (direct_dir / name).read_bytes() == text
 
 
-@pytest.mark.skipif(needs_ros() is not None, reason=needs_ros() or "no ROS underlay")
+@pytest.mark.skipif(needs_ros() is not None, reason=needs_ros() or 'no ROS underlay')
 def test_colcon_build_generates_firmware_sources(tmp_path):
-    workspace = tmp_path / "ws"
+    workspace = tmp_path / 'ws'
     src = package_sources(workspace)
-    fixture = write_fixture(src, "fw_fixture", GOOD_CONFIG, with_msg=True)
+    fixture = write_fixture(src, 'fw_fixture', GOOD_CONFIG, with_msg=True)
 
-    built = colcon_build(workspace, "fw_fixture")
+    built = colcon_build(workspace, 'fw_fixture')
 
     assert built.returncode == 0, built.stdout + built.stderr
     check_wrapped_matches_direct(
         tmp_path,
         workspace,
         fixture,
-        workspace / "build" / "fw_fixture" / "r2s_generated",
+        workspace / 'build' / 'fw_fixture' / 'r2s_generated',
         src,
     )
 
 
-@pytest.mark.skipif(needs_ros() is not None, reason=needs_ros() or "no ROS underlay")
+@pytest.mark.skipif(needs_ros() is not None, reason=needs_ros() or 'no ROS underlay')
 def test_colcon_build_honors_explicit_paths(tmp_path):
-    workspace = tmp_path / "ws"
+    workspace = tmp_path / 'ws'
     src = package_sources(workspace)
-    write_fixture(src, "fw_fixture", GOOD_CONFIG, with_msg=True)
+    write_fixture(src, 'fw_fixture', GOOD_CONFIG, with_msg=True)
     fixture = write_fixture(
         src,
-        "fw_explicit",
+        'fw_explicit',
         EXPLICIT_CONFIG,
         with_msg=False,
-        call="r2s_generate_firmware(CONFIG r2s.yaml MSG_PATHS .. OUTPUT_DIR custom_out)",
+        call='r2s_generate_firmware(CONFIG r2s.yaml MSG_PATHS .. OUTPUT_DIR custom_out)',
     )
 
-    built = colcon_build(workspace, "fw_explicit")
+    built = colcon_build(workspace, 'fw_explicit')
 
     assert built.returncode == 0, built.stdout + built.stderr
     check_wrapped_matches_direct(
         tmp_path,
         workspace,
         fixture,
-        workspace / "build" / "fw_explicit" / "custom_out",
+        workspace / 'build' / 'fw_explicit' / 'custom_out',
         src,
     )
 
 
-@pytest.mark.skipif(needs_ros() is not None, reason=needs_ros() or "no ROS underlay")
+@pytest.mark.skipif(needs_ros() is not None, reason=needs_ros() or 'no ROS underlay')
 def test_colcon_build_covers_a_package_without_local_messages(tmp_path):
-    workspace = tmp_path / "ws"
+    workspace = tmp_path / 'ws'
     src = package_sources(workspace)
-    fixture = write_fixture(src, "fw_std", STD_CONFIG, with_msg=False)
+    fixture = write_fixture(src, 'fw_std', STD_CONFIG, with_msg=False)
 
-    built = colcon_build(workspace, "fw_std")
+    built = colcon_build(workspace, 'fw_std')
 
     assert built.returncode == 0, built.stdout + built.stderr
     check_wrapped_matches_direct(
         tmp_path,
         workspace,
         fixture,
-        workspace / "build" / "fw_std" / "r2s_generated",
+        workspace / 'build' / 'fw_std' / 'r2s_generated',
         src,
     )
 
 
-@pytest.mark.skipif(needs_ros() is not None, reason=needs_ros() or "no ROS underlay")
+@pytest.mark.skipif(needs_ros() is not None, reason=needs_ros() or 'no ROS underlay')
 def test_colcon_build_fails_on_a_bad_config(tmp_path):
-    workspace = tmp_path / "ws"
+    workspace = tmp_path / 'ws'
     src = package_sources(workspace)
-    write_fixture(src, "fw_bad", BAD_CONFIG, with_msg=False)
+    write_fixture(src, 'fw_bad', BAD_CONFIG, with_msg=False)
 
-    built = colcon_build(workspace, "fw_bad")
+    built = colcon_build(workspace, 'fw_bad')
 
     assert built.returncode != 0
-    assert "r2s-gen: error:" in built.stdout + built.stderr
+    assert 'r2s-gen: error:' in built.stdout + built.stderr

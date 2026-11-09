@@ -22,74 +22,74 @@ READY_TIMEOUT = 20.0
 # The harness stops the firmware past this simulated budget; the soak raises
 # it past its wall window, since simulated time can run hot. Short runs keep
 # the five minute default.
-RUN_MS = ("--run-ms", os.environ.get("R2S_SIMAVR_RUN_MS", "300000"))
+RUN_MS = ('--run-ms', os.environ.get('R2S_SIMAVR_RUN_MS', '300000'))
 
 _BOARDS = {
-    "uno": ("atmega328p", "arduino:avr:uno"),
-    "mega": ("atmega2560", "arduino:avr:mega"),
+    'uno': ('atmega328p', 'arduino:avr:uno'),
+    'mega': ('atmega2560', 'arduino:avr:mega'),
 }
 
 
 def board_mcu(board):
     """The simavr MCU name for the board, rejecting unknown boards."""
-    assert board in _BOARDS, f"unknown avr board {board!r}: want one of {sorted(_BOARDS)}"
+    assert board in _BOARDS, f'unknown avr board {board!r}: want one of {sorted(_BOARDS)}'
     return _BOARDS[board][0]
 
 
 def board_fqbn(board):
     """The arduino-cli board name the slice sketch compiles for."""
-    assert board in _BOARDS, f"unknown avr board {board!r}: want one of {sorted(_BOARDS)}"
+    assert board in _BOARDS, f'unknown avr board {board!r}: want one of {sorted(_BOARDS)}'
     return _BOARDS[board][1]
 
 
 def parse_pty_line(line):
     """The pty slave path from the harness announcement line."""
-    assert line.startswith("r2s_simavr: pty="), "no pty in harness line: " + line.strip()
-    return line.strip().split("=", 1)[1]
+    assert line.startswith('r2s_simavr: pty='), 'no pty in harness line: ' + line.strip()
+    return line.strip().split('=', 1)[1]
 
 
 def harness_binary():
     """The r2s_simavr binary, built by tests/e2e/run-avr.sh."""
-    given = os.environ.get("R2S_SIMAVR_BIN", "")
-    assert given, "R2S_SIMAVR_BIN is unset: run tests/e2e/run-avr.sh, which builds the harness"
-    assert Path(given).is_file(), "no harness at " + given + ": run tests/e2e/run-avr.sh"
+    given = os.environ.get('R2S_SIMAVR_BIN', '')
+    assert given, 'R2S_SIMAVR_BIN is unset: run tests/e2e/run-avr.sh, which builds the harness'
+    assert Path(given).is_file(), 'no harness at ' + given + ': run tests/e2e/run-avr.sh'
     return Path(given)
 
 
-def firmware_image(board, flavor="slice", baud=None):
+def firmware_image(board, flavor='slice', baud=None):
     """The board's ELF of one flavor, built by tests/e2e/run-avr.sh.
 
     The slice carries scenarios 1 to 4; the flood feeds scenario 12. A baud
     names one matrix image; the default baud keeps the legacy file name.
     """
-    given = os.environ.get("R2S_E2E_AVR_FW", "")
-    assert given, "R2S_E2E_AVR_FW is unset: run tests/e2e/run-avr.sh, which builds the firmware"
-    assert flavor in ("slice", "flood"), f"unknown firmware flavor {flavor!r}: want slice or flood"
-    if baud is None or str(baud) == "115200":
-        name = f"{flavor}-{board_mcu(board)}.elf"
+    given = os.environ.get('R2S_E2E_AVR_FW', '')
+    assert given, 'R2S_E2E_AVR_FW is unset: run tests/e2e/run-avr.sh, which builds the firmware'
+    assert flavor in ('slice', 'flood'), f'unknown firmware flavor {flavor!r}: want slice or flood'
+    if baud is None or str(baud) == '115200':
+        name = f'{flavor}-{board_mcu(board)}.elf'
     else:
-        name = f"{flavor}-{board_mcu(board)}-{baud}.elf"
+        name = f'{flavor}-{board_mcu(board)}-{baud}.elf'
     path = Path(given) / name
-    assert path.is_file(), "no firmware at " + str(path) + ": run tests/e2e/run-avr.sh"
+    assert path.is_file(), 'no firmware at ' + str(path) + ': run tests/e2e/run-avr.sh'
     return path
 
 
 def parse_stop_summary(line):
     """The harness stop fields, with the simulated time scenario 2 gates on."""
-    assert line.startswith("r2s_simavr: stop "), "no stop summary in harness line: " + line.strip()
+    assert line.startswith('r2s_simavr: stop '), 'no stop summary in harness line: ' + line.strip()
     summary = {}
     for field in line.split()[2:]:
-        key, _, value = field.partition("=")
+        key, _, value = field.partition('=')
         summary[key] = int(value)
-    assert "simulated_ms" in summary, "no simulated_ms in harness line: " + line.strip()
+    assert 'simulated_ms' in summary, 'no simulated_ms in harness line: ' + line.strip()
     return summary
 
 
-def firmware_label(board, flavor="slice", baud=None):
+def firmware_label(board, flavor='slice', baud=None):
     """The measured-stack key for one firmware: flavor plus MCU plus matrix baud."""
-    if baud is None or str(baud) == "115200":
-        return f"{flavor}-{board_mcu(board)}"
-    return f"{flavor}-{board_mcu(board)}-{baud}"
+    if baud is None or str(baud) == '115200':
+        return f'{flavor}-{board_mcu(board)}'
+    return f'{flavor}-{board_mcu(board)}-{baud}'
 
 
 def record_peak(label, peak):
@@ -100,44 +100,44 @@ def record_peak(label, peak):
     with a warning on stderr; the table step reports which firmware never
     measured instead of failing the scenarios it summarizes.
     """
-    path = os.environ.get("R2S_E2E_AVR_STACK_OUT", "")
+    path = os.environ.get('R2S_E2E_AVR_STACK_OUT', '')
     if not path:
         return
     try:
-        stored = json.loads(Path(path).read_text(encoding="utf-8"))
+        stored = json.loads(Path(path).read_text(encoding='utf-8'))
     except (OSError, ValueError) as error:
-        print(f"avr: cannot read {path}: {error}; recording fresh", file=sys.stderr)
+        print(f'avr: cannot read {path}: {error}; recording fresh', file=sys.stderr)
         stored = {}
     if not isinstance(stored, dict):
-        print(f"avr: {path} holds no mapping; recording fresh", file=sys.stderr)
+        print(f'avr: {path} holds no mapping; recording fresh', file=sys.stderr)
         stored = {}
     prior = stored.get(label, 0)
     if not isinstance(prior, int) or isinstance(prior, bool):
         prior = 0
     stored[label] = max(prior, peak)
     try:
-        Path(path).write_text(json.dumps(stored, indent=2) + "\n", encoding="utf-8")
+        Path(path).write_text(json.dumps(stored, indent=2) + '\n', encoding='utf-8')
     except OSError as error:
-        print(f"avr: cannot write {path}: {error}", file=sys.stderr)
+        print(f'avr: cannot write {path}: {error}', file=sys.stderr)
 
 
-def harness_argv(board, flavor="slice", baud=None):
+def harness_argv(board, flavor='slice', baud=None):
     """The r2s_simavr command for one firmware, always painting the stack."""
     return [
         str(harness_binary()),
-        "--mcu",
+        '--mcu',
         board_mcu(board),
-        "--firmware",
+        '--firmware',
         str(firmware_image(board, flavor, baud)),
         *RUN_MS,
-        "--stack-paint",
+        '--stack-paint',
     ]
 
 
 class Spawned:
     """A running harness, with the pty path and the time it was announced."""
 
-    def __init__(self, proc, pty, ready_at, label=""):
+    def __init__(self, proc, pty, ready_at, label=''):
         self.proc = proc
         self.pty = pty
         self.ready_at = ready_at
@@ -156,36 +156,36 @@ class Spawned:
         except subprocess.TimeoutExpired as expired:
             self.proc.kill()
             tail, _ = self.proc.communicate()
-            raise AssertionError("the harness ignored SIGTERM") from expired
+            raise AssertionError('the harness ignored SIGTERM') from expired
         self.returncode = self.proc.returncode
         for line in tail.decode().splitlines():
-            if line.startswith("r2s_simavr: stop "):
-                self.summary = parse_stop_summary(line + "\n")
-        if self.label and "stack_peak" in self.summary:
-            record_peak(self.label, self.summary["stack_peak"])
+            if line.startswith('r2s_simavr: stop '):
+                self.summary = parse_stop_summary(line + '\n')
+        if self.label and 'stack_peak' in self.summary:
+            record_peak(self.label, self.summary['stack_peak'])
         return self.returncode
 
 
 def _await_pty(proc, deadline):
-    pending = b""
+    pending = b''
     while time.monotonic() < deadline:
         readable, _, _ = select.select([proc.stdout.fileno()], [], [], 0.5)
         if proc.stdout.fileno() in readable:
             chunk = os.read(proc.stdout.fileno(), 4096)
             if chunk:
                 pending += chunk
-        newline = pending.find(b"\n")
+        newline = pending.find(b'\n')
         while newline >= 0:
             line, pending = pending[:newline].decode(), pending[newline + 1 :]
-            if line.startswith("r2s_simavr: pty="):
-                return parse_pty_line(line + "\n"), time.monotonic()
-            newline = pending.find(b"\n")
+            if line.startswith('r2s_simavr: pty='):
+                return parse_pty_line(line + '\n'), time.monotonic()
+            newline = pending.find(b'\n')
         if proc.poll() is not None:
-            raise AssertionError("the harness exited before its pty line")
-    raise AssertionError(f"the harness announced no pty within {READY_TIMEOUT:.0f} s")
+            raise AssertionError('the harness exited before its pty line')
+    raise AssertionError(f'the harness announced no pty within {READY_TIMEOUT:.0f} s')
 
 
-def spawn(board, flavor="slice", baud=None):
+def spawn(board, flavor='slice', baud=None):
     """Start the board's firmware under simavr and return it once booted."""
     proc = subprocess.Popen(
         harness_argv(board, flavor, baud),

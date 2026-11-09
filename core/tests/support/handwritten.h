@@ -36,98 +36,116 @@
 /* The C structs the descriptors below describe (docs/00-design.md, "C type
  * mapping"): one float, two nested triples of doubles, and a bounded string
  * for the publish bound path. */
-typedef struct {
-    float data;
+typedef struct
+{
+  float data;
 } std_msgs__msg__Float32;
 
-typedef struct {
-    double x;
-    double y;
-    double z;
+typedef struct
+{
+  double x;
+  double y;
+  double z;
 } geometry_msgs__msg__Vector3;
 
-typedef struct {
-    geometry_msgs__msg__Vector3 linear;
-    geometry_msgs__msg__Vector3 angular;
+typedef struct
+{
+  geometry_msgs__msg__Vector3 linear;
+  geometry_msgs__msg__Vector3 angular;
 } geometry_msgs__msg__Twist;
 
-typedef struct {
-    char data[9];
+typedef struct
+{
+  char data[9];
 } std_msgs__msg__String;
 
-typedef struct {
-    int32_t sec;
-    uint32_t nanosec;
+typedef struct
+{
+  int32_t sec;
+  uint32_t nanosec;
 } builtin_interfaces__msg__Time;
 
-typedef struct {
-    builtin_interfaces__msg__Time stamp;
-    char frame_id[25];
+typedef struct
+{
+  builtin_interfaces__msg__Time stamp;
+  char frame_id[25];
 } std_msgs__msg__Header;
 
-typedef struct {
-    double x;
-    double y;
-    double z;
-    double w;
+typedef struct
+{
+  double x;
+  double y;
+  double z;
+  double w;
 } geometry_msgs__msg__Quaternion;
 
-typedef struct {
-    std_msgs__msg__Header header;
-    uint8_t radiation_type;
-    float field_of_view;
-    float min_range;
-    float max_range;
-    float range;
-    float variance;
+typedef struct
+{
+  std_msgs__msg__Header header;
+  uint8_t radiation_type;
+  float field_of_view;
+  float min_range;
+  float max_range;
+  float range;
+  float variance;
 } sensor_msgs__msg__Range;
 
-typedef struct {
-    std_msgs__msg__Header header;
-    geometry_msgs__msg__Quaternion orientation;
-    double orientation_covariance[9];
-    geometry_msgs__msg__Vector3 angular_velocity;
-    double angular_velocity_covariance[9];
-    geometry_msgs__msg__Vector3 linear_acceleration;
-    double linear_acceleration_covariance[9];
+typedef struct
+{
+  std_msgs__msg__Header header;
+  geometry_msgs__msg__Quaternion orientation;
+  double orientation_covariance[9];
+  geometry_msgs__msg__Vector3 angular_velocity;
+  double angular_velocity_covariance[9];
+  geometry_msgs__msg__Vector3 linear_acceleration;
+  double linear_acceleration_covariance[9];
 } sensor_msgs__msg__Imu;
 
-typedef struct {
-    std_msgs__msg__Header header;
-    struct {
-        char data[4][13];
-        uint8_t size;
-    } name;
-    struct {
-        double data[4];
-        uint8_t size;
-    } position;
-    struct {
-        double data[4];
-        uint8_t size;
-    } velocity;
-    struct {
-        double data[4];
-        uint8_t size;
-    } effort;
+typedef struct
+{
+  std_msgs__msg__Header header;
+  struct
+  {
+    char data[4][13];
+    uint8_t size;
+  } name;
+  struct
+  {
+    double data[4];
+    uint8_t size;
+  } position;
+  struct
+  {
+    double data[4];
+    uint8_t size;
+  } velocity;
+  struct
+  {
+    double data[4];
+    uint8_t size;
+  } effort;
 } sensor_msgs__msg__JointState;
 
-typedef struct {
-    geometry_msgs__msg__Vector3 translation;
-    geometry_msgs__msg__Quaternion rotation;
+typedef struct
+{
+  geometry_msgs__msg__Vector3 translation;
+  geometry_msgs__msg__Quaternion rotation;
 } geometry_msgs__msg__Transform;
 
-typedef struct {
-    std_msgs__msg__Header header;
-    char child_frame_id[25];
-    geometry_msgs__msg__Transform transform;
+typedef struct
+{
+  std_msgs__msg__Header header;
+  char child_frame_id[25];
+  geometry_msgs__msg__Transform transform;
 } geometry_msgs__msg__TransformStamped;
 
-typedef struct {
-    struct {
-        geometry_msgs__msg__TransformStamped data[4];
-        uint8_t size;
-    } transforms;
+typedef struct
+{
+  struct
+  {
+    geometry_msgs__msg__TransformStamped data[4];
+    uint8_t size;
+  } transforms;
 } tf2_msgs__msg__TFMessage;
 
 /* Type indices in the handwritten table, in the depth-first order [DSC-11]

@@ -26,10 +26,10 @@
 
 #include "fake_port.h"
 
-#define UNITY_TEST_FAIL(line, message)                                                                       \
-    do {                                                                                                     \
-        (void)(line);                                                                                        \
-        fake_port_fail(message);                                                                             \
-    } while (0)
+#define UNITY_TEST_FAIL(line, message) \
+  do { \
+    (void)(line); \
+    fake_port_fail(message); \
+  } while (0)
 
 #endif

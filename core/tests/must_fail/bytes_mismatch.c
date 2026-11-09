@@ -25,8 +25,8 @@
 
 void test_must_fail_assert_bytes_reports_a_mismatch(void)
 {
-    const uint8_t expected[] = {0x01, 0x02};
-    const uint8_t actual[] = {0x01, 0x03, 0x04};
+  const uint8_t expected[] = {0x01, 0x02};
+  const uint8_t actual[] = {0x01, 0x03, 0x04};
 
-    R2S_ASSERT_BYTES(expected, 2, actual, 3, "demo");
+  R2S_ASSERT_BYTES(expected, 2, actual, 3, "demo");
 }

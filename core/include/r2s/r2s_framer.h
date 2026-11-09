@@ -53,19 +53,21 @@ extern "C" {
 
 /* A decoded frame, as [FRM-2] lays it out, and the port tick at which its
  * delimiter arrived, which time sync uses (TIM-1). */
-typedef struct {
-    const uint8_t *data;
-    uint16_t len;
-    uint32_t tick;
+typedef struct
+{
+  const uint8_t *data;
+  uint16_t len;
+  uint32_t tick;
 } r2s_frame_t;
 
 /* The receive counters the heartbeat carries (HB-2), in its order. Each one
  * wraps at 2^16, and a drop counts in every counter its rule names (HB-3). */
-typedef struct {
-    uint16_t rx_frames;      /* frames accepted (HB-4) */
-    uint16_t crc_errors;     /* frames dropped for a bad CRC (HB-5) */
-    uint16_t rx_overflows;   /* frames dropped for the buffer bound (HB-6) */
-    uint16_t dropped_frames; /* every frame dropped, whichever rule (HB-7) */
+typedef struct
+{
+  uint16_t rx_frames;        /* frames accepted (HB-4) */
+  uint16_t crc_errors;       /* frames dropped for a bad CRC (HB-5) */
+  uint16_t rx_overflows;     /* frames dropped for the buffer bound (HB-6) */
+  uint16_t dropped_frames;   /* every frame dropped, whichever rule (HB-7) */
 } r2s_framer_counters_t;
 
 /* One link's framer state: the receive buffer, the frame in progress, the
@@ -74,19 +76,20 @@ typedef struct {
  * storage, one struct per link, so several links frame in one process, each
  * reading its own link from the port seam (#122). The tag lets C++ name the
  * struct without this header. */
-typedef struct r2s_framer {
-    uint8_t link;
-    uint8_t rx[R2S_FRAMER_RX_CAPACITY];
-    uint16_t len;
-    uint8_t overflow;
-    uint8_t ready;
-    const uint8_t *ready_data;
-    uint16_t ready_len;
-    uint32_t ready_tick;
-    uint16_t rep_overflow;
-    uint16_t rep_toolarge;
-    uint8_t rep_topic;
-    r2s_framer_counters_t counters;
+typedef struct r2s_framer
+{
+  uint8_t link;
+  uint8_t rx[R2S_FRAMER_RX_CAPACITY];
+  uint16_t len;
+  uint8_t overflow;
+  uint8_t ready;
+  const uint8_t *ready_data;
+  uint16_t ready_len;
+  uint32_t ready_tick;
+  uint16_t rep_overflow;
+  uint16_t rep_toolarge;
+  uint8_t rep_topic;
+  r2s_framer_counters_t counters;
 } r2s_framer_t;
 
 /* Returns the framer to its power-up state: as if a 0x00 had just arrived
@@ -121,11 +124,11 @@ void r2s_framer_release_inst(r2s_framer_t *framer);
 
 /* Returns the counters, which only r2s_framer_init() resets. The session
  * reads them for the heartbeat. */
-const r2s_framer_counters_t *r2s_framer_counters(void);
+const r2s_framer_counters_t * r2s_framer_counters(void);
 
 /* The counters of one owned instance, reset only by r2s_framer_init_inst().
  * The pointer stays valid while the instance outlives its use. */
-const r2s_framer_counters_t *r2s_framer_counters_inst(const r2s_framer_t *framer);
+const r2s_framer_counters_t * r2s_framer_counters_inst(const r2s_framer_t *framer);
 
 /* Counts a frame the session refused ([SYS-5]): the framer accepted it, but
  * the session took no other action on it. The heartbeat reports it in
@@ -142,8 +145,9 @@ void r2s_framer_count_refused_inst(r2s_framer_t *framer);
 void r2s_framer_take_error_reports(uint16_t *overflow, uint16_t *too_large, uint8_t *topic);
 
 /* Takes one owned instance's reports instead of the default one's. */
-void r2s_framer_take_error_reports_inst(r2s_framer_t *framer, uint16_t *overflow, uint16_t *too_large,
-                                        uint8_t *topic);
+void r2s_framer_take_error_reports_inst(
+  r2s_framer_t *framer, uint16_t *overflow, uint16_t *too_large,
+  uint8_t *topic);
 
 #ifdef __cplusplus
 }

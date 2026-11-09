@@ -24,6 +24,6 @@
 
 /* The last fake port misuse, or an empty string when none happened. The
  * driver asserts it stays empty after every step. */
-const char *r2s_host_error(void);
+const char * r2s_host_error(void);
 
 #endif

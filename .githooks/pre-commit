@@ -17,12 +17,12 @@ if [ "${#py[@]}" -gt 0 ]; then
 fi
 mapfile -t c < <(git diff --cached --name-only --diff-filter=ACM -- '*.c' '*.h' '*.cpp' '*.hpp' '*.cc')
 if [ "${#c[@]}" -gt 0 ]; then
-  if command -v clang-format >/dev/null 2>&1; then
+  if command -v uncrustify >/dev/null 2>&1; then
     bash "$root/scripts/c-format.sh" "${c[@]}" || status=1
   elif command -v docker >/dev/null 2>&1; then
     make -s -C "$root" exec CMD="bash scripts/c-format.sh $(printf '%q ' "${c[@]}")" || status=1
   else
-    echo "pre-commit: no clang-format and no docker; formatting is left to CI"
+    echo "pre-commit: no uncrustify and no docker; formatting is left to CI"
   fi
 fi
 if git diff --cached --name-only --diff-filter=ACMR -- core/ | grep -q .; then

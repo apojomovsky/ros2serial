@@ -37,11 +37,14 @@ import jsonschema
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-SCHEMAS = ROOT / "spec" / "schema" / "vectors"
-sys.path.insert(0, str(ROOT / "gen"))
+SCHEMAS = ROOT / 'spec' / 'schema' / 'vectors'
+sys.path.insert(0, str(ROOT / 'gen'))
 
 from r2s_gen import msgs  # noqa: E402
-from r2s_gen.reference import crc, messages, rcobs, time  # noqa: E402
+from r2s_gen.reference import crc  # noqa: E402
+from r2s_gen.reference import messages  # noqa: E402
+from r2s_gen.reference import rcobs  # noqa: E402
+from r2s_gen.reference import time  # noqa: E402
 from r2s_gen.reference.errors import Rejected  # noqa: E402
 
 _MESSAGES = msgs.MessageRepository()
@@ -49,7 +52,7 @@ _MESSAGES = msgs.MessageRepository()
 
 def _schemas() -> dict[str, jsonschema.protocols.Validator]:
     out = {}
-    for path in sorted(SCHEMAS.glob("*.json")):
+    for path in sorted(SCHEMAS.glob('*.json')):
         schema = json.loads(path.read_text())
         cls = jsonschema.validators.validator_for(schema)
         cls.check_schema(schema)
@@ -58,15 +61,15 @@ def _schemas() -> dict[str, jsonschema.protocols.Validator]:
 
 
 def _location(error: jsonschema.ValidationError) -> str:
-    return "/".join(str(p) for p in error.absolute_path) or "<root>"
+    return '/'.join(str(p) for p in error.absolute_path) or '<root>'
 
 
 def _message(error: jsonschema.ValidationError) -> str:
     # A oneOf failure only says "not valid under any of the given schemas"; the
     # reasons each alternative was rejected are what tells the author what to fix.
-    if error.validator in ("oneOf", "anyOf") and error.context:
+    if error.validator in ('oneOf', 'anyOf') and error.context:
         reasons = list(dict.fromkeys(sub.message for sub in error.context))
-        return "matches none of the allowed forms: " + "; ".join(reasons)
+        return 'matches none of the allowed forms: ' + '; '.join(reasons)
     return error.message
 
 
@@ -92,33 +95,35 @@ def _has_cycle(root) -> bool:
                 return True
             if id(child) not in done:
                 path.add(id(child))
-                stack.append((iter(child.values() if isinstance(child, dict) else child), id(child)))
+                stack.append(
+                    (iter(child.values() if isinstance(child, dict) else child), id(child))
+                )
     return False
 
 
 def check_file(path: Path, name: str, validators: dict) -> list[str]:
-    kind = name.split("/", 1)[0]
+    kind = name.split('/', 1)[0]
     if kind not in validators:
-        return [f"{name}: unknown vector kind {kind!r}; known: {', '.join(validators)}"]
-    if path.suffix != ".yaml":
-        return [f"{name}: vector files must end in .yaml"]
+        return [f'{name}: unknown vector kind {kind!r}; known: {", ".join(validators)}']
+    if path.suffix != '.yaml':
+        return [f'{name}: vector files must end in .yaml']
     try:
         data = yaml.safe_load(path.read_text())
     except yaml.YAMLError as e:
-        return [f"{name}: not valid YAML: {e}".splitlines()[0]]
+        return [f'{name}: not valid YAML: {e}'.splitlines()[0]]
     if _has_cycle(data):
-        return [f"{name}: cyclic YAML alias"]
+        return [f'{name}: cyclic YAML alias']
     errors = []
     for e in validators[kind].iter_errors(data):
         # When an alternative fails only inside one field, the case clearly meant
         # that form: report the field itself rather than every alternative.
         deeper = [s for s in e.context or [] if len(s.absolute_path) > len(e.absolute_path)]
-        errors += deeper if e.validator in ("oneOf", "anyOf") and deeper else [e]
+        errors += deeper if e.validator in ('oneOf', 'anyOf') and deeper else [e]
     errors.sort(key=lambda e: [str(p) for p in e.absolute_path])
-    lines = [f"{name}: {_location(e)}: {_message(e)}" for e in errors]
-    covers = set((data or {}).get("covers") or []) if isinstance(data, dict) else set()
-    for i, case in enumerate((data or {}).get("cases") or [] if isinstance(data, dict) else []):
-        rule = case.get("reject") if isinstance(case, dict) else None
+    lines = [f'{name}: {_location(e)}: {_message(e)}' for e in errors]
+    covers = set((data or {}).get('covers') or []) if isinstance(data, dict) else set()
+    for i, case in enumerate((data or {}).get('cases') or [] if isinstance(data, dict) else []):
+        rule = case.get('reject') if isinstance(case, dict) else None
         if isinstance(rule, str) and rule not in covers:
             lines.append(f"{name}: cases/{i}/reject: {rule} is not in the file's covers")
     # Alternatives of a oneOf that fail on the same field report the same message.
@@ -134,31 +139,31 @@ def check_frame(name: str, data: dict) -> list[str]:
     """
     problems = []
     try:
-        payload = bytes.fromhex(data["payload"])
+        payload = bytes.fromhex(data['payload'])
     except (KeyError, TypeError, ValueError) as e:
-        return [f"{name}/payload: not hexadecimal bytes: {e}"]
+        return [f'{name}/payload: not hexadecimal bytes: {e}']
     try:
-        frame = bytes.fromhex(data["frame"])
-        wire = bytes.fromhex(data["wire"])
-        topic_id = data["topic_id"]
-        seq = data["seq"]
+        frame = bytes.fromhex(data['frame'])
+        wire = bytes.fromhex(data['wire'])
+        topic_id = data['topic_id']
+        seq = data['seq']
         body = bytes((topic_id, seq)) + payload
     except (KeyError, TypeError, ValueError):
         # The schema reports the field that is out of range, so there is
         # nothing to add here.
         return []
 
-    expected_frame = body + crc.crc16(body).to_bytes(2, "little")
-    expected_wire = rcobs.encode(expected_frame) + b"\x00"
+    expected_frame = body + crc.crc16(body).to_bytes(2, 'little')
+    expected_wire = rcobs.encode(expected_frame) + b'\x00'
     if frame != expected_frame:
-        problems.append(f"{name}/frame: not the frame the reference makes")
+        problems.append(f'{name}/frame: not the frame the reference makes')
     if wire != expected_wire:
-        problems.append(f"{name}/wire: not the bytes the reference makes")
+        problems.append(f'{name}/wire: not the bytes the reference makes')
     if len(frame) < 4:
-        problems.append(f"{name}/frame: shorter than 4 bytes")
-    if not wire.endswith(b"\x00"):
-        problems.append(f"{name}/wire: does not end with the delimiter")
-    frame_name = data.get("name", "")
+        problems.append(f'{name}/frame: shorter than 4 bytes')
+    if not wire.endswith(b'\x00'):
+        problems.append(f'{name}/wire: does not end with the delimiter')
+    frame_name = data.get('name', '')
     problems += check_channel(name, frame_name, topic_id, payload)
     problems += check_payload(name, frame_name, payload, topic_id)
     return problems
@@ -172,21 +177,21 @@ def check_session(name: str, data: dict) -> list[str]:
     an ordered exchange: the host side proves the order in its own test.
     """
     problems = []
-    steps = data.get("steps") if isinstance(data, dict) else None
+    steps = data.get('steps') if isinstance(data, dict) else None
     if not isinstance(steps, list):
         return []
     for i, step in enumerate(steps):
         if not isinstance(step, dict):
             continue
         try:
-            frame = bytes.fromhex(step["frame"])
+            frame = bytes.fromhex(step['frame'])
         except (KeyError, TypeError, ValueError) as e:
-            problems.append(f"{name}/steps/{i}/frame: not hexadecimal bytes: {e}")
+            problems.append(f'{name}/steps/{i}/frame: not hexadecimal bytes: {e}')
             continue
         if len(frame) < 4:
-            problems.append(f"{name}/steps/{i}/frame: shorter than 4 bytes")
+            problems.append(f'{name}/steps/{i}/frame: shorter than 4 bytes')
         elif crc.crc16(frame) != 0:
-            problems.append(f"{name}/steps/{i}/frame: the frame check does not leave zero")
+            problems.append(f'{name}/steps/{i}/frame: the frame check does not leave zero')
     return problems
 
 
@@ -194,32 +199,32 @@ def check_session(name: str, data: dict) -> list[str]:
 # name the layout its payload has, so a vector is checked by the channel and
 # the opcode it carries, not by the name it happens to have.
 CONTROL_OPCODES = {
-    0x01: "hello_req",
-    0x02: "hello",
-    0x03: "topic_req",
-    0x04: "topic",
-    0x05: "topic_status",
-    0x06: "ready",
+    0x01: 'hello_req',
+    0x02: 'hello',
+    0x03: 'topic_req',
+    0x04: 'topic',
+    0x05: 'topic_status',
+    0x06: 'ready',
 }
-TIME_OPCODES = {0x01: "ping", 0x02: "pong", 0x03: "correction"}
-PARAM_OPCODES = {0x01: "param_req", 0x02: "param_declare", 0x03: "param_set", 0x04: "param_status"}
+TIME_OPCODES = {0x01: 'ping', 0x02: 'pong', 0x03: 'correction'}
+PARAM_OPCODES = {0x01: 'param_req', 0x02: 'param_declare', 0x03: 'param_set', 0x04: 'param_status'}
 SVC_OPCODES = {
-    0x01: "svc_query",
-    0x02: "svc_declare",
-    0x03: "svc_status",
-    0x04: "svc_request",
-    0x05: "svc_response",
+    0x01: 'svc_query',
+    0x02: 'svc_declare',
+    0x03: 'svc_status',
+    0x04: 'svc_request',
+    0x05: 'svc_response',
 }
 ACT_OPCODES = {
-    0x01: "act_query",
-    0x02: "act_declare",
-    0x03: "act_status",
-    0x04: "act_goal",
-    0x05: "act_goal_resp",
-    0x06: "act_cancel",
-    0x07: "act_cancel_resp",
-    0x08: "act_feedback",
-    0x09: "act_result",
+    0x01: 'act_query',
+    0x02: 'act_declare',
+    0x03: 'act_status',
+    0x04: 'act_goal',
+    0x05: 'act_goal_resp',
+    0x06: 'act_cancel',
+    0x07: 'act_cancel_resp',
+    0x08: 'act_feedback',
+    0x09: 'act_result',
 }
 # The channels whose payload has no opcode byte, so an empty payload on
 # them is what the spec says.
@@ -227,11 +232,11 @@ NO_OPCODE_CHANNELS = {4, 5}
 SYSTEM_CHANNELS = {
     0: CONTROL_OPCODES,
     1: TIME_OPCODES,
-    2: {"log": "log"},
+    2: {'log': 'log'},
     3: PARAM_OPCODES,
-    4: {"heartbeat": "heartbeat"},
-    5: {"error_report": "error_report"},
-    6: {"reliable_ack": "reliable_ack"},
+    4: {'heartbeat': 'heartbeat'},
+    5: {'error_report': 'error_report'},
+    6: {'reliable_ack': 'reliable_ack'},
     7: SVC_OPCODES,
     8: ACT_OPCODES,
 }
@@ -245,24 +250,24 @@ def layout_of(topic_id: int, payload: bytes) -> str:
     know, so it is left alone.
     """
     if topic_id not in SYSTEM_CHANNELS:
-        return "user"
+        return 'user'
     opcodes = SYSTEM_CHANNELS[topic_id]
     if not opcodes:
-        return "user"
+        return 'user'
     if topic_id == 4:
         # The heartbeat channel carries two frames with no opcode, and the
         # payload tells them apart: the host's is empty, the MCU's carries
         # four counters.
-        return "mcu_heartbeat" if payload else "heartbeat"
+        return 'mcu_heartbeat' if payload else 'heartbeat'
     if len(opcodes) == 1:
         # The channel's payload has no opcode byte, so it is empty or not.
         layout = next(iter(opcodes))
-        return layout if payload else "empty"
+        return layout if payload else 'empty'
     if not payload:
-        return "empty"
+        return 'empty'
     opcode = payload[0]
     if opcode not in opcodes:
-        return "unknown"
+        return 'unknown'
     return opcodes[opcode]
 
 
@@ -270,51 +275,51 @@ def layout_of(topic_id: int, payload: bytes) -> str:
 # frame. A vector on a system channel names the frame it carries, so the
 # name is what says which channel the frame was meant for.
 SPEC_NAMES = {
-    "hello_req": 0,
-    "hello": 0,
-    "topic_req": 0,
-    "topic": 0,
-    "topic_status": 0,
-    "ready": 0,
-    "ping": 1,
-    "pong": 1,
-    "correction": 1,
-    "param_req": 3,
-    "param_declare": 3,
-    "param_set": 3,
-    "param_status": 3,
-    "log": 2,
-    "heartbeat": 4,
-    "host_heartbeat": 4,
-    "mcu_heartbeat": 4,
-    "error_report": 5,
-    "reliable_ack": 6,
-    "svc_query": 7,
-    "svc_declare": 7,
-    "svc_status": 7,
-    "svc_status_unknown": 7,
-    "svc_request": 7,
-    "svc_response": 7,
-    "svc_response_busy": 7,
-    "svc_response_unknown": 7,
-    "svc_response_bad_payload": 7,
-    "act_query": 8,
-    "act_declare": 8,
-    "act_status": 8,
-    "act_status_unknown": 8,
-    "act_goal": 8,
-    "act_goal_resp": 8,
-    "act_goal_resp_busy": 8,
-    "act_goal_resp_rejected": 8,
-    "act_goal_resp_unknown": 8,
-    "act_cancel": 8,
-    "act_cancel_resp": 8,
-    "act_cancel_resp_rejected": 8,
-    "act_cancel_resp_unknown": 8,
-    "act_feedback": 8,
-    "act_result": 8,
-    "act_result_aborted": 8,
-    "act_result_canceled": 8,
+    'hello_req': 0,
+    'hello': 0,
+    'topic_req': 0,
+    'topic': 0,
+    'topic_status': 0,
+    'ready': 0,
+    'ping': 1,
+    'pong': 1,
+    'correction': 1,
+    'param_req': 3,
+    'param_declare': 3,
+    'param_set': 3,
+    'param_status': 3,
+    'log': 2,
+    'heartbeat': 4,
+    'host_heartbeat': 4,
+    'mcu_heartbeat': 4,
+    'error_report': 5,
+    'reliable_ack': 6,
+    'svc_query': 7,
+    'svc_declare': 7,
+    'svc_status': 7,
+    'svc_status_unknown': 7,
+    'svc_request': 7,
+    'svc_response': 7,
+    'svc_response_busy': 7,
+    'svc_response_unknown': 7,
+    'svc_response_bad_payload': 7,
+    'act_query': 8,
+    'act_declare': 8,
+    'act_status': 8,
+    'act_status_unknown': 8,
+    'act_goal': 8,
+    'act_goal_resp': 8,
+    'act_goal_resp_busy': 8,
+    'act_goal_resp_rejected': 8,
+    'act_goal_resp_unknown': 8,
+    'act_cancel': 8,
+    'act_cancel_resp': 8,
+    'act_cancel_resp_rejected': 8,
+    'act_cancel_resp_unknown': 8,
+    'act_feedback': 8,
+    'act_result': 8,
+    'act_result_aborted': 8,
+    'act_result_canceled': 8,
 }
 
 
@@ -322,7 +327,7 @@ def check_channel(name: str, vector_name: str, topic_id: int, payload: bytes) ->
     """Check that the frame sits on the channel its name says."""
     if 9 <= topic_id <= 15:
         if payload:
-            return [f"{name}/payload: a reserved channel carries no payload"]
+            return [f'{name}/payload: a reserved channel carries no payload']
         return []
     if topic_id not in SYSTEM_CHANNELS:
         return []
@@ -330,12 +335,12 @@ def check_channel(name: str, vector_name: str, topic_id: int, payload: bytes) ->
         # A cyclic alias can leave a list or mapping here. The channel
         # range above still applies; only the name lookup needs a string.
         return []
-    frame_name = vector_name.removesuffix("_compact")
+    frame_name = vector_name.removesuffix('_compact')
     if frame_name not in SPEC_NAMES:
-        return [f"{name}/name: {vector_name} is not a frame the spec gives"]
+        return [f'{name}/name: {vector_name} is not a frame the spec gives']
     wanted = SPEC_NAMES[frame_name]
     if topic_id != wanted:
-        return [f"{name}/topic_id: {topic_id} is not the channel {wanted} of a {frame_name} frame"]
+        return [f'{name}/topic_id: {topic_id} is not the channel {wanted} of a {frame_name} frame']
     return []
 
 
@@ -348,7 +353,7 @@ class _Reader:
 
     def take(self, n: int) -> bytes:
         if self.pos + n > len(self.data):
-            raise ValueError(f"the payload ends after {self.pos} bytes, wanted {n} more")
+            raise ValueError(f'the payload ends after {self.pos} bytes, wanted {n} more')
         out = self.data[self.pos : self.pos + n]
         self.pos += n
         return out
@@ -357,16 +362,16 @@ class _Reader:
         return self.take(1)[0]
 
     def u16(self) -> int:
-        return struct.unpack("<H", self.take(2))[0]
+        return struct.unpack('<H', self.take(2))[0]
 
     def u32(self) -> int:
-        return struct.unpack("<I", self.take(4))[0]
+        return struct.unpack('<I', self.take(4))[0]
 
     def i16(self) -> int:
-        return struct.unpack("<h", self.take(2))[0]
+        return struct.unpack('<h', self.take(2))[0]
 
     def i32(self) -> int:
-        return struct.unpack("<i", self.take(4))[0]
+        return struct.unpack('<i', self.take(4))[0]
 
     def varint(self) -> int:
         """A varint as the spec gives it: at most 3 bytes, and the shortest.
@@ -380,11 +385,11 @@ class _Reader:
             value |= (byte & 0x7F) << (7 * i)
             if not byte & 0x80:
                 if i > 0 and value < (1 << (7 * i)):
-                    raise ValueError("the varint is not in its shortest form")
+                    raise ValueError('the varint is not in its shortest form')
                 return value
             if i == 2:
-                raise ValueError("the varint is longer than 3 bytes")
-        raise ValueError("the varint is longer than 3 bytes")
+                raise ValueError('the varint is longer than 3 bytes')
+        raise ValueError('the varint is longer than 3 bytes')
 
     def string(self) -> bytes:
         return self.take(self.varint())
@@ -400,148 +405,148 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
     """
     problems: list[str] = []
     layout = layout_of(topic_id, payload)
-    if layout == "user":
+    if layout == 'user':
         return problems
-    if layout == "unknown":
-        problems.append(f"{name}/payload: the opcode is not one the spec gives for this channel")
+    if layout == 'unknown':
+        problems.append(f'{name}/payload: the opcode is not one the spec gives for this channel')
         return problems
-    if layout == "empty":
+    if layout == 'empty':
         if topic_id in NO_OPCODE_CHANNELS:
             return problems
-        problems.append(f"{name}/payload: a frame on this channel carries an opcode")
+        problems.append(f'{name}/payload: a frame on this channel carries an opcode')
         return problems
     r = _Reader(payload)
     try:
-        if layout == "hello_req":
+        if layout == 'hello_req':
             if r.u8() != 0x01:
-                problems.append(f"{name}/payload: the opcode is not HELLO_REQ")
+                problems.append(f'{name}/payload: the opcode is not HELLO_REQ')
             if r.u8() != 0x04:
-                problems.append(f"{name}/payload: the protocol version is not 4")
-        elif layout == "ready":
+                problems.append(f'{name}/payload: the protocol version is not 4')
+        elif layout == 'ready':
             if r.u8() != 0x06:
-                problems.append(f"{name}/payload: the opcode is not READY")
+                problems.append(f'{name}/payload: the opcode is not READY')
             if r.u32() == 0:
-                problems.append(f"{name}/payload: the READY token is zero")
-        elif layout == "hello":
+                problems.append(f'{name}/payload: the READY token is zero')
+        elif layout == 'hello':
             if r.u8() != 0x02:
-                problems.append(f"{name}/payload: the opcode is not HELLO")
+                problems.append(f'{name}/payload: the opcode is not HELLO')
             if r.u8() != 0x04:
-                problems.append(f"{name}/payload: the protocol version is not 4")
+                problems.append(f'{name}/payload: the protocol version is not 4')
             mode = r.u8()
             if mode not in (0, 1):
-                problems.append(f"{name}/payload: the handshake mode is neither full nor compact")
+                problems.append(f'{name}/payload: the handshake mode is neither full nor compact')
             r.u32()  # session token
             if r.u16() > 65277:
-                problems.append(f"{name}/payload: max_frame is above the limit")
+                problems.append(f'{name}/payload: max_frame is above the limit')
             r.u16()  # rx capacity
             tick_hz = r.u32()
             if tick_hz < 1000 or tick_hz % 1000 or 1000000 % (tick_hz // 1000):
-                problems.append(f"{name}/payload: tick_hz is not 1000 times k")
+                problems.append(f'{name}/payload: tick_hz is not 1000 times k')
             if r.u8() & ~0xFF:
-                problems.append(f"{name}/payload: the features byte has a reserved bit set")
+                problems.append(f'{name}/payload: the features byte has a reserved bit set')
             r.u8()  # topic count
             if mode == 0:
                 if not r.string():
-                    problems.append(f"{name}/payload: the node name is empty")
+                    problems.append(f'{name}/payload: the node name is empty')
             else:
                 r.u32()  # node name hash
-        elif layout == "topic":
+        elif layout == 'topic':
             if r.u8() != 0x04:
-                problems.append(f"{name}/payload: the opcode is not TOPIC")
+                problems.append(f'{name}/payload: the opcode is not TOPIC')
             r.u8()  # index
             if r.u8() < 16:
-                problems.append(f"{name}/payload: the topic id is in the reserved range")
+                problems.append(f'{name}/payload: the topic id is in the reserved range')
             if r.u8() & ~0x0F:
-                problems.append(f"{name}/payload: the flags byte has a reserved bit set")
+                problems.append(f'{name}/payload: the flags byte has a reserved bit set')
             r.take(8)  # type hash
             if not r.string():
-                problems.append(f"{name}/payload: the type name is empty")
+                problems.append(f'{name}/payload: the type name is empty')
             # The topic name is a string in a full handshake and a hash in
             # a compact one. A TOPIC carries no mode byte, so the vector's
             # name says which it is.
             # A cyclic alias can leave a non-string name; read it as a full
             # handshake then, since only a string can ask for the compact form.
-            if isinstance(frame_name, str) and frame_name.endswith("_compact"):
+            if isinstance(frame_name, str) and frame_name.endswith('_compact'):
                 r.u32()  # topic name hash
             elif not r.string():
-                problems.append(f"{name}/payload: the topic name is empty")
-        elif layout == "heartbeat":
+                problems.append(f'{name}/payload: the topic name is empty')
+        elif layout == 'heartbeat':
             pass  # the host's heartbeat has no payload
-        elif layout == "mcu_heartbeat":
+        elif layout == 'mcu_heartbeat':
             for _ in range(4):
                 r.u16()  # rx frames, crc errors, rx overflows, dropped frames
-        elif layout == "topic_req":
+        elif layout == 'topic_req':
             if r.u8() != 0x03:
-                problems.append(f"{name}/payload: the opcode is not TOPIC_REQ")
+                problems.append(f'{name}/payload: the opcode is not TOPIC_REQ')
             r.u8()  # index
-        elif layout == "topic_status":
+        elif layout == 'topic_status':
             if r.u8() != 0x05:
-                problems.append(f"{name}/payload: the opcode is not TOPIC_STATUS")
+                problems.append(f'{name}/payload: the opcode is not TOPIC_STATUS')
             r.u8()  # topic id
             if r.u8() > 3:
-                problems.append(f"{name}/payload: the status is not one the spec gives")
-        elif layout == "ping":
+                problems.append(f'{name}/payload: the status is not one the spec gives')
+        elif layout == 'ping':
             if r.u8() != 0x01:
-                problems.append(f"{name}/payload: the opcode is not PING")
+                problems.append(f'{name}/payload: the opcode is not PING')
             r.u8()  # ping id
-        elif layout == "pong":
+        elif layout == 'pong':
             if r.u8() != 0x02:
-                problems.append(f"{name}/payload: the opcode is not PONG")
+                problems.append(f'{name}/payload: the opcode is not PONG')
             r.u8()  # ping id
             r.u32()  # tick
-        elif layout == "correction":
+        elif layout == 'correction':
             if r.u8() != 0x03:
-                problems.append(f"{name}/payload: the opcode is not CORRECTION")
+                problems.append(f'{name}/payload: the opcode is not CORRECTION')
             r.u32()  # tick0
             r.i32()  # sec
             if r.u32() >= 1000000000:
-                problems.append(f"{name}/payload: nanosec is not below 10^9")
+                problems.append(f'{name}/payload: nanosec is not below 10^9')
             if abs(r.i16()) > 20000:
-                problems.append(f"{name}/payload: the drift is outside 20000 ppm")
-        elif layout == "log":
+                problems.append(f'{name}/payload: the drift is outside 20000 ppm')
+        elif layout == 'log':
             if r.u8() not in (10, 20, 30, 40, 50):
-                problems.append(f"{name}/payload: the level is not a ROS severity")
+                problems.append(f'{name}/payload: the level is not a ROS severity')
             r.string()  # text
             kind = r.u8()
             if kind > 5:
-                problems.append(f"{name}/payload: the value kind is not one the spec gives")
+                problems.append(f'{name}/payload: the value kind is not one the spec gives')
             elif kind in (1, 2):
                 r.take(2)
             elif kind in (3, 4, 5):
                 r.take(4)
-        elif layout == "param_req":
+        elif layout == 'param_req':
             if r.u8() != 0x01:
-                problems.append(f"{name}/payload: the opcode is not PARAM_REQ")
+                problems.append(f'{name}/payload: the opcode is not PARAM_REQ')
             r.u8()  # index
-        elif layout == "param_declare":
+        elif layout == 'param_declare':
             if r.u8() != 0x02:
-                problems.append(f"{name}/payload: the opcode is not PARAM_DECLARE")
+                problems.append(f'{name}/payload: the opcode is not PARAM_DECLARE')
             r.u8()  # index
             kind = r.u8()
             if kind > 3:
-                problems.append(f"{name}/payload: the type is not one the spec gives")
+                problems.append(f'{name}/payload: the type is not one the spec gives')
                 r.take(len(payload) - r.pos)
             else:
                 if r.u8() & ~0x01:
-                    problems.append(f"{name}/payload: the flags byte has a reserved bit set")
+                    problems.append(f'{name}/payload: the flags byte has a reserved bit set')
                 if not r.string():
-                    problems.append(f"{name}/payload: the name is empty")
+                    problems.append(f'{name}/payload: the name is empty')
                 if kind == 0:
                     if r.u8() not in (0, 1):
-                        problems.append(f"{name}/payload: the bool value is neither 0 nor 1")
+                        problems.append(f'{name}/payload: the bool value is neither 0 nor 1')
                 elif kind in (1, 2):
                     r.take(8)  # i64, f64
                 else:
                     text = r.string()
-                    if b"\x00" in text:
-                        problems.append(f"{name}/payload: the string value holds a 0x00 byte")
-        elif layout == "param_set":
+                    if b'\x00' in text:
+                        problems.append(f'{name}/payload: the string value holds a 0x00 byte')
+        elif layout == 'param_set':
             if r.u8() != 0x03:
-                problems.append(f"{name}/payload: the opcode is not PARAM_SET")
+                problems.append(f'{name}/payload: the opcode is not PARAM_SET')
             r.u8()  # rel seq
             r.u8()  # index
             value = r.take(len(payload) - r.pos)
-            if len(value) == 8 or value in (b"\x00", b"\x01"):
+            if len(value) == 8 or value in (b'\x00', b'\x01'):
                 pass  # i64, f64, or a bool; a SET carries no type byte
             else:
                 # A SET carries no type byte, so anything else must parse as
@@ -550,131 +555,131 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
                     rest = _Reader(value)
                     text = rest.take(rest.varint())
                     if rest.pos != len(value):
-                        raise ValueError("the value is not a bool, i64, f64 or string")
-                    if b"\x00" in text:
-                        problems.append(f"{name}/payload: the string value holds a 0x00 byte")
+                        raise ValueError('the value is not a bool, i64, f64 or string')
+                    if b'\x00' in text:
+                        problems.append(f'{name}/payload: the string value holds a 0x00 byte')
                 except ValueError:
-                    problems.append(f"{name}/payload: the value is not a bool, i64, f64 or string")
-        elif layout == "param_status":
+                    problems.append(f'{name}/payload: the value is not a bool, i64, f64 or string')
+        elif layout == 'param_status':
             if r.u8() != 0x04:
-                problems.append(f"{name}/payload: the opcode is not PARAM_STATUS")
+                problems.append(f'{name}/payload: the opcode is not PARAM_STATUS')
             r.u8()  # rel seq
             r.u8()  # index
             if r.u8() > 4:
-                problems.append(f"{name}/payload: the status is not one the spec gives")
-        elif layout == "svc_query":
+                problems.append(f'{name}/payload: the status is not one the spec gives')
+        elif layout == 'svc_query':
             if r.u8() != 0x01:
-                problems.append(f"{name}/payload: the opcode is not SVC_QUERY")
+                problems.append(f'{name}/payload: the opcode is not SVC_QUERY')
             r.u8()  # index
-        elif layout == "svc_declare":
+        elif layout == 'svc_declare':
             if r.u8() != 0x02:
-                problems.append(f"{name}/payload: the opcode is not SVC_DECLARE")
+                problems.append(f'{name}/payload: the opcode is not SVC_DECLARE')
             r.u8()  # index
             if r.u8() > 1:
-                problems.append(f"{name}/payload: the role is not one the spec gives")
+                problems.append(f'{name}/payload: the role is not one the spec gives')
             r.take(8)  # type hash
             if not r.string():
-                problems.append(f"{name}/payload: the type name is empty")
+                problems.append(f'{name}/payload: the type name is empty')
             if not r.string():
-                problems.append(f"{name}/payload: the service name is empty")
-        elif layout == "svc_status":
+                problems.append(f'{name}/payload: the service name is empty')
+        elif layout == 'svc_status':
             if r.u8() != 0x03:
-                problems.append(f"{name}/payload: the opcode is not SVC_STATUS")
+                problems.append(f'{name}/payload: the opcode is not SVC_STATUS')
             r.u8()  # rel seq
             r.u8()  # index
             if r.u8() > 3:
-                problems.append(f"{name}/payload: the status is not one the spec gives")
-        elif layout == "svc_request":
+                problems.append(f'{name}/payload: the status is not one the spec gives')
+        elif layout == 'svc_request':
             if r.u8() != 0x04:
-                problems.append(f"{name}/payload: the opcode is not SVC_REQUEST")
+                problems.append(f'{name}/payload: the opcode is not SVC_REQUEST')
             r.u8()  # rel seq
             r.u8()  # req id
             r.u8()  # service index
             r.take(len(payload) - r.pos)  # request message bytes, possibly empty
-        elif layout == "svc_response":
+        elif layout == 'svc_response':
             if r.u8() != 0x05:
-                problems.append(f"{name}/payload: the opcode is not SVC_RESPONSE")
+                problems.append(f'{name}/payload: the opcode is not SVC_RESPONSE')
             r.u8()  # rel seq
             r.u8()  # req id
             status = r.u8()
             if status > 3:
-                problems.append(f"{name}/payload: the status is not one the spec gives")
+                problems.append(f'{name}/payload: the status is not one the spec gives')
             rest = len(payload) - r.pos
             if status != 0 and rest:
-                problems.append(f"{name}/payload: a nonzero status carries no response")
+                problems.append(f'{name}/payload: a nonzero status carries no response')
             r.take(rest)  # response message bytes when the status is ok
-        elif layout == "act_query":
+        elif layout == 'act_query':
             if r.u8() != 0x01:
-                problems.append(f"{name}/payload: the opcode is not ACT_QUERY")
+                problems.append(f'{name}/payload: the opcode is not ACT_QUERY')
             r.u8()  # index
-        elif layout == "act_declare":
+        elif layout == 'act_declare':
             if r.u8() != 0x02:
-                problems.append(f"{name}/payload: the opcode is not ACT_DECLARE")
+                problems.append(f'{name}/payload: the opcode is not ACT_DECLARE')
             r.u8()  # index
             r.take(8)  # type hash
             if not r.string():
-                problems.append(f"{name}/payload: the type name is empty")
+                problems.append(f'{name}/payload: the type name is empty')
             if not r.string():
-                problems.append(f"{name}/payload: the action name is empty")
-        elif layout == "act_status":
+                problems.append(f'{name}/payload: the action name is empty')
+        elif layout == 'act_status':
             if r.u8() != 0x03:
-                problems.append(f"{name}/payload: the opcode is not ACT_STATUS")
+                problems.append(f'{name}/payload: the opcode is not ACT_STATUS')
             r.u8()  # rel seq
             r.u8()  # index
             if r.u8() > 3:
-                problems.append(f"{name}/payload: the status is not one the spec gives")
-        elif layout == "act_goal":
+                problems.append(f'{name}/payload: the status is not one the spec gives')
+        elif layout == 'act_goal':
             if r.u8() != 0x04:
-                problems.append(f"{name}/payload: the opcode is not ACT_GOAL")
+                problems.append(f'{name}/payload: the opcode is not ACT_GOAL')
             r.u8()  # rel seq
             r.u8()  # goal seq
             r.u8()  # action index
             r.take(len(payload) - r.pos)  # goal message bytes, possibly empty
-        elif layout == "act_goal_resp":
+        elif layout == 'act_goal_resp':
             if r.u8() != 0x05:
-                problems.append(f"{name}/payload: the opcode is not ACT_GOAL_RESP")
+                problems.append(f'{name}/payload: the opcode is not ACT_GOAL_RESP')
             r.u8()  # rel seq
             r.u8()  # goal seq
             if r.u8() > 3:
-                problems.append(f"{name}/payload: the decision is not one the spec gives")
-        elif layout == "act_cancel":
+                problems.append(f'{name}/payload: the decision is not one the spec gives')
+        elif layout == 'act_cancel':
             if r.u8() != 0x06:
-                problems.append(f"{name}/payload: the opcode is not ACT_CANCEL")
+                problems.append(f'{name}/payload: the opcode is not ACT_CANCEL')
             r.u8()  # rel seq
             r.u8()  # goal seq
-        elif layout == "act_cancel_resp":
+        elif layout == 'act_cancel_resp':
             if r.u8() != 0x07:
-                problems.append(f"{name}/payload: the opcode is not ACT_CANCEL_RESP")
+                problems.append(f'{name}/payload: the opcode is not ACT_CANCEL_RESP')
             r.u8()  # rel seq
             r.u8()  # goal seq
             if r.u8() > 2:
-                problems.append(f"{name}/payload: the decision is not one the spec gives")
-        elif layout == "act_feedback":
+                problems.append(f'{name}/payload: the decision is not one the spec gives')
+        elif layout == 'act_feedback':
             if r.u8() != 0x08:
-                problems.append(f"{name}/payload: the opcode is not ACT_FEEDBACK")
+                problems.append(f'{name}/payload: the opcode is not ACT_FEEDBACK')
             r.u8()  # goal seq
             r.u8()  # action index
             r.take(len(payload) - r.pos)  # feedback message bytes, possibly empty
-        elif layout == "act_result":
+        elif layout == 'act_result':
             if r.u8() != 0x09:
-                problems.append(f"{name}/payload: the opcode is not ACT_RESULT")
+                problems.append(f'{name}/payload: the opcode is not ACT_RESULT')
             r.u8()  # rel seq
             r.u8()  # goal seq
             if r.u8() not in (4, 5, 6):
-                problems.append(f"{name}/payload: the outcome is not one the spec gives")
+                problems.append(f'{name}/payload: the outcome is not one the spec gives')
             r.take(len(payload) - r.pos)  # result message bytes, possibly empty
-        elif layout == "reliable_ack":
+        elif layout == 'reliable_ack':
             r.u8()  # channel
             r.u8()  # rel seq
-        elif layout == "error_report":
+        elif layout == 'error_report':
             r.u8()  # code
             r.u8()  # topic id
             r.u16()  # count
             r.u8()  # field
         if r.pos != len(payload):
-            problems.append(f"{name}/payload: {len(payload) - r.pos} bytes were not read")
+            problems.append(f'{name}/payload: {len(payload) - r.pos} bytes were not read')
     except ValueError as e:
-        problems.append(f"{name}/payload: {e}")
+        problems.append(f'{name}/payload: {e}')
     return problems
 
 
@@ -683,7 +688,9 @@ def _exact_float32(value) -> bool:
         return True
     try:
         number = float(value)
-        return not math.isnan(number) and struct.unpack("<f", struct.pack("<f", number))[0] == number
+        return (
+            not math.isnan(number) and struct.unpack('<f', struct.pack('<f', number))[0] == number
+        )
     except (OverflowError, ValueError):
         return False
 
@@ -691,18 +698,26 @@ def _exact_float32(value) -> bool:
 def check_float32_exact(name: str, data: dict) -> list[str]:
     """Report float32 vector numbers which binary32 cannot hold exactly."""
     try:
-        message = _MESSAGES.load(data["type"])
-        values = data["message"]
-    except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError):
+        message = _MESSAGES.load(data['type'])
+        values = data['message']
+    except (
+        msgs.MessageError,
+        Rejected,
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+        OverflowError,
+    ):
         return []
     problems = []
     walked: set[tuple[int, str]] = set()
 
-    def visit(message, values, trail="", seen=frozenset()) -> None:
+    def visit(message, values, trail='', seen=frozenset()) -> None:
         for field in message.fields:
             expected = values[field.name]
-            where = f"{trail}{message.type_name}.{field.name}"
-            if field.type_name == "float32":
+            where = f'{trail}{message.type_name}.{field.name}'
+            if field.type_name == 'float32':
                 if field.is_array:
                     key = (id(expected), field.type_name)
                     if key in walked:
@@ -712,8 +727,11 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
                 for index, element in enumerate(elements):
                     if isinstance(element, dict) or _exact_float32(element):
                         continue
-                    position = f"[{index}]" if field.is_array else ""
-                    problems.append(f"{name}/message: {where}{position} must be exactly representable in binary32")
+                    position = f'[{index}]' if field.is_array else ''
+                    problems.append(
+                        f'{name}/message: {where}{position} must be exactly '
+                        'representable in binary32'
+                    )
             elif field.type_name not in msgs.PRIMITIVES:
                 nested = _MESSAGES.load(field.type_name)
                 key = (id(expected), field.type_name)
@@ -727,9 +745,9 @@ def check_float32_exact(name: str, data: dict) -> list[str]:
                         if id(item) in entering or item_key in walked:
                             continue
                         walked.add(item_key)
-                        visit(nested, item, f"{where}[{index}].", entering | {id(item)})
+                        visit(nested, item, f'{where}[{index}].', entering | {id(item)})
                 else:
-                    visit(nested, expected, f"{where}.", entering)
+                    visit(nested, expected, f'{where}.', entering)
 
     # A branching alias graph would visit one node per simple path through
     # it, which grows exponentially. Containers already walked anywhere in
@@ -762,19 +780,27 @@ def check_message(name: str, data: dict) -> list[str]:
     so a vector cannot drift from the implementation that generates them.
     """
     try:
-        expected = bytes.fromhex(data["payload"])
-        narrow = data["profile"]["narrow_float64"]
+        expected = bytes.fromhex(data['payload'])
+        narrow = data['profile']['narrow_float64']
     except (KeyError, TypeError, ValueError):
         # The schema reports a field that is missing or out of range, so there
         # is nothing to add here.
         return []
     try:
         exact = check_float32_exact(name, data)
-    except (msgs.MessageError, Rejected, ValueError, KeyError, TypeError, AttributeError, OverflowError):
+    except (
+        msgs.MessageError,
+        Rejected,
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+        OverflowError,
+    ):
         exact = []
     # The encoder walks the same nested messages, so it meets the same cycle.
     try:
-        payload = messages.encode(_MESSAGES, data["type"], data["message"], narrow=narrow)
+        payload = messages.encode(_MESSAGES, data['type'], data['message'], narrow=narrow)
     except (
         msgs.MessageError,
         Rejected,
@@ -785,10 +811,10 @@ def check_message(name: str, data: dict) -> list[str]:
         OverflowError,
         RecursionError,
     ) as e:
-        return [*exact, f"{name}/message: the reference does not make it: {e}"]
+        return [*exact, f'{name}/message: the reference does not make it: {e}']
     problems = exact
     if payload != expected:
-        problems.append(f"{name}/payload: not the payload the reference makes")
+        problems.append(f'{name}/payload: not the payload the reference makes')
     return problems
 
 
@@ -799,11 +825,11 @@ def check_time(name: str, data: dict) -> list[str]:
     so a vector cannot drift from the implementation that checks them.
     """
     problems = []
-    cases = data.get("cases") if isinstance(data, dict) else None
+    cases = data.get('cases') if isinstance(data, dict) else None
     if not isinstance(cases, list):
         return []
     try:
-        tick_hz = data["tick_hz"]
+        tick_hz = data['tick_hz']
     except (KeyError, TypeError):
         return []
     for i, case in enumerate(cases):
@@ -812,38 +838,41 @@ def check_time(name: str, data: dict) -> list[str]:
         try:
             got = time.compute(tick_hz, case)
         except (Rejected, ValueError, KeyError, TypeError) as e:
-            problems.append(f"{name}/cases/{i}: {e}")
+            problems.append(f'{name}/cases/{i}: {e}')
             continue
-        expect = case.get("expect")
-        made = "unsynced" if got is None else f"sec={got[0]} nanosec={got[1]}"
-        if expect == "unsynced":
+        expect = case.get('expect')
+        made = 'unsynced' if got is None else f'sec={got[0]} nanosec={got[1]}'
+        if expect == 'unsynced':
             ok = got is None
         elif isinstance(expect, dict):
-            ok = got == (expect.get("sec"), expect.get("nanosec"))
+            ok = got == (expect.get('sec'), expect.get('nanosec'))
         else:
             ok = False
         if not ok:
-            problems.append(f"{name}/cases/{i}/expect: the reference makes {made}")
+            problems.append(f'{name}/cases/{i}/expect: the reference makes {made}')
     return problems
 
 
 def check_tree(vectors: Path) -> list[str]:
     validators = _schemas()
     problems = []
-    for path in sorted(p for p in vectors.rglob("*") if p.is_file() and p.name != ".gitkeep"):
+    for path in sorted(p for p in vectors.rglob('*') if p.is_file() and p.name != '.gitkeep'):
         name = path.relative_to(vectors).as_posix()
         problems += check_file(path, name, validators)
-        if name.startswith(("frames/", "messages/", "session/", "time/")) and path.suffix == ".yaml":
+        if (
+            name.startswith(('frames/', 'messages/', 'session/', 'time/'))
+            and path.suffix == '.yaml'
+        ):
             try:
                 data = yaml.safe_load(path.read_text())
             except yaml.YAMLError:
                 continue
             if isinstance(data, dict):
-                if name.startswith("frames/"):
+                if name.startswith('frames/'):
                     problems += check_frame(name, data)
-                elif name.startswith("session/"):
+                elif name.startswith('session/'):
                     problems += check_session(name, data)
-                elif name.startswith("time/"):
+                elif name.startswith('time/'):
                     problems += check_time(name, data)
                 else:
                     problems += check_message(name, data)
@@ -851,11 +880,11 @@ def check_tree(vectors: Path) -> list[str]:
 
 
 def main() -> int:
-    problems = check_tree(ROOT / "spec" / "vectors")
+    problems = check_tree(ROOT / 'spec' / 'vectors')
     for p in problems:
         print(p)
     return 1 if problems else 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())

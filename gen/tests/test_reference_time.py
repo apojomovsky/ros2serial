@@ -27,19 +27,19 @@ from support import vector_files
 
 
 def expected_of(case):
-    expect = case["expect"]
-    return None if expect == "unsynced" else (expect["sec"], expect["nanosec"])
+    expect = case['expect']
+    return None if expect == 'unsynced' else (expect['sec'], expect['nanosec'])
 
 
 # The S7 hand vectors: the reference reproduces every case.
-@pytest.mark.parametrize("vector", vector_files("time"))
+@pytest.mark.parametrize('vector', vector_files('time'))
 def test_reference_reproduces_every_time_vector(vector):
-    for case in vector["cases"]:
-        assert time.compute(vector["tick_hz"], case) == expected_of(case), case
+    for case in vector['cases']:
+        assert time.compute(vector['tick_hz'], case) == expected_of(case), case
 
 
 def run(**fields):
-    case = {"tick0": 0, "sec0": 0, "nanosec0": 0, "drift_ppm": 0, "tick": 0, **fields}
+    case = {'tick0': 0, 'sec0': 0, 'nanosec0': 0, 'drift_ppm': 0, 'tick': 0, **fields}
     return time.compute(1000, case)
 
 
@@ -65,17 +65,17 @@ def test_a_negative_drift_that_crosses_a_second_borrows():
 
 
 def test_the_largest_drift_normalizes_before_and_after_it_applies():
-    case = {"tick0": 0, "sec0": 0, "nanosec0": 999999999, "drift_ppm": 20000, "tick": 1999000}
+    case = {'tick0': 0, 'sec0': 0, 'nanosec0': 999999999, 'drift_ppm': 20000, 'tick': 1999000}
     assert time.compute(1000000, case) == (3, 38979999)
 
 
 def test_rejections_name_the_rule_that_rejects_them():
     with pytest.raises(Rejected) as tick_hz:
-        time.compute(1500, {"tick0": 0, "sec0": 0, "nanosec0": 0, "drift_ppm": 0, "tick": 0})
-    assert tick_hz.value.rule == "CTL-9"
+        time.compute(1500, {'tick0': 0, 'sec0': 0, 'nanosec0': 0, 'drift_ppm': 0, 'tick': 0})
+    assert tick_hz.value.rule == 'CTL-9'
     with pytest.raises(Rejected) as drift:
         run(drift_ppm=20001)
-    assert drift.value.rule == "TIM-5"
+    assert drift.value.rule == 'TIM-5'
     with pytest.raises(Rejected) as nanosec:
         run(nanosec0=1000000000)
-    assert nanosec.value.rule == "TIM-11"
+    assert nanosec.value.rule == 'TIM-11'

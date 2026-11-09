@@ -27,21 +27,21 @@
 
 uint16_t r2s_crc16_update(uint16_t crc, uint8_t byte)
 {
-    crc ^= byte;
-    for (uint8_t bit = 0; bit < 8u; bit++) {
-        if (crc & 1u) {
-            crc = (uint16_t)((crc >> 1) ^ POLY_REFLECTED);
-        } else {
-            crc = (uint16_t)(crc >> 1);
-        }
+  crc ^= byte;
+  for (uint8_t bit = 0; bit < 8u; bit++) {
+    if (crc & 1u) {
+      crc = (uint16_t)((crc >> 1) ^ POLY_REFLECTED);
+    } else {
+      crc = (uint16_t)(crc >> 1);
     }
-    return crc;
+  }
+  return crc;
 }
 
 uint16_t r2s_crc16_update_buf(uint16_t crc, const uint8_t *data, uint16_t len)
 {
-    for (uint16_t i = 0; i < len; i++) {
-        crc = r2s_crc16_update(crc, data[i]);
-    }
-    return crc;
+  for (uint16_t i = 0; i < len; i++) {
+    crc = r2s_crc16_update(crc, data[i]);
+  }
+  return crc;
 }

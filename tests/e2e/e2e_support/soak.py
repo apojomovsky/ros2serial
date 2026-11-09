@@ -11,26 +11,26 @@ import os
 
 # Counters a clean link never moves; traffic counters are absent by design.
 EXACT_KEYS = (
-    "resets",
-    "mcu crc errors",
-    "mcu rx overflows",
-    "mcu dropped frames",
-    "mcu error code 1",
-    "mcu error code 2",
-    "mcu error code 3",
-    "mcu error code 4",
-    "mcu error code 5",
-    "mcu error code 6",
+    'resets',
+    'mcu crc errors',
+    'mcu rx overflows',
+    'mcu dropped frames',
+    'mcu error code 1',
+    'mcu error code 2',
+    'mcu error code 3',
+    'mcu error code 4',
+    'mcu error code 5',
+    'mcu error code 6',
 )
 
-_TOPIC_SUFFIXES = (" seq gaps", " dropped", " publish failures", " mcu errors")
+_TOPIC_SUFFIXES = (' seq gaps', ' dropped', ' publish failures', ' mcu errors')
 
 
 def _is_topic_counter(key):
-    return key.startswith("topic ") and key.endswith(_TOPIC_SUFFIXES)
+    return key.startswith('topic ') and key.endswith(_TOPIC_SUFFIXES)
 
 
-def check_wire_counters(base, final, what="soak"):
+def check_wire_counters(base, final, what='soak'):
     """The wire counters read identical in two /diagnostics samples.
 
     base and final map diagnostic keys to their string values. Traffic
@@ -38,10 +38,12 @@ def check_wire_counters(base, final, what="soak"):
     drop, error, gap and reset counter must match exactly.
     """
     for key in EXACT_KEYS:
-        assert base.get(key) == final.get(key), f"{what}: {key} moved {base.get(key)} to {final.get(key)}"
+        assert base.get(key) == final.get(key), (
+            f'{what}: {key} moved {base.get(key)} to {final.get(key)}'
+        )
     for key, value in base.items():
         if _is_topic_counter(key):
-            assert final.get(key) == value, f"{what}: {key} moved {value} to {final.get(key)}"
+            assert final.get(key) == value, f'{what}: {key} moved {value} to {final.get(key)}'
 
 
 def check_memory_growth(samples, warmup_s, tolerance_kb, what):
@@ -52,7 +54,7 @@ def check_memory_growth(samples, warmup_s, tolerance_kb, what):
     growth never counts and any later climb does. Needs at least one sample
     on each side of the warm-up boundary.
     """
-    assert samples, f"{what}: no memory samples"
+    assert samples, f'{what}: no memory samples'
     start = samples[0][0]
     baseline = None
     post = []
@@ -61,33 +63,35 @@ def check_memory_growth(samples, warmup_s, tolerance_kb, what):
             baseline = rss
         else:
             post.append(rss)
-    assert baseline is not None, f"{what}: no memory sample before warm-up ends"
-    assert post, f"{what}: no memory samples after warm-up"
+    assert baseline is not None, f'{what}: no memory sample before warm-up ends'
+    assert post, f'{what}: no memory samples after warm-up'
     growth = max(post) - baseline
-    assert growth <= tolerance_kb, f"{what}: RSS grew {growth:.0f} kB after warm-up (tolerance {tolerance_kb:.0f} kB)"
+    assert growth <= tolerance_kb, (
+        f'{what}: RSS grew {growth:.0f} kB after warm-up (tolerance {tolerance_kb:.0f} kB)'
+    )
 
 
 def rss_kb(pid):
     """The resident set size of pid in kB, read from /proc."""
-    with open(f"/proc/{pid}/status", encoding="utf-8") as handle:
+    with open(f'/proc/{pid}/status', encoding='utf-8') as handle:
         for line in handle:
-            if line.startswith("VmRSS:"):
+            if line.startswith('VmRSS:'):
                 return float(line.split()[1])
-    raise AssertionError(f"no VmRSS for pid {pid}")
+    raise AssertionError(f'no VmRSS for pid {pid}')
 
 
 def _command(pid):
     try:
-        with open(f"/proc/{pid}/cmdline", "rb") as handle:
-            return handle.read().replace(b"\0", b" ").decode("utf-8", "replace")
+        with open(f'/proc/{pid}/cmdline', 'rb') as handle:
+            return handle.read().replace(b'\0', b' ').decode('utf-8', 'replace')
     except OSError:
-        return ""
+        return ''
 
 
 def _parent(pid):
     try:
-        with open(f"/proc/{pid}/stat", encoding="utf-8") as handle:
-            return int(handle.read().rsplit(")", 1)[1].split()[1])
+        with open(f'/proc/{pid}/stat', encoding='utf-8') as handle:
+            return int(handle.read().rsplit(')', 1)[1].split()[1])
     except (OSError, IndexError, ValueError):
         return 0
 
@@ -100,11 +104,11 @@ def find_bridge_pids():
     """
     mine = os.getpid()
     found = []
-    for entry in os.listdir("/proc"):
+    for entry in os.listdir('/proc'):
         if not entry.isdigit():
             continue
         pid = int(entry)
-        if pid == mine or "r2s_bridge" not in _command(pid):
+        if pid == mine or 'r2s_bridge' not in _command(pid):
             continue
         parent = _parent(pid)
         while parent > 1:

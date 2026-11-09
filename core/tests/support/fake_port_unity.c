@@ -24,5 +24,5 @@
 
 void fake_port_fail(const char *message)
 {
-    TEST_FAIL_MESSAGE(message);
+  TEST_FAIL_MESSAGE(message);
 }

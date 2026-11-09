@@ -18,8 +18,9 @@ namespace demo_msgs
 namespace action
 {
 
-struct Spin_Goal {
-    int32_t order;
+struct Spin_Goal
+{
+  int32_t order;
 };
 
 } // namespace action
@@ -28,9 +29,10 @@ struct Spin_Goal {
 /* The codec writes into the C struct's bytes at the offsets the
  * descriptors give, so the C++ struct must hold them at the same
  * offsets and the same size. */
-#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), #cpp_type)
-#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field)                                                         \
-    static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
+#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), \
+    #cpp_type)
+#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field) \
+  static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
 
 R2S_CPP_SAME_SIZE(demo_msgs::action::Spin_Goal, demo_msgs__action__Spin_Goal);
 R2S_CPP_SAME_OFFSET(demo_msgs::action::Spin_Goal, demo_msgs__action__Spin_Goal, order);
@@ -49,29 +51,32 @@ extern const r2s_codec_table_t r2s_bundled_table_demo_msgs_Spin_Goal;
 
 /* The primary template the runtime layer declares; a message header
  * specializes it, so a sketch names a type and never a table. */
-template <typename T> struct msg_traits;
+template<typename T>
+struct msg_traits;
 
-template <> struct msg_traits<demo_msgs::action::Spin_Goal> {
-    static const r2s_codec_table_t *table()
-    {
-        return &r2s_bundled_table_demo_msgs_Spin_Goal;
-    }
+template<>
+struct msg_traits<demo_msgs::action::Spin_Goal>
+{
+  static const r2s_codec_table_t * table()
+  {
+    return &r2s_bundled_table_demo_msgs_Spin_Goal;
+  }
 
-    static uint16_t type_index()
-    {
-        return 0u;
-    }
+  static uint16_t type_index()
+  {
+    return 0u;
+  }
 
-    static const char *type_name()
-    {
-        return "demo_msgs/action/Spin_Goal";
-    }
+  static const char * type_name()
+  {
+    return "demo_msgs/action/Spin_Goal";
+  }
 
-    static const uint8_t *type_hash()
-    {
-        static const uint8_t hash[] = {0x52u, 0x48u, 0x28u, 0xe1u, 0xf5u, 0x6cu, 0xa3u, 0xe9u};
-        return hash;
-    }
+  static const uint8_t * type_hash()
+  {
+    static const uint8_t hash[] = {0x52u, 0x48u, 0x28u, 0xe1u, 0xf5u, 0x6cu, 0xa3u, 0xe9u};
+    return hash;
+  }
 };
 
 } // namespace r2s
@@ -81,12 +86,14 @@ namespace demo_msgs
 namespace action
 {
 
-struct Spin_Result {
-    struct sequence_sequence {
-        int32_t data[4];
-        uint8_t size;
-    };
-    sequence_sequence sequence;
+struct Spin_Result
+{
+  struct sequence_sequence
+  {
+    int32_t data[4];
+    uint8_t size;
+  };
+  sequence_sequence sequence;
 };
 
 } // namespace action
@@ -95,9 +102,10 @@ struct Spin_Result {
 /* The codec writes into the C struct's bytes at the offsets the
  * descriptors give, so the C++ struct must hold them at the same
  * offsets and the same size. */
-#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), #cpp_type)
-#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field)                                                         \
-    static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
+#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), \
+    #cpp_type)
+#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field) \
+  static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
 
 R2S_CPP_SAME_SIZE(demo_msgs::action::Spin_Result, demo_msgs__action__Spin_Result);
 R2S_CPP_SAME_OFFSET(demo_msgs::action::Spin_Result, demo_msgs__action__Spin_Result, sequence);
@@ -118,29 +126,32 @@ extern const r2s_codec_table_t r2s_bundled_table_demo_msgs_Spin_Result;
 
 /* The primary template the runtime layer declares; a message header
  * specializes it, so a sketch names a type and never a table. */
-template <typename T> struct msg_traits;
+template<typename T>
+struct msg_traits;
 
-template <> struct msg_traits<demo_msgs::action::Spin_Result> {
-    static const r2s_codec_table_t *table()
-    {
-        return &r2s_bundled_table_demo_msgs_Spin_Result;
-    }
+template<>
+struct msg_traits<demo_msgs::action::Spin_Result>
+{
+  static const r2s_codec_table_t * table()
+  {
+    return &r2s_bundled_table_demo_msgs_Spin_Result;
+  }
 
-    static uint16_t type_index()
-    {
-        return 1u;
-    }
+  static uint16_t type_index()
+  {
+    return 1u;
+  }
 
-    static const char *type_name()
-    {
-        return "demo_msgs/action/Spin_Result";
-    }
+  static const char * type_name()
+  {
+    return "demo_msgs/action/Spin_Result";
+  }
 
-    static const uint8_t *type_hash()
-    {
-        static const uint8_t hash[] = {0xeeu, 0x9du, 0x73u, 0xfau, 0x25u, 0x02u, 0x82u, 0x9du};
-        return hash;
-    }
+  static const uint8_t * type_hash()
+  {
+    static const uint8_t hash[] = {0xeeu, 0x9du, 0x73u, 0xfau, 0x25u, 0x02u, 0x82u, 0x9du};
+    return hash;
+  }
 };
 
 } // namespace r2s
@@ -150,12 +161,14 @@ namespace demo_msgs
 namespace action
 {
 
-struct Spin_Feedback {
-    struct partial_sequence_sequence {
-        int32_t data[4];
-        uint8_t size;
-    };
-    partial_sequence_sequence partial_sequence;
+struct Spin_Feedback
+{
+  struct partial_sequence_sequence
+  {
+    int32_t data[4];
+    uint8_t size;
+  };
+  partial_sequence_sequence partial_sequence;
 };
 
 } // namespace action
@@ -164,16 +177,21 @@ struct Spin_Feedback {
 /* The codec writes into the C struct's bytes at the offsets the
  * descriptors give, so the C++ struct must hold them at the same
  * offsets and the same size. */
-#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), #cpp_type)
-#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field)                                                         \
-    static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
+#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), \
+    #cpp_type)
+#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field) \
+  static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
 
 R2S_CPP_SAME_SIZE(demo_msgs::action::Spin_Feedback, demo_msgs__action__Spin_Feedback);
-R2S_CPP_SAME_OFFSET(demo_msgs::action::Spin_Feedback, demo_msgs__action__Spin_Feedback, partial_sequence);
-R2S_CPP_SAME_OFFSET(demo_msgs::action::Spin_Feedback, demo_msgs__action__Spin_Feedback,
-                    partial_sequence.data);
-R2S_CPP_SAME_OFFSET(demo_msgs::action::Spin_Feedback, demo_msgs__action__Spin_Feedback,
-                    partial_sequence.size);
+R2S_CPP_SAME_OFFSET(demo_msgs::action::Spin_Feedback,
+  demo_msgs__action__Spin_Feedback,
+  partial_sequence);
+R2S_CPP_SAME_OFFSET(demo_msgs::action::Spin_Feedback,
+  demo_msgs__action__Spin_Feedback,
+  partial_sequence.data);
+R2S_CPP_SAME_OFFSET(demo_msgs::action::Spin_Feedback,
+  demo_msgs__action__Spin_Feedback,
+  partial_sequence.size);
 
 #undef R2S_CPP_SAME_SIZE
 #undef R2S_CPP_SAME_OFFSET
@@ -189,29 +207,32 @@ extern const r2s_codec_table_t r2s_bundled_table_demo_msgs_Spin_Feedback;
 
 /* The primary template the runtime layer declares; a message header
  * specializes it, so a sketch names a type and never a table. */
-template <typename T> struct msg_traits;
+template<typename T>
+struct msg_traits;
 
-template <> struct msg_traits<demo_msgs::action::Spin_Feedback> {
-    static const r2s_codec_table_t *table()
-    {
-        return &r2s_bundled_table_demo_msgs_Spin_Feedback;
-    }
+template<>
+struct msg_traits<demo_msgs::action::Spin_Feedback>
+{
+  static const r2s_codec_table_t * table()
+  {
+    return &r2s_bundled_table_demo_msgs_Spin_Feedback;
+  }
 
-    static uint16_t type_index()
-    {
-        return 2u;
-    }
+  static uint16_t type_index()
+  {
+    return 2u;
+  }
 
-    static const char *type_name()
-    {
-        return "demo_msgs/action/Spin_Feedback";
-    }
+  static const char * type_name()
+  {
+    return "demo_msgs/action/Spin_Feedback";
+  }
 
-    static const uint8_t *type_hash()
-    {
-        static const uint8_t hash[] = {0x78u, 0xdfu, 0x82u, 0x93u, 0x8fu, 0xcbu, 0x6fu, 0x13u};
-        return hash;
-    }
+  static const uint8_t * type_hash()
+  {
+    static const uint8_t hash[] = {0x78u, 0xdfu, 0x82u, 0x93u, 0x8fu, 0xcbu, 0x6fu, 0x13u};
+    return hash;
+  }
 };
 
 } // namespace r2s
