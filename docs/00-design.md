@@ -737,7 +737,7 @@ ros2serial/
 │   └── harness/              simavr UART-to-pty harness, fault-injecting pty proxy
 ├── tools/                    size_report.py, stack_report.py, budgets.yaml, vectors_check.py, zone_check.py
 ├── scratch/                  gitignored per-ticket experiments; nothing ships
-├── docs/                     user documentation (later the docs site)
+├── docs/                     user documentation (published as the docs site)
 └── .github/workflows/
 ```
 
