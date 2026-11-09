@@ -7,6 +7,10 @@
 #ifndef R2S_ACTION_HPP
 #define R2S_ACTION_HPP
 
+#ifndef R2S_WITH_ACTIONS
+#error "The action server needs R2S_WITH_ACTIONS: the core gates the actions channel on it."
+#endif
+
 #include <float.h>
 #include <stddef.h>
 #include <stdint.h>
