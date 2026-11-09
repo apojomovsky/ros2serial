@@ -30,7 +30,7 @@ on:
 permissions:
   contents: read
 
-# Master runs force their sections, as in ci.yml; pull requests run stale ones.
+# Runs outside pull requests force their sections; pull requests run stale ones.
 env:
   R2S_FULL: ${{ github.event_name == 'pull_request' && '' || '1' }}
 
@@ -65,6 +65,17 @@ jobs:
         env:
           R2S_E2E_SKIP: test_scenario_8_posix
           R2S_SYNC_BOUND_NS: 5000000
+      # The failing section output leaves the runner with the scenario
+      # logs: collect them on any outcome, so a timeout kill still
+      # uploads what the pair proved before it stopped.
+      - if: always()
+        run: bash scripts/collect-isolation-logs.sh "$HOME/.cache/ros2serial" isolation-logs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-isolation-logs
+          path: isolation-logs/
+          if-no-files-found: warn
       - if: github.ref == 'refs/heads/master'
         uses: actions/cache/save@v4.2.2
         with:
