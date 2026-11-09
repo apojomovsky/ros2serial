@@ -600,6 +600,50 @@ def test_the_release_workflow_calls_the_subject_script():
     assert "scripts/release-subject.sh" in text
 
 
+def _cut_release_doc():
+    import yaml
+
+    text = (ROOT / ".github/workflows/cut-release.yml").read_text()
+    return text, yaml.safe_load(text)
+
+
+def _named_step(doc, name):
+    (step,) = [step for step in doc["jobs"]["prepare"]["steps"] if step.get("name") == name]
+    return step
+
+
+def test_the_release_commit_carries_no_hard_coded_identity():
+    """A noreply address belongs to the account it names, so a literal
+    "release" identity credits an unrelated account and its squash grows a
+    co-author trailer. Only the token owner may author the release commit."""
+    text, _ = _cut_release_doc()
+    assert 'user.name "release"' not in text
+    assert "release@users.noreply.github.com" not in text
+
+
+def test_the_release_commit_is_authored_by_the_token_owner():
+    """The release step reads the token owner with gh api user and builds
+    the noreply address from that lookup, so commit author and PR author
+    match and the squash carries no co-author trailer."""
+    _, doc = _cut_release_doc()
+    step = _named_step(doc, "Release commit and PR")
+    run = str(step.get("run", ""))
+    assert "gh api user" in run, run
+    assert "user.name" in run and "user.email" in run, run
+    assert "users.noreply.github.com" in run, run
+    assert "GH_TOKEN" in str(step.get("env", "")), "the lookup must authenticate as the release token"
+
+
+def test_the_dry_run_configures_no_release_identity():
+    """The dry run has no release token, so it must neither look up an
+    owner nor set an author."""
+    _, doc = _cut_release_doc()
+    step = _named_step(doc, "Dry run")
+    run = str(step.get("run", ""))
+    assert "gh api user" not in run, run
+    assert "user.name" not in run and "user.email" not in run, run
+
+
 def test_a_docs_title_survives_a_merged_in_master(tmp_path):
     """The title check covers the branch's own commits, not master's.
 
