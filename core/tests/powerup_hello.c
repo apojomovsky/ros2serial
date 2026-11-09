@@ -7,11 +7,11 @@
 
 int main(void)
 {
-    fake_port_reset();
-    r2s_init();
-    if (fake_port_tx_frame_count() != 1u || r2s_connected() != 0u) {
-        fprintf(stderr, "powerup: expected one HELLO while unconnected\n");
-        return 1;
-    }
-    return 0;
+  fake_port_reset();
+  r2s_init();
+  if (fake_port_tx_frame_count() != 1u || r2s_connected() != 0u) {
+    fprintf(stderr, "powerup: expected one HELLO while unconnected\n");
+    return 1;
+  }
+  return 0;
 }

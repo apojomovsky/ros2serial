@@ -4,24 +4,27 @@
 
 #include <stdint.h>
 
-typedef struct builtin_interfaces__msg__Time {
-    int32_t sec;
-    uint32_t nanosec;
+typedef struct builtin_interfaces__msg__Time
+{
+  int32_t sec;
+  uint32_t nanosec;
 } builtin_interfaces__msg__Time;
 
-typedef struct std_msgs__msg__Header {
-    builtin_interfaces__msg__Time stamp;
-    char frame_id[25];
+typedef struct std_msgs__msg__Header
+{
+  builtin_interfaces__msg__Time stamp;
+  char frame_id[25];
 } std_msgs__msg__Header;
 
-typedef struct sensor_msgs__msg__Range {
-    std_msgs__msg__Header header;
-    uint8_t radiation_type;
-    float field_of_view;
-    float min_range;
-    float max_range;
-    float range;
-    float variance;
+typedef struct sensor_msgs__msg__Range
+{
+  std_msgs__msg__Header header;
+  uint8_t radiation_type;
+  float field_of_view;
+  float min_range;
+  float max_range;
+  float range;
+  float variance;
 } sensor_msgs__msg__Range;
 
 #endif

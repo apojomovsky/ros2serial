@@ -22,14 +22,15 @@ namespace sensor_msgs
 namespace msg
 {
 
-struct Imu {
-    std_msgs::msg::Header header;
-    geometry_msgs::msg::Quaternion orientation;
-    double orientation_covariance[9];
-    geometry_msgs::msg::Vector3 angular_velocity;
-    double angular_velocity_covariance[9];
-    geometry_msgs::msg::Vector3 linear_acceleration;
-    double linear_acceleration_covariance[9];
+struct Imu
+{
+  std_msgs::msg::Header header;
+  geometry_msgs::msg::Quaternion orientation;
+  double orientation_covariance[9];
+  geometry_msgs::msg::Vector3 angular_velocity;
+  double angular_velocity_covariance[9];
+  geometry_msgs::msg::Vector3 linear_acceleration;
+  double linear_acceleration_covariance[9];
 };
 
 } // namespace msg
@@ -38,9 +39,10 @@ struct Imu {
 /* The codec writes into the C struct's bytes at the offsets the
  * descriptors give, so the C++ struct must hold them at the same
  * offsets and the same size. */
-#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), #cpp_type)
-#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field)                                                         \
-    static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
+#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), \
+    #cpp_type)
+#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field) \
+  static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
 
 R2S_CPP_SAME_SIZE(sensor_msgs::msg::Imu, sensor_msgs__msg__Imu);
 R2S_CPP_SAME_OFFSET(sensor_msgs::msg::Imu, sensor_msgs__msg__Imu, header);
@@ -65,29 +67,32 @@ extern const r2s_codec_table_t r2s_bundled_table_sensor_msgs_Imu;
 
 /* The primary template the runtime layer declares; a message header
  * specializes it, so a sketch names a type and never a table. */
-template <typename T> struct msg_traits;
+template<typename T>
+struct msg_traits;
 
-template <> struct msg_traits<sensor_msgs::msg::Imu> {
-    static const r2s_codec_table_t *table()
-    {
-        return &r2s_bundled_table_sensor_msgs_Imu;
-    }
+template<>
+struct msg_traits<sensor_msgs::msg::Imu>
+{
+  static const r2s_codec_table_t * table()
+  {
+    return &r2s_bundled_table_sensor_msgs_Imu;
+  }
 
-    static uint16_t type_index()
-    {
-        return 4u;
-    }
+  static uint16_t type_index()
+  {
+    return 4u;
+  }
 
-    static const char *type_name()
-    {
-        return "sensor_msgs/msg/Imu";
-    }
+  static const char * type_name()
+  {
+    return "sensor_msgs/msg/Imu";
+  }
 
-    static const uint8_t *type_hash()
-    {
-        static const uint8_t hash[] = {0x7du, 0x9au, 0x00u, 0xffu, 0x13u, 0x10u, 0x80u, 0x89u};
-        return hash;
-    }
+  static const uint8_t * type_hash()
+  {
+    static const uint8_t hash[] = {0x7du, 0x9au, 0x00u, 0xffu, 0x13u, 0x10u, 0x80u, 0x89u};
+    return hash;
+  }
 };
 
 } // namespace r2s

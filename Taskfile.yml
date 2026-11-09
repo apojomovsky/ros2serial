@@ -287,6 +287,8 @@ tasks:
       - scripts/with-build-lock.sh
       - scripts/e2e-lease.sh
       - tools/snippets_check.py
+      - tools/site_build.py
+      - tools/site_links.py
       - README.md
       - docs/**
       # Snippets compile against the core and the C++ layer, and the

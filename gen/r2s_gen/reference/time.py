@@ -13,18 +13,18 @@ def compute(tick_hz, case):
     spec says to refuse raises Rejected naming the rule that refuses it.
     """
     tick0, sec0, nanosec0, drift, tick = (
-        case["tick0"],
-        case["sec0"],
-        case["nanosec0"],
-        case["drift_ppm"],
-        case["tick"],
+        case['tick0'],
+        case['sec0'],
+        case['nanosec0'],
+        case['drift_ppm'],
+        case['tick'],
     )
     if tick_hz < 1000 or tick_hz % 1000 or 1000000 % (tick_hz // 1000):
-        raise Rejected("CTL-9", f"tick_hz {tick_hz} is not 1000 times a divisor of 1000000")
+        raise Rejected('CTL-9', f'tick_hz {tick_hz} is not 1000 times a divisor of 1000000')
     if abs(drift) > MAX_DRIFT_PPM:
-        raise Rejected("TIM-5", f"drift {drift} ppm is outside +-20000")
+        raise Rejected('TIM-5', f'drift {drift} ppm is outside +-20000')
     if not 0 <= nanosec0 < 1000000000:
-        raise Rejected("TIM-11", f"nanosec {nanosec0} is not below 10^9")
+        raise Rejected('TIM-11', f'nanosec {nanosec0} is not below 10^9')
     k = tick_hz // 1000
     e = (tick - tick0) % 2**32
     ms, r = divmod(e, k)

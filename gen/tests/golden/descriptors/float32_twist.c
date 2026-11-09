@@ -19,83 +19,85 @@
 /* A type fits its record when its struct holds in 16 bits (DSC-22), and a field
  * lies inside its type when its storage ends at or before the struct end
  * (DSC-48). The sums run in 32 bits so they cannot wrap (DSC-21). */
-#define R2S_SIZE_CHECK(type) typedef char r2s_dsc22_size_check_##type[(sizeof(type) <= 0xffffu) ? 1 : -1]
+#define R2S_SIZE_CHECK(type) typedef char r2s_dsc22_size_check_ ## type[(sizeof(type) <= \
+      0xffffu) ? 1 : -1]
 
-#define R2S_FIELD_CHECK(type, field, end)                                                                    \
-    typedef char r2s_dsc48_storage_check_##type##__##field                                                   \
-        [((uint32_t)(offsetof(type, end) + sizeof(((type *)0)->end)) <= (uint32_t)(sizeof(type))) ? 1 : -1]
+#define R2S_FIELD_CHECK(type, field, end) \
+  typedef char r2s_dsc48_storage_check_ ## type ## __ ## field \
+    [((uint32_t)(offsetof(type, \
+    end) + sizeof(((type *) 0)->end)) <= (uint32_t)(sizeof(type))) ? 1 : -1]
 
 R2S_SIZE_CHECK(std_msgs__msg__Float32);
 R2S_SIZE_CHECK(geometry_msgs__msg__Vector3);
 R2S_SIZE_CHECK(geometry_msgs__msg__Twist);
 
 const uint8_t R2S_FLASH r2s_type_records[] = {
-    R2S_U16_LO(sizeof(std_msgs__msg__Float32)),
-    R2S_U16_HI(sizeof(std_msgs__msg__Float32)),
-    0x00,
-    0x00,
-    0x01, /* std_msgs/msg/Float32 */
-    R2S_U16_LO(sizeof(geometry_msgs__msg__Vector3)),
-    R2S_U16_HI(sizeof(geometry_msgs__msg__Vector3)),
-    0x01,
-    0x00,
-    0x03, /* geometry_msgs/msg/Vector3 */
-    R2S_U16_LO(sizeof(geometry_msgs__msg__Twist)),
-    R2S_U16_HI(sizeof(geometry_msgs__msg__Twist)),
-    0x04,
-    0x00,
-    0x02, /* geometry_msgs/msg/Twist */
+  R2S_U16_LO(sizeof(std_msgs__msg__Float32)),
+  R2S_U16_HI(sizeof(std_msgs__msg__Float32)),
+  0x00,
+  0x00,
+  0x01, /* std_msgs/msg/Float32 */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__Vector3)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__Vector3)),
+  0x01,
+  0x00,
+  0x03, /* geometry_msgs/msg/Vector3 */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__Twist)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__Twist)),
+  0x04,
+  0x00,
+  0x02, /* geometry_msgs/msg/Twist */
 };
 
 const uint8_t R2S_FLASH r2s_field_entries[] = {
-    0x09,
-    0x00,
-    R2S_U16_LO(offsetof(std_msgs__msg__Float32, data)),
-    R2S_U16_HI(offsetof(std_msgs__msg__Float32, data)),
-    0x00,
-    0x00,
-    0x00,
-    0x00, /* std_msgs/msg/Float32.data */
-    0x0a,
-    0x00,
-    R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, x)),
-    R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, x)),
-    0x00,
-    0x00,
-    0x00,
-    0x00, /* geometry_msgs/msg/Vector3.x */
-    0x0a,
-    0x00,
-    R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, y)),
-    R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, y)),
-    0x00,
-    0x00,
-    0x00,
-    0x00, /* geometry_msgs/msg/Vector3.y */
-    0x0a,
-    0x00,
-    R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, z)),
-    R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, z)),
-    0x00,
-    0x00,
-    0x00,
-    0x00, /* geometry_msgs/msg/Vector3.z */
-    0x0c,
-    0x00,
-    R2S_U16_LO(offsetof(geometry_msgs__msg__Twist, linear)),
-    R2S_U16_HI(offsetof(geometry_msgs__msg__Twist, linear)),
-    0x00,
-    0x00,
-    0x01,
-    0x00, /* geometry_msgs/msg/Twist.linear */
-    0x0c,
-    0x00,
-    R2S_U16_LO(offsetof(geometry_msgs__msg__Twist, angular)),
-    R2S_U16_HI(offsetof(geometry_msgs__msg__Twist, angular)),
-    0x00,
-    0x00,
-    0x01,
-    0x00, /* geometry_msgs/msg/Twist.angular */
+  0x09,
+  0x00,
+  R2S_U16_LO(offsetof(std_msgs__msg__Float32, data)),
+  R2S_U16_HI(offsetof(std_msgs__msg__Float32, data)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* std_msgs/msg/Float32.data */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, x)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, x)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.x */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, y)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, y)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.y */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, z)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, z)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.z */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Twist, linear)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Twist, linear)),
+  0x00,
+  0x00,
+  0x01,
+  0x00, /* geometry_msgs/msg/Twist.linear */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Twist, angular)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Twist, angular)),
+  0x00,
+  0x00,
+  0x01,
+  0x00, /* geometry_msgs/msg/Twist.angular */
 };
 
 R2S_FIELD_CHECK(std_msgs__msg__Float32, data, data);

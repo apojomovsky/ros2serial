@@ -18,11 +18,12 @@ namespace geometry_msgs
 namespace msg
 {
 
-struct Quaternion {
-    double x;
-    double y;
-    double z;
-    double w;
+struct Quaternion
+{
+  double x;
+  double y;
+  double z;
+  double w;
 };
 
 } // namespace msg
@@ -31,9 +32,10 @@ struct Quaternion {
 /* The codec writes into the C struct's bytes at the offsets the
  * descriptors give, so the C++ struct must hold them at the same
  * offsets and the same size. */
-#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), #cpp_type)
-#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field)                                                         \
-    static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
+#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), \
+    #cpp_type)
+#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field) \
+  static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
 
 R2S_CPP_SAME_SIZE(geometry_msgs::msg::Quaternion, geometry_msgs__msg__Quaternion);
 R2S_CPP_SAME_OFFSET(geometry_msgs::msg::Quaternion, geometry_msgs__msg__Quaternion, x);
@@ -55,29 +57,32 @@ extern const r2s_codec_table_t r2s_bundled_table_geometry_msgs_Quaternion;
 
 /* The primary template the runtime layer declares; a message header
  * specializes it, so a sketch names a type and never a table. */
-template <typename T> struct msg_traits;
+template<typename T>
+struct msg_traits;
 
-template <> struct msg_traits<geometry_msgs::msg::Quaternion> {
-    static const r2s_codec_table_t *table()
-    {
-        return &r2s_bundled_table_geometry_msgs_Quaternion;
-    }
+template<>
+struct msg_traits<geometry_msgs::msg::Quaternion>
+{
+  static const r2s_codec_table_t * table()
+  {
+    return &r2s_bundled_table_geometry_msgs_Quaternion;
+  }
 
-    static uint16_t type_index()
-    {
-        return 0u;
-    }
+  static uint16_t type_index()
+  {
+    return 0u;
+  }
 
-    static const char *type_name()
-    {
-        return "geometry_msgs/msg/Quaternion";
-    }
+  static const char * type_name()
+  {
+    return "geometry_msgs/msg/Quaternion";
+  }
 
-    static const uint8_t *type_hash()
-    {
-        static const uint8_t hash[] = {0x8au, 0x76u, 0x5fu, 0x66u, 0x77u, 0x8cu, 0x8fu, 0xf7u};
-        return hash;
-    }
+  static const uint8_t * type_hash()
+  {
+    static const uint8_t hash[] = {0x8au, 0x76u, 0x5fu, 0x66u, 0x77u, 0x8cu, 0x8fu, 0xf7u};
+    return hash;
+  }
 };
 
 } // namespace r2s

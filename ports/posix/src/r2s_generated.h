@@ -15,9 +15,10 @@ extern "C" {
 #define R2S_MAX_NEST 3u
 #endif
 
-typedef struct {
-    uint8_t byte;
-    uint16_t following;
+typedef struct
+{
+  uint8_t byte;
+  uint16_t following;
 } r2s_generated_count_alignment_t;
 
 #define R2S_COUNT_ALIGNMENT offsetof(r2s_generated_count_alignment_t, following)
@@ -26,53 +27,63 @@ typedef struct {
 
 /* A count member sits where the compiler aligns a member that follows the
  * elements ([DSC-20]); the check below fails the build when it does not. */
-#define R2S_COUNT_CHECK(owner, field, count, alignment)                                                      \
-    typedef char                                                                                             \
-        r2s_count_check_##owner##__##field[((offsetof(owner, field.size) - offsetof(owner, field.data)) ==   \
-                                            R2S_ROUND_UP((count) * sizeof(((owner *)0)->field.data[0]),      \
-                                                         (alignment)))                                       \
-                                               ? 1                                                           \
-                                               : -1]
+#define R2S_COUNT_CHECK(owner, field, count, alignment) \
+  typedef char \
+    r2s_count_check_ ## owner ## __ ## field[((offsetof(owner, field.size) - offsetof(owner, \
+    field.data)) == \
+      R2S_ROUND_UP((count) * sizeof(((owner *) 0)->field.data[0]), \
+      (alignment))) \
+      ? 1 \
+      : -1]
 
-typedef struct builtin_interfaces__msg__Time {
-    int32_t sec;
-    uint32_t nanosec;
+typedef struct builtin_interfaces__msg__Time
+{
+  int32_t sec;
+  uint32_t nanosec;
 } builtin_interfaces__msg__Time;
 
-typedef struct geometry_msgs__msg__Vector3 {
-    double x;
-    double y;
-    double z;
+typedef struct geometry_msgs__msg__Vector3
+{
+  double x;
+  double y;
+  double z;
 } geometry_msgs__msg__Vector3;
 
-typedef struct geometry_msgs__msg__Twist {
-    geometry_msgs__msg__Vector3 linear;
-    geometry_msgs__msg__Vector3 angular;
+typedef struct geometry_msgs__msg__Twist
+{
+  geometry_msgs__msg__Vector3 linear;
+  geometry_msgs__msg__Vector3 angular;
 } geometry_msgs__msg__Twist;
 
-typedef struct std_msgs__msg__Header {
-    builtin_interfaces__msg__Time stamp;
-    char frame_id[17];
+typedef struct std_msgs__msg__Header
+{
+  builtin_interfaces__msg__Time stamp;
+  char frame_id[17];
 } std_msgs__msg__Header;
 
-typedef struct sensor_msgs__msg__JointState {
-    std_msgs__msg__Header header;
-    struct {
-        char data[6][17];
-        uint8_t size;
-    } name;
-    struct {
-        double data[6];
-        uint8_t size;
-    } position;
-    struct {
-        double data[6];
-        uint8_t size;
-    } velocity;
-    struct {
-        double data[6];
-        uint8_t size;
-    } effort;
+typedef struct sensor_msgs__msg__JointState
+{
+  std_msgs__msg__Header header;
+  struct
+  {
+    char data[6][17];
+    uint8_t size;
+  } name;
+  struct
+  {
+    double data[6];
+    uint8_t size;
+  } position;
+  struct
+  {
+    double data[6];
+    uint8_t size;
+  } velocity;
+  struct
+  {
+    double data[6];
+    uint8_t size;
+  } effort;
 } sensor_msgs__msg__JointState;
 
 R2S_COUNT_CHECK(sensor_msgs__msg__JointState, name, 6, 1);
@@ -80,12 +91,14 @@ R2S_COUNT_CHECK(sensor_msgs__msg__JointState, position, 6, 1);
 R2S_COUNT_CHECK(sensor_msgs__msg__JointState, velocity, 6, 1);
 R2S_COUNT_CHECK(sensor_msgs__msg__JointState, effort, 6, 1);
 
-typedef struct std_msgs__msg__Float32 {
-    float data;
+typedef struct std_msgs__msg__Float32
+{
+  float data;
 } std_msgs__msg__Float32;
 
-typedef struct std_msgs__msg__String {
-    char data[9];
+typedef struct std_msgs__msg__String
+{
+  char data[9];
 } std_msgs__msg__String;
 
 /* Topics in configuration order: user IDs run from 16 (FRM-3), each

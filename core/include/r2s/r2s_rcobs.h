@@ -22,8 +22,9 @@ extern "C" {
 
 /* The state of a streaming encoder. It is the run counter of COB-1 and
  * nothing else, so the encoder needs no buffer and no lookahead. */
-typedef struct {
-    uint8_t run; /* the code byte of the current group, 1 to 0xFF */
+typedef struct
+{
+  uint8_t run;   /* the code byte of the current group, 1 to 0xFF */
 } r2s_rcobs_encoder_t;
 
 /* Starts an encoding. The encoder must be started before the first byte. */

@@ -13,78 +13,78 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-WORKFLOW = ROOT / ".github" / "workflows" / "farm.yml"
-SCRIPT = ROOT / "scripts" / "farm-test.sh"
+WORKFLOW = ROOT / '.github' / 'workflows' / 'farm.yml'
+SCRIPT = ROOT / 'scripts' / 'farm-test.sh'
 
 
 def workflow():
-    return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    return yaml.safe_load(WORKFLOW.read_text(encoding='utf-8'))
 
 
 def script_text():
-    return SCRIPT.read_text(encoding="utf-8")
+    return SCRIPT.read_text(encoding='utf-8')
 
 
 def test_the_farm_workflow_exists_and_runs_on_pull_requests():
-    assert WORKFLOW.is_file(), "missing .github/workflows/farm.yml"
-    text = WORKFLOW.read_text(encoding="utf-8")
-    assert "pull_request" in text, "farm must run on pull requests"
+    assert WORKFLOW.is_file(), 'missing .github/workflows/farm.yml'
+    text = WORKFLOW.read_text(encoding='utf-8')
+    assert 'pull_request' in text, 'farm must run on pull requests'
 
 
 def test_the_farm_job_runs_in_a_clean_ros_image_not_the_dev_image():
-    jobs = workflow()["jobs"]
-    assert "farm" in jobs, "farm.yml names no farm job"
-    job = jobs["farm"]
-    assert "container" in job or "image" in str(job), "farm must run in a clean ROS container"
-    text = WORKFLOW.read_text(encoding="utf-8")
-    assert "actions/dev-image" not in text, "farm must not use the dev image"
-    assert "docker run" not in text.lower(), "farm must not run Docker inside"
-    assert "docker/build" not in text.lower(), "farm must not build images inside"
+    jobs = workflow()['jobs']
+    assert 'farm' in jobs, 'farm.yml names no farm job'
+    job = jobs['farm']
+    assert 'container' in job or 'image' in str(job), 'farm must run in a clean ROS container'
+    text = WORKFLOW.read_text(encoding='utf-8')
+    assert 'actions/dev-image' not in text, 'farm must not use the dev image'
+    assert 'docker run' not in text.lower(), 'farm must not run Docker inside'
+    assert 'docker/build' not in text.lower(), 'farm must not build images inside'
 
 
 def test_the_farm_job_builds_tests_and_smokes_the_released_packages():
-    text = WORKFLOW.read_text(encoding="utf-8") + "\n" + script_text()
-    assert "colcon" in text and "build" in text, "farm must colcon build"
-    assert "colcon" in text and "test" in text, "farm must colcon test"
-    assert "r2s-gen" in text or "r2s_gen" in text, "farm must smoke the installed generator"
-    for package in ("r2s_gen", "r2s_bridge", "r2s_rosidl"):
-        assert package in text, f"farm covers {package}"
+    text = WORKFLOW.read_text(encoding='utf-8') + '\n' + script_text()
+    assert 'colcon' in text and 'build' in text, 'farm must colcon build'
+    assert 'colcon' in text and 'test' in text, 'farm must colcon test'
+    assert 'r2s-gen' in text or 'r2s_gen' in text, 'farm must smoke the installed generator'
+    for package in ('r2s_gen', 'r2s_bridge', 'r2s_rosidl'):
+        assert package in text, f'farm covers {package}'
 
 
 def test_the_farm_job_refreshes_apt_lists_before_rosdep():
-    text = WORKFLOW.read_text(encoding="utf-8")
-    assert text.index("apt-get update") < text.index("rosdep install"), (
-        "rosdep installs from apt, so stale package lists fail the job"
+    text = WORKFLOW.read_text(encoding='utf-8')
+    assert text.index('apt-get update') < text.index('rosdep install'), (
+        'rosdep installs from apt, so stale package lists fail the job'
     )
 
 
 def test_the_farm_script_runs_no_docker_or_network_fetch():
     text = script_text()
-    for banned in ("docker run", "docker build", "curl ", "wget ", "pip install"):
-        assert banned not in text, f"farm build must not run `{banned.strip()}`"
+    for banned in ('docker run', 'docker build', 'curl ', 'wget ', 'pip install'):
+        assert banned not in text, f'farm build must not run `{banned.strip()}`'
 
 
 def test_colcon_tests_the_generator_with_pytest():
-    text = (ROOT / "scripts" / "farm-test.sh").read_text(encoding="utf-8")
-    assert "--python-testing pytest" in text, (
-        "colcon must run pytest explicitly: newer setuptools ignore setup.py "
-        "tests_require, so the unittest fallback finds no tests and fails"
+    text = (ROOT / 'scripts' / 'farm-test.sh').read_text(encoding='utf-8')
+    assert '--python-testing pytest' in text, (
+        'colcon must run pytest explicitly: newer setuptools ignore setup.py '
+        'tests_require, so the unittest fallback finds no tests and fails'
     )
 
 
 def test_the_generator_test_tooling_resolves_through_rosdep():
-    text = (ROOT / "gen" / "package.xml").read_text(encoding="utf-8")
-    for key in ("python3-pytest", "python3-venv", "python3-hypothesis", "python3-wheel"):
-        assert key in text, f"gen/package.xml names no {key} test dependency"
+    text = (ROOT / 'gen' / 'package.xml').read_text(encoding='utf-8')
+    for key in ('python3-pytest', 'python3-venv', 'python3-hypothesis', 'python3-wheel'):
+        assert key in text, f'gen/package.xml names no {key} test dependency'
 
 
 def test_every_released_package_carries_the_farm_metadata():
     for manifest in (
-        ROOT / "gen" / "package.xml",
-        ROOT / "gen" / "r2s_rosidl" / "package.xml",
-        ROOT / "bridge" / "r2s_bridge" / "package.xml",
+        ROOT / 'gen' / 'package.xml',
+        ROOT / 'gen' / 'r2s_rosidl' / 'package.xml',
+        ROOT / 'bridge' / 'r2s_bridge' / 'package.xml',
     ):
-        text = manifest.read_text(encoding="utf-8")
-        assert "<maintainer" in text, manifest
-        assert "<license>" in text, manifest
-        assert "<export>" in text and "build_type" in text, manifest
+        text = manifest.read_text(encoding='utf-8')
+        assert '<maintainer' in text, manifest
+        assert '<license>' in text, manifest
+        assert '<export>' in text and 'build_type' in text, manifest
