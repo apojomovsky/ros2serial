@@ -10,8 +10,10 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -131,6 +133,25 @@ def pair_build_dir(suffix):
         # Mirrors the run.sh default; run.sh appends e2e/posix and locks build/.lock.
         base = os.path.join(os.path.expanduser("~"), ".cache", "ros2serial", "build" + str(ROOT).replace("/", "-"))
     return base + "-iso-" + suffix
+
+
+class TestWriteSectionLog(unittest.TestCase):
+    def test_saves_the_full_output_under_the_shared_cache(self):
+        with tempfile.TemporaryDirectory() as cache:
+            with mock.patch.dict(os.environ, {"R2S_CACHE_DIR": cache}):
+                dest = write_section_log("posix-pair-a", "section says hi\n")
+            self.assertEqual(dest, os.path.join(cache, "e2e-section-logs", "posix-pair-a.log"))
+            with open(dest, encoding="utf-8") as handle:
+                self.assertEqual(handle.read(), "section says hi\n")
+
+    def test_overwrites_the_previous_run(self):
+        with tempfile.TemporaryDirectory() as cache:
+            with mock.patch.dict(os.environ, {"R2S_CACHE_DIR": cache}):
+                first = write_section_log("posix-pair-a", "old\n")
+                second = write_section_log("posix-pair-a", "new\n")
+            self.assertEqual(first, second)
+            with open(second, encoding="utf-8") as handle:
+                self.assertEqual(handle.read(), "new\n")
 
 
 @pytest.mark.skipif(shutil.which("colcon") is None, reason="colcon is not installed")
