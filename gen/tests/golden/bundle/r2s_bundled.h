@@ -15,9 +15,10 @@
 #define R2S_MAX_NEST 4u
 #endif
 
-typedef struct {
-    uint8_t byte;
-    uint16_t following;
+typedef struct
+{
+  uint8_t byte;
+  uint16_t following;
 } r2s_generated_count_alignment_t;
 
 #define R2S_COUNT_ALIGNMENT offsetof(r2s_generated_count_alignment_t, following)
@@ -26,81 +27,95 @@ typedef struct {
 
 /* A count member sits where the compiler aligns a member that follows the
  * elements ([DSC-20]); the check below fails the build when it does not. */
-#define R2S_COUNT_CHECK(owner, field, count, alignment)                                                      \
-    typedef char                                                                                             \
-        r2s_count_check_##owner##__##field[((offsetof(owner, field.size) - offsetof(owner, field.data)) ==   \
-                                            R2S_ROUND_UP((count) * sizeof(((owner *)0)->field.data[0]),      \
-                                                         (alignment)))                                       \
-                                               ? 1                                                           \
-                                               : -1]
+#define R2S_COUNT_CHECK(owner, field, count, alignment) \
+  typedef char \
+    r2s_count_check_ ## owner ## __ ## field[((offsetof(owner, field.size) - offsetof(owner, \
+    field.data)) == \
+      R2S_ROUND_UP((count) * sizeof(((owner *) 0)->field.data[0]), \
+      (alignment))) \
+      ? 1 \
+      : -1]
 
-typedef struct builtin_interfaces__msg__Time {
-    int32_t sec;
-    uint32_t nanosec;
+typedef struct builtin_interfaces__msg__Time
+{
+  int32_t sec;
+  uint32_t nanosec;
 } builtin_interfaces__msg__Time;
 
-typedef struct geometry_msgs__msg__Quaternion {
-    double x;
-    double y;
-    double z;
-    double w;
+typedef struct geometry_msgs__msg__Quaternion
+{
+  double x;
+  double y;
+  double z;
+  double w;
 } geometry_msgs__msg__Quaternion;
 
-typedef struct geometry_msgs__msg__Vector3 {
-    double x;
-    double y;
-    double z;
+typedef struct geometry_msgs__msg__Vector3
+{
+  double x;
+  double y;
+  double z;
 } geometry_msgs__msg__Vector3;
 
-typedef struct geometry_msgs__msg__Transform {
-    geometry_msgs__msg__Vector3 translation;
-    geometry_msgs__msg__Quaternion rotation;
+typedef struct geometry_msgs__msg__Transform
+{
+  geometry_msgs__msg__Vector3 translation;
+  geometry_msgs__msg__Quaternion rotation;
 } geometry_msgs__msg__Transform;
 
-typedef struct std_msgs__msg__Header {
-    builtin_interfaces__msg__Time stamp;
-    char frame_id[17];
+typedef struct std_msgs__msg__Header
+{
+  builtin_interfaces__msg__Time stamp;
+  char frame_id[17];
 } std_msgs__msg__Header;
 
-typedef struct geometry_msgs__msg__TransformStamped {
-    std_msgs__msg__Header header;
-    char child_frame_id[17];
-    geometry_msgs__msg__Transform transform;
+typedef struct geometry_msgs__msg__TransformStamped
+{
+  std_msgs__msg__Header header;
+  char child_frame_id[17];
+  geometry_msgs__msg__Transform transform;
 } geometry_msgs__msg__TransformStamped;
 
-typedef struct geometry_msgs__msg__Twist {
-    geometry_msgs__msg__Vector3 linear;
-    geometry_msgs__msg__Vector3 angular;
+typedef struct geometry_msgs__msg__Twist
+{
+  geometry_msgs__msg__Vector3 linear;
+  geometry_msgs__msg__Vector3 angular;
 } geometry_msgs__msg__Twist;
 
-typedef struct sensor_msgs__msg__Imu {
-    std_msgs__msg__Header header;
-    geometry_msgs__msg__Quaternion orientation;
-    double orientation_covariance[9];
-    geometry_msgs__msg__Vector3 angular_velocity;
-    double angular_velocity_covariance[9];
-    geometry_msgs__msg__Vector3 linear_acceleration;
-    double linear_acceleration_covariance[9];
+typedef struct sensor_msgs__msg__Imu
+{
+  std_msgs__msg__Header header;
+  geometry_msgs__msg__Quaternion orientation;
+  double orientation_covariance[9];
+  geometry_msgs__msg__Vector3 angular_velocity;
+  double angular_velocity_covariance[9];
+  geometry_msgs__msg__Vector3 linear_acceleration;
+  double linear_acceleration_covariance[9];
 } sensor_msgs__msg__Imu;
 
-typedef struct sensor_msgs__msg__JointState {
-    std_msgs__msg__Header header;
-    struct {
-        char data[6][17];
-        uint8_t size;
-    } name;
-    struct {
-        double data[6];
-        uint8_t size;
-    } position;
-    struct {
-        double data[6];
-        uint8_t size;
-    } velocity;
-    struct {
-        double data[6];
-        uint8_t size;
-    } effort;
+typedef struct sensor_msgs__msg__JointState
+{
+  std_msgs__msg__Header header;
+  struct
+  {
+    char data[6][17];
+    uint8_t size;
+  } name;
+  struct
+  {
+    double data[6];
+    uint8_t size;
+  } position;
+  struct
+  {
+    double data[6];
+    uint8_t size;
+  } velocity;
+  struct
+  {
+    double data[6];
+    uint8_t size;
+  } effort;
 } sensor_msgs__msg__JointState;
 
 R2S_COUNT_CHECK(sensor_msgs__msg__JointState, name, 6, 1);
@@ -108,33 +123,39 @@ R2S_COUNT_CHECK(sensor_msgs__msg__JointState, position, 6, 1);
 R2S_COUNT_CHECK(sensor_msgs__msg__JointState, velocity, 6, 1);
 R2S_COUNT_CHECK(sensor_msgs__msg__JointState, effort, 6, 1);
 
-typedef struct sensor_msgs__msg__Range {
-    std_msgs__msg__Header header;
-    uint8_t radiation_type;
-    float field_of_view;
-    float min_range;
-    float max_range;
-    float range;
-    float variance;
+typedef struct sensor_msgs__msg__Range
+{
+  std_msgs__msg__Header header;
+  uint8_t radiation_type;
+  float field_of_view;
+  float min_range;
+  float max_range;
+  float range;
+  float variance;
 } sensor_msgs__msg__Range;
 
-typedef struct std_msgs__msg__Bool {
-    uint8_t data;
+typedef struct std_msgs__msg__Bool
+{
+  uint8_t data;
 } std_msgs__msg__Bool;
 
-typedef struct std_msgs__msg__Float32 {
-    float data;
+typedef struct std_msgs__msg__Float32
+{
+  float data;
 } std_msgs__msg__Float32;
 
-typedef struct std_msgs__msg__String {
-    char data[17];
+typedef struct std_msgs__msg__String
+{
+  char data[17];
 } std_msgs__msg__String;
 
-typedef struct tf2_msgs__msg__TFMessage {
-    struct {
-        geometry_msgs__msg__TransformStamped data[1];
-        uint8_t size;
-    } transforms;
+typedef struct tf2_msgs__msg__TFMessage
+{
+  struct
+  {
+    geometry_msgs__msg__TransformStamped data[1];
+    uint8_t size;
+  } transforms;
 } tf2_msgs__msg__TFMessage;
 
 R2S_COUNT_CHECK(tf2_msgs__msg__TFMessage, transforms, 1, 1);
@@ -151,84 +172,99 @@ R2S_COUNT_CHECK(tf2_msgs__msg__TFMessage, transforms, 1, 1);
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_builtin_interfaces_Time 0u
 #define R2S_BUNDLED_TABLE_builtin_interfaces_Time r2s_bundled_table_builtin_interfaces_Time
-#define R2S_BUNDLED_HASH_builtin_interfaces_Time 0xb1u, 0x06u, 0x23u, 0x5eu, 0x25u, 0xa4u, 0xc5u, 0xedu
+#define R2S_BUNDLED_HASH_builtin_interfaces_Time \
+  0xb1u, 0x06u, 0x23u, 0x5eu, 0x25u, 0xa4u, 0xc5u, 0xedu
 
 /* Bundle index, table and hash of geometry_msgs/msg/Quaternion: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_geometry_msgs_Quaternion 0u
 #define R2S_BUNDLED_TABLE_geometry_msgs_Quaternion r2s_bundled_table_geometry_msgs_Quaternion
-#define R2S_BUNDLED_HASH_geometry_msgs_Quaternion 0x8au, 0x76u, 0x5fu, 0x66u, 0x77u, 0x8cu, 0x8fu, 0xf7u
+#define R2S_BUNDLED_HASH_geometry_msgs_Quaternion \
+  0x8au, 0x76u, 0x5fu, 0x66u, 0x77u, 0x8cu, 0x8fu, 0xf7u
 
 /* Bundle index, table and hash of geometry_msgs/msg/Transform: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_geometry_msgs_Transform 2u
 #define R2S_BUNDLED_TABLE_geometry_msgs_Transform r2s_bundled_table_geometry_msgs_Transform
-#define R2S_BUNDLED_HASH_geometry_msgs_Transform 0xbeu, 0xb8u, 0x3fu, 0xbeu, 0x69u, 0x86u, 0x36u, 0x35u
+#define R2S_BUNDLED_HASH_geometry_msgs_Transform \
+  0xbeu, 0xb8u, 0x3fu, 0xbeu, 0x69u, 0x86u, 0x36u, 0x35u
 
 /* Bundle index, table and hash of geometry_msgs/msg/TransformStamped: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_geometry_msgs_TransformStamped 5u
-#define R2S_BUNDLED_TABLE_geometry_msgs_TransformStamped r2s_bundled_table_geometry_msgs_TransformStamped
-#define R2S_BUNDLED_HASH_geometry_msgs_TransformStamped 0x0au, 0x24u, 0x1fu, 0x87u, 0xd0u, 0x46u, 0x68u, 0xd9u
+#define R2S_BUNDLED_TABLE_geometry_msgs_TransformStamped \
+  r2s_bundled_table_geometry_msgs_TransformStamped
+#define R2S_BUNDLED_HASH_geometry_msgs_TransformStamped \
+  0x0au, 0x24u, 0x1fu, 0x87u, 0xd0u, 0x46u, 0x68u, 0xd9u
 
 /* Bundle index, table and hash of geometry_msgs/msg/Twist: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_geometry_msgs_Twist 1u
 #define R2S_BUNDLED_TABLE_geometry_msgs_Twist r2s_bundled_table_geometry_msgs_Twist
-#define R2S_BUNDLED_HASH_geometry_msgs_Twist 0x9cu, 0x45u, 0xbfu, 0x16u, 0xfeu, 0x09u, 0x83u, 0xd8u
+#define R2S_BUNDLED_HASH_geometry_msgs_Twist \
+  0x9cu, 0x45u, 0xbfu, 0x16u, 0xfeu, 0x09u, 0x83u, 0xd8u
 
 /* Bundle index, table and hash of geometry_msgs/msg/Vector3: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_geometry_msgs_Vector3 0u
 #define R2S_BUNDLED_TABLE_geometry_msgs_Vector3 r2s_bundled_table_geometry_msgs_Vector3
-#define R2S_BUNDLED_HASH_geometry_msgs_Vector3 0xccu, 0x12u, 0xfeu, 0x83u, 0xe4u, 0xc0u, 0x27u, 0x19u
+#define R2S_BUNDLED_HASH_geometry_msgs_Vector3 \
+  0xccu, 0x12u, 0xfeu, 0x83u, 0xe4u, 0xc0u, 0x27u, 0x19u
 
 /* Bundle index, table and hash of sensor_msgs/msg/Imu: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_sensor_msgs_Imu 4u
 #define R2S_BUNDLED_TABLE_sensor_msgs_Imu r2s_bundled_table_sensor_msgs_Imu
-#define R2S_BUNDLED_HASH_sensor_msgs_Imu 0x7du, 0x9au, 0x00u, 0xffu, 0x13u, 0x10u, 0x80u, 0x89u
+#define R2S_BUNDLED_HASH_sensor_msgs_Imu \
+  0x7du, 0x9au, 0x00u, 0xffu, 0x13u, 0x10u, 0x80u, 0x89u
 
 /* Bundle index, table and hash of sensor_msgs/msg/JointState: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_sensor_msgs_JointState 2u
 #define R2S_BUNDLED_TABLE_sensor_msgs_JointState r2s_bundled_table_sensor_msgs_JointState
-#define R2S_BUNDLED_HASH_sensor_msgs_JointState 0xa1u, 0x3eu, 0xe3u, 0xa3u, 0x30u, 0xe3u, 0x46u, 0xc9u
+#define R2S_BUNDLED_HASH_sensor_msgs_JointState \
+  0xa1u, 0x3eu, 0xe3u, 0xa3u, 0x30u, 0xe3u, 0x46u, 0xc9u
 
 /* Bundle index, table and hash of sensor_msgs/msg/Range: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_sensor_msgs_Range 2u
 #define R2S_BUNDLED_TABLE_sensor_msgs_Range r2s_bundled_table_sensor_msgs_Range
-#define R2S_BUNDLED_HASH_sensor_msgs_Range 0xb4u, 0x2bu, 0x62u, 0x56u, 0x2eu, 0x93u, 0xcbu, 0xfeu
+#define R2S_BUNDLED_HASH_sensor_msgs_Range \
+  0xb4u, 0x2bu, 0x62u, 0x56u, 0x2eu, 0x93u, 0xcbu, 0xfeu
 
 /* Bundle index, table and hash of std_msgs/msg/Bool: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_std_msgs_Bool 0u
 #define R2S_BUNDLED_TABLE_std_msgs_Bool r2s_bundled_table_std_msgs_Bool
-#define R2S_BUNDLED_HASH_std_msgs_Bool 0xfeu, 0xb9u, 0x1eu, 0x99u, 0x5fu, 0xf9u, 0xebu, 0xd0u
+#define R2S_BUNDLED_HASH_std_msgs_Bool \
+  0xfeu, 0xb9u, 0x1eu, 0x99u, 0x5fu, 0xf9u, 0xebu, 0xd0u
 
 /* Bundle index, table and hash of std_msgs/msg/Float32: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_std_msgs_Float32 0u
 #define R2S_BUNDLED_TABLE_std_msgs_Float32 r2s_bundled_table_std_msgs_Float32
-#define R2S_BUNDLED_HASH_std_msgs_Float32 0x71u, 0x70u, 0xd3u, 0xd8u, 0xf8u, 0x41u, 0xf7u, 0xbeu
+#define R2S_BUNDLED_HASH_std_msgs_Float32 \
+  0x71u, 0x70u, 0xd3u, 0xd8u, 0xf8u, 0x41u, 0xf7u, 0xbeu
 
 /* Bundle index, table and hash of std_msgs/msg/Header: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_std_msgs_Header 1u
 #define R2S_BUNDLED_TABLE_std_msgs_Header r2s_bundled_table_std_msgs_Header
-#define R2S_BUNDLED_HASH_std_msgs_Header 0xf4u, 0x9fu, 0xb3u, 0xaeu, 0x2cu, 0xf0u, 0x70u, 0xf7u
+#define R2S_BUNDLED_HASH_std_msgs_Header \
+  0xf4u, 0x9fu, 0xb3u, 0xaeu, 0x2cu, 0xf0u, 0x70u, 0xf7u
 
 /* Bundle index, table and hash of std_msgs/msg/String: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_std_msgs_String 0u
 #define R2S_BUNDLED_TABLE_std_msgs_String r2s_bundled_table_std_msgs_String
-#define R2S_BUNDLED_HASH_std_msgs_String 0xdfu, 0x66u, 0x8cu, 0x74u, 0x04u, 0x82u, 0xbbu, 0xd4u
+#define R2S_BUNDLED_HASH_std_msgs_String \
+  0xdfu, 0x66u, 0x8cu, 0x74u, 0x04u, 0x82u, 0xbbu, 0xd4u
 
 /* Bundle index, table and hash of tf2_msgs/msg/TFMessage: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
 #define R2S_BUNDLED_INDEX_tf2_msgs_TFMessage 6u
 #define R2S_BUNDLED_TABLE_tf2_msgs_TFMessage r2s_bundled_table_tf2_msgs_TFMessage
-#define R2S_BUNDLED_HASH_tf2_msgs_TFMessage 0xe3u, 0x69u, 0xd0u, 0xf0u, 0x5au, 0x23u, 0xaeu, 0x52u
+#define R2S_BUNDLED_HASH_tf2_msgs_TFMessage \
+  0xe3u, 0x69u, 0xd0u, 0xf0u, 0x5au, 0x23u, 0xaeu, 0x52u
 
 #endif

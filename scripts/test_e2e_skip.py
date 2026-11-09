@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-RUN_SH = ROOT / "tests" / "e2e" / "run.sh"
-RUN_AVR_SH = ROOT / "tests" / "e2e" / "run-avr.sh"
-ISOLATION = ROOT / "tests" / "e2e" / "test_isolation.py"
+RUN_SH = ROOT / 'tests' / 'e2e' / 'run.sh'
+RUN_AVR_SH = ROOT / 'tests' / 'e2e' / 'run-avr.sh'
+ISOLATION = ROOT / 'tests' / 'e2e' / 'test_isolation.py'
 
 ANCHOR = 'case " ${R2S_E2E_SKIP:-} " in'
 
@@ -24,55 +24,76 @@ def skip_block(path):
     """The R2S_E2E_SKIP case block exactly as the runner carries it."""
     lines = path.read_text().splitlines()
     start = next(i for i, line in enumerate(lines) if ANCHOR in line)
-    end = next(i for i in range(start, len(lines)) if lines[i].strip() == "esac")
-    return "\n".join(lines[start : end + 1])
+    end = next(i for i in range(start, len(lines)) if lines[i].strip() == 'esac')
+    return '\n'.join(lines[start : end + 1])
 
 
 def decide(path, assignments):
     """The runner's decision for the given shell variables: skip or run."""
     prelude = 'timeout() { echo "RUN $*"; }\nlaunch_test() { echo "LAUNCH $*"; }\n'
-    setup = "".join(f"{name}={shlex.quote(value)}\n" for name, value in assignments.items())
-    proc = subprocess.run(["bash", "-c", prelude + setup + skip_block(path)], capture_output=True, text=True)
+    setup = ''.join(f'{name}={shlex.quote(value)}\n' for name, value in assignments.items())
+    proc = subprocess.run(
+        ['bash', '-c', prelude + setup + skip_block(path)], capture_output=True, text=True
+    )
     assert proc.returncode == 0, proc.stderr
     return proc.stdout
 
 
 @pytest.mark.parametrize(
-    ("runner", "variables", "skipped"),
+    ('runner', 'variables', 'skipped'),
     [
-        (RUN_SH, {"test_file": "test_scenario_8_posix", "R2S_E2E_SKIP": "test_scenario_8_posix"}, True),
-        (RUN_SH, {"test_file": "test_scenario_8_posix", "R2S_E2E_SKIP": "test_scenario_9_posix"}, False),
-        (RUN_SH, {"test_file": "test_scenario_8_posix"}, False),
         (
             RUN_SH,
-            {"test_file": "test_scenario_8_posix", "R2S_E2E_SKIP": "test_scenario_1_posix test_scenario_8_posix"},
+            {'test_file': 'test_scenario_8_posix', 'R2S_E2E_SKIP': 'test_scenario_8_posix'},
             True,
         ),
-        (RUN_SH, {"test_file": "test_scenario_8_posix", "R2S_E2E_SKIP": "test_scenario_8_posix_extra"}, False),
-        (RUN_AVR_SH, {"scenario": "8", "R2S_E2E_SKIP": "test_scenario_8_avr"}, True),
-        (RUN_AVR_SH, {"scenario": "3", "R2S_E2E_SKIP": "test_scenario_8_avr"}, False),
-        (RUN_AVR_SH, {"scenario": "3"}, False),
+        (
+            RUN_SH,
+            {'test_file': 'test_scenario_8_posix', 'R2S_E2E_SKIP': 'test_scenario_9_posix'},
+            False,
+        ),
+        (RUN_SH, {'test_file': 'test_scenario_8_posix'}, False),
+        (
+            RUN_SH,
+            {
+                'test_file': 'test_scenario_8_posix',
+                'R2S_E2E_SKIP': 'test_scenario_1_posix test_scenario_8_posix',
+            },
+            True,
+        ),
+        (
+            RUN_SH,
+            {'test_file': 'test_scenario_8_posix', 'R2S_E2E_SKIP': 'test_scenario_8_posix_extra'},
+            False,
+        ),
+        (RUN_AVR_SH, {'scenario': '8', 'R2S_E2E_SKIP': 'test_scenario_8_avr'}, True),
+        (RUN_AVR_SH, {'scenario': '3', 'R2S_E2E_SKIP': 'test_scenario_8_avr'}, False),
+        (RUN_AVR_SH, {'scenario': '3'}, False),
     ],
 )
 def test_skip_switch_decides_per_file(runner, variables, skipped):
     out = decide(runner, variables)
     if skipped:
-        assert "RUN " not in out, "listed file still runs:\n" + out
+        assert 'RUN ' not in out, 'listed file still runs:\n' + out
     else:
-        assert "RUN " in out, "unlisted file skipped:\n" + out
+        assert 'RUN ' in out, 'unlisted file skipped:\n' + out
 
 
 def test_standalone_loop_keeps_scenario_8():
     """The pairs skip scenario 8; deleting it from the list would dodge it everywhere."""
     items = [
         line
-        for line in (ROOT / "tests" / "e2e" / "scenarios.list").read_text().splitlines()
-        if line and not line.startswith("#")
+        for line in (ROOT / 'tests' / 'e2e' / 'scenarios.list').read_text().splitlines()
+        if line and not line.startswith('#')
     ]
-    seven = items.index("test_scenario_7_posix")
-    assert items[seven : seven + 3] == ["test_scenario_7_posix", "test_scenario_8_posix", "test_scenario_9_posix"]
+    seven = items.index('test_scenario_7_posix')
+    assert items[seven : seven + 3] == [
+        'test_scenario_7_posix',
+        'test_scenario_8_posix',
+        'test_scenario_9_posix',
+    ]
 
 
 def test_pairs_skip_scenario_8():
     """run_pair tells both runners to sit scenario 8 out."""
-    assert 'R2S_E2E_SKIP="test_scenario_8_posix"' in ISOLATION.read_text()
+    assert "R2S_E2E_SKIP='test_scenario_8_posix'" in ISOLATION.read_text()

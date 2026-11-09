@@ -4,22 +4,25 @@
 
 #include <stdint.h>
 
-typedef struct geometry_msgs__msg__Quaternion {
-    double x;
-    double y;
-    double z;
-    double w;
+typedef struct geometry_msgs__msg__Quaternion
+{
+  double x;
+  double y;
+  double z;
+  double w;
 } geometry_msgs__msg__Quaternion;
 
-typedef struct geometry_msgs__msg__Vector3 {
-    double x;
-    double y;
-    double z;
+typedef struct geometry_msgs__msg__Vector3
+{
+  double x;
+  double y;
+  double z;
 } geometry_msgs__msg__Vector3;
 
-typedef struct geometry_msgs__msg__Transform {
-    geometry_msgs__msg__Vector3 translation;
-    geometry_msgs__msg__Quaternion rotation;
+typedef struct geometry_msgs__msg__Transform
+{
+  geometry_msgs__msg__Vector3 translation;
+  geometry_msgs__msg__Quaternion rotation;
 } geometry_msgs__msg__Transform;
 
 #endif

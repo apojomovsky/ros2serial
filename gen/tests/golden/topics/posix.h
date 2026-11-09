@@ -14,23 +14,27 @@ extern "C" {
 #define R2S_MAX_NEST 2u
 #endif
 
-typedef struct geometry_msgs__msg__Vector3 {
-    double x;
-    double y;
-    double z;
+typedef struct geometry_msgs__msg__Vector3
+{
+  double x;
+  double y;
+  double z;
 } geometry_msgs__msg__Vector3;
 
-typedef struct geometry_msgs__msg__Twist {
-    geometry_msgs__msg__Vector3 linear;
-    geometry_msgs__msg__Vector3 angular;
+typedef struct geometry_msgs__msg__Twist
+{
+  geometry_msgs__msg__Vector3 linear;
+  geometry_msgs__msg__Vector3 angular;
 } geometry_msgs__msg__Twist;
 
-typedef struct std_msgs__msg__Float32 {
-    float data;
+typedef struct std_msgs__msg__Float32
+{
+  float data;
 } std_msgs__msg__Float32;
 
-typedef struct std_msgs__msg__String {
-    char data[9];
+typedef struct std_msgs__msg__String
+{
+  char data[9];
 } std_msgs__msg__String;
 
 /* Topics in configuration order: user IDs run from 16 (FRM-3), each

@@ -14,7 +14,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 
-sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / 'scripts'))
 
 import shard_nodes  # noqa: E402
 
@@ -22,11 +22,11 @@ import shard_nodes  # noqa: E402
 def sample_nodes():
     """A small node list with plain and parametrized ids."""
     return [
-        "scripts/test_ritual.py::test_a_clean_pr_passes",
-        "scripts/test_ritual.py::test_a_dirty_pr_gets_one_fix_line_per_problem",
-        "tools/test_vectors_check.py::test_each_case_decodes[param-0]",
-        "tools/test_vectors_check.py::test_each_case_decodes[param-1]",
-        "tools/test_zone_check.py::test_no_float_ops",
+        'scripts/test_ritual.py::test_a_clean_pr_passes',
+        'scripts/test_ritual.py::test_a_dirty_pr_gets_one_fix_line_per_problem',
+        'tools/test_vectors_check.py::test_each_case_decodes[param-0]',
+        'tools/test_vectors_check.py::test_each_case_decodes[param-1]',
+        'tools/test_zone_check.py::test_no_float_ops',
     ]
 
 
@@ -45,55 +45,76 @@ def test_every_node_lands_in_exactly_one_shard():
 
 
 def test_shard_of_deals_round_robin_in_sorted_order():
-    assert [shard_nodes.shard_of(i) for i in range(2 * shard_nodes.N_SHARDS + 1)] == [0, 1, 2, 3, 0, 1, 2, 3, 0]
+    assert [shard_nodes.shard_of(i) for i in range(2 * shard_nodes.N_SHARDS + 1)] == [
+        0,
+        1,
+        2,
+        3,
+        0,
+        1,
+        2,
+        3,
+        0,
+    ]
 
 
 def test_ritual_spreads_across_every_shard():
-    nodes = [f"scripts/test_ritual.py::test_case_{i:02d}" for i in range(50)]
+    nodes = [f'scripts/test_ritual.py::test_case_{i:02d}' for i in range(50)]
     for shard in range(shard_nodes.N_SHARDS):
-        assert shard_nodes.nodes_for_shard(nodes, shard), f"shard {shard} got no ritual nodes"
+        assert shard_nodes.nodes_for_shard(nodes, shard), f'shard {shard} got no ritual nodes'
 
 
 def test_bad_specs_fail_with_the_valid_range():
-    for bad in ("", "x", "-1", str(shard_nodes.N_SHARDS), f"1/{shard_nodes.N_SHARDS + 1}"):
-        with pytest.raises(ValueError, match="0"):
+    for bad in ('', 'x', '-1', str(shard_nodes.N_SHARDS), f'1/{shard_nodes.N_SHARDS + 1}'):
+        with pytest.raises(ValueError, match='0'):
             shard_nodes.parse_spec(bad)
 
 
 def test_each_test_file_on_disk_is_in_exactly_one_shard():
     """The ticket's file check: no scripts/test_*.py or tools/test_*.py file
     lands in zero shards or in two."""
-    files = sorted(ROOT.glob("scripts/test_*.py")) + sorted(ROOT.glob("tools/test_*.py"))
-    assert files, "no test files found"
+    files = sorted(ROOT.glob('scripts/test_*.py')) + sorted(ROOT.glob('tools/test_*.py'))
+    assert files, 'no test files found'
     for file in files:
-        probe = f"{file.relative_to(ROOT).as_posix()}::probe"
-        hits = [shard for shard in range(shard_nodes.N_SHARDS) if probe in shard_nodes.nodes_for_shard([probe], shard)]
-        assert hits and len(hits) == 1, f"{file.name} is in shards {hits}"
+        probe = f'{file.relative_to(ROOT).as_posix()}::probe'
+        hits = [
+            shard
+            for shard in range(shard_nodes.N_SHARDS)
+            if probe in shard_nodes.nodes_for_shard([probe], shard)
+        ]
+        assert hits and len(hits) == 1, f'{file.name} is in shards {hits}'
 
 
 def test_ci_matrix_matches_the_shard_count():
     """The ci.yml scripts matrix must list exactly shards 0 to N-1."""
-    text = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
-    match = re.search(r"shard:\s*\[([0-9,\s]+)\]", text)
-    assert match, "no shard matrix in ci.yml"
-    assert [int(n) for n in match.group(1).split(",")] == list(range(shard_nodes.N_SHARDS))
+    text = (ROOT / '.github' / 'workflows' / 'ci.yml').read_text()
+    match = re.search(r'shard:\s*\[([0-9,\s]+)\]', text)
+    assert match, 'no shard matrix in ci.yml'
+    assert [int(n) for n in match.group(1).split(',')] == list(range(shard_nodes.N_SHARDS))
 
 
 def collect_one_file():
     """The node ids pytest collects for a tiny file, without running them."""
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "scripts/test_core_order.py", "--collect-only"],
+        [sys.executable, '-m', 'pytest', 'scripts/test_core_order.py', '--collect-only'],
         cwd=ROOT,
         capture_output=True,
         text=True,
         check=True,
     )
-    return [line for line in result.stdout.splitlines() if "::" in line]
+    return [line for line in result.stdout.splitlines() if '::' in line]
 
 
 def test_bad_shard_flag_fails_precisely():
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "scripts/test_core_order.py", "--collect-only", "--shard=9"],
+        [
+            sys.executable,
+            '-m',
+            'pytest',
+            'scripts/test_core_order.py',
+            '--collect-only',
+            '--shard=9',
+        ],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -104,18 +125,25 @@ def test_bad_shard_flag_fails_precisely():
 
 def test_wiring_covers_every_collected_node_exactly_once():
     full = collect_one_file()
-    assert full, "collection found no nodes"
+    assert full, 'collection found no nodes'
     covered = []
     for shard in range(shard_nodes.N_SHARDS):
         # Exit 5 means the shard holds nothing of this file.
         result = subprocess.run(
-            [sys.executable, "-m", "pytest", "scripts/test_core_order.py", "--collect-only", f"--shard={shard}"],
+            [
+                sys.executable,
+                '-m',
+                'pytest',
+                'scripts/test_core_order.py',
+                '--collect-only',
+                f'--shard={shard}',
+            ],
             cwd=ROOT,
             capture_output=True,
             text=True,
         )
         assert result.returncode in (0, 5), result.stdout + result.stderr
-        got = [line for line in result.stdout.splitlines() if "::" in line]
+        got = [line for line in result.stdout.splitlines() if '::' in line]
         assert got == shard_nodes.nodes_for_shard(full, shard)
         covered += got
     assert sorted(covered) == sorted(full)

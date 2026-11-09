@@ -13,16 +13,16 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-HELPER = ROOT / "scripts" / "kill-tree.sh"
+HELPER = ROOT / 'scripts' / 'kill-tree.sh'
 
 
 def run_helper(*args):
     """Run the helper with a clean environment."""
     return subprocess.run(
-        ["bash", str(HELPER), *args],
+        ['bash', str(HELPER), *args],
         capture_output=True,
         text=True,
-        env={"PATH": os.environ["PATH"]},
+        env={'PATH': os.environ['PATH']},
         timeout=60,
     )
 
@@ -35,7 +35,7 @@ def start_orphaning_wrapper():
     Returns the wrapper popen and the child's pid.
     """
     wrapper = subprocess.Popen(
-        ["bash", "-c", "sleep 120 & echo $!; wait"],
+        ['bash', '-c', 'sleep 120 & echo $!; wait'],
         stdout=subprocess.PIPE,
         text=True,
     )
@@ -55,18 +55,18 @@ def reap(wrapper):
 def gone(pid):
     """A pid is gone when /proc lost it or only a zombie remains."""
     try:
-        with open(f"/proc/{pid}/stat") as handle:
-            fields = handle.read().rsplit(")", 1)[1].split()
+        with open(f'/proc/{pid}/stat') as handle:
+            fields = handle.read().rsplit(')', 1)[1].split()
     except FileNotFoundError:
         return True
-    return fields[0] == "Z"
+    return fields[0] == 'Z'
 
 
 def wait_gone(pid, timeout=10.0):
     """Poll until the pid is gone, so init gets its reap window."""
     deadline = time.monotonic() + timeout
     while not gone(pid):
-        assert time.monotonic() < deadline, f"pid {pid} never died"
+        assert time.monotonic() < deadline, f'pid {pid} never died'
         time.sleep(0.1)
 
 
@@ -85,8 +85,8 @@ def test_a_bare_kill_orphans_the_child():
     try:
         wrapper.terminate()
         reap(wrapper)
-        assert gone(wrapper.pid), "the wrapper survived TERM"
-        assert not gone(kid), "the child died with the wrapper"
+        assert gone(wrapper.pid), 'the wrapper survived TERM'
+        assert not gone(kid), 'the child died with the wrapper'
     finally:
         cleanup(kid)
         reap(wrapper)
@@ -107,46 +107,46 @@ def test_kill_tree_kills_the_wrapper_and_the_orphan():
 
 def live_marked(marker):
     """Pids whose command line carries the marker, zombies excluded."""
-    result = subprocess.run(["pgrep", "-f", marker], capture_output=True, text=True)
+    result = subprocess.run(['pgrep', '-f', marker], capture_output=True, text=True)
     return [pid for pid in result.stdout.split() if not gone(pid)]
 
 
 def test_kill_tree_reaches_grandchildren():
     """A wrapper whose child spawned its own child: all three die."""
-    marker = f"r2s504-gc-{os.getpid()}"
+    marker = f'r2s504-gc-{os.getpid()}'
     middle = f'exec -a {marker}-mid bash -c "exec -a {marker}-leaf sleep 120 & wait"'
     wrapper = subprocess.Popen(
-        ["bash", "-c", f"{middle} & wait"],
+        ['bash', '-c', f'{middle} & wait'],
         stdout=subprocess.DEVNULL,
         text=True,
     )
     try:
         deadline = time.monotonic() + 10.0
         while len(live_marked(marker)) < 3:
-            assert time.monotonic() < deadline, "the grandchild never started"
+            assert time.monotonic() < deadline, 'the grandchild never started'
             time.sleep(0.1)
         result = run_helper(str(wrapper.pid))
         assert result.returncode == 0, result.stderr
         wait_gone(wrapper.pid)
         deadline = time.monotonic() + 10.0
         while live_marked(marker):
-            assert time.monotonic() < deadline, "the grandchild survived"
+            assert time.monotonic() < deadline, 'the grandchild survived'
             time.sleep(0.1)
     finally:
-        subprocess.run(["pkill", "-f", marker])
+        subprocess.run(['pkill', '-f', marker])
         cleanup(wrapper.pid)
         reap(wrapper)
 
 
 def test_kill_tree_sigkills_a_term_ignorer():
     """A child that traps TERM still dies, quickly, by SIGKILL."""
-    ignorer = subprocess.Popen(["bash", "-c", "trap '' TERM; sleep 60"])
+    ignorer = subprocess.Popen(['bash', '-c', "trap '' TERM; sleep 60"])
     try:
         start = time.monotonic()
-        result = run_helper(str(ignorer.pid), "1")
+        result = run_helper(str(ignorer.pid), '1')
         assert result.returncode == 0, result.stderr
         wait_gone(ignorer.pid)
-        assert time.monotonic() - start < 10, "the SIGKILL path took too long"
+        assert time.monotonic() - start < 10, 'the SIGKILL path took too long'
     finally:
         cleanup(ignorer.pid)
         reap(ignorer)
@@ -154,13 +154,13 @@ def test_kill_tree_sigkills_a_term_ignorer():
 
 def test_kill_tree_refuses_pid_1():
     """Killing init's tree would take the machine down, so it fails fast."""
-    result = run_helper("1")
-    assert result.returncode != 0, "pid 1 was accepted"
+    result = run_helper('1')
+    assert result.returncode != 0, 'pid 1 was accepted'
 
 
 def test_kill_tree_accepts_an_already_dead_pid():
     """A reaped pid counts as dead: the helper is idempotent."""
-    sleeper = subprocess.Popen(["sleep", "0.01"])
+    sleeper = subprocess.Popen(['sleep', '0.01'])
     sleeper.wait(timeout=10)
     result = run_helper(str(sleeper.pid))
     assert result.returncode == 0, result.stderr
@@ -168,5 +168,5 @@ def test_kill_tree_accepts_an_already_dead_pid():
 
 def test_kill_tree_rejects_a_non_pid():
     """Usage errors exit 2 the way the other script helpers do."""
-    result = run_helper("not-a-pid")
+    result = run_helper('not-a-pid')
     assert result.returncode == 2, result.stderr

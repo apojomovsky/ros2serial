@@ -99,7 +99,7 @@ class Topic:
     type_hash: bytes
     type_name: str
     topic_name: str
-    direction: str = "pub"
+    direction: str = 'pub'
     codec_len: int = 0
     bound: int = 0
 
@@ -129,7 +129,7 @@ class McuSession:
 
     def __init__(
         self,
-        node: str = "node",
+        node: str = 'node',
         topics: list[Topic] | None = None,
         max_frame: int = 512,
         tick_hz: int = 1000,
@@ -165,7 +165,7 @@ class McuSession:
         self.rel_retries = 0
         self.rel_pending: bytes | None = None
         self.rel_pending_rel = 0
-        self.counters = {"rx_frames": 0, "crc_errors": 0, "rx_overflows": 0, "dropped": 0}
+        self.counters = {'rx_frames': 0, 'crc_errors': 0, 'rx_overflows': 0, 'dropped': 0}
         self.err_pending = [0] * 7
         self.err_topic = [0xFF] * 7
         self.err_field = [0xFF] * 7
@@ -198,7 +198,7 @@ class McuSession:
         self.param_seq = 0
         self.ack_seq = 0
         self._drop_reliable()
-        self.counters = {"rx_frames": 0, "crc_errors": 0, "rx_overflows": 0, "dropped": 0}
+        self.counters = {'rx_frames': 0, 'crc_errors': 0, 'rx_overflows': 0, 'dropped': 0}
         self.err_pending = [0] * 7
         self.err_topic = [0xFF] * 7
         self.err_field = [0xFF] * 7
@@ -332,18 +332,18 @@ class McuSession:
     def snapshot(self) -> dict[str, object]:
         """Every observable the tests compare after a step."""
         return {
-            "connected": self.state,
-            "token": self.token,
-            "status": list(self.status),
-            "counters": (
-                self.counters["rx_frames"] & MASK_16,
-                self.counters["crc_errors"] & MASK_16,
-                self.counters["rx_overflows"] & MASK_16,
-                self.counters["dropped"] & MASK_16,
+            'connected': self.state,
+            'token': self.token,
+            'status': list(self.status),
+            'counters': (
+                self.counters['rx_frames'] & MASK_16,
+                self.counters['crc_errors'] & MASK_16,
+                self.counters['rx_overflows'] & MASK_16,
+                self.counters['dropped'] & MASK_16,
             ),
-            "tx_seq": list(self.tx_seq),
-            "rx_lost": list(self.rx_lost),
-            "params": [(param.type, param.value) for param in self.params],
+            'tx_seq': list(self.tx_seq),
+            'rx_lost': list(self.rx_lost),
+            'params': [(param.type, param.value) for param in self.params],
         }
 
     def _accept(self, encoded: bytes, at: int) -> bool:
@@ -351,22 +351,22 @@ class McuSession:
         if not encoded:
             return False
         if len(encoded) > self.rx_capacity:
-            self.counters["rx_overflows"] += 1
-            self.counters["dropped"] += 1
+            self.counters['rx_overflows'] += 1
+            self.counters['dropped'] += 1
             return False
         try:
             decoded = rcobs_mod.decode(encoded)
         except Rejected:
-            self.counters["dropped"] += 1
+            self.counters['dropped'] += 1
             return False
         if len(decoded) < 4 or len(decoded) > self.max_frame:
-            self.counters["dropped"] += 1
+            self.counters['dropped'] += 1
             return False
         if crc_mod.crc16(decoded) != 0:
-            self.counters["crc_errors"] += 1
-            self.counters["dropped"] += 1
+            self.counters['crc_errors'] += 1
+            self.counters['dropped'] += 1
             return False
-        self.counters["rx_frames"] += 1
+        self.counters['rx_frames'] += 1
         self._on_frame(decoded[0], decoded[1], decoded[2:-2], at)
         return True
 
@@ -424,7 +424,7 @@ class McuSession:
             if len(payload) != 5:
                 self._refuse()
                 return
-            token = int.from_bytes(payload[1:5], "little")
+            token = int.from_bytes(payload[1:5], 'little')
             if token == 0:
                 self._refuse()
                 return
@@ -435,7 +435,9 @@ class McuSession:
             self._refuse()
 
     def _dispatch(self, topic_id: int, seq: int, payload: bytes) -> None:
-        sub = next((t for t in self.topics if t.topic_id == topic_id and t.direction == "sub"), None)
+        sub = next(
+            (t for t in self.topics if t.topic_id == topic_id and t.direction == 'sub'), None
+        )
         if sub is None:
             if not any(t.topic_id == topic_id for t in self.topics):
                 self._note_error(ERR_UNKNOWN_TOPIC, topic_id, 0xFF, 1)
@@ -477,9 +479,9 @@ class McuSession:
         if param.type == PARAM_BOOL:
             return bytes((param.initial,))
         if param.type == PARAM_I64:
-            return int(param.initial).to_bytes(8, "little", signed=True)
+            return int(param.initial).to_bytes(8, 'little', signed=True)
         if param.type == PARAM_F64:
-            return struct.pack("<d", param.initial)
+            return struct.pack('<d', param.initial)
         encoded = bytes(param.initial)
         return varint_mod.encode(len(encoded)) + encoded
 
@@ -516,9 +518,9 @@ class McuSession:
         if param.type == PARAM_BOOL:
             param.value = value[0]
         elif param.type == PARAM_I64:
-            param.value = int.from_bytes(value, "little", signed=True)
+            param.value = int.from_bytes(value, 'little', signed=True)
         elif param.type == PARAM_F64:
-            param.value = struct.unpack("<d", value)[0]
+            param.value = struct.unpack('<d', value)[0]
         else:
             length, used = varint_mod.decode(value)
             param.value = bytes(value[used : used + length])
@@ -633,7 +635,11 @@ class McuSession:
         if self.state != CONNECTED or len(payload) != 2:
             return
         channel, rel = payload[0], payload[1]
-        if channel == PARAM_CHANNEL and self.rel_outstanding is not None and rel == self.rel_outstanding_rel:
+        if (
+            channel == PARAM_CHANNEL
+            and self.rel_outstanding is not None
+            and rel == self.rel_outstanding_rel
+        ):
             self.rel_outstanding = None
             self._promote_status()
 
@@ -674,16 +680,16 @@ class McuSession:
             self._send_hello()
 
     def _refuse(self) -> None:
-        self.counters["dropped"] += 1
+        self.counters['dropped'] += 1
 
     def _send_hello(self) -> None:
         name = self.node.encode()
         payload = (
             bytes((OP_HELLO, PROTOCOL_VERSION, HANDSHAKE_MODE_FULL))
-            + self.token.to_bytes(4, "little")
-            + self.max_frame.to_bytes(2, "little")
-            + self.rx_capacity.to_bytes(2, "little")
-            + self.tick_hz.to_bytes(4, "little")
+            + self.token.to_bytes(4, 'little')
+            + self.max_frame.to_bytes(2, 'little')
+            + self.rx_capacity.to_bytes(2, 'little')
+            + self.tick_hz.to_bytes(4, 'little')
             + bytes((self.features, len(self.topics)))
             + varint_mod.encode(len(name))
             + name
@@ -708,10 +714,10 @@ class McuSession:
 
     def _send_heartbeat(self) -> None:
         payload = (
-            (self.counters["rx_frames"] & MASK_16).to_bytes(2, "little")
-            + (self.counters["crc_errors"] & MASK_16).to_bytes(2, "little")
-            + (self.counters["rx_overflows"] & MASK_16).to_bytes(2, "little")
-            + (self.counters["dropped"] & MASK_16).to_bytes(2, "little")
+            (self.counters['rx_frames'] & MASK_16).to_bytes(2, 'little')
+            + (self.counters['crc_errors'] & MASK_16).to_bytes(2, 'little')
+            + (self.counters['rx_overflows'] & MASK_16).to_bytes(2, 'little')
+            + (self.counters['dropped'] & MASK_16).to_bytes(2, 'little')
         )
         self.tx.append(encode_frame(4, self.hb_seq, payload))
         self.hb_seq = (self.hb_seq + 1) & MASK_8
@@ -726,7 +732,7 @@ class McuSession:
         assert self.rel_outstanding is not None
         if self.rel_retries >= REL_RETRIES:
             self.rel_outstanding = None
-            self.counters["dropped"] += 1
+            self.counters['dropped'] += 1
             self._promote_status()
             return
         self.rel_retries += 1

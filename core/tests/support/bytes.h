@@ -20,10 +20,11 @@ void r2s_hex_format(const uint8_t *data, uint16_t len, char *out, size_t size);
 
 /* Fails the current test at the given line, printing both byte strings in hex
  * and the label, unless actual equals expected. Use R2S_ASSERT_BYTES. */
-void r2s_assert_bytes_at(const uint8_t *expected, uint16_t expected_len, const uint8_t *actual,
-                         uint16_t actual_len, const char *label, unsigned line);
+void r2s_assert_bytes_at(
+  const uint8_t *expected, uint16_t expected_len, const uint8_t *actual,
+  uint16_t actual_len, const char *label, unsigned line);
 
-#define R2S_ASSERT_BYTES(expected, expected_len, actual, actual_len, label)                                  \
-    r2s_assert_bytes_at((expected), (expected_len), (actual), (actual_len), (label), __LINE__)
+#define R2S_ASSERT_BYTES(expected, expected_len, actual, actual_len, label) \
+  r2s_assert_bytes_at((expected), (expected_len), (actual), (actual_len), (label), __LINE__)
 
 #endif

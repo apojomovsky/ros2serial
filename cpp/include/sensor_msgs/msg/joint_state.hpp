@@ -20,28 +20,33 @@ namespace sensor_msgs
 namespace msg
 {
 
-struct JointState {
-    std_msgs::msg::Header header;
-    struct name_sequence {
-        char data[6][17];
-        uint8_t size;
-    };
-    name_sequence name;
-    struct position_sequence {
-        double data[6];
-        uint8_t size;
-    };
-    position_sequence position;
-    struct velocity_sequence {
-        double data[6];
-        uint8_t size;
-    };
-    velocity_sequence velocity;
-    struct effort_sequence {
-        double data[6];
-        uint8_t size;
-    };
-    effort_sequence effort;
+struct JointState
+{
+  std_msgs::msg::Header header;
+  struct name_sequence
+  {
+    char data[6][17];
+    uint8_t size;
+  };
+  name_sequence name;
+  struct position_sequence
+  {
+    double data[6];
+    uint8_t size;
+  };
+  position_sequence position;
+  struct velocity_sequence
+  {
+    double data[6];
+    uint8_t size;
+  };
+  velocity_sequence velocity;
+  struct effort_sequence
+  {
+    double data[6];
+    uint8_t size;
+  };
+  effort_sequence effort;
 };
 
 } // namespace msg
@@ -50,9 +55,10 @@ struct JointState {
 /* The codec writes into the C struct's bytes at the offsets the
  * descriptors give, so the C++ struct must hold them at the same
  * offsets and the same size. */
-#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), #cpp_type)
-#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field)                                                         \
-    static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
+#define R2S_CPP_SAME_SIZE(cpp_type, c_type) static_assert(sizeof(cpp_type) == sizeof(c_type), \
+    #cpp_type)
+#define R2S_CPP_SAME_OFFSET(cpp_type, c_type, field) \
+  static_assert(offsetof(cpp_type, field) == offsetof(c_type, field), #cpp_type "." #field)
 
 R2S_CPP_SAME_SIZE(sensor_msgs::msg::JointState, sensor_msgs__msg__JointState);
 R2S_CPP_SAME_OFFSET(sensor_msgs::msg::JointState, sensor_msgs__msg__JointState, header);
@@ -83,29 +89,32 @@ extern const r2s_codec_table_t r2s_bundled_table_sensor_msgs_JointState;
 
 /* The primary template the runtime layer declares; a message header
  * specializes it, so a sketch names a type and never a table. */
-template <typename T> struct msg_traits;
+template<typename T>
+struct msg_traits;
 
-template <> struct msg_traits<sensor_msgs::msg::JointState> {
-    static const r2s_codec_table_t *table()
-    {
-        return &r2s_bundled_table_sensor_msgs_JointState;
-    }
+template<>
+struct msg_traits<sensor_msgs::msg::JointState>
+{
+  static const r2s_codec_table_t * table()
+  {
+    return &r2s_bundled_table_sensor_msgs_JointState;
+  }
 
-    static uint16_t type_index()
-    {
-        return 2u;
-    }
+  static uint16_t type_index()
+  {
+    return 2u;
+  }
 
-    static const char *type_name()
-    {
-        return "sensor_msgs/msg/JointState";
-    }
+  static const char * type_name()
+  {
+    return "sensor_msgs/msg/JointState";
+  }
 
-    static const uint8_t *type_hash()
-    {
-        static const uint8_t hash[] = {0xa1u, 0x3eu, 0xe3u, 0xa3u, 0x30u, 0xe3u, 0x46u, 0xc9u};
-        return hash;
-    }
+  static const uint8_t * type_hash()
+  {
+    static const uint8_t hash[] = {0xa1u, 0x3eu, 0xe3u, 0xa3u, 0x30u, 0xe3u, 0x46u, 0xc9u};
+    return hash;
+  }
 };
 
 } // namespace r2s

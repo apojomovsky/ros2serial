@@ -14,37 +14,39 @@ import time
 import pytest
 import serial
 
-HARNESS = os.environ.get("R2S_SIMAVR_BIN", "")
-FIRMWARE_DIR = os.environ.get("R2S_SIMAVR_FW", "")
-SRAM_BYTES = {"atmega328p": 2048, "atmega2560": 8192}
+HARNESS = os.environ.get('R2S_SIMAVR_BIN', '')
+FIRMWARE_DIR = os.environ.get('R2S_SIMAVR_FW', '')
+SRAM_BYTES = {'atmega328p': 2048, 'atmega2560': 8192}
 START_TIMEOUT = 10.0
 STOP_TIMEOUT = 10.0
 
 
 def harness_binary():
-    assert HARNESS, "R2S_SIMAVR_BIN is unset: run tests/harness/simavr/run.sh, which builds it"
-    assert os.path.exists(HARNESS), f"no harness at {HARNESS!r}: run tests/harness/simavr/run.sh"
+    assert HARNESS, 'R2S_SIMAVR_BIN is unset: run tests/harness/simavr/run.sh, which builds it'
+    assert os.path.exists(HARNESS), f'no harness at {HARNESS!r}: run tests/harness/simavr/run.sh'
     return HARNESS
 
 
 def firmware_image(image, mcu):
-    assert FIRMWARE_DIR, "R2S_SIMAVR_FW is unset: run tests/harness/simavr/run.sh, which builds the firmware"
-    path = os.path.join(FIRMWARE_DIR, f"{image}-{mcu}.elf")
-    assert os.path.exists(path), f"no firmware at {path!r}: run tests/harness/simavr/run.sh"
+    assert FIRMWARE_DIR, (
+        'R2S_SIMAVR_FW is unset: run tests/harness/simavr/run.sh, which builds the firmware'
+    )
+    path = os.path.join(FIRMWARE_DIR, f'{image}-{mcu}.elf')
+    assert os.path.exists(path), f'no firmware at {path!r}: run tests/harness/simavr/run.sh'
     return path
 
 
 class Harness:
     """A running simulator, with the pty path it announced on startup."""
 
-    def __init__(self, mcu, *options, image="echo"):
+    def __init__(self, mcu, *options, image='echo'):
         self.mcu = mcu
         self.summary = {}
         self.returncode = None
         self._output = []
-        self._buffer = b""
+        self._buffer = b''
         self._proc = subprocess.Popen(
-            [harness_binary(), "--mcu", mcu, "--firmware", firmware_image(image, mcu), *options],
+            [harness_binary(), '--mcu', mcu, '--firmware', firmware_image(image, mcu), *options],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             bufsize=0,
@@ -63,7 +65,7 @@ class Harness:
         taken, so the bytes go through this buffer instead.
         """
         deadline = time.monotonic() + timeout
-        while b"\n" not in self._buffer:
+        while b'\n' not in self._buffer:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return None
@@ -74,37 +76,39 @@ class Harness:
             if not chunk:
                 return None
             self._buffer += chunk
-        line, _, self._buffer = self._buffer.partition(b"\n")
-        return line.decode() + "\n"
+        line, _, self._buffer = self._buffer.partition(b'\n')
+        return line.decode() + '\n'
 
     def _await_pty(self):
         deadline = time.monotonic() + START_TIMEOUT
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise AssertionError("no pty line from the harness:\n" + "".join(self._output))
+                raise AssertionError('no pty line from the harness:\n' + ''.join(self._output))
             line = self._read_line(remaining)
             if not line:
                 if self._proc.poll() is None:
                     # Alive but silent, or its output already closed: a duration
                     # in the message would claim a timeout that may not have run.
-                    raise AssertionError("the harness did not announce its pty:\n" + "".join(self._output))
+                    raise AssertionError(
+                        'the harness did not announce its pty:\n' + ''.join(self._output)
+                    )
                 raise AssertionError(
-                    f"the harness exited with {self._proc.returncode} before the pty was ready:\n"
-                    + "".join(self._output)
+                    f'the harness exited with {self._proc.returncode} before the pty was ready:\n'
+                    + ''.join(self._output)
                 )
             self._output.append(line)
-            if line.startswith("r2s_simavr: pty="):
-                return line.strip().split("=", 1)[1]
+            if line.startswith('r2s_simavr: pty='):
+                return line.strip().split('=', 1)[1]
 
     def _record(self, tail):
         tail = tail.decode()
         self._output.append(tail)
         self.returncode = self._proc.returncode
         for line in tail.splitlines():
-            if line.startswith("r2s_simavr: stop"):
+            if line.startswith('r2s_simavr: stop'):
                 for field in line.split()[2:]:
-                    key, _, value = field.partition("=")
+                    key, _, value = field.partition('=')
                     self.summary[key] = int(value)
 
     def wait(self):
@@ -121,7 +125,9 @@ class Harness:
         except subprocess.TimeoutExpired as expired:
             self._proc.kill()
             tail, _ = self._proc.communicate()
-            raise AssertionError("the harness ignored SIGTERM:\n" + "".join(self._output) + tail.decode()) from expired
+            raise AssertionError(
+                'the harness ignored SIGTERM:\n' + ''.join(self._output) + tail.decode()
+            ) from expired
         self._record(tail)
         return self.returncode
 
@@ -141,7 +147,7 @@ def read_exactly(port, count, timeout=5.0):
     return bytes(got)
 
 
-@pytest.mark.parametrize("mcu", sorted(SRAM_BYTES))
+@pytest.mark.parametrize('mcu', sorted(SRAM_BYTES))
 def test_echo_returns_every_byte_value(mcu):
     payload = bytes(range(256))
     with Harness(mcu) as harness:
@@ -152,26 +158,26 @@ def test_echo_returns_every_byte_value(mcu):
     assert harness.returncode == 0
 
 
-@pytest.mark.parametrize("mcu", sorted(SRAM_BYTES))
+@pytest.mark.parametrize('mcu', sorted(SRAM_BYTES))
 def test_the_mcu_runs_at_the_requested_frequency(mcu):
     # avr_init resets the clock from the core table, so a harness that sets it
     # too early runs the firmware 16 times slower than it was built for.
-    harness = Harness(mcu, "--run-ms", "200")
+    harness = Harness(mcu, '--run-ms', '200')
     try:
         harness.wait()
     finally:
         harness.stop()
-    assert harness.summary["frequency"] == 16_000_000
+    assert harness.summary['frequency'] == 16_000_000
 
 
-@pytest.mark.parametrize("mcu", sorted(SRAM_BYTES))
+@pytest.mark.parametrize('mcu', sorted(SRAM_BYTES))
 def test_echo_survives_a_starved_reader(mcu):
     # The harness must wait out a full pty instead of dropping bytes: under
     # host load the reader starves while simavr keeps emitting, which used to
     # mangle frames on the wire (#324). The reader here drains slower than the
     # firmware emits on purpose, with no host load at all.
     payload = bytes(range(256)) * 256
-    with Harness(mcu, "--run-ms", "60000") as harness:
+    with Harness(mcu, '--run-ms', '60000') as harness:
         with serial.Serial(harness.pty, 115200, timeout=0.2) as port:
             echoed = bytearray()
             writer = threading.Thread(target=port.write, args=(payload,))
@@ -183,9 +189,9 @@ def test_echo_survives_a_starved_reader(mcu):
                     echoed += os.read(port.fileno(), min(256, len(payload) - len(echoed)))
                     time.sleep(0.01)
             writer.join(timeout=10)
-            assert not writer.is_alive(), "the firmware stopped consuming input"
+            assert not writer.is_alive(), 'the firmware stopped consuming input'
     assert bytes(echoed) == payload
-    assert harness.summary["output_errors"] == 0
+    assert harness.summary['output_errors'] == 0
     assert harness.stop() == 0
 
 
@@ -195,7 +201,7 @@ def test_echo_carries_more_than_the_input_ring():
     # read would drop the remainder. Slicing the write instead would keep the
     # ring half empty and never reach that path.
     payload = bytes(range(256)) * 20
-    with Harness("atmega328p") as harness:
+    with Harness('atmega328p') as harness:
         with serial.Serial(harness.pty, 115200, timeout=0.2) as port:
             echoed = bytearray()
             writer = threading.Thread(target=port.write, args=(payload,))
@@ -210,53 +216,59 @@ def test_echo_carries_more_than_the_input_ring():
     assert bytes(echoed) == payload
 
 
-@pytest.mark.parametrize("mcu", sorted(SRAM_BYTES))
+@pytest.mark.parametrize('mcu', sorted(SRAM_BYTES))
 def test_stack_paint_tracks_call_depth(mcu):
-    harness = Harness(mcu, "--stack-paint", "--run-ms", "300", image="deep")
+    harness = Harness(mcu, '--stack-paint', '--run-ms', '300', image='deep')
     try:
         harness.wait()
     finally:
         harness.stop()
-    assert 150 < harness.summary["stack_peak"] < SRAM_BYTES[mcu]
+    assert 150 < harness.summary['stack_peak'] < SRAM_BYTES[mcu]
 
 
-@pytest.mark.parametrize("mcu", sorted(SRAM_BYTES))
+@pytest.mark.parametrize('mcu', sorted(SRAM_BYTES))
 def test_stack_paint_reports_the_high_water_mark(mcu):
-    with Harness(mcu, "--stack-paint") as harness:
+    with Harness(mcu, '--stack-paint') as harness:
         with serial.Serial(harness.pty, 115200, timeout=2) as port:
-            port.write(b"\x5a")
-            assert read_exactly(port, 1) == b"\x5a"
-    peak = harness.summary["stack_peak"]
+            port.write(b'\x5a')
+            assert read_exactly(port, 1) == b'\x5a'
+    peak = harness.summary['stack_peak']
     assert 0 < peak < SRAM_BYTES[mcu]
 
 
 def test_pace_keeps_simulated_time_on_the_wall_clock():
     # No client connects, so the firmware polls its UART. Paced, the run limit
     # stops it with about the same simulated time; unpaced it runs ahead.
-    harness = Harness("atmega328p", "--pace", "--run-ms", "300")
+    harness = Harness('atmega328p', '--pace', '--run-ms', '300')
     try:
         harness.wait()
     finally:
         harness.stop()
     assert harness.returncode == 3
-    assert harness.summary["simulated_ms"] <= harness.summary["wall_ms"] + 100
+    assert harness.summary['simulated_ms'] <= harness.summary['wall_ms'] + 100
 
 
 def test_an_unknown_mcu_is_rejected():
     result = subprocess.run(
-        [harness_binary(), "--mcu", "atmega999", "--firmware", firmware_image("echo", "atmega328p")],
+        [
+            harness_binary(),
+            '--mcu',
+            'atmega999',
+            '--firmware',
+            firmware_image('echo', 'atmega328p'),
+        ],
         capture_output=True,
         text=True,
     )
     assert result.returncode == 2
-    assert "atmega999" in result.stderr
+    assert 'atmega999' in result.stderr
 
 
 def test_a_missing_firmware_is_rejected():
-    assert FIRMWARE_DIR, "R2S_SIMAVR_FW is unset: run tests/harness/simavr/run.sh"
-    missing = os.path.join(FIRMWARE_DIR, "absent.elf")
+    assert FIRMWARE_DIR, 'R2S_SIMAVR_FW is unset: run tests/harness/simavr/run.sh'
+    missing = os.path.join(FIRMWARE_DIR, 'absent.elf')
     result = subprocess.run(
-        [harness_binary(), "--mcu", "atmega328p", "--firmware", missing],
+        [harness_binary(), '--mcu', 'atmega328p', '--firmware', missing],
         capture_output=True,
         text=True,
     )

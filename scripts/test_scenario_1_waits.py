@@ -13,8 +13,8 @@ import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-E2E = ROOT / "tests" / "e2e"
-POSIX_CASE = E2E / "test_scenario_1_posix.py"
+E2E = ROOT / 'tests' / 'e2e'
+POSIX_CASE = E2E / 'test_scenario_1_posix.py'
 
 STEP = 0.25
 
@@ -22,22 +22,22 @@ _current = None
 
 
 def _events():
-    assert _current is not None, "stub ROS called outside a driven scenario"
+    assert _current is not None, 'stub ROS called outside a driven scenario'
     return _current.events
 
 
 def _nodes():
-    assert _current is not None, "stub ROS called outside a driven scenario"
+    assert _current is not None, 'stub ROS called outside a driven scenario'
     return _current.nodes
 
 
 def _script():
-    assert _current is not None, "stub ROS called outside a driven scenario"
+    assert _current is not None, 'stub ROS called outside a driven scenario'
     return _current.next_script
 
 
 def _clock():
-    assert _current is not None, "stub ROS called outside a driven scenario"
+    assert _current is not None, 'stub ROS called outside a driven scenario'
     return _current.clock
 
 
@@ -81,12 +81,12 @@ class FakeNode:
         self._clock = clock
 
     def create_subscription(self, msg_type, topic, callback, qos):
-        self._events.append(("sub", topic))
+        self._events.append(('sub', topic))
         self._subs.setdefault(topic, []).append(callback)
-        return ("sub", topic)
+        return ('sub', topic)
 
     def destroy_node(self):
-        self._events.append(("destroy_node",))
+        self._events.append(('destroy_node',))
 
     def spin_once(self):
         self._clock.advance(STEP)
@@ -99,17 +99,17 @@ class FakeNode:
 
 
 _STUB_NAMES = (
-    "launch_testing",
-    "launch_testing.markers",
-    "rclpy",
-    "diagnostic_msgs",
-    "diagnostic_msgs.msg",
-    "e2e_support",
-    "e2e_support.bridge",
-    "e2e_support.checks",
-    "e2e_support.firmware",
-    "e2e_support.relay",
-    "e2e_support.teardown",
+    'launch_testing',
+    'launch_testing.markers',
+    'rclpy',
+    'diagnostic_msgs',
+    'diagnostic_msgs.msg',
+    'e2e_support',
+    'e2e_support.bridge',
+    'e2e_support.checks',
+    'e2e_support.firmware',
+    'e2e_support.relay',
+    'e2e_support.teardown',
 )
 
 
@@ -122,20 +122,22 @@ def _install_stubs():
     straight from its file, keeping the stub package pathless, so a missing
     fake fails loudly instead of importing the real backend.
     """
-    spec = importlib.util.spec_from_file_location("s1_waits_real_checks", E2E / "e2e_support" / "checks.py")
+    spec = importlib.util.spec_from_file_location(
+        's1_waits_real_checks', E2E / 'e2e_support' / 'checks.py'
+    )
     real_checks = importlib.util.module_from_spec(spec)
-    sys.modules["s1_waits_real_checks"] = real_checks
+    sys.modules['s1_waits_real_checks'] = real_checks
     spec.loader.exec_module(real_checks)
     # The helper keeps its file and its real time module: the scenario
     # passes its own time.monotonic as the clock, so the driven run needs
     # no patching of the helper's globals on any host uptime.
 
-    launch_testing = types.ModuleType("launch_testing")
-    markers = types.ModuleType("launch_testing.markers")
+    launch_testing = types.ModuleType('launch_testing')
+    markers = types.ModuleType('launch_testing.markers')
     markers.keep_alive = lambda func: func
     launch_testing.markers = markers
 
-    rclpy = types.ModuleType("rclpy")
+    rclpy = types.ModuleType('rclpy')
 
     def create_node(name):
         node = FakeNode(_events(), _script(), _clock())
@@ -143,58 +145,60 @@ def _install_stubs():
         return node
 
     rclpy.create_node = create_node
-    rclpy.init = lambda: _events().append(("init",))
+    rclpy.init = lambda: _events().append(('init',))
     rclpy.spin_once = lambda node, timeout_sec=0.0: node.spin_once()
 
-    diagnostic_msgs = types.ModuleType("diagnostic_msgs")
-    diagnostic_msgs_msg = types.ModuleType("diagnostic_msgs.msg")
-    diagnostic_msgs_msg.DiagnosticArray = type("DiagnosticArray", (), {})
+    diagnostic_msgs = types.ModuleType('diagnostic_msgs')
+    diagnostic_msgs_msg = types.ModuleType('diagnostic_msgs.msg')
+    diagnostic_msgs_msg.DiagnosticArray = type('DiagnosticArray', (), {})
     diagnostic_msgs.msg = diagnostic_msgs_msg
 
-    bridge = types.ModuleType("e2e_support.bridge")
+    bridge = types.ModuleType('e2e_support.bridge')
     bridge.HANDSHAKE_TIMEOUT = 20.0
     bridge.DISCOVERY_SPIN = 0.1
-    bridge.wait_for_bridge = lambda node, service="", timeout=0.0: _events().append(("wait_for_bridge",))
+    bridge.wait_for_bridge = lambda node, service='', timeout=0.0: _events().append(
+        ('wait_for_bridge',)
+    )
 
     def wait_for_topics(node, wanted, since, budget, what, spin):
-        assert callable(spin), "the scenario must pass a spin callback"
-        _events().append(("wait_for_topics", tuple(wanted), since, budget))
+        assert callable(spin), 'the scenario must pass a spin callback'
+        _events().append(('wait_for_topics', tuple(wanted), since, budget))
 
     bridge.wait_for_topics = wait_for_topics
     bridge.launch_bridge_only = lambda *args, **kwargs: None
     bridge.example_params_file = lambda: None
 
-    firmware = types.ModuleType("e2e_support.firmware")
+    firmware = types.ModuleType('e2e_support.firmware')
     firmware.from_run_script = lambda: None
 
     def spawn(fw, port, args=()):
-        _events().append(("spawn", _clock().now))
+        _events().append(('spawn', _clock().now))
         return types.SimpleNamespace(pty=port, ready_at=_clock().now)
 
     firmware.spawn = spawn
 
-    relay = types.ModuleType("e2e_support.relay")
-    relay.PtyRelay = type("PtyRelay", (), {})
+    relay = types.ModuleType('e2e_support.relay')
+    relay.PtyRelay = type('PtyRelay', (), {})
 
-    teardown = types.ModuleType("e2e_support.teardown")
-    teardown.shutdown = lambda: _events().append(("shutdown",))
+    teardown = types.ModuleType('e2e_support.teardown')
+    teardown.shutdown = lambda: _events().append(('shutdown',))
 
-    support = types.ModuleType("e2e_support")
+    support = types.ModuleType('e2e_support')
     for name, child in (
-        ("bridge", bridge),
-        ("checks", real_checks),
-        ("firmware", firmware),
-        ("relay", relay),
-        ("teardown", teardown),
+        ('bridge', bridge),
+        ('checks', real_checks),
+        ('firmware', firmware),
+        ('relay', relay),
+        ('teardown', teardown),
     ):
-        sys.modules[f"e2e_support.{name}"] = child
+        sys.modules[f'e2e_support.{name}'] = child
         setattr(support, name, child)
-    sys.modules["e2e_support"] = support
-    sys.modules["launch_testing"] = launch_testing
-    sys.modules["launch_testing.markers"] = markers
-    sys.modules["rclpy"] = rclpy
-    sys.modules["diagnostic_msgs"] = diagnostic_msgs
-    sys.modules["diagnostic_msgs.msg"] = diagnostic_msgs_msg
+    sys.modules['e2e_support'] = support
+    sys.modules['launch_testing'] = launch_testing
+    sys.modules['launch_testing.markers'] = markers
+    sys.modules['rclpy'] = rclpy
+    sys.modules['diagnostic_msgs'] = diagnostic_msgs
+    sys.modules['diagnostic_msgs.msg'] = diagnostic_msgs_msg
     return real_checks
 
 
@@ -222,7 +226,7 @@ class World:
     def drive(self, module):
         global _current
         _current = self
-        case = module.TestScenario1("test_handshake_announces_topics_within_3s_of_hello")
+        case = module.TestScenario1('test_handshake_announces_topics_within_3s_of_hello')
         module.TestScenario1.setUpClass()
         try:
             case.test_handshake_announces_topics_within_3s_of_hello()
@@ -231,7 +235,9 @@ class World:
 
 
 def _connected(names):
-    return FakeDiagnostics("connected", [(f"topic {16 + i} {name} status", "ok") for i, name in enumerate(names)])
+    return FakeDiagnostics(
+        'connected', [(f'topic {16 + i} {name} status', 'ok') for i, name in enumerate(names)]
+    )
 
 
 def _handshake_script(world):
@@ -242,9 +248,9 @@ def _handshake_script(world):
         node.deliver(topic, make())
 
     return [
-        lambda: deliver("/diagnostics", lambda: FakeDiagnostics("handshaking")),
-        lambda: deliver("/diagnostics", lambda: FakeDiagnostics("handshaking")),
-        lambda: deliver("/diagnostics", lambda: _connected(world.module.HANDSHAKE_TOPICS)),
+        lambda: deliver('/diagnostics', lambda: FakeDiagnostics('handshaking')),
+        lambda: deliver('/diagnostics', lambda: FakeDiagnostics('handshaking')),
+        lambda: deliver('/diagnostics', lambda: _connected(world.module.HANDSHAKE_TOPICS)),
     ]
 
 
@@ -253,13 +259,19 @@ def test_posix_discovers_on_its_own_budget_after_the_handshake():
     real_checks = _install_stubs()
     try:
         world = World()
-        module = world.load("s1_posix_waits_probe", POSIX_CASE)
+        module = world.load('s1_posix_waits_probe', POSIX_CASE)
         world.module = module
-        module._FIRMWARE = "fake-firmware"
-        module._RELAY = types.SimpleNamespace(mcu_port="/dev/fake")
+        module._FIRMWARE = 'fake-firmware'
+        module._RELAY = types.SimpleNamespace(mcu_port='/dev/fake')
         assert module.TOPIC_BUDGET == 3.0
-        assert set(module.ANNOUNCED) == {"/battery", "/cmd_vel", "/echo_vel", "/log_text", "/time_now"}
-        assert module.HANDSHAKE_TOPICS == [name.removeprefix("/") for name in module.ANNOUNCED]
+        assert set(module.ANNOUNCED) == {
+            '/battery',
+            '/cmd_vel',
+            '/echo_vel',
+            '/log_text',
+            '/time_now',
+        }
+        assert module.HANDSHAKE_TOPICS == [name.removeprefix('/') for name in module.ANNOUNCED]
         world.next_script.extend(_handshake_script(world))
         world.drive(module)
     finally:
@@ -268,12 +280,12 @@ def test_posix_discovers_on_its_own_budget_after_the_handshake():
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = stub
-    discovery = next(event for event in world.events if event[0] == "wait_for_topics")
+    discovery = next(event for event in world.events if event[0] == 'wait_for_topics')
     assert discovery[1] == tuple(module.ANNOUNCED)
     assert discovery[3] == real_checks.DISCOVERY_TIMEOUT
-    spawn = next(event for event in world.events if event[0] == "spawn")
+    spawn = next(event for event in world.events if event[0] == 'spawn')
     ready_at = spawn[1]
     since = discovery[2]
     assert since == ready_at + 2 * STEP
-    diag = world.events.index(("sub", "/diagnostics"))
+    diag = world.events.index(('sub', '/diagnostics'))
     assert diag < world.events.index(spawn) < world.events.index(discovery)
