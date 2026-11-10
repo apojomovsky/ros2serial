@@ -15,11 +15,16 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_compile_definitions(R2S_TESTING)
+# A frame limit above 254, as in the core's host tests, so the params and
+# services channels name the frame limit their DECLARE checks use.
+# Firmware takes the value from the generated configuration.
+add_compile_definitions(R2S_MAX_FRAME=512)
 # The same feature set the core's host tests use, so the runtime speaks the
 # same protocol there as on a board, plus the actions channel the action
-# server needs. The stack holds the deepest bundled closure: a stamp in a
-# header in a stamped transform in a TFMessage.
-add_compile_definitions(R2S_WITH_CODEC R2S_MAX_NEST=4 R2S_WITH_LOG R2S_WITH_TIME R2S_WITH_ACTIONS)
+# server needs and the services and parameters channels the compat layer
+# maps. The stack holds the deepest bundled closure: a stamp in a header in
+# a stamped transform in a TFMessage.
+add_compile_definitions(R2S_WITH_CODEC R2S_MAX_NEST=4 R2S_WITH_LOG R2S_WITH_TIME R2S_WITH_ACTIONS R2S_WITH_SERVICES R2S_WITH_PARAMS)
 set(R2S_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 set(R2S_WARNINGS -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow -Wundef)
@@ -38,7 +43,7 @@ add_library(r2s_core STATIC ${R2S_CORE_SOURCES})
 target_include_directories(r2s_core PUBLIC "${R2S_REPO_ROOT}/core/include")
 target_compile_options(r2s_core PRIVATE ${R2S_WARNINGS})
 
-add_library(r2s_runtime STATIC src/runtime.cpp src/action.cpp)
+add_library(r2s_runtime STATIC src/runtime.cpp src/action.cpp src/service.cpp)
 target_include_directories(r2s_runtime PUBLIC include)
 target_compile_options(r2s_runtime PRIVATE ${R2S_WARNINGS})
 target_link_libraries(r2s_runtime PUBLIC r2s_core)
@@ -97,6 +102,7 @@ endfunction()
 
 r2s_cpp_unit_test(tests/test_runtime.cpp r2s_runtime)
 r2s_cpp_unit_test(tests/test_action.cpp r2s_runtime)
+r2s_cpp_unit_test(tests/test_service.cpp r2s_runtime r2s_bundled)
 
 # The bundled tables the static test announces: the pinned generator output,
 # so the test speaks the tables the Arduino library ships. The frozen header

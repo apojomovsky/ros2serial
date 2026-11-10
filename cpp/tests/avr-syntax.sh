@@ -43,11 +43,12 @@ flags+=(-I "$stage")
 # fails here and names itself. The header is included by the path a sketch
 # uses, with the package directory on the include path.
 sources=()
-for header in "$root"/cpp/include/*/msg/*.hpp; do
+for header in "$root"/cpp/include/*/msg/*.hpp "$root"/cpp/include/*/srv/*.hpp; do
   [ -e "$header" ] || continue
   name=$(basename "$header" .hpp)
   package=$(basename "$(dirname "$(dirname "$header")")")
-  printf '#include <%s/msg/%s.hpp>\n' "$package" "$name" >"$build/check_$name.cpp"
+  kind=$(basename "$(dirname "$header")")
+  printf '#include <%s/%s/%s.hpp>\n' "$package" "$kind" "$name" >"$build/check_$name.cpp"
   sources+=("$build/check_$name.cpp")
 done
 # The runtime header on its own, without a message type, so a change there
@@ -339,65 +340,87 @@ for source in "${sources[@]}"; do
     status=1
   fi
 done
-# Services have no runtime until X6: a TU that advertises a service or
-# names a client must fail to compile with the X6 message. The check
-# fails when the TU compiles, or when the error names another cause.
-cat >"$build/check_ros_service_server.cpp" <<'EOF'
-#include <ros2serial/ros.h>
-#include <ros2serial/ros/service_server.h>
-struct AddTwoIntsReq {
-    int32_t a;
-    int32_t b;
-};
-struct AddTwoIntsRes {
-    int32_t sum;
-};
-void on_add(const AddTwoIntsReq &req, AddTwoIntsRes &res)
+# A service sketch, runtime and compat: the Trigger service rides on the
+# bundled tables, proving both declaration paths compile for the board.
+# The getParam calls ride along without the parameters channel, so a
+# sketch using them builds for every tier.
+cat >"$build/check_service_sketch.cpp" <<'EOF'
+#include <std_srvs/srv/trigger.hpp>
+#include <r2s/service.hpp>
+r2s::Node node("svc");
+void on_reset(const std_srvs::srv::Trigger::Request &req, std_srvs::srv::Trigger::Response &res)
 {
     (void)req;
-    res.sum = 0;
+    res.success = 1u;
+    res.message[0] = '\0';
 }
-ros::NodeHandle nh;
-ros::ServiceServer<AddTwoIntsReq, AddTwoIntsRes> server("add_two_ints", &on_add);
-void setup()
+r2s::Service<std_srvs::srv::Trigger> reset(node, "reset", &on_reset);
+r2s::Client<std_srvs::srv::Trigger> trigger(node, "trigger");
+bool call_trigger()
 {
-    nh.initNode();
-    nh.advertiseService(server);
-}
-void loop()
-{
-    (void)nh.spinOnce();
+    std_srvs::srv::Trigger::Request req;
+    std_srvs::srv::Trigger::Response res;
+    return trigger.call(req, res);
 }
 EOF
-cat >"$build/check_ros_service_client.cpp" <<'EOF'
+cat >"$build/check_ros_service.cpp" <<'EOF'
 #include <ros2serial/ros.h>
-#include <ros2serial/ros/service_client.h>
-struct AddTwoIntsReq {
-    int32_t a;
-    int32_t b;
-};
-struct AddTwoIntsRes {
-    int32_t sum;
-};
+#include <ros2serial/std_srvs/Trigger.h>
 ros::NodeHandle nh;
-ros::ServiceClient<AddTwoIntsReq, AddTwoIntsRes> client("add_two_ints");
+void on_reset(const std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res)
+{
+    (void)req;
+    res.success = 1u;
+    res.message[0] = '\0';
+}
+ros::ServiceServer<std_srvs::Trigger::Request, std_srvs::Trigger::Response> reset_srv("reset",
+    &on_reset);
+class Adder
+{
+  public:
+    void on_add(const std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res)
+    {
+        (void)req;
+        res.success = 1u;
+    }
+};
+Adder adder;
+ros::ServiceServer<std_srvs::Trigger::Request, std_srvs::Trigger::Response, Adder> add_srv("add",
+    &Adder::on_add, &adder);
+ros::ServiceClient<std_srvs::Trigger::Request, std_srvs::Trigger::Response> trigger_cli(
+    "trigger");
 void setup()
 {
+    int count = 0;
+    float gain = 0.0f;
+    char text[32];
+    char *slot = text;
+    bool flag = false;
     nh.initNode();
-    nh.serviceClient(client);
+    nh.advertiseService(reset_srv);
+    nh.advertiseService(add_srv);
+    nh.serviceClient(trigger_cli);
+    (void)nh.getParam("count", &count);
+    (void)nh.getParam("gain", &gain);
+    (void)nh.getParam("label", &slot);
+    (void)nh.getParam("flag", &flag);
 }
 void loop()
 {
+    std_srvs::Trigger::Request req;
+    std_srvs::Trigger::Response res;
+    (void)trigger_cli.call(req, res);
     (void)nh.spinOnce();
 }
 EOF
-for source in "$build/check_ros_service_server.cpp" "$build/check_ros_service_client.cpp"; do
-  if avr-g++ "${flags[@]}" -fsyntax-only "$source" 2>"$build/service_err.log"; then
-    echo "avr-syntax: $source compiled, but services wait on X6"
-    status=1
-  elif ! grep -q "X6" "$build/service_err.log"; then
-    echo "avr-syntax: $source failed without naming X6"
-    cat "$build/service_err.log"
+service_sources=("$build/check_service_sketch.cpp" "$build/check_ros_service.cpp")
+# The service sketches and the registry source, with the services channel
+# on: the channel is a build flag, so these prove the flag the sketches
+# build with.
+service_flags=("${flags[@]}" -DR2S_WITH_SERVICES)
+for source in "${service_sources[@]}" "$root/cpp/src/service.cpp"; do
+  if ! avr-g++ "${service_flags[@]}" -fsyntax-only "$source"; then
+    echo "avr-syntax: $source did not compile"
     status=1
   fi
 done
@@ -426,4 +449,4 @@ if ! avr-g++ "${flags[@]}" -fsyntax-only -DARDUINO -I "$root/ports/arduino" "$bu
   status=1
 fi
 [ "$status" = 0 ] || exit 1
-echo "avr-syntax ok: ${#sources[@]} translation units, ${#action_sources[@]} action sketches and the runtime sources"
+echo "avr-syntax ok: ${#sources[@]} translation units, ${#action_sources[@]} action sketches, ${#service_sources[@]} service sketches and the runtime sources"

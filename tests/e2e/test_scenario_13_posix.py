@@ -125,6 +125,16 @@ def _wait_applied_lines(proc, needles, budget):
     assert not pending, f'firmware never applied: {pending}'
 
 
+def _params_firmware():
+    """Whether this leg boots a firmware carrying the parameter table."""
+    given = os.environ.get('R2S_E2E_FW', '')
+    return not given or not given.endswith('/r2s_posix_static_firmware')
+
+
+@unittest.skipUnless(
+    _params_firmware(),
+    "scenario 13 needs the firmware's parameter table; the static C++ shape carries none",
+)
 class TestScenario13(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

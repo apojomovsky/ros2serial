@@ -1,6 +1,11 @@
-# Scenario files the static C++ and ros compat legs run: scenarios 1 to 4.
-# One per line so concurrent branches appending a scenario keep both.
+# Scenario files the static C++ and ros compat legs run: scenarios 1 to 4
+# on every leg, 13 and 14 where the firmware carries them. The static C++
+# firmware serves neither parameters nor services, so those two skip it
+# from inside the scenario. One per line so concurrent branches appending
+# a scenario keep both.
 test_scenario_1_posix
 test_scenario_2_posix
 test_scenario_3_posix
 test_scenario_4_posix
+test_scenario_13_posix
+test_scenario_14_posix

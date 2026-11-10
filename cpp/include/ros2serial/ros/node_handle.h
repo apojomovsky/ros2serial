@@ -7,8 +7,11 @@
 #ifndef R2S_ROS_NODE_HANDLE_H
 #define R2S_ROS_NODE_HANDLE_H
 
+#include <limits.h>
 #include <stdint.h>
+#include <string.h>
 
+#include "r2s/r2s_params.h"
 #include "r2s/runtime.hpp"
 
 #include "ros2serial/ros/publisher.h"
@@ -130,40 +133,197 @@ public:
     return true;
   }
 
-  /// Names a service server, which fails to compile with a message.
+  /// Announces the service server.
   /**
-   * Services land in X6, so naming one fails to compile instead of
-   * linking a half present runtime.
+   * The server answers each request through its callback while the node
+   * spins. Refused past the first spin, like a topic.
    *
    * \tparam MReq the request message type.
    * \tparam MRes the response message type.
    * \tparam ObjT the object type holding the callback.
-   * \param[in] srv the server that cannot be announced.
-   * \return False: this line is never reached.
+   * \param[in,out] srv the server to announce.
+   * \return True with the service announced, false on refusal.
    */
   template<typename MReq, typename MRes, typename ObjT>
   bool advertiseService(ServiceServer<MReq, MRes, ObjT> & srv)
   {
-    (void)srv;
-    static_assert(!sizeof(MReq *),
-        "service servers land in X6: advertiseService cannot announce one");
-    return false;
+    if (m_spun) {
+      return false;
+    }
+    return srv.attach(m_node);
   }
 
-  /// Names a service client, which fails to compile with a message.
+  /// Names the service client.
   /**
-   * Services land in X6, so naming one fails to compile instead of
-   * linking a half present runtime.
+   * The client calls the service through call(), which spins the node
+   * until its answer. Refused past the first spin, like a topic.
    *
    * \tparam MReq the request message type.
    * \tparam MRes the response message type.
-   * \param[in] srv the client that cannot be named.
-   * \return False: this line is never reached.
+   * \param[in,out] srv the client to name.
+   * \return True with the call announced, false on refusal.
    */
   template<typename MReq, typename MRes> bool serviceClient(ServiceClient<MReq, MRes> & srv)
   {
-    (void)srv;
-    static_assert(!sizeof(MReq *), "service clients land in X6: serviceClient cannot name one");
+    if (m_spun) {
+      return false;
+    }
+    return srv.attach(m_node);
+  }
+
+  /// Reads an integer parameter the sketch declared.
+  /**
+   * The value is the live one the last applied set left, so it reflects
+   * every set the node already spun past. Unlike rosserial, nothing
+   * crosses the wire: the MCU owns its parameters and the host sets them
+   * through the bridge. The timeout is accepted and ignored.
+   *
+   * \param[in] name the declared parameter to read.
+   * \param[out] param where the value lands.
+   * \param[in] length how many values to read, always 1.
+   * \param[in] timeout accepted and ignored.
+   * \return True with the value read, false on an unknown name, a type
+   * mismatch, a length other than 1, or a value outside int range.
+   */
+  bool getParam(const char *name, int *param, int length = 1, int timeout = 1000)
+  {
+    (void)timeout;
+#ifdef R2S_WITH_PARAMS
+    const r2s_param_t *entry = find_param(name);
+
+    if (param == NULL || length != 1 || entry == NULL || entry->type != R2S_PARAM_I64) {
+      return false;
+    }
+    if (entry->value.i < (int64_t)INT_MIN || entry->value.i > (int64_t)INT_MAX) {
+      return false;
+    }
+    *param = (int)entry->value.i;
+    return true;
+#else
+    (void)name;
+    (void)param;
+    (void)length;
+    return false;
+#endif
+  }
+
+  /// Reads a float parameter the sketch declared.
+  /**
+   * The value is the live one the last applied set left. The timeout is
+   * accepted and ignored, as above.
+   *
+   * \param[in] name the declared parameter to read.
+   * \param[out] param where the value lands.
+   * \param[in] length how many values to read, always 1.
+   * \param[in] timeout accepted and ignored.
+   * \return True with the value read, false on an unknown name, a type
+   * mismatch, or a length other than 1.
+   */
+  bool getParam(const char *name, float *param, int length = 1, int timeout = 1000)
+  {
+    (void)timeout;
+#ifdef R2S_WITH_PARAMS
+    const r2s_param_t *entry = find_param(name);
+
+    if (param == NULL || length != 1 || entry == NULL || entry->type != R2S_PARAM_F64) {
+      return false;
+    }
+    *param = (float)entry->value.f;
+    return true;
+#else
+    (void)name;
+    (void)param;
+    (void)length;
+    return false;
+#endif
+  }
+
+  /// Reads a string parameter the sketch declared.
+  /**
+   * Copies the live text into the caller's buffer, which holds the bound
+   * plus the terminator, as ros_lib does. The timeout is accepted and
+   * ignored, as above.
+   *
+   * \param[in] name the declared parameter to read.
+   * \param[out] param where the text lands, one buffer per value.
+   * \param[in] length how many values to read, always 1.
+   * \param[in] timeout accepted and ignored.
+   * \return True with the text copied, false on an unknown name, a type
+   * mismatch, or a length other than 1.
+   */
+  bool getParam(const char *name, char **param, int length = 1, int timeout = 1000)
+  {
+    (void)timeout;
+#ifdef R2S_WITH_PARAMS
+    const r2s_param_t *entry = find_param(name);
+
+    if (param == NULL || length != 1 || entry == NULL || entry->type != R2S_PARAM_STRING) {
+      return false;
+    }
+    (void)strcpy(param[0], entry->value.s);
+    return true;
+#else
+    (void)name;
+    (void)param;
+    (void)length;
+    return false;
+#endif
+  }
+
+  /// Reads a bool parameter the sketch declared.
+  /**
+   * The value is the live one the last applied set left. The timeout is
+   * accepted and ignored, as above.
+   *
+   * \param[in] name the declared parameter to read.
+   * \param[out] param where the value lands.
+   * \param[in] length how many values to read, always 1.
+   * \param[in] timeout accepted and ignored.
+   * \return True with the value read, false on an unknown name, a type
+   * mismatch, or a length other than 1.
+   */
+  bool getParam(const char *name, bool *param, int length = 1, int timeout = 1000)
+  {
+    (void)timeout;
+#ifdef R2S_WITH_PARAMS
+    const r2s_param_t *entry = find_param(name);
+
+    if (param == NULL || length != 1 || entry == NULL || entry->type != R2S_PARAM_BOOL) {
+      return false;
+    }
+    *param = entry->value.b != 0u;
+    return true;
+#else
+    (void)name;
+    (void)param;
+    (void)length;
+    return false;
+#endif
+  }
+
+  /// Rejects a parameter type with no equivalent.
+  /**
+   * The declared parameters are bool, 64-bit int, 64-bit float and
+   * string, so anything else fails to compile naming the rule instead of
+   * reading a wrong value.
+   *
+   * \tparam T the unsupported value type.
+   * \param[in] name the parameter that cannot be read.
+   * \param[out] param where nothing lands.
+   * \param[in] length how many values to read, always 1.
+   * \param[in] timeout accepted and ignored.
+   * \return False: this line is never reached.
+   */
+  template<typename T>
+  bool getParam(const char *name, T *param, int length = 1, int timeout = 1000)
+  {
+    (void)name;
+    (void)param;
+    (void)length;
+    (void)timeout;
+    static_assert(
+      !sizeof(T *),
+      "getParam reads bool, int, float and char* parameters: arrays and other types have no equivalent");
     return false;
   }
 
@@ -179,6 +339,7 @@ public:
   {
     uint32_t start = m_node.now();
 
+    m_spun = true;
     m_node.spin_some();
     if (m_spin_timeout > 0u && (m_node.now() - start) > m_spin_timeout) {
       return SPIN_TIMEOUT;
@@ -402,9 +563,34 @@ private:
   NodeHandle_(const NodeHandle_ &);
   NodeHandle_ & operator=(const NodeHandle_ &);
 
+#ifdef R2S_WITH_PARAMS
+  /// Finds a declared parameter by name.
+  /**
+   * \param[in] name the parameter to find.
+   * \return The entry, or NULL on an unknown or unnamed table.
+   */
+  static const r2s_param_t * find_param(const char *name)
+  {
+    uint8_t i;
+
+    if (name == NULL) {
+      return NULL;
+    }
+    for (i = 0u; i < r2s_params_count(); i++) {
+      const r2s_param_t *entry = r2s_params_get(i);
+
+      if (entry != NULL && entry->name != NULL && strcmp(entry->name, name) == 0) {
+        return entry;
+      }
+    }
+    return NULL;
+  }
+#endif
+
   r2s::Node m_node;
   Hardware hardware_;
   uint32_t m_spin_timeout = 0u;
+  bool m_spun = false;
 };
 
 /// The handle a ros_lib sketch names.

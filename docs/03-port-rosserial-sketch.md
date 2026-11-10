@@ -2,15 +2,19 @@
 
 A rosserial sketch ports by changing its includes and its message
 fields. The calls stay the same: `initNode`, `advertise`, `subscribe`,
-`spinOnce`, plus `connected`, `now`, `setSpinTimeout`, `getHardware`
-and the `log*` diagnostics. This guide covers what is on `master`:
-the aliases from [#145](https://github.com/apojomovsky/ros2serial/issues/145)
+`advertiseService`, `serviceClient`, `spinOnce`, plus `connected`,
+`now`, `setSpinTimeout`, `getHardware` and the `log*` diagnostics.
+Parameters read through `getParam`. This guide covers what is on
+`master`: the aliases from
+[#145](https://github.com/apojomovsky/ros2serial/issues/145)
 and the rest of the handle surface from
 [#417](https://github.com/apojomovsky/ros2serial/issues/417),
 plus the `tf` broadcaster from
 [#418](https://github.com/apojomovsky/ros2serial/issues/418)
-(see [Broadcast tf](#broadcast-tf)). Services and actions are not
-there yet; see [Not yet](#not-yet).
+(see [Broadcast tf](#broadcast-tf)), the services and parameters from
+[#447](https://github.com/apojomovsky/ros2serial/issues/447)
+(see [Services](#services) and [Parameters](#parameters)).
+Actions are not there yet; see [Not yet](#not-yet).
 
 What does not change: the wiring, the bridge launch, and the ROS 2
 side. The sketch still opens the serial port at 115200 baud, the
@@ -365,14 +369,123 @@ void loop()
 }
 ```
 
+## Services
+
+Services keep their ros_lib shape: `advertiseService` serves one
+service through a callback, `serviceClient` names one to call, and
+`call` sends a request and spins until its answer. The request and
+response types come from the service header, which the compatibility
+header renames the ros_lib way:
+
+```cpp
+#include <ros2serial.h>
+#include <ros2serial/ros.h>
+#include <ros2serial/std_srvs/Trigger.h>
+
+ros::NodeHandle nh;
+
+void on_reset(const std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res)
+{
+    (void)req;
+    res.success = true;
+}
+
+ros::ServiceServer<std_srvs::Trigger::Request, std_srvs::Trigger::Response> reset_srv("reset",
+    &on_reset);
+ros::ServiceClient<std_srvs::Trigger::Request, std_srvs::Trigger::Response> trigger_cli(
+    "trigger");
+
+void setup()
+{
+    nh.initNode();
+    nh.advertiseService(reset_srv);
+    nh.serviceClient(trigger_cli);
+}
+
+void loop()
+{
+    std_srvs::Trigger::Request req;
+    std_srvs::Trigger::Response res;
+
+    if (trigger_cli.call(req, res) && res.success) {
+        nh.loginfo("trigger answered");
+    }
+    (void)nh.spinOnce();
+}
+```
+
+Two differences to know. `call` returns whether the answer arrived:
+`true` with the host's ok answer, `false` on refusal, timeout or
+disconnect. Ignoring the result still compiles, so a ported sketch
+builds either way. And the announce closes with the first spin, like
+topics: `advertiseService` and `serviceClient` past it announce
+nothing and return false. Without the services channel the calls
+compile and report the refusal, so one sketch builds for every tier.
+
+## Parameters
+
+Parameters differ from rosserial: ros2serial parameters are declared
+by the MCU and exposed on the bridge node, while rosserial's
+`getParam` reads the host parameter server. The ported sketch declares
+its table before the first spin, then reads the live values through
+`getParam`: a host set lands at the next spin, and the sketch reads
+what the last spin applied.
+
+```cpp
+#include <ros2serial.h>
+#include <r2s/r2s_params.h>
+#include <ros2serial/ros.h>
+
+static char label_live[17];
+static r2s_param_t params[2];
+
+ros::NodeHandle nh;
+
+void setup()
+{
+    params[0].name = "led";
+    params[0].type = R2S_PARAM_BOOL;
+    params[0].initial.b = 1u;
+    params[1].name = "label";
+    params[1].type = R2S_PARAM_STRING;
+    params[1].bound = 16u;
+    params[1].initial.s = "hello";
+    params[1].value.s = label_live;
+#ifdef R2S_WITH_PARAMS
+    (void)r2s_params_configure(params, 2);
+#endif
+    nh.initNode();
+}
+
+void loop()
+{
+    bool led = false;
+    char text[17];
+    char *slot = text;
+
+    if (nh.getParam("led", &led) && led) {
+        nh.loginfo("led is on");
+    }
+    if (nh.getParam("label", &slot)) {
+        nh.loginfo(slot);
+    }
+    (void)nh.spinOnce();
+}
+```
+
+The guard keeps one sketch building with the channel off: then the
+configure call compiles out and `getParam` reads nothing. The four
+overloads (`bool*`, `int*`, `float*`, `char**`) map onto the declared
+types (`R2S_PARAM_BOOL`, `R2S_PARAM_I64`, `R2S_PARAM_F64`,
+`R2S_PARAM_STRING`): an unknown name, a type mismatch, a length other
+than 1, or an integer outside int range reads nothing and returns
+false. The timeout is accepted and ignored, since nothing crosses the
+wire. Anything else, an array or another width, fails to compile
+naming the rule.
+
 ## Not yet
 
-Services have no counterpart yet: `advertiseService` and
-`serviceClient` fail to compile with a message naming the services
-work item (X6, [#156](https://github.com/apojomovsky/ros2serial/issues/156))
-until services land. Leave that code out of the port for now.
-
-Actions have no sketch API yet either
+Actions have no sketch API yet
 ([#318](https://github.com/apojomovsky/ros2serial/issues/318),
 [#319](https://github.com/apojomovsky/ros2serial/issues/319)): the
 generator reads `.action` files at build time, but the MCU cannot

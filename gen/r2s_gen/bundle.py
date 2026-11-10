@@ -4,7 +4,7 @@
 """
 The `bundle` subcommand: the Arduino library with bundled common types.
 
-The library carries the descriptors for the fourteen bundled types with the
+The library carries the descriptors for the sixteen bundled types with the
 documented default bounds, plus the `ros2serial.h` header that expands a
 sketch's `R2S_TOPICS` X-macro list into the topic table, the typed publish
 functions and dispatch. The descriptors compile once in the library, so a
@@ -46,6 +46,8 @@ BUNDLED_TYPES = (
     'std_msgs/msg/Float32',
     'std_msgs/msg/Header',
     'std_msgs/msg/String',
+    'std_srvs/srv/Trigger_Request',
+    'std_srvs/srv/Trigger_Response',
     'tf2_msgs/msg/TFMessage',
 )
 
@@ -79,9 +81,21 @@ _FILES = (
 _CPP_HEADERS = tuple(f'src/{cpp.message_path(name)}' for name in BUNDLED_TYPES)
 
 
+def _service_roots() -> tuple[str, ...]:
+    """Return the services the bundled request types belong to, in build order."""
+    return tuple(
+        sorted({name[: -len('_Request')] for name in BUNDLED_TYPES if name.endswith('_Request')})
+    )
+
+
+# The C++ service headers the library ships: one per bundled service, at the
+# rclcpp include path beside its request and response headers.
+_SERVICE_HEADERS = tuple(f'src/{cpp.service_path(service)}' for service in _service_roots())
+
+
 def files_for() -> tuple[str, ...]:
     """Return the exact relative paths `bundle` writes, in build order."""
-    return _FILES + _CPP_HEADERS
+    return _FILES + _CPP_HEADERS + _SERVICE_HEADERS
 
 
 def _cname(type_name: str) -> str:
@@ -90,8 +104,24 @@ def _cname(type_name: str) -> str:
 
     `std_msgs/msg/Float32` to `std_msgs_Float32`.
     """
-    package, _, name = type_name.partition('/msg/')
+    if '/srv/' in type_name:
+        package, _, name = type_name.partition('/srv/')
+    else:
+        package, _, name = type_name.partition('/msg/')
     return f'{package}_{name}'
+
+
+def _kind(type_name: str) -> tuple[str, str, str]:
+    """
+    Split a canonical type into its package, its kind and its short name.
+
+    `std_srvs/srv/Trigger_Request` to `('std_srvs', 'srv', 'Trigger_Request')`.
+    """
+    if '/srv/' in type_name:
+        package, _, name = type_name.partition('/srv/')
+        return package, 'srv', name
+    package, _, name = type_name.partition('/msg/')
+    return package, 'msg', name
 
 
 def _digest(distro: str) -> str:
@@ -136,6 +166,10 @@ def bundle(distro: str = 'jazzy') -> dict[str, str]:
     for name in BUNDLED_TYPES:
         files[f'src/{cpp.message_path(name)}'] = cpp.emit_message_hpp(
             resolved, name, repository=repository, distro=distro
+        )
+    for service in _service_roots():
+        files[f'src/{cpp.service_path(service)}'] = cpp.emit_service_hpp(
+            resolved, service, repository=repository, distro=distro
         )
     return files
 
@@ -292,7 +326,7 @@ def _bundled_c(
             lines.append('};')
         else:
             lines.append('/* No entries: one unread byte keeps the table symbol defined. */')
-            lines.append(f'const uint8_t R2S_FLASH r2s_bundled_entries_{cname}[1] = {{ 0x00 }};')
+            lines.append(f'const uint8_t R2S_FLASH r2s_bundled_entries_{cname}[1] = {{0x00}};')
         lines.append('')
         lines.append(f'const r2s_codec_table_t r2s_bundled_table_{cname} = {{')
         lines.append(f'  r2s_bundled_records_{cname},')
@@ -350,10 +384,10 @@ def _scope_maps(
     hash travels as eight separate bytes, since an array member needs eight
     initializers and only one entity resolves per paste.
     """
-    by_package: dict[str, list[tuple[str, str, int]]] = {}
+    by_package: dict[tuple[str, str], list[tuple[str, str, int]]] = {}
     for name in BUNDLED_TYPES:
-        package, _, short = name.partition('/msg/')
-        by_package.setdefault(package, []).append(
+        package, kind, short = _kind(name)
+        by_package.setdefault((package, kind), []).append(
             (short, _cname(name), tables[name].index_of[name])
         )
     lines = [
@@ -361,10 +395,10 @@ def _scope_maps(
         ' * preprocessor cannot split, so the row pastes the package half and',
         ' * the trailing ::msg::Type resolves the entity it needs. */',
     ]
-    for package, entries in by_package.items():
-        lines += [f'namespace R2S_MAP_{package}', '{', 'namespace msg', '{']
+    for (package, kind), entries in by_package.items():
+        lines += [f'namespace R2S_MAP_{package}', '{', f'namespace {kind}', '{']
         for short, cname, index in entries:
-            canonical = f'{package}/msg/{short}'
+            canonical = f'{package}/{kind}/{short}'
             lines.append(f'/* {cpp.cpp_type(canonical)}: hash, table, index and wire name. */')
             for byte_index, byte in enumerate(_hash_bytes(repository, canonical).split(', ')):
                 lines.append(f'constexpr uint8_t {short}_hash_{byte_index} = {byte};')
@@ -378,7 +412,7 @@ def _scope_maps(
                 lines.append(f'  &r2s_bundled_table_{cname};')
             lines.append(f'constexpr uint16_t {short}_index = {index}u;')
             lines.append(f'constexpr const char {short}_name[] = "{canonical}";')
-        lines += ['} // namespace msg', f'}} // namespace R2S_MAP_{package}', '']
+        lines += [f'}} // namespace {kind}', f'}} // namespace R2S_MAP_{package}', '']
     return lines
 
 
@@ -398,7 +432,8 @@ def _c_type_aliases(
         ' * the generated C struct, which pastes straight onto these. */',
     ]
     for name in BUNDLED_TYPES:
-        ctype = name.replace('/msg/', '__msg__')
+        package, kind, short = _kind(name)
+        ctype = f'{package}__{kind}__{short}'
         cname = _cname(name)
         index = tables[name].index_of[name]
         lines.append(f'/* {ctype}: hash, table, index and wire name. */')
@@ -424,7 +459,7 @@ def _c_spelling_traps() -> list[str]:
         '/* A C row that spells its type with double colons pastes only the',
         ' * package half here, and fails naming the underscore spelling. */',
     ]
-    for package in sorted({name.partition('/msg/')[0] for name in BUNDLED_TYPES}):
+    for package in sorted({_kind(name)[0] for name in BUNDLED_TYPES}):
         for kind in ('HASH', 'TABLE', 'INDEX', 'NAME'):
             lines.append(
                 f'#define R2S_CTYPE_{kind}_{package} R2S_error_expected_c_row_pkg__msg__Type'
@@ -446,8 +481,8 @@ def _cxx_spelling_traps() -> list[str]:
         ' * double-colon spelling. */',
     ]
     for name in BUNDLED_TYPES:
-        package, _, short = name.partition('/msg/')
-        key = f'{package}__msg__{short}'
+        package, kind, short = _kind(name)
+        key = f'{package}__{kind}__{short}'
         for entity in [f'hash_{byte}' for byte in range(8)] + ['table', 'index', 'name']:
             lines.extend(
                 _wrapped_define(

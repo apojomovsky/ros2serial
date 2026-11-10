@@ -89,15 +89,19 @@ def _wait_link_ready(node, received, since):
         rclpy.spin_once(node, timeout_sec=0.2)
 
 
-def _c_firmware():
-    """Whether this leg boots the C firmware, the only shape serving services yet."""
+def _service_firmware():
+    """Whether this leg boots a firmware serving services: the C shape or the ros compat shape."""
     given = os.environ.get('R2S_E2E_FW', '')
-    return not given or given.endswith('/r2s_posix_firmware')
+    return (
+        not given
+        or given.endswith('/r2s_posix_firmware')
+        or given.endswith('/r2s_posix_ros_firmware')
+    )
 
 
 @unittest.skipUnless(
-    _c_firmware(),
-    "scenario 14 needs the C firmware's services; the C++ shapes have no service API yet",
+    _service_firmware(),
+    'scenario 14 needs a firmware serving services; the runtime and static C++ shapes serve none',
 )
 class TestScenario14(unittest.TestCase):
     @classmethod

@@ -233,12 +233,22 @@ def test_narrow_breakdown_is_empty_without_float64():
 
 
 def snapshot_fields(type_name):
-    package, name = type_name.replace('/msg/', ' ').split()
-    text = (
-        ROOT / 'gen' / 'r2s_gen' / 'snapshots' / 'jazzy' / package / 'msg' / f'{name}.msg'
-    ).read_text()
+    if '/srv/' in type_name:
+        package, rest = type_name.split('/srv/')
+        base = rest[: -len('_Request')] if rest.endswith('_Request') else rest[: -len('_Response')]
+        text = (
+            ROOT / 'gen' / 'r2s_gen' / 'snapshots' / 'jazzy' / package / 'srv' / f'{base}.srv'
+        ).read_text()
+        request_text, _, response_text = text.partition('---')
+        lines = (request_text if rest.endswith('_Request') else response_text).splitlines()
+    else:
+        package, name = type_name.replace('/msg/', ' ').split()
+        text = (
+            ROOT / 'gen' / 'r2s_gen' / 'snapshots' / 'jazzy' / package / 'msg' / f'{name}.msg'
+        ).read_text()
+        lines = text.splitlines()
     fields = []
-    for line in text.splitlines():
+    for line in lines:
         line = line.split('#', 1)[0].strip()
         if not line or '=' in line or ' ' not in line:
             continue
@@ -299,7 +309,13 @@ def bundle_bounds():
 def test_mavlink_bounds_match_the_bundle():
     bundled, bounds, default_string = bundle_bounds()
     assert sorted(sizes.REPRESENTATIVE) == sorted(bundled)
-    assert sizes.MAVLINK_BOUNDS == dict(bounds, **{'std_msgs/msg/String.data': default_string})
+    assert sizes.MAVLINK_BOUNDS == dict(
+        bounds,
+        **{
+            'std_msgs/msg/String.data': default_string,
+            'std_srvs/srv/Trigger_Response.message': default_string,
+        },
+    )
 
 
 def test_writeup_table_matches_the_model():

@@ -17,12 +17,15 @@ extern "C" {
 #include "r2s/r2s.h"
 #include "r2s/r2s_codec.h"
 #include "r2s/r2s_framer.h"
+#include "r2s/r2s_params.h"
 #include "r2s/r2s_session.h"
+#include "r2s/r2s_services.h"
 #include "r2s/r2s_topics.h"
 #include "ros2serial/geometry_msgs/Twist.h"
 #include "ros2serial/ros.h"
 #include "ros2serial/std_msgs/Float32.h"
 #include "ros2serial/std_msgs/String.h"
+#include "ros2serial/std_srvs/Trigger.h"
 #include "ros2serial/tf/transform_broadcaster.h"
 #include "unity.h"
 
@@ -625,4 +628,259 @@ void test_ros_broadcaster_send_transform_publishes_the_frame(void)
   }
   len = tf_payload(payload, expect, 0u);
   assert_tx(0, 16u, 0u, payload, len);
+}
+
+/* The service hash the bundle pins for std_srvs/srv/Trigger: comparing
+ * against the traits would re-derive a miscapture. */
+static const uint8_t s_trigger_hash[8] = {0xeeu, 0xffu, 0x2cu, 0xd6u, 0xfau, 0x5au, 0xd9u,
+  0xd2u};
+
+static uint8_t s_reset_calls;
+
+static void on_reset_free(
+  const std_srvs::Trigger::Request & req, std_srvs::Trigger::Response & res)
+{
+  (void)req;
+  s_reset_calls++;
+  res.success = 1u;
+  res.message[0] = 'o';
+  res.message[1] = 'k';
+  res.message[2] = '\0';
+}
+
+/* A member-function service server, the ServiceServer<MReq, MRes, ObjT>
+ * arity. */
+class Adder
+{
+public:
+  void on_add(
+    const std_srvs::Trigger::Request & req, std_srvs::Trigger::Response & res)
+  {
+    (void)req;
+    m_calls++;
+    res.success = 1u;
+    res.message[0] = 'o';
+    res.message[1] = 'k';
+    res.message[2] = '\0';
+  }
+  uint8_t m_calls = 0u;
+};
+
+/* A sketch serving reset: the objects live at file scope in a sketch, and
+ * here they live in the test so each test registers from an empty
+ * registry. */
+struct ServiceSketch
+{
+  ros::NodeHandle nh;
+  ros::Publisher battery_pub;
+  ros::ServiceServer<std_srvs::Trigger::Request, std_srvs::Trigger::Response> reset_srv;
+  std_msgs::Float32 battery;
+
+  ServiceSketch()
+  : battery_pub("battery", &battery), reset_srv("reset", &on_reset_free)
+  {
+    battery.data = 0.0f;
+  }
+
+  void setup()
+  {
+    nh.initNode();
+    TEST_ASSERT_TRUE(nh.advertise(battery_pub));
+    TEST_ASSERT_TRUE(nh.advertiseService(reset_srv));
+  }
+};
+
+/* covers: SVR-2 */
+void test_ros_advertise_service_registers_the_server_entry(void)
+{
+  ServiceSketch sketch;
+
+  sketch.setup();
+  TEST_ASSERT_EQUAL_INT(ros::SPIN_OK, sketch.nh.spinOnce());
+  TEST_ASSERT_EQUAL_UINT8(1, r2s_services_count());
+  TEST_ASSERT_EQUAL_STRING("std_srvs/srv/Trigger", r2s_services_get(0)->type_name);
+  TEST_ASSERT_EQUAL_STRING("reset", r2s_services_get(0)->service_name);
+  TEST_ASSERT_EQUAL_UINT8(R2S_SVC_SERVER, r2s_services_get(0)->role);
+  TEST_ASSERT_EQUAL_MEMORY(s_trigger_hash, r2s_services_get(0)->type_hash, 8u);
+}
+
+/* covers: SVR-4, SVR-5, SVR-6 */
+void test_ros_member_service_server_answers_a_request(void)
+{
+  ros::NodeHandle nh;
+  Adder adder;
+  ros::ServiceServer<std_srvs::Trigger::Request, std_srvs::Trigger::Response, Adder> add_srv(
+    "reset", &Adder::on_add, &adder);
+  std_msgs::Float32 battery;
+  ros::Publisher battery_pub("battery", &battery);
+    /* REQUEST rel 0, req 9, index 0, empty Trigger request. */
+  const uint8_t request[] = {0x04u, 0x00u, 0x09u, 0x00u};
+  const uint8_t ack[] = {0x07u, 0x00u};
+    /* RESPONSE rel 0, req 9, ok, success true and "ok". */
+  const uint8_t response[] = {0x05u, 0x00u, 0x09u, 0x00u, 0x01u, 0x02u, 'o', 'k'};
+
+  battery.data = 0.0f;
+  adder.m_calls = 0u;
+  nh.initNode();
+  TEST_ASSERT_TRUE(nh.advertise(battery_pub));
+  TEST_ASSERT_TRUE(nh.advertiseService(add_srv));
+  TEST_ASSERT_EQUAL_INT(ros::SPIN_OK, nh.spinOnce());
+  handshake(1u);
+  fake_port_tx_clear();
+  {
+    uint16_t wire_len = r2s_test_frame(s_wire, 7u, 0u, request, sizeof request);
+
+    feed_slow(s_wire, wire_len);
+  }
+  TEST_ASSERT_EQUAL_INT(ros::SPIN_OK, nh.spinOnce());
+  TEST_ASSERT_EQUAL_UINT8(1, adder.m_calls);
+  TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+  assert_tx(0, 6u, 0u, ack, sizeof ack);
+  assert_tx(1, 7u, 0u, response, sizeof response);
+}
+
+/* covers: SVR-5, SVR-6 */
+void test_ros_service_client_call_returns_the_host_answer(void)
+{
+  ros::NodeHandle nh;
+  std_msgs::Float32 battery;
+  ros::Publisher battery_pub("battery", &battery);
+  ros::ServiceClient<std_srvs::Trigger::Request, std_srvs::Trigger::Response> trigger_cli(
+    "trigger");
+    /* REQUEST rel 0, req 0, index 0, empty Trigger request. */
+  const uint8_t want[] = {0x04u, 0x00u, 0x00u, 0x00u};
+  const uint8_t ack[] = {0x07u, 0x00u};
+    /* RESPONSE rel 0, req 0, ok, success true and "ok". */
+  const uint8_t response[] = {0x05u, 0x00u, 0x00u, 0x00u, 0x01u, 0x02u, 'o', 'k'};
+  std_srvs::Trigger::Request req;
+  std_srvs::Trigger::Response res;
+  uint16_t wire_len;
+
+  memset(&req, 0, sizeof req);
+  memset(&res, 0, sizeof res);
+  battery.data = 0.0f;
+  nh.initNode();
+  TEST_ASSERT_TRUE(nh.advertise(battery_pub));
+  TEST_ASSERT_TRUE(nh.serviceClient(trigger_cli));
+  TEST_ASSERT_EQUAL_INT(ros::SPIN_OK, nh.spinOnce());
+  handshake(1u);
+  fake_port_tx_clear();
+  wire_len = r2s_test_frame(s_wire, 6u, 0u, ack, sizeof ack);
+  fake_port_queue_rx(s_wire, wire_len);
+  wire_len = r2s_test_frame(s_wire, 7u, 0u, response, sizeof response);
+  fake_port_queue_rx(s_wire, wire_len);
+  TEST_ASSERT_TRUE(trigger_cli.call(req, res));
+  TEST_ASSERT_EQUAL_UINT8(1u, res.success);
+  TEST_ASSERT_EQUAL_STRING("ok", res.message);
+  TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+  assert_tx(0, 7u, 0u, want, sizeof want);
+  assert_tx(1, 6u, 0u, ack, sizeof ack);
+}
+
+/* The table closes with the first spin, so a service named after that is
+ * refused instead of announced. */
+void test_ros_advertise_service_after_the_first_spin_is_refused(void)
+{
+  ServiceSketch sketch;
+  ros::ServiceClient<std_srvs::Trigger::Request, std_srvs::Trigger::Response> late_cli(
+    "late");
+
+  sketch.setup();
+  TEST_ASSERT_EQUAL_INT(ros::SPIN_OK, sketch.nh.spinOnce());
+  TEST_ASSERT_FALSE(sketch.nh.advertiseService(sketch.reset_srv));
+  TEST_ASSERT_FALSE(sketch.nh.serviceClient(late_cli));
+  TEST_ASSERT_EQUAL_UINT8(1, r2s_services_count());
+}
+
+/* The parameter table a sketch declares: flag, count, gain and label, with
+ * a live string buffer the configure call fills from the default. */
+static char s_label_live[17];
+static r2s_param_t s_get_params[4];
+
+static void configure_get_params(void)
+{
+  memset(s_get_params, 0, sizeof s_get_params);
+  s_get_params[0].name = "flag";
+  s_get_params[0].type = R2S_PARAM_BOOL;
+  s_get_params[0].initial.b = 1u;
+  s_get_params[1].name = "count";
+  s_get_params[1].type = R2S_PARAM_I64;
+  s_get_params[1].initial.i = -7;
+  s_get_params[2].name = "gain";
+  s_get_params[2].type = R2S_PARAM_F64;
+  s_get_params[2].initial.f = 1.5;
+  s_get_params[3].name = "label";
+  s_get_params[3].type = R2S_PARAM_STRING;
+  s_get_params[3].bound = 16u;
+  s_get_params[3].initial.s = "hi";
+  s_get_params[3].value.s = s_label_live;
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_params_configure(s_get_params, 4));
+}
+
+void test_ros_get_param_reads_each_typed_live_value(void)
+{
+  ros::NodeHandle nh;
+  int int_value = 0;
+  float float_value = 0.0f;
+  char text[32];
+  char *slot = text;
+  bool flag = false;
+
+  memset(text, 0, sizeof text);
+  configure_get_params();
+  nh.initNode();
+  TEST_ASSERT_TRUE(nh.getParam("count", &int_value));
+  TEST_ASSERT_EQUAL_INT(-7, int_value);
+  TEST_ASSERT_TRUE(nh.getParam("gain", &float_value));
+  TEST_ASSERT_FLOAT_WITHIN(0.000001f, 1.5f, float_value);
+  TEST_ASSERT_TRUE(nh.getParam("label", &slot));
+  TEST_ASSERT_EQUAL_STRING("hi", text);
+  TEST_ASSERT_TRUE(nh.getParam("flag", &flag));
+  TEST_ASSERT_TRUE(flag);
+  TEST_ASSERT_TRUE(nh.getParam("count", &int_value, 1, 50));
+  TEST_ASSERT_EQUAL_INT(-7, int_value);
+}
+
+void test_ros_get_param_refuses_what_has_no_equivalent(void)
+{
+  ros::NodeHandle nh;
+  int int_value = 0;
+  float float_value = 0.0f;
+  char text[32];
+  char *slot = text;
+  bool flag = false;
+  r2s_param_t big;
+
+  memset(text, 0, sizeof text);
+  configure_get_params();
+  nh.initNode();
+  TEST_ASSERT_FALSE(nh.getParam("missing", &int_value));
+  TEST_ASSERT_FALSE(nh.getParam("flag", &int_value));
+  TEST_ASSERT_FALSE(nh.getParam("count", &flag));
+  TEST_ASSERT_FALSE(nh.getParam("label", &float_value));
+  TEST_ASSERT_FALSE(nh.getParam("count", &slot));
+  TEST_ASSERT_FALSE(nh.getParam("count", &int_value, 2));
+  memset(&big, 0, sizeof big);
+  big.name = "big";
+  big.type = R2S_PARAM_I64;
+  big.initial.i = (int64_t)1 << 40;
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_params_configure(&big, 1));
+  TEST_ASSERT_FALSE(nh.getParam("big", &int_value));
+}
+
+void test_ros_get_param_sees_an_applied_set(void)
+{
+  ros::NodeHandle nh;
+  static const uint8_t seven[] = {0x07u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
+    0x00u};
+  int int_value = 0;
+
+  configure_get_params();
+  nh.initNode();
+  TEST_ASSERT_TRUE(nh.getParam("count", &int_value));
+  TEST_ASSERT_EQUAL_INT(-7, int_value);
+  TEST_ASSERT_EQUAL_INT(R2S_PARAM_APPLIED, r2s_params_check_set(1, seven, sizeof seven));
+  r2s_params_store(1, seven, sizeof seven);
+  TEST_ASSERT_TRUE(nh.getParam("count", &int_value));
+  TEST_ASSERT_EQUAL_INT(7, int_value);
 }
