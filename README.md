@@ -186,7 +186,6 @@ Tested on every PR in CI. The wire is protocol v4 (`[GEN-2]` in `spec/protocol.m
 
 Serial only, best effort, bounded messages. The figures below come from `tools/budgets.yaml`, measured by `make size-report` with `avr-size`: the minimal example fits in about 12 KB of flash and 1.4 KB of RAM on an Uno, with a worst-case static stack around 200 bytes.
 
-- No actions ([#318](https://github.com/apojomovsky/ros2serial/issues/318), [#319](https://github.com/apojomovsky/ros2serial/issues/319)) yet; services ([#156](https://github.com/apojomovsky/ros2serial/issues/156)) and the P1 spec work ([#316](https://github.com/apojomovsky/ros2serial/issues/316)) have landed
 - WiFi or other network transports: ros2serial stays serial-only; see [Vision and non-goals](docs/00-design.md#vision-and-non-goals)
 - Real-hardware checklist ([#95](https://github.com/apojomovsky/ros2serial/issues/95))
 
