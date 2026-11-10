@@ -5,15 +5,17 @@
 The `generate` subcommand: firmware sources plus the wrapper a build consumes.
 
 `topics.generate` makes the header and source pair; a layout adds the wrapper
-file its toolchain reads (`CMakeLists.txt`, `library.properties`) and fixes
-the exact file set, so a test pins what each layout writes. Every file starts
-with the generator version and the config hash, so a stale copy identifies
-the configuration it came from.
+file its toolchain reads (`CMakeLists.txt`, `library.properties`,
+`library.json`) and fixes the exact file set, so a test pins what each layout
+writes. Every file names the generator version and the config hash, as a
+comment or a manifest field where the format allows no comments, so a stale
+copy identifies the configuration it came from.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -30,11 +32,12 @@ from r2s_gen.config import Config
 from r2s_gen.msgs import MessageError
 from r2s_gen.version import __version__
 
-LAYOUTS = ('arduino', 'cmake')
+LAYOUTS = ('arduino', 'cmake', 'platformio')
 
 _FILES = {
     'cmake': ('r2s_generated.h', 'r2s_generated.c', 'CMakeLists.txt'),
     'arduino': ('library.properties', 'src/r2s_generated.h', 'src/r2s_generated.c'),
+    'platformio': ('library.json', 'src/r2s_generated.h', 'src/r2s_generated.c'),
 }
 
 
@@ -50,7 +53,9 @@ def files_for(layout: str) -> tuple[str, ...]:
         return _FILES[layout]
     except KeyError:
         raise MessageError(
-            '--layout', f"unknown layout '{layout}'", 'use one of: arduino, cmake'
+            '--layout',
+            f"unknown layout '{layout}'",
+            'use one of: arduino, cmake, platformio',
         ) from None
 
 
@@ -117,6 +122,12 @@ def generate(
             'r2s_generated.c': code,
             'CMakeLists.txt': _cmake_lists(source, digest),
         }
+    if layout == 'platformio':
+        return {
+            'library.json': _library_json(loaded.node, source, digest, build_defines(header)),
+            'src/r2s_generated.h': header,
+            'src/r2s_generated.c': code,
+        }
     return {
         'library.properties': _library_properties(loaded.node, source, digest),
         'src/r2s_generated.h': header,
@@ -182,6 +193,28 @@ def _cmake_lists(source: str, digest: str) -> str:
     return '\n'.join(lines)
 
 
+def _library_json(node: str, source: str, digest: str, defines: list[str]) -> str:
+    """Render the PlatformIO library manifest for the generated sources."""
+    manifest = {
+        'name': node,
+        'version': __version__,
+        'description': f'ros2serial firmware sources for {node}',
+        'keywords': 'ros2serial',
+        'repository': {
+            'type': 'git',
+            'url': 'https://github.com/apojomovsky/ros2serial',
+        },
+        'authors': [{'name': 'ros2serial contributors'}],
+        'license': 'MIT',
+        'frameworks': 'arduino',
+        'platforms': ['atmelavr', 'espressif32'],
+        'headers': 'r2s_generated.h',
+        'build': {'flags': [f'-D{define}' for define in defines]},
+    }
+    stamped = {'generated': topics.banner('', source, digest).strip(), **manifest}
+    return json.dumps(stamped, indent=4) + '\n'
+
+
 def _library_properties(node: str, source: str, digest: str) -> str:
     """Render the Arduino library metadata for the generated sources, AVR and ESP32."""
     lines = [
@@ -221,7 +254,7 @@ def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParse
     parser.add_argument(
         '--layout',
         default='arduino',
-        help='the wrapper to emit: arduino or cmake (default arduino)',
+        help='the wrapper to emit: arduino, cmake or platformio (default arduino)',
     )
     parser.add_argument(
         '--cpp', action='store_true', help='also emit the C++ header (not emitted yet)'
