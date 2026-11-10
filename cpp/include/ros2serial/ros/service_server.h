@@ -51,7 +51,8 @@ public:
   /// Announces the service on the node's service table.
   /**
    * Called by advertiseService; sketches do not call it. Refused past
-   * the first spin, like a topic.
+   * the first spin, like a topic, and without the services channel the
+   * announce reports the refusal, so one sketch builds for every tier.
    *
    * \param[in,out] node the node to announce against.
    * \return True with the service announced, false on refusal.
@@ -71,10 +72,9 @@ public:
     id_ = (int)index;
     return true;
 #else
+    /* Without the channel the sketch still builds, and the announce
+     * reports the refusal like a full table does. */
     (void)node;
-    static_assert(
-      !sizeof(MReq *),
-      "advertiseService needs R2S_WITH_SERVICES: the services channel is off");
     return false;
 #endif
   }
@@ -239,7 +239,8 @@ public:
   /// Announces the service on the node's service table.
   /**
    * Called by advertiseService; sketches do not call it. Refused past
-   * the first spin, like a topic.
+   * the first spin, like a topic, and without the services channel the
+   * announce reports the refusal, so one sketch builds for every tier.
    *
    * \param[in,out] node the node to announce against.
    * \return True with the service announced, false on refusal.
@@ -259,10 +260,9 @@ public:
     id_ = (int)index;
     return true;
 #else
+    /* Without the channel the sketch still builds, and the announce
+     * reports the refusal like a full table does. */
     (void)node;
-    static_assert(
-      !sizeof(MReq *),
-      "advertiseService needs R2S_WITH_SERVICES: the services channel is off");
     return false;
 #endif
   }

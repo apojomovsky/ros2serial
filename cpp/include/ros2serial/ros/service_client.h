@@ -42,7 +42,8 @@ public:
   /// Announces the call on the node's service table.
   /**
    * Called by serviceClient; sketches do not call it. Refused past the
-   * first spin, like a topic.
+   * first spin, like a topic, and without the services channel the
+   * announce reports the refusal, so one sketch builds for every tier.
    *
    * \param[in,out] node the node to announce against.
    * \return True with the call announced, false on refusal.
@@ -61,10 +62,9 @@ public:
     id_ = (int)index;
     return true;
 #else
+    /* Without the channel the sketch still builds, and the announce
+     * reports the refusal like a full table does. */
     (void)node;
-    static_assert(
-      !sizeof(MReq *),
-      "serviceClient needs R2S_WITH_SERVICES: the services channel is off");
     return false;
 #endif
   }
@@ -73,9 +73,10 @@ public:
   /**
    * Spins the node while it waits, so the sketch keeps serving its own
    * services meanwhile. Fails without sending when the message does not
-   * encode, the service was never announced, the link is down, or another
-   * call is still outstanding. Unlike ros_lib, it reports the outcome
-   * instead of blocking past it: ignoring the result still compiles.
+   * encode, the service was never announced, the channel is off, the link
+   * is down, or another call is still outstanding. Unlike ros_lib, it
+   * reports the outcome instead of blocking past it: ignoring the result
+   * still compiles.
    *
    * \param[in] req the request to send.
    * \param[out] res the answer, valid only when the call returns true.
@@ -126,11 +127,10 @@ public:
                  payload, len, R2S_SERVICE_NARROW, &res, &field) == R2S_OK;
     }
 #else
+    /* Without the channel the sketch still builds, and the call
+     * reports the refusal. */
     (void)req;
     (void)res;
-    static_assert(
-      !sizeof(MReq *),
-      "serviceClient needs R2S_WITH_SERVICES: the services channel is off");
     return false;
 #endif
   }
