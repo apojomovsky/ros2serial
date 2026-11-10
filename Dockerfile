@@ -16,6 +16,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && test "$(avr-gcc -dumpversion)" = "${AVR_GCC_VERSION}" \
     || { echo "avr-gcc is $(avr-gcc -dumpversion), ci/versions.env pins ${AVR_GCC_VERSION}" >&2; exit 1; }
+ARG RISCV_XPACK_VERSION
+ARG RISCV_XPACK_SHA256
+ARG RISCV_GCC_VERSION
+RUN curl -fsSL -o /tmp/riscv-xpack.tar.gz "https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v${RISCV_XPACK_VERSION}/xpack-riscv-none-elf-gcc-${RISCV_XPACK_VERSION}-linux-x64.tar.gz" \
+    && echo "${RISCV_XPACK_SHA256}  /tmp/riscv-xpack.tar.gz" | sha256sum -c - \
+    && mkdir -p /opt/riscv-xpack && tar -xz -C /opt/riscv-xpack --strip-components=1 -f /tmp/riscv-xpack.tar.gz \
+    && rm /tmp/riscv-xpack.tar.gz \
+    && test "$(/opt/riscv-xpack/bin/riscv-none-elf-gcc -dumpversion)" = "${RISCV_GCC_VERSION}" \
+    || { echo "riscv-none-elf-gcc is $(/opt/riscv-xpack/bin/riscv-none-elf-gcc -dumpversion), ci/versions.env pins ${RISCV_GCC_VERSION}" >&2; exit 1; }
+ENV PATH=/opt/riscv-xpack/bin:${PATH}
 
 FROM base AS dev
 ARG RUFF_VERSION
