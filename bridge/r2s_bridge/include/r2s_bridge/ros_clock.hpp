@@ -32,13 +32,25 @@
 namespace r2s_bridge
 {
 
-// A Clock over ROS time in nanoseconds since the ROS epoch. The bridge binds
-// it to its node clock; tests bind it to a second manual clock.
+/// A Clock over ROS time in nanoseconds since the ROS epoch.
+/**
+ * The bridge binds it to its node clock; tests bind it to a second manual
+ * clock.
+ */
 class RosClock final : public Clock
 {
 public:
-    // Throws std::invalid_argument without a source to read.
+  /// Reads ROS time through a source.
+  /**
+   * \param[in] now_ns the source to read.
+   * \throws std::invalid_argument without a source to read.
+   */
   explicit RosClock(std::function<std::int64_t()> now_ns);
+
+  /// Time since the ROS epoch, in nanoseconds.
+  /**
+   * \return The source reading at the call.
+   */
   std::chrono::nanoseconds now() const override;
 
 private:

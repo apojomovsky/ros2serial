@@ -32,51 +32,83 @@
 namespace r2s_bridge
 {
 
-// One paced topic. rate_hz of 0 sets no limit ([SES-27]); the queue holds
-// queue_bound messages, or one when keep_latest is set ([SES-26], [SES-30]).
+/// One paced topic.
+/**
+ * rate_hz of 0 sets no limit ([SES-27]); the queue holds queue_bound
+ * messages, or one when keep_latest is set ([SES-26], [SES-30]).
+ */
 struct SchedulerTopic
 {
-  std::uint8_t topic_id = 0;
-  bool keep_latest = false;
-  double rate_hz = 0.0;
-  std::size_t queue_bound = 1;
+  std::uint8_t topic_id = 0;  ///< Whose queue this paces.
+  bool keep_latest = false;  ///< Keep only the newest payload.
+  double rate_hz = 0.0;  ///< The send rate limit, 0 for none [SES-27].
+  std::size_t queue_bound = 1;  ///< How many payloads the queue holds.
 };
 
-// The pacing state. Single-threaded; the caller serializes submit and poll.
+/// The pacing state.
+/**
+ * Single-threaded; the caller serializes submit and poll.
+ */
 class Scheduler
 {
 public:
-    // Replaces every topic and clears queues, buckets and counters.
-    // max_burst_bytes raises the bucket capacity to at least one frame of
-    // the caller's maximum (see [SES-28]). Throws std::invalid_argument on
-    // a negative rate, budget or burst.
+  /// Replaces every topic and clears queues, buckets and counters.
+  /**
+   * max_burst_bytes raises the bucket capacity to at least one frame of
+   * the caller's maximum (see [SES-28]).
+   *
+   * \param[in] topics the paced topics, in handshake order.
+   * \param[in] budget_bytes_per_sec the global bandwidth budget.
+   * \param[in] max_burst_bytes the lowest bucket capacity.
+   * \throws std::invalid_argument on a negative rate, budget or burst.
+   */
   void configure(
     std::vector<SchedulerTopic> topics, double budget_bytes_per_sec,
     double max_burst_bytes = 0.0);
 
-    // Registers one more topic without touching the queues, buckets or
-    // counters the handshake left: route repair adds a healed topic the way
-    // the handshake would have. A known id stays as it is. Throws
-    // std::invalid_argument on a negative rate.
+  /// Registers one more topic without touching the queues.
+  /**
+   * Buckets and counters the handshake left stay as they are: route repair
+   * adds a healed topic the way the handshake would have. A known id stays
+   * as it is.
+   *
+   * \param[in] topic the topic to register.
+   * \throws std::invalid_argument on a negative rate.
+   */
   void add_topic(SchedulerTopic topic);
 
-    // Refreshes the burst capacity after a re-handshake that kept the routes:
-    // the MCU's new maximum frame may exceed the old bucket ([SES-28]).
-    // Queues and counters are untouched. Throws std::invalid_argument on a
-    // negative burst.
+  /// Refreshes the burst capacity after a re-handshake that kept the routes.
+  /**
+   * The MCU's new maximum frame may exceed the old bucket ([SES-28]).
+   * Queues and counters are untouched.
+   *
+   * \param[in] max_burst_bytes the lowest bucket capacity.
+   * \throws std::invalid_argument on a negative burst.
+   */
   void set_max_burst(double max_burst_bytes);
 
-    // Queues one packed payload. A keep-latest topic keeps only the newest
-    // ([SES-26]); a queued topic past its bound drops the oldest and counts
-    // it ([SES-30]). An unknown topic id is ignored. A keep-latest
-    // replacement is dropped and counted too.
+  /// Queues one packed payload.
+  /**
+   * A keep-latest topic keeps only the newest ([SES-26]); a queued topic
+   * past its bound drops the oldest and counts it ([SES-30]). An unknown
+   * topic id is ignored. A keep-latest replacement is dropped and counted
+   * too.
+   *
+   * \param[in] topic_id whose queue takes the payload.
+   * \param[in] payload the packed payload to queue.
+   */
   void submit(std::uint8_t topic_id, std::vector<std::uint8_t> payload);
 
-    // Sends what is due: at most one frame per topic, in handshake order from
-    // after the topic that sent last ([SES-29]). A frame goes out only with a
-    // per-topic permit and enough global bytes ([SES-27], [SES-28]). send
-    // reports whether the frame left; on false the frame stays queued and
-    // the pass stops ([SES-32]).
+  /// Sends what is due: at most one frame per topic, in handshake order.
+  /**
+   * From after the topic that sent last ([SES-29]). A frame goes out only
+   * with a per-topic permit and enough global bytes ([SES-27], [SES-28]).
+   * send reports whether the frame left; on false the frame stays queued
+   * and the pass stops ([SES-32]).
+   *
+   * \param[in] now the time to serve.
+   * \param[in] send reports whether the frame left.
+   */
   template<typename Send> void poll(std::chrono::nanoseconds now, Send && send)
   {
     if (entries_.empty()) {
@@ -115,12 +147,28 @@ public:
       cursor_ = (last_sent + 1u) % count;
     }
   }
-    // Queued frames and dropped frames per topic, the latter for H8.
+  /// Queued frames per topic.
+  /**
+   * \param[in] topic_id whose queue to count.
+   * \return How many frames wait.
+   */
   std::size_t queued(std::uint8_t topic_id) const;
+
+  /// Dropped frames per topic, for H8.
+  /**
+   * \param[in] topic_id whose drops to count.
+   * \return How many frames the pacer dropped.
+   */
   std::size_t dropped(std::uint8_t topic_id) const;
 
-    // The wire bytes one packed payload of packed_size bytes occupies: the
-    // topic id, seq and CRC around it, the rCOBS code bytes and delimiter.
+  /// The wire bytes one packed payload of packed_size bytes occupies.
+  /**
+   * The topic id, seq and CRC around it, the rCOBS code bytes and
+   * delimiter.
+   *
+   * \param[in] packed_size the packed payload size.
+   * \return The encoded frame size bound.
+   */
   static std::size_t encoded_frame_bound(std::size_t packed_size);
 
 private:
