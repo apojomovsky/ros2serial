@@ -3396,6 +3396,86 @@ TEST_F(RouterNode, DropsResultForNoLiveGoal)
   EXPECT_NE(goal_handle.get(), nullptr);
 }
 
+// covers: SES-35, REL-2
+TEST_F(RouterNode, DropsAnUnackedGoalAfterThreeRetries)
+{
+  RouterFixture fixture("act_goaldrop", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  // Never ack the GOAL: three 500 ms retries pass, then the frame drops.
+  // Each pump frame drives the session poll past the next retry deadline.
+  for (int i = 0; i < 4; ++i) {
+    fixture.advance(500u);
+    rclcpp::spin_some(fixture.node());
+    fixture.deliver_frame(
+      kAckTopic, static_cast<std::uint8_t>(i), {kHelperActions, 0x7Fu});
+  }
+  EXPECT_TRUE(logged_has(fixture.logged(), "no ack for the action frame"))
+    << "the unacked GOAL is dropped and counted";
+  // A late GOAL_RESP names a seq nothing tracks: it is ignored as stale.
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, goal_seq, 0x00u});
+  for (int i = 0; i < 5; ++i) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+  }
+  EXPECT_FALSE(goal_handle.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+    << "the dropped goal strands nothing and answers nothing";
+}
+
+// covers: SES-35, REL-2
+TEST_F(RouterNode, DropsAnUnackedCancelAfterThreeRetries)
+{
+  RouterFixture fixture("act_canceldrop", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+  ASSERT_NE(goal_handle.get(), nullptr);
+
+  auto cancel = client->async_cancel_goal(goal_handle.get());
+  bool cancel_wire = false;
+  const auto start = std::chrono::steady_clock::now();
+  while (!cancel_wire && std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kHelperActions &&
+        decoded[2] == kHelperActCancel)
+      {
+        cancel_wire = true;
+      }
+    }
+  }
+  ASSERT_TRUE(cancel_wire) << "the CANCEL never reached the wire";
+  // Never ack the CANCEL: three retries pass, then it drops.
+  for (int i = 0; i < 4; ++i) {
+    fixture.advance(500u);
+    rclcpp::spin_some(fixture.node());
+    fixture.deliver_frame(
+      kAckTopic, static_cast<std::uint8_t>(i), {kHelperActions, 0x7Fu});
+  }
+  EXPECT_TRUE(logged_has(fixture.logged(), "no ack for the action frame"))
+    << "the unacked CANCEL is dropped and counted";
+}
+
 // covers: SES-35
 TEST_F(RouterNode, RejectsTheCancelOfATerminalGoal)
 {

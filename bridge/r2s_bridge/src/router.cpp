@@ -1162,12 +1162,6 @@ struct Router::Impl
     const ActiveGoal & goal, const std::array<std::uint8_t, 16> & uuid, std::int32_t sec,
     std::uint32_t nanosec) const
   {
-    // GCOVR_EXCL_START: the caller answers terminal goals before matching,
-    // so a terminal goal never reaches this guard.
-    if (goal.terminal >= 0) {
-      return false;
-    }
-    // GCOVR_EXCL_STOP
     const bool id_match = uuid_is_zero(uuid) || uuid == goal.uuid;
     const bool time_match = (sec == 0 && nanosec == 0u) ||
       (goal.accept_sec < sec ||
