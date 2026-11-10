@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+# Minimal PlatformIO example: one published Float32 and one subscribed Twist.
+node: hello_pio
+topics:
+  - name: battery
+    type: std_msgs/msg/Float32
+    direction: pub
+  - name: cmd_vel
+    type: geometry_msgs/msg/Twist
+    direction: sub
