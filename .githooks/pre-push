@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# pre-push: refuse force pushes, run the prose gate, then the stale tasks but
-# the end-to-end ones (R2S_LOCAL=1), which CI runs on every pull request.
+# pre-push: refuse force pushes, run the prose gate, then the stale fast
+# gates only (R2S_LOCAL=1); CI runs the rest on every pull request. A green
+# push means the fast gates passed, never that the PR is green.
 # A force push is any push whose remote ref is not an ancestor of what is
 # pushed: it drops commits other agents may have pulled, so it needs the
 # maintainer's go-ahead and R2S_FORCE_PUSH_APPROVED=1.

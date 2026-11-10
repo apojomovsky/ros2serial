@@ -154,8 +154,8 @@ if [ "${TEST:-}" = 1 ]; then
   # The output is kept, so a failure can be shown without running the suite
   # again: a second run would be refused by the lock the first one holds.
   suite_log=$(mktemp "${TMPDIR:-/tmp}/r2s-suite.XXXXXX")
-  # R2S_LOCAL=1 leaves the CI-only sections (end-to-end plus esp32) to CI,
-  # as the pre-push hook does; a scope named on the command line (E2E=posix)
+  # R2S_LOCAL=1 leaves everything but the fast gates to CI, as the
+  # pre-push hook does; a scope named on the command line (E2E=posix)
   # still runs.
   if ! env -u TEST -u BASE -u PR_BODY -u PR_TITLE R2S_LOCAL=1 bash "$root/scripts/run-tasks.sh" >"$suite_log" 2>&1; then
     # The failed sections are the point, so they are shown. The suite names

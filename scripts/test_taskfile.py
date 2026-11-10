@@ -464,13 +464,35 @@ def test_soak_runs_on_schedule_outside_the_default_task(tmp_path):
     assert run_task(repo, 'soak') == ['SOAK=1']
 
 
-def test_the_local_task_is_the_default_set_without_the_ci_only_sections():
-    """The pre-push hook and the takeoff run it; CI runs e2e and esp32."""
-    ci_only = {'e2e-avr', 'e2e-posix', 'nightly', 'esp32'}
-    ci_only = {'e2e-avr', 'e2e-posix', 'nightly', 'esp32', 'pic', 'platformio'}
+def test_the_local_task_holds_only_the_fast_gates():
+    """The pre-push hook and the takeoff run it; CI runs the rest on every PR.
+
+    The local ritual keeps only the fast gates that catch the mistakes a
+    push actually makes. Everything else (scripts, bridge, ament_lint,
+    coverage, examples, budgets, readme, fuzz, plus e2e-avr, e2e-posix,
+    nightly, esp32, pic and platformio) stays in the default task and
+    runs in CI.
+    """
+    fast = ['lint', 'commits', 'core', 'gen', 'cpp', 'docs']
     local = list(tasks()['local']['deps'])
-    assert local == [name for name in default_tasks() if name not in ci_only], local
-    assert not ci_only & set(local), local
+    assert local == fast, local
+    ci_only = [name for name in default_tasks() if name not in fast]
+    assert set(ci_only) == {
+        'scripts',
+        'bridge',
+        'ament_lint',
+        'coverage',
+        'examples',
+        'budgets',
+        'readme',
+        'fuzz',
+        'e2e-avr',
+        'e2e-posix',
+        'nightly',
+        'esp32',
+        'pic',
+        'platformio',
+    }, ci_only
 
 
 def test_the_hook_and_the_takeoff_run_the_local_task():
