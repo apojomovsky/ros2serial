@@ -161,6 +161,7 @@ STRIPPED_SCOPES = (
     'EXAMPLES',
     'ESP32',
     'PIC',
+    'STM32',
     'BUDGETS',
     'FUZZ',
     'README',
