@@ -166,7 +166,7 @@ def test_the_service_table_is_c99(tmp_path):
     source.write_text(
         '#include "r2s_services_gen.h"\n' + services.emit_c(table) + '\n', encoding='utf-8'
     )
-    compile = subprocess.run(
+    compiled = subprocess.run(
         [
             'gcc',
             '-std=c99',
@@ -185,4 +185,4 @@ def test_the_service_table_is_c99(tmp_path):
         text=True,
         check=False,
     )
-    assert compile.returncode == 0, compile.stderr
+    assert compiled.returncode == 0, compiled.stderr

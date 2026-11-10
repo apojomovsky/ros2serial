@@ -119,7 +119,7 @@ class Param:
     """
 
     name: str
-    type: int
+    kind: int
     flags: int
     bound: int
     initial: object
@@ -361,7 +361,7 @@ class McuSession:
             ),
             'tx_seq': list(self.tx_seq),
             'rx_lost': list(self.rx_lost),
-            'params': [(param.type, param.value) for param in self.params],
+            'params': [(param.kind, param.value) for param in self.params],
         }
 
     def _accept(self, encoded: bytes, at: int) -> bool:
@@ -495,11 +495,11 @@ class McuSession:
 
     def _default_bytes(self, param: Param) -> bytes:
         """Return the DECLARE default for one parameter (PAR-1, PAR-3)."""
-        if param.type == PARAM_BOOL:
+        if param.kind == PARAM_BOOL:
             return bytes((param.initial,))
-        if param.type == PARAM_I64:
+        if param.kind == PARAM_I64:
             return int(param.initial).to_bytes(8, 'little', signed=True)
-        if param.type == PARAM_F64:
+        if param.kind == PARAM_F64:
             return struct.pack('<d', param.initial)
         encoded = bytes(param.initial)
         return varint_mod.encode(len(encoded)) + encoded
@@ -512,12 +512,12 @@ class McuSession:
         PAR-5). Unknown index, length, read-only and range report 1, 2, 3
         and 4 in order.
         """
-        if param.type == PARAM_BOOL:
+        if param.kind == PARAM_BOOL:
             if len(value) != 1:
                 return PARAM_BAD_TYPE_OR_LENGTH
             if value[0] > 1:
                 return None
-        elif param.type in (PARAM_I64, PARAM_F64):
+        elif param.kind in (PARAM_I64, PARAM_F64):
             if len(value) != 8:
                 return PARAM_BAD_TYPE_OR_LENGTH
         else:
@@ -537,11 +537,11 @@ class McuSession:
     def _store(self, index: int, value: bytes) -> None:
         """Keep the applied SET value as the live one."""
         param = self.params[index]
-        if param.type == PARAM_BOOL:
+        if param.kind == PARAM_BOOL:
             param.value = value[0]
-        elif param.type == PARAM_I64:
+        elif param.kind == PARAM_I64:
             param.value = int.from_bytes(value, 'little', signed=True)
-        elif param.type == PARAM_F64:
+        elif param.kind == PARAM_F64:
             param.value = struct.unpack('<d', value)[0]
         else:
             length, used = varint_mod.decode(value)
@@ -552,7 +552,7 @@ class McuSession:
         param = self.params[index]
         name = param.name.encode()
         payload = (
-            bytes((OP_PARAM_DECLARE, index, param.type, param.flags))
+            bytes((OP_PARAM_DECLARE, index, param.kind, param.flags))
             + varint_mod.encode(len(name))
             + name
             + self._default_bytes(param)
