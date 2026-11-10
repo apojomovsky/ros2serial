@@ -105,7 +105,7 @@ Work is plain GitHub issues.
 10. PR body: real newlines, `Closes #N`, a `## Review` section.
 11. Hooks installed.
 12. README and docs freshness: user-visible changes update `README.md` or `docs/` in the same PR, or the PR body says `README: n/a` (advisory).
-13. `make pre-pr-check TEST=1` runs the stale tasks locally but the end-to-end ones (the `local` task), leaving those to CI; a fresh tree is a fast no-op once every checksum matches. Scopes named on the command line and `R2S_FULL=1` still run locally. CI is where the suite runs: it still runs everything on the merge with master, and a PR merges only on green CI.
+13. `make pre-pr-check TEST=1` runs only the stale fast gates locally (the `local` task: `lint`, `commits`, `core`, `gen`, `cpp`, `docs`), leaving the rest to CI; a fresh tree is a fast no-op once every checksum matches. Scopes named on the command line and `R2S_FULL=1` still run locally. CI is where the suite runs: it still runs everything on the merge with master, and a PR merges only on green CI. A green push does not mean a green PR.
 
 Write PR bodies to a unique file under the cache, which the dev image can see (`mktemp "$HOME/.cache/ros2serial/pr-<issue>-XXXXXX.md"`), and pass it as `make pre-pr-check PR_BODY=<file>`. Never use an inline `\n` string, and never a shared fixed path such as `/tmp/pr_body.md`, which another agent can overwrite.
 
@@ -124,7 +124,7 @@ Pass the title the PR will carry as `make pre-pr-check PR_TITLE="<title>"`, so t
 - `commit-msg`: Conventional Commits, no trailers, no em-dashes. Every commit is checked, except that git's own `Merge ...` message is accepted while a merge is in progress, which is how a branch catches up with `master`.
 - Every hook and the suite run tests without the repository-local git variables git exports to hooks (`scripts/clean-git-env.sh`, `conftest.py`), so a test's throwaway repository never writes to the real one.
 - `pre-commit`: format check on staged files (clang-format, ruff), warning check on touched C and C++, trailing whitespace.
-- `pre-push`: refuse force pushes unless approved, run the prose verify, then the stale tasks but the end-to-end ones (the `local` task: no e2e-avr, e2e-posix or isolation pairs, whose timing bounds need a quiet host; CI runs them on every pull request). A fresh tree is a fast no-op once every checksum matches, so pushing the same tree twice costs nothing.
+- `pre-push`: refuse force pushes unless approved, run the prose verify, then only the stale fast gates (the `local` task: `lint`, `commits`, `core`, `gen`, `cpp`, `docs`; everything else runs in CI on every pull request). A fresh tree is a fast no-op once every checksum matches, so pushing the same tree twice costs nothing. A green push does not mean a green PR.
 
 ## Ground rules
 
