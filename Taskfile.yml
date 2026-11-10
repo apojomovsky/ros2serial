@@ -18,7 +18,7 @@ use_gitignore: true
 tasks:
   default:
     desc: Run every section whose inputs changed.
-    deps: [lint, commits, scripts, core, gen, bridge, ament_lint, cpp, coverage, docs, examples, esp32, pic, platformio, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
+    deps: [lint, commits, scripts, core, gen, bridge, ament_lint, cpp, coverage, docs, examples, esp32, pic, platformio, stm32, rp2040, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
 
   # What the pre-push hook and the takeoff run: only the fast gates that
   # catch the mistakes a push actually makes. Everything else stays in the
@@ -27,9 +27,9 @@ tasks:
   # for a host several agents push from under one suite lock, and the
   # end-to-end ones (e2e-avr, e2e-posix and the nightly isolation pairs)
   # assume a quiet host for their timing bounds, which a shared one is not;
-  # the ESP32 Arduino core, the epic-cc bundle and the PlatformIO toolchain
-  # install only in their CI jobs. A green push means the fast gates passed,
-  # never that the PR is green.
+  # the ESP32 Arduino core, the epic-cc bundle, the PlatformIO toolchain
+  # and the Pico SDK install only in their CI jobs. A green push means
+  # the fast gates passed, never that the PR is green.
   local:
     desc: Run the stale fast gates; CI runs the rest on every pull request.
     deps: [lint, commits, core, gen, cpp, docs]
@@ -357,6 +357,8 @@ tasks:
       - scripts/budgets-check.sh
       - scripts/build-examples.sh
       - scripts/build-examples-esp32.sh
+      - ports/stm32/build.sh
+      - ports/rp2040/build.sh
       - tools/budgets.yaml
       - tools/size_report.py
       - tools/stack_report.py
@@ -369,6 +371,9 @@ tasks:
       - core/**
       - cpp/**
       - ports/arduino/**
+      - ports/stm32/**
+      - ports/rp2040/**
+      - ports/common/**
     cmds:
       - BUDGETS=1 bash scripts/ci-test.sh
 
@@ -449,6 +454,54 @@ tasks:
       - gen/tests/golden/bundle/r2s_bundled.c
     cmds:
       - PIC=1 bash scripts/ci-test.sh
+
+  stm32:
+    desc: Builds the STM32F103 minimal firmware with arm-none-eabi-gcc.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/pass-vars.list
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - ports/stm32/**
+      - ports/common/**
+      - core/**
+      - gen/**
+      - exclude: gen/tests/**
+    cmds:
+      - STM32=1 bash scripts/ci-test.sh
+
+  rp2040:
+    desc: Builds the RP2040 minimal firmware with arm-none-eabi-gcc.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/pass-vars.list
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - ports/rp2040/**
+      - ports/common/**
+      - core/**
+      - gen/**
+      - exclude: gen/tests/**
+    cmds:
+      - RP2040=1 bash scripts/ci-test.sh
 
   readme:
     desc: Runs the walkthrough on simavr.

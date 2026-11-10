@@ -32,6 +32,8 @@ ARG ARDUINO_CLI_VERSION
 ARG ARDUINO_AVR_CORE_VERSION
 ARG TASK_VERSION
 ARG TASK_SHA256
+ARG ARM_GCC_VERSION
+ARG ARM_GCC_SHA256
 # System site packages stay visible so the ROS Python packages (rclpy) work too.
 RUN python3 -m venv --system-site-packages /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir \
@@ -54,6 +56,15 @@ RUN curl -fsSL -o /tmp/task.tar.gz "https://github.com/go-task/task/releases/dow
     && tar -xz -C /usr/local/bin -f /tmp/task.tar.gz task \
     && rm /tmp/task.tar.gz \
     && task --version
+# The Arm toolchain the STM32 and RP2040 firmware builds with. The tarball
+# is checked against its pinned hash before anything is extracted, and the
+# version directory it carries keeps one pin beside the next on upgrades.
+RUN curl -fsSL -o /tmp/arm-gcc.tar.gz "https://github.com/xpack-dev-tools/arm-none-eabi-gcc-xpack/releases/download/v${ARM_GCC_VERSION}/xpack-arm-none-eabi-gcc-${ARM_GCC_VERSION}-linux-x64.tar.gz" \
+    && echo "${ARM_GCC_SHA256}  /tmp/arm-gcc.tar.gz" | sha256sum -c - \
+    && tar -xz -C /opt -f /tmp/arm-gcc.tar.gz \
+    && rm /tmp/arm-gcc.tar.gz \
+    && /opt/xpack-arm-none-eabi-gcc-${ARM_GCC_VERSION}/bin/arm-none-eabi-gcc --version
+ENV PATH=/opt/xpack-arm-none-eabi-gcc-${ARM_GCC_VERSION}/bin:${PATH}
 # The container runs as the caller's uid, which has no home directory here.
 RUN mkdir -p /tmp/home && chmod 1777 /tmp/home
 ENV PATH=/opt/venv/bin:${PATH} \
