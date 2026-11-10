@@ -7,6 +7,7 @@
 
 namespace builtin_interfaces
 {
+/// The Time message under its rosserial spelling.
 using Time = msg::Time;
 } // namespace builtin_interfaces
 

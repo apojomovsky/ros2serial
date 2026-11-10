@@ -7,6 +7,7 @@
 
 namespace geometry_msgs
 {
+/// The Twist message under its rosserial spelling.
 using Twist = msg::Twist;
 } // namespace geometry_msgs
 

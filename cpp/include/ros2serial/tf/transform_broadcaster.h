@@ -9,21 +9,33 @@
 namespace tf
 {
 
+/// The tf broadcaster a ported sketch drives.
+/**
+ * init and sendTransform work as in ros_lib, over the compat Publisher,
+ * so a ported sketch keeps its shape.
+ */
 class TransformBroadcaster
 {
 public:
+  /// Prepares the /tf publisher carrying TFMessage.
   TransformBroadcaster()
   : publisher_("/tf", &internal_msg_)
   {
   }
 
-    /* Announces /tf carrying TFMessage, as in ros_lib. */
+  /// Announces /tf carrying TFMessage, as in ros_lib.
+  /**
+   * \param[in,out] nh the handle to advertise on.
+   */
   void init(ros::NodeHandle & nh)
   {
     nh.advertise(publisher_);
   }
 
-    /* Publishes the one stamped transform on /tf, as in ros_lib. */
+  /// Publishes the one stamped transform on /tf, as in ros_lib.
+  /**
+   * \param[in] transform the stamped transform to publish.
+   */
   void sendTransform(geometry_msgs::TransformStamped & transform)
   {
     internal_msg_.transforms.size = 1u;
