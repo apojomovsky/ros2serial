@@ -107,17 +107,22 @@ target_compile_options(r2s_posix_runtime_firmware PRIVATE
 # layer: the firmware registers ros:: publishers and subscribers, and the
 # end-to-end suite runs the same scenarios against it. The message headers
 # come from the same staged bundle, so the type hashes match on every path.
+# The firmware also serves reset and calls trigger (scenario 14) and carries
+# the parameter table the bridge walks (scenario 13), like the C firmware.
 add_executable(r2s_posix_ros_firmware
     ${R2S_CORE_SOURCES}
     "${R2S_REPO_ROOT}/cpp/src/runtime.cpp"
+    "${R2S_REPO_ROOT}/cpp/src/service.cpp"
     "${R2S_BUNDLE_DIR}/src/r2s_bundled.c"
     src/r2s_posix_port.c
+    src/r2s_posix_params.c
     src/r2s_posix_ros_firmware.cpp)
 target_include_directories(r2s_posix_ros_firmware PRIVATE
     "${R2S_REPO_ROOT}/core/include" "${R2S_REPO_ROOT}/cpp/include"
     "${R2S_BUNDLE_DIR}/src" src)
 target_compile_definitions(r2s_posix_ros_firmware PRIVATE
-    R2S_WITH_CODEC R2S_WITH_TIME R2S_WITH_LOG R2S_MAX_FRAME=${R2S_BUNDLE_MAX_FRAME} R2S_MAX_NEST=${R2S_BUNDLE_MAX_NEST})
+    R2S_WITH_CODEC R2S_WITH_TIME R2S_WITH_LOG R2S_WITH_PARAMS R2S_WITH_SERVICES
+    R2S_MAX_FRAME=${R2S_BUNDLE_MAX_FRAME} R2S_MAX_NEST=${R2S_BUNDLE_MAX_NEST})
 target_compile_features(r2s_posix_ros_firmware PRIVATE cxx_std_11)
 set_target_properties(r2s_posix_ros_firmware PROPERTIES CXX_EXTENSIONS OFF)
 target_compile_options(r2s_posix_ros_firmware PRIVATE
