@@ -55,12 +55,13 @@ jobs:
           path: .task/checksum/fuzz
           key: r2s-task-fuzz-refs/heads/master-${{ github.sha }}
 
-  # Two full e2e sections side by side on one host. The load-sensitive
-  # scenario is skipped and the sync bound keeps headroom for the shared
-  # host, as the CI e2e jobs do.
+  # Two full e2e sections side by side on one host, measured about 28
+  # minutes including setup (#577): the bound keeps roughly double
+  # headroom. The load-sensitive scenario is skipped and the sync bound
+  # keeps headroom for the shared host, as the CI e2e jobs do.
   e2e-isolation:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
