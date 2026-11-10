@@ -282,6 +282,20 @@ def test_the_platformio_manifest_names_the_node_and_the_toolchain(tmp_path):
     _, files = generated('platformio', tmp_path)
 
     manifest = json.loads(files['library.json'])
+    assert set(manifest) == {
+        'generated',
+        'name',
+        'version',
+        'description',
+        'keywords',
+        'repository',
+        'authors',
+        'license',
+        'frameworks',
+        'platforms',
+        'headers',
+        'build',
+    }
     assert manifest['name'] == 'r2s_posix'
     assert manifest['version'] == __version__
     assert manifest['frameworks'] == 'arduino'

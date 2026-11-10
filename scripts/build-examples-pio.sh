@@ -82,6 +82,13 @@ platform_pin=$(grep '^PLATFORMIO_ATMELAVR_VERSION=' "$versions" 2>/dev/null | cu
   exit 1
 }
 
+# Every board name resolves before anything stages or installs, so a
+# misspelled board fails fast instead of after the downloads.
+ids=()
+for board in "${boards[@]}"; do
+  ids+=("$(board_id "$board")") || exit 1
+done
+
 # The staged library: the generated platformio layout, the core and the
 # Arduino port glue. The manifest's build flags reach the compile, so the
 # sketch keeps no --build-property flag string.
@@ -141,13 +148,6 @@ export PLATFORMIO_CORE_DIR="$data_dir/core"
 mkdir -p "$PLATFORMIO_CORE_DIR" || exit 1
 "$pio" pkg install --global --platform "atmelavr@$platform_pin" || exit 1
 
-# Every board name resolves before anything installs or builds, so a
-# misspelled board fails fast instead of after the downloads.
-ids=()
-for board in "${boards[@]}"; do
-  ids+=("$(board_id "$board")") || exit 1
-done
-
 status=0
 out="$build/pio"
 mkdir -p "$out" || exit 1
@@ -156,13 +156,26 @@ mkdir -p "$out" || exit 1
 # and the gate could not name the artifact it proved.
 # shellcheck disable=SC2207 # one --board flag per resolved id.
 board_flags=($(printf -- '--board=%s ' "${ids[@]}"))
-(cd "$out" && "$pio" ci --lib="$stage" "${board_flags[@]}" --build-dir="$out" \
-  --keep-build-dir "$root/examples/pio_hello/pio_hello.ino") || status=1
+# A previous run's objects would skip the compile and with it the proof,
+# so the build starts clean; verbose, so the log names the compile flags
+# the gate then checks.
+rm -rf "$out/.pio" "$out/build.log"
+(cd "$out" && "$pio" ci --verbose --lib="$stage" "${board_flags[@]}" --build-dir="$out" \
+  --keep-build-dir "$root/examples/pio_hello/pio_hello.ino" 2>&1 | tee "$out/build.log") || status=1
 for index in "${!boards[@]}"; do
   if [ ! -f "$out/.pio/build/${ids[$index]}/firmware.elf" ]; then
     echo "build-examples-pio (${boards[$index]}): the build left no firmware.elf" >&2
     status=1
   fi
+done
+# The core headers fall back to default limits when a define never arrives,
+# which still links: every staged flag must appear in a compile line.
+# shellcheck disable=SC2086 # the flags are -D words by construction.
+for flag in $extras; do
+  grep -q -F -- "$flag" "$out/build.log" || {
+    echo "build-examples-pio: the firmware build never compiled $flag" >&2
+    status=1
+  }
 done
 
 exit "$status"
