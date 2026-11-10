@@ -251,6 +251,20 @@ def stub_toolbox(path: Path) -> Path:
         'esac\n',
         encoding='utf-8',
     )
+    # The CH32V firmware builds with the RISC-V toolchain, which the stubbed
+    # run lacks: the stubs exit 0 and the static firmware's buffer symbol
+    # stands in for the linker, the way the AVR stubs stand in.
+    (path / 'riscv-none-elf-gcc').write_text('#!/usr/bin/env bash\nexit 0\n', encoding='utf-8')
+    (path / 'riscv-none-elf-size').write_text(
+        '#!/usr/bin/env bash\n'
+        "printf '   text\\t   data\\t    bss\\t    dec\\t    hex\\tfilename\\n"
+        "   8000\\t    100\\t    200\\t   8300\\t   206c\\tfirmware.elf\\n'",
+        encoding='utf-8',
+    )
+    (path / 'riscv-none-elf-nm').write_text(
+        "#!/usr/bin/env bash\necho '008001eb b r2s_rx_buf'\necho '20000800 A _edata'\n",
+        encoding='utf-8',
+    )
     for tool in (
         'cmake',
         'arduino-cli',
@@ -258,6 +272,9 @@ def stub_toolbox(path: Path) -> Path:
         'avr-objdump',
         'avr-nm',
         'xtensa-esp32-elf-nm',
+        'riscv-none-elf-gcc',
+        'riscv-none-elf-size',
+        'riscv-none-elf-nm',
     ):
         (path / tool).chmod(0o755)
     return path
@@ -469,6 +486,7 @@ def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):
     build = tmp_path / 'build' / 'examples'
     shipped = [
         'cmake_minimal/hello_cmake',
+        'ch32v_minimal/ch32v/ch32v_minimal.elf',
         'arduino_minimal/uno/arduino_minimal.ino.elf',
         'arduino_minimal/mega/arduino_minimal.ino.elf',
         'arduino_xmacro/uno/arduino_xmacro.ino.elf',
@@ -533,6 +551,13 @@ def test_budgets_gate_fails_on_stale_docs(tmp_path, monkeypatch):
     fake.chmod(0o755)
     (build / 'cmake_minimal' / 'firmware.su').write_text('main:32:static\n')
     plant_port_stack(build, 'main:32:static\n')
+    # The gate builds every example, so the CH32V firmware needs its stub
+    # too before the run can reach the stale copy: the helper above only
+    # plants the STM32 and RP2040 stack sources.
+    ch32v = build / 'ch32v_minimal' / 'ch32v' / 'ch32v_minimal.elf'
+    ch32v.parent.mkdir(parents=True, exist_ok=True)
+    ch32v.write_bytes(b'')
+    (build / 'ch32v_minimal' / 'ch32v' / 'firmware.su').write_text('main:32:static\n')
     result = run_scope(
         root, 'BUDGETS', stubs=stub_toolbox(tmp_path / 'bin'), build_dir=tmp_path / 'build'
     )

@@ -37,7 +37,6 @@ UNLISTED = {
     # Ports no suite section builds yet. Wiring one into a section lists it
     # in that section's task.
     'ports/avr': 'no suite section builds this port yet',
-    'ports/ch32v': 'no suite section builds this port yet',
     'ports/epic-hal': 'no suite section builds this port yet',
     # Read by the standing lint gate, which always runs, so no task lists them.
     'tools/vendor/ament_code_style.cfg': 'read by the standing lint gate, which always runs',

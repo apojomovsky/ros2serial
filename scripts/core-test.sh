@@ -92,6 +92,13 @@ if [ "$build_only" = 0 ]; then
     echo "-- core: arduino FAILED"
     failed+=("arduino")
   fi
+  echo "-- core: ch32v"
+  if bash "$root/ports/ch32v/run.sh"; then
+    echo "-- core: ch32v ok"
+  else
+    echo "-- core: ch32v FAILED"
+    failed+=("ch32v")
+  fi
   echo "-- core: avr-flash"
   if bash "$root/core/tests/avr/check.sh"; then
     echo "-- core: avr-flash ok"

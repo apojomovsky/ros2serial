@@ -6,7 +6,8 @@
 avr-size prints the Berkeley text/data/bss split. Flash holds the image
 (the code plus the initialized data image) and static RAM holds data plus
 bss. Xtensa firmware (the ESP32 builds) measures through the matching
-xtensa-esp32-elf-size, whose Berkeley table reads the same way. Firmware
+xtensa-esp32-elf-size, and RISC-V firmware (the CH32V builds) through
+riscv-none-elf-size, whose Berkeley tables read the same way. Firmware
 the budgets file does not name is reported, never judged, so a new example
 cannot fail the gate before its budget is set.
 """
@@ -28,9 +29,12 @@ AVRNM = os.environ.get('R2S_AVR_NM', 'avr-nm')
 # The Xtensa machine number: ESP32 firmware measures with the Xtensa tools.
 # Arm firmware (STM32, RP2040) measures with the Arm tools: the dev image
 # ships them, and a run whose image predates them uses the pinned fetch
-# in the cache. Every other (or unreadable) ELF uses the AVR ones.
+# in the cache. The RISC-V machine number: CH32V firmware measures with
+# the RISC-V tools, which the dev image carries. Every other (or
+# unreadable) ELF uses the AVR ones.
 EM_XTENSA = 0x5E
 EM_ARM = 0x28
+EM_RISCV = 0xF3
 
 
 def _arm_tool(filename: str, override_var: str) -> str:
@@ -92,6 +96,16 @@ def xtensa_size() -> str:
 def xtensa_nm() -> str:
     """The nm tool for ESP32 firmware (see _xtensa_tool)."""
     return _xtensa_tool('xtensa-esp32-elf-nm', 'R2S_XTENSA_NM')
+
+
+def riscv_size() -> str:
+    """The size tool for CH32V firmware: an override wins, then PATH."""
+    return os.environ.get('R2S_RISCV_SIZE', 'riscv-none-elf-size')
+
+
+def riscv_nm() -> str:
+    """The nm tool for CH32V firmware (see riscv_size)."""
+    return os.environ.get('R2S_RISCV_NM', 'riscv-none-elf-nm')
 
 
 def elf_machine(path) -> int | None:
@@ -179,6 +193,8 @@ def measure(build_dir: Path) -> dict:
             size_tool, nm_tool = xtensa_size(), xtensa_nm()
         elif elf_machine(elf) == EM_ARM:
             size_tool, nm_tool = arm_size(), arm_nm()
+        elif elf_machine(elf) == EM_RISCV:
+            size_tool, nm_tool = riscv_size(), riscv_nm()
         else:
             size_tool, nm_tool = AVRSIZE, AVRNM
         sizes = parse_avr_size(_run(size_tool, str(elf)))
