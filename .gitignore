@@ -14,3 +14,7 @@ mutation-report/
 
 # Task's checksum store: a local cache, restored from CI, never committed.
 .task/
+
+# A manual doxygen run writes beside its Doxyfile; scripts/rosdoc2.sh cleans
+# its own output, this keeps a manual run from dirtying the tree.
+doc_output/
