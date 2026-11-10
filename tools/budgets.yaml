@@ -15,6 +15,14 @@ firmware:
   arduino_minimal/esp32/arduino_minimal.ino.elf:
     flash: 332500
     ram: 90900
+  arduino_action/uno/arduino_action.ino.elf:
+    flash: 16000
+    ram: 1600
+    stack: 200
+  arduino_action/mega/arduino_action.ino.elf:
+    flash: 16500
+    ram: 1600
+    stack: 210
   arduino_xmacro/uno/arduino_xmacro.ino.elf:
     flash: 12000
     ram: 1250
@@ -96,6 +104,14 @@ firmware:
   arduino_range/esp32/arduino_range.ino.elf:
     flash: 330400
     ram: 90700
+  arduino_xmacro_c/uno/arduino_xmacro_c.ino.elf:
+    flash: 12000
+    ram: 1250
+    stack: 32
+  arduino_xmacro_c/mega/arduino_xmacro_c.ino.elf:
+    flash: 12500
+    ram: 1250
+    stack: 32
   arduino_xmacro_c/esp32/arduino_xmacro_c.ino.elf:
     flash: 332100
     ram: 90700

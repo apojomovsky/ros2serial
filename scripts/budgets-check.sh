@@ -104,6 +104,9 @@ if [ "$report_only" = 1 ]; then
     --budgets "$budgets" --markdown /dev/stdout || true
   python3 "$root/tools/stack_report.py" check --stack "$build/stack.json" \
     --budgets "$budgets" --markdown /dev/stdout || true
+  python3 "$root/tools/budgets_table.py" --measurements "$build/measurements.json" \
+    --stack "$build/stack.json" --budgets "$budgets" --out "$root/docs/budgets.md"
+  echo "budgets: refreshed docs/budgets.md"
   exit 0
 fi
 
@@ -127,6 +130,17 @@ fi
 if python3 "$root/tools/stack_report.py" check --stack "$build/stack.json" \
   --budgets "$breach" >/dev/null 2>&1; then
   echo "budgets: the breached fixture passed the stack check" >&2
+  status=1
+fi
+
+# The published table is generated, never hand-maintained: render it from
+# this run's numbers and refuse a stale copy.
+if ! python3 "$root/tools/budgets_table.py" --measurements "$build/measurements.json" \
+  --stack "$build/stack.json" --budgets "$budgets" --out "$build/budgets-doc.md"; then
+  echo "budgets: rendering docs/budgets.md failed" >&2
+  status=1
+elif ! diff -u "$root/docs/budgets.md" "$build/budgets-doc.md" >/dev/null; then
+  echo "budgets: docs/budgets.md is stale; run make size-report and commit it" >&2
   status=1
 fi
 
