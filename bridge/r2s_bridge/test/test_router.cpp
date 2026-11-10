@@ -22,6 +22,12 @@
 #include <utility>
 #include <vector>
 
+#if defined(__linux__)
+#include <csignal>
+#include <execinfo.h>
+#include <unistd.h>
+#endif
+
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/srv/set_camera_info.hpp>
@@ -38,6 +44,37 @@
 
 namespace r2s_bridge
 {
+
+#if defined(__linux__)
+// Temporary abort backtrace for the lyrical and rolling service-test abort;
+// reverted once the crash is root-caused.
+namespace
+{
+void print_abort_backtrace(int sig)
+{
+  void * frames[32];
+  const int depth = backtrace(frames, 32);
+  backtrace_symbols_fd(frames, depth, STDERR_FILENO);
+  signal(sig, SIG_DFL);
+  raise(sig);
+}
+struct AbortTracer : ::testing::Environment
+{
+  void SetUp() override
+  {
+    signal(SIGABRT, print_abort_backtrace);
+  }
+};
+struct AbortTracerRegistrar
+{
+  AbortTracerRegistrar()
+  {
+    ::testing::AddGlobalTestEnvironment(new AbortTracer);
+  }
+};
+const AbortTracerRegistrar kAbortTracerRegistrar{};
+}  // namespace
+#endif
 namespace test
 {
 namespace
