@@ -20,6 +20,7 @@ extern "C" {
 #include "r2s/runtime.hpp"
 #include "r2s/service.hpp"
 #include "ros2serial/std_msgs/Float32.h"
+#include "std_msgs/msg/float32.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include "unity.h"
 
@@ -111,7 +112,7 @@ void test_service_server_registers_the_table_entry(void)
 {
   r2s::Node node("svc");
   std_msgs::msg::Float32 battery;
-  r2s::Publisher battery_pub(node, "battery");
+  r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
 
   (void)battery;
   r2s::Service<std_srvs::srv::Trigger> reset(node, "reset", &on_reset);
@@ -128,7 +129,7 @@ void test_service_server_answers_a_request_with_the_callback_response(void)
 {
   r2s::Node node("svc");
   std_msgs::msg::Float32 battery;
-  r2s::Publisher battery_pub(node, "battery");
+  r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
   r2s::Service<std_srvs::srv::Trigger> reset(node, "reset", &on_reset);
     /* REQUEST rel 0, req 9, index 0, empty Trigger request. */
   const uint8_t request[] = {0x04u, 0x00u, 0x09u, 0x00u};
@@ -154,11 +155,10 @@ void test_service_server_ignores_a_request_for_an_unknown_index(void)
 {
   r2s::Node node("svc");
   std_msgs::msg::Float32 battery;
-  r2s::Publisher battery_pub(node, "battery");
+  r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
   r2s::Service<std_srvs::srv::Trigger> reset(node, "reset", &on_reset);
     /* REQUEST rel 0, req 9, index 5: no entry answers it. */
   const uint8_t request[] = {0x04u, 0x00u, 0x09u, 0x05u};
-  const uint8_t ack[] = {0x07u, 0x00u};
 
   (void)battery;
   s_reset_calls = 0u;
@@ -168,15 +168,15 @@ void test_service_server_ignores_a_request_for_an_unknown_index(void)
   feed_host(7u, 0u, request, sizeof request);
   node.spin_some();
   TEST_ASSERT_EQUAL_UINT8(0, s_reset_calls);
-  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
-  assert_tx(0, 6u, 0u, ack, sizeof ack);
+    /* Refused without an ack, like an undecodable SET: nothing answers. */
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
 }
 
 void test_service_register_after_the_first_spin_is_refused(void)
 {
   r2s::Node node("svc");
   std_msgs::msg::Float32 battery;
-  r2s::Publisher battery_pub(node, "battery");
+  r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
   r2s::Service<std_srvs::srv::Trigger> reset(node, "reset", &on_reset);
 
   (void)battery;
@@ -192,7 +192,7 @@ void test_service_client_registers_the_call_entry(void)
 {
   r2s::Node node("svc");
   std_msgs::msg::Float32 battery;
-  r2s::Publisher battery_pub(node, "battery");
+  r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
 
   (void)battery;
   r2s::Client<std_srvs::srv::Trigger> trigger(node, "trigger");
@@ -209,7 +209,7 @@ void test_service_client_call_returns_the_host_answer(void)
 {
   r2s::Node node("svc");
   std_msgs::msg::Float32 battery;
-  r2s::Publisher battery_pub(node, "battery");
+  r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
   r2s::Client<std_srvs::srv::Trigger> trigger(node, "trigger");
     /* REQUEST rel 0, req 0, index 0, empty Trigger request. */
   const uint8_t want[] = {0x04u, 0x00u, 0x00u, 0x00u};
@@ -240,7 +240,7 @@ void test_service_client_call_reports_a_refused_status(void)
 {
   r2s::Node node("svc");
   std_msgs::msg::Float32 battery;
-  r2s::Publisher battery_pub(node, "battery");
+  r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
   r2s::Client<std_srvs::srv::Trigger> trigger(node, "trigger");
   const uint8_t ack[] = {0x07u, 0x00u};
     /* RESPONSE rel 0, req 0, busy: the server took nothing. */
@@ -260,14 +260,50 @@ void test_service_client_call_reports_a_refused_status(void)
 }
 
 /* covers: SVR-9 */
+void test_service_server_answer_retries_while_the_stream_is_busy(void)
+{
+  r2s::Node node("svc");
+  std_msgs::msg::Float32 battery;
+  r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
+  r2s::Service<std_srvs::srv::Trigger> reset(node, "reset", &on_reset);
+  r2s::Client<std_srvs::srv::Trigger> trigger(node, "trigger");
+    /* REQUEST rel 0, req 9, index 0, empty Trigger request. */
+  const uint8_t request[] = {0x04u, 0x00u, 0x09u, 0x00u};
+  const uint8_t ack[] = {0x07u, 0x00u};
+  const uint8_t want[] = {0x04u, 0x00u, 0x00u, 0x01u};
+    /* RESPONSE rel 1, req 9, ok, success true and "ok". */
+  const uint8_t response[] = {0x05u, 0x01u, 0x09u, 0x00u, 0x01u, 0x02u, 'o', 'k'};
+  uint8_t req_id = 0xFFu;
+
+  (void)battery;
+  s_reset_calls = 0u;
+  node.spin_some();
+  handshake(1u);
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_service_call(1, NULL, 0u, &req_id));
+  feed_host(7u, 0u, request, sizeof request);
+  node.spin_some();
+  TEST_ASSERT_EQUAL_UINT8(1, s_reset_calls);
+  TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+  assert_tx(0, 7u, 0u, want, sizeof want);
+  assert_tx(1, 6u, 0u, ack, sizeof ack);
+  feed_host(6u, 0u, ack, sizeof ack);
+  node.spin_some();
+  TEST_ASSERT_EQUAL_UINT16(3, fake_port_tx_frame_count());
+  assert_tx(2, 7u, 1u, response, sizeof response);
+}
+
+/* covers: SVR-9 */
 void test_service_client_call_refuses_while_disconnected(void)
 {
   r2s::Node node("svc");
   std_msgs::msg::Float32 battery;
-  r2s::Publisher battery_pub(node, "battery");
+  r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
   r2s::Client<std_srvs::srv::Trigger> trigger(node, "trigger");
   std_srvs::srv::Trigger::Request req;
   std_srvs::srv::Trigger::Response res;
+    /* code 5, services, one occurrence, no field. */
+  const uint8_t report[] = {0x05u, 0x07u, 0x01u, 0x00u, 0xFFu};
 
   (void)battery;
   memset(&req, 0, sizeof req);
@@ -275,5 +311,6 @@ void test_service_client_call_refuses_while_disconnected(void)
   node.spin_some();
   fake_port_tx_clear();
   TEST_ASSERT_FALSE(trigger.call(req, res));
-  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+  assert_tx(0, 5u, 0u, report, sizeof report);
 }

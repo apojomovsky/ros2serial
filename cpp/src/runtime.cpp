@@ -4,6 +4,10 @@
  * keeps no function pointer; the callbacks live here. */
 #include "r2s/runtime.hpp"
 
+#ifdef R2S_WITH_SERVICES
+#include "r2s/service.hpp"
+#endif
+
 #include "r2s/r2s_error.h"
 #include "r2s/r2s_tx.h"
 
@@ -240,6 +244,9 @@ void Node::spin_some()
          * starts announcing, and a topic declared after that is refused. */
     reg.closed = 1u;
     reg.bound = 1u;
+#ifdef R2S_WITH_SERVICES
+    service::detail::note_bound();
+#endif
     if (reg.node_name == nullptr ||
       r2s_session_configure_ram(reg.node_name, r2s_runtime_topics, reg.topic_count) != R2S_OK)
     {
@@ -249,6 +256,9 @@ void Node::spin_some()
     r2s_init();
   }
   detail::spin();
+#ifdef R2S_WITH_SERVICES
+  service::detail::pump_services();
+#endif
 }
 
 bool Node::connected() const

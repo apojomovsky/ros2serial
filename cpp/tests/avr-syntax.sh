@@ -44,7 +44,8 @@ for header in "$root"/cpp/include/*/msg/*.hpp "$root"/cpp/include/*/srv/*.hpp; d
   [ -e "$header" ] || continue
   name=$(basename "$header" .hpp)
   package=$(basename "$(dirname "$(dirname "$header")")")
-  printf '#include <%s/msg/%s.hpp>\n' "$package" "$name" >"$build/check_$name.cpp"
+  kind=$(basename "$(dirname "$header")")
+  printf '#include <%s/%s/%s.hpp>\n' "$package" "$kind" "$name" >"$build/check_$name.cpp"
   sources+=("$build/check_$name.cpp")
 done
 # The runtime header on its own, without a message type, so a change there

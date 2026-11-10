@@ -12,6 +12,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_compile_definitions(R2S_TESTING)
+# A frame limit above 254, as in the core's host tests, so the params and
+# services channels name the frame limit their DECLARE checks use.
+# Firmware takes the value from the generated configuration.
+add_compile_definitions(R2S_MAX_FRAME=512)
 # The same feature set the core's host tests use, so the runtime speaks the
 # same protocol there as on a board, plus the actions channel the action
 # server needs and the services and parameters channels the compat layer
@@ -36,7 +40,7 @@ add_library(r2s_core STATIC ${R2S_CORE_SOURCES})
 target_include_directories(r2s_core PUBLIC "${R2S_REPO_ROOT}/core/include")
 target_compile_options(r2s_core PRIVATE ${R2S_WARNINGS})
 
-add_library(r2s_runtime STATIC src/runtime.cpp src/action.cpp)
+add_library(r2s_runtime STATIC src/runtime.cpp src/action.cpp src/service.cpp)
 target_include_directories(r2s_runtime PUBLIC include)
 target_compile_options(r2s_runtime PRIVATE ${R2S_WARNINGS})
 target_link_libraries(r2s_runtime PUBLIC r2s_core)
