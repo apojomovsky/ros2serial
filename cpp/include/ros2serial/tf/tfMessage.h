@@ -10,6 +10,7 @@
 
 namespace tf
 {
+/// The tf array message under its rosserial spelling.
 using tfMessage = tf2_msgs::msg::TFMessage;
 } // namespace tf
 

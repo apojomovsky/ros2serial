@@ -7,6 +7,7 @@
 
 namespace geometry_msgs
 {
+/// The Quaternion message under its rosserial spelling.
 using Quaternion = msg::Quaternion;
 } // namespace geometry_msgs
 

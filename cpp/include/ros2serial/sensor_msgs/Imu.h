@@ -7,6 +7,7 @@
 
 namespace sensor_msgs
 {
+/// The Imu message under its rosserial spelling.
 using Imu = msg::Imu;
 } // namespace sensor_msgs
 

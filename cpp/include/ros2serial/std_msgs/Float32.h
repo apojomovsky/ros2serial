@@ -7,6 +7,7 @@
 
 namespace std_msgs
 {
+/// The Float32 message under its rosserial spelling.
 using Float32 = msg::Float32;
 } // namespace std_msgs
 

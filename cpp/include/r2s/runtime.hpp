@@ -24,32 +24,45 @@
 #ifdef ARDUINO
 #include "r2s_arduino_port.h"
 #endif
-/* A build whose double is 32 bits travels narrow on every topic, so the
- * announced flags carry it (ENC-12, CTL-4). */
+/// Set when the build's double is 32 bits, so every topic travels narrow.
+/**
+ * The announced flags carry it (ENC-12, CTL-4).
+ */
 #if DBL_MANT_DIG == FLT_MANT_DIG
 #define R2S_RUNTIME_NARROW_FLAG 0x02u
 #else
+/// Clear when the build's double is 64 bits; topics travel full width.
 #define R2S_RUNTIME_NARROW_FLAG 0x00u
 #endif
 
 namespace r2s
 {
-/* How the bridge serves a topic on the ROS graph: best effort, keep-latest
- * or reliable. The values are the CTL-4 flag bits they announce, the same
- * mapping the generator uses for the qos names in r2s.yaml. */
+/// How the bridge serves a topic on the ROS graph.
+/**
+ * Best effort, keep-latest or reliable. The values are the CTL-4 flag
+ * bits they announce, the same mapping the generator uses for the qos
+ * names in r2s.yaml.
+ */
 enum class QoS : uint8_t { BestEffort = 0x00u, KeepLatest = 0x04u, Reliable = 0x08u };
 
-/* What every message type must provide: the descriptor table that encodes
- * and decodes it, its index in that table, its type name and the first
- * eight bytes of its type hash. The generated message headers specialize
- * this template. */
 template<typename T>
+/// What every message type must provide.
+/**
+ * The descriptor table that encodes and decodes it, its index in that
+ * table, its type name and the first eight bytes of its type hash. The
+ * generated message headers specialize this template.
+ *
+ * \tparam T the message type being described.
+ */
 struct msg_traits;
 
 namespace detail
 {
-/* One subscriber's storage and callback, typed by the message it carries. */
 template<typename T>
+/// One subscriber's storage and callback, typed by the message it carries.
+/**
+ * \tparam T the message type this record carries.
+ */
 struct subscriber
 {
   const r2s_codec_table_t *table;
@@ -58,9 +71,18 @@ struct subscriber
   void (*callback)(const T &);
 };
 
-/* Decodes a payload into the subscriber's storage and calls its callback.
+/// Decodes a payload into the subscriber's storage and calls its callback.
+/**
  * The registry stores this per subscriber, so the dispatch stays typed
- * while the core sees only a plain function. */
+ * while the core sees only a plain function.
+ *
+ * \tparam T the message type this dispatch decodes.
+ * \param[in,out] record the subscriber record to fill and read back.
+ * \param[in] payload the frame bytes to decode.
+ * \param[in] len how many bytes payload holds.
+ * \param[in] narrow whether doubles travel 32-bit.
+ * \param[in] topic which topic the frame arrived on.
+ */
 template<typename T>
 void dispatch_subscriber(
   void *record, const uint8_t *payload, uint16_t len, uint8_t narrow,
@@ -85,57 +107,126 @@ void dispatch_subscriber(
   sub->callback(*sub->storage);
 }
 
-/* The registry's seam. The registry itself lives in runtime.cpp, so the
+/// Announces a publisher topic against the session.
+/**
+ * The registry's seam. The registry itself lives in runtime.cpp, so the
  * core stays free of C++ and of the callbacks this layer stores. The
  * default serves the topic best effort, as an unqualified r2s.yaml
- * entry does. */
+ * entry does.
+ *
+ * \param[in] topic what to announce.
+ * \param[in] table the codec table of the message type.
+ * \param[in] type_index the type index inside table.
+ * \param[in] type_name the announced type name.
+ * \param[in] type_hash the first eight bytes of the type hash.
+ * \param[out] topic_id where the announced id lands.
+ * \param[in] qos how the bridge serves the topic.
+ * \return R2S_OK with the id stored, R2S_ERR_BOUNDS when the table is
+ * closed or full, or a name is null.
+ */
 r2s_status_t register_publisher(
   const char *topic, const r2s_codec_table_t *table, uint16_t type_index,
   const char *type_name, const uint8_t *type_hash, uint8_t *topic_id,
   QoS qos = QoS::BestEffort);
-/* A subscriber's table and type index live in its own typed record, so the
- * registry needs only the record and the dispatch that reaches it. The
- * default serves the topic best effort, as an unqualified r2s.yaml
- * entry does. */
+/// Announces a subscriber topic against the session.
+/**
+ * A subscriber's table and type index live in its own typed record, so
+ * the registry needs only the record and the dispatch that reaches it.
+ * The default serves the topic best effort, as an unqualified r2s.yaml
+ * entry does.
+ *
+ * \param[in] topic what to listen on.
+ * \param[in] type_name the announced type name.
+ * \param[in] type_hash the first eight bytes of the type hash.
+ * \param[in,out] record the typed subscriber record to keep.
+ * \param[in] dispatch how to reach the record.
+ * \param[out] topic_id where the announced id lands.
+ * \param[in] qos how the bridge serves the topic.
+ * \return R2S_OK with the id stored, R2S_ERR_BOUNDS when the table is
+ * closed or full, or a name is null.
+ */
 r2s_status_t register_subscriber(
   const char *topic, const char *type_name, const uint8_t *type_hash,
   void *record,
   void (*dispatch)(void *, const uint8_t *, uint16_t, uint8_t, uint8_t),
   uint8_t *topic_id, QoS qos = QoS::BestEffort);
+/// Sends one encoded message on an announced topic.
+/**
+ * \param[in] topic_id the announced id to send on.
+ * \param[in] msg the message bytes to encode.
+ * \return R2S_OK when the frame left, R2S_ERR_TOPIC_REJECTED for an
+ * unknown or refused topic, R2S_ERR_NOT_CONNECTED while the session
+ * announces, R2S_ERR_TX_BUSY with no free frame, or the encode error.
+ */
 r2s_status_t publish(uint8_t topic_id, const void *msg);
+/// Serves the link once.
 void spin(void);
+/// True when the firmware asked for something the runtime refused.
+/**
+ * \return Whether a registration failed.
+ */
 bool registration_error(void);
 } // namespace detail
 
-/* The firmware's node: it names the session and owns the topics declared
- * against it. One node per firmware, since the core has one session. */
+/// The firmware's node.
+/**
+ * It names the session and owns the topics declared against it. One
+ * node per firmware, since the core has one session.
+ */
 class Node
 {
 public:
-    /* Names the node the session announces. A second node sets the
-     * registration error, because the core has one session to announce. */
+  /// Names the node the session announces.
+  /**
+   * A second node sets the registration error, because the core has one
+   * session to announce.
+   *
+   * \param[in] name the announced node name, kept by reference.
+   */
   explicit Node(const char *name);
 
-    /* Runs the session: the first call binds the topic table and starts
-     * the handshake, the later ones serve the link. */
+  /// Runs the session.
+  /**
+   * The first call binds the topic table and starts the handshake, the
+   * later ones serve the link.
+   */
   void spin_some();
 
-    /* True while the handshake completed and user traffic may flow. */
+  /// True while the handshake completed and user traffic may flow.
+  /**
+   * \return Whether the session is connected.
+   */
   bool connected() const;
 
-    /* Milliseconds since boot, taken from the port tick. The host's time
-     * sync replaces it with the shared clock when that channel lands. */
+  /// Milliseconds since boot, taken from the port tick.
+  /**
+   * The host's time sync replaces it with the shared clock when that
+   * channel lands.
+   *
+   * \return Ticks since boot in milliseconds.
+   */
   uint32_t now() const;
 
-    /* True when the firmware asked for something the runtime refused: a
-     * second node, a topic declared after the table closed, or a table
-     * the session would not bind. */
+  /// True when the firmware asked for something the runtime refused.
+  /**
+   * A second node, a topic declared after the table closed, or a table
+   * the session would not bind.
+   *
+   * \return Whether a registration failed.
+   */
   bool registration_error() const;
 
-    /* Starts the port at baud. On a board the port glue also takes the
-     * stream, so the core reads it; elsewhere the port is started and
-     * nothing else, so a host build needs no Arduino header. The port
-     * type must offer begin(unsigned long), as every Arduino stream does. */
+  /// Starts the port at baud.
+  /**
+   * On a board the port glue also takes the stream, so the core reads
+   * it; elsewhere the port is started and nothing else, so a host build
+   * needs no Arduino header.
+   *
+   * \tparam PortT the port type, which must offer
+   * begin(unsigned long), as every Arduino stream does.
+   * \param[in,out] port the stream to start and serve.
+   * \param[in] baud the line speed to start it at.
+   */
   template<typename PortT> void begin(PortT & port, unsigned long baud)
   {
 #ifdef ARDUINO
@@ -145,15 +236,44 @@ public:
 #endif
   }
 
-    /* The registration the Publisher and the Subscription call. They are
-     * public because the templates reach them, and a topic they refuse
-     * leaves the node with its registration error set. The default
-     * serves the topic best effort, so existing sketches keep
-     * announcing what they always announced. */
+  /// The registration the Publisher and the Subscription call.
+  /**
+   * They are public because the templates reach them, and a topic they
+   * refuse leaves the node with its registration error set. The default
+   * serves the topic best effort, so existing sketches keep announcing
+   * what they always announced.
+   *
+   * \param[in] topic what to announce.
+   * \param[in] table the codec table of the message type.
+   * \param[in] type_index the type index inside table.
+   * \param[in] type_name the announced type name.
+   * \param[in] type_hash the first eight bytes of the type hash.
+   * \param[out] topic_id where the announced id lands.
+   * \param[in] qos how the bridge serves the topic.
+   * \return R2S_OK with the id stored, R2S_ERR_BOUNDS when the node is
+   * a second one, or the table is closed or full.
+   */
   r2s_status_t register_publisher(
     const char *topic, const r2s_codec_table_t *table, uint16_t type_index,
     const char *type_name, const uint8_t *type_hash, uint8_t *topic_id,
     QoS qos = QoS::BestEffort);
+  /// The registration the Subscription calls.
+  /**
+   * Public because the template reaches it, and a topic it refuses
+   * leaves the node with its registration error set. The default serves
+   * the topic best effort, so existing sketches keep announcing what
+   * they always announced.
+   *
+   * \param[in] topic what to listen on.
+   * \param[in] type_name the announced type name.
+   * \param[in] type_hash the first eight bytes of the type hash.
+   * \param[in,out] record the typed subscriber record to keep.
+   * \param[in] dispatch how to reach the record.
+   * \param[out] topic_id where the announced id lands.
+   * \param[in] qos how the bridge serves the topic.
+   * \return R2S_OK with the id stored, R2S_ERR_BOUNDS when the node is
+   * a second one, or the table is closed or full.
+   */
   r2s_status_t register_subscriber(
     const char *topic, const char *type_name, const uint8_t *type_hash,
     void *record,
@@ -168,17 +288,26 @@ private:
   bool m_owned;
 };
 
-/* Publishes messages of one type on one topic. */
 template<typename T>
+/// Publishes messages of one type on one topic.
+/**
+ * \tparam T the message type this publisher sends.
+ */
 class Publisher
 {
 public:
-    /* Announces the topic against the node. A node whose table already
-     * closed refuses it, and the node keeps its registration error. The
-     * parameter is not named node, since a sketch names its own node
-     * that way and the warning would fire on every such sketch. The
-     * default announces best effort, so a sketch without the argument
-     * keeps its old announce. */
+  /// Announces the topic against the node.
+  /**
+   * A node whose table already closed refuses it, and the node keeps
+   * its registration error. The parameter is not named node, since a
+   * sketch names its own node that way and the warning would fire on
+   * every such sketch. The default announces best effort, so a sketch
+   * without the argument keeps its old announce.
+   *
+   * \param[in,out] owner the node to announce against.
+   * \param[in] topic what to announce.
+   * \param[in] qos how the bridge serves the topic.
+   */
   Publisher(Node & owner, const char *topic, QoS qos = QoS::BestEffort)
   {
     uint8_t id = 0xFFu;
@@ -190,10 +319,17 @@ public:
     m_topic_id = id;
   }
 
-    /* Sends the message on the wire. Fails with the not-connected error
-     * while the session announces, with the rejected error when the host
-     * did not accept the topic, and with the bounds error when the
-     * message does not fit; each failure sends nothing. */
+  /// Sends the message on the wire.
+  /**
+   * Fails with the not-connected error while the session announces,
+   * with the rejected error when the host did not accept the topic,
+   * and with the bounds error when the message does not fit; each
+   * failure sends nothing.
+   *
+   * \param[in] msg the message to send.
+   * \return R2S_OK when the frame left, or the refusal that sent
+   * nothing.
+   */
   r2s_status_t publish(const T & msg)
   {
     if (m_topic_id == 0xFFu) {
@@ -206,21 +342,33 @@ private:
   uint8_t m_topic_id;
 };
 
-/* Receives messages of one type on one topic, and calls the handler with
- * the message it decoded. Keep it alive while the node spins: the registry
- * keeps the address of its record, which carries the storage and the
- * handler, so destroying it first leaves a dangling record. Sketches
- * declare it at file scope, next to the node. */
 template<typename T>
+/// Receives messages of one type on one topic.
+/**
+ * Calls the handler with the message it decoded. Keep it alive while
+ * the node spins: the registry keeps the address of its record, which
+ * carries the storage and the handler, so destroying it first leaves a
+ * dangling record. Sketches declare it at file scope, next to the node.
+ *
+ * \tparam T the message type this subscription receives.
+ * \pre The subscription outlives the spinning node.
+ */
 class Subscription
 {
 public:
-    /* Announces the topic against the node and stores the handler. A
-     * capture-less lambda converts to the function pointer the handler
-     * takes. The parameter is not named node, since a sketch names its
-     * own node that way and the warning would fire on every such
-     * sketch. The default announces best effort, so a sketch without
-     * the argument keeps its old announce. */
+  /// Announces the topic against the node and stores the handler.
+  /**
+   * A capture-less lambda converts to the function pointer the handler
+   * takes. The parameter is not named node, since a sketch names its
+   * own node that way and the warning would fire on every such sketch.
+   * The default announces best effort, so a sketch without the argument
+   * keeps its old announce.
+   *
+   * \param[in,out] owner the node to announce against.
+   * \param[in] topic what to listen on.
+   * \param[in] callback the handler to call with each message.
+   * \param[in] qos how the bridge serves the topic.
+   */
   Subscription(
     Node & owner, const char *topic, void (*callback)(const T & msg),
     QoS qos = QoS::BestEffort)
@@ -238,8 +386,8 @@ public:
   }
 
 private:
-    /* Each subscription holds its own copy of the message, as the
-     * rosserial API does, so two subscriptions never share a buffer. */
+  // Each subscription holds its own copy of the message, as the
+  // rosserial API does, so two subscriptions never share a buffer.
   T m_storage;
   detail::subscriber<T> m_subscriber;
   uint8_t m_topic_id;

@@ -33,7 +33,7 @@ enum class SessionState : std::uint8_t
   kConnected,  ///< Routing traffic.
 };
 
-/// Severity of a SessionEvents::log or ::mcu_log call.
+/// Severity of a SessionEvents::log or mcu_log call.
 /**
  * The bridge maps these to its loggers with the same severity.
  */

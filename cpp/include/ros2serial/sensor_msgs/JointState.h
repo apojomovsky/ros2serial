@@ -7,6 +7,7 @@
 
 namespace sensor_msgs
 {
+/// The JointState message under its rosserial spelling.
 using JointState = msg::JointState;
 } // namespace sensor_msgs
 
