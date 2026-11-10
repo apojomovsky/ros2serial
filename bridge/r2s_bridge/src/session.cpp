@@ -10,11 +10,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <deque>
 #include <map>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -705,8 +705,8 @@ struct Session::Impl
     act_out_active_ = false;
     act_pending_goals_.clear();
     act_pending_cancel_ = false;
-    act_host_goal_active_ = false;
-    act_host_cancel_active_ = false;
+    act_host_goals_.clear();
+    act_host_cancels_.clear();
     const bool drop_front =
       !queue_.empty() &&
       (queue_.front().topic_id == kParamsTopic || queue_.front().topic_id == kServicesTopic ||
@@ -1483,8 +1483,7 @@ struct Session::Impl
     act_out_rel_ = rel_seq;
     act_out_retries_ = 0;
     act_out_deadline_ms_ = now_ms() + kRelRetryMs;
-    act_host_goal_active_ = true;
-    act_host_goal_ = goal_seq;
+    act_host_goals_.insert(goal_seq);
   }
 
     // One ACT_CANCEL emission with a fresh rel_seq: the goal_seq travels
@@ -1499,8 +1498,7 @@ struct Session::Impl
     act_out_rel_ = rel_seq;
     act_out_retries_ = 0;
     act_out_deadline_ms_ = now_ms() + kRelRetryMs;
-    act_host_cancel_active_ = true;
-    act_host_cancel_ = goal_seq;
+    act_host_cancels_.insert(goal_seq);
   }
 
     // The pending CANCEL goes out before the pending GOALs: it answers a
@@ -1541,8 +1539,15 @@ struct Session::Impl
       log(SessionLog::kWarning, "no ack for the action frame; the frame is dropped");
       ++reliable_dropped_;
       act_out_active_ = false;
-      act_host_goal_active_ = false;
-      act_host_cancel_active_ = false;
+        // A dropped frame ends that wire goal: a late answer names a seq
+        // nothing tracks anymore and is ignored as stale.
+      if (!act_out_payload_.empty()) {
+        if (act_out_payload_[0] == kActGoal && act_out_payload_.size() > 2u) {
+          act_host_goals_.erase(act_out_payload_[2]);
+        } else if (act_out_payload_[0] == kActCancel && act_out_payload_.size() > 2u) {
+          act_host_cancels_.erase(act_out_payload_[2]);
+        }
+      }
       promote_act_pending();
       return;
     }
@@ -1671,10 +1676,10 @@ struct Session::Impl
             return;
           }
           ++expected;
-          if (!act_host_goal_active_ || payload[2] != act_host_goal_) {
+          if (act_host_goals_.count(payload[2]) == 0u) {
             return;
           }
-          act_host_goal_active_ = false;
+          act_host_goals_.erase(payload[2]);
           if (events.action_goal_response) {
             events.action_goal_response(payload[2], payload[3]);
           }
@@ -1690,10 +1695,10 @@ struct Session::Impl
             return;
           }
           ++expected;
-          if (!act_host_cancel_active_ || payload[2] != act_host_cancel_) {
+          if (act_host_cancels_.count(payload[2]) == 0u) {
             return;
           }
-          act_host_cancel_active_ = false;
+          act_host_cancels_.erase(payload[2]);
           if (events.action_cancel_response) {
             events.action_cancel_response(payload[2], payload[3]);
           }
@@ -2303,10 +2308,11 @@ struct Session::Impl
   std::map<std::uint8_t, ActPendingGoal> act_pending_goals_;
   bool act_pending_cancel_ = false;
   std::uint8_t act_pending_cancel_goal_ = 0;
-  bool act_host_goal_active_ = false;
-  std::uint8_t act_host_goal_ = 0;
-  bool act_host_cancel_active_ = false;
-  std::uint8_t act_host_cancel_ = 0;
+    // The host's GOALs and CANCELs awaiting the MCU's answer, by wire
+    // goal_seq. Several actions may hold one each while connected, and
+    // answers may arrive in any order, so one slot per kind is not enough.
+  std::set<std::uint8_t> act_host_goals_;
+  std::set<std::uint8_t> act_host_cancels_;
   std::uint8_t rel_next_ = 0;
   std::uint8_t rel_next_svc_ = 0;
   std::uint8_t rel_next_act_ = 0;

@@ -3827,6 +3827,36 @@ TEST(ActionExchange, QueuesOnePendingGoalPerIndex)
     0x03u}));
 }
 
+// covers: ACT-3, ACT-4
+TEST(ActionExchange, AppliesGoalResponsesInEitherOrder)
+{
+  std::vector<std::uint8_t> answered;
+  SessionEvents events;
+  events.action_goal_response = [&](std::uint8_t seq, std::uint8_t) {
+      answered.push_back(seq);
+    };
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x01u}));
+  drain_decoded(fixture);
+  // The second GOAL queues behind the unacked first and goes out once the
+  // MCU acks rel 0; both stay tracked until their own GOAL_RESP arrives.
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x01u, {0x02u}));
+  fixture.deliver_frame(kAck, 0u, {kHelperActions, 0x00u});
+  fixture.session().poll();
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActGoalResp, 0x00u, 0x01u, 0x00u});
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x01u, 0x00u, 0x00u});
+  ASSERT_EQ(answered.size(), 2u);
+  EXPECT_EQ(answered[0], 0x01u) << "the later goal's answer applies first";
+  EXPECT_EQ(answered[1], 0x00u);
+}
+
 // covers: ACT-4
 TEST(ActionExchange, AppliesTheGoalResponseOnce)
 {
