@@ -259,7 +259,9 @@ struct Router::Impl
     node_services_(std::move(in_node_services)),
     session_(session_config, in_clock, in_ros_clock, std::move(in_open), resolve_topic_type,
       SessionEvents{log_event(), handshake_event(), user_event(), mcu_log_event(),
-        param_status_event(), service_request_event(), service_response_event()},
+        param_status_event(), service_request_event(), service_response_event(),
+        action_goal_response_event(), action_cancel_response_event(), action_feedback_event(),
+        action_result_event()},
       resolve_service_type)
   {
     if (!sink) {
@@ -431,6 +433,28 @@ struct Router::Impl
              const std::vector<std::uint8_t> & payload) {
              on_service_response(req, status, payload);
            };
+  }
+
+  std::function<void(std::uint8_t, std::uint8_t)> action_goal_response_event()
+  {
+    return [this](std::uint8_t, std::uint8_t) {};
+  }
+
+  std::function<void(std::uint8_t, std::uint8_t)> action_cancel_response_event()
+  {
+    return [this](std::uint8_t, std::uint8_t) {};
+  }
+
+  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
+  action_feedback_event()
+  {
+    return [this](std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &) {};
+  }
+
+  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
+  action_result_event()
+  {
+    return [this](std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &) {};
   }
 
   void emit(SessionLog level, const std::string & text)
