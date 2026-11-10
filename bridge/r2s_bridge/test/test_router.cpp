@@ -22,17 +22,22 @@
 #include <utility>
 #include <vector>
 
+#include <action_msgs/msg/goal_status_array.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
 #include <sensor_msgs/srv/set_camera_info.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/int32_multi_array.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/trigger.hpp>
+#include <tf2_msgs/action/lookup_transform.hpp>
 
 #include "frame_helpers.hpp"
 #include "manual_clock.hpp"
+#include "r2s_bridge/action_types.hpp"
+#include "r2s_bridge/converter.hpp"
 #include "r2s_bridge/router.hpp"
 #include "rosidl_runtime_c/type_hash.h"
 
@@ -2386,6 +2391,792 @@ TEST_F(RouterNode, IgnoresALateResponseAfterTheCallTimedOut)
   rclcpp::spin_some(fixture.node());
   ASSERT_EQ(second.wait_for(std::chrono::seconds(10)), std::future_status::ready);
   EXPECT_TRUE(second.get()->success);
+}
+
+// The bridge as the ROS 2 action server for one MCU action: goals reach the
+// MCU over the reliable channel, and feedback, cancel and result come back
+// (spec/protocol.md, 7.9; SES-35).
+// covers: SES-35, ACT-2, ACT-3
+
+std::array<std::uint8_t, 8> installed_action_hash(const std::string & type)
+{
+  const ActionTypes types(type);
+  return types.type_hash();
+}
+
+// The link never times out under the test's manual clock: each poll
+// advances it 20 ms, so a default timeout would drop the session mid-goal.
+SessionConfig action_session_config()
+{
+  SessionConfig config;
+  config.link_timeout_ms = 3600000;
+  return config;
+}
+
+// A handshake announcing one LookupTransform action "spin", with the
+// installed hash. Time stays off the HELLO so no PING disturbs the capture.
+void handshake_with_actions(RouterFixture & fixture)
+{
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0xCCu));
+  fixture.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  fixture.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kServicesTopic, 0u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> hash =
+    installed_action_hash("tf2_msgs/action/LookupTransform");
+  fixture.deliver_frame(kHelperActions, 0u,
+    helper_action_declare(0u, hash.data(), "tf2_msgs/action/LookupTransform", "spin"));
+  fixture.deliver_frame(kHelperActions, 1u,
+    std::vector<std::uint8_t>{kHelperActStatus, 0x00u, 0x01u, 0x01u});
+}
+
+// One LookupTransform goal asking for "base" in "odom".
+tf2_msgs::action::LookupTransform_Goal make_spin_goal()
+{
+  tf2_msgs::action::LookupTransform_Goal goal;
+  goal.target_frame = "base";
+  goal.source_frame = "odom";
+  return goal;
+}
+
+// The packed wire form of one introspection struct, for the scripted MCU.
+std::vector<std::uint8_t> pack_action(
+  const std::string & type, const void *storage, Converter & converter)
+{
+  std::vector<std::uint8_t> packed;
+  const ConvertResult result = converter.pack_from_struct(type, false, storage, packed);
+  EXPECT_EQ(result.fail, ConvertFail::kNone);
+  return packed;
+}
+
+// Spins the node and the router until a future is ready, or the timeout
+// expires: ROS futures only complete while the node spins.
+template<typename FutureT>
+bool spin_until_ready(RouterFixture & fixture, FutureT & future)
+{
+  const auto start = std::chrono::steady_clock::now();
+  while (future.wait_for(std::chrono::seconds(0)) != std::future_status::ready &&
+    std::chrono::steady_clock::now() - start < std::chrono::seconds(10))
+  {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+  }
+  return future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+}
+
+// Spins until the wire carries an ACT_GOAL, or the timeout expires.
+bool wait_for_wire_goal(
+  RouterFixture & fixture, std::uint8_t & goal_seq, std::vector<std::uint8_t> & payload)
+{
+  const auto start = std::chrono::steady_clock::now();
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 7u && decoded[0] == kHelperActions &&
+        decoded[2] == kHelperActGoal)
+      {
+        goal_seq = decoded[4];
+        payload = std::vector<std::uint8_t>(decoded.begin() + 6, decoded.end() - 2);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// covers: SES-35, ACT-2, ACT-3, ACT-8
+TEST_F(RouterNode, AcceptsAGoalAndStreamsFeedbackAndResult)
+{
+  RouterFixture fixture("act_goal", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+  Converter converter;
+  const auto spin_goal = make_spin_goal();
+  const auto want = pack_action(
+    "tf2_msgs/action/LookupTransform_Goal", &spin_goal, converter);
+
+  bool feedback_seen = false;
+  rclcpp_action::Client<tf2_msgs::action::LookupTransform>::SendGoalOptions options;
+  options.feedback_callback =
+    [&feedback_seen](rclcpp_action::ClientGoalHandle<
+      tf2_msgs::action::LookupTransform>::SharedPtr,
+      const std::shared_ptr<const tf2_msgs::action::LookupTransform_Feedback> &) {
+      feedback_seen = true;
+    };
+  auto goal_handle = client->async_send_goal(make_spin_goal(), options);
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  EXPECT_EQ(goal_seq, 0x00u);
+  EXPECT_EQ(payload, want);
+  // The MCU accepts goal 0.
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+  const auto handle = goal_handle.get();
+  ASSERT_NE(handle, nullptr);
+
+  // The status array names the live goal: executing now, succeeded at
+  // the end. The bridge publishes it on change and periodically.
+  std::vector<action_msgs::msg::GoalStatusArray> statuses;
+  auto status_sub = fixture.node()->create_subscription<action_msgs::msg::GoalStatusArray>(
+    "spin/_action/status", 10,
+    [&statuses](action_msgs::msg::GoalStatusArray::SharedPtr message) {
+      statuses.push_back(*message);
+    });
+  const auto status_shows = [&](std::int8_t want) {
+      const auto start = std::chrono::steady_clock::now();
+      while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+        fixture.advance(20u);
+        rclcpp::spin_some(fixture.node());
+        for (const auto & array : statuses) {
+          for (const auto & entry : array.status_list) {
+            if (entry.goal_info.goal_id.uuid == handle->get_goal_id() &&
+              entry.status == want)
+            {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    };
+  EXPECT_TRUE(status_shows(2)) << "the status array never showed the goal executing";
+
+  // Empty feedback rides best effort with no ack. Drain first: the ack
+  // answering the MCU's GOAL_RESP is still queued behind the link.
+  static_cast<void>(fixture.drain());
+  fixture.deliver_frame(kHelperActions, 3u, {kHelperActFeedback, 0x00u, 0x00u});
+  const auto start = std::chrono::steady_clock::now();
+  while (!feedback_seen && std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+  }
+  EXPECT_TRUE(feedback_seen);
+  bool acked = false;
+  for (const auto & unit : fixture.drain()) {
+    const auto decoded = fixture.checked_decode(unit);
+    if (!decoded.empty() && decoded[0] == kAckTopic) {
+      acked = true;
+    }
+  }
+  EXPECT_FALSE(acked) << "feedback is never acked";
+
+  // The result completes the ROS goal as succeeded.
+  tf2_msgs::action::LookupTransform_Result result;
+  result.transform.header.frame_id = "b";
+  const auto packed = pack_action(
+    "tf2_msgs/action/LookupTransform_Result", &result, converter);
+  auto result_future = client->async_get_result(handle);
+  std::vector<std::uint8_t> frame{kHelperActResult, 0x01u, 0x00u, 0x04u};
+  frame.insert(frame.end(), packed.begin(), packed.end());
+  fixture.deliver_frame(kHelperActions, 4u, frame);
+  ASSERT_TRUE(spin_until_ready(fixture, result_future));
+  const auto wrapped = result_future.get();
+  EXPECT_EQ(wrapped.code, rclcpp_action::ResultCode::SUCCEEDED);
+  EXPECT_EQ(wrapped.result->transform.header.frame_id, "b");
+  EXPECT_TRUE(status_shows(4)) << "the status array never showed the goal succeeded";
+}
+
+// covers: SES-35, ACT-4
+TEST_F(RouterNode, RejectsAGoalTheMcuRefuses)
+{
+  RouterFixture fixture("act_reject", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  // The MCU refuses goal 0.
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+  EXPECT_EQ(goal_handle.get(), nullptr) << "a refused goal completes with no handle";
+}
+
+// covers: SES-35
+TEST_F(RouterNode, RejectsASecondGoalWhileOneIsActive)
+{
+  RouterFixture fixture("act_second", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+
+  auto first = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, first));
+  ASSERT_NE(first.get(), nullptr);
+
+  // A second goal while one is active never reaches the wire.
+  auto second = client->async_send_goal(make_spin_goal());
+  const auto start = std::chrono::steady_clock::now();
+  bool second_wire = false;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(2)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 7u && decoded[0] == kHelperActions &&
+        decoded[2] == kHelperActGoal)
+      {
+        second_wire = true;
+      }
+    }
+  }
+  EXPECT_FALSE(second_wire) << "the bridge rejects the second goal itself";
+  ASSERT_TRUE(spin_until_ready(fixture, second));
+  EXPECT_EQ(second.get(), nullptr) << "a rejected goal completes with no handle";
+}
+
+// covers: SES-35, ACT-5, ACT-8
+TEST_F(RouterNode, CancelsAnActiveGoal)
+{
+  RouterFixture fixture("act_cancel", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+  const auto handle = goal_handle.get();
+  ASSERT_NE(handle, nullptr);
+
+  auto cancel = client->async_cancel_goal(handle);
+  // The cancel reaches the wire for goal 0.
+  bool cancel_wire = false;
+  const auto start = std::chrono::steady_clock::now();
+  while (!cancel_wire && std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kHelperActions &&
+        decoded[2] == kHelperActCancel && decoded[4] == 0x00u)
+      {
+        cancel_wire = true;
+      }
+    }
+  }
+  ASSERT_TRUE(cancel_wire) << "the CANCEL never reached the wire";
+  // The MCU accepts the cancel.
+  fixture.deliver_frame(kHelperActions, 3u, {kHelperActCancelResp, 0x01u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAckTopic, 3u, {kHelperActions, 0x01u});
+  ASSERT_TRUE(spin_until_ready(fixture, cancel));
+
+  // The canceled result completes the ROS goal as canceled.
+  Converter converter;
+  tf2_msgs::action::LookupTransform_Result result;
+  const auto packed = pack_action(
+    "tf2_msgs/action/LookupTransform_Result", &result, converter);
+  auto result_future = client->async_get_result(handle);
+  std::vector<std::uint8_t> frame{kHelperActResult, 0x02u, 0x00u, 0x05u};
+  frame.insert(frame.end(), packed.begin(), packed.end());
+  fixture.deliver_frame(kHelperActions, 4u, frame);
+  ASSERT_TRUE(spin_until_ready(fixture, result_future));
+  EXPECT_EQ(result_future.get().code, rclcpp_action::ResultCode::CANCELED);
+}
+
+// covers: SES-35, ACT-9
+TEST_F(RouterNode, AbortsTheGoalWhenTheLinkResets)
+{
+  RouterFixture fixture("act_abort", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+  const auto handle = goal_handle.get();
+  ASSERT_NE(handle, nullptr);
+  auto result_future = client->async_get_result(handle);
+
+  // The MCU resets mid-goal: a new HELLO and a full re-handshake. The
+  // empty parameter and service walks end at index 0; the action walk ends
+  // at index 1 after the one DECLARE.
+  fixture.deliver_frame(kHelperControl, 5u, helper_hello(0x4445u, 1u, 512u, 0xCCu));
+  fixture.deliver_frame(kHelperControl, 6u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  fixture.deliver_frame(kParamsTopic, 1u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kServicesTopic, 1u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> hash =
+    installed_action_hash("tf2_msgs/action/LookupTransform");
+  fixture.deliver_frame(kHelperActions, 5u,
+    helper_action_declare(0u, hash.data(), "tf2_msgs/action/LookupTransform", "spin"));
+  fixture.deliver_frame(kHelperActions, 6u,
+    std::vector<std::uint8_t>{kHelperActStatus, 0x00u, 0x01u, 0x01u});
+  EXPECT_EQ(fixture.router().diagnostics().link_state, "connected")
+    << "the re-handshake never completed";
+  ASSERT_TRUE(spin_until_ready(fixture, result_future));
+  EXPECT_EQ(result_future.get().code, rclcpp_action::ResultCode::ABORTED);
+  // Asking again after the re-handshake finds no trace of the old goal: the
+  // client itself refuses the forgotten goal.
+  EXPECT_THROW(
+    { [[maybe_unused]] auto retake = client->async_get_result(handle); },
+    rclcpp_action::exceptions::UnknownGoalHandleError);
+}
+
+// Spins until the wire carries an ACT_GOAL for one action, or the timeout
+// expires.
+bool wait_for_indexed_goal(
+  RouterFixture & fixture, std::uint8_t & index, std::uint8_t & goal_seq)
+{
+  const auto start = std::chrono::steady_clock::now();
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 7u && decoded[0] == kHelperActions &&
+        decoded[2] == kHelperActGoal)
+      {
+        index = decoded[5];
+        goal_seq = decoded[4];
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// covers: SES-35, ACT-7
+TEST_F(RouterNode, RefusesAnUnknownActionType)
+{
+  RouterFixture fixture("act_badtype", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0xCCu));
+  fixture.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  fixture.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kServicesTopic, 0u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> zero{};
+  fixture.deliver_frame(kHelperActions, 0u,
+    helper_action_declare(0u, zero.data(), "nope/action/Nope", "bad"));
+  fixture.deliver_frame(kHelperActions, 1u,
+    std::vector<std::uint8_t>{kHelperActStatus, 0x00u, 0x01u, 0x01u});
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "bad");
+  EXPECT_FALSE(client->wait_for_action_server(std::chrono::milliseconds(200)));
+  EXPECT_TRUE(logged_has(fixture.logged(), "unknown type"));
+}
+
+// covers: SES-35, ACT-7
+TEST_F(RouterNode, RefusesAnActionWithAnUnusableName)
+{
+  RouterFixture fixture("act_badname", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0xCCu));
+  fixture.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  fixture.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kServicesTopic, 0u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  // The type loads, so the walk accepts the DECLARE; the name cannot name
+  // a ROS action, so no endpoint is created for it.
+  const std::array<std::uint8_t, 8> hash =
+    installed_action_hash("tf2_msgs/action/LookupTransform");
+  fixture.deliver_frame(kHelperActions, 0u,
+    helper_action_declare(0u, hash.data(), "tf2_msgs/action/LookupTransform", "9bad!"));
+  fixture.deliver_frame(kHelperActions, 1u,
+    std::vector<std::uint8_t>{kHelperActStatus, 0x00u, 0x01u, 0x01u});
+  EXPECT_TRUE(logged_has(fixture.logged(), "no endpoint"));
+}
+
+// covers: SES-35
+TEST_F(RouterNode, RefusesActionsWithoutNodeInterfaces)
+{
+  RouterFixture fixture("act_noiface", remapped(), RouterParams{},
+    512u, true, action_session_config(), true, false);
+  handshake_with_actions(fixture);
+  for (int i = 0; i < 12; ++i) {
+    fixture.advance(150u);
+    rclcpp::spin_some(fixture.node());
+  }
+  // Neither the action server nor any ROS endpoint exists.
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  EXPECT_FALSE(client->wait_for_action_server(std::chrono::milliseconds(200)));
+  EXPECT_TRUE(logged_has(fixture.logged(), "no endpoint"));
+}
+
+// A handshake announcing two LookupTransform actions, "spin" and "spin2".
+void handshake_with_two_actions(RouterFixture & fixture)
+{
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0xCCu));
+  fixture.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  fixture.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kServicesTopic, 0u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> hash =
+    installed_action_hash("tf2_msgs/action/LookupTransform");
+  fixture.deliver_frame(kHelperActions, 0u,
+    helper_action_declare(0u, hash.data(), "tf2_msgs/action/LookupTransform", "spin"));
+  fixture.deliver_frame(kHelperActions, 1u,
+    helper_action_declare(1u, hash.data(), "tf2_msgs/action/LookupTransform", "spin2"));
+  fixture.deliver_frame(kHelperActions, 2u,
+    std::vector<std::uint8_t>{kHelperActStatus, 0x00u, 0x02u, 0x01u});
+}
+
+// covers: SES-35, ACT-2, ACT-3, ACT-4, ACT-6, ACT-8
+TEST_F(RouterNode, RunsTwoActionsWithUniqueWireGoals)
+{
+  RouterFixture fixture("act_two", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_two_actions(fixture);
+  auto first_client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  auto second_client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin2");
+  ASSERT_TRUE(first_client->wait_for_action_server(std::chrono::seconds(10)));
+  ASSERT_TRUE(second_client->wait_for_action_server(std::chrono::seconds(10)));
+
+  auto first = first_client->async_send_goal(make_spin_goal());
+  std::uint8_t first_index = 0xFFu;
+  std::uint8_t first_seq = 0xFFu;
+  ASSERT_TRUE(wait_for_indexed_goal(fixture, first_index, first_seq));
+  EXPECT_EQ(first_index, 0x00u);
+  EXPECT_EQ(first_seq, 0x00u);
+  // Ack promptly like a real MCU: the reliable channel carries one frame
+  // at a time, so the second GOAL waits behind an unacked first.
+  fixture.deliver_frame(kAckTopic, 3u, {kHelperActions, 0x00u});
+  auto second = second_client->async_send_goal(make_spin_goal());
+  // Wait for the second action's GOAL specifically: the first goal's
+  // reliable retransmits may still be on the wire.
+  std::uint8_t second_index = 0xFFu;
+  std::uint8_t second_seq = 0xFFu;
+  const auto start = std::chrono::steady_clock::now();
+  while (second_index != 0x01u &&
+    std::chrono::steady_clock::now() - start < std::chrono::seconds(10))
+  {
+    if (!wait_for_indexed_goal(fixture, second_index, second_seq)) {
+      break;
+    }
+  }
+  EXPECT_EQ(second_index, 0x01u) << "each action walks its own wire index";
+  EXPECT_EQ(second_seq, 0x01u) << "the bridge skips seqs live on other actions";
+  fixture.deliver_frame(kAckTopic, 4u, {kHelperActions, 0x01u});
+
+  // The MCU accepts and completes both, each answered on its own seq.
+  fixture.deliver_frame(kHelperActions, 5u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kHelperActions, 6u, {kHelperActGoalResp, 0x01u, 0x01u, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, first));
+  ASSERT_TRUE(spin_until_ready(fixture, second));
+  for (const auto & line : fixture.logged()) {
+  }
+  ASSERT_NE(first.get(), nullptr);
+  ASSERT_NE(second.get(), nullptr);
+
+  Converter converter;
+  tf2_msgs::action::LookupTransform_Result result;
+  const auto packed = pack_action(
+    "tf2_msgs/action/LookupTransform_Result", &result, converter);
+  auto first_result = first_client->async_get_result(first.get());
+  auto second_result = second_client->async_get_result(second.get());
+  std::vector<std::uint8_t> frame0{kHelperActResult, 0x02u, 0x00u, 0x04u};
+  frame0.insert(frame0.end(), packed.begin(), packed.end());
+  std::vector<std::uint8_t> frame1{kHelperActResult, 0x03u, 0x01u, 0x04u};
+  frame1.insert(frame1.end(), packed.begin(), packed.end());
+  fixture.deliver_frame(kHelperActions, 7u, frame0);
+  fixture.deliver_frame(kHelperActions, 8u, frame1);
+  ASSERT_TRUE(spin_until_ready(fixture, first_result));
+  ASSERT_TRUE(spin_until_ready(fixture, second_result));
+  EXPECT_EQ(first_result.get().code, rclcpp_action::ResultCode::SUCCEEDED);
+  EXPECT_EQ(second_result.get().code, rclcpp_action::ResultCode::SUCCEEDED);
+}
+
+// covers: SES-35, ACT-1, ACT-4, ACT-8
+TEST_F(RouterNode, IgnoresStaleActionFrames)
+{
+  RouterFixture fixture("act_stale", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+
+  bool feedback_seen = false;
+  rclcpp_action::Client<tf2_msgs::action::LookupTransform>::SendGoalOptions options;
+  options.feedback_callback =
+    [&feedback_seen](rclcpp_action::ClientGoalHandle<
+      tf2_msgs::action::LookupTransform>::SharedPtr,
+      const std::shared_ptr<const tf2_msgs::action::LookupTransform_Feedback> &) {
+      feedback_seen = true;
+    };
+  auto goal_handle = client->async_send_goal(make_spin_goal(), options);
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+  const auto handle = goal_handle.get();
+  ASSERT_NE(handle, nullptr);
+
+  // A duplicate GOAL_RESP, feedback and result for other seqs, and feedback
+  // for an unknown action all report nothing to ROS. The rel numbers stay
+  // in order so the session applies every frame; the router drops the ones
+  // naming no live goal.
+  fixture.deliver_frame(kHelperActions, 3u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kHelperActions, 4u, {kHelperActFeedback, 0x02u, 0x01u, 0x09u});
+  fixture.deliver_frame(kHelperActions, 5u, {kHelperActFeedback, 0x03u, 0x07u, 0x09u});
+  fixture.deliver_frame(kHelperActions, 6u, {kHelperActResult, 0x01u, 0x01u, 0x04u, 0x09u});
+  const auto start = std::chrono::steady_clock::now();
+  while (!feedback_seen && std::chrono::steady_clock::now() - start < std::chrono::seconds(2)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+  }
+  EXPECT_FALSE(feedback_seen) << "stray frames never reach the ROS client";
+
+  // The live goal still completes once its own frames arrive.
+  fixture.deliver_frame(kHelperActions, 7u, {kHelperActFeedback, 0x05u, 0x00u});
+  auto result_future = client->async_get_result(handle);
+  Converter converter;
+  tf2_msgs::action::LookupTransform_Result result;
+  const auto packed = pack_action(
+    "tf2_msgs/action/LookupTransform_Result", &result, converter);
+  std::vector<std::uint8_t> frame{kHelperActResult, 0x02u, 0x00u, 0x04u};
+  frame.insert(frame.end(), packed.begin(), packed.end());
+  fixture.deliver_frame(kHelperActions, 8u, frame);
+  ASSERT_TRUE(spin_until_ready(fixture, result_future));
+  EXPECT_EQ(result_future.get().code, rclcpp_action::ResultCode::SUCCEEDED);
+}
+
+// covers: SES-35, ACT-6
+TEST_F(RouterNode, AbortsTheGoalOnAnUndecodableResult)
+{
+  RouterFixture fixture("act_badresult", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+  ASSERT_NE(goal_handle.get(), nullptr);
+
+  // A result whose payload cannot unpack aborts the goal instead of
+  // stranding the ROS client.
+  auto result_future = client->async_get_result(goal_handle.get());
+  fixture.deliver_frame(kHelperActions, 3u,
+    {kHelperActResult, 0x01u, 0x00u, 0x04u, 0xC8u, 0x01u});
+  ASSERT_TRUE(spin_until_ready(fixture, result_future));
+  EXPECT_EQ(result_future.get().code, rclcpp_action::ResultCode::ABORTED);
+  EXPECT_TRUE(logged_has(fixture.logged(), "dropped result"));
+}
+
+// covers: SES-35
+TEST_F(RouterNode, RejectsTheGoalTheMcuNeverAnswers)
+{
+  RouterFixture fixture("act_timeout", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  // The manual clock jumps past the call timeout: no MCU answer arrives.
+  fixture.advance(6000u);
+  rclcpp::spin_some(fixture.node());
+  ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+  EXPECT_EQ(goal_handle.get(), nullptr) << "an unanswered goal is refused, not stranded";
+  EXPECT_TRUE(logged_has(fixture.logged(), "never answered the goal"));
+}
+
+// covers: SES-35, ACT-5
+TEST_F(RouterNode, RejectsTheCancelTheMcuNeverAnswers)
+{
+  RouterFixture fixture("act_canceltimeout", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+  ASSERT_NE(goal_handle.get(), nullptr);
+
+  auto cancel = client->async_cancel_goal(goal_handle.get());
+  const auto start = std::chrono::steady_clock::now();
+  bool cancel_wire = false;
+  while (!cancel_wire && std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kHelperActions &&
+        decoded[2] == kHelperActCancel)
+      {
+        cancel_wire = true;
+      }
+    }
+  }
+  ASSERT_TRUE(cancel_wire);
+  // The manual clock jumps past the call timeout: no MCU answer arrives.
+  fixture.advance(6000u);
+  rclcpp::spin_some(fixture.node());
+  ASSERT_TRUE(spin_until_ready(fixture, cancel));
+  EXPECT_EQ(cancel.get()->return_code, 1) << "an unanswered cancel reports rejection";
+  EXPECT_TRUE(logged_has(fixture.logged(), "never answered the cancel"));
+}
+
+// covers: SES-35
+TEST_F(RouterNode, RejectsCallsWhileTheLinkIsDown)
+{
+  RouterFixture fixture("act_down", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+
+  // A goal and its cancel go out, then the manual clock jumps past the
+  // link timeout: the disconnect aborts both instead of stranding them.
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+  const auto handle = goal_handle.get();
+  ASSERT_NE(handle, nullptr);
+  auto cancel = client->async_cancel_goal(handle);
+  auto result_future = client->async_get_result(handle);
+  const auto cancel_start = std::chrono::steady_clock::now();
+  bool cancel_wire = false;
+  while (!cancel_wire && std::chrono::steady_clock::now() - cancel_start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kHelperActions &&
+        decoded[2] == kHelperActCancel)
+      {
+        cancel_wire = true;
+      }
+    }
+  }
+  ASSERT_TRUE(cancel_wire);
+
+  fixture.advance(3600001u);
+  rclcpp::spin_some(fixture.node());
+  ASSERT_TRUE(spin_until_ready(fixture, cancel));
+  EXPECT_EQ(cancel.get()->return_code, 1) << "the lost cancel reports rejection";
+  ASSERT_TRUE(spin_until_ready(fixture, result_future));
+  EXPECT_EQ(result_future.get().code, rclcpp_action::ResultCode::ABORTED);
+
+  // A new goal while the link is down is refused at once.
+  auto late = client->async_send_goal(make_spin_goal());
+  ASSERT_TRUE(spin_until_ready(fixture, late));
+  EXPECT_EQ(late.get(), nullptr) << "no ROS goal waits on a dead link";
+}
+
+// covers: SES-35
+TEST_F(RouterNode, RejectsTheCancelOfATerminalGoal)
+{
+  RouterFixture fixture("act_termcancel", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+  const auto handle = goal_handle.get();
+  ASSERT_NE(handle, nullptr);
+
+  Converter converter;
+  tf2_msgs::action::LookupTransform_Result result;
+  const auto packed = pack_action(
+    "tf2_msgs/action/LookupTransform_Result", &result, converter);
+  std::vector<std::uint8_t> frame{kHelperActResult, 0x01u, 0x00u, 0x04u};
+  frame.insert(frame.end(), packed.begin(), packed.end());
+  fixture.deliver_frame(kHelperActions, 4u, frame);
+
+  // Canceling a terminal goal reports it instead of touching the wire. The
+  // cancel goes out before the client first spins on the result, so the
+  // client still holds the handle while the bridge already stored it.
+  auto cancel = client->async_cancel_goal(handle);
+  ASSERT_TRUE(spin_until_ready(fixture, cancel));
+  EXPECT_EQ(cancel.get()->return_code, 3) << "a terminal goal reports its end";
+  auto result_future = client->async_get_result(handle);
+  ASSERT_TRUE(spin_until_ready(fixture, result_future));
+  EXPECT_EQ(result_future.get().code, rclcpp_action::ResultCode::SUCCEEDED);
+  bool cancel_wire = false;
+  const auto start = std::chrono::steady_clock::now();
+  while (std::chrono::steady_clock::now() - start < std::chrono::milliseconds(500)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kHelperActions &&
+        decoded[2] == kHelperActCancel)
+      {
+        cancel_wire = true;
+      }
+    }
+  }
+  EXPECT_FALSE(cancel_wire) << "no CANCEL goes out for a terminal goal";
 }
 
 }  // namespace

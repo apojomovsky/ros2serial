@@ -226,15 +226,18 @@ if(BUILD_TESTING)
 
   # The router drives a real node with a scripted link and real type support,
   # covering remapping, QoS and both traffic directions end to end.
+  find_package(rclcpp_action REQUIRED)
   ament_add_gtest(test_router test/test_router.cpp)
   target_include_directories(test_router PRIVATE ${R2S_CORE_DIR}/include)
   target_link_libraries(test_router
     r2s_bridge_component
     r2s_bridge_test_support
     geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
+    rclcpp_action::rclcpp_action
     sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
     std_msgs::std_msgs__rosidl_typesupport_cpp
-    std_srvs::std_srvs__rosidl_typesupport_cpp)
+    std_srvs::std_srvs__rosidl_typesupport_cpp
+    tf2_msgs::tf2_msgs__rosidl_typesupport_cpp)
 
   # A publish that fails on the ROS graph (a context shutting down under
   # the poll loop) is logged, counted and survived, never an abort.

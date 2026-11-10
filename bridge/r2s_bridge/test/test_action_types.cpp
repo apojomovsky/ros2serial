@@ -130,6 +130,32 @@ TEST(ActionTypes, FeedbackMessageMatchesGeneratedLayout)
   EXPECT_NE(types.feedback_of(message), nullptr);
 }
 
+TEST(ActionTypes, RefusesStructsWithoutTheEnvelopeFields)
+{
+  const ActionTypes types("tf2_msgs/action/LookupTransform");
+  ActionTypes::Struct goal = types.make_goal();
+  std::array<std::uint8_t, 16> goal_id{};
+  std::int32_t sec = 0;
+  std::uint32_t nanosec = 0u;
+  EXPECT_FALSE(types.goal_id_of(goal, goal_id));
+  EXPECT_EQ(types.goal_of(goal), nullptr);
+  EXPECT_FALSE(types.fill_goal_response(goal, 0, 0u, true));
+  EXPECT_FALSE(types.result_id_of(goal, goal_id));
+  EXPECT_FALSE(types.fill_result_status(goal, 0));
+  EXPECT_EQ(types.result_of(goal), nullptr);
+  EXPECT_FALSE(types.fill_feedback_id(goal, goal_id));
+  EXPECT_EQ(types.feedback_of(goal), nullptr);
+  EXPECT_FALSE(types.cancel_of(goal, goal_id, sec, nanosec));
+  ActionTypes::Struct response = types.make_goal_response();
+  EXPECT_FALSE(types.fill_cancel_response(response, 0, goal_id, 0, 0u, true));
+  ActionTypes::Struct empty;
+  EXPECT_FALSE(types.goal_id_of(empty, goal_id));
+  EXPECT_EQ(types.goal_of(empty), nullptr);
+  EXPECT_FALSE(types.fill_goal_response(empty, 0, 0u, true));
+  EXPECT_EQ(types.result_of(empty), nullptr);
+  EXPECT_EQ(types.feedback_of(empty), nullptr);
+}
+
 TEST(ActionTypes, CancelExchangeMatchesGeneratedLayout)
 {
   const ActionTypes types("tf2_msgs/action/LookupTransform");
