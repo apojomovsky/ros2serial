@@ -625,9 +625,6 @@ struct Router::Impl
     }
     route.client = rclcpp::create_generic_client(node_services_.base, node_services_.graph,
         node_services_.services, route.info.service_name, route.info.type_name);
-    // A live client route is as valid as a server one: the take loop tells
-    // them apart by role.
-    route.rcl_valid = true;
   }
 
     // Gives one ok service its route: the introspection handles, then the
