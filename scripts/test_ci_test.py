@@ -313,8 +313,13 @@ def test_pic_scope_runs_its_section(tmp_path, monkeypatch):
 
 
 def test_platformio_scope_runs_its_section(tmp_path, monkeypatch):
-    # The stubbed PlatformIO install plants its binary under the data dir,
-    # so the run keeps a scratch directory instead of the shared cache.
+    # The stubbed PlatformIO binary succeeds without downloads, so the run
+    # keeps a scratch directory instead of the shared cache.
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    (stub / 'pio').write_text('#!/usr/bin/env bash\nexit 0\n')
+    (stub / 'pio').chmod(0o755)
+    monkeypatch.setenv('R2S_PIO_BIN', str(stub / 'pio'))
     monkeypatch.setenv('R2S_PIO_DATA_DIR', str(tmp_path / 'pio-data'))
     result = run_scope(
         copy_tree(tmp_path),
