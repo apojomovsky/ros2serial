@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The descriptor table the fuzz targets decode with: one record per kind of
  * field the codec knows, so arbitrary payloads reach every interpreter path.
  * tools/fuzz_corpus.py heads each seed with the index its payload decodes as.

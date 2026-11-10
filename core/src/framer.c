@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* framer: bytes in through r2s_port_read, decoded frames out. It cuts frames
  * on 0x00, decodes rCOBS in place and checks the CRC (spec/protocol.md,
  * sections 2 to 4). */

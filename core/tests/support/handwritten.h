@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Handwritten message code for the codec tests: C structs, descriptor tables
  * and the topic configuration for Float32, Twist, a bounded String, Range,
  * Imu, JointState and the tf closure. It stands in for the files G7 and G8

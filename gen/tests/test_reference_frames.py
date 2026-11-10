@@ -1,4 +1,8 @@
-"""The reference frame codec.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+The reference frame codec.
 
 The frame vectors, the zero residue and the rules that drop a unit.
 """

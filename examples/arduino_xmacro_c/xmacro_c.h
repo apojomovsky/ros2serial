@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Shared declarations between the C sketch file and the Arduino shim. */
 
 #ifndef XMACRO_C_H

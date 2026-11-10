@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The bridge's only time source: monotonic host time in production, a clock the
 // test moves by hand. Nothing in the session reads a clock directly, so a test
 // decides exactly when a deadline expires.
@@ -9,13 +12,19 @@
 namespace r2s_bridge
 {
 
+/// The bridge's only time source: monotonic host time, or a test clock.
 class Clock
 {
 public:
+  /// Destroys the clock.
   virtual ~Clock() = default;
 
-    // Time since a fixed, arbitrary origin, in nanoseconds. Successive calls on
-    // one instance never go backwards.
+  /// Time since a fixed, arbitrary origin, in nanoseconds.
+  /**
+   * Successive calls on one instance never go backwards.
+   *
+   * \return The current time in nanoseconds.
+   */
   virtual std::chrono::nanoseconds now() const = 0;
 };
 

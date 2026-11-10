@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // Host-to-MCU pacing (spec/protocol.md, 8.4).
 #include "r2s_bridge/scheduler.hpp"
 

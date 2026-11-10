@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Varint lengths: every length round-trips, the encoding is the shortest one,
  * and an encoding that breaks a rule is refused by that rule. */
 #include "r2s/r2s_varint.h"

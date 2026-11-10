@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* CRC-16/MCRF4XX: the published check value, the zero residue and the
  * incremental and buffer forms agreeing. */
 #include <stdio.h>

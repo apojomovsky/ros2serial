@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Fuzz target: the MCU session on arbitrary bytes from the host. The input
  * is the RX stream; the tick advances with every port call so heartbeats,
  * retransmits and the link timeout fire without an endless loop. The session

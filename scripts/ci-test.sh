@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The single suite script: CI runs exactly this, and so does `make test`.
 # Scope with one or more of LINT=1 SCRIPTS=1 COMMITS=1 CORE=1 GEN=1 BRIDGE=1
-# CPP=1 E2E=<backend> COVERAGE=1 DOCS=1 EXAMPLES=1 ESP32=1 BUDGETS=1 FUZZ=1
-# README=1 NIGHTLY=1 SOAK=1; no scope runs everything.
+# CPP=1 E2E=<backend> COVERAGE=1 DOCS=1 EXAMPLES=1 ESP32=1 PIC=1 BUDGETS=1
+# FUZZ=1 README=1 NIGHTLY=1 SOAK=1; no scope runs everything.
 # E2E takes posix, avr, or both; both runs each backend once in one scope.
 # SCRIPTS_SHARD=N runs one CI shard of the SCRIPTS scope; unset runs it whole.
 # COMMITS checks COMMIT_RANGE (default origin/master..HEAD) and PR_TITLE when set,
@@ -64,7 +64,7 @@ else
 fi
 
 scoped=0
-for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE AMENT_LINT CPP E2E COVERAGE DOCS EXAMPLES ESP32 BUDGETS FUZZ README NIGHTLY SOAK; do [ -n "${!v:-}" ] && scoped=1; done
+for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE AMENT_LINT CPP E2E COVERAGE DOCS EXAMPLES ESP32 PIC BUDGETS FUZZ README NIGHTLY SOAK; do [ -n "${!v:-}" ] && scoped=1; done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }
 
 failed=()
@@ -122,6 +122,7 @@ lint_workflows() { need actionlint && actionlint .github/workflows/*.yml; }
 if wants LINT; then scope_now=LINT
   section layout python3 scripts/check_layout.py
   section python-lint lint_python
+  section headers python3 scripts/check_headers.py
   section c-format bash scripts/c-format.sh
   section cppcheck bash scripts/cppcheck.sh
   section workflow-lint lint_workflows
@@ -162,6 +163,7 @@ if wants COVERAGE; then scope_now=COVERAGE; section coverage bash scripts/covera
 if wants DOCS; then scope_now=DOCS; section docs python3 tools/snippets_check.py; section site python3 tools/site_build.py; section site-links python3 tools/site_links.py; fi
 if wants EXAMPLES; then scope_now=EXAMPLES; section examples bash scripts/build-examples.sh; fi
 if wants ESP32; then scope_now=ESP32; section esp32 bash scripts/build-examples-esp32.sh; fi
+if wants PIC; then scope_now=PIC; section pic bash scripts/build-pic-canary.sh; fi
 if wants BUDGETS; then scope_now=BUDGETS; section budgets bash scripts/budgets-check.sh; fi
 if wants FUZZ; then scope_now=FUZZ; section fuzz bash scripts/fuzz.sh; fi
 if wants README; then scope_now=README; section readme bash scripts/check-readme.sh; fi
@@ -187,7 +189,7 @@ fi
 
 empty=""
 if [ "$scoped" = 1 ]; then
-  for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE AMENT_LINT CPP E2E COVERAGE DOCS EXAMPLES ESP32 BUDGETS FUZZ README NIGHTLY SOAK; do
+  for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE AMENT_LINT CPP E2E COVERAGE DOCS EXAMPLES ESP32 PIC BUDGETS FUZZ README NIGHTLY SOAK; do
     if [ -n "${!v:-}" ]; then
       case " $ran_scopes " in *" $v "*) ;; *) empty="$empty $v" ;; esac
     fi

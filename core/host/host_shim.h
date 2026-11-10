@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* libr2s_host shim: the failure hook and error cell the Python driver uses. */
 #ifndef R2S_HOST_SHIM_H
 #define R2S_HOST_SHIM_H

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // Packed wire payloads to serialized CDR, through introspection with the plan
 // per type cached.
 #include "r2s_bridge/converter.hpp"

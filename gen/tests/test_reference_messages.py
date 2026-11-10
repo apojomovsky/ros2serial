@@ -1,4 +1,8 @@
-"""The reference message codec.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+The reference message codec.
 
 The message vectors, every bundled type, and the rules it enforces.
 """

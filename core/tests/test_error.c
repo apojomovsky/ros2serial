@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The MCU error report channel through the fake port: what the core sends on
  * topic ID 5 for each error code, and the rate limits that hold reports back
  * (spec/protocol.md, section 7.5). */

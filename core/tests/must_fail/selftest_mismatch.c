@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Must fail: the vector self-test rejects a record whose bytes disagree with
  * its hex text, as a mistranscribed vector would. */
 #include "unity.h"

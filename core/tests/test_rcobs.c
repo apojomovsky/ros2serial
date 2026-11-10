@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* rCOBS: the encoding round-trips, it never holds a 0x00, the decoder accepts
  * only the canonical encoding, and the decoder decodes in place. */
 #include <stdio.h>

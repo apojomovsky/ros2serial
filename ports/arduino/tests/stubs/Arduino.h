@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The stub Arduino core the glue's host test compiles against: a fake
  * Stream the test drives and a controllable micros clock. Only the calls
  * the glue makes exist here, so a new Arduino call fails to link. */

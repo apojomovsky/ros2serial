@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The `vectors` subcommand: payload hex from the reference codec, reproducing the hand vectors."""
 
 import re

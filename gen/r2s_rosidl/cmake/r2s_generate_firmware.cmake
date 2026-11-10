@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Generate firmware sources from r2s.yaml during the build.
 #
 #   r2s_generate_firmware(CONFIG <r2s.yaml> [MSG_PATHS <dir>...] [OUTPUT_DIR <dir>])

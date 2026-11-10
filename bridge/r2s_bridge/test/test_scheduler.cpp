@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The host-to-MCU pacer: keep-latest, per-topic rates, the global bandwidth
 // budget, round-robin service and bounded queues (spec/protocol.md, 8.4).
 // covers: SES-26, SES-27, SES-28, SES-29, SES-30, SES-32

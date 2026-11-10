@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Runtime posix firmware: the same Float32, Twist, String and Time topics as
  * the generated C firmware, registered as r2s::Node objects while the
  * firmware runs, so the end-to-end suite drives the runtime registration path

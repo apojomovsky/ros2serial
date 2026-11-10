@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The bridge publishes /diagnostics from its poll timer: a Bridge on a pty
 // reports boot_wait before any HELLO and handshaking after one, with the
 // session values as key/value pairs.

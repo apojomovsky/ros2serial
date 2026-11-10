@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Static posix firmware: the same Float32, Twist, String, Time and JointState
  * topics as the generated C firmware, announced from a fixed R2S_TOPICS list
  * through the static C++ API, so the end-to-end suite drives the static path

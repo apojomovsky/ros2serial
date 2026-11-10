@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The handwritten test firmware wiring: publish wrappers and dispatch for the
  * topics handwritten.c configures. Only the tests that drive the link need
  * the handler, so this file links only into them. */

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Host harness for the example timing tests: a tap stream, the wire codec
  * through the core's public rCOBS and CRC calls, and the handshake driver.
  * The tests compile the real sketches against the Arduino stubs, so every

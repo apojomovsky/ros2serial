@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Unit tests for tools/stack_report.py: .su parsing, call graphs, worst paths."""
 
 import pytest

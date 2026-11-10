@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Blink on the runtime API: a Bool subscription on led drives the LED.
  * Try it with: ros2 topic pub /led std_msgs/msg/Bool "{data: true}" --once
  * (bridge launch as in the README walkthrough). */

@@ -1,4 +1,8 @@
-"""Payloads: the packed message encoding of spec/protocol.md, section 6.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+Payloads: the packed message encoding of spec/protocol.md, section 6.
 
 The layout depends on the field types and on whether the topic is narrow, never
 on the bounds a side was built with ([ENC-13]), so this reads the message
@@ -36,13 +40,20 @@ def encode(
     *,
     narrow: bool = False,
 ) -> bytes:
-    """The payload of `message` for `type_name`, or an error naming what it cannot encode.
+    """
+    Encode the payload of `message` for `type_name`.
 
     A string field takes `str` (encoded as UTF-8) or `bytes`; a bool takes a
     `bool` or 0 and 1. A number is converted with binary32 rounding, so a vector
-    must only write a number which is already exactly representable. A missing or
-    unknown field is a `ValueError` naming it, as is a value the field cannot
-    hold, while input a rule of the spec refuses is a `Rejected` naming that rule.
+    must only write a number which is already exactly representable.
+
+    :param repository: the messages to resolve from.
+    :param type_name: the message type to encode.
+    :param message: the field values.
+    :param narrow: encode float64 fields as binary32.
+    :return: the payload bytes.
+    :raises ValueError: if a field is missing, unknown, or unholdable.
+    :raises Rejected: if a rule of the spec refuses the input.
     """
     out = bytearray()
     _encode_message(repository, repository.load(type_name), message, narrow, out)
@@ -56,10 +67,18 @@ def decode(
     *,
     narrow: bool = False,
 ) -> dict[str, Any]:
-    """The message `payload` carries for `type_name`, or a `Rejected` naming the rule it breaks.
+    """
+    Decode the message `payload` carries for `type_name`.
 
     Strings come back as `bytes`, and a `float64` field on a narrow topic as the
     binary64 the binary32 on the wire widens to exactly ([ENC-11]).
+
+    :param repository: the messages to resolve from.
+    :param type_name: the message type to decode.
+    :param payload: the payload bytes.
+    :param narrow: decode float64 fields from binary32.
+    :return: the field values.
+    :raises Rejected: if the payload breaks a rule of the spec.
     """
     reader = _Reader(payload)
     values = _decode_message(repository, repository.load(type_name), reader, narrow)
@@ -69,7 +88,7 @@ def decode(
 
 
 def narrow(value: float) -> float:
-    """The binary64 that [ENC-11]'s roundTiesToEven makes of `value` in binary32."""
+    """Return the binary64 that [ENC-11]'s roundTiesToEven makes of `value` in binary32."""
     return struct.unpack('<f', _binary32('<narrow>', value, overflow_to_infinity=True))[0]
 
 
@@ -234,7 +253,7 @@ def _float_bytes(where: str, value: Any, width: int, narrow: bool) -> bytes:
 
 
 def _pattern(where: str, value: Mapping[str, Any], width: int) -> bytes:
-    """The little-endian bytes of a `{bits: "<hex>"}`, written most significant bit first."""
+    """Return the little-endian bytes of a `{bits: "<hex>"}`, most significant bit first."""
     bits = value.get('bits')
     if (
         not isinstance(bits, str)

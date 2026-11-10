@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Seed corpora for the libFuzzer targets from the conformance vectors.
 
 Each target in core/fuzz/corpus/ holds whole inputs: rCOBS encodings for the

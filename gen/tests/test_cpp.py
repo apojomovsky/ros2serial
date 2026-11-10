@@ -1,4 +1,8 @@
-"""The C++ message headers: the field mapping, the frozen text and the bundle's bytes.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+The C++ message headers: the field mapping, the frozen text and the bundle's bytes.
 
 Covers the generator side of the runtime API: every field kind the nine
 bundled types use, the frozen header of each type, the layout checks that tie
@@ -46,7 +50,7 @@ FIELD_KINDS = [
 
 
 def emit_for(tmp_path, definitions, type_name, bound_map=None, default_string_bound=16):
-    """The C++ header of one type, from a throwaway message package."""
+    """Emit the C++ header of one type, from a throwaway message package."""
     root = tmp_path / 'messages'
     for name, text in definitions.items():
         write_message(root, name, text)
@@ -61,7 +65,7 @@ def emit_for(tmp_path, definitions, type_name, bound_map=None, default_string_bo
 
 
 def bundled_resolved(distro='jazzy'):
-    """The resolved bundled types and the repository they came from."""
+    """Resolve the bundled types and the repository they came from."""
     repository = msgs.MessageRepository(distro=distro)
     resolved = bounds.resolve(
         repository,
@@ -73,12 +77,12 @@ def bundled_resolved(distro='jazzy'):
 
 
 def emit_bundled(resolved, repository, type_name, distro='jazzy'):
-    """The C++ header of a bundled type, with the banner the bundle gives it."""
+    """Emit the C++ header of a bundled type, with the banner the bundle gives it."""
     return cpp.emit_message_hpp(resolved, type_name, repository=repository, distro=distro)
 
 
 def frozen(type_name):
-    """The frozen header of a type, as the tree holds it."""
+    """Read the frozen header of a type, as the tree holds it."""
     return (CPP_INCLUDE / cpp.message_path(type_name)).read_text(encoding='utf-8')
 
 

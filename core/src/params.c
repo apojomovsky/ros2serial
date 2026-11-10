@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* params: the MCU side of the parameters channel. The table below is the
  * firmware's live values; the session calls in for channel 3 frames. */
 #include "r2s/r2s_params.h"

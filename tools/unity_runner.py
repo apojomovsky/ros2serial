@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Generate Unity runners: one for a test source file, or one for vector files.
 
 `tests` scans a C file for `void test_*(void)` definitions and writes a main

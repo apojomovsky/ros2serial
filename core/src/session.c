@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* session: the MCU side of the handshake and the link. It announces the
  * firmware on boot, answers the host through ANNOUNCING, and sends heartbeats
  * while CONNECTED (spec/protocol.md, sections 7 and 8). */

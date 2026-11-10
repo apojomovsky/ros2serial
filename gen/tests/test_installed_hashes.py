@@ -1,4 +1,8 @@
-"""Bundled hashes equal the installed type support's, on this distro.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+Bundled hashes equal the installed type support's, on this distro.
 
 The bridge job runs this file in every supported distro container, so a
 snapshot that drifts from a released distro fails there. Skips only when no
@@ -20,7 +24,8 @@ from r2s_gen import typehash
 def _prefixes(
     ament: str | None = None, distro: str | None = None, opt_ros: Path | None = None
 ) -> list[Path]:
-    """This distro's install first, then the sourced prefixes.
+    """
+    Order this distro's install first, then the sourced prefixes.
 
     The container's own install is authoritative: an overlay from another
     distro must not shadow the type support under test. The arguments default
@@ -44,7 +49,7 @@ def _prefixes(
 
 
 def _snapshot_distro() -> str | None:
-    """The snapshot matching this container, or None when it cannot be told."""
+    """Return the snapshot matching this container, or None when it cannot be told."""
     distro = os.environ.get('ROS_DISTRO', '')
     if distro in bundle.DISTROS:
         return distro
@@ -65,7 +70,7 @@ ACTION_TYPES = (
 
 
 def _installed_hash(prefix: Path, type_name: str) -> str | None:
-    """The installed hash_string for `type_name` under `prefix`, if present."""
+    """Read the installed hash_string for `type_name` under `prefix`, if present."""
     if '/action/' in type_name:
         package, _, name = type_name.partition('/action/')
         for suffix_text in ('_Goal', '_Result', '_Feedback'):
@@ -99,7 +104,7 @@ def _mismatches(installed: dict[str, str], generated: dict[str, str]) -> list[st
 def _collect_installed(
     prefixes: list[Path], types: tuple[str, ...] = bundle.BUNDLED_TYPES
 ) -> dict[str, str]:
-    """The installed hash per type from the first prefix that carries it."""
+    """Collect the installed hash per type from the first prefix that carries it."""
     installed: dict[str, str] = {}
     for type_name in types:
         for prefix in prefixes:
@@ -201,7 +206,7 @@ def test_matching_hashes_report_no_mismatch():
 
 
 def _write_hash(root: Path, type_name: str, hashed: str) -> None:
-    """A fake installed type description under `root` carrying one hash."""
+    """Write a fake installed type description under `root` carrying one hash."""
     package, _, name = type_name.partition('/msg/')
     document_dir = root / 'share' / package / 'msg'
     document_dir.mkdir(parents=True)

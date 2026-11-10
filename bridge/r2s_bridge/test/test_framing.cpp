@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The frame vectors through the bridge's own framing: the core framer reads
 // each vector's wire from a scripted transport and must hand back its frame.
 // The bridge also takes exactly the host's maximum decoded frame.

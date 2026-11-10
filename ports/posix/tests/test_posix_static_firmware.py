@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The static posix firmware's node name check: an overlong --node fails fast.
 
 The static C++ firmware announces through the fixed R2S_TOPICS list, so an

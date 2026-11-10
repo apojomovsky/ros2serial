@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The handwritten test firmware data: descriptor tables and the topic
  * configuration for Float32, Twist and a bounded String. The publish wrappers
  * and dispatch live in handwritten_firmware.c, linked only by the tests that

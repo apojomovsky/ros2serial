@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Probe: every codec seed must decode through the fuzz table. The fuzzer
  * treats a refusal as a legal outcome, so a broken table or a mistyped seed
  * header would pass the seeds stage silently; this turns that drift into a

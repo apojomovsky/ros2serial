@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # The posix "virtual MCU": the unmodified core plus the posix port, as one
 # host process the end-to-end tests launch on a pty (docs/00-design.md, C10).
 cmake_minimum_required(VERSION 3.22)

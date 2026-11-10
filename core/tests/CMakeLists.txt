@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Unit tests (test_*.c, one executable each), must-fail tests (must_fail/*.c,
 # which pass only by failing with the expected message) and vector tests (one
 # executable per vector kind and check). Runners come from tools/unity_runner.py.

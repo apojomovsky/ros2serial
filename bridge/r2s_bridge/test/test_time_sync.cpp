@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The host time-sync estimator: offset from the lowest round trip samples,
 // drift from a linear fit, corrections the MCU can anchor r2s_now() to.
 // covers: SES-24, SES-25

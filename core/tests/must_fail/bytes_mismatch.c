@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Must fail: a byte mismatch is reported with both strings in hex. CMake
  * passes this test only if the failure message appears. */
 #include "bytes.h"

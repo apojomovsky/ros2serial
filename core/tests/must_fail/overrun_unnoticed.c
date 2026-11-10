@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Must fail: a test that lets the core write past tx_free fails in tearDown,
  * even when it never looks at the overrun count itself. */
 #include "fake_port.h"

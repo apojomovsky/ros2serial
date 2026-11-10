@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Servo on the runtime API: a Float32 subscription on servo sets the angle.
  * A 50 Hz pulse drives the hobby servo, 1 ms at 0 degrees to 2 ms at 180,
  * so the link never blocks for the pulse. Timer1 makes the pulse on AVR

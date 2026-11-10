@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Check that every rule of spec/protocol.md is covered by a vector or a test.
 
 A rule is covered when a vector file lists its ID under `covers`, or when a test

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The ring at its smallest size, two slots and one usable: the capacity the
  * default-size test cannot reach. This build compiles rx.c with
  * R2S_RX_RING_SIZE=2, so every read here holds a single byte by construction. */

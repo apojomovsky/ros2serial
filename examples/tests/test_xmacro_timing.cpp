@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The X-macro example resyncs without bursts: a slightly late tick keeps
  * the phase, a stale deadline publishes once and resyncs, and the offline
  * branch resets the deadline instead of replaying it. Each case drives the

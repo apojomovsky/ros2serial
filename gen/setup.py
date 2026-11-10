@@ -1,4 +1,8 @@
-"""The r2s-gen distribution.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+The r2s-gen distribution.
 
 Pip installs it, and colcon builds the same sources as an ament_python package.
 

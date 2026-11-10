@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Example firmware: the generated static library plus the ATmega328P main.
 cmake_minimum_required(VERSION 3.22)
 project(hello_cmake C)

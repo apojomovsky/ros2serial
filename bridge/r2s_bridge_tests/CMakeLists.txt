@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Integration tests for the bridge launch file: launch_testing cases that drive
 # the installed r2s_bridge launch file against the posix virtual MCU.
 cmake_minimum_required(VERSION 3.16)

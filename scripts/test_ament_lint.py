@@ -3,9 +3,13 @@
 r2s_bridge, r2s_gen and r2s_rosidl declare the lint test dependencies and
 wire ament_lint_auto behind the R2S_AMENT_LINT option, off by default so
 lint findings never fail the bridge or farm builds. scripts/ament-lint.sh
-enables the option, runs only the lint tests, and always exits zero after
-printing the per-linter baseline; ci.yml runs it as a continue-on-error
-job. The tests stub colcon, python3 and pytest, so they never build.
+enables the option, runs only the lint tests, prints the per-linter
+baseline, and exits nonzero only when cpplint on the bridge reports
+findings; ci.yml runs it as a continue-on-error job, so the gate stays
+non-blocking. copyright is the known divergence: the tree carries the SPDX
+two-liner (#549) which ament_copyright cannot read, so its count shows in
+the baseline without failing the run. The tests stub colcon, python3 and
+pytest, so they never build.
 """
 
 import os
@@ -84,7 +88,14 @@ exit 1
 """
 
 
-def run_advisory(tmp_path, colcon_stub=COLCON_STUB, python_stub=PYTHON_STUB, with_results=True):
+def run_advisory(
+    tmp_path,
+    colcon_stub=COLCON_STUB,
+    python_stub=PYTHON_STUB,
+    with_results=True,
+    copyright_failures=0,
+    cpplint_failures=0,
+):
     bindir = tmp_path / 'bin'
     bindir.mkdir(exist_ok=True)
     (bindir / 'colcon').write_text(colcon_stub)
@@ -92,8 +103,8 @@ def run_advisory(tmp_path, colcon_stub=COLCON_STUB, python_stub=PYTHON_STUB, wit
     for tool in ('colcon', 'python3'):
         path = bindir / tool
         path.chmod(stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH | path.stat().st_mode)
-    # Pre-existing results the summary reads: copyright fails twice of
-    # three checks, flake8 is clean, rosidl has none.
+    # Pre-existing results the summary reads: copyright and cpplint report
+    # their counts on three checks each, flake8 is clean, rosidl has none.
     if with_results:
         results = (
             tmp_path
@@ -106,8 +117,12 @@ def run_advisory(tmp_path, colcon_stub=COLCON_STUB, python_stub=PYTHON_STUB, wit
         )
         results.mkdir(parents=True)
         (results / 'copyright.xunit.xml').write_text(
-            '<testsuite name="copyright" tests="3" failures="2" errors="0" '
-            'skipped="0"></testsuite>\n'
+            '<testsuite name="copyright" tests="3" '
+            f'failures="{copyright_failures}" errors="0" skipped="0"></testsuite>\n'
+        )
+        (results / 'cpplint.xunit.xml').write_text(
+            '<testsuite name="cpplint" tests="3" '
+            f'failures="{cpplint_failures}" errors="0" skipped="0"></testsuite>\n'
         )
         (results / 'flake8.xunit.xml').write_text(
             '<testsuite name="flake8" tests="1" failures="0" errors="0" skipped="0"></testsuite>\n'
@@ -129,7 +144,7 @@ def test_advisory_run_enables_lint_selects_lint_tests_and_reports_a_baseline(tmp
     assert SCRIPT.is_file(), 'scripts/ament-lint.sh is missing'
     result = run_advisory(tmp_path)
     out = result.stdout + result.stderr
-    assert result.returncode == 0, f'advisory run must not fail on lint findings:\n{out}'
+    assert result.returncode == 0, f'clean baseline must pass:\n{out}'
     build_calls = (tmp_path / 'colcon.log').read_text()
     assert '-DR2S_AMENT_LINT=ON' in build_calls, f'lint option not enabled:\n{build_calls}'
     assert '--ctest-args' in build_calls and '-R' in build_calls, (
@@ -141,8 +156,24 @@ def test_advisory_run_enables_lint_selects_lint_tests_and_reports_a_baseline(tmp
         f'gen lint not run through pytest:\n{pytest_log}'
     )
     assert 'baseline' in out.lower(), f'no baseline table:\n{out}'
-    assert 'r2s_bridge copyright 2 3' in out, f'copyright count missing:\n{out}'
+    assert 'r2s_bridge copyright 0 3' in out, f'copyright count missing:\n{out}'
+    assert 'r2s_bridge cpplint 0 3' in out, f'cpplint count missing:\n{out}'
     assert 'r2s_bridge flake8 0 1' in out, f'flake8 count missing:\n{out}'
+
+
+def test_cleaned_area_findings_fail_the_run_but_not_the_gate(tmp_path):
+    result = run_advisory(tmp_path, cpplint_failures=2)
+    out = result.stdout + result.stderr
+    assert result.returncode != 0, f'cpplint findings must fail the run:\n{out}'
+    assert 'r2s_bridge cpplint 2 3' in out, f'cpplint count missing:\n{out}'
+    assert 'expected zero' in out, f'no zero expectation:\n{out}'
+
+
+def test_copyright_findings_stay_visible_without_failing_the_run(tmp_path):
+    result = run_advisory(tmp_path, copyright_failures=2)
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, f'copyright divergence must not fail the run:\n{out}'
+    assert 'r2s_bridge copyright 2 3' in out, f'copyright count missing:\n{out}'
 
 
 def test_advisory_run_fails_loudly_when_no_linter_ran(tmp_path):

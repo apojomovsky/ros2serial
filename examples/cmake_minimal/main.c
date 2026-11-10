@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Minimal CMake example firmware: the generated pair on an ATmega328P at
  * 16 MHz, publishing battery and counting cmd_vel frames. */
 #include <avr/interrupt.h>

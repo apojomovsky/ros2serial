@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Conformance: every frame vector through the transmit path, which must put
  * the vector's wire bytes on the port. */
 #include <stdio.h>

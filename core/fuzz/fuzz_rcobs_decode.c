@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Fuzz target: the rCOBS decoder on arbitrary bytes. It must never crash,
  * read out of bounds or hang, whatever it is given, and whatever it accepts
  * must be the canonical encoding of the bytes it decoded. */

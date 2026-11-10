@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Worst-case stack budgets: static analysis from .su files and the call graph.
 
 avr-gcc -fstack-usage writes one .su file per compiled unit; avr-objdump -d

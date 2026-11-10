@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The transmit path: one frame out through the fake port, its space reserved
  * before the first byte, its bytes handed over in chunks, and a busy port left
  * alone. */

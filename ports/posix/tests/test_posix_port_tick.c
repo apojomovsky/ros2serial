@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Port tick checks: monotonic, live, at 1000 Hz and pinned to CLOCK_MONOTONIC.
  * The rate check reads the same clock the port uses, so it cannot tell which
  * clock that is. The link-time wrap below sees every clock_gettime call the

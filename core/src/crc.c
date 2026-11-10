@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* crc: CRC-16/MCRF4XX, bit by bit, so no 512-byte table costs flash on small
  * targets. Bytes in, the running check out (spec/protocol.md, section 3). */
 #include "r2s/r2s_crc.h"

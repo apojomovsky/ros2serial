@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The compat firmware: the runtime firmware's topics and timing through
  * the rosserial-compatible layer, so the e2e suite also covers the compat
  * path. Publish intervals come from the monotonic clock rather than the

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // A transport the tests script: reads come from a queue the test fills, writes
 // are captured call by call. Limits: it never blocks, one thread drives it, and
 // a scripted chunk is split across reads by the caller's capacity.

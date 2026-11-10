@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The framer: frames cut on 0x00, decoded in place, checked and counted, and
  * never overwritten while a consumer still holds one. */
 #include <string.h>

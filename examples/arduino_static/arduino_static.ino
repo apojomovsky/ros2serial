@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Minimal Arduino example: the static API on Uno and Mega, publishing
  * battery and reacting to cmd_vel. The topics are declared in an R2S_TOPICS
  * list, so the example needs no r2s.yaml and no generated output; the

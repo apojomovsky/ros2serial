@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Stage the Arduino library and compile a sketch for Uno or Mega.
 # Usage: build.sh [--board uno|mega] [--sketch DIR] [--lib DIR] [--out DIR]
 # [--distro NAME] [--stage-only] [--no-bundle]. Builds go under

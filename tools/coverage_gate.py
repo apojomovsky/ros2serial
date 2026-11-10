@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Head-vs-base coverage gate: fail a PR that lowers a component's figure.
 
 Reads gcovr --json-summary files, compares the head figure against the base

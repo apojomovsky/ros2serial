@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Minimal X-macro example: the bundled library on Uno and Mega, publishing
  * battery and greeting and counting cmd_vel and joints frames. The sketch
  * declares its topics in an R2S_TOPICS list, so there is no r2s.yaml and no

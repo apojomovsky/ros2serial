@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Seed corpora under core/fuzz/corpus/ come from the conformance vectors.
 
 tools/fuzz_corpus.py extracts them; these tests check every seed against the

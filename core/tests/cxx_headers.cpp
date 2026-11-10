@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The core's headers from C++: the bridge and the C++ layer include them and
 // link the C objects, which needs C linkage on every declaration.
 #include "r2s/r2s.h"

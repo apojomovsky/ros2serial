@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* varint: lengths as unsigned LEB128, 7 bits per byte, least significant group
  * first (spec/protocol.md, section 5). */
 #include "r2s/r2s_varint.h"

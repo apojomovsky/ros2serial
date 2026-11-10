@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The link between the MCU's topics and the ROS graph: generic publishers
 // and subscriptions under the announced names, paced host-to-MCU traffic,
 // and converted payloads both directions.

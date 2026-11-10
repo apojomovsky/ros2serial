@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Helpers the generator tests share: throwaway message packages, vectors and random messages."""
 
 import math
@@ -73,7 +76,7 @@ def vector_files(kind: str) -> list:
 def random_message(
     repository: msgs.MessageRepository, type_name: str, rng: random.Random
 ) -> dict[str, Any]:
-    """A message of `type_name` whose every field holds a random value, boundaries included."""
+    """Build a message of `type_name` with random values in every field, boundaries included."""
     return _random_message(repository, repository.load(type_name), rng)
 
 
@@ -134,7 +137,8 @@ def matches(
     *,
     narrow: bool = False,
 ) -> bool:
-    """Whether `decoded` holds the message `expected` writes, with NaN equal to NaN.
+    """
+    Whether `decoded` holds the message `expected` writes, with NaN equal to NaN.
 
     A vector writes a float as a number or as `{bits: "<hex>"}`; a narrow topic
     carries a binary32 that [ENC-11] makes of the binary64 the vector states.
@@ -195,7 +199,7 @@ def _element_matches(
 
 
 def _field_value(value: Any, width: int, narrow: bool) -> float:
-    """The value a float field holds, from a number, a `{bits}` or a decoded value."""
+    """Return the value a float field holds, from a number, a `{bits}` or a decoded value."""
     if isinstance(value, Mapping):
         number = struct.unpack(
             '<f' if width == 4 else '<d', int(value['bits'], 16).to_bytes(width, 'little')
@@ -214,7 +218,8 @@ _WALK_SIGNED = frozenset({2, 4, 6, 8})
 
 
 def walk_encode(table, resolved, type_name, values, narrow=False):
-    """The payload the descriptor table makes of `values`.
+    """
+    Encode the payload the descriptor table makes of `values`.
 
     Walking entries the way the interpreter does.
     """
@@ -258,7 +263,8 @@ def _walk_encode_element(table, resolved, entry, value, narrow, out):
 
 
 def _walk_float_bytes(entry, value, narrow):
-    """The wire bytes of a float field.
+    """
+    Encode the wire bytes of a float field.
 
     A `{bits}` pattern direct, a number packed, narrow in binary32.
     """
@@ -277,7 +283,8 @@ def _walk_float_bytes(entry, value, narrow):
 
 
 def walk_decode(table, resolved, type_name, payload, narrow=False):
-    """The message the descriptor table reads from `payload`.
+    """
+    Decode the message the descriptor table reads from `payload`.
 
     Walking entries the way the interpreter does.
     """

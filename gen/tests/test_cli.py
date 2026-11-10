@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The r2s-gen command line: the version command, and the refusal of unknown ones."""
 
 from r2s_gen import cli

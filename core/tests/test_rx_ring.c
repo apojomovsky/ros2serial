@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The optional receive ring: bytes in through r2s_rx_push() from the
  * interrupt, out through the r2s_port_read() the core provides. This is the
  * R2S_WITH_RX_RING build's test, so it links no port. */

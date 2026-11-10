@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // A clock the test moves: time passes only through advance(), never with the
 // wall clock, so a timeout test fixes exactly when its deadline expires.
 #ifndef SUPPORT__MANUAL_CLOCK_HPP_

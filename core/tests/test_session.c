@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The MCU session through the fake port: boot, a full handshake byte by byte,
  * timeouts, re-announce and the heartbeat counters. */
 #include <float.h>

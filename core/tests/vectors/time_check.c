@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Conformance: every time vector through the core's time arithmetic. The
  * check drives the same function r2s_now() uses, with the vector's tick rate,
  * so the C core and the Python reference agree case by case. */

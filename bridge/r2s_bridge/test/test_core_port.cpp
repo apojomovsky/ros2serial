@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The core port with one slot per live link: reads and ticks come from the
 // slot's own transport and clock, a fault marks only its own slot, and
 // attaching past the table throws instead of sharing a link.

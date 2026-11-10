@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The scriptable fake port the core's tests link instead of a real one. It
  * implements r2s_port_* from r2s/r2s_port.h; these controls drive it. */
 #ifndef R2S_TEST_FAKE_PORT_H

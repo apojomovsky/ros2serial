@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Build the posix test firmware and run its contract tests. Builds go under
 # R2S_BUILD_DIR, so the tree stays clean; the core suite runs this script.
 # Usage: run.sh [--build-only]

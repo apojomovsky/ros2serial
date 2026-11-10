@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Power-up probe: the first r2s_init() without any reset must announce. It has
  * its own main, because the Unity setUp resets every module first. */
 #include <stdio.h>

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Conformance: handshake transcripts through the MCU session. The firmware
  * comes from the transcript: the HELLO names the node and the topic count,
  * and the TOPIC steps fill the table. Host steps go onto the fake port byte

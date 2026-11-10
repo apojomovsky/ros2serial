@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The topic verdict: type support loading and hash check, through the
 // installed rosidl_typesupport_cpp library.
 #include "r2s_bridge/type_support.hpp"

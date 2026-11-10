@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # The colcon-time wrapper over r2s-gen: install the CMake helper a firmware
 # package finds to generate its sources during the build.
 cmake_minimum_required(VERSION 3.22)

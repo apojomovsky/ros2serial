@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The site link check proves every built page only links at the site.
 
 Internal links must name a built file, and every #fragment must match
@@ -18,31 +21,33 @@ def write_site(root, files):
 
 
 def test_check_clean_site_passes(tmp_path):
-    site = write_site(tmp_path, {"a.html": GOOD_A, "b.html": GOOD_B})
+    site = write_site(tmp_path, {'a.html': GOOD_A, 'b.html': GOOD_B})
     assert site_links.check_site(site) == []
 
 
 def test_check_dead_page_link_fails(tmp_path):
-    site = write_site(tmp_path, {"a.html": '<html><body><a href="gone.html">G</a></body></html>'})
+    site = write_site(tmp_path, {'a.html': '<html><body><a href="gone.html">G</a></body></html>'})
     problems = site_links.check_site(site)
     assert len(problems) == 1
-    assert "gone.html" in problems[0]
+    assert 'gone.html' in problems[0]
 
 
 def test_check_dead_fragment_fails(tmp_path):
-    site = write_site(tmp_path, {"a.html": '<html><body><h1 id="top">A</h1><a href="#nope">X</a></body></html>'})
+    site = write_site(
+        tmp_path, {'a.html': '<html><body><h1 id="top">A</h1><a href="#nope">X</a></body></html>'}
+    )
     problems = site_links.check_site(site)
     assert len(problems) == 1
-    assert "#nope" in problems[0]
+    assert '#nope' in problems[0]
 
 
 def test_check_fragment_on_other_page_resolves(tmp_path):
-    site = write_site(tmp_path, {"a.html": GOOD_A, "b.html": GOOD_B})
+    site = write_site(tmp_path, {'a.html': GOOD_A, 'b.html': GOOD_B})
     assert site_links.check_site(site) == []
 
 
 def test_check_external_link_is_skipped(tmp_path, capsys):
-    url = "https://github.com/apojomovsky/ros2serial"
-    site = write_site(tmp_path, {"a.html": f'<html><body><a href="{url}">R</a></body></html>'})
+    url = 'https://github.com/apojomovsky/ros2serial'
+    site = write_site(tmp_path, {'a.html': f'<html><body><a href="{url}">R</a></body></html>'})
     assert site_links.check_site(site) == []
-    assert "external" in capsys.readouterr().out
+    assert 'external' in capsys.readouterr().out

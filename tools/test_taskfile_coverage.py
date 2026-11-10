@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Every tracked file maps to a task or says why not.
 
 `tools/taskfile_coverage.py` replaces the retired scope map's fail-safe:

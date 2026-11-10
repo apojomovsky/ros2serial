@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Cross-checks for the P10 encoding benchmark.
 
 The Python models in benchmark/encoding are the readable spec of each

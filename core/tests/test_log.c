@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The logging calls through the fake port: every level and value type sends
  * one frame on the log channel, and busy or oversize lines send nothing. */
 #include <stdio.h>

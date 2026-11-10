@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* posix port: the core's port contract over a serial device, with the tick
  * from CLOCK_MONOTONIC. */
 #define _POSIX_C_SOURCE 200809L

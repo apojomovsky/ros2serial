@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # The C99 core and its host test builds. scripts/core-test.sh configures one
 # build per CI configuration through the options below and CMAKE_C_FLAGS
 # (-m32 for the 32-bit build).

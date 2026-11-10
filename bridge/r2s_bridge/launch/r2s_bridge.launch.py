@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Launch the r2s bridge on one serial port.
 
 The port and the parameter file stay launch arguments, so tests and users

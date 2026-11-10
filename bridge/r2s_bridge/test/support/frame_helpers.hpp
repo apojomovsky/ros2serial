@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // Handshake and frame builders shared by the bridge tests that script the
 // link: the wire form of decoded frames, HELLO and TOPIC payloads, and a
 // transport that borrows the fake instead of owning the link.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The virtual MCU's parameter table: a bool led and an i64 rate, announced
  * so the end-to-end suite sets them over the reliable channel. */
 #ifndef R2S_POSIX_PARAMS_H

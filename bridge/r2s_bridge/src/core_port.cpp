@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The core's port seam for the bridge: one slot per live link, each with
 // the transport and clock one FrameReader's framer instance reads through.
 #include "core_port.hpp"

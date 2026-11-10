@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The host session: the section 8.2 state machine. Timers advance only in
 // poll(), the link is read through the core framer, and every frame the host
 // sends is assembled here from the core's CRC and rCOBS.

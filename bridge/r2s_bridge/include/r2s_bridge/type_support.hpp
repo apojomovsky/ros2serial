@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The topic verdict: loads the installed type support of one announced
 // topic and checks the MCU's hash against it ([SES-16], [CTL-12], [CTL-13]).
 // The service verdict below does the same for one announced service
@@ -12,10 +15,16 @@
 namespace r2s_bridge
 {
 
-// The TOPIC_STATUS verdict for one announced topic: ok when the installed
-// hash matches, unknown type when the type does not load, hash mismatch
-// otherwise. Never throws; a failed load is verdict 1. Needs no node: it
-// opens the installed library and closes it again when done.
+/// The TOPIC_STATUS verdict for one announced topic.
+/**
+ * ok when the installed hash matches, unknown type when the type does not
+ * load, hash mismatch otherwise. Never throws; a failed load is verdict
+ * 1. Needs no node: it opens the installed library and closes it again
+ * when done.
+ *
+ * \param[in] info the announced topic to judge.
+ * \return The verdict, one of the kTopicStatus codes.
+ */
 std::uint8_t resolve_topic_type(const TopicInfo & info);
 
 // The SVC_STATUS verdict for one announced service: ok when the installed

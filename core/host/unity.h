@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* unity.h for libr2s_host: bytes.c names UNITY_TEST_FAIL on its malformed hex
  * path. The driver never feeds one, so the hook records it like any other
  * fake port misuse, which the driver then raises. */

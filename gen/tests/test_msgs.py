@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Message loading: the .msg grammar, the search order and the bundled snapshots."""
 
 from pathlib import Path
@@ -10,12 +13,12 @@ DISTROS = ['jazzy', 'lyrical', 'rolling']
 
 
 def source_tree(tmp_path: Path) -> Path:
-    """A directory of packages in a source tree layout: <root>/<package>/msg/<Type>.msg."""
+    """Make a directory of packages in a source tree layout: <root>/<package>/msg/<Type>.msg."""
     return tmp_path / 'messages'
 
 
 def installed_prefix(tmp_path: Path, type_name: str, text: str) -> Path:
-    """A ROS install prefix: <prefix>/share/<package>/msg/<Type>.msg."""
+    """Make a ROS install prefix: <prefix>/share/<package>/msg/<Type>.msg."""
     package, _, name = type_name.partition('/msg/')
     path = tmp_path / 'prefix' / 'share' / package / 'msg' / f'{name}.msg'
     path.parent.mkdir(parents=True, exist_ok=True)

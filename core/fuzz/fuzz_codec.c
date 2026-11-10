@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Fuzz target: the codec interpreter on arbitrary payloads. The first byte
  * picks the record, the second the narrow flag, the rest is the payload. The
  * decoder must accept or refuse every input without crashing, hanging or

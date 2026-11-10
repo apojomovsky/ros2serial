@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """One serial line between two pty slaves, for the posix quickstart.
 
 Prints MCU_PORT and HOST_PORT assignments, then relays both ways until

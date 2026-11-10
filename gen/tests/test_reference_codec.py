@@ -1,4 +1,8 @@
-"""The Python reference for CRC, rCOBS and varint.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+The Python reference for CRC, rCOBS and varint.
 
 Published values, properties, rejections, vectors.
 """

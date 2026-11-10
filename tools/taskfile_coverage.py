@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Every tracked file maps to a task or says why not.
 
 The retired scope map failed safe to the full suite on unknown paths; the

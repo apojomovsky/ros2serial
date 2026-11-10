@@ -1,4 +1,8 @@
-"""The rosidl plugin wrapper: generation from `colcon build` in a test package.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+The rosidl plugin wrapper: generation from `colcon build` in a test package.
 
 `r2s_rosidl` is a thin shell over `r2s-gen generate --layout cmake`: a fixture
 package with one custom message plus standard types builds with colcon, and
@@ -72,7 +76,7 @@ def run(command, **kwargs):
 
 
 def distro() -> str | None:
-    """The ROS distro under test, or None when it cannot be told."""
+    """Return the ROS distro under test, or None when it cannot be told."""
     name = os.environ.get('ROS_DISTRO', '')
     if name:
         return name
@@ -95,7 +99,7 @@ def needs_ros() -> str | None:
 
 
 def ros_env() -> dict:
-    """The environment with the underlay sourced, so ament_cmake resolves."""
+    """Return the environment with the underlay sourced, so ament_cmake resolves."""
     name = distro()
     setup = Path(f'/opt/ros/{name}/setup.bash')
     if 'AMENT_PREFIX_PATH' not in os.environ and setup.is_file():
@@ -202,7 +206,7 @@ def colcon_build(workspace: Path, *packages: str):
 
 
 def generated_files(out: Path) -> dict[str, bytes]:
-    """The three cmake-layout files the wrapper writes under `out`."""
+    """Collect the three cmake-layout files the wrapper writes under `out`."""
     return {
         name: (out / name).read_bytes()
         for name in ('r2s_generated.h', 'r2s_generated.c', 'CMakeLists.txt')
@@ -212,7 +216,7 @@ def generated_files(out: Path) -> dict[str, bytes]:
 def check_wrapped_matches_direct(
     tmp_path: Path, workspace: Path, fixture: Path, out: Path, msg_path: Path
 ) -> None:
-    """The wrapper output exists and is byte-identical to a direct r2s-gen run."""
+    """Check the wrapper output exists and is byte-identical to a direct r2s-gen run."""
     try:
         wrapped = generated_files(out)
     except FileNotFoundError as error:

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Launch test: the bridge launch file against the posix virtual MCU.
 
 Builds the posix firmware, joins it to the bridge with two ptys tied by a

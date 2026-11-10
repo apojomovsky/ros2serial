@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* rx: the optional receive ring, compiled only with R2S_WITH_RX_RING: bytes in
  * from the UART interrupt, out through the r2s_port_read() the core provides. */
 #include "r2s/r2s_rx.h"

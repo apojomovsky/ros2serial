@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The MCU side of time sync through the fake port: PING answers carry the
  * delimiter tick, CORRECTIONs anchor r2s_now(), and bad ones are refused. */
 #include <float.h>

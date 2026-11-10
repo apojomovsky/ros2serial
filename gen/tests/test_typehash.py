@@ -1,4 +1,8 @@
-"""RIHS01 type hashes: the generator's hash equals the installed type support's.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+RIHS01 type hashes: the generator's hash equals the installed type support's.
 
 The expected values are the hashes REP-2011 defines, read from the type
 description JSON files the ROS build installs for these types.

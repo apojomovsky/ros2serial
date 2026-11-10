@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Hello and blink on an emulated Uno: the two task sketches that need no hardware.
 
 The firmware registers its topics while it runs, the handshake announces

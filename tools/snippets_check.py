@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Compile every code snippet fenced in README.md and docs/.
 
 A fenced block tagged c, cpp or python is a snippet and must compile with

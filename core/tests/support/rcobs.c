@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The rCOBS encoder, for the tests that need to build an encoding. */
 #include "rcobs.h"
 

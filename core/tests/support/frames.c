@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Frames for the tests that need the wire form of a valid one, or of one
  * whose check fails. */
 #include "frames.h"

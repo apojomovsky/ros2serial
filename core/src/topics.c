@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* topics: the topic table the core reads through count and get. */
 #include <stddef.h>
 #include <string.h>

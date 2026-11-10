@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Build and run the example timing tests: each example's real loop code on
 # the host against a scripted tick, asserting the resync the ticket decides
 # (and the catch-up the slice keeps). Builds go under R2S_BUILD_DIR, so the

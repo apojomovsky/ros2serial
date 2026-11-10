@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The MCU side of the parameters channel and the reliable channel: the table
  * it announces, the SET frames it applies and the acks it answers with. */
 #include <string.h>

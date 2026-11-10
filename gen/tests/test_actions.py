@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Action loading: .action files parse to Goal, Result and Feedback messages."""
 
 import subprocess

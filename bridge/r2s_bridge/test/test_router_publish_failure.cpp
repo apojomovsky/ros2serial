@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // A failed serialized publish never aborts the bridge: with the ROS context
 // shut down (as in teardown, issue #330) the publish throws, and the router
 // logs the topic, counts the failure in diagnostics, and keeps polling.

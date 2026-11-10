@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """List every released dependency's rosdep key and fail on keys that do not resolve.
 
 The farm installs every non-ROS dependency through rosdep, so a declared

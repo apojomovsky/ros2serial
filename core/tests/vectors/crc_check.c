@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Conformance: every CRC vector through the core's CRC. */
 #include <stdio.h>
 

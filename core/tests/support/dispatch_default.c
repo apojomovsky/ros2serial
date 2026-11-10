@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Default user-frame dispatch for test binaries without a topic
  * configuration: accepted and ignored, as a build without the codec behaves.
  * The link tests override it with the strong symbol from the handwritten

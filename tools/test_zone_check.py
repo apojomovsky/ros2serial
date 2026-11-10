@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The zone check compiles the core for AVR and inspects the objects, not the source."""
 
 from pathlib import Path

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Check the portable core's rules on what the compiler produced, not on the source.
 
 Every C file under core/src, and every header under core/include through a stub

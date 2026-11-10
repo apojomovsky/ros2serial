@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The installed type support answers one announced topic: accepted, unknown,
 // or hash mismatch (spec/protocol.md, section 8.2).
 // covers: SES-16, CTL-12, CTL-13

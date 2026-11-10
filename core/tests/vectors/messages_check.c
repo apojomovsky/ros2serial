@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Conformance: every message vector through the codec interpreter, encoding
  * the vector's message and decoding its payload. */
 #include <stdio.h>

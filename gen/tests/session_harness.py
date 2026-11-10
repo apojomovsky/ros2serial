@@ -1,4 +1,8 @@
-"""The pair the session tests step together: the C core and the Python model.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+The pair the session tests step together: the C core and the Python model.
 
 Every helper applies one event to both sides and compares every observable:
 the frames sent, the connection state, the token, the topic statuses and the
@@ -36,7 +40,7 @@ DIRECTIONS = ('pub', 'sub', 'pub', 'sub')
 
 
 def model_topics(flags: list[int]) -> list[model.Topic]:
-    """The handwritten table with the C build's own flags and widths."""
+    """Return the handwritten table with the C build's own flags and widths."""
     # The IDs, names and hashes repeat core/tests/support/handwritten.c, and
     # the Twist width is its six float64 fields, halved when narrow. The
     # cmd_str bound repeats the handwritten codec table: a String has no
@@ -66,7 +70,7 @@ MODEL_FEATURES = 0x02 | 0x04 | 0x08 | 0x40
 
 
 def model_params() -> list[model.Param]:
-    """The handwritten parameter table both sides announce."""
+    """Return the handwritten parameter table both sides announce."""
     # The names, types, flags, bounds and defaults repeat
     # core/tests/support/handwritten.c.
     return [

@@ -1,4 +1,8 @@
-"""r2s-gen: the ros2serial code generator.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+r2s-gen: the ros2serial code generator.
 
 From message definitions and a config to firmware sources.
 """

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Fuzz target: the framer on arbitrary bytes pulled through the port. It must
  * never crash, read out of bounds or hang, an accepted frame must pass the CRC
  * check, and every delimiter must end at most one frame, accepted or dropped.

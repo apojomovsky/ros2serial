@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Vector checks for the runner self-test: each record's bytes must match the
  * vector's own text, parsed again in C. The generator writes both from the
  * YAML independently, so a transcription bug on either side shows here. */

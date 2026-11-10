@@ -1,4 +1,8 @@
-"""The bundle subcommand: the Arduino library file set, golden bytes and the X-macro expansion.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+The bundle subcommand: the Arduino library file set, golden bytes and the X-macro expansion.
 
 Covers the bundle path end to end: the exact file set, the banner in every
 file, determinism across runs and distros, the distro error, the command
@@ -266,8 +270,11 @@ def compile_cxx_unit(root, source):
 
 
 def compile_sketch(root, sources, core_sources, extra=()):
-    """Link the sketch: its translation units read the limits from the header,
-    while the core ones take them as defines, as the Arduino build does."""
+    """
+    Link the sketch: its translation units read the limits from the header.
+
+    The core ones take them as defines, as the Arduino build does.
+    """
     objects = [
         compile_cxx_unit(root, source) if source.endswith('.cpp') else compile_unit(root, source)
         for source in sources
@@ -286,7 +293,7 @@ def c_bytes(payload):
 
 
 def proof_vectors():
-    """The reference payloads and hashes every host proof checks against."""
+    """Build the reference payloads and hashes every host proof checks against."""
     repository = msgs.MessageRepository(distro='jazzy')
     battery = messages.encode(repository, 'std_msgs/msg/Float32', {'data': 1.5}, narrow=False)
     greeting = messages.encode(repository, 'std_msgs/msg/String', {'data': 'hi'}, narrow=False)
@@ -1031,7 +1038,7 @@ def test_a_subscribe_only_list_compiles_cleanly(tmp_path):
 
 
 def compile_strict_cxx(root, body):
-    """A list that compiles warning-free: what a `-Werror` sketch build needs."""
+    """Write a list that compiles warning-free: what a `-Werror` sketch build needs."""
     (root / 'case.cpp').write_text(body, encoding='utf-8')
 
     return subprocess.run(

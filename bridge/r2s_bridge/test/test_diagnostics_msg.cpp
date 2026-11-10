@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The /diagnostics payload rendering: a fabricated snapshot in, a
 // DiagnosticArray out, through the real builder and no node.
 #include <gtest/gtest.h>

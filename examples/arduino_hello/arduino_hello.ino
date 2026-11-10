@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Hello world on the runtime API: a String publisher on chatter.
  * Try it with: ros2 topic echo /chatter std_msgs/msg/String --once
  * (bridge launch as in the README walkthrough). */

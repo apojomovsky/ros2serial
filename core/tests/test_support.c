@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The test helpers every core test relies on: hex parsing and byte comparison. */
 #include "bytes.h"
 #include "unity.h"

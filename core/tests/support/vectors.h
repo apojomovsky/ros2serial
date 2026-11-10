@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Records of conformance vector cases, filled by the runners that
  * tools/unity_runner.py generates. Each byte field comes as the bytes, their
  * length and the vector's own hex text, and every record names its file,

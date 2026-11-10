@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """PEP 257 checks for the generator, run only by the advisory lint job."""
 
 import os

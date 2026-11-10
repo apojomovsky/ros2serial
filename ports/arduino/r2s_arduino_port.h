@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Arduino port selection: which stream the glue serves, default Serial.
  * node.begin() calls begin() (V7); until then the sketch begins Serial
  * itself and the glue serves it. Stays internal: no sketch names it. */

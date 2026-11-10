@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The versions r2s-gen reports: the repository's, and the one the wire speaks."""
 
 import re

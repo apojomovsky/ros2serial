@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

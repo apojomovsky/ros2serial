@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Flash and RAM budgets: measure firmware ELFs and check them against budgets.yaml.
 
 avr-size prints the Berkeley text/data/bss split. Flash holds the image

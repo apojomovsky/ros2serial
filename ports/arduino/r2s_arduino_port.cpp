@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Arduino port glue: the core's port contract over a Stream, default Serial.
  * The sketch never names these; node.begin() selects the stream (V7). */
 #include <Arduino.h>

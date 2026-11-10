@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* rcobs: the framing that removes every 0x00 from a frame, so a 0x00 can
  * delimit it (spec/protocol.md, section 4). */
 #include "r2s/r2s_rcobs.h"

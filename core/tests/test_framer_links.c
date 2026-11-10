@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The framer with several live instances: one link per instance, each with
  * its own bytes, frames and counters, sharing nothing but the port seam. */
 #include <string.h>

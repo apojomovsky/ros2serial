@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* log: flash-string diagnostics on the log channel (spec/protocol.md, section
  * 7.3). Each call sends one frame with the level, the text and the value. */
 #include "r2s/r2s.h"

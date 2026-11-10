@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The ROS clock: a time source in, ROS stamps out, with the missing source
 // refused up front.
 #include <gtest/gtest.h>

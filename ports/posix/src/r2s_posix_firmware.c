@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Test firmware: the generated Float32, Twist and bounded-String topics on
  * a pty, with launch-time names, so the end-to-end tests drive the real core
  * as a process (docs/00-design.md, C10). */

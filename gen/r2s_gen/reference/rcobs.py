@@ -1,9 +1,18 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """rCOBS encoding and decoding (spec/protocol.md, section 4), without the delimiter."""
 
 from .errors import Rejected
 
 
 def encode(data: bytes) -> bytes:
+    """
+    Encode `data` as rCOBS, without the delimiter.
+
+    :param data: the raw bytes to encode.
+    :return: the rCOBS encoding.
+    """
     out = bytearray()
     n = 1
     for b in data:
@@ -21,10 +30,16 @@ def encode(data: bytes) -> bytes:
 
 
 def decode(encoded: bytes) -> bytes:
-    """Decodes from the end, group by group, as COB-4 to COB-7 describe.
+    """
+    Decode from the end, group by group, as COB-4 to COB-7 describe.
 
     The input is one frame without its delimiter, as the framer delivers it; the
-    framer ignores an empty frame (FRM-14) before it ever gets here."""
+    framer ignores an empty frame (FRM-14) before it ever gets here.
+
+    :param encoded: the rCOBS bytes to decode.
+    :return: the decoded bytes.
+    :raises Rejected: if a code breaks a COB rule named above.
+    """
     if encoded[-1:] == b'\xff':
         raise Rejected('COB-6', 'the last code is 0xFF')
     if 0 in encoded:

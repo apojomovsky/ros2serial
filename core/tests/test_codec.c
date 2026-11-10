@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The codec interpreter over handwritten and purpose-built tables: scalars in
  * both byte orders, arrays, strings, nesting and the narrow conversion. */
 #include <stddef.h>

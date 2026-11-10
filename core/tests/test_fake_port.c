@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The fake port itself: what the core's tests rely on to drive the core
  * through r2s_port_* without hardware (docs/01-testing.md, section 2.1). */
 #include <string.h>

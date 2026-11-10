@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Bounds resolution: every variable-length field gets a concrete bound or an error."""
 
 import pytest

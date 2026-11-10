@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The slice firmware owes every missed tick, like the posix firmware it
  * mirrors: a stall is caught up frame by frame, which the message-count
  * scenario needs. Each case drives the real sketch with a frozen tick. The

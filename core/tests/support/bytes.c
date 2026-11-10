@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Hex parsing, formatting and byte comparison for tests. */
 #include "bytes.h"
 

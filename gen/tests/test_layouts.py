@@ -1,4 +1,8 @@
-"""The generate layouts: the exact file set each layout writes, and the generate command.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+The generate layouts: the exact file set each layout writes, and the generate command.
 
 Covers the G10 output contract: cmake writes the generated pair plus a
 CMakeLists static library, arduino writes library.properties plus the pair

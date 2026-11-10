@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* r2s_test_reset(): every stateful core module adds its reset and a
  * dirty-reset-check test here when it lands (C5 onwards). */
 #include "bytes.h"

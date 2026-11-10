@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* libr2s_host shim: the fake port's failure hook without Unity, the idle
  * cmd_vel handler, and the last-error cell the Python driver checks. */
 #include <string.h>

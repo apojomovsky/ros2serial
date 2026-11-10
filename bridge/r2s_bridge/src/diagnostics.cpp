@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // Snapshot in, DiagnosticArray out: the H8 values as key/value pairs.
 #include "r2s_bridge/diagnostics.hpp"
 

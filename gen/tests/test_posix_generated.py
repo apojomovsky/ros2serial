@@ -1,5 +1,12 @@
-"""The posix firmware builds from generated code: regenerating its sources
-from its configuration reproduces the checked-in pair byte for byte."""
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+Build the posix firmware from generated code.
+
+Regenerating its sources from its configuration reproduces the checked-in
+pair byte for byte.
+"""
 
 import os
 from pathlib import Path

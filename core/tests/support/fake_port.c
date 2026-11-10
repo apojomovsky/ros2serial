@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The scriptable fake port: r2s_port_* backed by in-memory RX and TX buffers,
  * a settable tick and tx_free. */
 #include "fake_port.h"

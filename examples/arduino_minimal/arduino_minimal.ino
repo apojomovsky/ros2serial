@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Minimal Arduino example: the runtime API on Uno and Mega, publishing
  * battery and reacting to cmd_vel. The topics are registered while the
  * firmware runs, so the example needs no r2s.yaml and no generated output;

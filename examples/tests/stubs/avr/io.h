@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Host stub of avr/io.h for the cmake example test: plain globals stand
  * in for the registers, which the renamed port functions never touch. */
 #ifndef AVR_IO_H

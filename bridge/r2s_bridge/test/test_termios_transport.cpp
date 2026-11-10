@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 #include <gtest/gtest.h>
 
 #include <pty.h>
@@ -129,6 +132,8 @@ public:
     return TermiosSyscalls::set_attributes(fd, action, attributes);
   }
 
+  // The request mirrors the POSIX ::ioctl signature, so the fake keeps unsigned long.
+  // NOLINTNEXTLINE(runtime/int)
   int serial_ioctl(int fd, unsigned long request, void *data) const noexcept override
   {
 #if defined(__linux__)

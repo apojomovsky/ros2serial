@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* codec: the descriptor interpreter over flash tables (spec/protocol.md,
  * section 9). One iterative walk encodes and decodes any type: each message
  * level owns a frame on an explicit stack of R2S_MAX_NEST frames, and arrays

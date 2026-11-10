@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Button on the runtime API: a debounced Bool publisher on button.
  * Pin 2 is active low with its pull-up, true means pressed.
  * Try it with: ros2 topic echo /button std_msgs/msg/Bool

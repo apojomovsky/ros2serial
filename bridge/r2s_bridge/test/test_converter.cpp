@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The packed to CDR converter against rclcpp serialization: every message
 // vector converts byte-identically, the plan caches per type, and the field
 // index order matches the MCU codec's report order.
@@ -741,8 +744,9 @@ void fake_noop_init(void *, MessageInitialization)
 {
 }
 
-void fake_noop_fini(void *)
+void fake_noop_fini(void * memory)
 {
+  (void)memory;
 }
 
 rosidl_message_type_support_t fake_ts_for(const MessageMembers *members)
@@ -997,7 +1001,7 @@ struct FakeBounded
 
 void fake_bounded_init(void *memory, MessageInitialization)
 {
-  new (&static_cast<FakeBounded *>(memory)->values) std::vector<double>();
+  new (&(static_cast<FakeBounded *>(memory)->values)) std::vector<double>();
 }
 
 void fake_bounded_fini(void *memory)
@@ -1007,7 +1011,7 @@ void fake_bounded_fini(void *memory)
 
 void * fake_bounded_get(void *memory, std::size_t index)
 {
-  return &static_cast<FakeBounded *>(memory)->values[index];
+  return &(static_cast<FakeBounded *>(memory)->values[index]);
 }
 
 void fake_bounded_resize(void *memory, std::size_t size)
@@ -1116,7 +1120,7 @@ struct FakeOuter
 
 void * fake_outer_get(void *memory, std::size_t index)
 {
-  return &static_cast<FakeOuter *>(memory)->items[index];
+  return &(static_cast<FakeOuter *>(memory)->items[index]);
 }
 
 TEST(ConverterFieldPath, PassesThroughFixedNestedArrays)
@@ -1290,7 +1294,7 @@ std::vector<std::size_t> resized_bool_counts;
 
 void fake_bools_init(void *memory, MessageInitialization)
 {
-  new (&static_cast<FakeBools *>(memory)->values) std::vector<bool>();
+  new (&(static_cast<FakeBools *>(memory)->values)) std::vector<bool>();
   assigned_bools.clear();
   resized_bool_counts.clear();
 }

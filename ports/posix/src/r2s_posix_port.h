@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Opening the serial line: the firmware main's handle to the port. */
 #ifndef R2S_POSIX_PORT_H
 #define R2S_POSIX_PORT_H

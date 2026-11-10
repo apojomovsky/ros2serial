@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The bridge's receive framing: the core framer reads the link's transport
 // through the installed port slot and hands back one decoded frame at a time.
 #include "r2s_bridge/framing.hpp"

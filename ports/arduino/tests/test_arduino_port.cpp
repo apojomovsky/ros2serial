@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The Arduino glue's host test: the port contract against stub streams.
  * Fails unless the glue reads the selected stream, writes to it, reports
  * blocking TX space and ticks from micros. */

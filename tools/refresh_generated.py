@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Regenerate every version-stamped generated file in the tree.
 
 The emitted banners carry the generator version, so a version bump without

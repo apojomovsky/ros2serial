@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // A Clock over a ROS-time callback, so the session stamps corrections in ROS
 // time while measuring round trips on the steady clock.
 #include "r2s_bridge/ros_clock.hpp"

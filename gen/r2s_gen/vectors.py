@@ -1,4 +1,8 @@
-"""The `vectors` subcommand: payload hex from the reference codec for one message.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+"""
+The `vectors` subcommand: payload hex from the reference codec for one message.
 
 Reads message definitions like every other subcommand and encodes with the
 reference, so its output is what a message vector writes in `payload`.
@@ -70,7 +74,7 @@ def run(args: argparse.Namespace) -> int:
 
 
 def _repository(args: argparse.Namespace) -> msgs.MessageRepository:
-    """The repository from the message paths, the sourced ROS prefixes and the distro."""
+    """Build the repository from the message paths, the sourced prefixes and the distro."""
     prefixes = [
         Path(entry) for entry in os.environ.get('AMENT_PREFIX_PATH', '').split(os.pathsep) if entry
     ]
@@ -89,7 +93,13 @@ def _repository(args: argparse.Namespace) -> msgs.MessageRepository:
 
 
 def _read_message(spec: str) -> Mapping:
-    """The message mapping `spec` holds, inline or behind @path."""
+    """
+    Read the message mapping `spec` holds, inline or behind @path.
+
+    :param spec: the YAML mapping text, or @path to read it from a file.
+    :return: the message mapping.
+    :raises ValueError: if the spec is unreadable, needs PyYAML, or is no mapping.
+    """
     if spec.startswith('@'):
         path = Path(spec[1:])
         try:

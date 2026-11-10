@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Range on the runtime API: a sonar-style Range publisher on range.
  * The reading stands in for the hardware, fixed at one metre.
  * Try it with: ros2 topic echo /range sensor_msgs/msg/Range --once

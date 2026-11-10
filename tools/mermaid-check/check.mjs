@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // check.mjs: parse every fenced mermaid block in the tracked markdown with
 // mermaid's own parser, so a block that fails here fails on GitHub too.
 // Runs under the pinned node image (see scripts/lint-docs.sh), never in

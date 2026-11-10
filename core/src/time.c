@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* time: the MCU side of time sync (spec/protocol.md, section 7.2). The host
  * pings, the session answers with the delimiter tick, and corrections anchor
  * r2s_now() to ROS time. */

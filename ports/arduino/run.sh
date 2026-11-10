@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Build and run the Arduino glue's host test: the port contract against stub
 # streams, compiled with the host C++ compiler. Builds go under R2S_BUILD_DIR,
 # so the tree stays clean. Usage: run.sh [--build-only]

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The MCU time arithmetic of spec/protocol.md section 7.2, in 32-bit integers alone."""
 
 from r2s_gen.reference.errors import Rejected
@@ -7,10 +10,17 @@ MAX_DRIFT_PPM = 20000
 
 
 def compute(tick_hz, case):
-    """The ROS time of `tick` under the correction `case` holds, or None while unsynced.
+    """
+    Return the ROS time of `tick` under the correction `case` holds.
 
-    `case` carries `tick0`, `sec0`, `nanosec0`, `drift_ppm` and `tick`. Input the
-    spec says to refuse raises Rejected naming the rule that refuses it.
+    `case` carries `tick0`, `sec0`, `nanosec0`, `drift_ppm` and `tick`. Return
+    None while unsynced. Input the spec says to refuse raises Rejected naming
+    the rule that refuses it.
+
+    :param tick_hz: the MCU tick rate in Hz.
+    :param case: the correction inputs named above.
+    :return: the `(sec, nanosec)` pair, or None while unsynced.
+    :raises Rejected: if an input breaks a rule named above.
     """
     tick0, sec0, nanosec0, drift, tick = (
         case['tick0'],

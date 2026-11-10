@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* C X-macro example: the sketch file is C++, but the topic list lives in
  * the C file next to it. This shim opens the port and forwards setup and
  * loop to the C implementation, which owns the list. */

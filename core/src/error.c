@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* error: the MCU side of the error report channel (spec/protocol.md, section
  * 7.5). It counts what the session, the framer and the publish wrappers
  * report, and sends one 5-byte frame per code on topic ID 5. */

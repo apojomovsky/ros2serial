@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Byte strings in the vector notation (spec/protocol.md, section 1), for tests. */
 #ifndef R2S_TEST_BYTES_H
 #define R2S_TEST_BYTES_H

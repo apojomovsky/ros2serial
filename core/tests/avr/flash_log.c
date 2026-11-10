@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* AVR flash check firmware: R2S_FLASH tables and flash-string log calls. The
  * check builds it with and without the log lines: equal SRAM proves the
  * strings stayed out of RAM, and avr-strings proves the lines survived. */

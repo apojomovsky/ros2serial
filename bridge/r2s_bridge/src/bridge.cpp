@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The host bridge node: parameters in, a Router out, polled every millisecond
 // so the pacer and the heartbeats track the link latency.
 #include "r2s_bridge/bridge.hpp"

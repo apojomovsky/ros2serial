@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 // The bridge diagnostics: link state, session token, resets, protocol
 // version, MCU counters, per-topic gaps and drops, and the time sync slot,
 // through a real node with a scripted link and real type support.

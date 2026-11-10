@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # AVR flash check for C12: the R2S_FLASH tables and the flash-string log calls
 # keep strings out of RAM. Builds the check firmware with and without the log
 # lines and fails when the SRAM use differs; avr-strings proves the lines

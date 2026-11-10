@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* tx: payload bytes in, one frame out through the port (spec/protocol.md,
  * sections 2 to 4). */
 #include "r2s/r2s_tx.h"
