@@ -6,11 +6,10 @@
 # task names, then let `task` skip every task whose inputs match its last
 # successful run. Naming no scope runs the default task, which holds every
 # section but the host-only mermaid check; with R2S_LOCAL=1 it runs the
-# local task instead, the same set without the CI-only sections: the
-# end-to-end ones, esp32, pic, stm32 and rp2040, whose toolchains install
-# only in their CI jobs or download on demand (the pre-push hook and the
-# takeoff set it). A named scope, E2E included, still runs. R2S_FULL=1
-# forces all of them.
+# local task instead, only the fast gates (lint, commits, core, gen, cpp,
+# docs), while CI runs the rest on every pull request (the pre-push hook
+# and the takeoff set it). A named scope, E2E included, still runs.
+# R2S_FULL=1 forces all of them.
 # R2S_SUITE points the runner at another command (tests point it at a
 # recorder), which receives the task names as arguments; the scope
 # variables stay exported, so the command sees what `task` would.
