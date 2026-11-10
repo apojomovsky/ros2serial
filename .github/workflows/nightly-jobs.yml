@@ -49,6 +49,32 @@ jobs:
       - run: make test FUZZ=1
         env:
           R2S_FUZZ_SECONDS: 1800
+          R2S_FUZZ_ARTIFACTS_DIR: fuzz-artifacts
+      # Seed-corpus coverage, deterministic and quick: which lines each
+      # target's seeds reach, as a report and never a gate. The same run
+      # keeps whatever the seeds add, so the upload below holds both.
+      - run: make test FUZZ=1
+        env:
+          R2S_FUZZ_SECONDS: 0
+          R2S_FUZZ_COVERAGE: 1
+          R2S_FUZZ_ARTIFACTS_DIR: fuzz-artifacts
+      - if: always()
+        run: |
+          if [ -f fuzz-artifacts/coverage/fuzz-coverage.md ]; then
+            cat fuzz-artifacts/coverage/fuzz-coverage.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-coverage
+          path: fuzz-artifacts/coverage/
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-new-inputs
+          path: fuzz-artifacts/
+          if-no-files-found: warn
       - if: github.ref == 'refs/heads/master'
         uses: actions/cache/save@v4.2.2
         with:
@@ -103,10 +129,10 @@ jobs:
 
   # Nightly-only mutation testing in its own image: Mull over the core,
   # mutmut over the generator. It publishes a triage report to the run
-  # summary and an artifact, and it never gates: pull requests and the
-  # pre-PR ritual never run it, and a low score never fails this job once
-  # the report is written. A broken run still fails loudly, so the
-  # scheduled failure reporter files it instead of going silent.
+  # summary and an artifact, and a measured score below its floor in
+  # tools/robustness.yaml fails this job once the report is written, so
+  # the scheduled failure reporter files the regression. Pull requests
+  # and the pre-PR ritual never run it: the gate is nightly-only.
   mutation:
     if: ${{ inputs.mutation }}
     runs-on: ubuntu-24.04

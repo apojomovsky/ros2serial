@@ -12,6 +12,10 @@ node_modules/
 mutants/
 mutation-report/
 
+# The nightly fuzz job keeps crashers and new inputs here for upload; never
+# committed, like the mutation report above.
+fuzz-artifacts/
+
 # Task's checksum store: a local cache, restored from CI, never committed.
 .task/
 

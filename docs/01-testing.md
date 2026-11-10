@@ -279,7 +279,7 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 
 - **Spec coverage is 100%:** every spec ID has at least one test (`tools/spec_coverage.py`).
 - **Error-path coverage is 100%:** every `R2S_ERR_*` code and every counter is triggered by at least one test.
-- **Mutation testing** runs nightly with Mull (C and C++, LLVM-based) and mutmut (Python); research ticket R13 confirms the tools. Surviving mutants are triaged: either a test is added, or the mutant is recorded as equivalent with a one-line reason.
+- **Mutation testing** runs nightly with Mull (the core) and mutmut (the generator); research ticket R13 confirms the tools. A measured score below its floor in `tools/robustness.yaml` fails the nightly once the triage report is written; areas the run does not measure yet read no data and never fail. Surviving mutants are triaged: either a test is added, or the mutant is recorded as equivalent with a one-line reason.
 - Lines excluded from coverage carry an exclusion comment with a reason, and the exclusions are counted in the report.
 - Branch coverage excludes compiler-generated exception edges: every gcovr measurement passes `--exclude-throw-branches`, so the arcs of calls that never throw in tests never enter the denominator.
 - Core, bridge and gen are measured head-vs-base, and their floors fail the gate; the `cpp/` and `scripts/`/`tools/` floors are not gated yet.
@@ -294,7 +294,7 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 | `pre-push` hook | Only the stale fast gates (`lint`, `commits`, `core`, `gen`, `cpp`, `docs`: the `local` task); a fresh tree is a fast no-op | Cheap, minutes |
 | Takeoff (`make pre-pr-check TEST=1`) | The same fast gates as the hook; scopes named on the command line and `R2S_FULL=1` still run locally | Cheap, minutes |
 | Every PR | Unit, component, contract, integration on posix, simavr scenarios, fuzz smoke (60 s per target), sanitizers, coverage, spec coverage, budgets, build matrix, golden, docs snippets | Under 15 min wall clock, in parallel jobs |
-| Nightly | Long fuzzing (30 min per target), mutation testing, extended property and model-based runs, long fault injection, soak (2 h), big-endian, Rolling, e2e isolation pairs | Hours |
+| Nightly | Long fuzzing (30 min per target), seed-corpus coverage report, gated mutation testing, extended property and model-based runs, long fault injection, soak (2 h), big-endian, Rolling, e2e isolation pairs | Hours |
 | Release | Everything above; on a tag the nightly jobs run first and gate the publish, then the hardware checklist on a Uno and a Mega, the full distro and RMW matrix, frozen-vector check | |
 
 When the PR suite exceeds its budget, the slowest tests are made faster or moved down a level; the budget is not raised without the maintainer's approval.

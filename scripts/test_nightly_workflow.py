@@ -389,3 +389,53 @@ def test_the_mutation_image_resolves_the_mull_package_dependencies():
     assert 'Mull-18-' in dockerfile and 'LLVM-' in dockerfile
     assert 'Mull-${MULL_VERSION}-ubuntu' in dockerfile
     assert 'apt-get install' in dockerfile and 'dpkg -i' not in dockerfile
+
+
+def fuzz_long_job():
+    return workflow(JOBS)['jobs']['fuzz-long']
+
+
+def test_the_mutation_run_gates_on_its_floors():
+    runner = (ROOT / 'scripts' / 'run-mutation.sh').read_text(encoding='utf-8')
+    assert '--gate' in runner
+
+
+def test_the_mutation_job_still_publishes_its_report_when_it_gates():
+    steps = mutation_job()['steps']
+    assert any('upload-artifact' in str(step.get('uses', '')) for step in steps)
+    assert 'GITHUB_STEP_SUMMARY' in ' '.join(str(step.get('run', '')) for step in steps)
+
+
+def test_the_fuzz_long_job_measures_seed_corpus_coverage():
+    steps = fuzz_long_job()['steps']
+    coverage_runs = [
+        step
+        for step in steps
+        if str((step.get('env', {}) or {}).get('R2S_FUZZ_COVERAGE')) == '1'
+        and 'make test FUZZ=1' in str(step.get('run', ''))
+    ]
+    assert len(coverage_runs) == 1
+    assert str(coverage_runs[0].get('env', {}).get('R2S_FUZZ_SECONDS')) == '0'
+    assert 'tools/fuzz_coverage.py' in (ROOT / 'scripts' / 'fuzz.sh').read_text(encoding='utf-8')
+    assert 'GITHUB_STEP_SUMMARY' in ' '.join(str(step.get('run', '')) for step in steps)
+
+
+def test_the_fuzz_long_job_uploads_coverage_and_regression_artifacts():
+    steps = fuzz_long_job()['steps']
+    uploads = [
+        str(step.get('with', {}).get('name', ''))
+        for step in steps
+        if 'upload-artifact' in str(step.get('uses', ''))
+    ]
+    assert any('coverage' in name for name in uploads)
+    assert any('regression' in name or 'fuzz' in name for name in uploads)
+    assert any(
+        'R2S_FUZZ_ARTIFACTS_DIR' in str(step.get('env', {}) or {})
+        for step in steps
+        if 'make test FUZZ=1' in str(step.get('run', ''))
+    )
+
+
+def test_make_forwards_the_fuzz_coverage_and_artifacts_env():
+    for var in ('R2S_FUZZ_COVERAGE', 'R2S_FUZZ_ARTIFACTS_DIR'):
+        assert var in pass_vars(), f'make drops {var} before the container'
