@@ -66,6 +66,79 @@ else
   echo "the suite lock is not taken: flock is not on this host" >&2
 fi
 
+# A host-wide cap on concurrent suites: the per-tree lock above stops a
+# second run of one tree, and this gate stops several trees from running at
+# once on a shared host. Each suite holds one of R2S_SUITE_SLOTS slots
+# (default 2: a full suite drives about a core, so two leave headroom on a
+# small shared host while short local runs drain fast). A suite that finds
+# every slot taken waits up to R2S_SUITE_HOST_WAIT_SECS (default 1800) and
+# then stops instead of hanging; R2S_LOCK_NOWAIT=1 refuses at once, as the
+# build lock does. A nested run inherits its ancestor's slot and skips the
+# gate, so script tests starting fixture suites never deadlock a
+# single-slot host against the suite running them.
+if [ -z "${R2S_SUITE_HOST_SLOT:-}" ]; then
+  host_cache=${R2S_CACHE_DIR:-}
+  if [ -z "$host_cache" ] && [ -n "${R2S_BUILD_DIR:-}" ]; then
+    host_cache=$(dirname "$R2S_BUILD_DIR")
+  fi
+  host_cache=${host_cache:-$HOME/.cache/ros2serial}
+  host_gate_dir=$host_cache/suite-host-slots
+  slots=${R2S_SUITE_SLOTS:-2}
+  wait_secs=${R2S_SUITE_HOST_WAIT_SECS:-1800}
+  case $slots in '' | *[!0-9]* | 0)
+    echo "R2S_SUITE_SLOTS must be a positive number of slots (got '$slots')" >&2
+    exit 2
+    ;;
+  esac
+  case $wait_secs in '' | *[!0-9]*)
+    echo "R2S_SUITE_HOST_WAIT_SECS must be a wait in seconds (got '$wait_secs')" >&2
+    exit 2
+    ;;
+  esac
+  mkdir -p "$host_gate_dir" 2>/dev/null || {
+    echo "the host gate directory cannot be created ($host_gate_dir)" >&2
+    echo "set R2S_CACHE_DIR to a writable directory" >&2
+    exit 1
+  }
+  host_slot_fd=""
+  host_slot=""
+  take_host_slot() {
+    local i f fd
+    for i in $(seq 0 $((slots - 1))); do
+      f="$host_gate_dir/slot-$i.lock"
+      exec {fd}>"$f" || return 1
+      if flock -n "$fd" 2>/dev/null; then
+        host_slot_fd=$fd
+        host_slot=$i
+        return 0
+      fi
+      exec {fd}>&- || return 1
+    done
+    return 1
+  }
+  if ! command -v flock >/dev/null 2>&1; then
+    echo "the host suite gate is not taken: flock is not on this host" >&2
+  elif take_host_slot; then
+    export R2S_SUITE_HOST_SLOT=$host_slot
+  elif [ "${R2S_LOCK_NOWAIT:-0}" = 1 ]; then
+    echo "the host suite gate is full ($slots slots in $host_gate_dir)" >&2
+    echo "wait for it, or raise R2S_SUITE_SLOTS" >&2
+    exit 75
+  else
+    echo "waiting for a host suite slot ($slots slots in $host_gate_dir)" >&2
+    deadline=$((SECONDS + wait_secs))
+    while [ "$SECONDS" -lt "$deadline" ] && ! take_host_slot; do
+      sleep 2
+    done
+    if [ -z "$host_slot_fd" ]; then
+      echo "the host suite gate stayed full for ${wait_secs}s ($slots slots in $host_gate_dir)" >&2
+      echo "wait for it, raise R2S_SUITE_SLOTS or R2S_SUITE_HOST_WAIT_SECS, or set R2S_LOCK_NOWAIT=1 to fail fast" >&2
+      exit 75
+    fi
+    export R2S_SUITE_HOST_SLOT=$host_slot
+  fi
+fi
+
 scoped=0
 for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE AMENT_LINT CPP E2E COVERAGE DOCS EXAMPLES ESP32 PIC PLATFORMIO STM32 RP2040 BUDGETS FUZZ README NIGHTLY SOAK; do [ -n "${!v:-}" ] && scoped=1; done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }
