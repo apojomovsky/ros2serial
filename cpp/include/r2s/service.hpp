@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* service: the ROS 2-named service API. Servers and clients are registered
  * while the firmware runs, into the core's RAM service table, so a sketch
  * needs no generated service list. The pump serves taken requests through

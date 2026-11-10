@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* service: the registry behind the ROS 2-named service API. It holds the
  * RAM service table the core announces and the records the request pump
  * dispatches through. The core itself keeps no function pointer; the

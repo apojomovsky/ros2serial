@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The ROS 2-named service API over the core services channel: the MCU
  * serves reset and calls trigger (both std_srvs Trigger), and the announce,
  * the request bytes and the answer are the ones the core speaks. The bundled
