@@ -265,12 +265,82 @@ TEST(ActionTypes, RejectsHandBuiltLayouts)
   no_data_struct.members = &no_data_parent;
   no_data_struct.storage.resize(16u, 0u);
   EXPECT_FALSE(types.goal_id_of(no_data_struct, goal_id));
+  // A uuid entry with the wrong type is not a goal id: the bytes check
+  // sees a non-null member and evaluates each shape term.
+  MessageMember bad_type_bytes{};
+  bad_type_bytes.name_ = "uuid";
+  bad_type_bytes.type_id_ = ROS_TYPE_STRING;
+  bad_type_bytes.is_array_ = true;
+  bad_type_bytes.array_size_ = 16u;
+  MessageMembers bad_type_uuid{};
+  bad_type_uuid.member_count_ = 1u;
+  bad_type_uuid.members_ = &bad_type_bytes;
+  rosidl_message_type_support_t bad_type_ts{};
+  bad_type_ts.data = &bad_type_uuid;
+  MessageMember bad_type_goal{};
+  bad_type_goal.name_ = "goal_id";
+  bad_type_goal.type_id_ = ROS_TYPE_MESSAGE;
+  bad_type_goal.members_ = &bad_type_ts;
+  MessageMembers bad_type_parent{};
+  bad_type_parent.member_count_ = 1u;
+  bad_type_parent.members_ = &bad_type_goal;
+  ActionTypes::Struct bad_type_struct;
+  bad_type_struct.members = &bad_type_parent;
+  bad_type_struct.storage.resize(64u, 0u);
+  EXPECT_FALSE(types.goal_id_of(bad_type_struct, goal_id));
+  // A uuid entry that is not an array is refused the same way.
+  MessageMember no_array_bytes{};
+  no_array_bytes.name_ = "uuid";
+  no_array_bytes.type_id_ = ROS_TYPE_UINT8;
+  no_array_bytes.is_array_ = false;
+  no_array_bytes.array_size_ = 16u;
+  MessageMembers no_array_uuid{};
+  no_array_uuid.member_count_ = 1u;
+  no_array_uuid.members_ = &no_array_bytes;
+  rosidl_message_type_support_t no_array_ts{};
+  no_array_ts.data = &no_array_uuid;
+  MessageMember no_array_goal{};
+  no_array_goal.name_ = "goal_id";
+  no_array_goal.type_id_ = ROS_TYPE_MESSAGE;
+  no_array_goal.members_ = &no_array_ts;
+  MessageMembers no_array_parent{};
+  no_array_parent.member_count_ = 1u;
+  no_array_parent.members_ = &no_array_goal;
+  ActionTypes::Struct no_array_struct;
+  no_array_struct.members = &no_array_parent;
+  no_array_struct.storage.resize(64u, 0u);
+  EXPECT_FALSE(types.goal_id_of(no_array_struct, goal_id));
+  // A uuid array of the wrong size is refused as well.
+  MessageMember bad_size_bytes{};
+  bad_size_bytes.name_ = "uuid";
+  bad_size_bytes.type_id_ = ROS_TYPE_UINT8;
+  bad_size_bytes.is_array_ = true;
+  bad_size_bytes.array_size_ = 8u;
+  MessageMembers bad_size_uuid{};
+  bad_size_uuid.member_count_ = 1u;
+  bad_size_uuid.members_ = &bad_size_bytes;
+  rosidl_message_type_support_t bad_size_ts{};
+  bad_size_ts.data = &bad_size_uuid;
+  MessageMember bad_size_goal{};
+  bad_size_goal.name_ = "goal_id";
+  bad_size_goal.type_id_ = ROS_TYPE_MESSAGE;
+  bad_size_goal.members_ = &bad_size_ts;
+  MessageMembers bad_size_parent{};
+  bad_size_parent.member_count_ = 1u;
+  bad_size_parent.members_ = &bad_size_goal;
+  ActionTypes::Struct bad_size_struct;
+  bad_size_struct.members = &bad_size_parent;
+  bad_size_struct.storage.resize(64u, 0u);
+  EXPECT_FALSE(types.goal_id_of(bad_size_struct, goal_id));
   // The fakes own no ROS storage: detach them before they destruct so no
   // finalizer runs on the hand-built members.
   missing.members = nullptr;
   wrong.members = nullptr;
   no_sub_struct.members = nullptr;
   no_data_struct.members = nullptr;
+  bad_type_struct.members = nullptr;
+  no_array_struct.members = nullptr;
+  bad_size_struct.members = nullptr;
 }
 
 TEST(ActionTypes, CancelExchangeMatchesGeneratedLayout)
