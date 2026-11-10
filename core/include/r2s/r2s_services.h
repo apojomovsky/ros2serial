@@ -81,10 +81,10 @@ extern "C" {
  */
 typedef struct
 {
-  const char *type_name;
-  const char *service_name;
-  uint8_t role;
-  uint8_t type_hash[8];
+  const char *type_name;  ///< The ROS type name, e.g. "std_srvs/srv/Trigger".
+  const char *service_name;  ///< The service name the MCU serves or calls.
+  uint8_t role;  ///< R2S_SVC_SERVER or R2S_SVC_CLIENT.
+  uint8_t type_hash[8];  ///< The first 8 bytes of the type's RIHS01 hash.
 } r2s_service_t;
 
 #ifdef R2S_WITH_SERVICES
