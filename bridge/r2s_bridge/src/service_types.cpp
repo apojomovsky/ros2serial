@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 // The introspection handles behind one service type, loaded by name.
 #include "r2s_bridge/service_types.hpp"
 

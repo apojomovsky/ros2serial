@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 // The service introspection handles: names, sizes, live structs and the
 // unknown-type refusal behind every routed service.
 // covers: SVR-3

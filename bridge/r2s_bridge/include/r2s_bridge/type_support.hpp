@@ -27,10 +27,16 @@ namespace r2s_bridge
  */
 std::uint8_t resolve_topic_type(const TopicInfo & info);
 
-// The SVC_STATUS verdict for one announced service: ok when the installed
-// service hash matches, unknown type when the service type does not load,
-// hash mismatch otherwise. Never throws; a failed load is verdict 1. Needs
-// no node: it opens the installed library and closes it again when done.
+/// The SVC_STATUS verdict for one announced service.
+/**
+ * Ok when the installed service hash matches, unknown type when the service
+ * type does not load, hash mismatch otherwise. Never throws; a failed load
+ * is verdict 1. Needs no node: it opens the installed library and closes
+ * it again when done.
+ *
+ * \param[in] info the announced service to judge.
+ * \return The verdict, one of the kServiceStatus codes.
+ */
 std::uint8_t resolve_service_type(const ServiceInfo & info);
 
 }  // namespace r2s_bridge

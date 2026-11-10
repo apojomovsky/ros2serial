@@ -247,12 +247,22 @@ struct ServiceInfo
   std::string type_name;
   std::string service_name;
   std::uint8_t status = 0;
+  /// Two service announcements match when every field matches.
+  /**
+   * \param[in] other the announcement to compare.
+   * \return True when every field matches.
+   */
   bool operator==(const ServiceInfo & other) const
   {
     return index == other.index && role == other.role && type_hash == other.type_hash &&
            type_name == other.type_name && service_name == other.service_name &&
            status == other.status;
   }
+  /// Two service announcements differ when any field differs.
+  /**
+   * \param[in] other the announcement to compare.
+   * \return True when any field differs.
+   */
   bool operator!=(const ServiceInfo & other) const
   {
     return !(*this == other);
@@ -264,12 +274,16 @@ struct ServiceInfo
  * The MCU serves the service, or the MCU calls it.
  */
 constexpr std::uint8_t kServiceRoleServer = 0u;
+/// The MCU calls the service named by the DECLARE.
 constexpr std::uint8_t kServiceRoleClient = 1u;
 
 /// The walk STATUS verdicts section 7.8 names, mirroring the topic verdicts.
 constexpr std::uint8_t kServiceStatusOk = 0u;
+/// The DECLARE named an unknown service type.
 constexpr std::uint8_t kServiceStatusUnknownType = 1u;
+/// The DECLARE carried a mismatching type hash.
 constexpr std::uint8_t kServiceStatusHashMismatch = 2u;
+/// The DECLARE named a service already announced.
 constexpr std::uint8_t kServiceStatusNameConflict = 3u;
 
 /// Names the section 7.8 verdict for one DECLARE.

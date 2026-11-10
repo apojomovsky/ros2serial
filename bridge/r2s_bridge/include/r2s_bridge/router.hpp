@@ -96,6 +96,7 @@ public:
    * \param[in] session_config the H4 link timing.
    * \param[in] mcu_sink where the MCU log lines go.
    * \param[in] node_params the parameters interface, or null to skip it.
+   * \param[in] node_services the service interfaces, or nulls to skip them.
    * \throws std::invalid_argument on a nonsense param (no QoS depth, a
    * budget outside 0 to 100, no baud, a negative default rate) or a
    * missing log sink.
