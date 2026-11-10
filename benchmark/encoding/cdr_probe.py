@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """CDR ground truth for the encoding benchmark: serialize the representative
 payloads with the ROS container's own rmw_serialize and print each length.
 

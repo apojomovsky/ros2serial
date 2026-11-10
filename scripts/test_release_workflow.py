@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The release workflow: a maintainer's tag builds the artifacts into a GitHub release.
 
 A plain version tag becomes a full release marked Latest, while a tag with a

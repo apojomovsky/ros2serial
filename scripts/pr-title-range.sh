@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Print the range the PR title check covers: the merge base with the current
 # base branch through HEAD. The payload base.sha goes stale when the base
 # moves on and is merged in, putting base commits inside the range.

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The soak gate: exact wire counters and bounded memory growth.
 
 A clean link drops nothing, so the /diagnostics wire counters must read

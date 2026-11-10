@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # The posix end-to-end suite: scenarios 1 to 4 against the posix virtual MCU.
 # Builds the bridge workspace and the firmware, then runs every scenario under
 # each RMW the design names, starting the Zenoh router first for its leg.

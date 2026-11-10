@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* action: the registry behind the ROS 2-named action server API. It holds
  * the RAM action table the core announces and the records the goal exchange
  * dispatches through. The core itself keeps no function pointer; the

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Check a PR body: real newlines always; with --full, also the ritual's sections.
 
 CI (pr-body.yml) runs the newline check on every PR, since a body written with

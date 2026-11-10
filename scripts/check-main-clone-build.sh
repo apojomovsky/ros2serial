@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Refuse builds from the main clone while worktrees exist: agents building in
 # the same directory share one build dir and corrupt each other's builds.
 # ALLOW_MAIN_CLONE=1 overrides for one-offs.

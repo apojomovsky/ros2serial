@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 1 stages its waits: handshake on bridge state, then discovery.
 
 Regression test for #411: the discovery budget must run from the completed

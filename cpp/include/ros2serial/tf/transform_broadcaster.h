@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* rosserial-compatible tf broadcaster: init and sendTransform as in
  * ros_lib, over the compat Publisher, so a ported sketch keeps its shape. */
 #ifndef R2S_ROS2SERIAL_TF_TRANSFORM_BROADCASTER_H

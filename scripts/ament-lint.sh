@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Advisory ament_lint_common run over the ROS packages: builds with the lint
 # tests enabled, runs only them, prints the per-linter baseline, and exits
 # nonzero only when a cleaned area reports findings or nothing ran at all.

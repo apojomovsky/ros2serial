@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Merge normalized mutation results into one triage report.
 
 Mull and mutmut speak different formats, so scripts/run-mutation.sh

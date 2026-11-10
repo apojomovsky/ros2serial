@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 1: the handshake announces the firmware topics in time.
 
 The bridge is up before the firmware boots, so the 3 s budget measures the

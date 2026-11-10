@@ -22,13 +22,32 @@ from pathlib import Path
 import check_headers
 
 
-def header_for(path: Path) -> list[str]:
+def header_for(path: Path, eol: str = '') -> list[str]:
     """The two header lines in the comment style the path takes."""
     prefix = '#' if check_headers.style_for(path) == 'hash' else '//'
     return [
-        f'{prefix} {check_headers.SPDX_MARKER}',
-        f'{prefix} {check_headers.HOLDER}',
+        f'{prefix} {check_headers.SPDX_MARKER}{eol}',
+        f'{prefix} {check_headers.HOLDER}{eol}',
     ]
+
+
+def read_lines(path: Path) -> tuple[list[str], str]:
+    """The file's lines with their ending style, kept byte for byte.
+
+    The read disables newline translation, so a CRLF file keeps its
+    carriage returns and the applier only adds header lines, never
+    renormalizing the rest of the file.
+    """
+    with open(path, encoding='utf-8', newline='') as handle:
+        text = handle.read()
+    eol = '\r' if '\r\n' in text else ''
+    return text.split('\n'), eol
+
+
+def write_lines(path: Path, lines: list[str]) -> None:
+    """Write lines back without translating their endings."""
+    with open(path, 'w', encoding='utf-8', newline='') as handle:
+        handle.write('\n'.join(lines))
 
 
 def header_span(lines: list[str], style: str) -> tuple[int, int]:
@@ -65,10 +84,9 @@ def header_span(lines: list[str], style: str) -> tuple[int, int]:
 def needs_change(path: Path, insert: bool = True) -> bool:
     """True when the file still wants a header applied."""
     try:
-        text = path.read_text(encoding='utf-8')
+        lines, _ = read_lines(path)
     except (OSError, UnicodeDecodeError):
         return False
-    lines = text.split('\n')
     start, end = header_span(lines, check_headers.style_for(path))
     run = '\n'.join(lines[start:end])
     if check_headers.GENERATED_MARKER in run:
@@ -84,18 +102,20 @@ def apply_to_file(path: Path, insert: bool = True) -> bool:
     """Bring one file to the SPDX header; True when the file changed."""
     if not needs_change(path, insert):
         return False
-    text = path.read_text(encoding='utf-8')
-    lines = text.split('\n')
+    try:
+        lines, eol = read_lines(path)
+    except (OSError, UnicodeDecodeError):
+        return False
     start, end = header_span(lines, check_headers.style_for(path))
     run = '\n'.join(lines[start:end])
     if check_headers.OLD_MIT_MARKER in run:
-        lines[start:end] = header_for(path)
+        lines[start:end] = header_for(path, eol)
         end = start + 2
         if end < len(lines) - 1 and lines[end].strip():
-            lines[end:end] = ['']
+            lines[end:end] = [eol]
     else:
-        lines[start:start] = header_for(path) + ['']
-    path.write_text('\n'.join(lines), encoding='utf-8')
+        lines[start:start] = header_for(path, eol) + [eol]
+    write_lines(path, lines)
     return True
 
 
@@ -128,7 +148,8 @@ def is_exempt(path: Path, root: Path) -> bool:
         rel = path.resolve().relative_to(root).as_posix()
     except ValueError:
         return False
-    if rel.startswith(check_headers.VENDOR_PREFIXES):
+    prefixes = tuple(prefix for prefix, _ in check_headers.EXEMPT_PREFIXES)
+    if rel.startswith(prefixes):
         return True
     return path.name in ('LICENSE', 'LICENSE.txt')
 

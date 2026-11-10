@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Run a command while holding a lock, so builds sharing one build directory run
 # one at a time. Hosts without flock run unlocked rather than failing.
 # Usage: with-build-lock.sh <lockfile> <command> [args...]

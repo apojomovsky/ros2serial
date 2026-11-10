@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The make entry points and their helpers: image tag, doctor, main-clone guard, build lock."""
 
 import os

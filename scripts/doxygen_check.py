@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Check the Doxygen form of doc comments on public C and C++ headers.
 
 The C core follows the rcl header style and the C++ bridge the rclcpp one

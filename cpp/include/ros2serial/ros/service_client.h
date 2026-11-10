@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* rosserial spelling of the service client: the declaration a ported
  * sketch names, until X6 gives it a runtime. serviceClient refuses it. */
 #ifndef R2S_ROS2SERIAL_ROS_SERVICE_CLIENT_H

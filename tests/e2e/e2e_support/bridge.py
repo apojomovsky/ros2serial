@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The bridge under its own launch file, as the scenarios need it.
 
 Every scenario drives the bridge through the installed launch file with its

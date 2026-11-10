@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* bm_slip: SLIP after RFC 1055 for the benchmark. The encoding quotes END
  * and ESC and appends its own END; decoding splits on END outside. */
 #include "bm_slip.h"

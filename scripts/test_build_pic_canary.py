@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The PIC canary: core and static C++ compile with epic-cc, advisory.
 
 The epic-cc bundle lives outside the dev image: the build downloads the

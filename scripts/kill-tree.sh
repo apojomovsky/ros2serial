@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # TERM a process tree, then KILL what lingers, so a killed launch wrapper
 # cannot orphan its node into the next leg. Only the pid and its own
 # descendants are ever signalled, never anything else on the host.

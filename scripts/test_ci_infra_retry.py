@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """A failed master run reruns once, and only on infrastructure trouble.
 
 ci.yml never cancels master runs, and master pushes run the plan-selected

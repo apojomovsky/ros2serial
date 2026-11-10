@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Edge cases from COB-1 and COB-3: all zeros, and runs of 253 to 255 non-zero bytes.
 covers: [COB-1, COB-3, COB-4, COB-7, COB-8]
 cases:

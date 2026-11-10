@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # The README walkthrough check: every Getting started command runs here on
 # simavr, so the walkthrough cannot drift from the code.
 set -uo pipefail

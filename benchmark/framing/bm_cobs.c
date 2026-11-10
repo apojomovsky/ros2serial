@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* bm_cobs: standard COBS byte stuffing for the benchmark. Codes open the
  * block they describe; the decoder walks front to back, in place. */
 #include "bm_cobs.h"

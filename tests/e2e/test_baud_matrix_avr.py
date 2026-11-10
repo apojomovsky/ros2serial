@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Baud matrix: the scenario 2 flow gates at one rate of the matrix.
 
 run-avr.sh builds one slice image per board per baud in R2S_E2E_BAUDS and

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The scope-to-task selection: make variables name the tasks to run.
 
 `scripts/run-tasks.sh` maps the ci-test.sh scope variables to Taskfile

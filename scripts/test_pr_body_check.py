@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 import pr_body_check
 
 GOOD = 'Closes #1\n\n## Review\n\nNo findings.\n'

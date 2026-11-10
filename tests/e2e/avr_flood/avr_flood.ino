@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Flood firmware for avr scenario 12: the same four topics the slice
  * announces, but battery publishes until the port refuses instead of at
  * 50 Hz. Each attempt consumes its sample number, so a refused publish

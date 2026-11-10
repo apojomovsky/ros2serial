@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Discovery waits run from the completed handshake in scenarios 3, 4 and 10.
 
 Regression tests for #412: the discovery budget must run from the completed

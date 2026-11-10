@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 13: a ROS parameter set reaches the MCU.
 
 The bridge declares the firmware's parameters as its own ROS parameters

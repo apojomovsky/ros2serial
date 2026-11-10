@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Nightly mutation testing: Mull over the core, mutmut over the generator.
 # Runs inside the docker/mutation image, never in a pull request check, and
 # always ends with a triage report in $R2S_MUTATION_OUT (never a gate: even

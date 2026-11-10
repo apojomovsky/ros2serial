@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Run a command until it passes, bounded: a per-attempt timeout and a capped
 # try count, with the last attempt's output kept so a real regression stays
 # visible. Usage: with-retry.sh --tries N --timeout SECS --out FILE -- CMD...

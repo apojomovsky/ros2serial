@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Build and test every bridge package in the ROS environment the caller runs
 # in: the dev image locally, the pinned distro container in CI. The
 # workspace lives under the shared build directory, outside the checkout.

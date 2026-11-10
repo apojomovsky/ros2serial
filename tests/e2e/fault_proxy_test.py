@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Unit tests for the fault-injecting pty proxy, with no ROS in the loop.
 
 Run directly: `python3 tests/e2e/fault_proxy_test.py`. The launch suite runs

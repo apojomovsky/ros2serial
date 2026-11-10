@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 14: a service call from ROS 2 reaches the MCU and back, both ways.
 
 The firmware serves reset and calls trigger (both std_srvs Trigger). The

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """bridge-test.sh --build-only builds and nothing else, even across its re-execs.
 
 The lease and the build lock re-exec the script, so the flag must survive

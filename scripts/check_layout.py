@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Check the repository skeleton: required paths, the rulebook links, no stray proposals.
 
 Exits 1 with one line per problem. Run from anywhere: paths resolve from the

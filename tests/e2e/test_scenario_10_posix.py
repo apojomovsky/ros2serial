@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 10: 1% byte corruption costs exactly the touched frames.
 
 The proxy corrupts both directions while the firmware publishes battery at

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # The nightly soak: clean-link traffic on posix and simavr, two hours per
 # backend on the schedule. Builds the bridge workspace, both firmwares and
 # the simavr harness under R2S_BUILD_DIR, then runs one soak leg per backend

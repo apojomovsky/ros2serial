@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 8 reads its median bound from R2S_SYNC_BOUND_NS.
 
 The bound defaults to 5 ms of shared-host headroom; the CI e2e jobs

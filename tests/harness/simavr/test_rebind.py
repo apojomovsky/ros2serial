@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The flash-to-RAM rebind over simavr: a PROGMEM table configures on the MCU,
 the handshake announces it, a host frame on the trigger subscription rebinds
 a RAM table with different content, and the next announce carries the RAM

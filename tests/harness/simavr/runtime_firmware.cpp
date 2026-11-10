@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Runtime firmware for the simavr harness: the C++ runtime API on a real
  * AVR, announcing a Float32 topic and a Twist topic it subscribes to, and
  * echoing every Twist it receives on the battery topic. It links the core

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # The C++ layer's host test build: the runtime API over the core and the
 # fake port. scripts/cpp-test.sh configures one build per CI configuration.
 cmake_minimum_required(VERSION 3.22)

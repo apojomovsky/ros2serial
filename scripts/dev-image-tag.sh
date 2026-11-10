@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Print the dev image tag: a hash of everything the image is built from, so
 # `make image` is a no-op when nothing changed and a new tag when anything did.
 set -euo pipefail
