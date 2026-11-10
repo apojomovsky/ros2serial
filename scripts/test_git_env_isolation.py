@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Tests that make throwaway repos must never reach the repository running them.
 
 Git exports GIT_DIR, GIT_INDEX_FILE and the like to hooks, so a suite run by

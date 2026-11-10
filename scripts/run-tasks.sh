@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Run the stale suite tasks: map the ci-test.sh scope variables to Taskfile
 # task names, then let `task` skip every task whose inputs match its last
 # successful run. Naming no scope runs the default task, which holds every

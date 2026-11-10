@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # The warnings gate: the core builds clean with -Werror under gcc and clang
 # (the flags are in core/CMakeLists.txt), the fuzz targets compile under the
 # same flags, and cppcheck reports nothing.

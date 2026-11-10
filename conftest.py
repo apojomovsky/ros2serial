@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Every pytest run starts without the caller's repository-local git variables.
 
 Git exports GIT_DIR, GIT_INDEX_FILE and the like to hooks; a test that builds a

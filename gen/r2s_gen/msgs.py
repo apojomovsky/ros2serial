@@ -393,7 +393,7 @@ class MessageRepository:
         yield self._snapshot_root / self._distro / relative
 
     def load_service(self, type_name: str) -> Service:
-        """The service definition of `type_name`, from the first file that has it."""
+        """Return the service definition of `type_name`, from the first file that has it."""
         canonical = canonical_type_name(type_name)
         if '/srv/' not in canonical:
             raise MessageError(canonical, 'not a service type', "name it as 'package/srv/Name'")

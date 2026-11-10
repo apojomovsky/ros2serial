@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The posix virtual MCU as a launched process.
 
 The firmware prints a ready line once its port is open, just before it enters

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Announce firmware for the simavr harness: a topic table behind the C13
  * accessors, announced over UART0. Built twice: the flash image carries the
  * table in PROGMEM, as the generator emits it (G7), and the RAM image binds

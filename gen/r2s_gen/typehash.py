@@ -71,7 +71,11 @@ def type_hash(repository: msgs.MessageRepository, type_name: str) -> str:
 
 
 def _event_description(service: msgs.Service) -> dict:
-    """The synthetic `Name_Event` message the service hash covers, as rosidl generates it."""
+    """
+    Return the synthetic `Name_Event` message the service hash covers.
+
+    Matches what rosidl generates.
+    """
     return {
         'type_name': f'{service.type_name}_Event',
         'fields': [
@@ -107,7 +111,11 @@ def _event_description(service: msgs.Service) -> dict:
 
 
 def _event_info_description() -> dict:
-    """The `service_msgs/msg/ServiceEventInfo` message, fixed by the service event design."""
+    """
+    Return the `service_msgs/msg/ServiceEventInfo` message.
+
+    Fixed by the service event design.
+    """
     uint8 = {'type_id': 3, 'capacity': 0, 'string_capacity': 0, 'nested_type_name': ''}
     return {
         'type_name': 'service_msgs/msg/ServiceEventInfo',
@@ -145,7 +153,7 @@ def _event_info_description() -> dict:
 
 
 def service_hash(repository: msgs.MessageRepository, type_name: str) -> str:
-    """The `RIHS01_` hash of a `package/srv/Name`, equal to the installed service hash.
+    """Return the `RIHS01_` hash of a `package/srv/Name`, equal to the installed service hash.
 
     The service description names its request, response and synthetic event
     messages; the event and its info are fixed by the service event design,

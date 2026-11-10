@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* simavr harness: an emulated AVR's UART0 bridged to a pty, for system tests.
    It links libsimavr, which only test-only code may do (AGENTS.md, Licensing boundaries). */
 

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Rerun a failed master run once when every failed job died of infra trouble.
 # The workflow guards the attempt count; this driver lists the failed jobs,
 # asks scripts/ci_infra_retry.py whether each log reads as an HTTP 5xx with

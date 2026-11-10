@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Report what first-time setup is missing; change nothing. Exits 1 if a
 # required host dependency is missing.
 set -uo pipefail

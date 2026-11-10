@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Echo firmware for the simavr harness: every byte that arrives on UART0 goes
    back out unchanged. It uses no ros2serial code, so a harness fault never
    looks like a core fault. */

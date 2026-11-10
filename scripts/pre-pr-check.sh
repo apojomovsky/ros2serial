@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # The takeoff ritual (AGENTS.md): run before opening a PR, from the PR's worktree.
 # Prints one FIX line per blocking problem and exits 1 while any remain.
 #   BASE     ref the PR targets (default origin/master; a PR is never stacked)

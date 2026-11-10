@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The rosserial-compatible include: the handle, the publisher, the
  * subscriber and the clock types a ported sketch names. Message aliases
  * come from their own headers, so a sketch includes only the types it uses. */

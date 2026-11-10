@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Is the commit that last changed VERSION a release commit?
 # The tag job refuses to tag unless it is, so this is the check it runs.
 # A squash puts the PR number after the subject, so the subject is matched

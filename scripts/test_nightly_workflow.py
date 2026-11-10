@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The nightly and release workflows run what is too long for a PR.
 
 The e2e isolation pairs left the SCRIPTS scope for a reusable workflow

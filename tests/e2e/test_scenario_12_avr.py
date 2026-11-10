@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 12: the simavr MCU publishes more than the link carries.
 
 The flood firmware publishes battery samples through a per-tick byte

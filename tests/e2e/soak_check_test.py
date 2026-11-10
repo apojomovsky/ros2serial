@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Unit tests for the soak checker, with no ROS in the loop.
 
 Run directly: `python3 tests/e2e/soak_check_test.py`. The launch suite runs

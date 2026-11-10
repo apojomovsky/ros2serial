@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Cut a release: next version from the commits (git-cliff and the [bump] rules
 # in cliff.toml), VERSION, the generator version files and CHANGELOG.md
 # updated, the version-stamped generated files refreshed with make regen, one

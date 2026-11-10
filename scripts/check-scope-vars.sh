@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Fail a make run whose command-line variables name no scope: a misspelled
 # scope (make test CROE=1) must name the valid scopes instead of silently
 # running nothing or everything. Prints the error message; prints nothing

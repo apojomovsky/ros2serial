@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The ESP32 example build: pinned core, cache data dir, every sketch.
 
 The ESP32 Arduino core lives outside the dev image: the build installs the

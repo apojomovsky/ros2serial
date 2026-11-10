@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Syntax-only compile of the C++ layer's headers with avr-g++, so the code
 # that reaches a board is checked against the toolchain that builds it.
 # The message headers include the bundle's C header, so one is staged where

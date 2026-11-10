@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* rosserial-compatible Time: seconds and nanoseconds since the epoch of the
  * shared clock. The arithmetic copies ros_lib, so ported sketches compute
  * the same values. Header-only, with the normalize step inline, since the

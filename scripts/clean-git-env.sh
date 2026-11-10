@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Sourced, not run: drops the repository-local git variables (GIT_DIR,
 # GIT_INDEX_FILE and the like) that git exports to hooks. Without this, a test
 # that builds a throwaway repo would run its git commands on the real one. The

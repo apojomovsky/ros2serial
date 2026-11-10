@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Node sharding for the SCRIPTS scope: every test runs in one CI shard.
 
 #337 moved the e2e isolation pairs to the nightly workflow, so no shard

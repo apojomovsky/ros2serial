@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """A pty proxy between the posix firmware and the bridge that injects faults.
 
 Bytes written on one slave come out of the other, as with the plain relay,

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The coverage gate judges a fixture PR: fail on a drop, pass on equal figures.
 
 The fixture repo carries the real scripts/coverage-gate.sh with the real

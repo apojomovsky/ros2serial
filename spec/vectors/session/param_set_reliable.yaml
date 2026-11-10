@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 name: param_set_reliable
 covers: [REL-2, REL-3, REL-4, PAR-8]
 steps:

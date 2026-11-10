@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The static C++ API over the X-macro list: the node names the session,
  * the rows expand to the global objects, and the generated switch calls
  * each subscription's callback directly. The table below is the real

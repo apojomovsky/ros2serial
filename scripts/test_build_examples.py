@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The example builds read their compiler flags from the bundled header.
 
 Each inline extractor in build-examples.sh reports a bad header as an

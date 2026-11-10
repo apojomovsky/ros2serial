@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The bridge isolation pair overlaps for real on separate build dirs.
 
 Both legs run scripts/bridge-test.sh, whose build lock is held for the

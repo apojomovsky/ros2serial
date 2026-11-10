@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Shared end-to-end support: backends and scenarios meet here.
 
 A backend (posix, simavr, hardware) launches the bridge and the MCU; the

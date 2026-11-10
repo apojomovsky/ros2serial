@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Build every example sketch for the ESP32 Dev Module through the Arduino
 # layout: the ESP32 core installs into a cache directory at the version
 # pinned in ci/versions.env, never into the dev image. The staged library is

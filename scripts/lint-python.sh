@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Python lint gate: ruff check and ruff format, the pinned version from the
 # image (python3 -m keeps it ahead of any other ruff on PATH).
 set -uo pipefail

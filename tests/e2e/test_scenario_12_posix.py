@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 12: the MCU publishes more than the link carries.
 
 The firmware floods battery samples through a per-tick byte budget, so a

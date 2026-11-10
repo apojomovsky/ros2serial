@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 3: the host publishes Twist and the MCU echoes it back.
 
 Five distinct Twists go out on cmd_vel; the firmware republishes each on

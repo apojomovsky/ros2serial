@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The rosserial-compatible API over the runtime registry: the sketch names its
  * topics the rosserial way, and the announce, the publish bytes and the
  * dispatch are the ones the runtime layer speaks. The bundled tables carry

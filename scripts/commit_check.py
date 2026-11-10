@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Check commit messages and PR titles against the commit hygiene rules in AGENTS.md.
 
 Usage:

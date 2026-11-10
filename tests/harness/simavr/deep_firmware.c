@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Deep-call variant of the echo firmware: four nested frames of 48 bytes run
    once before the echo loop, so the harness's stack painting has a depth to
    measure that the echo firmware alone does not reach. */

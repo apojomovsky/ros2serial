@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Run the P9 framing benchmark: build, measure, print.
 
 Builds one firmware per framer for the Uno and the Mega, runs each under

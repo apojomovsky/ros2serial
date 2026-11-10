@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 name: svc_query
 covers: [SVR-1, SVR-7]
 topic_id: 7

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Build the release artifacts: the Arduino library zip from the G11 bundle and
 # the Python sdist and wheel. The release workflow runs this in the dev image
 # and attaches what it prints to the GitHub release; a maintainer runs the same

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 3 waits for handshake and discovery before priming the echo.
 
 Regression test for #365: the priming loop used to conflate the serial

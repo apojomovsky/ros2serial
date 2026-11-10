@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Check (default) or apply (--fix) the ament uncrustify style on the tracked C
 # and C++ files, or on the files given. Vendored code under */vendor/ is never
 # touched, and neither is the bridge: ament_lint_auto checks it instead (#509).

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The header-applying tool: the bulk change runs through it, not by hand.
 
 apply_headers.py walks the same scope the gate checks, replaces the old full
@@ -74,6 +77,14 @@ def test_walk_matches_the_gate_scope(tmp_path):
     assert check_headers.check(tmp_path) != []
 
 
+def test_walk_covers_scripts_and_yaml(tmp_path):
+    script = write(tmp_path / 'scripts' / 'helper.py', 'x = 1\n')
+    config = write(tmp_path / 'spec' / 'vectors' / 'frames' / 'ping.yaml', 'kind: frame\n')
+    targets = apply_headers.iter_targets(tmp_path)
+    assert script in targets
+    assert config in targets
+
+
 def test_named_files_cover_paths_outside_the_scope(tmp_path):
     file = write(tmp_path / 'scripts' / 'gate.py', old_block('#') + '\nx = 1\n')
     assert apply_headers.main([str(file)]) == 0
@@ -84,6 +95,18 @@ def test_named_yaml_takes_hash_comments(tmp_path):
     file = write(tmp_path / 'ports' / 'posix' / 'r2s.yaml', old_block('#') + '\nkey: 1\n')
     assert apply_headers.main([str(file)]) == 0
     assert file.read_text(encoding='utf-8') == f'# {SPDX}\n# {HOLDER}\n\nkey: 1\n'
+
+
+def test_crlf_files_keep_their_endings(tmp_path):
+    file = write(tmp_path / 'scripts' / 'job.sh', '#!/usr/bin/env bash\r\necho hi\r\n')
+    assert apply_headers.apply_to_file(file) is True
+    assert file.read_bytes() == (
+        b'#!/usr/bin/env bash\r\n'
+        b'# SPDX-License-Identifier: MIT\r\n'
+        b'# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors\r\n'
+        b'\r\n'
+        b'echo hi\r\n'
+    )
 
 
 def test_check_mode_reports_without_writing(tmp_path):

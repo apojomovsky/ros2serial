@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Build and test the C++ layer on the host in each configuration CI checks:
 # gcc and clang, and clang with the sanitizers. Builds go under
 # R2S_BUILD_DIR. Usage: cpp-test.sh [--build-only] [CONFIG...]

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* rosserial-compatible Subscriber: the sketch hands it a topic and a callback,
  * and subscribe() announces it on the runtime topic table. The two arities
  * follow ros_lib: a member function with its object, or a free function. */

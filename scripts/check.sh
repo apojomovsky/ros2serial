@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # make check: run the stale tasks for the current tree and print what was
 # selected. Caller scopes stay: they select the tasks to consider, and the
 # checksums decide which of those run. R2S_FULL=1 forces all of them.
