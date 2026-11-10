@@ -5,12 +5,11 @@
 // installed rosidl_typesupport_cpp library.
 #include "r2s_bridge/type_support.hpp"
 
-#include "r2s_bridge/action_types.hpp"
-
 #include <algorithm>
 #include <exception>
 #include <memory>
 
+#include "r2s_bridge/action_types.hpp"
 #include "rclcpp/typesupport_helpers.hpp"
 #include "rcpputils/shared_library.hpp"
 

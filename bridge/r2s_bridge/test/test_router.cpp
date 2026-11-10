@@ -3096,7 +3096,9 @@ TEST_F(RouterNode, RejectsCallsWhileTheLinkIsDown)
   auto result_future = client->async_get_result(handle);
   const auto cancel_start = std::chrono::steady_clock::now();
   bool cancel_wire = false;
-  while (!cancel_wire && std::chrono::steady_clock::now() - cancel_start < std::chrono::seconds(10)) {
+  while (!cancel_wire &&
+    std::chrono::steady_clock::now() - cancel_start < std::chrono::seconds(10))
+  {
     fixture.advance(20u);
     rclcpp::spin_some(fixture.node());
     for (const auto & unit : fixture.drain()) {

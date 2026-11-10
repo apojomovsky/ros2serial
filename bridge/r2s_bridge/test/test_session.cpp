@@ -3597,16 +3597,16 @@ void replay_action_exchange(const std::string & file)
     const Step & step = steps[i];
     SCOPED_TRACE(name + " step " + std::to_string(i));
     fixture.advance_to(step.at_ms);
+    const bool is_goal = step.decoded.size() > 7u && step.decoded[0] == kHelperActions &&
+      step.decoded[2] == kHelperActGoal;
+    const bool is_cancel = step.decoded.size() > 5u && step.decoded[0] == kHelperActions &&
+      step.decoded[2] == kHelperActCancel;
     if (!step.from_host) {
       fixture.deliver(step.decoded);
-    } else if (step.decoded.size() > 7u && step.decoded[0] == kHelperActions &&
-      step.decoded[2] == kHelperActGoal)
-    {
+    } else if (is_goal) {
       EXPECT_TRUE(fixture.session().send_action_goal(step.decoded[5], step.decoded[4],
         {step.decoded.begin() + 6, step.decoded.end() - 2}));
-    } else if (step.decoded.size() > 5u && step.decoded[0] == kHelperActions &&
-      step.decoded[2] == kHelperActCancel)
-    {
+    } else if (is_cancel) {
       EXPECT_TRUE(fixture.session().send_action_cancel(step.decoded[4]));
     }
     for (const auto & unit : drain_decoded(fixture)) {
@@ -3966,7 +3966,8 @@ TEST(ActionExchange, ReportsFeedbackAndResult)
   events.action_feedback = [&](std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> & got) {
       feedback = got;
     };
-  events.action_result = [&](std::uint8_t, std::uint8_t got, const std::vector<std::uint8_t> & got_payload) {
+  events.action_result =
+    [&](std::uint8_t, std::uint8_t got, const std::vector<std::uint8_t> & got_payload) {
       outcome = got;
       result = got_payload;
     };
