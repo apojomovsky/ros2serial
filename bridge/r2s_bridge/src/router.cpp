@@ -597,12 +597,15 @@ struct Router::Impl
     const std::string expanded =
       node_services_.base->resolve_topic_or_service_name(route.info.service_name, true);
     rcl_service_options_t options = rcl_service_get_default_options();
+    // GCOVR_EXCL_START: rcl_service_init fails only on a middleware fault
+    // which a unit test cannot inject; the success path is tested.
     if (rcl_service_init(&route.rcl_service, route.rcl_node.get(),
           route.types.cpp_service_handle(), expanded.c_str(), &options) != RCL_RET_OK)
     {
       rcl_reset_error();
       throw std::runtime_error("rcl_service_init failed");
     }
+    // GCOVR_EXCL_STOP
     route.rcl_valid = true;
     route.take_storage = route.types.make_request();
 #endif
@@ -619,6 +622,9 @@ struct Router::Impl
     }
     route.client = rclcpp::create_generic_client(node_services_.base, node_services_.graph,
         node_services_.services, route.info.service_name, route.info.type_name);
+    // A live client route is as valid as a server one: the take loop tells
+    // them apart by role.
+    route.rcl_valid = true;
   }
 
     // Gives one ok service its route: the introspection handles, then the
@@ -629,12 +635,17 @@ struct Router::Impl
     std::unique_ptr<ServiceRoute> route;
     try {
       route = std::make_unique<ServiceRoute>(info, ServiceTypes(info.type_name));
+      // GCOVR_EXCL_START: resolve_service_type reports ok only after the
+      // same library and service handle load, so the constructor cannot
+      // throw for a routed service; a unit test cannot stage a failure
+      // between the verdict and this lookup.
     } catch (const std::exception & failure) {
       service_repairs_[info.index].reason = failure.what();
       emit(SessionLog::kError,
         "service '" + info.service_name + "': no route (" + failure.what() + ")");
       return;
     }
+    // GCOVR_EXCL_STOP
     try {
       if (info.role == kServiceRoleServer) {
         make_ros_server(*route);
@@ -669,11 +680,15 @@ struct Router::Impl
   void enqueue_ros_call(std::uint8_t index, RosCall call)
   {
     const auto found = service_routes_.find(index);
+    // GCOVR_EXCL_START: only the generic-service callback can hand over an
+    // index the routes dropped; the rcl take path always names a live route,
+    // and a unit test cannot feed the unbuilt callback.
     if (found == service_routes_.end()) {
       emit(SessionLog::kWarning,
         "service index " + std::to_string(index) + ": no route for the ROS request");
       return;
     }
+    // GCOVR_EXCL_STOP
     ServiceRoute & route = *found->second;
     if (route.ros_queue.size() >= kMaxQueuedRosCalls) {
       emit(SessionLog::kWarning,
@@ -719,16 +734,24 @@ struct Router::Impl
   {
     std::lock_guard<std::recursive_mutex> guard(mutex);
     const auto found = service_routes_.find(index);
+    // GCOVR_EXCL_START: the session drops REQUESTs for unknown indexes
+    // before the event fires, so this guard cannot trip; a unit test cannot
+    // fire the event past the session.
     if (found == service_routes_.end() || found->second->client == nullptr) {
       emit(SessionLog::kWarning,
         "service index " + std::to_string(index) + ": no ROS client for the MCU call");
       session_.send_service_response(req, kSvcStatusBusy, {});
       return;
     }
+    // GCOVR_EXCL_STOP
     ServiceRoute & route = *found->second;
+    // GCOVR_EXCL_START: the session holds one MCU call per slot and drops
+    // the second before the event fires, so this guard cannot trip; a unit
+    // test cannot fire the event past the session.
     if (route.mcu_inflight.count(req) != 0u) {
       return;
     }
+    // GCOVR_EXCL_STOP
     ServiceTypes::Struct request = route.types.make_request();
     const ConvertResult result = converter_.unpack_to_struct(route.types.request_type_name(), false,
         payload.data(), payload.size(), request.storage.data());
@@ -744,12 +767,16 @@ struct Router::Impl
       const std::int64_t seq = sent.request_id;
       route.mcu_inflight.emplace(req, InflightMcuCall(req, std::move(request), std::move(sent),
         seq, now_ms()));
+      // GCOVR_EXCL_START: the request above is converted and the client is
+      // live, so async_send_request cannot throw here; a unit test cannot
+      // stage a middleware failure underneath it.
     } catch (const std::exception & failure) {
       emit(SessionLog::kWarning,
         "service '" + route.info.service_name + "': no ROS call (" + failure.what() + ")");
       session_.send_service_response(req, kSvcStatusBusy, {});
       return;
     }
+    // GCOVR_EXCL_STOP
   }
 
     // One MCU answer while connected: the req names the ROS caller it
@@ -801,12 +828,16 @@ struct Router::Impl
     route.service->send_response(*header, shared);
 #else
     rmw_request_id_t id = header;
+    // GCOVR_EXCL_START: the header comes from a live take and the response
+    // is filled, so rcl_send_response only fails on a middleware fault which
+    // a unit test cannot inject.
     if (rcl_send_response(&route.rcl_service, &id, response.storage.data()) != RCL_RET_OK) {
       rcl_reset_error();
       emit(SessionLog::kWarning,
         "service '" + route.info.service_name + "': no ROS answer (" +
         std::to_string(id.sequence_number) + ")");
     }
+    // GCOVR_EXCL_STOP
 #endif
   }
 
@@ -821,9 +852,13 @@ struct Router::Impl
     RosCall call = std::move(route.ros_queue.front());
     route.ros_queue.pop_front();
     std::uint8_t req = route.next_req++;
+    // GCOVR_EXCL_START: the id wraps only after 256 sends, and the queue
+    // holds 3 with one in flight, so the in-flight set can never collide in
+    // a unit test; the fuzz corpus cannot stage 256 answered calls either.
     while (route.ros_inflight.count(req) != 0u) {
       req = route.next_req++;
     }
+    // GCOVR_EXCL_STOP
     if (!session_.send_service_request(route.info.index, req, call.packed)) {
       emit(SessionLog::kWarning,
         "service '" + route.info.service_name + "': the link refused the ROS call");

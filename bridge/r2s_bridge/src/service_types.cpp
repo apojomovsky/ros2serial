@@ -64,6 +64,10 @@ ServiceTypes::ServiceTypes(const std::string & type_name)
     throw std::runtime_error("service '" + type_name + "': no introspection type support (" +
       failure.what() + ")");
   }
+  // GCOVR_EXCL_START: the lookups above throw when a symbol is missing,
+  // so a null without a throw would break their documented contract, and
+  // the handles are read into the members first; a unit test cannot stage
+  // the state these guards describe.
   if (request_members_ == nullptr || response_members_ == nullptr || service_ts_ == nullptr) {
     throw std::runtime_error("service '" + type_name + "': no introspection type support");
   }
@@ -72,6 +76,7 @@ ServiceTypes::ServiceTypes(const std::string & type_name)
   {
     throw std::runtime_error("service '" + type_name + "': no init or fini function");
   }
+  // GCOVR_EXCL_STOP
 }
 
 ServiceTypes::~ServiceTypes()
