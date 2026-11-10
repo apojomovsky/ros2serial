@@ -1028,9 +1028,9 @@ static void on_frame(const r2s_frame_t *frame)
 #endif
 #if defined(R2S_WITH_PARAMS) || defined(R2S_WITH_SERVICES) || defined(R2S_WITH_ACTIONS)
   } else if (topic == 6u) {
-#ifdef R2S_WITH_PARAMS
+#if defined(R2S_WITH_PARAMS) || defined(R2S_WITH_ACTIONS)
     on_ack(payload, payload_len, frame->tick);
-  #endif
+#endif
 #ifdef R2S_WITH_SERVICES
     on_service_ack(payload, payload_len, frame->tick);
   #endif
