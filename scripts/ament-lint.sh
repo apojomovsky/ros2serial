@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Advisory ament_lint_common run over the ROS packages: builds with the lint
-# tests enabled, runs only them, prints the per-linter baseline, and always
-# exits zero. Lint findings never fail this script; a broken setup does.
+# tests enabled, runs only them, prints the per-linter baseline, and exits
+# nonzero only when a cleaned area reports findings or nothing ran at all.
+# The CI gate stays non-blocking through continue-on-error.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root" || exit 2
@@ -23,7 +24,7 @@ if [ -z "${R2S_AMENT_LINT_LOCKED:-}" ]; then
     bash "$root/scripts/ament-lint.sh"
 fi
 mkdir -p "$workspace" || exit 1
-echo "== ament-lint: $ROS_DISTRO (advisory; findings never fail this script)"
+echo "== ament-lint: $ROS_DISTRO (advisory; cleaned areas must report zero)"
 
 # The lint test names ament_lint_common registers, so colcon runs only them
 # and never the unit tests.
@@ -61,9 +62,12 @@ for linter in flake8 pep257 copyright xmllint; do
 done
 
 # Baseline table from the xunit files: failing adds failures and errors,
-# checked subtracts the skipped, a missing file reports dashes.
-echo "== ament-lint baseline (advisory, #508; lint findings never fail this script)"
+# checked subtracts the skipped, a missing file reports dashes. The cleaned
+# areas (copyright everywhere, cpplint on the bridge) must report zero: the
+# remaining linters stay advisory until their own cleanup tickets land.
+echo "== ament-lint baseline (advisory, #508; cleaned areas must report zero)"
 echo "# package linter failing checked"
+clean=0
 attr() {
   grep -m1 -o "$2=\"[0-9]*\"" "$1" 2>/dev/null | grep -o "[0-9]*" || true
 }
@@ -80,7 +84,16 @@ row() {
   failures=$(attr "$file" failures)
   errors=$(attr "$file" errors)
   skipped=$(attr "$file" skipped)
-  echo "$pkg $linter $((${failures:-0} + ${errors:-0})) $((${tests:-0} - ${skipped:-0}))"
+  failing=$((${failures:-0} + ${errors:-0}))
+  echo "$pkg $linter $failing $((${tests:-0} - ${skipped:-0}))"
+  case "$linter" in
+    copyright | cpplint)
+      if [ "$failing" -ne 0 ]; then
+        echo "ament-lint: $pkg $linter reports $failing findings, expected zero (#511)" >&2
+        clean=1
+      fi
+      ;;
+  esac
 }
 for pkg in $cmake_pkgs; do
   # shellcheck disable=SC2086
@@ -91,11 +104,11 @@ done
 for linter in flake8 pep257 copyright xmllint; do
   row "$workspace/gen-results/${linter}.xml" r2s_gen "$linter"
 done
-# Advisory covers lint findings, not a silent no-run: with no result file
-# at all, the linters never executed, so fail loudly instead of reporting
-# an empty baseline.
+# The cleaned areas fail here, never in the CI gate: the workflow keeps
+# continue-on-error until the remaining linters are clean. A silent no-run
+# still fails loudly instead of reporting an empty baseline.
 if [ "$found" -eq 0 ]; then
   echo "ament-lint: no lint results were produced; the linters did not run" >&2
   exit 1
 fi
-exit 0
+exit "$clean"

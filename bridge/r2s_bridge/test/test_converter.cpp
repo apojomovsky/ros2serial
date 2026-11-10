@@ -1,3 +1,23 @@
+// Copyright (c) 2026 Alexis Pojomovsky
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 // The packed to CDR converter against rclcpp serialization: every message
 // vector converts byte-identically, the plan caches per type, and the field
 // index order matches the MCU codec's report order.
@@ -741,8 +761,9 @@ void fake_noop_init(void *, MessageInitialization)
 {
 }
 
-void fake_noop_fini(void *)
+void fake_noop_fini(void * memory)
 {
+  (void)memory;
 }
 
 rosidl_message_type_support_t fake_ts_for(const MessageMembers *members)
@@ -997,7 +1018,7 @@ struct FakeBounded
 
 void fake_bounded_init(void *memory, MessageInitialization)
 {
-  new (&static_cast<FakeBounded *>(memory)->values) std::vector<double>();
+  new (&(static_cast<FakeBounded *>(memory)->values)) std::vector<double>();
 }
 
 void fake_bounded_fini(void *memory)
@@ -1007,7 +1028,7 @@ void fake_bounded_fini(void *memory)
 
 void * fake_bounded_get(void *memory, std::size_t index)
 {
-  return &static_cast<FakeBounded *>(memory)->values[index];
+  return &(static_cast<FakeBounded *>(memory)->values[index]);
 }
 
 void fake_bounded_resize(void *memory, std::size_t size)
@@ -1116,7 +1137,7 @@ struct FakeOuter
 
 void * fake_outer_get(void *memory, std::size_t index)
 {
-  return &static_cast<FakeOuter *>(memory)->items[index];
+  return &(static_cast<FakeOuter *>(memory)->items[index]);
 }
 
 TEST(ConverterFieldPath, PassesThroughFixedNestedArrays)
@@ -1290,7 +1311,7 @@ std::vector<std::size_t> resized_bool_counts;
 
 void fake_bools_init(void *memory, MessageInitialization)
 {
-  new (&static_cast<FakeBools *>(memory)->values) std::vector<bool>();
+  new (&(static_cast<FakeBools *>(memory)->values)) std::vector<bool>();
   assigned_bools.clear();
   resized_bool_counts.clear();
 }
