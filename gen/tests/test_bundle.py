@@ -1099,7 +1099,7 @@ def test_a_bundled_type_without_entries_keeps_its_table_defined(tmp_path, monkey
     text = bundle._bundled_c(resolved, {'test_msgs/msg/Empty': table}, 'jazzy')
 
     assert (
-        'const uint8_t R2S_FLASH r2s_bundled_entries_test_msgs_Empty[1] = { 0x00 };'
+        'const uint8_t R2S_FLASH r2s_bundled_entries_test_msgs_Empty[1] = {0x00};'
         in text.splitlines()
     )
 
