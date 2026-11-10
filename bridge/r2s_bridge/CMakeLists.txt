@@ -184,6 +184,13 @@ if(BUILD_TESTING)
     std_msgs::std_msgs__rosidl_typesupport_cpp
     tf2_msgs::tf2_msgs__rosidl_typesupport_cpp)
 
+  # The service introspection test loads the service packages for real, so it
+  # needs std_srvs (found above) at build and test time.
+  ament_add_gtest(test_service_types test/test_service_types.cpp)
+  target_link_libraries(test_service_types
+    r2s_bridge_component
+    std_srvs::std_srvs__rosidl_typesupport_cpp)
+
   # openpty comes from libutil; the pty test uses it instead of a device.
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
   target_link_libraries(test_termios_transport r2s_bridge_component util)

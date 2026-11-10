@@ -1727,6 +1727,56 @@ TEST(ConverterFromCdr, RefusesAnOverlongString)
     EXPECT_TRUE(packed.empty()) << "no partial payload escapes";
 }
 
+TEST(ConverterGuards, RefusesUnpackWithoutStorage)
+{
+    Converter converter;
+    const std::uint8_t empty[1] = {0u};
+    const ConvertResult result =
+      converter.unpack_to_struct("std_msgs/msg/Bool", false, empty, 0, nullptr);
+    EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
+}
+
+TEST(ConverterGuards, RefusesUnpackOfUnknownType)
+{
+    Converter converter;
+    std_msgs::msg::Bool flag;
+    const std::uint8_t empty[1] = {0u};
+    const ConvertResult result =
+      converter.unpack_to_struct("nope/msg/Nope", false, empty, 0, &flag);
+    EXPECT_EQ(result.fail, ConvertFail::kUnknownType);
+}
+
+TEST(ConverterGuards, ReportsTruncatedUnpack)
+{
+    Converter converter;
+    std_msgs::msg::Bool flag;
+    const ConvertResult result =
+      converter.unpack_to_struct("std_msgs/msg/Bool", false, nullptr, 0, &flag);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+}
+
+TEST(ConverterGuards, RefusesPackWithoutStorage)
+{
+    Converter converter;
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+      converter.pack_from_struct("std_msgs/msg/Bool", false, nullptr, packed);
+    EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
+    EXPECT_TRUE(packed.empty());
+}
+
+TEST(ConverterGuards, RefusesPackOfUnknownType)
+{
+    Converter converter;
+    std_msgs::msg::Bool flag;
+    flag.data = true;
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+      converter.pack_from_struct("nope/msg/Nope", false, &flag, packed);
+    EXPECT_EQ(result.fail, ConvertFail::kUnknownType);
+    EXPECT_TRUE(packed.empty());
+}
+
 }  // namespace
 }  // namespace test
 }  // namespace r2s_bridge
