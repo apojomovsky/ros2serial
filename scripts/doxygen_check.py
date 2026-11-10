@@ -93,13 +93,17 @@ def _code_lines(text: str) -> list[str]:
 
 
 def _split_top_commas(text: str) -> list[str]:
-    parts, depth, start = [], 0, 0
+    parts, depth, angles, start = [], 0, 0, 0
     for i, ch in enumerate(text):
         if ch == '(':
             depth += 1
         elif ch == ')':
             depth -= 1
-        elif ch == ',' and depth == 0:
+        elif ch == '<':
+            angles += 1
+        elif ch == '>':
+            angles = max(0, angles - 1)
+        elif ch == ',' and depth == 0 and angles == 0:
             parts.append(text[start:i])
             start = i + 1
     parts.append(text[start:])
