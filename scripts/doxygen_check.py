@@ -244,6 +244,9 @@ def _is_function(buf: str) -> bool:
         text = text.split('{')[0]
     else:
         return False
+    paren = text.find('(')
+    if paren >= 0 and re.match(r'\s*\*', text[paren + 1 :]):
+        return False
     return bool(FUNC_SIG_RE.search(text))
 
 
