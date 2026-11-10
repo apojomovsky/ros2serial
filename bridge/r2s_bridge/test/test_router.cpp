@@ -8,6 +8,13 @@
 // covers: LOG-1, LOG-2
 #include <gtest/gtest.h>
 
+#if defined(__linux__)
+#include <execinfo.h>
+#include <unistd.h>
+
+#include <csignal>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -21,12 +28,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#if defined(__linux__)
-#include <csignal>
-#include <execinfo.h>
-#include <unistd.h>
-#endif
 
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
