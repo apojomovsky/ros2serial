@@ -14,6 +14,7 @@ the staging without the downloads.
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,8 +25,11 @@ BOARDS = ('bluepill', 'pico')
 
 
 def run(args, cwd, tmp_path, extra_env=None):
+    # This interpreter's directory first: the generate step needs the
+    # same third-party modules the suite runs with.
+    path = os.pathsep.join([str(Path(sys.executable).parent), '/usr/bin:/bin:/usr/local/bin'])
     env = {
-        'PATH': '/usr/bin:/bin:/usr/local/bin',
+        'PATH': path,
         'HOME': str(tmp_path),
         'R2S_BUILD_DIR': str(tmp_path / 'b'),
         'R2S_CACHE_DIR': str(tmp_path / 'cache'),
@@ -82,6 +86,9 @@ def test_the_script_fetches_the_sdk_boot_stage_from_a_verified_tarball():
     assert 'pad_checksum' in text
     assert 'pico-sdk' in text
     assert 'sha256sum' in text
+    # Boot stage intermediates stay under a build/ component, which the
+    # size and stack reporters skip, so only the firmware links measure.
+    assert '"$pico/build"' in text
 
 
 def test_the_toolchain_cache_lands_beside_the_other_bundles():
@@ -118,16 +125,25 @@ def test_the_helper_fails_when_versions_env_names_no_arm_gcc(tmp_path):
 
 
 def test_the_pico_build_fails_when_versions_env_names_no_pico_sdk(tmp_path):
+    versions = tmp_path / 'arm-only-versions.env'
+    versions.write_text('ARM_GCC_VERSION=14.2.1-1.1\nARM_GCC_SHA256=abc\n')
     out = tmp_path / 'out'
     result = run(
         ['bash', str(SCRIPT), '--out', str(out)],
         ROOT,
         tmp_path,
-        extra_env={'R2S_VERSIONS_ENV': str(tmp_path / 'empty-versions.env')},
+        extra_env={'R2S_VERSIONS_ENV': str(versions)},
     )
 
     assert result.returncode != 0
     assert 'PICO_SDK_VERSION' in result.stderr
+
+
+def stub_path(bin_dir):
+    """The stub toolchain first, then the suite interpreter for r2s-gen."""
+    return os.pathsep.join(
+        [str(bin_dir), str(Path(sys.executable).parent), '/usr/bin:/bin:/usr/local/bin']
+    )
 
 
 def stub_arm(bin_dir, log):
@@ -167,7 +183,7 @@ def fixture_sdk(sdk_dir):
         'MEMORY { SRAM(rx) : ORIGIN = 0x20041f00, LENGTH = 252 }\n'
     )
     pad = stage / 'pad_checksum'
-    pad.write_text('#!/usr/bin/env bash\n: > "$2"\nexit 0\n')
+    pad.write_text('#!/usr/bin/env bash\n: > "${@: -1}"\nexit 0\n')
     pad.chmod(0o755)
     (stage / 'asminclude').mkdir()
 
@@ -197,7 +213,7 @@ def test_the_bluepill_build_invokes_arm_gcc_and_links_an_elf(tmp_path):
     log = tmp_path / 'arm.log'
     bin_dir = tmp_path / 'bin'
     env = stub_arm(bin_dir, log)
-    env['PATH'] = f'{bin_dir}:/usr/bin:/bin'
+    env['PATH'] = stub_path(bin_dir)
     env['R2S_PICO_SDK'] = str(tmp_path / 'no-sdk')
     result = run(['bash', str(SCRIPT), '--out', str(out)], ROOT, tmp_path, extra_env=env)
 
@@ -213,7 +229,7 @@ def test_the_pico_build_links_the_sdk_boot_stage(tmp_path):
     log = tmp_path / 'arm.log'
     bin_dir = tmp_path / 'bin'
     env = stub_arm(bin_dir, log)
-    env['PATH'] = f'{bin_dir}:/usr/bin:/bin'
+    env['PATH'] = stub_path(bin_dir)
     sdk = tmp_path / 'sdk'
     fixture_sdk(sdk)
     env['R2S_PICO_SDK'] = str(sdk)

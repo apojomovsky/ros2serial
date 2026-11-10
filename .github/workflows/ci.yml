@@ -65,6 +65,7 @@ jobs:
       e2e: ${{ steps.statuses.outputs.e2e }}
       esp32: ${{ steps.statuses.outputs.esp32 }}
       pic: ${{ steps.statuses.outputs.pic }}
+      stm32: ${{ steps.statuses.outputs.stm32 }}
       coverage: ${{ steps.statuses.outputs.coverage }}
       docs: ${{ steps.statuses.outputs.docs }}
       mermaid: ${{ steps.statuses.outputs.mermaid }}
@@ -156,6 +157,13 @@ jobs:
             r2s-task-pic-refs/heads/master-
       - uses: actions/cache/restore@v4.2.2
         with:
+          path: .task/checksum/stm32
+          key: r2s-task-stm32-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            r2s-task-stm32-${{ github.ref }}-
+            r2s-task-stm32-refs/heads/master-
+      - uses: actions/cache/restore@v4.2.2
+        with:
           path: .task/checksum/budgets
           key: r2s-task-budgets-${{ github.ref }}-${{ github.sha }}
           restore-keys: |
@@ -216,7 +224,7 @@ jobs:
           full=""
           # A task without a checksum file (lint, commits) is always stale.
           # Exit 0 is fresh, 1 is stale; anything else fails safe to FULL.
-          for task in lint commits scripts core gen bridge ament_lint cpp coverage docs examples esp32 pic budgets readme fuzz e2e-avr e2e-posix nightly mermaid; do
+          for task in lint commits scripts core gen bridge ament_lint cpp coverage docs examples esp32 pic stm32 budgets readme fuzz e2e-avr e2e-posix nightly mermaid; do
             rc=0
             task --status "$task" >/dev/null 2>&1 || rc=$?
             case $rc in
@@ -687,6 +695,31 @@ jobs:
         with:
           path: .task/checksum/pic
           key: r2s-task-pic-refs/heads/master-${{ github.sha }}
+
+  # The STM32 and RP2040 firmware: the core and the generated pair link
+  # with arm-none-eabi-gcc for the Blue Pill and the Pico. The toolchain
+  # ships in the dev image; the Pico boot stage downloads into a cache
+  # directory, never into the tree.
+  stm32:
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.stm32 == '1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - uses: actions/cache@v4.2.2
+        with:
+          path: ~/.cache/ros2serial/pico-sdk-2.3.1
+          key: pico-sdk-${{ hashFiles('ci/versions.env') }}
+          restore-keys: |
+            pico-sdk-
+      - run: make test STM32=1
+      - if: github.ref == 'refs/heads/master'
+        uses: actions/cache/save@v4.2.2
+        with:
+          path: .task/checksum/stm32
+          key: r2s-task-stm32-refs/heads/master-${{ github.sha }}
   budgets:
     needs: plan
     if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.budgets == '1'

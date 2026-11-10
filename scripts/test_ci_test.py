@@ -341,7 +341,7 @@ def test_stm32_scope_runs_its_section(tmp_path, monkeypatch):
         'MEMORY { SRAM(rx) : ORIGIN = 0x20041f00, LENGTH = 252 }\n'
     )
     pad = sdk / 'pad_checksum'
-    pad.write_text('#!/usr/bin/env bash\n: > "$2"\nexit 0\n')
+    pad.write_text('#!/usr/bin/env bash\n: > "${@: -1}"\nexit 0\n')
     pad.chmod(0o755)
     (sdk / 'asminclude').mkdir()
     monkeypatch.setenv('R2S_PICO_SDK', str(tmp_path / 'sdk'))
@@ -351,12 +351,70 @@ def test_stm32_scope_runs_its_section(tmp_path, monkeypatch):
     assert '== stm32' in result.stdout
 
 
+def stub_arm_toolchain(stub):
+    """A stub Arm toolchain: compiles and objcopy touch their outputs."""
+    (stub / 'arm-none-eabi-gcc').write_text(
+        '#!/usr/bin/env bash\n'
+        'out=""\n'
+        'prev=""\n'
+        'for arg in "$@"; do\n'
+        '    if [ "$prev" = "-o" ]; then out="$arg"; fi\n'
+        '    prev="$arg"\n'
+        'done\n'
+        '[ -n "$out" ] && mkdir -p "$(dirname "$out")" && : > "$out"\n'
+        'exit 0\n',
+        encoding='utf-8',
+    )
+    (stub / 'arm-none-eabi-gcc').chmod(0o755)
+    (stub / 'arm-none-eabi-objcopy').write_text(
+        '#!/usr/bin/env bash\n: > "${@: -1}"\nexit 0\n', encoding='utf-8'
+    )
+    (stub / 'arm-none-eabi-objcopy').chmod(0o755)
+
+
+def fixture_sdk(sdk_dir):
+    """The boot stage tree the STM32 build reads: a stub stage stands in."""
+    stage = sdk_dir / 'src' / 'rp2040' / 'boot_stage2'
+    stage.mkdir(parents=True)
+    (stage / 'boot2_w25q080.S').write_text(
+        '.cpu cortex-m0plus\n.thumb\n.section .entry\n b .\n', encoding='utf-8'
+    )
+    (stage / 'boot_stage2.ld').write_text(
+        'MEMORY { SRAM(rx) : ORIGIN = 0x20041f00, LENGTH = 252 }\n', encoding='utf-8'
+    )
+    pad = stage / 'pad_checksum'
+    pad.write_text('#!/usr/bin/env bash\n: > "${@: -1}"\nexit 0\n')
+    pad.chmod(0o755)
+    (stage / 'asminclude').mkdir()
+
+
+STM32_BOARDS = ('bluepill', 'pico')
+
+
+def plant_stm32_stack(build, su):
+    """The stack sources the gate needs beside the stub-linked firmware."""
+    for board in STM32_BOARDS:
+        source = build / 'stack' / 'stm32' / board / 'firmware.elf'
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(b'')
+        (source.parent / 'firmware.su').write_text(su)
+
+
 def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):
     # The budgets run builds the ESP32 firmware too, whose stubbed install
     # plants its toolchain under the data dir: keep a scratch directory.
+    # The STM32 firmware builds with the stubbed Arm toolchain and SDK.
     monkeypatch.setenv('R2S_ARDUINO_DATA_DIR', str(tmp_path / 'arduino-data'))
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    stub_arm_toolchain(stub)
+    monkeypatch.setenv('R2S_ARM_GCC', str(stub / 'arm-none-eabi-gcc'))
+    monkeypatch.setenv('R2S_ARM_OBJCOPY', str(stub / 'arm-none-eabi-objcopy'))
+    sdk = tmp_path / 'sdk'
+    fixture_sdk(sdk)
+    monkeypatch.setenv('R2S_PICO_SDK', str(sdk))
     root = copy_tree(tmp_path)
-    stubs = stub_toolbox(tmp_path / 'bin')
+    stubs = stub_toolbox(stub)
     build = tmp_path / 'build' / 'examples'
     shipped = [
         'cmake_minimal/hello_cmake',
@@ -380,6 +438,7 @@ def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):
             source.parent.mkdir(parents=True, exist_ok=True)
             source.write_bytes(b'')
             (source.parent / 'firmware.su').write_text(su)
+    plant_stm32_stack(build, su)
     # The gate refuses a stale docs/budgets.md, so the run first refreshes
     # it from the stubbed measurements, the way make size-report does.
     env = {k: v for k, v in os.environ.items() if k not in SCOPES}
@@ -403,8 +462,18 @@ def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):
 
 def test_budgets_gate_fails_on_stale_docs(tmp_path, monkeypatch):
     # The checked-in docs/budgets.md holds real measurements, so a run
-    # over stubbed firmware must fail naming the stale copy.
+    # over stubbed firmware must fail naming the stale copy. The STM32
+    # firmware builds with the stubbed Arm toolchain and SDK, and its
+    # stack sources are planted so the failure stays about the docs.
     monkeypatch.setenv('R2S_ARDUINO_DATA_DIR', str(tmp_path / 'arduino-data'))
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    stub_arm_toolchain(stub)
+    monkeypatch.setenv('R2S_ARM_GCC', str(stub / 'arm-none-eabi-gcc'))
+    monkeypatch.setenv('R2S_ARM_OBJCOPY', str(stub / 'arm-none-eabi-objcopy'))
+    sdk = tmp_path / 'sdk'
+    fixture_sdk(sdk)
+    monkeypatch.setenv('R2S_PICO_SDK', str(sdk))
     root = copy_tree(tmp_path)
     build = tmp_path / 'build' / 'examples'
     fake = build / 'cmake_minimal' / 'hello_cmake'
@@ -412,6 +481,7 @@ def test_budgets_gate_fails_on_stale_docs(tmp_path, monkeypatch):
     fake.write_bytes(b'')
     fake.chmod(0o755)
     (build / 'cmake_minimal' / 'firmware.su').write_text('main:32:static\n')
+    plant_stm32_stack(build, 'main:32:static\n')
     result = run_scope(
         root, 'BUDGETS', stubs=stub_toolbox(tmp_path / 'bin'), build_dir=tmp_path / 'build'
     )

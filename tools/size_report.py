@@ -15,6 +15,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -24,9 +25,41 @@ import yaml
 AVRSIZE = os.environ.get('R2S_AVR_SIZE', 'avr-size')
 AVRNM = os.environ.get('R2S_AVR_NM', 'avr-nm')
 
-# The Xtensa machine number: ESP32 firmware measures with the Xtensa tools,
-# every other (or unreadable) ELF with the AVR ones.
+# The Xtensa machine number: ESP32 firmware measures with the Xtensa tools.
+# Arm firmware (STM32, RP2040) measures with the Arm tools: the dev image
+# ships them, and a run whose image predates them uses the pinned fetch
+# in the cache. Every other (or unreadable) ELF uses the AVR ones.
 EM_XTENSA = 0x5E
+EM_ARM = 0x28
+
+
+def _arm_tool(filename: str, override_var: str) -> str:
+    """The Arm binutil for the STM32 and RP2040 firmware: an explicit
+    override wins, then PATH, then the pinned fetch in the cache, then
+    the bare name, which fails loudly when no toolchain is installed."""
+    override = os.environ.get(override_var)
+    if override:
+        return override
+    found = shutil.which(filename)
+    if found:
+        return found
+    cache = os.environ.get(
+        'R2S_CACHE_DIR', os.path.join(os.path.expanduser('~'), '.cache', 'ros2serial')
+    )
+    matches = sorted(Path(cache, 'xpack-arm').glob('xpack-arm-none-eabi-gcc-*/bin/' + filename))
+    if matches:
+        return str(matches[-1])
+    return filename
+
+
+def arm_size() -> str:
+    """The size tool for STM32 and RP2040 firmware (see _arm_tool)."""
+    return _arm_tool('arm-none-eabi-size', 'R2S_ARM_SIZE')
+
+
+def arm_nm() -> str:
+    """The nm tool for STM32 and RP2040 firmware (see _arm_tool)."""
+    return _arm_tool('arm-none-eabi-nm', 'R2S_ARM_NM')
 
 
 def _arduino_data_dir() -> Path:
@@ -144,6 +177,8 @@ def measure(build_dir: Path) -> dict:
         name = elf.relative_to(build_dir).as_posix()
         if elf_machine(elf) == EM_XTENSA:
             size_tool, nm_tool = xtensa_size(), xtensa_nm()
+        elif elf_machine(elf) == EM_ARM:
+            size_tool, nm_tool = arm_size(), arm_nm()
         else:
             size_tool, nm_tool = AVRSIZE, AVRNM
         sizes = parse_avr_size(_run(size_tool, str(elf)))

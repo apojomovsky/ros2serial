@@ -32,6 +32,9 @@ bash "$root/scripts/build-examples.sh" || status=1
 # The ESP32 firmware joins the same build tree, so its flash and RAM land in
 # the table beside the AVR numbers; its stack stays unanalyzed (see below).
 bash "$root/scripts/build-examples-esp32.sh" || status=1
+# The STM32 and RP2040 firmware joins it the same way, measured with the
+# Arm toolchain beside the AVR and Xtensa ones.
+bash "$root/ports/stm32/build.sh" || status=1
 if [ "$status" -ne 0 ]; then
   echo "budgets: the example builds failed" >&2
   exit 1
@@ -153,7 +156,8 @@ fi
   cat "$build/stack-table.md"
   echo
   echo "Stack comes from the non-LTO rebuild under stack/; flash and RAM from the shipped firmware."
-  echo "ESP32 firmware reports flash and RAM only; the AVR call-graph analysis does not cover Xtensa."
+  echo "ESP32, STM32 and RP2040 firmware report flash and RAM only; the AVR call-graph"
+  echo "analysis covers neither Xtensa nor Arm."
 } >"$build/budgets-table.md"
 echo "TABLE $build/budgets-table.md"
 
