@@ -316,6 +316,7 @@ def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):
     # plants its toolchain under the data dir: keep a scratch directory.
     monkeypatch.setenv('R2S_ARDUINO_DATA_DIR', str(tmp_path / 'arduino-data'))
     root = copy_tree(tmp_path)
+    stubs = stub_toolbox(tmp_path / 'bin')
     build = tmp_path / 'build' / 'examples'
     shipped = [
         'cmake_minimal/hello_cmake',
@@ -339,12 +340,44 @@ def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):
             source.parent.mkdir(parents=True, exist_ok=True)
             source.write_bytes(b'')
             (source.parent / 'firmware.su').write_text(su)
+    # The gate refuses a stale docs/budgets.md, so the run first refreshes
+    # it from the stubbed measurements, the way make size-report does.
+    env = {k: v for k, v in os.environ.items() if k not in SCOPES}
+    env['PATH'] = os.pathsep.join(
+        [str(stubs), str(Path(sys.executable).parent), env.get('PATH', '')]
+    )
+    env['R2S_BUILD_DIR'] = str(tmp_path / 'build')
+    report = subprocess.run(
+        ['bash', 'scripts/budgets-check.sh', '--report'],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert report.returncode == 0, report.stdout + report.stderr
+    result = run_scope(root, 'BUDGETS', stubs=stubs, build_dir=tmp_path / 'build')
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '== budgets' in result.stdout
+
+
+def test_budgets_gate_fails_on_stale_docs(tmp_path, monkeypatch):
+    # The checked-in docs/budgets.md holds real measurements, so a run
+    # over stubbed firmware must fail naming the stale copy.
+    monkeypatch.setenv('R2S_ARDUINO_DATA_DIR', str(tmp_path / 'arduino-data'))
+    root = copy_tree(tmp_path)
+    build = tmp_path / 'build' / 'examples'
+    fake = build / 'cmake_minimal' / 'hello_cmake'
+    fake.parent.mkdir(parents=True, exist_ok=True)
+    fake.write_bytes(b'')
+    fake.chmod(0o755)
+    (build / 'cmake_minimal' / 'firmware.su').write_text('main:32:static\n')
     result = run_scope(
         root, 'BUDGETS', stubs=stub_toolbox(tmp_path / 'bin'), build_dir=tmp_path / 'build'
     )
 
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert '== budgets' in result.stdout
+    assert result.returncode != 0
+    assert 'docs/budgets.md is stale' in result.stdout + result.stderr
 
 
 def test_examples_builds_isolate_their_build_paths():

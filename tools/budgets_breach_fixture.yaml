@@ -28,6 +28,22 @@ firmware:
     flash: 1
     ram: 1
     stack: 1
+  arduino_action/uno/arduino_action.ino.elf:
+    flash: 1
+    ram: 1
+    stack: 1
+  arduino_action/mega/arduino_action.ino.elf:
+    flash: 1
+    ram: 1
+    stack: 1
+  arduino_xmacro_c/uno/arduino_xmacro_c.ino.elf:
+    flash: 1
+    ram: 1
+    stack: 1
+  arduino_xmacro_c/mega/arduino_xmacro_c.ino.elf:
+    flash: 1
+    ram: 1
+    stack: 1
   cmake_minimal/hello_cmake:
     flash: 1
     ram: 1

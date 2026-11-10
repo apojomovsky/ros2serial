@@ -355,6 +355,8 @@ tasks:
       - tools/budgets.yaml
       - tools/size_report.py
       - tools/stack_report.py
+      - tools/budgets_table.py
+      - docs/budgets.md
       # The gate rebuilds the example sketches, so it reads what they build.
       - examples/**
       - gen/**
