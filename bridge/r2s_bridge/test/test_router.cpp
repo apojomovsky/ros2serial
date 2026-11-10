@@ -21,6 +21,7 @@
 
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/srv/set_camera_info.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/int32_multi_array.hpp>
@@ -81,7 +82,8 @@ public:
   RouterFixture(
     const std::string & name, rclcpp::NodeOptions options, RouterParams params,
     std::uint16_t max_frame = 512u, bool with_mcu_sink = true,
-    SessionConfig session_config = SessionConfig(), bool with_node_params = true)
+    SessionConfig session_config = SessionConfig(), bool with_node_params = true,
+    bool with_node_services = true)
   : max_frame_(max_frame), node_(std::make_shared<rclcpp::Node>(name, "robot1", options))
   {
     LogSink mcu_sink;
@@ -91,9 +93,11 @@ public:
         };
     }
     NodeServiceInterfaces node_services;
-    node_services.base = node_->get_node_base_interface();
-    node_services.graph = node_->get_node_graph_interface();
-    node_services.services = node_->get_node_services_interface();
+    if (with_node_services) {
+      node_services.base = node_->get_node_base_interface();
+      node_services.graph = node_->get_node_graph_interface();
+      node_services.services = node_->get_node_services_interface();
+    }
     router_ = std::make_unique<Router>(
       node_->get_node_topics_interface(),
       [this]() {return std::unique_ptr<Transport>(new HelperLink(transport_));},
@@ -1540,6 +1544,845 @@ TEST_F(RouterNode, RefusesUnusableServices)
   EXPECT_TRUE(refused) << "no STATUS 1 for the unknown type";
   auto probe = bad_type.node()->create_client<std_srvs::srv::Trigger>("bad");
   EXPECT_FALSE(probe->wait_for_service(std::chrono::milliseconds(200)));
+}
+
+// covers: SES-34, SVR-7
+TEST_F(RouterNode, RefusesServicesWithoutNodeInterfaces)
+{
+  RouterFixture fixture("svc_noiface", remapped(), RouterParams{},
+    512u, true, SessionConfig(), true, false);
+  fixture.handshake_with_services();
+  for (int i = 0; i < 12; ++i) {
+    fixture.advance(150u);
+    rclcpp::spin_some(fixture.node());
+  }
+  // Neither the server nor the client endpoint exists.
+  auto reset = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+  auto trigger = fixture.node()->create_client<std_srvs::srv::Trigger>("trigger");
+  EXPECT_FALSE(reset->wait_for_service(std::chrono::milliseconds(200)));
+  EXPECT_FALSE(trigger->wait_for_service(std::chrono::milliseconds(200)));
+  EXPECT_TRUE(logged_has(fixture.logged(), "no endpoint"));
+}
+
+// covers: SES-34, SVR-7
+TEST_F(RouterNode, RefusesServicesWithUnusableNames)
+{
+  RouterFixture fixture("svc_badname", remapped(), RouterParams{});
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0x4Cu));
+  fixture.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  fixture.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> hash = installed_service_hash("std_srvs/srv/Trigger");
+  fixture.deliver_frame(kServicesTopic, 0u,
+    helper_service_declare(0u, 0x00u, hash.data(), "std_srvs/srv/Trigger", "9bad"));
+  fixture.deliver_frame(kServicesTopic, 1u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x01u, 0x01u});
+  // The rcl service name is unusable, so no endpoint is created.
+  const auto services = fixture.node()->get_service_names_and_types();
+  EXPECT_TRUE(services.find("9bad") == services.end());
+  EXPECT_TRUE(logged_has(fixture.logged(), "no endpoint"));
+}
+
+// covers: SVR-4, SVR-5
+TEST_F(RouterNode, AnswersTheSecondServerAfterTheFirst)
+{
+  RouterFixture fixture("svc_two", remapped(), RouterParams{});
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0x4Cu));
+  fixture.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  fixture.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> hash = installed_service_hash("std_srvs/srv/Trigger");
+  fixture.deliver_frame(kServicesTopic, 0u,
+    helper_service_declare(0u, 0x00u, hash.data(), "std_srvs/srv/Trigger", "reset"));
+  fixture.deliver_frame(kServicesTopic, 1u,
+    helper_service_declare(1u, 0x00u, hash.data(), "std_srvs/srv/Trigger", "reset2"));
+  fixture.deliver_frame(kServicesTopic, 2u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x02u, 0x01u});
+  auto first = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+  auto second = fixture.node()->create_client<std_srvs::srv::Trigger>("reset2");
+  ASSERT_TRUE(first->wait_for_service(std::chrono::seconds(10)));
+  ASSERT_TRUE(second->wait_for_service(std::chrono::seconds(10)));
+  auto answer1 = first->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  const auto start = std::chrono::steady_clock::now();
+  bool requested = false;
+  std::uint8_t first_req = 0u;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+      {
+        first_req = decoded[4];
+        requested = true;
+      }
+    }
+    if (requested) {
+      break;
+    }
+  }
+  ASSERT_TRUE(requested);
+  // The first answer clears the first route: the second answer scans past
+  // it to the second route.
+  fixture.deliver_frame(kServicesTopic, 0u,
+    {kHelperSvcResponse, 0x00u, first_req, 0x00u, 0x01u, 0x00u});
+  // The answer needs one spin to reach the client future.
+  rclcpp::spin_some(fixture.node());
+  ASSERT_EQ(answer1.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+  // The ack frees the stream for the second route behind it.
+  fixture.deliver_frame(kAckTopic, 0u, {kServicesTopic, 0x00u});
+  // The second server runs its own route, told apart by its index.
+  auto answer2 = second->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  requested = false;
+  std::uint8_t second_req = 0u;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(20)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 7u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest && decoded[5] == 0x01u)
+      {
+        second_req = decoded[4];
+        requested = true;
+      }
+    }
+    if (requested) {
+      break;
+    }
+  }
+  ASSERT_TRUE(requested);
+  fixture.deliver_frame(kServicesTopic, 1u,
+    {kHelperSvcResponse, 0x01u, second_req, 0x00u, 0x01u, 0x00u});
+  // The answer needs one spin to reach the client future.
+  rclcpp::spin_some(fixture.node());
+  ASSERT_EQ(answer2.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+  EXPECT_TRUE(answer2.get()->success);
+}
+
+// covers: SVR-5, SVR-6
+TEST_F(RouterNode, AnswersDefaultWhenTheMcuAnswerDoesNotUnpack)
+{
+  RouterFixture fixture("svc_badpayload", remapped(), RouterParams{});
+  fixture.handshake_with_services();
+  auto client = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+  auto future =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  const auto start = std::chrono::steady_clock::now();
+  bool requested = false;
+  std::uint8_t req = 0u;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+      {
+        req = decoded[4];
+        requested = true;
+      }
+    }
+    if (requested) {
+      break;
+    }
+  }
+  ASSERT_TRUE(requested);
+  // A boolean out of range never unpacks: the caller gets the default.
+  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcResponse, 0x00u, req, 0x00u, 0x02u});
+  // The answer needs one spin to reach the client future.
+  rclcpp::spin_some(fixture.node());
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+  const auto response = future.get();
+  EXPECT_FALSE(response->success);
+  EXPECT_TRUE(response->message.empty());
+}
+
+// covers: SVR-5, SVR-6
+TEST_F(RouterNode, AnswersDefaultWhenTheMcuReportsBusy)
+{
+  RouterFixture fixture("svc_msubusy", remapped(), RouterParams{});
+  fixture.handshake_with_services();
+  auto client = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+  auto future =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  const auto start = std::chrono::steady_clock::now();
+  bool requested = false;
+  std::uint8_t req = 0u;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+      {
+        req = decoded[4];
+        requested = true;
+      }
+    }
+    if (requested) {
+      break;
+    }
+  }
+  ASSERT_TRUE(requested);
+  // A busy MCU answers nothing itself: the caller gets the default.
+  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcResponse, 0x00u, req, 0x03u});
+  // The answer needs one spin to reach the client future.
+  rclcpp::spin_some(fixture.node());
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+  const auto response = future.get();
+  EXPECT_FALSE(response->success);
+  EXPECT_TRUE(response->message.empty());
+}
+
+// covers: SVR-4, SVR-10
+// covers: SVR-4, SVR-10
+TEST_F(RouterNode, PromotesThePendingCallWhenTheAckArrives)
+{
+  RouterFixture fixture("svc_pending", remapped(), RouterParams{});
+  fixture.handshake_with_services();
+  auto client = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+  auto first =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  const auto start = std::chrono::steady_clock::now();
+  bool requested = false;
+  std::uint8_t first_req = 0u;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+      {
+        first_req = decoded[4];
+        requested = true;
+      }
+    }
+    if (requested) {
+      break;
+    }
+  }
+  ASSERT_TRUE(requested);
+  // A second call while the first is still outstanding waits behind it in
+  // the router, so nothing new reaches the wire for it yet.
+  auto second =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  for (int i = 0; i < 5; ++i) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      EXPECT_FALSE(decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+        << "the queued call never reaches the wire";
+    }
+  }
+  // The MCU answers the first call without acking it: answered but still
+  // outstanding, so the pumped second call waits in the pending slot.
+  fixture.deliver_frame(kServicesTopic, 0u,
+    {kHelperSvcResponse, 0x00u, first_req, 0x00u, 0x01u, 0x00u});
+  rclcpp::spin_some(fixture.node());
+  ASSERT_EQ(first.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+  EXPECT_TRUE(first.get()->success) << "the first answer completes its caller";
+  for (int i = 0; i < 2; ++i) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      EXPECT_FALSE(decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest && decoded[4] != first_req)
+        << "the pending call never reaches the wire";
+    }
+  }
+  // The late ack frees the stream and the pending call goes out next.
+  fixture.deliver_frame(kAckTopic, 0u, {kServicesTopic, 0x00u});
+  const auto stop = std::chrono::steady_clock::now();
+  bool promoted = false;
+  std::uint8_t second_req = 0u;
+  while (std::chrono::steady_clock::now() - stop < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest && decoded[4] != first_req)
+      {
+        EXPECT_EQ(decoded[3], 0x01u) << "the promoted call takes the next rel_seq";
+        second_req = decoded[4];
+        promoted = true;
+      }
+    }
+    if (promoted) {
+      break;
+    }
+  }
+  ASSERT_TRUE(promoted) << "the ack promotes the pending call";
+  // The MCU answers the promoted call under the next rel_seq of its own
+  // stream; the answer completes the waiting future.
+  fixture.deliver_frame(kServicesTopic, 0u,
+    {kHelperSvcResponse, 0x01u, second_req, 0x00u, 0x01u, 0x00u});
+  rclcpp::spin_some(fixture.node());
+  ASSERT_EQ(second.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+  const auto response = second.get();
+  EXPECT_TRUE(response->success);
+  EXPECT_TRUE(response->message.empty());
+  (void)first;
+}
+
+// covers: SVR-8, SVR-10
+TEST_F(RouterNode, DropsTheUnackedCallAndPromotesThePendingOne)
+{
+  RouterFixture fixture("svc_giveup", remapped(), RouterParams{});
+  fixture.handshake_with_services();
+  auto client = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+  auto first =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  const auto start = std::chrono::steady_clock::now();
+  bool requested = false;
+  std::uint8_t first_req = 0u;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+      {
+        first_req = decoded[4];
+        requested = true;
+      }
+    }
+    if (requested) {
+      break;
+    }
+  }
+  ASSERT_TRUE(requested);
+  auto second =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  // The MCU answers the first call without acking it: answered but still
+  // outstanding, so the pumped second call waits in the pending slot.
+  fixture.deliver_frame(kServicesTopic, 0u,
+    {kHelperSvcResponse, 0x00u, first_req, 0x00u, 0x01u, 0x00u});
+  rclcpp::spin_some(fixture.node());
+  ASSERT_EQ(first.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+  EXPECT_TRUE(first.get()->success) << "the first answer completes its caller";
+  // Acks for a stranger rel_seq keep the link alive without freeing the
+  // stream. The first three polls only resend the first frame; the fourth
+  // spends the last retry and drops it, promoting the pending call.
+  for (int i = 0; i < 3; ++i) {
+    fixture.advance(500u);
+    rclcpp::spin_some(fixture.node());
+    fixture.deliver_frame(
+      kAckTopic, static_cast<std::uint8_t>(i), {kServicesTopic, 0x07u});
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      EXPECT_FALSE(decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest && decoded[4] != first_req)
+        << "the pending call never reaches the wire";
+    }
+  }
+  fixture.advance(500u);
+  rclcpp::spin_some(fixture.node());
+  fixture.deliver_frame(kAckTopic, 3u, {kServicesTopic, 0x07u});
+  EXPECT_TRUE(logged_has(fixture.logged(), "no ack for the service frame"))
+    << "the unacked frame is dropped and counted";
+  // The drop promotes the pending call: it reaches the wire now.
+  const std::uint8_t second_req =
+    static_cast<std::uint8_t>(first_req + 1u);
+  bool promoted = false;
+  for (int i = 4; i < 6 && !promoted; ++i) {
+    fixture.advance(500u);
+    rclcpp::spin_some(fixture.node());
+    fixture.deliver_frame(
+      kAckTopic, static_cast<std::uint8_t>(i), {kServicesTopic, 0x07u});
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest && decoded[4] == second_req)
+      {
+        EXPECT_EQ(decoded[3], 0x01u) << "the promoted call takes the next rel_seq";
+        promoted = true;
+      }
+    }
+  }
+  ASSERT_TRUE(promoted) << "the drop promotes the pending call";
+  fixture.deliver_frame(kAckTopic, 6u, {kServicesTopic, 0x01u});
+  fixture.deliver_frame(kServicesTopic, 0u,
+    {kHelperSvcResponse, 0x01u, second_req, 0x00u, 0x01u, 0x00u});
+  rclcpp::spin_some(fixture.node());
+  ASSERT_EQ(second.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+  const auto response = second.get();
+  EXPECT_TRUE(response->success);
+  EXPECT_TRUE(response->message.empty());
+  (void)first;
+}
+
+// covers: SVR-4
+TEST_F(RouterNode, RefusesTheCallThatExceedsTheFrameCap)
+{
+  RouterFixture fixture("svc_big", remapped(), RouterParams{});
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0x4Cu));
+  fixture.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  fixture.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> hash =
+    installed_service_hash("sensor_msgs/srv/SetCameraInfo");
+  fixture.deliver_frame(kServicesTopic, 0u,
+    helper_service_declare(0u, 0x00u, hash.data(), "sensor_msgs/srv/SetCameraInfo", "cam"));
+  fixture.deliver_frame(kServicesTopic, 1u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x01u, 0x01u});
+  auto client = fixture.node()->create_client<sensor_msgs::srv::SetCameraInfo>("cam");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+  // A packed request larger than the announced frame fits no channel, so
+  // the send refuses it straight away.
+  auto request = std::make_shared<sensor_msgs::srv::SetCameraInfo::Request>();
+  request->camera_info.distortion_model = std::string(600u, 'd');
+  auto future = client->async_send_request(request);
+  const auto start = std::chrono::steady_clock::now();
+  bool answered = false;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    if (future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+      answered = true;
+      break;
+    }
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      EXPECT_FALSE(decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+        << "the oversize call never reaches the wire";
+    }
+  }
+  ASSERT_TRUE(answered);
+  const auto refused = future.get();
+  EXPECT_FALSE(refused->success);
+  EXPECT_TRUE(refused->status_message.empty());
+  EXPECT_TRUE(logged_has(fixture.logged(), "refused the ROS call"));
+}
+
+// covers: SVR-4
+TEST_F(RouterNode, DropsTheFourthCallWhileOneIsInflight)
+{
+  RouterFixture fixture("svc_overload", remapped(), RouterParams{});
+  fixture.handshake_with_services();
+  auto client = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+  auto first =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  const auto start = std::chrono::steady_clock::now();
+  bool requested = false;
+  std::uint8_t first_req = 0u;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+      {
+        first_req = decoded[4];
+        requested = true;
+      }
+    }
+    if (requested) {
+      break;
+    }
+  }
+  ASSERT_TRUE(requested);
+  // Three more calls queue behind the outstanding one; the fourth exceeds
+  // the queue and is answered empty straight away.
+  auto queued_a =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  auto queued_b =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  auto queued_c =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  auto dropped =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  const auto stop = std::chrono::steady_clock::now();
+  bool answered = false;
+  while (std::chrono::steady_clock::now() - stop < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    if (dropped.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+      answered = true;
+      break;
+    }
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      EXPECT_FALSE(decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest && decoded[4] != first_req)
+        << "the queued calls never reach the wire";
+    }
+  }
+  ASSERT_TRUE(answered);
+  const auto refused = dropped.get();
+  EXPECT_FALSE(refused->success);
+  EXPECT_TRUE(refused->message.empty());
+  EXPECT_TRUE(logged_has(fixture.logged(), "overloaded"));
+  EXPECT_FALSE(
+    queued_a.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
+  EXPECT_FALSE(
+    queued_b.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
+  EXPECT_FALSE(
+    queued_c.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
+  (void)first;
+}
+
+// covers: SVR-5, SVR-6
+TEST_F(RouterNode, DropsTheMcuCallThatDoesNotUnpack)
+{
+  RouterFixture fixture("svc_badmcu", remapped(), RouterParams{});
+  fixture.handshake_with_services();
+  // A junk byte behind the empty Trigger request never unpacks: the router
+  // reports a bad payload without calling ROS.
+  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u, 0x02u});
+  const auto start = std::chrono::steady_clock::now();
+  bool answered = false;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 7u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcResponse && decoded[4] == 0x07u && decoded[5] == 0x02u)
+      {
+        answered = true;
+      }
+    }
+    if (answered) {
+      break;
+    }
+  }
+  EXPECT_TRUE(answered) << "no bad-payload RESPONSE for the unpackable call";
+  EXPECT_TRUE(logged_has(fixture.logged(), "dropped MCU call"));
+}
+
+// covers: SVR-4
+TEST_F(RouterNode, RefusesTheRosAnswerThatExceedsTheFrameCap)
+{
+  RouterFixture fixture("svc_biganswer", remapped(), RouterParams{});
+  auto server = fixture.node()->create_service<std_srvs::srv::Trigger>("trigger",
+    [](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+      std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+      response->success = true;
+      response->message = std::string(1000u, 'd');
+    });
+  fixture.handshake_with_services();
+  for (int i = 0; i < 50; ++i) {
+    rclcpp::spin_some(fixture.node());
+  }
+  // The ROS answer packs, but the frame it needs fits no channel, so the
+  // send refuses it and nothing reaches the wire.
+  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
+  const auto start = std::chrono::steady_clock::now();
+  bool refused = false;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    if (logged_has(fixture.logged(), "refused the ROS answer")) {
+      refused = true;
+      break;
+    }
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      EXPECT_FALSE(decoded.size() >= 7u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcResponse && decoded[4] == 0x07u)
+        << "the refused answer never reaches the wire";
+    }
+  }
+  EXPECT_TRUE(refused);
+  (void)server;
+}
+
+// covers: SVR-4, SVR-10
+TEST_F(RouterNode, DropsARosRequestThatDoesNotPack)
+{
+  RouterFixture fixture("svc_badros", remapped(), RouterParams{});
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0x4Cu));
+  fixture.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  fixture.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> hash =
+    installed_service_hash("sensor_msgs/srv/SetCameraInfo");
+  fixture.deliver_frame(kServicesTopic, 0u,
+    helper_service_declare(0u, 0x00u, hash.data(), "sensor_msgs/srv/SetCameraInfo", "cam"));
+  fixture.deliver_frame(kServicesTopic, 1u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x01u, 0x01u});
+  auto client = fixture.node()->create_client<sensor_msgs::srv::SetCameraInfo>("cam");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+  // A string past the wire length passes the middleware but never packs,
+  // so the take drops the call straight away.
+  auto request = std::make_shared<sensor_msgs::srv::SetCameraInfo::Request>();
+  request->camera_info.distortion_model = std::string(70000u, 'd');
+  auto future = client->async_send_request(request);
+  // Spin until the take drops it: no REQUEST reaches the wire.
+  const auto start = std::chrono::steady_clock::now();
+  bool answered = false;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    if (future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+      answered = true;
+      break;
+    }
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      EXPECT_FALSE(decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+        << "the unpackable call never reaches the wire";
+    }
+  }
+  ASSERT_TRUE(answered);
+  const auto dropped = future.get();
+  EXPECT_FALSE(dropped->success);
+  EXPECT_TRUE(dropped->status_message.empty());
+  EXPECT_TRUE(logged_has(fixture.logged(), "dropped ROS request"));
+}
+
+// covers: SVR-8
+TEST_F(RouterNode, AnswersEmptyWhenTheMcuNeverAnswers)
+{
+  RouterFixture fixture("svc_rostimeout", remapped(), RouterParams{});
+  fixture.handshake_with_services();
+  auto client = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+  auto future =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  const auto start = std::chrono::steady_clock::now();
+  bool requested = false;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+      {
+        requested = true;
+      }
+    }
+    if (requested) {
+      break;
+    }
+  }
+  ASSERT_TRUE(requested);
+  // The MCU stays silent: acks keep the link alive past the call timeout.
+  for (int i = 0; i < 12; ++i) {
+    fixture.advance(500u);
+    rclcpp::spin_some(fixture.node());
+    fixture.deliver_frame(kAckTopic, static_cast<std::uint8_t>(i), {kServicesTopic, 0x00u});
+  }
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+  const auto response = future.get();
+  EXPECT_FALSE(response->success);
+  EXPECT_TRUE(response->message.empty());
+}
+
+// covers: SVR-5
+TEST_F(RouterNode, ReportsBusyWhenTheRosAnswerDoesNotPack)
+{
+  bool called = false;
+  RouterFixture fixture("svc_nulanswer", remapped(), RouterParams{});
+  // A message past the wire length passes the middleware but never packs,
+  // so the router answers the MCU call busy instead.
+  auto server = fixture.node()->create_service<std_srvs::srv::Trigger>("trigger",
+    [&called](
+      const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+      std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+      called = true;
+      response->success = true;
+      response->message = std::string(70000u, 'd');
+    });
+  fixture.handshake_with_services();
+  for (int i = 0; i < 50; ++i) {
+    rclcpp::spin_some(fixture.node());
+  }
+  fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
+  const auto start = std::chrono::steady_clock::now();
+  bool busy = false;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcResponse && decoded[4] == 0x07u && decoded[5] == 0x03u)
+      {
+        busy = true;
+      }
+    }
+    if (busy) {
+      break;
+    }
+  }
+  EXPECT_TRUE(called) << "the ROS server never saw the call";
+  EXPECT_TRUE(busy) << "no busy RESPONSE for the unpackable answer";
+}
+
+// covers: SVR-5, SVR-10
+TEST_F(RouterNode, HoldsTheRosAnswerWhileTheLinkIsBusy)
+{
+  RouterFixture fixture("svc_holdanswer", remapped(), RouterParams{});
+  auto server = fixture.node()->create_service<std_srvs::srv::Trigger>("trigger",
+    [](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+      std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+      response->success = true;
+      response->message = "ok";
+    });
+  fixture.handshake_with_services();
+  for (int i = 0; i < 50; ++i) {
+    rclcpp::spin_some(fixture.node());
+  }
+  auto caller = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+  ASSERT_TRUE(caller->wait_for_service(std::chrono::seconds(10)));
+  auto outstanding =
+    caller->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  const auto start = std::chrono::steady_clock::now();
+  bool requested = false;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+      {
+        requested = true;
+      }
+    }
+    if (requested) {
+      break;
+    }
+  }
+  ASSERT_TRUE(requested);
+  // The MCU calls while the host call is outstanding: the ROS answer packs,
+  // but the busy stream holds it behind the outstanding frame.
+  fixture.deliver_frame(kServicesTopic, 1u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
+  // The ROS round trip takes a few polls; retries of the host frame pass
+  // through while the held answer stays queued behind it.
+  for (int i = 0; i < 25; ++i) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      EXPECT_FALSE(decoded.size() >= 7u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcResponse && decoded[4] == 0x07u)
+        << "the held answer never reaches the wire";
+    }
+  }
+  // The ack frees the stream and the held answer goes out next.
+  fixture.deliver_frame(kAckTopic, 0u, {kServicesTopic, 0x00u});
+  const auto stop = std::chrono::steady_clock::now();
+  bool promoted = false;
+  while (std::chrono::steady_clock::now() - stop < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 7u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcResponse && decoded[4] == 0x07u && decoded[5] == 0x00u)
+      {
+        promoted = true;
+      }
+    }
+    if (promoted) {
+      break;
+    }
+  }
+  EXPECT_TRUE(promoted) << "the ack promotes the held answer";
+  (void)outstanding;
+  (void)server;
+}
+
+// covers: SVR-5, SVR-8
+TEST_F(RouterNode, IgnoresALateResponseAfterTheCallTimedOut)
+{
+  RouterFixture fixture("svc_late", remapped(), RouterParams{});
+  fixture.handshake_with_services();
+  auto client = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+  auto first =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  const auto start = std::chrono::steady_clock::now();
+  bool requested = false;
+  std::uint8_t first_req = 0u;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+      {
+        first_req = decoded[4];
+        requested = true;
+      }
+    }
+    if (requested) {
+      break;
+    }
+  }
+  ASSERT_TRUE(requested);
+  // Wrong-rel acks keep the link alive without freeing the stream: the
+  // call times out while the MCU stays silent.
+  for (int i = 0; i < 11; ++i) {
+    fixture.advance(500u);
+    rclcpp::spin_some(fixture.node());
+    fixture.deliver_frame(
+      kAckTopic, static_cast<std::uint8_t>(i), {kServicesTopic, 0x07u});
+    if (first.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+      break;
+    }
+  }
+  ASSERT_EQ(first.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+  EXPECT_FALSE(first.get()->success) << "the silent call times out empty";
+  EXPECT_TRUE(logged_has(fixture.logged(), "the MCU never answered"));
+  // The MCU's late RESPONSE matches nothing and is ignored.
+  fixture.deliver_frame(kServicesTopic, 0u,
+    {kHelperSvcResponse, 0x00u, first_req, 0x00u, 0x01u, 0x00u});
+  rclcpp::spin_some(fixture.node());
+  // The stream is not wedged: the ack frees it and a new call completes.
+  fixture.deliver_frame(kAckTopic, 11u, {kServicesTopic, 0x00u});
+  auto second =
+    client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  const auto stop = std::chrono::steady_clock::now();
+  bool promoted = false;
+  std::uint8_t second_req = 0u;
+  while (std::chrono::steady_clock::now() - stop < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest && decoded[4] != first_req)
+      {
+        second_req = decoded[4];
+        promoted = true;
+      }
+    }
+    if (promoted) {
+      break;
+    }
+  }
+  ASSERT_TRUE(promoted);
+  fixture.deliver_frame(kServicesTopic, 1u,
+    {kHelperSvcResponse, 0x01u, second_req, 0x00u, 0x01u, 0x00u});
+  rclcpp::spin_some(fixture.node());
+  ASSERT_EQ(second.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+  EXPECT_TRUE(second.get()->success);
 }
 
 }  // namespace
