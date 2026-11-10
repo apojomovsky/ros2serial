@@ -242,7 +242,9 @@ def test_the_taskfile_runs_the_advisory_section_through_the_suite():
     assert task is not None, 'Taskfile has no ament_lint task'
     assert task['cmds'] == ['AMENT_LINT=1 bash scripts/ci-test.sh'], task['cmds']
     assert 'scripts/ament-lint.sh' in task['sources'], 'the runner is not a task input'
-    for aggregate in ('default', 'local'):
-        assert 'ament_lint' in taskfile['tasks'][aggregate]['deps'], (
-            f'{aggregate} skips the advisory section'
-        )
+    assert 'ament_lint' in taskfile['tasks']['default']['deps'], (
+        'default skips the advisory section'
+    )
+    assert 'ament_lint' not in taskfile['tasks']['local']['deps'], (
+        'local keeps the advisory section: #576 moves it to CI'
+    )
