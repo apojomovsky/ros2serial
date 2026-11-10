@@ -9,11 +9,14 @@ pairs skip load-sensitive scenario 8; the standalone legs keep judging
 it. The nightly workflow runs this file; PR CI does not.
 """
 
+import contextlib
+import io
 import os
 import re
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -110,6 +113,16 @@ class TestSectionReport(unittest.TestCase):
         report = section_report(output)
         self.assertIn('test_baud_matrix_avr', report)
         self.assertIn('timeout', report)
+
+
+class TestSectionWallTime(unittest.TestCase):
+    def test_names_the_section_and_its_seconds(self):
+        logged = io.StringIO()
+        with contextlib.redirect_stdout(logged):
+            with mock.patch.object(time, 'monotonic', return_value=912.0):
+                log_section_wall_time('posix-pair-a', 100.0)
+        self.assertIn('posix-pair-a', logged.getvalue())
+        self.assertIn('812s', logged.getvalue())
 
 
 class TestFailureLines(unittest.TestCase):
