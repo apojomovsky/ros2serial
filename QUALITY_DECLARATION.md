@@ -70,9 +70,11 @@ toolchain versions the build measures against live in `ci/versions.env`.
 
 Level 4 expects support for all target platforms of the package
 ecosystem, which for ROS 2 means the tier-1 platforms of REP-2000. This
-is the known gap in the claim: host code builds and tests on Linux, and
-the firmware targets AVR MCUs through avr-gcc, which are not REP-2000
-tier-1 platforms. Windows and macOS hosts are not exercised.
+is the one requirement the repository does not meet yet, so it is the
+exception to the Level 4 claim above: host code builds and tests on
+Linux, and the firmware targets AVR MCUs through avr-gcc, which are not
+REP-2000 tier-1 platforms. Windows and macOS hosts are not exercised.
+The claim stays at Level 4, with this exception, until that changes.
 
 ## Security [7]
 

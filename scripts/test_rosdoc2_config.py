@@ -23,11 +23,13 @@ def _doxyfile_settings(path: Path) -> dict:
     return settings
 
 
-def test_core_doxyfile_warns_on_undocumented_public_symbols():
+def test_core_doxyfile_fails_on_undocumented_public_symbols():
     settings = _doxyfile_settings(ROOT / 'core/Doxyfile')
     assert settings['PROJECT_NAME'] == 'r2s_core'
     assert settings['INPUT'] == './include'
     assert settings['WARN_IF_UNDOCUMENTED'] == 'YES'
+    assert settings['WARN_NO_PARAMDOC'] == 'YES'
+    assert settings['WARN_AS_ERROR'] == 'YES'
 
 
 def test_bridge_doxyfile_warns_on_undocumented_public_symbols():
@@ -35,6 +37,10 @@ def test_bridge_doxyfile_warns_on_undocumented_public_symbols():
     assert settings['PROJECT_NAME'] == 'r2s_bridge'
     assert settings['INPUT'] == './include'
     assert settings['WARN_IF_UNDOCUMENTED'] == 'YES'
+    assert settings['WARN_NO_PARAMDOC'] == 'YES'
+    # Report-only until #544 converts the bridge headers: failing the
+    # rosdoc2 build on bridge warnings would break acceptance item 1.
+    assert settings.get('WARN_AS_ERROR', 'NO') == 'NO'
 
 
 def test_each_package_exports_its_rosdoc2_config():
