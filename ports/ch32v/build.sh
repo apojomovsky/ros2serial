@@ -116,4 +116,12 @@ if elf_has_symbol r2s_runtime_topics; then
   echo "ch32v build: the firmware links the runtime topic table" >&2
   exit 1
 fi
+# The startup word-copy loop ends on _edata, so the linker keeps it word
+# aligned; an unaligned end would copy past the image instead of stopping.
+edata=$(riscv-none-elf-nm "$elf" 2>/dev/null | awk '$NF == "_edata" { print $1; exit }')
+[ -n "$edata" ] || { echo "ch32v build: no _edata symbol in the firmware" >&2; exit 1; }
+if [ $((16#$edata % 4)) -ne 0 ]; then
+  echo "ch32v build: _edata ($edata) is not word aligned" >&2
+  exit 1
+fi
 echo "ch32v build: firmware at $elf"

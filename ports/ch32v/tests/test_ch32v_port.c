@@ -55,6 +55,8 @@ static int check_init_enables_clocks_and_usart(void)
 {
   reset_all();
   r2s_ch32v_init(48000000u, 115200u);
+  /* One flash wait state before the 48 MHz switch. */
+  CHECK(R2S_CH32V_TEST_flash.ACTLR == 1u);
   /* GPIOD for the pins and USART1 itself leave reset together. */
   CHECK((R2S_CH32V_TEST_rcc.APB2PCENR & R2S_CH32V_RCC_GPIODEN) != 0u);
   CHECK((R2S_CH32V_TEST_rcc.APB2PCENR & R2S_CH32V_RCC_USART1EN) != 0u);
@@ -64,6 +66,10 @@ static int check_init_enables_clocks_and_usart(void)
   CHECK((R2S_CH32V_TEST_usart1.CTLR1 & R2S_CH32V_USART_UE) != 0u);
   CHECK((R2S_CH32V_TEST_usart1.CTLR1 & R2S_CH32V_USART_TE) != 0u);
   CHECK((R2S_CH32V_TEST_usart1.CTLR1 & R2S_CH32V_USART_RE) != 0u);
+  /* 8-N-1: no word-length or parity bits, default stop bits, no flow control. */
+  CHECK((R2S_CH32V_TEST_usart1.CTLR1 & (R2S_CH32V_USART_M | R2S_CH32V_USART_PCE)) == 0u);
+  CHECK(R2S_CH32V_TEST_usart1.CTLR2 == 0u);
+  CHECK(R2S_CH32V_TEST_usart1.CTLR3 == 0u);
   /* The SysTick runs free without its interrupt, which the port never uses. */
   CHECK(R2S_CH32V_TEST_stk.CTLR == 1u);
   return 0;

@@ -24,7 +24,7 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
 static uint32_t s_last_pub;
 static uint32_t s_sent;
 
-/* One loop step, broken out so the host test drives it directly. */
+/* One loop step, kept separate the way the minimal AVR firmware keeps its own. */
 void loop_once(void);
 
 /* An example publishes a fresh reading, so a missed interval is dropped,

@@ -259,7 +259,7 @@ def stub_toolbox(path: Path) -> Path:
         encoding='utf-8',
     )
     (path / 'riscv-none-elf-nm').write_text(
-        "#!/usr/bin/env bash\necho '008001eb b r2s_rx_buf'\n",
+        "#!/usr/bin/env bash\necho '008001eb b r2s_rx_buf'\necho '20000800 A _edata'\n",
         encoding='utf-8',
     )
     for tool in (

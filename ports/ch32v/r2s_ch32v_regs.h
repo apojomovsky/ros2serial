@@ -74,6 +74,12 @@ typedef struct
   volatile uint32_t RESERVED1;
 } r2s_ch32v_stk_t;
 
+/* Flash: only the access control register the init touches. */
+typedef struct
+{
+  volatile uint32_t ACTLR;
+} r2s_ch32v_flash_t;
+
 /* Clock control: trim default, HSI on, PLL on and ready. */
 #define R2S_CH32V_RCC_CTLR_HSITRIM (0x10u << 3u)
 #define R2S_CH32V_RCC_CTLR_HSION 0x00000001u
@@ -90,6 +96,9 @@ typedef struct
 /* APB2 enables: GPIOD for the pins, USART1 for the port. */
 #define R2S_CH32V_RCC_GPIODEN 0x00000020u
 #define R2S_CH32V_RCC_USART1EN 0x00004000u
+/* Flash registers hang off AHB; one wait state past 25 MHz at 48 MHz. */
+#define R2S_CH32V_FLASH_R_BASE (R2S_CH32V_AHB_BASE + 0x2000u)
+#define R2S_CH32V_FLASH_LATENCY_1 0x00000001u
 
 /* USART1 lives on PD5 (TX) and PD6 (RX): the default pin mapping, so no
  * alternate-function remap is needed. */
@@ -104,6 +113,9 @@ typedef struct
 #define R2S_CH32V_USART_RE 0x00000004u
 #define R2S_CH32V_USART_TE 0x00000008u
 #define R2S_CH32V_USART_UE 0x00002000u
+/* Frame shape bits the init leaves clear for 8-N-1: parity enable, word length. */
+#define R2S_CH32V_USART_PCE 0x00000400u
+#define R2S_CH32V_USART_M 0x00001000u
 
 /* SysTick enable: counting at HCLK/8 with no interrupt, which the polled
  * tick reads directly. */
@@ -119,6 +131,7 @@ extern r2s_ch32v_rcc_t R2S_CH32V_TEST_rcc;
 extern r2s_ch32v_gpio_t R2S_CH32V_TEST_gpiod;
 extern r2s_ch32v_usart_t R2S_CH32V_TEST_usart1;
 extern r2s_ch32v_stk_t R2S_CH32V_TEST_stk;
+extern r2s_ch32v_flash_t R2S_CH32V_TEST_flash;
 extern uint8_t R2S_CH32V_TEST_tx[256];
 extern uint16_t R2S_CH32V_TEST_tx_count;
 
@@ -126,6 +139,7 @@ extern uint16_t R2S_CH32V_TEST_tx_count;
 #define R2S_CH32V_GPIOD (&R2S_CH32V_TEST_gpiod)
 #define R2S_CH32V_USART1 (&R2S_CH32V_TEST_usart1)
 #define R2S_CH32V_STK (&R2S_CH32V_TEST_stk)
+#define R2S_CH32V_FLASH (&R2S_CH32V_TEST_flash)
 
 /* Zeroes the fakes and presets the settled-clock flags. */
 void r2s_ch32v_test_regs_reset(void);
@@ -134,6 +148,7 @@ void r2s_ch32v_test_regs_reset(void);
 #define R2S_CH32V_GPIOD ((r2s_ch32v_gpio_t *)(R2S_CH32V_APB2_BASE + 0x1400u))
 #define R2S_CH32V_USART1 ((r2s_ch32v_usart_t *)(R2S_CH32V_APB2_BASE + 0x3800u))
 #define R2S_CH32V_STK ((r2s_ch32v_stk_t *)(R2S_CH32V_CORE_BASE + 0xF000u))
+#define R2S_CH32V_FLASH ((r2s_ch32v_flash_t *)R2S_CH32V_FLASH_R_BASE)
 #endif
 
 /// Divisor for a baud rate from the given clock.

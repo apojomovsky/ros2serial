@@ -15,6 +15,7 @@ r2s_ch32v_rcc_t R2S_CH32V_TEST_rcc;
 r2s_ch32v_gpio_t R2S_CH32V_TEST_gpiod;
 r2s_ch32v_usart_t R2S_CH32V_TEST_usart1;
 r2s_ch32v_stk_t R2S_CH32V_TEST_stk;
+r2s_ch32v_flash_t R2S_CH32V_TEST_flash;
 uint8_t R2S_CH32V_TEST_tx[256];
 uint16_t R2S_CH32V_TEST_tx_count;
 
@@ -24,12 +25,14 @@ void r2s_ch32v_test_regs_reset(void)
   r2s_ch32v_gpio_t gpiod = {0};
   r2s_ch32v_usart_t usart1 = {0};
   r2s_ch32v_stk_t stk = {0};
+  r2s_ch32v_flash_t flash = {0};
   uint16_t i;
 
   R2S_CH32V_TEST_rcc = rcc;
   R2S_CH32V_TEST_gpiod = gpiod;
   R2S_CH32V_TEST_usart1 = usart1;
   R2S_CH32V_TEST_stk = stk;
+  R2S_CH32V_TEST_flash = flash;
   /* The host has no clock tree, so the init waits see settled hardware. */
   R2S_CH32V_TEST_rcc.CTLR = R2S_CH32V_RCC_CTLR_PLLRDY;
   R2S_CH32V_TEST_rcc.CFGR0 = R2S_CH32V_RCC_CFGR0_SWS_PLL;
@@ -44,6 +47,9 @@ void r2s_ch32v_init(uint32_t hclk_hz, uint32_t baud)
 {
   uint32_t cfglr;
 
+  /* One flash wait state first: the 48 MHz switch below needs it, and the
+   * switch must not run ahead of the flash. */
+  R2S_CH32V_FLASH->ACTLR = R2S_CH32V_FLASH_LATENCY_1;
   /* The writes below OR into the control registers instead of assigning
    * them: reset CFGR0 is zero and the OR keeps the factory trim and the
    * host-test ready flags, so the target sees the same bits either way. */

@@ -65,7 +65,7 @@ base in the job summary.
 | arduino_xmacro_c/esp32/arduino_xmacro_c.ino.elf | 276708 | 332100 | 75525 | 90700 | n/a | n/a |
 | arduino_xmacro_c/mega/arduino_xmacro_c.ino.elf | 11714 | 12500 | 1101 | 1250 | 16 | 32 |
 | arduino_xmacro_c/uno/arduino_xmacro_c.ino.elf | 11366 | 12000 | 1101 | 1250 | 13 | 32 |
-| ch32v_minimal/ch32v/ch32v_minimal.elf | 9568 | 11500 | 332 | 400 | n/a | n/a |
+| ch32v_minimal/ch32v/ch32v_minimal.elf | 9576 | 11500 | 332 | 400 | n/a | n/a |
 | cmake_minimal/hello_cmake | 10496 | 11200 | 374 | 400 | 184 | 224 |
 
 Rows with `n/a` budgets name firmware the budgets file does not

@@ -31,6 +31,9 @@ SECTIONS
     _data_vma = .;
     *(.data .data.*)
     *(.sdata .sdata.*)
+    /* The startup word-copy loop ends on _edata, so the end stays aligned:
+     * an unaligned end would copy past the image instead of stopping. */
+    . = ALIGN(4);
     _edata = .;
   } > RAM AT > FLASH
 
