@@ -14,12 +14,14 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
+find_package(rcl_action REQUIRED)
 find_package(rmw REQUIRED)
 find_package(rosidl_runtime_cpp REQUIRED)
 find_package(rosidl_typesupport_introspection_cpp REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 
 add_library(r2s_bridge_component SHARED
+  src/action_types.cpp
   src/bridge.cpp
   src/converter.cpp
   src/core_port.cpp
@@ -40,6 +42,7 @@ target_link_libraries(r2s_bridge_component PUBLIC
   rclcpp::rclcpp
   rclcpp_components::component
   diagnostic_msgs::diagnostic_msgs__rosidl_typesupport_cpp
+  rcl_action::rcl_action
   rmw::rmw
   rosidl_runtime_cpp::rosidl_runtime_cpp
   rosidl_typesupport_introspection_cpp::rosidl_typesupport_introspection_cpp)
@@ -193,6 +196,15 @@ if(BUILD_TESTING)
   target_link_libraries(test_service_types
     r2s_bridge_component
     std_srvs::std_srvs__rosidl_typesupport_cpp)
+
+  # The action introspection test loads the action packages for real, so it
+  # needs tf2_msgs and action_msgs at build and test time.
+  find_package(action_msgs REQUIRED)
+  ament_add_gtest(test_action_types test/test_action_types.cpp)
+  target_link_libraries(test_action_types
+    r2s_bridge_component
+    action_msgs::action_msgs__rosidl_typesupport_cpp
+    tf2_msgs::tf2_msgs__rosidl_typesupport_cpp)
 
   # openpty comes from libutil; the pty test uses it instead of a device.
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
