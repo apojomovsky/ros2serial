@@ -1,26 +1,11 @@
-# Copyright (c) 2026 Alexis Pojomovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The shared sketch body on both declaration styles: the runtime objects and
-the X-macro list drive the same body, and the two firmwares print the same
-bytes and callback counts.
+"""
+The shared sketch body on both declaration styles.
+
+The runtime objects and the X-macro list drive the same body, and the two
+firmwares print the same bytes and callback counts.
 
 Covers the 1-to-1 map: the static sketch differs from the runtime sketch
 only in its declaration block, and everything after it behaves the same on
@@ -276,7 +261,7 @@ r2s_status_t r2s_session_configure_ram(
 
 
 def stage_bundle(tmp_path):
-    """The staged bundle, as a board library stages it."""
+    """Stage the bundle, as a board library stages it."""
     root = tmp_path / 'bundle'
     for name, text in bundle.bundle('jazzy').items():
         path = root / name
@@ -295,12 +280,12 @@ def bundle_limit(bundle_root, key):
 
 
 def frame_limit(bundle_root):
-    """The frame limit the staged bundle carries."""
+    """Read the frame limit the staged bundle carries."""
     return bundle_limit(bundle_root, 'R2S_MAX_FRAME')
 
 
 def nest_limit(bundle_root):
-    """The nesting limit the staged bundle carries."""
+    """Read the nesting limit the staged bundle carries."""
     return bundle_limit(bundle_root, 'R2S_MAX_NEST')
 
 
@@ -382,7 +367,7 @@ def compile_variant(tmp_path, bundle_root, decls, name, extra_sources):
 
 
 def run_variant(binary):
-    """The variant's printed bytes and callback counts."""
+    """Collect the variant's printed bytes and callback counts."""
     run = subprocess.run([str(binary)], capture_output=True, text=True)
 
     assert run.returncode == 0, run.stdout + run.stderr

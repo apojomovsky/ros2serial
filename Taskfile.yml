@@ -15,13 +15,13 @@ use_gitignore: true
 tasks:
   default:
     desc: Run every section whose inputs changed.
-    deps: [lint, commits, scripts, core, gen, bridge, ament_lint, cpp, coverage, docs, examples, esp32, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
+    deps: [lint, commits, scripts, core, gen, bridge, ament_lint, cpp, coverage, docs, examples, esp32, pic, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
 
   # What the pre-push hook and the takeoff run: the default set without the
   # CI-only sections. The end-to-end ones (e2e-avr, e2e-posix and the nightly
   # isolation pairs) assume a quiet host for their timing bounds, which a
-  # shared one is not; the ESP32 Arduino core is installed only in its CI
-  # job. CI runs all of them on every pull request.
+  # shared one is not; the ESP32 Arduino core and the epic-cc bundle install
+  # only in their CI jobs. CI runs all of them on every pull request.
   local:
     desc: Run every stale section but the CI-only ones, which CI runs.
     deps: [lint, commits, scripts, core, gen, bridge, ament_lint, cpp, coverage, docs, examples, budgets, readme, fuzz]
@@ -388,6 +388,30 @@ tasks:
       - ports/arduino/**
     cmds:
       - ESP32=1 bash scripts/ci-test.sh
+
+  pic:
+    desc: Compiles the core and the static C++ sketch with epic-cc.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/pass-vars.list
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - scripts/build-pic-canary.sh
+      - core/**
+      - cpp/**
+      # The checked-in bundled tables the canary links.
+      - gen/tests/golden/bundle/r2s_bundled.c
+    cmds:
+      - PIC=1 bash scripts/ci-test.sh
 
   readme:
     desc: Runs the walkthrough on simavr.

@@ -1,24 +1,8 @@
-# Copyright (c) 2026 Alexis Pojomovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The C++ message headers: the field mapping, the frozen text and the bundle's bytes.
+"""
+The C++ message headers: the field mapping, the frozen text and the bundle's bytes.
 
 Covers the generator side of the runtime API: every field kind the nine
 bundled types use, the frozen header of each type, the layout checks that tie
@@ -66,7 +50,7 @@ FIELD_KINDS = [
 
 
 def emit_for(tmp_path, definitions, type_name, bound_map=None, default_string_bound=16):
-    """The C++ header of one type, from a throwaway message package."""
+    """Emit the C++ header of one type, from a throwaway message package."""
     root = tmp_path / 'messages'
     for name, text in definitions.items():
         write_message(root, name, text)
@@ -81,7 +65,7 @@ def emit_for(tmp_path, definitions, type_name, bound_map=None, default_string_bo
 
 
 def bundled_resolved(distro='jazzy'):
-    """The resolved bundled types and the repository they came from."""
+    """Resolve the bundled types and the repository they came from."""
     repository = msgs.MessageRepository(distro=distro)
     resolved = bounds.resolve(
         repository,
@@ -93,12 +77,12 @@ def bundled_resolved(distro='jazzy'):
 
 
 def emit_bundled(resolved, repository, type_name, distro='jazzy'):
-    """The C++ header of a bundled type, with the banner the bundle gives it."""
+    """Emit the C++ header of a bundled type, with the banner the bundle gives it."""
     return cpp.emit_message_hpp(resolved, type_name, repository=repository, distro=distro)
 
 
 def frozen(type_name):
-    """The frozen header of a type, as the tree holds it."""
+    """Read the frozen header of a type, as the tree holds it."""
     return (CPP_INCLUDE / cpp.message_path(type_name)).read_text(encoding='utf-8')
 
 

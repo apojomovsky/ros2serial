@@ -1,24 +1,8 @@
-# Copyright (c) 2026 Alexis Pojomovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""C++ emission: the per-message headers a C++ sketch includes.
+"""
+C++ emission: the per-message headers a C++ sketch includes.
 
 A header carries one message's C++ struct, the checks that tie it to the C
 struct the bundle's descriptors describe, and the trait the runtime layer asks
@@ -56,9 +40,14 @@ def _split(type_name: str) -> tuple[str, str, str]:
 
 
 def action_name(type_name: str) -> str:
-    """A goal, result or feedback type to its action.
+    """
+    Map a goal, result or feedback type to its action.
 
     `pkg/action/Name_Goal` to `pkg/action/Name`.
+
+    :param type_name: the action part type.
+    :return: the action type.
+    :raises ValueError: if the type is not an action type.
     """
     package, kind, name = _split(type_name)
     if kind != 'action':
@@ -70,7 +59,7 @@ def action_name(type_name: str) -> str:
 
 
 def message_path(type_name: str) -> str:
-    """A canonical type as the rclcpp header path, actions at `pkg/action/name.hpp`."""
+    """Return a canonical type as the rclcpp header path, actions at `pkg/action/name.hpp`."""
     package, kind, name = _split(type_name)
     if kind == 'action':
         base = (
@@ -81,23 +70,33 @@ def message_path(type_name: str) -> str:
 
 
 def suffix(type_name: str) -> str:
-    """A canonical type as the bundle's suffix: `std_msgs/msg/Float32` to `std_msgs_Float32`."""
+    """
+    Return a canonical type as the bundle's suffix.
+
+    `std_msgs/msg/Float32` to `std_msgs_Float32`.
+    """
     package, _, name = _split(type_name)
     return f'{package}_{name}'
 
 
 def cpp_type(type_name: str) -> str:
-    """A canonical type as its C++ name: `std_msgs/msg/Float32` to `std_msgs::msg::Float32`."""
+    """
+    Return a canonical type as its C++ name.
+
+    `std_msgs/msg/Float32` to `std_msgs::msg::Float32`.
+    """
     package, kind, name = _split(type_name)
     return f'{package}::{kind}::{name}'
 
 
 def _snake(name: str) -> str:
-    """A type name as the rclcpp file name spells it: `JointState` to `joint_state`.
+    """
+    Spell a type name as the rclcpp file name spells it.
 
-    A leading acronym stays one word, as rclcpp spells it: `TFMessage` to
-    `tf_message`, not `t_f_message`. The first split breaks before a word
-    starting uppercase, the second before an uppercase after lowercase.
+    `JointState` to `joint_state`. A leading acronym stays one word, as rclcpp
+    spells it: `TFMessage` to `tf_message`, not `t_f_message`. The first split
+    breaks before a word starting uppercase, the second before an uppercase
+    after lowercase.
     """
     word = re.sub(r'(.)([A-Z][a-z]+)', r'\1_\2', name)
     return re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', word).lower()
@@ -109,7 +108,7 @@ def emit_message_hpp(
     repository: MessageRepository,
     distro: str = 'jazzy',
 ) -> str:
-    """The C++ header of one message: its struct, the layout checks and the trait."""
+    """Emit the C++ header of one message: its struct, the layout checks and the trait."""
     message = resolved[type_name]
     table = descriptors.build(resolved, [type_name])
     name = suffix(type_name)
@@ -151,7 +150,7 @@ def emit_action_hpp(
     repository: MessageRepository,
     distro: str = 'jazzy',
 ) -> str:
-    """One action header at the rclcpp path: its goal, result and feedback structs."""
+    """Emit one action header at the rclcpp path: its goal, result and feedback structs."""
     canonical = action_name_text
     goal_name = f'{canonical}_Goal'
     result_name = f'{canonical}_Result'
@@ -197,12 +196,12 @@ def emit_action_hpp(
 
 
 def _nested_types(resolved: Mapping[str, ResolvedMessage], message: ResolvedMessage) -> set[str]:
-    """The message types the fields of `message` nest."""
+    """Collect the message types the fields of `message` nest."""
     return {field.type_name for field in message.fields if field.type_name in resolved}
 
 
 def _struct(message: ResolvedMessage) -> list[str]:
-    """The C++ struct of a message, member for member the C struct holds."""
+    """Emit the C++ struct of a message, member for member the C struct holds."""
     package, kind, name = _split(message.type_name)
     lines = [
         f'namespace {package}',
@@ -224,7 +223,7 @@ def _struct(message: ResolvedMessage) -> list[str]:
 
 
 def _field(field) -> list[str]:
-    """One field as the C emission writes it, with the nested type as its C++ name."""
+    """Emit one field as the C emission writes it, with the nested type as its C++ name."""
     if not field.is_sequence:
         return emit.field_members(field, cpp_type)
     lines = [f'{INDENT}struct {field.name}_sequence', f'{INDENT}{{']
@@ -235,8 +234,12 @@ def _field(field) -> list[str]:
 
 
 def _one_per_line(head: str, args: list, last: str, limit: int = 100) -> list:
-    """A check invocation uncrustify keeps: one line within the limit, else
-    one argument per line one level past the head."""
+    """
+    Format a check invocation uncrustify keeps.
+
+    One line within the limit, else one argument per line one level past the
+    head.
+    """
     single = f'{head}{", ".join(args)}{last}'
     if len(single) <= limit:
         return [single]
@@ -247,19 +250,25 @@ def _one_per_line(head: str, args: list, last: str, limit: int = 100) -> list:
 
 
 def _same_offset(cpp: str, c_name: str, field: str) -> list[str]:
-    """A layout check uncrustify keeps: one line within 100 columns,
-    otherwise one argument per line."""
+    """
+    Format a layout check uncrustify keeps.
+
+    One line within 100 columns, otherwise one argument per line.
+    """
     return _one_per_line('R2S_CPP_SAME_OFFSET(', [cpp, c_name, field], ');')
 
 
 def _same_size(cpp: str, c_name: str) -> list[str]:
-    """A size check uncrustify keeps: one line within 100 columns,
-    otherwise one argument per line."""
+    """
+    Format a size check uncrustify keeps.
+
+    One line within 100 columns, otherwise one argument per line.
+    """
     return _one_per_line('R2S_CPP_SAME_SIZE(', [cpp, c_name], ');')
 
 
 def _layout_checks(message: ResolvedMessage) -> list[str]:
-    """The checks that the C++ struct holds what the C struct the codec writes into holds."""
+    """Emit the checks that the C++ struct holds what the C struct the codec writes into holds."""
     c_name = emit._c_name(message.type_name)
     cpp = cpp_type(message.type_name)
     lines = [
@@ -290,7 +299,7 @@ def _trait(
     table: descriptors.DescriptorTable,
     repository: MessageRepository,
 ) -> list[str]:
-    """The trait the runtime layer asks for a type's table, index, name and hash."""
+    """Emit the trait the runtime layer asks for a type's table, index, name and hash."""
     type_name = message.type_name
     index = table.index_of[type_name]
     hash_text = ', '.join(f'0x{byte:02x}u' for byte in hash_bytes(repository, type_name))
@@ -339,6 +348,6 @@ def _trait(
 
 
 def hash_bytes(repository: MessageRepository, type_name: str) -> bytes:
-    """The first 8 bytes of the type's RIHS01 hash, as the topic table announces them."""
+    """Return the first 8 bytes of the type's RIHS01 hash, as the topic table announces them."""
     digest = typehash.type_hash(repository, type_name)
     return bytes.fromhex(digest[len('RIHS01_') :])[:8]

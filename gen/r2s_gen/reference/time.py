@@ -1,22 +1,5 @@
-# Copyright (c) 2026 Alexis Pojomovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
 """The MCU time arithmetic of spec/protocol.md section 7.2, in 32-bit integers alone."""
 
@@ -27,10 +10,17 @@ MAX_DRIFT_PPM = 20000
 
 
 def compute(tick_hz, case):
-    """The ROS time of `tick` under the correction `case` holds, or None while unsynced.
+    """
+    Return the ROS time of `tick` under the correction `case` holds.
 
-    `case` carries `tick0`, `sec0`, `nanosec0`, `drift_ppm` and `tick`. Input the
-    spec says to refuse raises Rejected naming the rule that refuses it.
+    `case` carries `tick0`, `sec0`, `nanosec0`, `drift_ppm` and `tick`. Return
+    None while unsynced. Input the spec says to refuse raises Rejected naming
+    the rule that refuses it.
+
+    :param tick_hz: the MCU tick rate in Hz.
+    :param case: the correction inputs named above.
+    :return: the `(sec, nanosec)` pair, or None while unsynced.
+    :raises Rejected: if an input breaks a rule named above.
     """
     tick0, sec0, nanosec0, drift, tick = (
         case['tick0'],

@@ -1,24 +1,8 @@
-# Copyright (c) 2026 Alexis Pojomovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""C emission: the topic table, publish wrappers, dispatch and limits.
+"""
+C emission: the topic table, publish wrappers, dispatch and limits.
 
 Covers the static path past the descriptors: IDs from 16 in configuration
 order, depth-first type indices, RIHS01 hashes, per-direction limits, and the
@@ -351,7 +335,7 @@ def test_the_golden_pair_is_emitted(tmp_path):
 
 
 def compile_pair(tmp_path, header, source):
-    """A generated pair that compiles as C99 with the core headers and -Werror."""
+    """Write a generated pair that compiles as C99 with the core headers and -Werror."""
     (tmp_path / 'r2s_generated.h').write_text(header, encoding='utf-8')
     (tmp_path / 'r2s_generated.c').write_text(source, encoding='utf-8')
 
@@ -508,7 +492,7 @@ def test_an_empty_topic_list_is_an_error_at_pair_generation():
 
 
 def _uncrustify_clean(paths):
-    """The gate the emitted C must pass: uncrustify changes none of it."""
+    """Check the gate the emitted C must pass: uncrustify changes none of it."""
     binary = shutil.which('uncrustify')
     if binary is None:
         pytest.skip('uncrustify is not installed')
