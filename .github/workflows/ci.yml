@@ -61,6 +61,7 @@ jobs:
       cpp: ${{ steps.statuses.outputs.cpp }}
       e2e: ${{ steps.statuses.outputs.e2e }}
       esp32: ${{ steps.statuses.outputs.esp32 }}
+      pic: ${{ steps.statuses.outputs.pic }}
       coverage: ${{ steps.statuses.outputs.coverage }}
       docs: ${{ steps.statuses.outputs.docs }}
       mermaid: ${{ steps.statuses.outputs.mermaid }}
@@ -145,6 +146,13 @@ jobs:
             r2s-task-examples-refs/heads/master-
       - uses: actions/cache/restore@v4.2.2
         with:
+          path: .task/checksum/pic
+          key: r2s-task-pic-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            r2s-task-pic-${{ github.ref }}-
+            r2s-task-pic-refs/heads/master-
+      - uses: actions/cache/restore@v4.2.2
+        with:
           path: .task/checksum/budgets
           key: r2s-task-budgets-${{ github.ref }}-${{ github.sha }}
           restore-keys: |
@@ -205,7 +213,7 @@ jobs:
           full=""
           # A task without a checksum file (lint, commits) is always stale.
           # Exit 0 is fresh, 1 is stale; anything else fails safe to FULL.
-          for task in lint commits scripts core gen bridge ament_lint cpp coverage docs examples esp32 budgets readme fuzz e2e-avr e2e-posix nightly mermaid; do
+          for task in lint commits scripts core gen bridge ament_lint cpp coverage docs examples esp32 pic budgets readme fuzz e2e-avr e2e-posix nightly mermaid; do
             rc=0
             task --status "$task" >/dev/null 2>&1 || rc=$?
             case $rc in
@@ -649,6 +657,33 @@ jobs:
         with:
           path: .task/checksum/esp32
           key: r2s-task-esp32-refs/heads/master-${{ github.sha }}
+
+  # The PIC canary: the core and the static C++ sketch compile with
+  # epic-cc for PIC16F1938 and PIC18F4550. Advisory until Phase 5, so a
+  # red canary never blocks the pull request. The bundle installs into
+  # a cache directory, never into the dev image, and a run without the
+  # toolchain skips with a message instead of failing.
+  pic-canary:
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.pic == '1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - uses: actions/cache@v4.2.2
+        with:
+          path: ~/.cache/ros2serial/epic-cc
+          key: epic-cc-${{ hashFiles('ci/versions.env') }}
+          restore-keys: |
+            epic-cc-
+      - run: make test PIC=1
+      - if: github.ref == 'refs/heads/master'
+        uses: actions/cache/save@v4.2.2
+        with:
+          path: .task/checksum/pic
+          key: r2s-task-pic-refs/heads/master-${{ github.sha }}
   budgets:
     needs: plan
     if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.budgets == '1'
