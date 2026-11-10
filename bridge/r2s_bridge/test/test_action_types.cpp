@@ -84,7 +84,7 @@ TEST(ActionTypes, MovesAndFreesStructs)
   ActionTypes::Struct self = types.make_goal();
   const auto *self_members = self.members;
   const auto self_size = self.storage.size();
-  ActionTypes::Struct &alias = self;
+  ActionTypes::Struct & alias = self;
   alias = std::move(self);
   EXPECT_EQ(alias.members, self_members);
   EXPECT_EQ(alias.storage.size(), self_size);

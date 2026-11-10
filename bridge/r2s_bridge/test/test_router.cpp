@@ -2089,10 +2089,10 @@ TEST_F(RouterNode, RefusesTheRosAnswerThatExceedsTheFrameCap)
 {
   RouterFixture fixture("svc_biganswer", remapped(), RouterParams{});
   auto server = fixture.node()->create_service<std_srvs::srv::Trigger>("trigger",
-    [](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+      [](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
       std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-      response->success = true;
-      response->message = std::string(1000u, 'd');
+        response->success = true;
+        response->message = std::string(1000u, 'd');
     });
   fixture.handshake_with_services();
   for (int i = 0; i < 50; ++i) {
@@ -2214,12 +2214,12 @@ TEST_F(RouterNode, ReportsBusyWhenTheRosAnswerDoesNotPack)
   // A message past the wire length passes the middleware but never packs,
   // so the router answers the MCU call busy instead.
   auto server = fixture.node()->create_service<std_srvs::srv::Trigger>("trigger",
-    [&called](
-      const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-      std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-      called = true;
-      response->success = true;
-      response->message = std::string(70000u, 'd');
+      [&called](
+        const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+        called = true;
+        response->success = true;
+        response->message = std::string(70000u, 'd');
     });
   fixture.handshake_with_services();
   for (int i = 0; i < 50; ++i) {
@@ -2252,10 +2252,10 @@ TEST_F(RouterNode, HoldsTheRosAnswerWhileTheLinkIsBusy)
 {
   RouterFixture fixture("svc_holdanswer", remapped(), RouterParams{});
   auto server = fixture.node()->create_service<std_srvs::srv::Trigger>("trigger",
-    [](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+      [](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
       std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-      response->success = true;
-      response->message = "ok";
+        response->success = true;
+        response->message = "ok";
     });
   fixture.handshake_with_services();
   for (int i = 0; i < 50; ++i) {
@@ -2514,7 +2514,7 @@ TEST_F(RouterNode, AcceptsAGoalAndStreamsFeedbackAndResult)
   options.feedback_callback =
     [&feedback_seen](rclcpp_action::ClientGoalHandle<
       tf2_msgs::action::LookupTransform>::SharedPtr,
-      const std::shared_ptr<const tf2_msgs::action::LookupTransform_Feedback> &) {
+    const std::shared_ptr<const tf2_msgs::action::LookupTransform_Feedback> &) {
       feedback_seen = true;
     };
   auto goal_handle = client->async_send_goal(make_spin_goal(), options);
@@ -2803,7 +2803,7 @@ TEST_F(RouterNode, AbortsTheGoalWhenTheLinkResets)
   // Asking again after the re-handshake finds no trace of the old goal: the
   // client itself refuses the forgotten goal.
   EXPECT_THROW(
-    { [[maybe_unused]] auto retake = client->async_get_result(handle); },
+    {[[maybe_unused]] auto retake = client->async_get_result(handle);},
     rclcpp_action::exceptions::UnknownGoalHandleError);
 }
 
@@ -3025,7 +3025,7 @@ TEST_F(RouterNode, IgnoresStaleActionFrames)
   options.feedback_callback =
     [&feedback_seen](rclcpp_action::ClientGoalHandle<
       tf2_msgs::action::LookupTransform>::SharedPtr,
-      const std::shared_ptr<const tf2_msgs::action::LookupTransform_Feedback> &) {
+    const std::shared_ptr<const tf2_msgs::action::LookupTransform_Feedback> &) {
       feedback_seen = true;
     };
   // Feedback and result before any goal name no live goal either.
@@ -3330,7 +3330,7 @@ TEST_F(RouterNode, DropsFeedbackForNoLiveGoal)
   options.feedback_callback =
     [&feedback_seen](rclcpp_action::ClientGoalHandle<
       tf2_msgs::action::LookupTransform>::SharedPtr,
-      const std::shared_ptr<const tf2_msgs::action::LookupTransform_Feedback> &) {
+    const std::shared_ptr<const tf2_msgs::action::LookupTransform_Feedback> &) {
       feedback_seen = true;
     };
   // Feedback for a seq with no live goal is dropped before parsing: the
@@ -3680,7 +3680,7 @@ TEST_F(RouterNode, AbortsTheGoalOnAnUndecodableFeedback)
   options.feedback_callback =
     [&feedback_seen](rclcpp_action::ClientGoalHandle<
       tf2_msgs::action::LookupTransform>::SharedPtr,
-      const std::shared_ptr<const tf2_msgs::action::LookupTransform_Feedback> &) {
+    const std::shared_ptr<const tf2_msgs::action::LookupTransform_Feedback> &) {
       feedback_seen = true;
     };
   auto goal_handle = client->async_send_goal(make_spin_goal(), options);

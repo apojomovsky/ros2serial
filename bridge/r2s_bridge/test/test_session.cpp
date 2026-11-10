@@ -3798,9 +3798,9 @@ TEST(ActionExchange, SendsGoalsOnTheirOwnStream)
   const auto units = drain_decoded(fixture);
   ASSERT_EQ(units.size(), 2u);
   EXPECT_EQ(units[0], with_check({kHelperServices, 0u, kHelperSvcRequest, 0x00u, 0x09u, 0x00u,
-    0x01u}));
+      0x01u}));
   EXPECT_EQ(units[1], with_check({kHelperActions, 3u, kHelperActGoal, 0x00u, 0x00u, 0x00u,
-    0x05u})) << "the action frame seq continues the walk, its rel_seq starts at 0";
+      0x05u})) << "the action frame seq continues the walk, its rel_seq starts at 0";
 }
 
 // covers: ACT-3
@@ -3824,7 +3824,7 @@ TEST(ActionExchange, QueuesOnePendingGoalPerIndex)
   const auto units = drain_decoded(fixture);
   ASSERT_EQ(units.size(), 1u);
   EXPECT_EQ(units[0], with_check({kHelperActions, 4u, kHelperActGoal, 0x01u, 0x02u, 0x00u,
-    0x03u}));
+      0x03u}));
 }
 
 // covers: ACT-3, ACT-4
@@ -4458,7 +4458,8 @@ TEST(ActionExchange, RefusesAnOversizeGoal)
     [](const ServiceInfo &) {return kServiceStatusOk;},
     [](const ActionInfo &) {return kActionStatusOk;}};
   handshake_with_actions(fixture);
-  EXPECT_FALSE(fixture.session().send_action_goal(0u, 0x00u, std::vector<std::uint8_t>(600u, 0xAAu)))
+  EXPECT_FALSE(fixture.session().send_action_goal(0u, 0x00u,
+          std::vector<std::uint8_t>(600u, 0xAAu)))
     << "a goal past the MCU window never leaves";
 }
 
@@ -4735,7 +4736,7 @@ TEST(ServiceWalk, ReportsUnknownTypeWithoutAResolver)
   fixture.deliver_frame(kHelperServices, 0u, svc_declare(0u, 0x00u, "reset"));
   const auto units = drain_decoded(fixture);
   const auto status = std::find_if(units.begin(), units.end(), [](const auto & unit) {
-    return unit.size() >= 6u && unit[0] == kHelperServices && unit[2] == kHelperSvcStatus;
+        return unit.size() >= 6u && unit[0] == kHelperServices && unit[2] == kHelperSvcStatus;
   });
   ASSERT_TRUE(status != units.end()) << "the walk answers the DECLARE";
   EXPECT_EQ(
@@ -4764,7 +4765,7 @@ TEST(ServiceWalk, ReportsAResolverConflict)
   fixture.deliver_frame(kHelperServices, 0u, svc_declare(0u, 0x00u, "reset"));
   const auto units = drain_decoded(fixture);
   const auto status = std::find_if(units.begin(), units.end(), [](const auto & unit) {
-    return unit.size() >= 6u && unit[0] == kHelperServices && unit[2] == kHelperSvcStatus;
+        return unit.size() >= 6u && unit[0] == kHelperServices && unit[2] == kHelperSvcStatus;
   });
   ASSERT_TRUE(status != units.end()) << "the walk answers the DECLARE";
   EXPECT_EQ(
@@ -4785,7 +4786,7 @@ TEST(ServiceExchange, SendsRequestsOnTheirOwnStream)
   fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0x4Cu, 1000u));
   fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
   fixture.deliver_frame(kParams, 0u,
-  {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x03u, 'l', 'e', 'd', 0x01u});
+    {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x03u, 'l', 'e', 'd', 0x01u});
   fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x01u, 0x01u});
   fixture.deliver_frame(kHelperServices, 0u, svc_declare(0u, 0x00u, "reset"));
   fixture.deliver_frame(kHelperServices, 1u, {kHelperSvcStatus, 0x00u, 0x01u, 0x01u});

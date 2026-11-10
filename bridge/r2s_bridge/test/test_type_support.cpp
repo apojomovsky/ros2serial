@@ -103,12 +103,12 @@ TEST(TopicStatus, CodesMatchTheSpec)
 // covers: ACT-7
 ActionInfo announced_action(std::string type, std::array<std::uint8_t, 8> hash)
 {
-    ActionInfo info;
-    info.index = 0u;
-    info.type_hash = hash;
-    info.type_name = std::move(type);
-    info.action_name = "spin";
-    return info;
+  ActionInfo info;
+  info.index = 0u;
+  info.type_hash = hash;
+  info.type_name = std::move(type);
+  info.action_name = "spin";
+  return info;
 }
 
 TEST(ActionResolve, AcceptsTheInstalledHash)

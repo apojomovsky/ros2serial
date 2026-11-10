@@ -55,7 +55,7 @@ const MessageMembers * nested_members(const MessageMember *member)
 
 bool read_uuid(
   const MessageMembers *parent, const void *storage, const char *field,
-  std::array<std::uint8_t, 16> &goal_id)
+  std::array<std::uint8_t, 16> & goal_id)
 {
   const MessageMember *member = find_member(parent, field);
   const MessageMembers *uuid_members = nested_members(member);
@@ -74,8 +74,8 @@ bool read_uuid(
 }
 
 bool read_time(
-  const MessageMembers *parent, const void *storage, const char *field, std::int32_t &sec,
-  std::uint32_t &nanosec)
+  const MessageMembers *parent, const void *storage, const char *field, std::int32_t & sec,
+  std::uint32_t & nanosec)
 {
   const MessageMember *member = find_member(parent, field);
   const MessageMembers *time_members = nested_members(member);
@@ -97,7 +97,7 @@ bool read_time(
 
 bool write_uuid(
   const MessageMembers *parent, void *storage, const char *field,
-  const std::array<std::uint8_t, 16> &goal_id)
+  const std::array<std::uint8_t, 16> & goal_id)
 {
   const MessageMember *member = find_member(parent, field);
   const MessageMembers *uuid_members = nested_members(member);
@@ -184,7 +184,7 @@ void * nested_storage(const MessageMembers *parent, void *storage, const char *f
   return base + member->offset_;
 }
 
-std::string mangle(const std::string &type_name)
+std::string mangle(const std::string & type_name)
 {
   std::string out;
   for (const char c : type_name) {

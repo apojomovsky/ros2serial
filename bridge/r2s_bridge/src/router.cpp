@@ -550,20 +550,20 @@ struct Router::Impl
       };
   }
 
-  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
+  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> & )>
   service_request_event()
   {
     return [this](std::uint8_t index, std::uint8_t req,
-             const std::vector<std::uint8_t> & payload) {
+           const std::vector<std::uint8_t> & payload) {
              on_service_request(index, req, payload);
            };
   }
 
-  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
+  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> & )>
   service_response_event()
   {
     return [this](std::uint8_t req, std::uint8_t status,
-             const std::vector<std::uint8_t> & payload) {
+           const std::vector<std::uint8_t> & payload) {
              on_service_response(req, status, payload);
            };
   }
@@ -582,20 +582,20 @@ struct Router::Impl
            };
   }
 
-  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
+  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> & )>
   action_feedback_event()
   {
     return [this](std::uint8_t seq, std::uint8_t index,
-             const std::vector<std::uint8_t> & payload) {
+           const std::vector<std::uint8_t> & payload) {
              on_action_feedback(seq, index, payload);
            };
   }
 
-  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
+  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> & )>
   action_result_event()
   {
     return [this](std::uint8_t seq, std::uint8_t outcome,
-             const std::vector<std::uint8_t> & payload) {
+           const std::vector<std::uint8_t> & payload) {
              on_action_result(seq, outcome, payload);
            };
   }
@@ -755,8 +755,8 @@ struct Router::Impl
     }
 #if defined(R2S_HAS_GENERIC_SERVICE)
     auto callback = [this, index = route.info.index](
-                      std::shared_ptr<rmw_request_id_t> header,
-                      rclcpp::GenericService::SharedRequest request) {
+      std::shared_ptr<rmw_request_id_t> header,
+      rclcpp::GenericService::SharedRequest request) {
         std::lock_guard<std::recursive_mutex> guard(mutex);
         on_ros_request(index, std::move(header), std::move(request));
       };
@@ -870,8 +870,8 @@ struct Router::Impl
       rclcpp::Publisher<action_msgs::msg::GoalStatusArray>>(
       topics->create_publisher(expanded + "/_action/status",
         rclcpp::create_publisher_factory<action_msgs::msg::GoalStatusArray,
-          std::allocator<void>,
-          rclcpp::Publisher<action_msgs::msg::GoalStatusArray>>(
+      std::allocator<void>,
+      rclcpp::Publisher<action_msgs::msg::GoalStatusArray>>(
           rclcpp::PublisherOptionsWithAllocator<std::allocator<void>>()),
         rclcpp::QoS(1).transient_local().reliable()));
     // GCOVR_EXCL_START: the publisher is null only when its allocation
@@ -1098,7 +1098,7 @@ struct Router::Impl
     std::vector<std::uint8_t> packed;
     const ConvertResult converted = goal == nullptr ?
       ConvertResult{ConvertFail::kUnsupportedField, 0xFFu} :
-      converter_.pack_from_struct(route.types.goal_type_name(), false, goal, packed);
+    converter_.pack_from_struct(route.types.goal_type_name(), false, goal, packed);
     if (converted.fail != ConvertFail::kNone) {
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': dropped ROS goal (" +
@@ -1330,7 +1330,7 @@ struct Router::Impl
     }
   }
 
-  ActionRoute *action_route_for(std::uint8_t index)
+  ActionRoute * action_route_for(std::uint8_t index)
   {
     const auto found = action_routes_.find(index);
     // GCOVR_EXCL_START: the session drops frames for unserved indices
@@ -1926,7 +1926,7 @@ struct Router::Impl
     for (auto & entry : service_routes_) {
       ServiceRoute & route = *entry.second;
       pump_ros_queue(route);
-      for (auto it = route.ros_inflight.begin(); it != route.ros_inflight.end();) {
+      for (auto it = route.ros_inflight.begin(); it != route.ros_inflight.end(); ) {
         if (now - it->second.sent_ms < kServiceCallTimeoutMs) {
           ++it;
           continue;
@@ -1937,7 +1937,7 @@ struct Router::Impl
         it = route.ros_inflight.erase(it);
         pump_ros_queue(route);
       }
-      for (auto it = route.mcu_inflight.begin(); it != route.mcu_inflight.end();) {
+      for (auto it = route.mcu_inflight.begin(); it != route.mcu_inflight.end(); ) {
         InflightMcuCall & call = it->second;
         if (call.future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
           if (now - call.sent_ms >= kServiceCallTimeoutMs) {
