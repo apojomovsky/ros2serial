@@ -107,7 +107,7 @@ public:
 
   /// Runs an ioctl on the port.
   /**
-   * The request mirrors the POSIX ::ioctl signature, so the seam keeps
+   * The request mirrors the POSIX ioctl signature, so the seam keeps
    * unsigned long.
    *
    * \param[in] fd the open port.
