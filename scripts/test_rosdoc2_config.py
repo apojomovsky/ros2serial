@@ -56,6 +56,17 @@ def test_each_package_exports_its_rosdoc2_config():
         assert export is not None and export.text == 'rosdoc2.yaml', package
 
 
+def test_rosdoc2_configs_satisfy_the_pinned_builder_contract():
+    for package in ROS_PACKAGES:
+        docs = list(yaml.safe_load_all((ROOT / package / 'rosdoc2.yaml').read_text()))
+        assert docs[0]['type'] == 'rosdoc2 config', package
+        assert {next(iter(entry)) for entry in docs[1]['builders']} == {'doxygen', 'sphinx'}
+        for entry in docs[1]['builders']:
+            for name, body in entry.items():
+                assert body.get('name'), (package, name)
+                assert 'output_dir' in body, (package, name)
+
+
 def test_quality_declaration_names_level_four():
     text = (ROOT / 'QUALITY_DECLARATION.md').read_text()
     assert 'Quality Level 4' in text
