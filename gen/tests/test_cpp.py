@@ -22,6 +22,7 @@ from r2s_gen import msgs
 from r2s_gen import typehash
 from r2s_gen.version import __version__
 from support import write_message
+from support import write_service
 
 ROOT = Path(__file__).resolve().parents[2]
 CPP_INCLUDE = ROOT / 'cpp' / 'include'
@@ -400,6 +401,20 @@ def test_the_message_header_path_follows_the_rclcpp_convention():
     assert cpp.message_path('sensor_msgs/msg/JointState') == 'sensor_msgs/msg/joint_state.hpp'
     assert cpp.message_path('builtin_interfaces/msg/Time') == 'builtin_interfaces/msg/time.hpp'
     assert cpp.message_path('tf2_msgs/msg/TFMessage') == 'tf2_msgs/msg/tf_message.hpp'
+    assert cpp.message_path('std_srvs/srv/Trigger_Request') == 'std_srvs/srv/trigger_request.hpp'
+    assert cpp.service_path('std_srvs/srv/Trigger') == 'std_srvs/srv/trigger.hpp'
+    assert cpp.cpp_type('std_srvs/srv/Trigger_Request') == 'std_srvs::srv::Trigger_Request'
+    assert cpp.suffix('std_srvs/srv/Trigger_Request') == 'std_srvs_Trigger_Request'
+
+
+def test_emit_service_hpp_rejects_an_unresolved_part(tmp_path):
+    root = tmp_path / 'messages'
+    write_service(root, 'demo_srvs/srv/Spin', 'int32 order\n---\nint32[] sequence\n')
+    repository = msgs.MessageRepository(msg_paths=[root])
+    resolved = bounds.resolve(repository, ['demo_srvs/srv/Spin_Request'], bounds={})
+
+    with pytest.raises(ValueError, match='Spin_Response is not resolved'):
+        cpp.emit_service_hpp(resolved, 'demo_srvs/srv/Spin', repository)
 
 
 def test_the_cpp_type_follows_the_ros_2_naming():
