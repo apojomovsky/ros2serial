@@ -303,7 +303,8 @@ A green push does not mean a green PR. The pre-push hook and the takeoff
 run only the `local` task (`lint`, `commits`, `core`, `gen`, `cpp`, `docs`):
 fast gates that catch the mistakes a push actually makes. Everything else
 (`scripts`, `bridge`, `ament_lint`, `coverage`, `examples`, `budgets`,
-`readme`, `fuzz`, the end-to-end legs, `esp32`, `pic`, `nightly`) runs in
+`readme`, `fuzz`, the end-to-end legs, `esp32`, `pic`, `platformio`,
+`nightly`) runs in
 CI on every pull request, where parallel jobs keep it fast. A failure there
 still blocks the merge, no matter how green the push was.
 
