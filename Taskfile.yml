@@ -584,7 +584,8 @@ tasks:
       - ports/arduino/**
       # The shared leg files. The posix runner, the posix scenarios and the
       # posix firmware helper stay with the posix leg; the isolation pairs
-      # and the soak checks run in the nightly workflow instead.
+      # run in the e2e-isolation job and the soak checks in the nightly
+      # workflow instead.
       - tests/e2e/**
       - exclude: tests/e2e/run.sh
       - exclude: tests/e2e/legs.list
@@ -621,8 +622,9 @@ tasks:
       - core/**
       - bridge/**
       # The leg builds and launches the posix firmware shapes. The avr-only
-      # files stay with the avr leg; the isolation pairs and the soak checks
-      # run in the nightly workflow instead.
+      # files stay with the avr leg; the isolation pairs run in the
+      # e2e-isolation job and the soak checks in the nightly workflow
+      # instead.
       - ports/posix/**
       - tests/e2e/**
       - exclude: tests/e2e/run-avr.sh

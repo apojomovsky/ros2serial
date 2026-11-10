@@ -26,7 +26,7 @@ flowchart TB
 
 ### CI flow
 
-The `plan` job restores each Taskfile task's last successful inputs from the latest `master` run and reports every section whose inputs changed since; each section job gates on its scope. Pushes to `master` and manual runs select every scope and force the tasks, then save the checksums. The SCRIPTS scope runs as one job per shard; the `nightly` job calls the shared nightly jobs on pull requests that select them or carry the `fuzz-long` label, and the long fuzzing runs on pull requests only with that label. A version tag runs the same nightly jobs with the long fuzzing off, and they gate the publish.
+The `plan` job restores each Taskfile task's last successful inputs from the latest `master` run and reports every section whose inputs changed since; each section job gates on its scope. Pushes to `master` and manual runs select every scope and force the tasks, then save the checksums. The SCRIPTS scope runs as one job per shard; the `e2e-isolation` job runs the two e2e sections side by side when the plan selects `NIGHTLY`, and the `nightly` job calls the shared nightly jobs on pull requests carrying the `fuzz-long` label, so the long fuzzing runs on pull requests only with that label. A version tag runs the same nightly jobs with the long fuzzing off, and they gate the publish.
 
 ```mermaid
 flowchart TB
@@ -36,12 +36,12 @@ flowchart TB
         lint["lint"]
         shards["scripts, one job per shard"]
         backends["core, gen, bridge, cpp"]
-        e2e["e2e-posix matrix, e2e-avr"]
+        e2e["e2e-posix matrix, e2e-avr, e2e-isolation"]
         gates["coverage, docs, readme, examples, budgets, fuzz-smoke"]
-        cinight["nightly: nightly-jobs.yml when NIGHTLY is selected or labelled fuzz-long; fuzz-long only with that label"]
+        cinight["nightly: nightly-jobs.yml when labelled fuzz-long; fuzz-long only with that label"]
     end
     full["Master or manual: every job forced, checksums saved"]
-    shared["nightly-jobs.yml: fuzz-long plus e2e-isolation"]
+    shared["nightly-jobs.yml: fuzz-long, soak, mutation, big-endian"]
     sched["nightly.yml on schedule"]
     rel["release.yml on a version tag: nightly jobs with fuzz off gate the publish; a plain tag ships Latest, an -rc tag ships a pre-release"]
 

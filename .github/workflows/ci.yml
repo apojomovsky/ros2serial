@@ -307,7 +307,7 @@ jobs:
 
   # The SCRIPTS scope runs as one job per shard over the collected node
   # ids, spread round-robin in sorted order (scripts/shard_nodes.py). The
-  # e2e isolation pairs run in the nightly workflow instead.
+  # e2e isolation pairs run in the e2e-isolation job instead.
   scripts:
     needs: plan
     if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.scripts == '1'
@@ -623,16 +623,50 @@ jobs:
         with:
           path: .task/checksum/fuzz
           key: r2s-task-fuzz-refs/heads/master-${{ github.sha }}
-  # The nightly jobs on a pull request that touches them: the plan selects
-  # NIGHTLY for the isolation pairs. The long fuzzing would hold every
-  # core pull request for two hours, so it stays off there unless the
-  # fuzz-long label opts in; the label is read from the event, so adding
-  # it takes effect on the next push or rerun. The soak never runs here:
+  # Two full e2e sections side by side on one host, measured about 28
+  # minutes including setup (#577): the bound keeps roughly double
+  # headroom. The load-sensitive scenario is skipped and the sync bound
+  # keeps headroom for the shared host, as the CI e2e jobs do. A direct
+  # job, not a reusable-workflow call, so the pull request shows
+  # e2e-isolation instead of a nightly caller (#586).
+  e2e-isolation:
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.nightly == '1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test NIGHTLY=1
+        env:
+          R2S_E2E_SKIP: test_scenario_8_posix
+          R2S_SYNC_BOUND_NS: 5000000
+      # The failing section output leaves the runner with the scenario
+      # logs: collect them on any outcome, so a timeout kill still
+      # uploads what the pair proved before it stopped.
+      - if: always()
+        run: bash scripts/collect-isolation-logs.sh "$HOME/.cache/ros2serial" isolation-logs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-isolation-logs
+          path: isolation-logs/
+          if-no-files-found: warn
+      - if: github.ref == 'refs/heads/master'
+        uses: actions/cache/save@v4.2.2
+        with:
+          path: .task/checksum/nightly
+          key: r2s-task-nightly-refs/heads/master-${{ github.sha }}
+  # The reusable nightly jobs left on a pull request: only the long
+  # fuzzing, and only when the fuzz-long label opts in. The isolation
+  # pairs run as the e2e-isolation job above, so no pull request runs a
+  # job called nightly. The label is read from the event, so adding it
+  # takes effect on the next push or rerun. The soak never runs here:
   # two hours is a schedule-only wait. A reusable workflow call takes no
   # timeout-minutes; the called jobs carry theirs.
   nightly:
     needs: plan
-    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.nightly == '1' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'fuzz-long'))
+    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'fuzz-long'))
     uses: ./.github/workflows/nightly-jobs.yml
     with:
       # Schedule, master and manual runs follow the FUZZ selection; a pull
