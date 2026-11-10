@@ -203,6 +203,10 @@ def _refresh_layouts() -> None:
     (GOLDEN / 'layouts' / 'library.properties').write_text(
         files['library.properties'], encoding='utf-8'
     )
+    pio_files = layouts.generate(
+        loaded, resolved, repository, 'platformio', source=config_path.name
+    )
+    (GOLDEN / 'layouts' / 'library.json').write_text(pio_files['library.json'], encoding='utf-8')
 
 
 def _refresh_example(name: str, layout: str) -> None:

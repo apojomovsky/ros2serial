@@ -21,6 +21,7 @@ STAMPED = [
     'gen/tests/golden/actions/spin.hpp',
     'gen/tests/golden/descriptors/float32_twist.c',
     'gen/tests/golden/layouts/library.properties',
+    'gen/tests/golden/layouts/library.json',
     'gen/tests/golden/topics/posix.c',
     'gen/tests/golden/topics/posix.h',
     'gen/tests/golden/types/float32.h',

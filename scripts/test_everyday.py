@@ -242,6 +242,19 @@ def pass_vars():
     return (ROOT / 'scripts' / 'pass-vars.list').read_text().split()
 
 
+def test_make_forwards_every_suite_scope():
+    """A scope make accepts must reach the container, or it silently runs nothing."""
+    text = (ROOT / 'scripts' / 'ci-test.sh').read_text()
+    header = '\n'.join(
+        line
+        for line in text.splitlines()
+        if 'Scope with' in line or re.match(r'^# [A-Z]{2,}', line)
+    )
+    scopes = set(re.findall(r'\b([A-Z][A-Z0-9]*)(?:=1|=<backend>)', header))
+    for scope in sorted(scopes):
+        assert scope in pass_vars(), f'make drops {scope} before the container'
+
+
 def test_make_forwards_the_e2e_loop_narrowers():
     # tests/e2e/README.md documents both for a quicker local loop; make
     # must hand them into the dev image or they are silently ignored.
