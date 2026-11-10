@@ -36,6 +36,8 @@ REQUIRED_DIRS = [
     'ports/avr',
     'ports/ch32v',
     'ports/stm32',
+    'ports/rp2040',
+    'ports/common',
     'ports/epic-hal',
     'examples',
     'tests/e2e',

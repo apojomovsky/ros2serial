@@ -26,8 +26,9 @@ METHOD = """## How to reproduce
 
 Run `make size-report` in the dev image. It builds every example sketch
 for Uno and Mega through `scripts/build-examples.sh`, the ESP32 builds
-through `scripts/build-examples-esp32.sh`, the STM32 and RP2040 firmware
-through `ports/stm32/build.sh`, then measures the firmware
+through `scripts/build-examples-esp32.sh`, the STM32 firmware through
+`ports/stm32/build.sh` and the RP2040 firmware through
+`ports/rp2040/build.sh`, then measures the firmware
 with `tools/size_report.py` and `tools/stack_report.py`:
 
 * Flash is text plus data and static RAM is data plus bss, as `avr-size`

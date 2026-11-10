@@ -59,7 +59,7 @@ void loop_once(void)
 int main(void)
 {
   r2s_board_init();
-  if (r2s_session_configure("hello_stm32", r2s_topics, R2S_TOPIC_COUNT) != R2S_OK) {
+  if (r2s_session_configure("hello_arm", r2s_topics, R2S_TOPIC_COUNT) != R2S_OK) {
     return 1;
   }
   r2s_init();

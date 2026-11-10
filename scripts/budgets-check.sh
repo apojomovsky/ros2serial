@@ -32,9 +32,10 @@ bash "$root/scripts/build-examples.sh" || status=1
 # The ESP32 firmware joins the same build tree, so its flash and RAM land in
 # the table beside the AVR numbers; its stack stays unanalyzed (see below).
 bash "$root/scripts/build-examples-esp32.sh" || status=1
-# The STM32 and RP2040 firmware joins it the same way, measured with the
+# The STM32 and RP2040 firmware join it the same way, measured with the
 # Arm toolchain beside the AVR and Xtensa ones.
 bash "$root/ports/stm32/build.sh" || status=1
+bash "$root/ports/rp2040/build.sh" || status=1
 if [ "$status" -ne 0 ]; then
   echo "budgets: the example builds failed" >&2
   exit 1

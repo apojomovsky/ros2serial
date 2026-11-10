@@ -2,12 +2,11 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-# Build the STM32F103 and RP2040 minimal firmware: resolve the pinned xPack
-# Arm toolchain (the image, an override, or a verified fetch into the
-# cache), generate the firmware pair from ports/stm32/r2s.yaml, stage the
-# core with the port glue, then link one firmware per target. The Pico boot
-# stage comes from the pinned pico-sdk tarball, verified before anything is
-# extracted from it. Builds go under R2S_BUILD_DIR, so the tree stays clean.
+# Build the STM32F103 minimal firmware: resolve the pinned xPack Arm
+# toolchain (the image, an override, or a verified fetch into the cache),
+# generate the firmware pair from the shared ports/common config, stage
+# the core with the Blue Pill glue, then link one firmware. Builds go
+# under R2S_BUILD_DIR, so the tree stays clean.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$root" || exit 2
@@ -45,12 +44,6 @@ arm_sha=$(grep '^ARM_GCC_SHA256=' "$versions" 2>/dev/null | cut -d= -f2)
   echo "ports/stm32/build.sh: $versions names no ARM_GCC_VERSION or ARM_GCC_SHA256" >&2
   exit 1
 }
-sdk_ver=$(grep '^PICO_SDK_VERSION=' "$versions" 2>/dev/null | cut -d= -f2)
-sdk_sha=$(grep '^PICO_SDK_SHA256=' "$versions" 2>/dev/null | cut -d= -f2)
-[ -n "$sdk_ver" ] && [ -n "$sdk_sha" ] || {
-  echo "ports/stm32/build.sh: $versions names no PICO_SDK_VERSION or PICO_SDK_SHA256" >&2
-  exit 1
-}
 
 arm_gcc=${R2S_ARM_GCC:-}
 if [ -n "$arm_gcc" ]; then
@@ -85,20 +78,6 @@ else
   fi
 fi
 
-arm_objcopy=${R2S_ARM_OBJCOPY:-}
-if [ -z "$arm_objcopy" ]; then
-  gcc_dir=$(dirname "$arm_gcc")
-  if [ -x "$gcc_dir/arm-none-eabi-objcopy" ]; then
-    arm_objcopy="$gcc_dir/arm-none-eabi-objcopy"
-  else
-    arm_objcopy=arm-none-eabi-objcopy
-  fi
-fi
-command -v "$arm_objcopy" >/dev/null 2>&1 || {
-  echo "ports/stm32/build.sh: no arm-none-eabi-objcopy beside $arm_gcc or on PATH" >&2
-  exit 1
-}
-
 # A fresh output tree: a renamed linker section must not leave the
 # previous link beside the new one for the reporters to measure. The
 # empty and root paths are refused before anything is removed.
@@ -113,14 +92,14 @@ stage="$out/stage"
 gendir="$out/generated"
 mkdir -p "$stage" "$gendir" || exit 1
 PYTHONPATH="$root/gen" python3 -m r2s_gen.cli generate \
-  --config "$root/ports/stm32/r2s.yaml" --out "$gendir" --layout cmake || exit 1
+  --config "$root/ports/common/r2s.yaml" --out "$gendir" --layout cmake || exit 1
 cp "$gendir/r2s_generated.h" "$gendir/r2s_generated.c" "$stage/" || exit 1
 mkdir -p "$stage/r2s" || exit 1
 cp core/include/r2s/*.h "$stage/r2s/" || exit 1
 cp core/src/*.c "$stage/" || exit 1
 rm -f "$stage/test_reset.c"
-cp ports/stm32/firmware.c ports/stm32/r2s_board.h ports/stm32/r2s_bluepill.c \
-  ports/stm32/r2s_pico.c ports/stm32/stm32f103.ld ports/stm32/rp2040.ld "$stage/" || exit 1
+cp ports/common/firmware.c ports/common/r2s_board.h ports/stm32/r2s_bluepill.c \
+  ports/stm32/stm32f103.ld "$stage/" || exit 1
 
 # The core never includes the generated header, so the limits travel as -D
 # flags read from it: the same set the cmake layout passes as definitions.
@@ -148,79 +127,12 @@ echo "stm32 build: limits $extras"
 cflags="-std=c99 -Os -ffunction-sections -fdata-sections -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef"
 specs="--specs=nano.specs --specs=nosys.specs"
 
-blue="$out/bluepill"
-mkdir -p "$blue" || exit 1
 # shellcheck disable=SC2086 # the flag strings split on purpose.
 "$arm_gcc" -mcpu=cortex-m3 -mthumb $cflags $extras -I "$stage" \
-  -T "$stage/stm32f103.ld" -nostartfiles $specs -Wl,--gc-sections,-Map,"$blue/firmware.map" \
+  -T "$stage/stm32f103.ld" -nostartfiles $specs -Wl,--gc-sections,-Map,"$out/firmware.map" \
   $stage/firmware.c $stage/r2s_bluepill.c $stage/actions.c $stage/codec.c $stage/crc.c \
   $stage/error.c $stage/framer.c $stage/log.c $stage/params.c $stage/rcobs.c $stage/rx.c \
   $stage/services.c $stage/session.c $stage/time.c $stage/topics.c $stage/tx.c \
   $stage/varint.c $stage/r2s_generated.c \
-  -o "$blue/firmware.elf" || exit 1
-"$arm_objcopy" -O binary "$blue/firmware.elf" "$blue/firmware.bin" || exit 1
-
-# The Pico firmware links the SDK boot stage at the flash base, then the
-# firmware after it. The SDK tarball below carries only the boot stage in.
-sdk_cache=${R2S_CACHE_DIR:-$HOME/.cache/ros2serial}/pico-sdk-$sdk_ver
-sdk=${R2S_PICO_SDK:-$sdk_cache/pico-sdk-$sdk_ver}
-boot2_src="$sdk/src/rp2040/boot_stage2"
-if [ ! -f "$boot2_src/boot2_w25q080.S" ] || [ ! -f "$boot2_src/boot_stage2.ld" ] ||
-   [ ! -f "$boot2_src/pad_checksum" ]; then
-  command -v curl >/dev/null 2>&1 || {
-    echo "ports/stm32/build.sh: no pico-sdk under $sdk and no downloader" >&2
-    exit 1
-  }
-  mkdir -p "$sdk_cache" || exit 1
-  url="https://github.com/raspberrypi/pico-sdk/archive/refs/tags/$sdk_ver.tar.gz"
-  curl -fsSL -o "$sdk_cache/pico-sdk-$sdk_ver.tar.gz" "$url" || exit 1
-  (cd "$sdk_cache" && echo "$sdk_sha  pico-sdk-$sdk_ver.tar.gz" | sha256sum -c -) || exit 1
-  tar -xz -C "$sdk_cache" -f "$sdk_cache/pico-sdk-$sdk_ver.tar.gz" || exit 1
-  sdk="$sdk_cache/pico-sdk-$sdk_ver"
-  boot2_src="$sdk/src/rp2040/boot_stage2"
-fi
-[ -f "$boot2_src/boot2_w25q080.S" ] && [ -f "$boot2_src/boot_stage2.ld" ] &&
-  [ -f "$boot2_src/pad_checksum" ] || {
-    echo "ports/stm32/build.sh: $sdk holds no boot stage" >&2
-    exit 1
-  }
-
-pico="$out/pico"
-mkdir -p "$pico" || exit 1
-# The boot stage intermediates stay out of the measured tree: like the
-# Arduino build directory, anything under a build/ component is skipped.
-pico_obj="$pico/build"
-mkdir -p "$pico_obj" || exit 1
-# The stage source includes pico/asm_helper.S, which includes pico.h but
-# uses nothing from it: the SDK's own pico.h drags in the generated board
-# config, so the build writes a shim with the stock stringize macros
-# instead. The pin keeps the stage source stable under it.
-mkdir -p "$pico/include" || exit 1
-cat >"$pico/include/pico.h" <<'EOF'
-#ifndef _PICO_H
-#define _PICO_H
-#define __PICO_STRING(x) #x
-#define __PICO_XSTRING(x) __PICO_STRING(x)
-#define __PICO_CONCAT1(x, y) x ## y
-#endif
-EOF
-# shellcheck disable=SC2086 # the flag strings split on purpose.
-"$arm_gcc" -mcpu=cortex-m0plus -mthumb -c "$boot2_src/boot2_w25q080.S" \
-  -I "$pico/include" -I "$boot2_src/asminclude" -I "$sdk/src/rp2040/pico_platform/include" \
-  -I "$sdk/src/rp2040/hardware_regs/include" \
-  -o "$pico_obj/boot2.o" || exit 1
-"$arm_gcc" -mcpu=cortex-m0plus -mthumb -nostartfiles -T "$boot2_src/boot_stage2.ld" \
-  "$pico_obj/boot2.o" -o "$pico_obj/boot2.elf" || exit 1
-"$arm_objcopy" -O binary "$pico_obj/boot2.elf" "$pico_obj/boot2.bin" || exit 1
-"$boot2_src/pad_checksum" -s 0xffffffff "$pico_obj/boot2.bin" "$pico_obj/boot2_padded.S" || exit 1
-"$arm_gcc" -mcpu=cortex-m0plus -mthumb -c "$pico_obj/boot2_padded.S" -o "$pico_obj/boot2_padded.o" || exit 1
-# shellcheck disable=SC2086 # the flag strings split on purpose.
-"$arm_gcc" -mcpu=cortex-m0plus -mthumb $cflags $extras -I "$stage" \
-  -T "$stage/rp2040.ld" -nostartfiles $specs -Wl,--gc-sections,-Map,"$pico/firmware.map" \
-  "$pico_obj/boot2_padded.o" $stage/firmware.c $stage/r2s_pico.c $stage/actions.c \
-  $stage/codec.c $stage/crc.c $stage/error.c $stage/framer.c $stage/log.c $stage/params.c \
-  $stage/rcobs.c $stage/rx.c $stage/services.c $stage/session.c $stage/time.c \
-  $stage/topics.c $stage/tx.c $stage/varint.c $stage/r2s_generated.c \
-  -o "$pico/firmware.elf" || exit 1
-"$arm_objcopy" -O binary "$pico/firmware.elf" "$pico/firmware.bin" || exit 1
+  -o "$out/firmware.elf" || exit 1
 echo "stm32 build: firmware at $out"

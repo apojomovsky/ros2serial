@@ -115,9 +115,9 @@ firmware:
   arduino_xmacro_c/esp32/arduino_xmacro_c.ino.elf:
     flash: 332100
     ram: 90700
-  stm32/bluepill/firmware.elf:
+  stm32/firmware.elf:
     flash: 8700
     ram: 410
-  stm32/pico/firmware.elf:
+  rp2040/firmware.elf:
     flash: 9200
     ram: 410

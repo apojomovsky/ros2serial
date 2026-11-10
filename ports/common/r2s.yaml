@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
 # Minimal STM32/RP2040 firmware: one published Float32 and one subscribed Twist.
-node: hello_stm32
+node: hello_arm
 topics:
   - name: battery
     type: std_msgs/msg/Float32

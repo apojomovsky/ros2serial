@@ -9,8 +9,9 @@ measured by the same tools that gate every pull request.
 
 Run `make size-report` in the dev image. It builds every example sketch
 for Uno and Mega through `scripts/build-examples.sh`, the ESP32 builds
-through `scripts/build-examples-esp32.sh`, the STM32 and RP2040 firmware
-through `ports/stm32/build.sh`, then measures the firmware
+through `scripts/build-examples-esp32.sh`, the STM32 firmware through
+`ports/stm32/build.sh` and the RP2040 firmware through
+`ports/rp2040/build.sh`, then measures the firmware
 with `tools/size_report.py` and `tools/stack_report.py`:
 
 * Flash is text plus data and static RAM is data plus bss, as `avr-size`
@@ -68,8 +69,8 @@ base in the job summary.
 | arduino_xmacro_c/mega/arduino_xmacro_c.ino.elf | 11714 | 12500 | 1101 | 1250 | 16 | 32 |
 | arduino_xmacro_c/uno/arduino_xmacro_c.ino.elf | 11366 | 12000 | 1101 | 1250 | 13 | 32 |
 | cmake_minimal/hello_cmake | 10496 | 11200 | 374 | 400 | 184 | 224 |
-| stm32/bluepill/firmware.elf | 7207 | 8700 | 340 | 410 | n/a | n/a |
-| stm32/pico/firmware.elf | 7599 | 9200 | 340 | 410 | n/a | n/a |
+| rp2040/firmware.elf | 7599 | 9200 | 340 | 410 | n/a | n/a |
+| stm32/firmware.elf | 7207 | 8700 | 340 | 410 | n/a | n/a |
 
 Rows with `n/a` budgets name firmware the budgets file does not
 constrain yet; the gate reports such rows and never judges them.

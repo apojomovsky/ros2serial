@@ -86,8 +86,9 @@ and [Part II, Test strategy](00-design.md#test-strategy).
 | Spec and vectors | `spec/` | every scope, via vectors |
 | Generator | `gen/r2s_gen` | `GEN=1` |
 
-`ports/avr`, `ports/stm32`, `ports/ch32v` and `ports/epic-hal` hold the
-planned 32-bit and PIC ports; each currently carries only a `.gitkeep`.
+`ports/avr`, `ports/stm32`, `ports/rp2040`, `ports/ch32v` and `ports/epic-hal`
+hold the planned 32-bit and PIC ports; `ports/common` holds the firmware
+the stm32 and rp2040 ports share.
 
 ## Generation pipeline
 
