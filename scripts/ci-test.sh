@@ -4,7 +4,7 @@
 
 # The single suite script: CI runs exactly this, and so does `make test`.
 # Scope with one or more of LINT=1 SCRIPTS=1 COMMITS=1 CORE=1 GEN=1 BRIDGE=1
-# CPP=1 E2E=<backend> COVERAGE=1 DOCS=1 EXAMPLES=1 ESP32=1 PIC=1 PLATFORMIO=1 BUDGETS=1
+# CPP=1 E2E=<backend> COVERAGE=1 DOCS=1 EXAMPLES=1 ESP32=1 PIC=1 PLATFORMIO=1 STM32=1 RP2040=1 BUDGETS=1
 # FUZZ=1 README=1 NIGHTLY=1 SOAK=1; no scope runs everything.
 # E2E takes posix, avr, or both; both runs each backend once in one scope.
 # SCRIPTS_SHARD=N runs one CI shard of the SCRIPTS scope; unset runs it whole.
@@ -66,8 +66,81 @@ else
   echo "the suite lock is not taken: flock is not on this host" >&2
 fi
 
+# A host-wide cap on concurrent suites: the per-tree lock above stops a
+# second run of one tree, and this gate stops several trees from running at
+# once on a shared host. Each suite holds one of R2S_SUITE_SLOTS slots
+# (default 2: a full suite drives about a core, so two leave headroom on a
+# small shared host while short local runs drain fast). A suite that finds
+# every slot taken waits up to R2S_SUITE_HOST_WAIT_SECS (default 1800) and
+# then stops instead of hanging; R2S_LOCK_NOWAIT=1 refuses at once, as the
+# build lock does. A nested run inherits its ancestor's slot and skips the
+# gate, so script tests starting fixture suites never deadlock a
+# single-slot host against the suite running them.
+if [ -z "${R2S_SUITE_HOST_SLOT:-}" ]; then
+  host_cache=${R2S_CACHE_DIR:-}
+  if [ -z "$host_cache" ] && [ -n "${R2S_BUILD_DIR:-}" ]; then
+    host_cache=$(dirname "$R2S_BUILD_DIR")
+  fi
+  host_cache=${host_cache:-$HOME/.cache/ros2serial}
+  host_gate_dir=$host_cache/suite-host-slots
+  slots=${R2S_SUITE_SLOTS:-2}
+  wait_secs=${R2S_SUITE_HOST_WAIT_SECS:-1800}
+  case $slots in '' | *[!0-9]* | 0)
+    echo "R2S_SUITE_SLOTS must be a positive number of slots (got '$slots')" >&2
+    exit 2
+    ;;
+  esac
+  case $wait_secs in '' | *[!0-9]*)
+    echo "R2S_SUITE_HOST_WAIT_SECS must be a wait in seconds (got '$wait_secs')" >&2
+    exit 2
+    ;;
+  esac
+  mkdir -p "$host_gate_dir" 2>/dev/null || {
+    echo "the host gate directory cannot be created ($host_gate_dir)" >&2
+    echo "set R2S_CACHE_DIR to a writable directory" >&2
+    exit 1
+  }
+  host_slot_fd=""
+  host_slot=""
+  take_host_slot() {
+    local i f fd
+    for i in $(seq 0 $((slots - 1))); do
+      f="$host_gate_dir/slot-$i.lock"
+      exec {fd}>"$f" || return 1
+      if flock -n "$fd" 2>/dev/null; then
+        host_slot_fd=$fd
+        host_slot=$i
+        return 0
+      fi
+      exec {fd}>&- || return 1
+    done
+    return 1
+  }
+  if ! command -v flock >/dev/null 2>&1; then
+    echo "the host suite gate is not taken: flock is not on this host" >&2
+  elif take_host_slot; then
+    export R2S_SUITE_HOST_SLOT=$host_slot
+  elif [ "${R2S_LOCK_NOWAIT:-0}" = 1 ]; then
+    echo "the host suite gate is full ($slots slots in $host_gate_dir)" >&2
+    echo "wait for it, or raise R2S_SUITE_SLOTS" >&2
+    exit 75
+  else
+    echo "waiting for a host suite slot ($slots slots in $host_gate_dir)" >&2
+    deadline=$((SECONDS + wait_secs))
+    while [ "$SECONDS" -lt "$deadline" ] && ! take_host_slot; do
+      sleep 2
+    done
+    if [ -z "$host_slot_fd" ]; then
+      echo "the host suite gate stayed full for ${wait_secs}s ($slots slots in $host_gate_dir)" >&2
+      echo "wait for it, raise R2S_SUITE_SLOTS or R2S_SUITE_HOST_WAIT_SECS, or set R2S_LOCK_NOWAIT=1 to fail fast" >&2
+      exit 75
+    fi
+    export R2S_SUITE_HOST_SLOT=$host_slot
+  fi
+fi
+
 scoped=0
-for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE AMENT_LINT CPP E2E COVERAGE DOCS EXAMPLES ESP32 PIC PLATFORMIO BUDGETS FUZZ README NIGHTLY SOAK; do [ -n "${!v:-}" ] && scoped=1; done
+for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE AMENT_LINT CPP E2E COVERAGE DOCS EXAMPLES ESP32 PIC PLATFORMIO STM32 RP2040 BUDGETS FUZZ README NIGHTLY SOAK; do [ -n "${!v:-}" ] && scoped=1; done
 wants() { [ "$scoped" = 0 ] || [ -n "${!1:-}" ]; }
 
 failed=()
@@ -168,6 +241,8 @@ if wants EXAMPLES; then scope_now=EXAMPLES; section examples bash scripts/build-
 if wants ESP32; then scope_now=ESP32; section esp32 bash scripts/build-examples-esp32.sh; fi
 if wants PIC; then scope_now=PIC; section pic bash scripts/build-pic-canary.sh; fi
 if wants PLATFORMIO; then scope_now=PLATFORMIO; section platformio bash scripts/build-examples-pio.sh; fi
+if wants STM32; then scope_now=STM32; section stm32 bash ports/stm32/build.sh; fi
+if wants RP2040; then scope_now=RP2040; section rp2040 bash ports/rp2040/build.sh; fi
 if wants BUDGETS; then scope_now=BUDGETS; section budgets bash scripts/budgets-check.sh; fi
 if wants FUZZ; then scope_now=FUZZ; section fuzz bash scripts/fuzz.sh; fi
 if wants README; then scope_now=README; section readme bash scripts/check-readme.sh; fi
@@ -193,7 +268,7 @@ fi
 
 empty=""
 if [ "$scoped" = 1 ]; then
-  for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE AMENT_LINT CPP E2E COVERAGE DOCS EXAMPLES ESP32 PIC PLATFORMIO BUDGETS FUZZ README NIGHTLY SOAK; do
+  for v in LINT SCRIPTS COMMITS CORE GEN BRIDGE AMENT_LINT CPP E2E COVERAGE DOCS EXAMPLES ESP32 PIC PLATFORMIO STM32 RP2040 BUDGETS FUZZ README NIGHTLY SOAK; do
     if [ -n "${!v:-}" ]; then
       case " $ran_scopes " in *" $v "*) ;; *) empty="$empty $v" ;; esac
     fi

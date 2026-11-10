@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+# The robustness numbers in one place. scripts/mutation_triage.py reads the
+# floors from here when it gates the nightly run, and docs/robustness.md
+# repeats them for readers; scripts/test_robustness.py fails when the two
+# drift apart. The floors match docs/01-testing.md, section 6: only the
+# nightly measures them, and the bridge row stays documentary until the
+# bridge pipeline lands in its own issue.
+mutation_floors:
+  core: 85
+  cpp: 75
+  gen: 80
+  bridge: 70
+
+# Every libFuzzer target and the core sources it links. The fuzz script runs
+# each target over core/fuzz/corpus/<name>, and the coverage step filters
+# its report to these files, so "fuzzed" means exact code. Only sources
+# that compile to code under the fuzz flags belong here: actions.c is all
+# behind R2S_WITH_ACTIONS, which the fuzz build never defines.
+fuzz_targets:
+  framer:
+    - core/src/framer.c
+    - core/src/rcobs.c
+    - core/src/crc.c
+  rcobs_decode:
+    - core/src/rcobs.c
+  session:
+    - core/src/codec.c
+    - core/src/crc.c
+    - core/src/error.c
+    - core/src/framer.c
+    - core/src/log.c
+    - core/src/params.c
+    - core/src/rcobs.c
+    - core/src/rx.c
+    - core/src/services.c
+    - core/src/session.c
+    - core/src/test_reset.c
+    - core/src/time.c
+    - core/src/topics.c
+    - core/src/tx.c
+    - core/src/varint.c
+  codec:
+    - core/src/codec.c
+    - core/src/tx.c
+    - core/src/rcobs.c
+    - core/src/crc.c
+    - core/src/varint.c

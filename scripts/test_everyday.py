@@ -161,6 +161,8 @@ STRIPPED_SCOPES = (
     'EXAMPLES',
     'ESP32',
     'PIC',
+    'STM32',
+    'RP2040',
     'BUDGETS',
     'FUZZ',
     'README',
@@ -274,3 +276,13 @@ def test_make_forwards_the_build_lock_nowait():
     # R2S_LOCK_NOWAIT=1; make must hand it into the dev image too.
     assert 'R2S_LOCK_NOWAIT' in (ROOT / 'scripts' / 'with-build-lock.sh').read_text()
     assert 'R2S_LOCK_NOWAIT' in pass_vars(), 'make drops R2S_LOCK_NOWAIT before the container'
+
+
+def test_make_forwards_the_host_gate_knobs():
+    # scripts/ci-test.sh caps concurrent suites with R2S_SUITE_SLOTS and
+    # bounds the wait with R2S_SUITE_HOST_WAIT_SECS; make must hand both
+    # into the dev image or the gate stays at its defaults.
+    text = (ROOT / 'scripts' / 'ci-test.sh').read_text()
+    for var in ('R2S_SUITE_SLOTS', 'R2S_SUITE_HOST_WAIT_SECS'):
+        assert var in text, f'ci-test.sh never reads {var}'
+        assert var in pass_vars(), f'make drops {var} before the container'

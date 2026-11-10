@@ -100,6 +100,12 @@ def test_elf_machine_reads_an_avr_header(tmp_path):
     assert size_report.elf_machine(firmware) == 83
 
 
+def test_elf_machine_reads_an_arm_header(tmp_path):
+    firmware = tmp_path / 'bluepill.elf'
+    firmware.write_bytes(elf_bytes(0x28))
+    assert size_report.elf_machine(firmware) == 0x28
+
+
 def test_elf_machine_is_none_when_unreadable(tmp_path):
     assert size_report.elf_machine(tmp_path / 'missing.elf') is None
     empty = tmp_path / 'empty.elf'
@@ -159,6 +165,53 @@ def test_measure_keeps_the_avr_tools_when_the_machine_is_unknown(tmp_path, monke
     size_report.measure(tmp_path)
     assert 'avr-size' in calls
     assert 'xtensa-esp32-elf-size' not in calls
+
+
+def test_measure_uses_the_arm_tools_for_arm_firmware(tmp_path, monkeypatch):
+    empty_data_dir(tmp_path, monkeypatch)
+    cache = tmp_path / 'empty-cache'
+    cache.mkdir()
+    monkeypatch.setenv('R2S_CACHE_DIR', str(cache))
+    monkeypatch.setenv('PATH', '/usr/bin:/bin')
+    firmware = tmp_path / 'stm32' / 'firmware.elf'
+    firmware.parent.mkdir(parents=True)
+    firmware.write_bytes(elf_bytes(0x28))
+    calls = []
+    monkeypatch.setattr(size_report, '_run', fake_run(calls))
+    sizes = size_report.measure(tmp_path)['stm32/firmware.elf']
+    assert 'arm-none-eabi-size' in calls
+    assert 'avr-size' not in calls
+    assert 'xtensa-esp32-elf-size' not in calls
+    assert sizes['flash'] == 8200
+
+
+def test_arm_tool_overrides_win(tmp_path, monkeypatch):
+    monkeypatch.setenv('R2S_ARM_SIZE', 'custom-size')
+    monkeypatch.setenv('R2S_ARM_NM', 'custom-nm')
+    assert size_report._arm_tool('arm-none-eabi-size', 'R2S_ARM_SIZE') == 'custom-size'
+    assert size_report._arm_tool('arm-none-eabi-nm', 'R2S_ARM_NM') == 'custom-nm'
+
+
+def test_arm_tools_prefer_path_then_cache_then_bare_name(tmp_path, monkeypatch):
+    monkeypatch.delenv('R2S_ARM_SIZE', raising=False)
+    monkeypatch.setenv('PATH', '/usr/bin:/bin')
+    cache = tmp_path / 'cache'
+    tool = cache / 'xpack-arm' / 'xpack-arm-none-eabi-gcc-1' / 'bin' / 'arm-none-eabi-size'
+    tool.parent.mkdir(parents=True)
+    tool.write_bytes(b'')
+    monkeypatch.setenv('R2S_CACHE_DIR', str(cache))
+    assert size_report._arm_tool('arm-none-eabi-size', 'R2S_ARM_SIZE') == str(tool)
+
+
+def test_arm_tools_fall_back_to_the_bare_name(tmp_path, monkeypatch):
+    monkeypatch.delenv('R2S_ARM_SIZE', raising=False)
+    monkeypatch.delenv('R2S_ARM_NM', raising=False)
+    cache = tmp_path / 'empty-cache'
+    cache.mkdir()
+    monkeypatch.setenv('R2S_CACHE_DIR', str(cache))
+    monkeypatch.setenv('PATH', '/usr/bin:/bin')
+    assert size_report._arm_tool('arm-none-eabi-size', 'R2S_ARM_SIZE') == 'arm-none-eabi-size'
+    assert size_report._arm_tool('arm-none-eabi-nm', 'R2S_ARM_NM') == 'arm-none-eabi-nm'
 
 
 def test_xtensa_tools_resolve_into_the_installed_core(tmp_path, monkeypatch):

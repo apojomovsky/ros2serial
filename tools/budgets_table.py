@@ -26,12 +26,15 @@ METHOD = """## How to reproduce
 
 Run `make size-report` in the dev image. It builds every example sketch
 for Uno and Mega through `scripts/build-examples.sh`, the ESP32 builds
-through `scripts/build-examples-esp32.sh`, then measures the firmware
+through `scripts/build-examples-esp32.sh`, the STM32 firmware through
+`ports/stm32/build.sh` and the RP2040 firmware through
+`ports/rp2040/build.sh`, then measures the firmware
 with `tools/size_report.py` and `tools/stack_report.py`:
 
 * Flash is text plus data and static RAM is data plus bss, as `avr-size`
   prints them. ESP32 firmware measures through the matching
-  `xtensa-esp32-elf-size`, whose table reads the same way.
+  `xtensa-esp32-elf-size`, and STM32 and RP2040 firmware through
+  `arm-none-eabi-size`, whose tables read the same way.
 * The stack column is the deepest static path from `main`, computed from
   `avr-gcc -fstack-usage` frames and the `avr-objdump -d` call graph.
   The core allows no recursion and no indirect calls, so the deepest
@@ -39,8 +42,8 @@ with `tools/size_report.py` and `tools/stack_report.py`:
   optimization, under which `avr-gcc` writes no frame files, so the gate
   rebuilds each sketch without LTO under `stack/` and analyzes that
   build; the deeper non-LTO paths overestimate rather than hide.
-  Xtensa firmware skips the AVR call-graph analysis, so ESP32 rows read
-  `n/a` for stack.
+  Xtensa and Arm firmware skip the AVR call-graph analysis, so ESP32,
+  STM32 and RP2040 rows read `n/a` for stack.
 * The toolchain is pinned in `ci/versions.env`, so the same image
   measures the same bytes everywhere, including CI.
 
