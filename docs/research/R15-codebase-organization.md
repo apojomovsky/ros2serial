@@ -71,10 +71,12 @@ package layout, or any gate.
   under `core/src`, 3 shims under `core/host`. Real code is about
   36 files; the fuzzer corpus is 83 percent of the directory by
   count.
-- `gen/` 150: `r2s_gen` (19 modules plus `reference/`, `schema/`,
-  `snapshots/` with 51 `.msg` files across jazzy, lyrical and
-  rolling), `r2s_rosidl`, `tests/` (34 files, 32 of them
-  `test_*.py`), `tests/golden` (22 files).
+- `gen/` 150: `r2s_gen` (16 modules plus `reference/`, `schema/`,
+  `snapshots/` with 48 `.msg` files and one `.action` file per
+  distro across jazzy, lyrical and rolling), `r2s_rosidl`,
+  `tests/` (34 files, 32 of them `test_*.py`), `tests/golden`
+  (22 files).
+- `cpp/` 49: the MCU C++ layer (`include/`, `src/`, `tests/`).
 - `spec/` 134: 126 vector files, 7 files under `spec/schema`, plus
   `spec/protocol.md`.
 - `scripts/` 121: 65 implementation and helper files, 56
