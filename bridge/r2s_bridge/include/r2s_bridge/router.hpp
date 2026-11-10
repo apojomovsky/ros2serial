@@ -44,8 +44,11 @@ using LogSink = std::function<void(SessionLog, const std::string &)>;
  */
 struct NodeServiceInterfaces
 {
+  /// The rcl handle behind the servers.
   rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base;
+  /// The graph behind the clients.
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph;
+  /// The registry behind the servers.
   rclcpp::node_interfaces::NodeServicesInterface::SharedPtr services;
 };
 

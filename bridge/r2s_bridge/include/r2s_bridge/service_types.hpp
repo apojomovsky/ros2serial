@@ -39,8 +39,15 @@ public:
   /// Unloads the type support.
   ~ServiceTypes();
   /// Moves the loaded handles.
+  /**
+   * \param[in] other the object to take over.
+   */
   ServiceTypes(ServiceTypes && other) noexcept = default;
   /// Moves the loaded handles.
+  /**
+   * \param[in] other the object to take over.
+   * \return A reference to this object.
+   */
   ServiceTypes & operator=(ServiceTypes && other) noexcept = default;
   /// Not copyable.
   ServiceTypes(const ServiceTypes &) = delete;
@@ -61,8 +68,15 @@ public:
     /// An empty struct, no members.
     Struct() = default;
     /// Moves the owned storage.
+    /**
+     * \param[in] other the object to take over.
+     */
     Struct(Struct && other) noexcept;
     /// Moves the owned storage.
+    /**
+     * \param[in] other the object to take over.
+     * \return A reference to this object.
+     */
     Struct & operator=(Struct && other) noexcept;
     /// Not copyable.
     Struct(const Struct &) = delete;

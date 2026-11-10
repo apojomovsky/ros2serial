@@ -241,12 +241,12 @@ struct ParamInfo
  */
 struct ServiceInfo
 {
-  std::uint8_t index = 0;
-  std::uint8_t role = 0;
-  std::array<std::uint8_t, 8> type_hash{};
-  std::string type_name;
-  std::string service_name;
-  std::uint8_t status = 0;
+  std::uint8_t index = 0;  ///< The walk index.
+  std::uint8_t role = 0;  ///< The SVR-2 role the DECLARE named.
+  std::array<std::uint8_t, 8> type_hash{};  ///< The first 8 hash bytes.
+  std::string type_name;  ///< The announced ROS service type.
+  std::string service_name;  ///< The announced service name.
+  std::uint8_t status = 0;  ///< The host verdict on the DECLARE.
   /// Two service announcements match when every field matches.
   /**
    * \param[in] other the announcement to compare.
