@@ -79,15 +79,17 @@ and [Part II, Test strategy](00-design.md#test-strategy).
 | Box | Directory | Test scope |
 | --- | --- | --- |
 | Portable core | `core/` | `CORE=1` |
-| Port glue | `ports/arduino`, `ports/posix` | `E2E=posix`, `E2E=avr` |
+| Port glue | `ports/arduino`, `ports/posix`, `ports/ch32v` | `E2E=posix`, `E2E=avr`, `CORE=1` for the CH32V contract test |
 | C++ layer | `cpp/` | `CPP=1` |
 | Generated sources | `gen/` output, `r2s_generated.h` | `GEN=1` |
 | Bridge | `bridge/` | `BRIDGE=1` |
 | Spec and vectors | `spec/` | every scope, via vectors |
 | Generator | `gen/r2s_gen` | `GEN=1` |
 
-`ports/avr`, `ports/stm32`, `ports/ch32v` and `ports/epic-hal` hold the
-planned 32-bit and PIC ports; each currently carries only a `.gitkeep`.
+`ports/avr`, `ports/stm32` and `ports/epic-hal` hold the planned AVR,
+32-bit and PIC ports; each currently carries only a `.gitkeep`.
+`ports/ch32v` holds the CH32V003 glue, built with the pinned RISC-V
+toolchain and judged by the budgets gate.
 
 ## Generation pipeline
 

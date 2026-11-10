@@ -121,9 +121,10 @@ tasks:
       - core/**
       # Vectors replay through the conformance runners.
       - spec/**
-      # The scope runs the posix and arduino port contract tests.
+      # The scope runs the posix, arduino and ch32v port contract tests.
       - ports/posix/**
       - ports/arduino/**
+      - ports/ch32v/**
     cmds:
       - CORE=1 bash scripts/ci-test.sh
 
@@ -352,6 +353,7 @@ tasks:
       - scripts/budgets-check.sh
       - scripts/build-examples.sh
       - scripts/build-examples-esp32.sh
+      - scripts/build-examples-ch32v.sh
       - tools/budgets.yaml
       - tools/size_report.py
       - tools/stack_report.py
@@ -364,6 +366,7 @@ tasks:
       - core/**
       - cpp/**
       - ports/arduino/**
+      - ports/ch32v/**
     cmds:
       - BUDGETS=1 bash scripts/ci-test.sh
 
