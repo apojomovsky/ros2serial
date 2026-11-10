@@ -1153,7 +1153,8 @@ struct Session::Impl
           info.service_name + "'");
       } else if (verdict == kServiceStatusHashMismatch) {
         log(SessionLog::kError,
-          "SVC refused: the hash of '" + info.type_name + "' is not the installed one, for service '" +
+          "SVC refused: the hash of '" + info.type_name +
+          "' is not the installed one, for service '" +
           info.service_name + "'");
       }
       info.status = verdict;

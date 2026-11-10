@@ -121,7 +121,8 @@ ServiceTypes::Struct ServiceTypes::make_request() const
   Struct out;
   out.members = request_members_;
   out.storage.resize(request_members_->size_of_);
-  request_members_->init_function(out.storage.data(), rosidl_runtime_cpp::MessageInitialization::ALL);
+  request_members_->init_function(
+    out.storage.data(), rosidl_runtime_cpp::MessageInitialization::ALL);
   return out;
 }
 
@@ -130,7 +131,8 @@ ServiceTypes::Struct ServiceTypes::make_response() const
   Struct out;
   out.members = response_members_;
   out.storage.resize(response_members_->size_of_);
-  response_members_->init_function(out.storage.data(), rosidl_runtime_cpp::MessageInitialization::ALL);
+  response_members_->init_function(
+    out.storage.data(), rosidl_runtime_cpp::MessageInitialization::ALL);
   return out;
 }
 

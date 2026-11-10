@@ -3852,7 +3852,9 @@ TEST(ServiceExchange, QueuesOnePendingRequestPerIndex)
   fixture.deliver_frame(kAck, 0u, {kHelperServices, 0x00u});
   const auto next = drain_decoded(fixture);
   ASSERT_EQ(next.size(), 1u);
-  EXPECT_EQ(next[0], with_check({kHelperServices, 1u, kHelperSvcRequest, 0x01u, 0x03u, 0x01u, 0xCCu}));
+  EXPECT_EQ(
+    next[0],
+    with_check({kHelperServices, 1u, kHelperSvcRequest, 0x01u, 0x03u, 0x01u, 0xCCu}));
 }
 
 // covers: SVR-5
@@ -3888,7 +3890,9 @@ TEST(ServiceExchange, AnswersOnlyTheOutstandingCall)
   EXPECT_FALSE(fixture.session().send_service_response(8u, 0u, {}));
   const auto units = drain_decoded(fixture);
   ASSERT_EQ(units.size(), 1u);
-  EXPECT_EQ(units[0], with_check({kHelperServices, 0u, kHelperSvcResponse, 0x00u, 0x07u, 0x00u, 0x01u}));
+  EXPECT_EQ(
+    units[0],
+    with_check({kHelperServices, 0u, kHelperSvcResponse, 0x00u, 0x07u, 0x00u, 0x01u}));
   // A REQUEST for an index the walk never announced is acked and dropped:
   // nothing is served and no event fires.
   fixture.deliver_frame(kHelperServices, 2u, {kHelperSvcRequest, 0x02u, 0x09u, 0x09u});
@@ -4512,7 +4516,9 @@ TEST(ServiceExchange, PrioritizesTheAnswerOverQueuedRequests)
   fixture.deliver_frame(kAck, 0u, {kHelperServices, 0x00u});
   const auto answered = drain_decoded(fixture);
   ASSERT_EQ(answered.size(), 1u);
-  EXPECT_EQ(answered[0], with_check({kHelperServices, 1u, kHelperSvcResponse, 0x01u, 0x07u, 0x00u, 0x01u}));
+  EXPECT_EQ(
+    answered[0],
+    with_check({kHelperServices, 1u, kHelperSvcResponse, 0x01u, 0x07u, 0x00u, 0x01u}));
   fixture.deliver_frame(kAck, 1u, {kHelperServices, 0x01u});
   const auto next = drain_decoded(fixture);
   ASSERT_EQ(next.size(), 1u);
