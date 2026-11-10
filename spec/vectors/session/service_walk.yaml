@@ -2,7 +2,7 @@ name: service_walk
 covers: [SVR-7]
 steps:
   - from: mcu
-    frame: "00 00 02 04 00 00 00 00 00 00 04 80 00 e8 03 00 00 cd 00 04 6e 6f 64 65 56 9a"
+    frame: "00 00 02 04 00 00 00 00 00 00 04 80 00 e8 03 00 00 4c 00 04 6e 6f 64 65 9e 83"
     at_ms: 0
     note: "HELLO, protocol 4, params plus reliable plus services, no topics"
   - from: host
