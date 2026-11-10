@@ -214,6 +214,17 @@ def test_the_gate_reads_its_floors_from_a_file(tmp_path):
     assert '99%' in result.stderr
 
 
+def test_the_gate_rejects_a_non_integer_floor(tmp_path):
+    floors = tmp_path / 'floors.yaml'
+    floors.write_text(
+        'mutation_floors:\n  core: high\n  cpp: 75\n  gen: 80\n  bridge: 70\n', encoding='utf-8'
+    )
+    mull, mutmut = half_killed_results()
+    result, _ = run_triage(tmp_path, mull, mutmut, extra=('--gate', '--floors', str(floors)))
+    assert result.returncode != 0
+    assert 'core' in result.stderr
+
+
 def test_the_gate_rejects_a_floors_file_missing_a_component(tmp_path):
     floors = tmp_path / 'floors.yaml'
     floors.write_text('mutation_floors:\n  core: 85\n', encoding='utf-8')

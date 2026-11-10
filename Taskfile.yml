@@ -468,6 +468,7 @@ tasks:
       - scripts/e2e-lease.sh
       - scripts/fuzz.sh
       - tools/fuzz_corpus.py
+      - tools/fuzz_coverage.py
       # Every target parses the core; the seeds come from the vectors.
       - core/**
       - spec/**

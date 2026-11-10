@@ -59,6 +59,10 @@ def load_floors(path):
     for component in COMPONENTS:
         if component not in floors:
             sys.exit(f'mutation_triage: floors file names no floor for {component}: {path}')
+        if not isinstance(floors[component], int) or isinstance(floors[component], bool):
+            sys.exit(
+                f'mutation_triage: floors file names no integer floor for {component}: {path}'
+            )
     return floors
 
 
