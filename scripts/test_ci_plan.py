@@ -78,7 +78,10 @@ SECTION_SCOPE = {
     'stm32': 'stm32',
     'rp2040': 'rp2040',
     'budgets': 'budgets',
-    'nightly': 'nightly',
+    # The nightly caller is label-gated, not scope-gated: it runs the
+    # reusable workflow for the fuzz-long label, while e2e-isolation
+    # gates on the nightly scope.
+    'e2e-isolation': 'nightly',
     'e2e-avr': 'e2e',
     'e2e-posix': 'e2e',
 }
@@ -317,6 +320,12 @@ def test_the_plan_carries_no_soak_output():
     assert nightly['with']['soak'] is False
 
 
+def test_the_label_gated_nightly_caller_still_needs_the_plan():
+    job = nightly_call()
+    needs = job['needs'] if isinstance(job['needs'], list) else [job['needs']]
+    assert 'plan' in needs
+
+
 def test_each_section_job_needs_the_plan_and_gates_on_its_scope():
     jobs = workflow()['jobs']
     for name, scope in SECTION_SCOPE.items():
@@ -402,9 +411,10 @@ def test_section_jobs_save_their_checksums_on_master():
     assert 'lint' not in saves, 'lint writes no checksum: it always runs'
     assert 'bridge-images' not in saves, 'bridge-images is setup, not a section'
     assert 'plan' not in saves
+    assert saves['e2e-isolation'] == '.task/checksum/nightly'
     night_saves = jobs_with_saves(nightly_jobs())
     assert night_saves['fuzz-long'] == '.task/checksum/fuzz'
-    assert night_saves['e2e-isolation'] == '.task/checksum/nightly'
+    assert 'e2e-isolation' not in night_saves
 
 
 def test_no_matrix_job_saves_a_checksum():
@@ -506,9 +516,11 @@ def test_save_jobs_run_on_master_only_after_their_legs(tmp_path):
     assert set(SECTION_SAVE.values()) <= set(master_jobs)
 
 
-def test_a_cache_miss_runs_every_job_but_the_saves(tmp_path):
+def test_a_cache_miss_runs_every_job_but_the_saves_and_the_label_gated_caller(tmp_path):
     repo = test_taskfile.fixture(tmp_path)
-    assert selected_jobs(repo, tmp_path) == jobs_without_saves()
+    expected = [job for job in jobs_without_saves() if job != 'nightly']
+    assert selected_jobs(repo, tmp_path) == expected
+    assert selected_jobs(repo, tmp_path, labels=('fuzz-long',)) == jobs_without_saves()
 
 
 def test_a_docs_edit_runs_docs_mermaid_and_lint(tmp_path):
@@ -624,21 +636,23 @@ def test_a_common_source_edit_runs_both_ports_and_budgets(tmp_path):
     ]
 
 
-def test_a_versions_env_edit_runs_every_job_but_the_saves(tmp_path):
+def test_a_versions_env_edit_runs_every_job_but_the_saves_and_the_label_gated_caller(tmp_path):
     repo = test_taskfile.fixture(tmp_path)
     establish(repo)
     (repo / 'ci' / 'versions.env').write_text('TASK_VERSION=1\n')
-    assert selected_jobs(repo, tmp_path) == jobs_without_saves()
+    expected = [job for job in jobs_without_saves() if job != 'nightly']
+    assert selected_jobs(repo, tmp_path) == expected
+    assert selected_jobs(repo, tmp_path, labels=('fuzz-long',)) == jobs_without_saves()
 
 
-def test_an_isolation_edit_runs_the_nightly_job_not_the_e2e_legs(tmp_path):
+def test_an_isolation_edit_runs_the_isolation_job_not_the_e2e_legs(tmp_path):
     repo = test_taskfile.fixture(tmp_path)
     establish(repo)
     (repo / 'tests' / 'e2e' / 'test_isolation.py').write_text('probe\nprobe again\n')
     assert selected_jobs(repo, tmp_path) == [
         'bridge-images',
+        'e2e-isolation',
         'lint',
-        'nightly',
         'plan',
         'scripts',
     ]
@@ -677,11 +691,10 @@ def test_master_push_runs_only_the_plan_selected_sections(tmp_path):
     ]
 
 
-def test_a_cache_miss_on_master_runs_every_job(tmp_path):
+def test_a_cache_miss_on_master_runs_every_job_but_the_label_gated_caller(tmp_path):
     repo = test_taskfile.fixture(tmp_path)
-    assert selected_jobs(repo, tmp_path, event='push', ref=MASTER_REF) == sorted(
-        workflow()['jobs']
-    )
+    expected = sorted(set(workflow()['jobs']) - {'nightly'})
+    assert selected_jobs(repo, tmp_path, event='push', ref=MASTER_REF) == expected
 
 
 def test_pull_request_and_master_push_select_the_same_sections(tmp_path):
@@ -748,7 +761,8 @@ def test_a_fuzz_edit_runs_fuzz_smoke_but_not_fuzz_long_without_the_label(tmp_pat
     assert outputs['nightly'] == '1'
     jobs = running_jobs('pull_request', outputs)
     assert 'fuzz-smoke' in jobs
-    assert 'nightly' in jobs
+    assert 'e2e-isolation' in jobs
+    assert 'nightly' not in jobs
     assert not fuzz_long_runs('pull_request', outputs)
 
 

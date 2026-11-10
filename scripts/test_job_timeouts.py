@@ -142,7 +142,7 @@ def test_soak_outlasts_its_backends_plus_the_image_floor():
 
 
 def test_isolation_outlasts_its_sections_with_headroom():
-    job = jobs_of(ROOT / '.github' / 'workflows' / 'nightly-jobs.yml')['e2e-isolation']
+    job = jobs_of(ROOT / '.github' / 'workflows' / 'ci.yml')['e2e-isolation']
     # Two full e2e sections side by side measured about 28 minutes
     # including setup (#577), so the bound keeps roughly double headroom.
     assert job['timeout-minutes'] >= 60, (
