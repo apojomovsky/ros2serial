@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""r2s-gen: the ros2serial code generator.
+"""
+r2s-gen: the ros2serial code generator.
 
 From message definitions and a config to firmware sources.
 """

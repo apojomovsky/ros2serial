@@ -99,7 +99,7 @@ string<=130[<=130] seq_strings
 
 
 def repository_for(tmp_path, definitions):
-    """A repository whose message path holds `definitions`, keyed by canonical type name."""
+    """Build a repository whose message path holds `definitions`, keyed by canonical type name."""
     root = tmp_path / 'messages'
     for type_name, text in definitions.items():
         write_message(root, type_name, text)
@@ -107,18 +107,18 @@ def repository_for(tmp_path, definitions):
 
 
 def resolve(repository, roots, bound_map=None):
-    """The bounded messages for `roots`, ready to build a table from."""
+    """Resolve the bounded messages for `roots`, ready to build a table from."""
     return bounds.resolve(repository, roots, bounds=bound_map or {})
 
 
 def build(roots, bound_map=None, repository=None):
-    """The descriptor table for `roots` with `bound_map` from the default repository."""
+    """Build the descriptor table for `roots` with `bound_map` from the default repository."""
     resolved = resolve(repository or msgs.MessageRepository(), roots, bound_map)
     return resolved, descriptors.build(resolved, roots)
 
 
 def compiled_bytes(tmp_path, resolved, roots):
-    """The type records and field entries the emitted C holds, read from a host run."""
+    """Read the type records and field entries the emitted C holds from a host run."""
     table = descriptors.build(resolved, roots)
     (tmp_path / 'r2s_generated.h').write_text(
         emit.emit_types(resolved, max_nest=table.max_nest), encoding='utf-8'

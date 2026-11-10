@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""The reference frame codec.
+"""
+The reference frame codec.
 
 The frame vectors, the zero residue and the rules that drop a unit.
 """

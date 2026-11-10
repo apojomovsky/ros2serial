@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""The `bundle` subcommand: the Arduino library with bundled common types.
+"""
+The `bundle` subcommand: the Arduino library with bundled common types.
 
 The library carries the descriptors for the fourteen bundled types with the
 documented default bounds, plus the `ros2serial.h` header that expands a
@@ -96,12 +97,16 @@ _CPP_HEADERS = tuple(f'src/{cpp.message_path(name)}' for name in BUNDLED_TYPES)
 
 
 def files_for() -> tuple[str, ...]:
-    """The exact relative paths `bundle` writes, in build order."""
+    """Return the exact relative paths `bundle` writes, in build order."""
     return _FILES + _CPP_HEADERS
 
 
 def _cname(type_name: str) -> str:
-    """A canonical type as the bundle's suffix: `std_msgs/msg/Float32` to `std_msgs_Float32`."""
+    """
+    Spell a canonical type as the bundle's suffix.
+
+    `std_msgs/msg/Float32` to `std_msgs_Float32`.
+    """
     package, _, name = type_name.partition('/msg/')
     return f'{package}_{name}'
 
@@ -115,7 +120,15 @@ def _digest(distro: str) -> str:
 
 
 def bundle(distro: str = 'jazzy') -> dict[str, str]:
-    """The library's files for `distro`: metadata, the sketch header and the bundled pair."""
+    """
+    Bundle the library's files for `distro`.
+
+    Metadata, the sketch header and the bundled pair.
+
+    :param distro: the snapshot distro to resolve from.
+    :return: file name to file text.
+    :raises MessageError: if the distro is unknown.
+    """
     if distro not in DISTROS:
         raise MessageError(
             '--distro', f"unknown distro '{distro}'", 'use one of: jazzy, lyrical, rolling'
@@ -151,7 +164,7 @@ def _banner(prefix: str, distro: str) -> str:
 
 
 def _library_properties(distro: str) -> str:
-    """The Arduino library metadata for the bundle, AVR and ESP32."""
+    """Render the Arduino library metadata for the bundle, AVR and ESP32."""
     lines = [
         _banner('#', distro),
         'name=ros2serial',
@@ -170,7 +183,7 @@ def _library_properties(distro: str) -> str:
 
 
 def _max_frame(resolved: Mapping[str, ResolvedMessage]) -> int:
-    """The largest decoded frame a bundled sketch sends or receives, overhead included."""
+    """Return the largest decoded frame a bundled sketch sends or receives, overhead included."""
     # The generator's own wire-size formula, so the bundle limit matches a
     # generated firmware's for the same payloads.
     memo: dict = {}
@@ -187,7 +200,7 @@ def _max_frame(resolved: Mapping[str, ResolvedMessage]) -> int:
 
 
 def _hash_bytes(repository: msgs.MessageRepository, type_name: str) -> str:
-    """The first 8 bytes of the type's RIHS01 hash, as CTL-12 carries them."""
+    """Return the first 8 bytes of the type's RIHS01 hash, as CTL-12 carries them."""
     digest = typehash.type_hash(repository, type_name)
     return ', '.join(f'0x{byte:02x}u' for byte in bytes.fromhex(digest[len('RIHS01_') :])[:8])
 
@@ -200,7 +213,7 @@ def _bundled_h(
     digest: str,
     max_nest: int,
 ) -> str:
-    """The bundled header: structs, the limits, and the per-type index, table and hash."""
+    """Emit the bundled header: structs, the limits, and the per-type index, table and hash."""
     structs = emit.emit_types(resolved, max_nest)
     guard = 'R2S_GENERATED_H'
     assert structs.count(guard) == 2
@@ -248,7 +261,8 @@ def _bundled_c(
     tables: Mapping[str, descriptors.DescriptorTable],
     distro: str,
 ) -> str:
-    """The bundled source.
+    """
+    Emit the bundled source.
 
     Per-type records, entries and tables, so the linker drops unused types.
     """
@@ -325,9 +339,12 @@ def _bundled_c(
 
 
 def _wrapped_define(head: str, value: str) -> list[str]:
-    """A #define uncrustify keeps: a comma list rides on one line within 88
-    columns, else the whole value rides on its own line, as does any other
-    value past 100 columns."""
+    """
+    Wrap a #define the way uncrustify keeps it.
+
+    A comma list rides on one line within 88 columns, else the whole value
+    rides on its own line, as does any other value past 100 columns.
+    """
     if ',' in value:
         if len(f'{head} {value}') <= 88:
             return [f'{head} {value}']
@@ -341,7 +358,8 @@ def _scope_maps(
     tables: Mapping[str, descriptors.DescriptorTable],
     repository: msgs.MessageRepository,
 ) -> list[str]:
-    """One scope map per package: the facts a sketch row needs about its type.
+    """
+    Emit one scope map per package: the facts a sketch row needs about its type.
 
     A row names a C++ type (`pkg::msg::Type`), which the preprocessor cannot
     split into package and type, so each row pastes only the package half and
@@ -385,7 +403,8 @@ def _c_type_aliases(
     tables: Mapping[str, descriptors.DescriptorTable],
     repository: msgs.MessageRepository,
 ) -> list[str]:
-    """One alias macro per bundled type for the C row spelling.
+    """
+    Emit one alias macro per bundled type for the C row spelling.
 
     A C row spells its type the generated C struct name, which pastes
     straight onto these, so the C expansion never splits the spelling the
@@ -412,7 +431,8 @@ def _c_type_aliases(
 
 
 def _c_spelling_traps() -> list[str]:
-    """One trap per package and lookup for a C row with a C++ spelling.
+    """
+    Emit one trap per package and lookup for a C row with a C++ spelling.
 
     A C row that spells its type with double colons pastes only the package
     half here, so it fails naming the underscore spelling the C list uses.
@@ -430,7 +450,8 @@ def _c_spelling_traps() -> list[str]:
 
 
 def _cxx_spelling_traps() -> list[str]:
-    """One trap per bundled type and lookup for a C++ row with a C spelling.
+    """
+    Emit one trap per bundled type and lookup for a C++ row with a C spelling.
 
     A C++ row that spells its type with underscores selects one of these
     instead of the scope maps above, and fails naming the double-colon
@@ -458,8 +479,12 @@ def _sketch_h_c(
     tables: Mapping[str, descriptors.DescriptorTable],
     repository: msgs.MessageRepository,
 ) -> list[str]:
-    """The C expansion for underscore rows: the table, the typed publish
-    functions and dispatch in the sketch's own translation unit."""
+    """
+    Emit the C expansion for underscore rows.
+
+    The table, the typed publish functions and dispatch in the sketch's own
+    translation unit.
+    """
     lines = [
         '/* The bundled tables the passes below encode and decode with. */',
         *[
@@ -672,7 +697,7 @@ def _sketch_h(
     repository: msgs.MessageRepository,
     distro: str,
 ) -> str:
-    """The sketch header: the `R2S_TOPICS` expansion into table, wrappers and dispatch."""
+    """Emit the sketch header: the `R2S_TOPICS` expansion into table, wrappers and dispatch."""
     lines = [
         _banner('/*', distro) + ' */',
         '#ifndef ROS2SERIAL_H',

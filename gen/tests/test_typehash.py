@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""RIHS01 type hashes: the generator's hash equals the installed type support's.
+"""
+RIHS01 type hashes: the generator's hash equals the installed type support's.
 
 The expected values are the hashes REP-2011 defines, read from the type
 description JSON files the ROS build installs for these types.

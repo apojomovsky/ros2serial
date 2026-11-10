@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""RIHS01 type hashes over resolved message definitions.
+"""
+RIHS01 type hashes over resolved message definitions.
 
 The hash is the REP-2011 RIHS01 string the installed type support reports.
 The .msg to FieldType mapping follows `rosidl_adapter` (`MSG_TYPE_TO_IDL`)
@@ -60,7 +61,13 @@ _PRIMITIVE_TYPE_IDS = {
 
 
 def type_hash(repository: msgs.MessageRepository, type_name: str) -> str:
-    """The `RIHS01_` hash of `type_name`, equal to the installed type support's hash."""
+    """
+    Compute the `RIHS01_` hash of `type_name`, as the installed type support reports.
+
+    :param repository: the messages to resolve from.
+    :param type_name: the type to hash.
+    :return: the `RIHS01_` hash string.
+    """
     canonical = msgs.canonical_type_name(type_name)
     descriptions: dict[str, dict] = {}
     queue = [canonical]
@@ -127,7 +134,7 @@ def _field_type(field: msgs.Field, where: str) -> dict:
 
 
 def _full_description(type_name: str, descriptions: dict[str, dict]) -> dict:
-    """The type description with the transitively referenced types, sorted by name."""
+    """Assemble the type description with its referenced types, sorted by name."""
     references: set[str] = set()
     queue = [
         field['type']['nested_type_name']

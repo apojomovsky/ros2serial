@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""The Python reference for CRC, rCOBS and varint.
+"""
+The Python reference for CRC, rCOBS and varint.
 
 Published values, properties, rejections, vectors.
 """

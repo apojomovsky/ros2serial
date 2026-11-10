@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""The r2s-gen distribution.
+"""
+The r2s-gen distribution.
 
 Pip installs it, and colcon builds the same sources as an ament_python package.
 

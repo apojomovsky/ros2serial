@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""The deliberately injected session bug, found through the same comparison.
+"""
+The deliberately injected session bug, found through the same comparison.
 
 libr2s_host_injected.so builds the same sources with
 R2S_TEST_INJECT_READY_ZERO_TOKEN, which accepts a READY token of 0 against
@@ -48,7 +49,7 @@ def handshake_to_ready(pair: Pair, token: bytes) -> None:
 
 
 def injected_pair() -> Pair:
-    """The pair on the injected-bug library, built by build-host-lib.sh."""
+    """Build the pair on the injected-bug library, built by build-host-lib.sh."""
     return Pair(host_mod.find_library('libr2s_host_injected.so'))
 
 

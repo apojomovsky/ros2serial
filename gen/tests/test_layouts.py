@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""The generate layouts: the exact file set each layout writes, and the generate command.
+"""
+The generate layouts: the exact file set each layout writes, and the generate command.
 
 Covers the G10 output contract: cmake writes the generated pair plus a
 CMakeLists static library, arduino writes library.properties plus the pair

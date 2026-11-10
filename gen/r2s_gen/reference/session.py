@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""A model of the MCU session: states, timers, counters and error reports.
+"""
+A model of the MCU session: states, timers, counters and error reports.
 
 The oracle the model-based tests compare the real C core against
 (docs/01-testing.md, section 5.4). It is written from spec/protocol.md
@@ -108,7 +109,8 @@ BUSY_WINDOW_MS = 1000
 
 @dataclass
 class Topic:
-    """One announced topic: the CTL-4 flags are the truth for the wire.
+    """
+    One announced topic: the CTL-4 flags are the truth for the wire.
 
     A nonzero bound marks a bounded-string subscription, whose payloads
     the model checks against the bound instead of a fixed width.
@@ -126,9 +128,11 @@ class Topic:
 
 @dataclass
 class Param:
-    """One parameter: the PAR-2 type, the PAR-4 flags, the string bound and
-    the default the DECLARE carries. The value is the live one the last
-    applied SET left.
+    """
+    One parameter: its PAR-2 type, PAR-4 flags, bound, default, and live value.
+
+    The string bound and the default the DECLARE carries. The value is the live
+    one the last applied SET left.
     """
 
     name: str
@@ -156,6 +160,16 @@ class McuSession:
         features: int = 0x02,
         params: list[Param] | None = None,
     ) -> None:
+        """
+        Start the model in ANNOUNCING with empty state.
+
+        :param node: the node name the HELLO carries.
+        :param topics: the announced topics.
+        :param max_frame: the largest decoded frame accepted.
+        :param tick_hz: the MCU tick rate in Hz.
+        :param features: the feature flags the HELLO carries.
+        :param params: the parameter table.
+        """
         self.node = node
         self.topics: list[Topic] = list(topics) if topics is not None else []
         self.max_frame = max_frame
@@ -200,7 +214,7 @@ class McuSession:
         self.reset(0)
 
     def reset(self, tick: int) -> None:
-        """A reboot: the token clears and a HELLO goes out (SES-1, SES-10)."""
+        """Reboot: the token clears and a HELLO goes out (SES-1, SES-10)."""
         self.tick = tick & MASK_32
         self.rx_buf = bytearray()
         self.pending = []
@@ -233,7 +247,7 @@ class McuSession:
         self._send_hello()
 
     def take_tx(self) -> list[bytes]:
-        """The frames queued since the last call, clearing the capture."""
+        """Take the frames queued since the last call, clearing the capture."""
         out = list(self.tx)
         self.tx = []
         return out
@@ -262,7 +276,8 @@ class McuSession:
         self._timers()
 
     def _note_framer_errors(self, refused: list[bytes]) -> None:
-        """Note the refused units the framer reports at the end of a spin.
+        """
+        Note the refused units the framer reports at the end of a spin.
 
         An oversized unit never decodes, so it names no topic; a decoded
         unit past the frame limit names its topic, last one wins.
@@ -292,7 +307,7 @@ class McuSession:
         self.spin()
 
     def publish(self, topic_id: int, payload: bytes) -> int:
-        """A publish wrapper: status and connection gate it (SES-4, SES-9)."""
+        """Publish on the topic, gated by status and connection (SES-4, SES-9)."""
         if self.state != CONNECTED:
             self._note_error(ERR_NOT_CONNECTED_CODE, topic_id, 0xFF, 1)
             return ERR_NOT_CONNECTED
@@ -475,7 +490,8 @@ class McuSession:
             self._refuse()
 
     def _dispatch_string(self, topic_id: int, bound: int, payload: bytes) -> None:
-        """Check a bounded-string payload: over the bound reports, else accepts.
+        """
+        Check a bounded-string payload: over the bound reports, else accepts.
 
         A length the varint cannot carry, short bytes or a zero byte breaks
         an encoding rule and refuses silently; only a length past the bound
@@ -495,7 +511,7 @@ class McuSession:
             self._refuse()
 
     def _default_bytes(self, param: Param) -> bytes:
-        """The DECLARE default for one parameter (PAR-1, PAR-3)."""
+        """Return the DECLARE default for one parameter (PAR-1, PAR-3)."""
         if param.type == PARAM_BOOL:
             return bytes((param.initial,))
         if param.type == PARAM_I64:
@@ -506,9 +522,12 @@ class McuSession:
         return varint_mod.encode(len(encoded)) + encoded
 
     def _check_value(self, param: Param, value: bytes) -> int | None:
-        """The STATUS verdict for a SET value, or None when the value breaks
-        its type's rule and the frame is refused (PAR-3, PAR-5). Unknown
-        index, length, read-only and range report 1, 2, 3 and 4 in order.
+        """
+        Return the STATUS verdict for a SET value, or None when refused.
+
+        The value breaks its type's rule and the frame is refused (PAR-3,
+        PAR-5). Unknown index, length, read-only and range report 1, 2, 3
+        and 4 in order.
         """
         if param.type == PARAM_BOOL:
             if len(value) != 1:
@@ -559,8 +578,11 @@ class McuSession:
         self.param_seq = (self.param_seq + 1) & MASK_8
 
     def _send_plain_status(self, index: int, status: int) -> None:
-        """One plain STATUS answering a PARAM_REQ past the table (PAR-7,
-        PAR-8): under the request retry, never a reliable frame, rel_seq 0.
+        """
+        Send one plain STATUS answering a PARAM_REQ past the table.
+
+        Under PAR-7 and PAR-8: under the request retry, never a reliable
+        frame, rel_seq 0.
         """
         payload = bytes((OP_PARAM_STATUS, 0, index, status))
         self.tx.append(encode_frame(PARAM_CHANNEL, self.param_seq, payload))
@@ -572,11 +594,13 @@ class McuSession:
         self.ack_seq = (self.ack_seq + 1) & MASK_8
 
     def _queue_status(self, index: int, status: int) -> None:
-        """Hold the STATUS for the retransmit timer: at most one reliable
-        payload is outstanding per direction (REL-2). The STATUS carries the
-        next rel_seq of this direction's own stream, which moves in lockstep
-        with the host's under stop-and-wait. A second applied SET waits
-        behind the first.
+        """
+        Hold the STATUS for the retransmit timer (REL-2).
+
+        At most one reliable payload is outstanding per direction. The STATUS
+        carries the next rel_seq of this direction's own stream, which moves in
+        lockstep with the host's under stop-and-wait. A second applied SET
+        waits behind the first.
         """
         rel = self.tx_rel_next
         self.tx_rel_next = (self.tx_rel_next + 1) & MASK_8
@@ -590,7 +614,7 @@ class McuSession:
             self.rel_pending_rel = rel
 
     def _send_status(self) -> None:
-        """The outstanding STATUS goes out with the next frame seq (REL-4)."""
+        """Send the outstanding STATUS out with the next frame seq (REL-4)."""
         assert self.rel_outstanding is not None
         self.tx.append(encode_frame(PARAM_CHANNEL, self.param_seq, self.rel_outstanding))
         self.param_seq = (self.param_seq + 1) & MASK_8
@@ -598,7 +622,7 @@ class McuSession:
         self.rel_retries = 0
 
     def _promote_status(self) -> None:
-        """The pending STATUS becomes outstanding and goes out at once."""
+        """Promote the pending STATUS to outstanding and send it out at once."""
         self.rel_outstanding = self.rel_pending
         self.rel_outstanding_rel = self.rel_pending_rel
         self.rel_pending = None
@@ -606,9 +630,12 @@ class McuSession:
             self._send_status()
 
     def _on_params(self, payload: bytes) -> None:
-        """One channel 3 frame: a plain REQ answer in ANNOUNCING (PAR-10),
-        a reliable SET exchange while connected (PAR-8, REL-1 to REL-4). A
-        SET in ANNOUNCING is ignored like any other non-handshake frame.
+        """
+        Handle one channel 3 frame (PAR-7, PAR-8, PAR-10, REL-1 to REL-4).
+
+        A plain REQ answer in ANNOUNCING (PAR-10), a reliable SET exchange
+        while connected (PAR-8, REL-1 to REL-4). A SET in ANNOUNCING is
+        ignored like any other non-handshake frame.
         """
         if self.state == ANNOUNCING:
             if len(payload) == 2 and payload[0] == OP_PARAM_REQ:
@@ -645,9 +672,11 @@ class McuSession:
             self._refuse()
 
     def _on_ack(self, payload: bytes) -> None:
-        """One channel 6 frame: a stale ack in ANNOUNCING is answered like
-        any other non-handshake frame; a matching one while connected clears
-        the outstanding STATUS (REL-1, REL-2, REL-4).
+        """
+        Handle one channel 6 frame (REL-1, REL-2, REL-4).
+
+        A stale ack in ANNOUNCING is answered like any other non-handshake
+        frame; a matching one while connected clears the outstanding STATUS.
         """
         if self.state == ANNOUNCING:
             self._answer_with_hello()
@@ -664,7 +693,7 @@ class McuSession:
             self._promote_status()
 
     def _drop_reliable(self) -> None:
-        """A re-handshake drops all reliable state (REL-5)."""
+        """Drop all reliable state on a re-handshake (REL-5)."""
         self.rx_rel_expected = 0
         self.tx_rel_next = 0
         self.rel_outstanding = None
@@ -743,8 +772,10 @@ class McuSession:
         self.hb_seq = (self.hb_seq + 1) & MASK_8
 
     def _retransmit_status(self) -> None:
-        """The 500 ms timer: resend the outstanding STATUS, or drop it and
-        count it after 3 retries (REL-2). A pending STATUS moves up either
+        """
+        Run the 500 ms timer: resend the outstanding STATUS, or drop it (REL-2).
+
+        After 3 retries drop it and count it. A pending STATUS moves up either
         way, so an applied SET is never left unreported.
         """
         if (self.tick - self.rel_deadline) & MASK_32 < REL_RETRY_MS:

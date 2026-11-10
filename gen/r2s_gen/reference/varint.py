@@ -26,6 +26,13 @@ MAX = 0xFFFF
 
 
 def encode(value: int) -> bytes:
+    """
+    Encode a length as unsigned LEB128, at most 65535.
+
+    :param value: the length to encode.
+    :return: the varint bytes.
+    :raises ValueError: if the value is outside 0 to 65535.
+    """
     if not 0 <= value <= MAX:
         raise ValueError(f'a length is 0 to {MAX}, not {value}')
     out = bytearray()
@@ -40,7 +47,13 @@ def encode(value: int) -> bytes:
 
 
 def decode(data: bytes) -> tuple[int, int]:
-    """Returns the value and the number of bytes it used."""
+    """
+    Return the value and the number of bytes it used.
+
+    :param data: the bytes to read the varint from.
+    :return: the value and the number of bytes consumed.
+    :raises Rejected: if the varint is truncated, too large, or not shortest.
+    """
     value = 0
     for i in range(3):
         if i == len(data):

@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""The session model against hand-computed bytes and boundaries.
+"""
+The session model against hand-computed bytes and boundaries.
 
 These tests pin the model itself, without the C core: the HELLO payload is
 written out by hand, and every timer fires on its specified millisecond. The
@@ -46,7 +47,7 @@ HELLO_PAYLOAD = bytes.fromhex('02 04 00 00 00 00 00 00 02 03 02 e8 03 00 00 02 0
 
 
 def fresh() -> model.McuSession:
-    """A model on the handwritten table, booted at tick 0 with TX drained."""
+    """Boot a model on the handwritten table at tick 0 with TX drained."""
     session = model.McuSession(topics=list(TOPICS))
     session.reset(0)
     assert session.take_tx() == [model.encode_frame(0, 0, HELLO_PAYLOAD)]

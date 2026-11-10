@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""Config loading: r2s.yaml into a validated model, with golden error messages.
+"""
+Config loading: r2s.yaml into a validated model, with golden error messages.
 
 Validation runs against the shipped JSON Schema, and every rejection becomes a
 MessageError of file, key path, what is wrong and how to fix it. The command
@@ -81,6 +82,8 @@ _ARTICLE = {
 
 @dataclass(frozen=True)
 class Topic:
+    """One configured topic: its name, type, direction, and options."""
+
     name: str
     type_name: str
     direction: str
@@ -90,6 +93,8 @@ class Topic:
 
 @dataclass(frozen=True)
 class Config:
+    """One validated r2s.yaml: the node, its topics, and its limits."""
+
     node: str
     topics: tuple[Topic, ...] = ()
     distro: str = 'jazzy'
@@ -216,7 +221,7 @@ def _check_schema(path: str | Path, data: dict) -> None:
 
 
 def _location(parts: Any) -> str:
-    """A key path such as topics[0].name, or bounds['pkg/msg/Type.field'] for dotted keys."""
+    """Format a key path such as topics[0].name, or bounds['pkg/msg/Type.field'] for dots."""
     out = ''
     for part in parts:
         if isinstance(part, int):
@@ -229,7 +234,7 @@ def _location(parts: Any) -> str:
 
 
 def _describe(path: str, data: dict, error: Any) -> MessageError:
-    """The golden message for a schema rejection: file, key path, what is wrong, how to fix it."""
+    """Describe a schema rejection as the golden message: file, path, wrong, and fix."""
     parts = list(error.absolute_path)
     location = _location(parts)
     where = path if not location else f'{path}: {location}'
@@ -252,7 +257,7 @@ def _describe(path: str, data: dict, error: Any) -> MessageError:
 
 
 def _describe_bound(where: str, value: Any) -> MessageError:
-    """The golden message for a bounds value, read from the value itself."""
+    """Describe a bounds value rejection as the golden message, read from the value."""
     if isinstance(value, int) and not isinstance(value, bool):
         return MessageError(where, 'the bound must be at least 0', 'raise it')
     if not isinstance(value, list):
@@ -366,7 +371,7 @@ def _describe_minimum(path: str, error: Any) -> MessageError:
 
 
 def _model(path: str | Path, data: dict) -> Config:
-    """The validated mapping as a Config; the schema already pins every shape but uniqueness."""
+    """Model the validated mapping as a Config; the schema pins every shape but uniqueness."""
     topics = []
     seen = set()
     for index, entry in enumerate(data['topics']):

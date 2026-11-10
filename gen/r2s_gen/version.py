@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""The versions r2s-gen reports: its own, and the one the wire speaks.
+"""
+The versions r2s-gen reports: its own, and the one the wire speaks.
 
 The release cut writes the repository version into this file next to VERSION,
 so the wheel, the ROS manifest and VERSION always state the same number, and a

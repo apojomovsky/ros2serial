@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""The reference message codec.
+"""
+The reference message codec.
 
 The message vectors, every bundled type, and the rules it enforces.
 """

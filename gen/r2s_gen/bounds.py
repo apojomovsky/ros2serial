@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-"""Bounds resolution: give every variable-length field a concrete capacity or name it in an error.
+"""
+Bounds resolution: every variable-length field gains a capacity or an error.
 
 Resolution walks the message graph from the generated topic types. A field takes
 its bound from the config by `package/msg/Type.field`, a scalar string falls back
@@ -41,6 +42,8 @@ from r2s_gen.msgs import canonical_type_name
 
 @dataclass(frozen=True)
 class ResolvedField:
+    """One field with every variable length replaced by a concrete bound."""
+
     name: str
     type_name: str
     is_array: bool
@@ -51,10 +54,19 @@ class ResolvedField:
 
 @dataclass(frozen=True)
 class ResolvedMessage:
+    """One message with every field resolved to a concrete bound."""
+
     type_name: str
     fields: tuple[ResolvedField, ...]
 
     def field(self, name: str) -> ResolvedField:
+        """
+        Return the resolved field called `name`.
+
+        :param name: the field name to look up.
+        :return: the resolved field.
+        :raises KeyError: if no field is called `name`.
+        """
         for field in self.fields:
             if field.name == name:
                 return field
@@ -75,9 +87,15 @@ def resolve(
     bounds: Mapping[str, object] | None = None,
     default_string_bound: int | None = None,
 ) -> dict[str, ResolvedMessage]:
-    """The reachable messages from `type_names`, keyed by canonical type name.
+    """
+    Collect the reachable messages from `type_names`, keyed by canonical name.
 
-    Each field bounded.
+    :param repository: the messages to resolve from.
+    :param type_names: the entry-point types to walk from.
+    :param bounds: per-field capacities from the config, if any.
+    :param default_string_bound: the fallback for scalar strings, if any.
+    :return: each reachable message with every field bounded.
+    :raises MessageError: if a field stays unbounded or breaks a rule above.
     """
     configured = dict(bounds or {})
     if default_string_bound is not None:
