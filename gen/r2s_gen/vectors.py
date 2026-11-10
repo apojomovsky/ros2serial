@@ -1,24 +1,8 @@
-# Copyright (c) 2026 Alexis Pojomovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The `vectors` subcommand: payload hex from the reference codec for one message.
+"""
+The `vectors` subcommand: payload hex from the reference codec for one message.
 
 Reads message definitions like every other subcommand and encodes with the
 reference, so its output is what a message vector writes in `payload`.
@@ -89,7 +73,7 @@ def run(args: argparse.Namespace) -> int:
 
 
 def _repository(args: argparse.Namespace) -> msgs.MessageRepository:
-    """The repository from the message paths, the sourced ROS prefixes and the distro."""
+    """Build the repository from the message paths, the sourced prefixes and the distro."""
     prefixes = [
         Path(entry) for entry in os.environ.get('AMENT_PREFIX_PATH', '').split(os.pathsep) if entry
     ]
@@ -108,7 +92,13 @@ def _repository(args: argparse.Namespace) -> msgs.MessageRepository:
 
 
 def _read_message(spec: str) -> Mapping:
-    """The message mapping `spec` holds, inline or behind @path."""
+    """
+    Read the message mapping `spec` holds, inline or behind @path.
+
+    :param spec: the YAML mapping text, or @path to read it from a file.
+    :return: the message mapping.
+    :raises ValueError: if the spec is unreadable, needs PyYAML, or is no mapping.
+    """
     if spec.startswith('@'):
         path = Path(spec[1:])
         try:

@@ -24,7 +24,7 @@ if [ -z "${R2S_AMENT_LINT_LOCKED:-}" ]; then
     bash "$root/scripts/ament-lint.sh"
 fi
 mkdir -p "$workspace" || exit 1
-echo "== ament-lint: $ROS_DISTRO (advisory; cleaned areas must report zero)"
+echo "== ament-lint: $ROS_DISTRO (advisory; cpplint must report zero)"
 
 # The lint test names ament_lint_common registers, so colcon runs only them
 # and never the unit tests.
@@ -62,9 +62,12 @@ for linter in flake8 pep257 copyright xmllint; do
 done
 
 # Baseline table from the xunit files: failing adds failures and errors,
-# checked subtracts the skipped, a missing file reports dashes. The cleaned
-# areas (copyright everywhere, cpplint on the bridge) must report zero: the
-# remaining linters stay advisory until their own cleanup tickets land.
+# checked subtracts the skipped, a missing file reports dashes. cpplint on
+# the bridge must report zero: the remaining linters stay advisory until
+# their own cleanup tickets land. copyright is the known divergence: the
+# tree carries the SPDX two-liner by decision (#549), while ament_copyright
+# only accepts its fixed MIT permission text, so the table keeps showing
+# the count without failing the run.
 echo "== ament-lint baseline (advisory, #508; cleaned areas must report zero)"
 echo "# package linter failing checked"
 clean=0
@@ -87,7 +90,7 @@ row() {
   failing=$((${failures:-0} + ${errors:-0}))
   echo "$pkg $linter $failing $((${tests:-0} - ${skipped:-0}))"
   case "$linter" in
-    copyright | cpplint)
+    cpplint)
       if [ "$failing" -ne 0 ]; then
         echo "ament-lint: $pkg $linter reports $failing findings, expected zero (#511)" >&2
         clean=1

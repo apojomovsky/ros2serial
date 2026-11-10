@@ -1,22 +1,5 @@
-# Copyright (c) 2026 Alexis Pojomovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
 """C emission: descriptor tables in the spec section 9 format, and their C99 compilation."""
 
@@ -99,7 +82,7 @@ string<=130[<=130] seq_strings
 
 
 def repository_for(tmp_path, definitions):
-    """A repository whose message path holds `definitions`, keyed by canonical type name."""
+    """Build a repository whose message path holds `definitions`, keyed by canonical type name."""
     root = tmp_path / 'messages'
     for type_name, text in definitions.items():
         write_message(root, type_name, text)
@@ -107,18 +90,18 @@ def repository_for(tmp_path, definitions):
 
 
 def resolve(repository, roots, bound_map=None):
-    """The bounded messages for `roots`, ready to build a table from."""
+    """Resolve the bounded messages for `roots`, ready to build a table from."""
     return bounds.resolve(repository, roots, bounds=bound_map or {})
 
 
 def build(roots, bound_map=None, repository=None):
-    """The descriptor table for `roots` with `bound_map` from the default repository."""
+    """Build the descriptor table for `roots` with `bound_map` from the default repository."""
     resolved = resolve(repository or msgs.MessageRepository(), roots, bound_map)
     return resolved, descriptors.build(resolved, roots)
 
 
 def compiled_bytes(tmp_path, resolved, roots):
-    """The type records and field entries the emitted C holds, read from a host run."""
+    """Read the type records and field entries the emitted C holds from a host run."""
     table = descriptors.build(resolved, roots)
     (tmp_path / 'r2s_generated.h').write_text(
         emit.emit_types(resolved, max_nest=table.max_nest), encoding='utf-8'

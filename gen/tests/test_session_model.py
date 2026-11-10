@@ -1,24 +1,8 @@
-# Copyright (c) 2026 Alexis Pojomovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The session state machine: random event sequences against libr2s_host.
+"""
+The session state machine: random event sequences against libr2s_host.
 
 Each rule feeds one event to the C core and to the Python model and compares
 every observable after it. The event set covers the implemented session: the
@@ -49,7 +33,7 @@ VALID_MSS = [0, 1, 99, 100, 499, 500, 999, 1000, 1500, 1999, 2000, 2001, 5000]
 
 
 def valid_twist(narrow: bool) -> bytes:
-    """A decodable cmd_vel payload for the announced width."""
+    """Build a decodable cmd_vel payload for the announced width."""
     return bytes(24 if narrow else 48)
 
 
@@ -155,14 +139,14 @@ class SessionMachine(RuleBasedStateMachine):
 
     @rule()
     def param_set_duplicate(self) -> None:
-        """The last SET again: acked by both, applied by neither."""
+        """Replay the last SET: acked by both, applied by neither."""
         if self.last_set is None:
             return
         self.pair.feed_frame(3, self._seq(3), self.last_set)
 
     @rule()
     def param_set_future(self) -> None:
-        """A rel seq neither side expects: acked by both, applied by neither."""
+        """Send a rel seq neither side expects: acked by both, applied by neither."""
         self.pair.feed_frame(3, self._seq(3), bytes((PARAM_SET, (self.set_rel + 5) & 0xFF, 0, 0)))
 
     @rule()
@@ -215,7 +199,7 @@ class SessionMachine(RuleBasedStateMachine):
 
     @invariant()
     def encoded_tx_holds_no_zero(self) -> None:
-        """The rCOBS output of the last step carries no delimiter (COB-2)."""
+        """Check the rCOBS output of the last step carries no delimiter (COB-2)."""
         for frame in self.pair.last_host_tx + self.pair.last_model_tx:
             assert all(byte != 0 for byte in frame)
 
@@ -243,7 +227,7 @@ def test_session_matches_model():
 
 
 def handshake(pair: Pair, token: int = 1) -> None:
-    """The full handshake to CONNECTED, comparing after every step."""
+    """Run the full handshake to CONNECTED, comparing after every step."""
     pair.feed_frame(0, 0, bytes((model.OP_HELLO_REQ, model.PROTOCOL_VERSION)))
     for index in range(4):
         pair.feed_frame(0, 1 + index, bytes((model.OP_TOPIC_REQ, index)))

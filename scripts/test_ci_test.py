@@ -55,6 +55,7 @@ SCOPES = (
     'DOCS',
     'EXAMPLES',
     'ESP32',
+    'PIC',
     'BUDGETS',
     'FUZZ',
     'README',
@@ -291,6 +292,20 @@ def test_esp32_scope_runs_its_section(tmp_path, monkeypatch):
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert '== esp32' in result.stdout
+
+
+def test_pic_scope_runs_its_section(tmp_path, monkeypatch):
+    # The stubbed compiler satisfies the toolchain lookup, so the run
+    # compiles nothing real and downloads nothing.
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    (stub / 'epic-cc').write_text('#!/usr/bin/env bash\nexit 0\n')
+    (stub / 'epic-cc').chmod(0o755)
+    monkeypatch.setenv('R2S_EPIC_CC_BIN', str(stub / 'epic-cc'))
+    result = run_scope(copy_tree(tmp_path), 'PIC', build_dir=tmp_path / 'build')
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '== pic' in result.stdout
 
 
 def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):

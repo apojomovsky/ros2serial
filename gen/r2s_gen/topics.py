@@ -1,24 +1,8 @@
-# Copyright (c) 2026 Alexis Pojomovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""C emission: the topic table, publish wrappers, dispatch and limits.
+"""
+C emission: the topic table, publish wrappers, dispatch and limits.
 
 `emit` holds the structs and `descriptors` the codec tables; this module holds
 everything the topic list adds. User topic IDs run from 16 in configuration
@@ -62,6 +46,8 @@ _NARROW_FLAG = 0x02
 
 @dataclass(frozen=True)
 class TopicEntry:
+    """One row of the topic table: the topic and the facts the firmware announces."""
+
     name: str
     type_name: str
     direction: str
@@ -74,13 +60,15 @@ class TopicEntry:
 
 @dataclass(frozen=True)
 class TopicTable:
+    """The node's topic table: its entries and the frame limit they need."""
+
     node: str
     entries: tuple[TopicEntry, ...]
     max_frame: int
 
 
 def c_identifier(name: str) -> str:
-    """The topic name as a C identifier: ROS segments join with underscores."""
+    """Spell the topic name as a C identifier: ROS segments join with underscores."""
     return name.replace('/', '_')
 
 
@@ -183,7 +171,17 @@ def build(
     table: descriptors.DescriptorTable | None = None,
     source: str = 'r2s.yaml',
 ) -> TopicTable:
-    """The topic table for `config`: IDs, flags, hashes and the frame limit."""
+    """
+    Build the topic table for `config`: IDs, flags, hashes and the frame limit.
+
+    :param config: the validated configuration.
+    :param resolved: the resolved messages.
+    :param repository: the messages to resolve from.
+    :param table: the descriptor table, built when missing.
+    :param source: the file the errors name.
+    :return: the topic table.
+    :raises MessageError: if a topic breaks a rule named above.
+    """
     names = [topic.name for topic in config.topics]
     check_non_empty(names, source)
     check_collisions(names, source)
@@ -216,7 +214,7 @@ def build(
 
 
 def _flags(direction: str, qos: str, narrow: bool) -> int:
-    """The announced CTL-4 flags without the bit the build forces (ENC-12)."""
+    """Return the announced CTL-4 flags without the bit the build forces (ENC-12)."""
     flags = _DIRECTION_FLAGS[direction] | _QOS_FLAGS[qos]
     if narrow:
         flags |= _NARROW_FLAG
@@ -224,7 +222,7 @@ def _flags(direction: str, qos: str, narrow: bool) -> int:
 
 
 def _hash(repository: MessageRepository, type_name: str) -> bytes:
-    """The first 8 bytes of the type's RIHS01 hash, as CTL-12 carries them."""
+    """Return the first 8 bytes of the type's RIHS01 hash, as CTL-12 carries them."""
     digest = typehash.type_hash(repository, type_name)
     return bytes.fromhex(digest[len('RIHS01_') :])[:8]
 
@@ -238,7 +236,7 @@ def _varint_len(value: int) -> int:
 
 
 def _payload(resolved: Mapping[str, ResolvedMessage], name: str, narrow: bool, memo: dict) -> int:
-    """The largest wire payload of `name`: bounds, not values, set the size."""
+    """Return the largest wire payload of `name`: bounds, not values, set the size."""
     key = (name, narrow)
     if key not in memo:
         memo[key] = sum(
@@ -270,7 +268,7 @@ def _string_wire(text: str) -> int:
 def _max_frame(
     config: Config, resolved: Mapping[str, ResolvedMessage], entries: tuple, source: str
 ) -> int:
-    """The largest decoded frame the firmware sends or receives, overhead included."""
+    """Return the largest decoded frame the firmware sends or receives, overhead included."""
     memo: dict = {}
     configured = {
         entry.name: (entry.type_name, entry.flags & _NARROW_FLAG != 0) for entry in entries
@@ -311,17 +309,17 @@ def _max_frame(
 
 
 def _indent_of(line: str) -> str:
-    """The leading spaces of a line."""
+    """Return the leading spaces of a line."""
     return line[: len(line) - len(line.lstrip(' '))]
 
 
 def _cont_for(first: str) -> str:
-    """The continuation indent uncrustify uses: one level past the line."""
+    """Return the continuation indent uncrustify uses: one level past the line."""
     return _indent_of(first) + '  '
 
 
 def _arg_text(arg) -> str:
-    """The source of an argument: plain text, or head(inner)tail for a call."""
+    """Render the source of an argument: plain text, or head(inner)tail for a call."""
     if isinstance(arg, str):
         return arg
     head, sub, tail = arg
@@ -335,7 +333,7 @@ def _flush(lines: list, line: str) -> None:
 
 
 def _split_member(arg: str) -> tuple | None:
-    """An address-of-member argument as (receiver, member), else None."""
+    """Split an address-of-member argument as (receiver, member), else None."""
     head, dot, member = arg.partition('.')
     if not dot or not head.startswith('&') or not member:
         return None
@@ -399,7 +397,8 @@ def _fill(start: str, cont: str, args: list, last: str, limit: int) -> list:
 
 
 def _call_lines(first: str, args: list, last: str, limit: int = 100, cont=None) -> list:
-    """A call wrapped the way uncrustify wraps one.
+    """
+    Wrap a call the way uncrustify wraps one.
 
     A single line when it fits, else broken after the paren with the
     arguments packed greedily one level past the line. A head that alone
@@ -418,7 +417,8 @@ def _call_lines(first: str, args: list, last: str, limit: int = 100, cont=None) 
 
 
 def _switch_call_lines(first: str, args: list, limit: int = 100) -> list:
-    """A switch on a call wrapped the way uncrustify wraps one.
+    """
+    Wrap a switch on a call the way uncrustify wraps one.
 
     A single line when it fits, else the call packed like _call_lines with
     its closes hugging the last argument and the brace on its own line.
@@ -431,7 +431,8 @@ def _switch_call_lines(first: str, args: list, limit: int = 100) -> list:
 
 
 def _decl_lines(ret: str, name: str, params: str, last: str, limit: int = 100) -> list:
-    """A declaration wrapped the way uncrustify wraps one.
+    """
+    Wrap a declaration the way uncrustify wraps one.
 
     A single line when it fits, else broken after the paren with the
     parameters one level past the line. A head that alone overflows keeps
@@ -448,8 +449,11 @@ def _decl_lines(ret: str, name: str, params: str, last: str, limit: int = 100) -
 
 
 def _assign_lines(indent: str, lhs: str, head: str, arg: str, last: str, limit: int = 100) -> list:
-    """An assignment wrapped the way uncrustify wraps one: unbroken, then
-    after the equals sign, then after the call paren."""
+    """
+    Wrap an assignment the way uncrustify wraps one.
+
+    Unbroken, then after the equals sign, then after the call paren.
+    """
     if len(f'{indent}{lhs} = {head}{arg}{last}') <= limit:
         return [f'{indent}{lhs} = {head}{arg}{last}']
     cont = indent + '  '
@@ -457,14 +461,15 @@ def _assign_lines(indent: str, lhs: str, head: str, arg: str, last: str, limit: 
 
 
 def _member_lines(indent: str, kind: str, name: str, last: str = ';', limit: int = 100) -> list:
-    """A struct member wrapped the way uncrustify wraps one: after the type."""
+    """Wrap a struct member the way uncrustify wraps one: after the type."""
     if len(f'{indent}{kind} {name}{last}') <= limit:
         return [f'{indent}{kind} {name}{last}']
     return [f'{indent}{kind}', f'{indent}  {name}{last}']
 
 
 def _string_chunks(content: str, cap: int) -> list:
-    """Split content into string pieces.
+    """
+    Split content into string pieces.
 
     Longest prefix ending after a non-alphanumeric.
     """
@@ -480,7 +485,7 @@ def _string_chunks(content: str, cap: int) -> list:
 
 
 def _string_row(indent: str, content: str, last: str, limit: int = 100) -> list:
-    """A table string row split across lines: never touch the literal text."""
+    """Split a table string row across lines: never touch the literal text."""
     if len(f'{indent}"{content}"{last}') <= limit:
         return [f'{indent}"{content}"{last}']
     cap = limit - len(indent) - 2
@@ -498,8 +503,11 @@ def _string_row(indent: str, content: str, last: str, limit: int = 100) -> list:
 
 
 def _define_lines(name: str, value: str, limit: int = 100) -> list:
-    """A define: one line within the limit, else the value on its own line;
-    a head past the limit breaks after the define first."""
+    """
+    Emit a define: one line within the limit, else the value on its own line.
+
+    A head past the limit breaks after the define first.
+    """
     if len(f'#define {name} {value}') <= limit:
         return [f'#define {name} {value}']
     if len(f'#define {name}') > limit:
@@ -528,7 +536,8 @@ def _comment_lines(first: str, cont: str, last: str, text: str, limit: int = 100
 
 
 def _doc_lines(template: list, text: str, limit: int = 100) -> list:
-    """A doc comment, refilled greedily when the template overflows.
+    """
+    Refill a doc comment greedily when the template overflows.
 
     Uncrustify leaves comments alone, so the refill is stable wherever the
     comment lands.
@@ -539,7 +548,7 @@ def _doc_lines(template: list, text: str, limit: int = 100) -> list:
 
 
 def emit_h(table: TopicTable) -> str:
-    """The topic section of the generated header: limits, IDs, the table and the wrappers."""
+    """Emit the topic section of the generated header: limits, IDs, the table and the wrappers."""
     lines = [
         '/* Topics in configuration order: user IDs run from 16 (FRM-3), each',
         ' * topic names its type by the descriptor index the depth-first walk',
@@ -636,7 +645,7 @@ def emit_h(table: TopicTable) -> str:
 
 
 def emit_c(table: TopicTable) -> str:
-    """The topic section of the generated source: the tables, the wrappers and dispatch."""
+    """Emit the topic section of the generated source: the tables, the wrappers and dispatch."""
     lines = [
         '',
         '#include <float.h>',
@@ -898,7 +907,7 @@ def config_hash(loaded: Config) -> str:
 
 
 def banner(prefix: str, source: str, digest: str) -> str:
-    """The file banner naming the generator version, the source config and its hash."""
+    """Render the file banner naming the generator version, the source config and its hash."""
     return (
         f'{prefix} Generated by r2s-gen {__version__} from {source} '
         f'(config {digest}); do not edit.'
@@ -906,7 +915,7 @@ def banner(prefix: str, source: str, digest: str) -> str:
 
 
 def _stamped(text: str, source: str, digest: str) -> str:
-    """The emitted file with its banner naming the config it came from."""
+    """Stamp the emitted file with its banner naming the config it came from."""
     first, rest = text.split('\n', 1)
     assert first.startswith('/* Generated by r2s-gen ')
     return banner('/*', source, digest) + ' */\n' + rest
@@ -918,7 +927,7 @@ def generate(
     repository: MessageRepository,
     source: str = 'r2s.yaml',
 ) -> tuple[str, str]:
-    """The firmware's header and source pair for `config`, descriptors first."""
+    """Generate the firmware's header and source pair for `config`, descriptors first."""
     roots = [canonical_type_name(topic.type_name) for topic in config.topics]
     table = descriptors.build(resolved, roots)
     topic_table = build(config, resolved, repository, table, source)

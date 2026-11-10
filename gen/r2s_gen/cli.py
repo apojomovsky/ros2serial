@@ -1,24 +1,8 @@
-# Copyright (c) 2026 Alexis Pojomovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The r2s-gen command line: the parser, the subcommands, and the exit codes.
+"""
+The r2s-gen command line: the parser, the subcommands, and the exit codes.
 
 The subcommands that generate code land with the tickets that implement them;
 this module is the shell every one of them hangs off.
@@ -42,7 +26,7 @@ def _print_version(_args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """The parser with every subcommand the tool has today."""
+    """Build the parser with every subcommand the tool has today."""
     parser = argparse.ArgumentParser(
         prog='r2s-gen',
         description='Generate the ros2serial firmware sources from .msg files and r2s.yaml.',
@@ -60,9 +44,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the command line and return the exit code.
+    """
+    Run the command line and return the exit code.
 
-    A usage error is 2, as argparse reports it.
+    :param argv: the arguments to parse, defaulting to the process arguments.
+    :return: 0 on success, 1 on a bad input, 2 on a usage error.
     """
     try:
         args = build_parser().parse_args(argv)

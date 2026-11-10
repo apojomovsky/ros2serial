@@ -1,24 +1,8 @@
-# Copyright (c) 2026 Alexis Pojomovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""Message loading: .msg and .action definitions from the search paths and snapshots.
+"""
+Message loading: .msg and .action definitions from the search paths and snapshots.
 
 A repository resolves a canonical `package/msg/Type` or `package/action/Name`
 name to the first matching file and parses it into fields and constants.
@@ -66,12 +50,20 @@ _FIELD_NAME = re.compile(r'^(?!.*__)(?!.*_$)[a-z][a-z0-9_]*$')
 
 
 class MessageError(Exception):
-    """A definition that cannot be loaded or resolved.
+    """
+    A definition that cannot be loaded or resolved.
 
     `where` names the file, line, type or field.
     """
 
     def __init__(self, where: str, problem: str, fix: str):
+        """
+        Record where the definition broke and how to fix it.
+
+        :param where: the file, line, type, or field.
+        :param problem: what is wrong.
+        :param fix: what to do about it.
+        """
         super().__init__(f'{where}: {problem}; {fix}')
         self.where = where
         self.problem = problem
@@ -80,6 +72,8 @@ class MessageError(Exception):
 
 @dataclass(frozen=True)
 class Constant:
+    """One named constant of a message definition."""
+
     name: str
     type_name: str
     value: str
@@ -87,6 +81,8 @@ class Constant:
 
 @dataclass(frozen=True)
 class Field:
+    """One field of a message definition."""
+
     name: str
     type_name: str
     is_array: bool = False
@@ -98,12 +94,21 @@ class Field:
 
 @dataclass(frozen=True)
 class Message:
+    """One parsed .msg definition."""
+
     type_name: str
     fields: tuple[Field, ...]
     constants: tuple[Constant, ...]
     path: Path
 
     def field(self, name: str) -> Field:
+        """
+        Return the field called `name`.
+
+        :param name: the field name to look up.
+        :return: the field.
+        :raises KeyError: if no field is called `name`.
+        """
         for field in self.fields:
             if field.name == name:
                 return field
@@ -112,6 +117,8 @@ class Message:
 
 @dataclass(frozen=True)
 class Action:
+    """One parsed .action definition: goal, result, and feedback."""
+
     type_name: str
     goal: Message
     result: Message
@@ -130,7 +137,13 @@ def _action_base(type_name: str) -> str | None:
 
 
 def canonical_type_name(type_name: str) -> str:
-    """A type to its canonical `package/msg/Type` or `package/action/Name` form."""
+    """
+    Return the canonical `package/msg/Type` or `package/action/Name` form of a type.
+
+    :param type_name: the type in any accepted form.
+    :return: the canonical form.
+    :raises MessageError: if the type has no accepted form.
+    """
     parts = type_name.split('/')
     if len(parts) == 2:
         return f'{parts[0]}/msg/{parts[1]}'
@@ -278,7 +291,8 @@ def parse_message(text: str, type_name: str, path: Path) -> Message:
 
 
 class MessageRepository:
-    """Resolves message and action type names through the paths and a distro snapshot.
+    """
+    Resolves message and action type names through the paths and a distro snapshot.
 
     A message path holds packages as `<package>/msg/<Type>.msg` and
     `<package>/action/<Name>.action`; a ROS prefix is read as
@@ -293,6 +307,15 @@ class MessageRepository:
         sourced_distro: str | None = None,
         snapshot_root: Path | None = None,
     ):
+        """
+        Point the repository at message paths, ROS prefixes, and a snapshot distro.
+
+        :param msg_paths: directories holding message packages.
+        :param ament_prefix_path: sourced ROS prefixes to search.
+        :param distro: the snapshot distro to fall back to.
+        :param sourced_distro: the sourced ROS distro, if any.
+        :param snapshot_root: the snapshots directory, defaulting to the shipped one.
+        """
         self._msg_paths = tuple(Path(path) for path in msg_paths)
         self._ament_prefix_path = tuple(Path(path) for path in ament_prefix_path)
         self._distro = distro
@@ -323,7 +346,7 @@ class MessageRepository:
         yield self._snapshot_root / self._distro / relative
 
     def load_action(self, type_name: str) -> Action:
-        """The action definition of `type_name`, from the first file that has it."""
+        """Load the action definition of `type_name`, from the first file that has it."""
         canonical = canonical_type_name(type_name)
         if '/action/' not in canonical:
             raise MessageError(canonical, 'not an action type', "name it as 'package/action/Name'")
@@ -348,7 +371,7 @@ class MessageRepository:
         )
 
     def load(self, type_name: str) -> Message:
-        """The definition of `type_name`, from the first file that has it."""
+        """Load the definition of `type_name`, from the first file that has it."""
         canonical = canonical_type_name(type_name)
         cached = self._cache.get(canonical)
         if cached is not None:

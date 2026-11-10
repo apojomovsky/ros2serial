@@ -1,24 +1,8 @@
-# Copyright (c) 2026 Alexis Pojomovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The `generate` subcommand: firmware sources plus the wrapper a build consumes.
+"""
+The `generate` subcommand: firmware sources plus the wrapper a build consumes.
 
 `topics.generate` makes the header and source pair; a layout adds the wrapper
 file its toolchain reads (`CMakeLists.txt`, `library.properties`) and fixes
@@ -54,7 +38,13 @@ _FILES = {
 
 
 def files_for(layout: str) -> tuple[str, ...]:
-    """The exact relative paths `generate` writes for `layout`, in build order."""
+    """
+    Return the exact relative paths `generate` writes for `layout`, in build order.
+
+    :param layout: the layout name.
+    :return: the relative paths.
+    :raises MessageError: if the layout is unknown.
+    """
     try:
         return _FILES[layout]
     except KeyError:
@@ -69,7 +59,16 @@ def _defined(header: str, name: str) -> bool:
 
 
 def build_defines(header: str, source: str = 'r2s_generated.h') -> list[str]:
-    """The -D flags a non-CMake build needs: the codec flag plus the header's limits."""
+    """
+    Return the -D flags a non-CMake build needs.
+
+    The codec flag plus the header's limits.
+
+    :param header: the generated header text.
+    :param source: the file the error names.
+    :return: the define flags.
+    :raises MessageError: if the header names no limit.
+    """
     defines = ['R2S_WITH_CODEC']
     for name in ('R2S_MAX_FRAME', 'R2S_MAX_NEST', 'R2S_TOPIC_MAX_COUNT'):
         match = re.search(rf'^#define {name}[ \t]+([0-9]+)u$', header, re.MULTILINE)
@@ -88,7 +87,18 @@ def generate(
     source: str = 'r2s.yaml',
     cpp: bool = False,
 ) -> dict[str, str]:
-    """The layout's files for `loaded`: relative path to file text, in build order."""
+    """
+    Generate the layout's files for `loaded`.
+
+    :param loaded: the configuration.
+    :param resolved: the resolved messages.
+    :param repository: the messages to resolve from.
+    :param layout: the wrapper to emit.
+    :param source: the file the errors name.
+    :param cpp: also emit the C++ header, which is not emitted yet.
+    :return: relative path to file text, in build order.
+    :raises MessageError: if the layout, handshake, or C++ flag is unsupported.
+    """
     files_for(layout)
     if cpp:
         raise MessageError('--cpp', 'C++ output is not emitted yet', 'drop --cpp')
@@ -172,7 +182,7 @@ def _cmake_lists(source: str, digest: str) -> str:
 
 
 def _library_properties(node: str, source: str, digest: str) -> str:
-    """The Arduino library metadata for the generated sources, AVR and ESP32."""
+    """Render the Arduino library metadata for the generated sources, AVR and ESP32."""
     lines = [
         topics.banner('#', source, digest),
         f'name={node}',
@@ -237,7 +247,7 @@ def run(args: argparse.Namespace) -> int:
 
 
 def _repository(args: argparse.Namespace, distro: str) -> msgs.MessageRepository:
-    """The repository from the message paths, the sourced ROS prefixes and the config distro."""
+    """Build the repository from the message paths, the sourced prefixes and the distro."""
     prefixes = [
         Path(entry) for entry in os.environ.get('AMENT_PREFIX_PATH', '').split(os.pathsep) if entry
     ]

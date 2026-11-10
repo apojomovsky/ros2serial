@@ -1,24 +1,8 @@
-# Copyright (c) 2026 Alexis Pojomovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The pair the session tests step together: the C core and the Python model.
+"""
+The pair the session tests step together: the C core and the Python model.
 
 Every helper applies one event to both sides and compares every observable:
 the frames sent, the connection state, the token, the topic statuses and the
@@ -56,7 +40,7 @@ DIRECTIONS = ('pub', 'sub', 'pub', 'sub')
 
 
 def model_topics(flags: list[int]) -> list[model.Topic]:
-    """The handwritten table with the C build's own flags and widths."""
+    """Return the handwritten table with the C build's own flags and widths."""
     # The IDs, names and hashes repeat core/tests/support/handwritten.c, and
     # the Twist width is its six float64 fields, halved when narrow. The
     # cmd_str bound repeats the handwritten codec table: a String has no
@@ -86,7 +70,7 @@ MODEL_FEATURES = 0x02 | 0x04 | 0x08
 
 
 def model_params() -> list[model.Param]:
-    """The handwritten parameter table both sides announce."""
+    """Return the handwritten parameter table both sides announce."""
     # The names, types, flags, bounds and defaults repeat
     # core/tests/support/handwritten.c.
     return [

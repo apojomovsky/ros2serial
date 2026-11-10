@@ -1,24 +1,8 @@
-# Copyright (c) 2026 Alexis Pojomovsky
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The bundle subcommand: the Arduino library file set, golden bytes and the X-macro expansion.
+"""
+The bundle subcommand: the Arduino library file set, golden bytes and the X-macro expansion.
 
 Covers the bundle path end to end: the exact file set, the banner in every
 file, determinism across runs and distros, the distro error, the command
@@ -286,8 +270,11 @@ def compile_cxx_unit(root, source):
 
 
 def compile_sketch(root, sources, core_sources, extra=()):
-    """Link the sketch: its translation units read the limits from the header,
-    while the core ones take them as defines, as the Arduino build does."""
+    """
+    Link the sketch: its translation units read the limits from the header.
+
+    The core ones take them as defines, as the Arduino build does.
+    """
     objects = [
         compile_cxx_unit(root, source) if source.endswith('.cpp') else compile_unit(root, source)
         for source in sources
@@ -306,7 +293,7 @@ def c_bytes(payload):
 
 
 def proof_vectors():
-    """The reference payloads and hashes every host proof checks against."""
+    """Build the reference payloads and hashes every host proof checks against."""
     repository = msgs.MessageRepository(distro='jazzy')
     battery = messages.encode(repository, 'std_msgs/msg/Float32', {'data': 1.5}, narrow=False)
     greeting = messages.encode(repository, 'std_msgs/msg/String', {'data': 'hi'}, narrow=False)
@@ -1051,7 +1038,7 @@ def test_a_subscribe_only_list_compiles_cleanly(tmp_path):
 
 
 def compile_strict_cxx(root, body):
-    """A list that compiles warning-free: what a `-Werror` sketch build needs."""
+    """Write a list that compiles warning-free: what a `-Werror` sketch build needs."""
     (root / 'case.cpp').write_text(body, encoding='utf-8')
 
     return subprocess.run(
