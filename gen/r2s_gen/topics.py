@@ -946,13 +946,13 @@ def generate(
     # declarations C linkage, so no sketch writes its own extern "C" block.
     anchor = '#include <stdint.h>\n'
     assert base.count(anchor) == 1
-    open = anchor + '\n#ifdef __cplusplus\nextern "C" {\n#endif\n'
+    guard_open = anchor + '\n#ifdef __cplusplus\nextern "C" {\n#endif\n'
     close = '\n#ifdef __cplusplus\n}\n#endif\n'
     middle = emit_h(topic_table)
     if service_h:
         middle += '\n' + service_h
     body = base[: -len(closing)] + middle + '\n' + close + '\n' + closing
-    header = body.replace(anchor, open, 1)
+    header = body.replace(anchor, guard_open, 1)
     body_c = descriptors.emit_c(table) + emit_c(topic_table)
     if service_c:
         body_c += '\n' + service_c
