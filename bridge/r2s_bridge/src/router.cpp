@@ -823,8 +823,11 @@ struct Router::Impl
     ServiceRoute & route, const RosCallHeader & header, ServiceTypes::Struct response)
   {
 #if defined(R2S_HAS_GENERIC_SERVICE)
-    auto shared = route.service->create_response();
-    std::memcpy(shared.get(), response.storage.data(), response.storage.size());
+    // Single owner for the response bytes: the shared pointer aliases the
+    // bridge-owned struct, so its fini runs once and nothing is copied
+    // between owners with separate finis.
+    auto owned = std::make_shared<ServiceTypes::Struct>(std::move(response));
+    std::shared_ptr<void> shared(owned, owned->storage.data());
     route.service->send_response(*header, shared);
 #else
     rmw_request_id_t id = header;
