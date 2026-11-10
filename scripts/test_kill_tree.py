@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """kill-tree.sh TERMs a wrapper and the children it would orphan.
 
 A bare kill of a launch wrapper leaves its node child alive, announcing

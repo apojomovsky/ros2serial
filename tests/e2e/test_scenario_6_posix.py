@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 6: unplug (close the pty) and replug without restarting the bridge.
 
 The bridge opens a stable symlink to the relay slave. Unplug stops the

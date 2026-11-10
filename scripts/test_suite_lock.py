@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """suite-lock.sh names the lock a suite run of a tree takes.
 
 One tree keeps one lock, so a second suite refuses it. Two trees never share

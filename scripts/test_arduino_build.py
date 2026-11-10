@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The Arduino build helper stages the library and compiles the sketch.
 
 `ports/arduino/build.sh` is the README quickstart's single Arduino build

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The runtime API through the fake port: registration order, the ids and
  * flags the table carries, the publish gates, the dispatch round trip and
  * the errors the closed registration raises. */

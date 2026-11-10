@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* rosserial-compatible NodeHandle: the sketch drives initNode, advertise,
  * subscribe and spinOnce as under ros_lib, and the layer registers the
  * topics on the runtime topic table the r2s API speaks. */

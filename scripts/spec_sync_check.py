@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Pair a spec change with a vector change, for the rules that cross the wire.
 
 Check 8 of the takeoff ritual. A rule in a section whose heading ends in

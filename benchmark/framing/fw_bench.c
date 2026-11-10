@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Bench firmware: one framer encodes and decodes the benchmark payloads,
  * timing each side with Timer1, and reports over UART0. Buffers are static
  * like the shipped framer's, so the stack paint measures call depth only. */

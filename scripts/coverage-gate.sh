@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Coverage gate: fail when HEAD lowers line or branch coverage of core,
 # bridge or gen below the merge base, or below the floors in
 # docs/01-testing.md.

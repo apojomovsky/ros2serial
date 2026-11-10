@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 10 framing variant: framing faults cost a bound, then recover.
 
 The proxy corrupts code bytes and delimiters in both directions while the

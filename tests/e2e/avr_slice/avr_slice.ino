@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Slice firmware for the avr end-to-end suite: the four topics the posix
  * virtual MCU announces, on an emulated Uno or Mega under simavr. The
  * sketch declares its topics in an R2S_TOPICS list, so no r2s.yaml and no

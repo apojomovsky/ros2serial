@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The runtime API on an emulated AVR: the firmware registers its topics while
 it runs, the handshake announces exactly those, and a Twist the host sends
 comes back as a battery frame.

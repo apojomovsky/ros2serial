@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The SCRIPTS pytest run names a stuck test instead of going silent.
 
 A hung test must dump every thread's stack with the test's name

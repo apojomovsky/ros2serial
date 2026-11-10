@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Unity calls these around every test: each one starts from a reset core,
  * a reset fake port and empty registries, and fails if the core wrote past
  * tx_free unnoticed. The core's own hooks reset the core; the runtime and

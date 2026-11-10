@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # P9 framing benchmark: one firmware per framer on Uno and Mega under simavr.
 # Builds go under R2S_BUILD_DIR, so the tree stays clean. Needs the dev image
 # (avr-gcc, simavr, pyserial): run through make exec or from make shell.

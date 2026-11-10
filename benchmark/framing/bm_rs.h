@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* bm_rs: a rosserial-style length-prefixed framing for the benchmark. It
  * follows rosserial's shape (sync byte, version, length with an additive
  * check, 16-bit topic, message checksum) without copying its code. */

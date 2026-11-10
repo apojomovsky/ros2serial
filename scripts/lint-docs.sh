@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # make lint-docs: parse every fenced mermaid block in the tracked markdown
 # with mermaid's own parser, inside the pinned node image. The dev image
 # gains no Node, so this runs on the host through docker run and needs a

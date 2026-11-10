@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Print the bridge job's matrix and images as GITHUB_OUTPUT lines, read from
 # ci/versions.env. The job's container image is fixed before any step runs, so
 # a job of its own resolves the pins first.

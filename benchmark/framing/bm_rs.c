@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* bm_rs: a rosserial-style length-prefixed framing for the benchmark. The
  * scanner resynchronizes by hunting the next sync byte, the price of having
  * no delimiter. Lengths are capped so one wild byte cannot claim the line. */

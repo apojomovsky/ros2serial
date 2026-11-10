@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* runtime: the registry behind the ROS 2-named runtime API. It holds the
  * RAM topic table the core announces, the records the publish and dispatch
  * paths use, and the one dispatch hook the core calls. The core itself

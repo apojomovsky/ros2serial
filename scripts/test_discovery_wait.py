@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The discovery wait spins the node and reports the last graph state.
 
 Regression test for #515: the rolling Fast DDS legs missed /echo_vel for

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # One task per ci-test.sh section: a section reruns only when the files it
 # reads change. Task hashes each task's `sources:` with `method: checksum`
 # and skips a task whose inputs match its last successful run.

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 name: pr-title
 
 # The PR is squashed into one commit on master, so each of its commits must

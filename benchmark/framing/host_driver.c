@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Host driver for the framing benchmark: one argv front end over every
  * framer, so the pytest cross-checks the C against the Python models. */
 #include <stdint.h>

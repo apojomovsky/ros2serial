@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The table announce over simavr: a topic table configures on the MCU and the
 handshake announces exactly what it configures, from a PROGMEM table and from
 a RAM table (#189).

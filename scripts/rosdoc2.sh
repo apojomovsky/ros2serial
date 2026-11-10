@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Advisory documentation build: the #512 Doxygen-form gate on the core, a
 # doxygen warning count per Doxyfile, and rosdoc2 build per ROS package.
 # The core count fails the run; the bridge count stays advisory until #544

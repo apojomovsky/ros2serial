@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* rosserial-compatible Duration: a signed span of seconds and nanoseconds.
  * The arithmetic copies ros_lib, so ported sketches compute the same values.
  * Header-only, with the normalize step inline, since the layer has no source

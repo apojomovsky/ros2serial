@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Two e2e sections side by side on one host: both pass without crosstalk.
 
 Each run.sh and run-avr.sh leases its own DDS domain and zenoh port, so

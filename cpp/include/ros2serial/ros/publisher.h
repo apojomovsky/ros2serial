@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* rosserial-compatible Publisher: the sketch hands it a topic and its message,
  * and advertise() announces it on the runtime topic table. The shape follows
  * ros_lib, so sketches port by changing the include. */

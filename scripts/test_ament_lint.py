@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The advisory ament_lint_common gate: wiring, runner and CI job.
 
 r2s_bridge, r2s_gen and r2s_rosidl declare the lint test dependencies and

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* action: the ROS 2-named action server API. Servers are registered while the
  * firmware runs, into the core's RAM action table, so a sketch needs no
  * generated action list. The core reaches the goal exchange through two

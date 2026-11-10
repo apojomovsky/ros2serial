@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # cppcheck on the core, its tests and the test support. Vendored code is not
 # checked. Part of the LINT section of the suite and of make check-warnings.
 set -uo pipefail

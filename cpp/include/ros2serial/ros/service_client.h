@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* rosserial spelling of the service client: the declaration a ported
  * sketch names, calling over X6. serviceClient announces it on the core
  * service table, and call() sends one request and spins until its answer.

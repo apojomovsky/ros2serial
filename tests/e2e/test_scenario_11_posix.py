@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 11: a subscribed message that exceeds a bound is dropped, and the
 bridge logs the topic and the field path.
 

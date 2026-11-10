@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The e2e runners honor R2S_E2E_SKIP, and the isolation pairs skip scenario 8.
 
 run.sh and run-avr.sh skip the test files named in R2S_E2E_SKIP, so the

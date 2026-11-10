@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The isolation log collector gathers what the pair leaves behind.
 
 scripts/collect-isolation-logs.sh copies per-scenario logs and full

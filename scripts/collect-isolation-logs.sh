@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Gather what the e2e isolation pairs leave behind for the artifact upload.
 # Per-scenario logs live under each section's build dir and full section
 # outputs under e2e-section-logs; a section that never built leaves

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """ci-test.sh is the single suite script: it must pass on the tree and fail on a lint error.
 
 Runs the script on a copy of the tracked files, scoped to LINT=1 so the

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 name: twist_narrow_exact
 covers: [ENC-1, ENC-11]
 type: geometry_msgs/msg/Twist

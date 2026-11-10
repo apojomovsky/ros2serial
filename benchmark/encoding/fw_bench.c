@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Cycle benchmark firmware: time the packed codec on representative narrow
  * payloads with Timer1 at one tick per cycle, and report over UART0. The
  * harness test runs this under simavr and pins the payload lengths and a

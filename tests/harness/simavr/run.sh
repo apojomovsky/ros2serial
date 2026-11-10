@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Build the simavr harness and its firmware images for the ATmega328P and the
 # ATmega2560, then run the harness's tests. Builds go under R2S_BUILD_DIR, so
 # the tree stays clean; the suite runs this script for E2E=avr.

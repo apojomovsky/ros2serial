@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Lease one suite isolation slot for the wrapped command: a DDS domain and a
 # Zenoh router port no other local suite holds. The slot lock is held on an
 # open file descriptor, so the lease dies with the command however it exits.

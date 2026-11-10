@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 2: the MCU publishes Float32 at 50 Hz for 10 s.
 
 The host receives at least 99% of the 500 messages with the counter values

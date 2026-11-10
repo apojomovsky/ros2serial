@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Install git hooks and register this clone's merge drivers.
 # Usage: setup-hooks.sh [<repo>]; the repository defaults to the current directory.
 # The generated-files driver is always registered; mergiraf only when it is

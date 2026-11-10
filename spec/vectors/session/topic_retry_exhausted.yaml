@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 name: topic_retry_exhausted
 covers: [SES-2, SES-14, SES-16]
 steps:

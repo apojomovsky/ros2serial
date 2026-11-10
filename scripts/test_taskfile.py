@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Per-section change detection: a section reruns only when its inputs change.
 
 The Taskfile holds one task per ci-test.sh section, each with `sources:`

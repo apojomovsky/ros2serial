@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The simavr harness's own test: echo firmware on an emulated Uno and Mega.
 
 `tests/harness/simavr/run.sh` builds `r2s_simavr` and the firmware images and

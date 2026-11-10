@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Soak on simavr: a wall-clock window of clean-link traffic on the Uno.
 
 The slice sketch publishes battery at 50 Hz of simulated time for

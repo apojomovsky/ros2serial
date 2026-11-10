@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Soak on posix: two hours of clean-link traffic against the virtual MCU.
 
 The firmware publishes battery at 50 Hz for R2S_SOAK_SECONDS while the test

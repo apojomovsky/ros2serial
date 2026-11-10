@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The ros compat leg runs scenarios 1 to 4 plus the parameter and service
 scenarios its firmware carries; the static C++ leg reads the same list and
 skips those two from inside. The runtime legs keep the whole file list.

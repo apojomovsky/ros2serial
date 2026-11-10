@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Build and test the core on the host in each configuration CI checks: gcc,
 # clang, gcc -m32, clang with ASan and UBSan, and gcc with coverage held to the
 # floors in docs/01-testing.md, section 6. Builds go under R2S_BUILD_DIR.

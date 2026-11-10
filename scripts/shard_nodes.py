@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Split the SCRIPTS scope's collected test node ids across CI shards.
 
 Every node id spreads round-robin over the shards in sorted order, so the

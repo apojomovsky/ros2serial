@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # The nightly big-endian job's entry point: build docker/bigendian and run
 # the portable test scope inside it, with the core cross-built for s390x and
 # tested under qemu-s390x. Host-only: the dev image carries no Docker daemon,
