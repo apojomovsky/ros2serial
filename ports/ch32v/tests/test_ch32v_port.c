@@ -65,7 +65,7 @@ static int check_init_enables_clocks_and_usart(void)
   CHECK((R2S_CH32V_TEST_usart1.CTLR1 & R2S_CH32V_USART_TE) != 0u);
   CHECK((R2S_CH32V_TEST_usart1.CTLR1 & R2S_CH32V_USART_RE) != 0u);
   /* The SysTick runs free without its interrupt, which the port never uses. */
-  CHECK(R2S_CH32V_TEST_stk.CTLR == R2S_CH32V_STK_STE);
+  CHECK(R2S_CH32V_TEST_stk.CTLR == 1u);
   return 0;
 }
 
@@ -73,8 +73,8 @@ static int check_init_maps_pd5_pd6(void)
 {
   reset_all();
   r2s_ch32v_init(48000000u, 115200u);
-  /* PD5 (TX) is alternate push-pull, PD6 (RX) floats: the default mapping. */
-  CHECK(((R2S_CH32V_TEST_gpiod.CFGLR >> (4u * 5u)) & 0xFu) == 0xBu);
+  /* PD5 (TX) is alternate push-pull at 10 MHz, PD6 (RX) floats. */
+  CHECK(((R2S_CH32V_TEST_gpiod.CFGLR >> (4u * 5u)) & 0xFu) == 0x9u);
   CHECK(((R2S_CH32V_TEST_gpiod.CFGLR >> (4u * 6u)) & 0xFu) == 0x4u);
   return 0;
 }
