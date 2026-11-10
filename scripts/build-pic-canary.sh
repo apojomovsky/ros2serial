@@ -44,8 +44,8 @@ else
     fi
     mkdir -p "$cache" || exit 1
     if ! curl -fsSL -o "$cache/$archive.zip" "$url"; then
-      echo "pic-canary: cannot fetch $url; skipping"
-      exit 0
+      echo "build-pic-canary: cannot fetch $url" >&2
+      exit 1
     fi
     # A hash mismatch is a wrong bundle, not an absent one, so it fails.
     (cd "$cache" && echo "$sha  $archive.zip" | sha256sum -c -) || exit 1
@@ -162,21 +162,56 @@ void main(void)
 EOF
 
 status=0
+gaps="$build/known_gaps.log"
+: >"$gaps" || exit 1
+# One whole-program compile. An internal compiler error is the known
+# toolchain gap: it warns and stays green, with the gap recorded below.
+# Any other failure is ours (wiring or a real PIC break) and fails.
+compile_one() {
+  local target=$1 label=$2 out
+  shift 2
+  if out=$("$epic_cc" --target "$target" "${flags[@]}" "${defines[@]}" "$@" 2>&1); then
+    printf '%s\n' "$out"
+  else
+    printf '%s\n' "$out"
+    case "$out" in
+    *"internal compiler error"*)
+      detail=$(printf '%s\n' "$out" | grep "internal compiler error" | head -n 1)
+      detail=${detail#*internal compiler error: }
+      echo "::warning::pic-canary: known epic-cc gap on $target ($label): $detail"
+      echo "$target ($label): $detail" >>"$gaps" || exit 1
+      ;;
+    *)
+      echo "pic-canary: $label failed for $target" >&2
+      status=1
+      ;;
+    esac
+  fi
+}
 for target in p16f1938 p18f4550; do
-  if ! "$epic_cc" --target "$target" "${flags[@]}" "${defines[@]}" \
+  compile_one "$target" "core C sources" \
     "${sources[@]}" "$build/canary_port.c" "$build/canary_c.c" \
-    -o "$build/canary_c_$target.hex"; then
-    echo "pic-canary: the core C sources failed for $target" >&2
-    status=1
-  fi
-  if ! "$epic_cc" --target "$target" "${flags[@]}" "${defines[@]}" \
+    -o "$build/canary_c_$target.hex"
+  compile_one "$target" "static C++ sketch" \
     "${sources[@]}" "$build/canary_port.c" "$build/canary_static.cpp" \
-    -o "$build/canary_static_$target.hex"; then
-    echo "pic-canary: the static C++ sketch failed for $target" >&2
-    status=1
-  fi
+    -o "$build/canary_static_$target.hex"
 done
 [ "$status" = 0 ] || exit 1
+# The known gaps ride the job summary, so the finding stays visible on a
+# green run; the hex report below lists only what compiled.
+if [ -s "$gaps" ]; then
+  {
+    echo "### PIC canary: known epic-cc gaps"
+    echo ""
+    echo "Advisory; tracked for #148. The toolchain, not the core, fails these."
+    echo ""
+    cat "$gaps"
+  } >>"${GITHUB_STEP_SUMMARY:-/dev/null}"
+  while IFS= read -r gap; do
+    echo "pic-canary: known gap: $gap (advisory)"
+  done <"$gaps"
+fi
 for hex in "$build"/canary_*_p16f1938.hex "$build"/canary_*_p18f4550.hex; do
+  [ -e "$hex" ] || continue
   echo "pic-canary: $(basename "$hex") $(wc -c <"$hex") bytes"
 done

@@ -150,6 +150,86 @@ def test_a_failing_toolchain_fails_the_run(tmp_path):
     assert 'pic-canary' in result.stdout + result.stderr
 
 
+def test_a_known_toolchain_gap_warns_and_stays_green(tmp_path):
+    # The recorded epic-cc internal compiler errors are the toolchain's gap,
+    # not the core's: the run warns, records the gap in the job summary, and
+    # passes, so the advisory job stays green and the finding stays visible.
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    compiler = stub / 'epic-cc'
+    compiler.write_text(
+        '#!/usr/bin/env bash\n'
+        'echo "epic-cc: internal compiler error: isel: plain ptr arg with multiple terms" >&2\n'
+        'exit 1\n',
+        encoding='utf-8',
+    )
+    compiler.chmod(compiler.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    summary = tmp_path / 'summary.md'
+    result = run_script(
+        {
+            'R2S_EPIC_CC_BIN': str(compiler),
+            'R2S_BUILD_DIR': str(tmp_path / 'build'),
+            'GITHUB_STEP_SUMMARY': str(summary),
+        },
+        tmp_path,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '::warning::pic-canary' in result.stdout, result.stdout
+    assert 'isel: plain ptr arg' in summary.read_text(encoding='utf-8')
+
+
+def test_a_broken_override_fails_the_run(tmp_path):
+    # An override naming no executable is a wiring failure, not a known gap.
+    result = run_script(
+        {
+            'R2S_EPIC_CC_BIN': str(tmp_path / 'no-such-compiler'),
+            'R2S_BUILD_DIR': str(tmp_path / 'build'),
+        },
+        tmp_path,
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+
+
+def test_a_failed_download_fails_the_run(tmp_path):
+    # curl runs but the fetch fails: the bundle is unreachable, which is a
+    # wiring failure, unlike a toolchain the environment cannot provide.
+    path = tmp_path / 'badload'
+    path.mkdir()
+    (path / 'curl').write_text('#!/usr/bin/env bash\nexit 1\n', encoding='utf-8')
+    (path / 'curl').chmod(0o755)
+    for tool in (
+        'bash',
+        'env',
+        'mkdir',
+        'rm',
+        'cp',
+        'grep',
+        'cut',
+        'python3',
+        'sha256sum',
+        'uname',
+        'dirname',
+    ):
+        source = Path('/usr/bin') / tool
+        if not source.exists():
+            source = Path('/bin') / tool
+        if source.exists():
+            (path / tool).symlink_to(source)
+    env = {k: v for k, v in os.environ.items() if k not in ('PIC', 'R2S_EPIC_CC_BIN')}
+    env.update(
+        {
+            'PATH': str(path),
+            'R2S_CACHE_DIR': str(tmp_path / 'cache'),
+            'R2S_BUILD_DIR': str(tmp_path / 'build'),
+        }
+    )
+    result = subprocess.run(
+        ['bash', str(SCRIPT)], cwd=ROOT, capture_output=True, text=True, env=env, timeout=300
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert 'cannot fetch' in result.stdout + result.stderr
+
+
 def test_the_run_without_a_toolchain_skips_instead_of_failing(tmp_path):
     # No override, an empty cache, and no downloader on PATH: the bundle
     # cannot be fetched, so the canary reports the skip and passes.
