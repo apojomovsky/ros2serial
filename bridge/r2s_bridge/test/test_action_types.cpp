@@ -344,6 +344,13 @@ TEST(ActionTypes, RejectsHandBuiltLayouts)
   bad_status_struct.storage.resize(16u, 0u);
   EXPECT_FALSE(types.fill_result_status(bad_status_struct, 0));
   bad_status_struct.members = nullptr;
+  // The write path refuses the same bad uuid layouts.
+  EXPECT_FALSE(types.fill_feedback_id(bad_type_struct, goal_id));
+  EXPECT_FALSE(types.fill_feedback_id(no_array_struct, goal_id));
+  EXPECT_FALSE(types.fill_feedback_id(bad_size_struct, goal_id));
+  bad_type_struct.members = nullptr;
+  no_array_struct.members = nullptr;
+  bad_size_struct.members = nullptr;
   // The fakes own no ROS storage: detach them before they destruct so no
   // finalizer runs on the hand-built members.
   missing.members = nullptr;
