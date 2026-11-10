@@ -62,6 +62,23 @@ def test_check_fails_on_a_breached_fixture():
     assert len(size_report.check_sizes(measurements, budgets)) == 2
 
 
+def test_markdown_table_reports_the_delta_against_base():
+    measurements = {'uno': {'flash': 8200, 'ram': 800}}
+    budgets = {'firmware': {'uno': {'flash': 9000, 'ram': 1000}}}
+    base = {'uno': {'flash': 8100, 'ram': 800}}
+    table = size_report.markdown_table(measurements, budgets, base)
+    assert '8200 (+100 vs base 8100)' in table
+    assert '800 (base 800)' in table
+
+
+def test_markdown_table_reports_a_shrink_against_base():
+    measurements = {'uno': {'flash': 8000, 'ram': 800}}
+    budgets = {'firmware': {'uno': {'flash': 9000, 'ram': 1000}}}
+    base = {'uno': {'flash': 8100, 'ram': 800}}
+    table = size_report.markdown_table(measurements, budgets, base)
+    assert '8000 (-100 vs base 8100)' in table
+
+
 def elf_bytes(machine):
     header = bytearray(64)
     header[0:4] = b'\x7fELF'
