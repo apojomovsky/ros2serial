@@ -18,13 +18,14 @@ use_gitignore: true
 tasks:
   default:
     desc: Run every section whose inputs changed.
-    deps: [lint, commits, scripts, core, gen, bridge, ament_lint, cpp, coverage, docs, examples, esp32, pic, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
+    deps: [lint, commits, scripts, core, gen, bridge, ament_lint, cpp, coverage, docs, examples, esp32, pic, platformio, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
 
   # What the pre-push hook and the takeoff run: the default set without the
   # CI-only sections. The end-to-end ones (e2e-avr, e2e-posix and the nightly
   # isolation pairs) assume a quiet host for their timing bounds, which a
-  # shared one is not; the ESP32 Arduino core and the epic-cc bundle install
-  # only in their CI jobs. CI runs all of them on every pull request.
+  # shared one is not; the ESP32 Arduino core, the epic-cc bundle and the
+  # PlatformIO toolchain install only in their CI jobs. CI runs all of
+  # them on every pull request.
   local:
     desc: Run every stale section but the CI-only ones, which CI runs.
     deps: [lint, commits, scripts, core, gen, bridge, ament_lint, cpp, coverage, docs, examples, budgets, readme, fuzz]
@@ -393,6 +394,33 @@ tasks:
       - ports/arduino/**
     cmds:
       - ESP32=1 bash scripts/ci-test.sh
+
+  platformio:
+    desc: Installs PlatformIO and builds the pio_hello sketch for Uno and Mega.
+    sources:
+      - Taskfile.yml
+      - .gitignore
+      - Dockerfile
+      - .dockerignore
+      - ci/versions.env
+      - Makefile
+      - scripts/pass-vars.list
+      - scripts/ci-test.sh
+      - scripts/run-tasks.sh
+      - scripts/suite-lock.sh
+      - scripts/clean-git-env.sh
+      - scripts/with-build-lock.sh
+      - scripts/e2e-lease.sh
+      - scripts/build-examples-pio.sh
+      - examples/pio_hello/**
+      # The platformio layout is emitted at build time; the core and the
+      # port glue are staged into it.
+      - gen/**
+      - exclude: gen/tests/**
+      - core/**
+      - ports/arduino/**
+    cmds:
+      - PLATFORMIO=1 bash scripts/ci-test.sh
 
   pic:
     desc: Compiles the core and the static C++ sketch with epic-cc.

@@ -59,6 +59,7 @@ SCOPES = (
     'EXAMPLES',
     'ESP32',
     'PIC',
+    'PLATFORMIO',
     'BUDGETS',
     'FUZZ',
     'README',
@@ -311,6 +312,63 @@ def test_pic_scope_runs_its_section(tmp_path, monkeypatch):
     assert '== pic' in result.stdout
 
 
+def test_platformio_scope_runs_its_section(tmp_path, monkeypatch):
+    # The stubbed PlatformIO binary succeeds without downloads, so the run
+    # keeps a scratch directory instead of the shared cache.
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    # Mimics `pio ci`: one firmware per named board under .pio/build, so
+    # the gate's artifact check runs against the same layout as the build.
+    (stub / 'pio').write_text(
+        '#!/usr/bin/env bash\n'
+        'echo "$@" >> "$R2S_PIO_LOG"\n'
+        'want_board=0\n'
+        'lib=""\n'
+        'for arg in "$@"; do\n'
+        '  case "$arg" in\n'
+        '  --board)\n'
+        '    want_board=1\n'
+        '    ;;\n'
+        '  --board=*)\n'
+        '    mkdir -p ".pio/build/${arg#--board=}"\n'
+        '    : > ".pio/build/${arg#--board=}/firmware.elf"\n'
+        '    ;;\n'
+        '  --lib=*)\n'
+        '    lib="${arg#--lib=}"\n'
+        '    ;;\n'
+        '  *)\n'
+        '    if [ "$want_board" = 1 ]; then\n'
+        '      mkdir -p ".pio/build/$arg"\n'
+        '      : > ".pio/build/$arg/firmware.elf"\n'
+        '      want_board=0\n'
+        '    fi\n'
+        '    ;;\n'
+        '  esac\n'
+        'done\n'
+        '# Mimic verbose compile lines from the staged manifest, so the\n'
+        '# gate proves the flags it staged reach the log it greps.\n'
+        'if [ -n "$lib" ] && [ -f "$lib/library.json" ]; then\n'
+        '  grep -o \'"-D[^"]*"\' "$lib/library.json" | tr -d \'"\' | while read -r flag; do\n'
+        '    echo "avr-gcc $flag -c lib.c"\n'
+        '  done\n'
+        'fi\n'
+        'exit 0\n'
+    )
+    (stub / 'pio').chmod(0o755)
+    monkeypatch.setenv('R2S_PIO_BIN', str(stub / 'pio'))
+    monkeypatch.setenv('R2S_PIO_LOG', str(tmp_path / 'pio.log'))
+    monkeypatch.setenv('R2S_PIO_DATA_DIR', str(tmp_path / 'pio-data'))
+    result = run_scope(
+        copy_tree(tmp_path),
+        'PLATFORMIO',
+        stubs=stub_toolbox(tmp_path / 'bin'),
+        build_dir=tmp_path / 'build',
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '== platformio' in result.stdout
+
+
 def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):
     # The budgets run builds the ESP32 firmware too, whose stubbed install
     # plants its toolchain under the data dir: keep a scratch directory.
@@ -481,6 +539,14 @@ def test_nightly_scope_names_its_section():
     text = (ROOT / 'scripts' / 'ci-test.sh').read_text()
     assert 'wants NIGHTLY' in text
     assert 'tests/e2e/test_isolation.py' in text
+
+
+def test_nightly_section_shows_pytest_output_live():
+    """The isolation wall-time lines must reach the job log, not pytest's capture."""
+    text = (ROOT / 'scripts' / 'ci-test.sh').read_text()
+    assert re.search(r'pytest -s tests/e2e/test_isolation\.py', text), (
+        'the NIGHTLY pytest run must pass -s so section wall times reach the log'
+    )
 
 
 def test_e2e_both_backend_runs_all_three_suites(tmp_path):
