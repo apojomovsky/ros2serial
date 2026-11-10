@@ -72,6 +72,11 @@ def section_report(output):
     return '\n'.join(summary_lines(output) + failure_lines(output) + [output[-4000:]])
 
 
+def log_section_wall_time(name, start):
+    """One section's wall time in the job log, so a slow pair reads as a number."""
+    print(f'e2e isolation: section {name} took {time.monotonic() - start:.0f}s', flush=True)
+
+
 class TestSectionReport(unittest.TestCase):
     def test_names_a_failure_outside_the_tail(self):
         failure = 'e2e-failure: test_scenario_9_posix leg=static rmw=rmw_fastrtps_cpp exit=1'
@@ -214,6 +219,7 @@ def test_two_concurrent_e2e_sections_pass_without_crosstalk():
         R2S_E2E_SKIP='test_scenario_8_posix',
         R2S_BUILD_DIR=pair_build_dir('b'),
     )
+    started_a = time.monotonic()
     first = subprocess.Popen(
         ['bash', 'tests/e2e/run.sh'],
         cwd=ROOT,
@@ -222,6 +228,7 @@ def test_two_concurrent_e2e_sections_pass_without_crosstalk():
         text=True,
         env=env_a,
     )
+    started_b = time.monotonic()
     second = subprocess.Popen(
         ['bash', 'tests/e2e/run.sh'],
         cwd=ROOT,
@@ -231,7 +238,9 @@ def test_two_concurrent_e2e_sections_pass_without_crosstalk():
         env=env_b,
     )
     out1, _ = first.communicate()
+    log_section_wall_time('posix-pair-a', started_a)
     out2, _ = second.communicate()
+    log_section_wall_time('posix-pair-b', started_b)
     write_section_log('posix-pair-a', out1)
     write_section_log('posix-pair-b', out2)
     assert first.returncode == 0, 'first section failed:\n' + section_report(out1)
@@ -247,6 +256,7 @@ def test_avr_and_posix_sections_pass_side_by_side():
         R2S_E2E_BOARDS='uno',
         R2S_E2E_SKIP='test_scenario_8_posix',
     )
+    started_avr = time.monotonic()
     avr = subprocess.Popen(
         ['bash', 'tests/e2e/run-avr.sh'],
         cwd=ROOT,
@@ -255,6 +265,7 @@ def test_avr_and_posix_sections_pass_side_by_side():
         text=True,
         env=env,
     )
+    started_posix = time.monotonic()
     posix = subprocess.Popen(
         ['bash', 'tests/e2e/run.sh'],
         cwd=ROOT,
@@ -264,7 +275,9 @@ def test_avr_and_posix_sections_pass_side_by_side():
         env=env,
     )
     out_avr, _ = avr.communicate()
+    log_section_wall_time('avr-side', started_avr)
     out_posix, _ = posix.communicate()
+    log_section_wall_time('posix-side', started_posix)
     write_section_log('avr-side', out_avr)
     write_section_log('posix-side', out_posix)
     assert avr.returncode == 0, 'avr section failed:\n' + section_report(out_avr)

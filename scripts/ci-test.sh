@@ -170,7 +170,7 @@ if wants PIC; then scope_now=PIC; section pic bash scripts/build-pic-canary.sh; 
 if wants BUDGETS; then scope_now=BUDGETS; section budgets bash scripts/budgets-check.sh; fi
 if wants FUZZ; then scope_now=FUZZ; section fuzz bash scripts/fuzz.sh; fi
 if wants README; then scope_now=README; section readme bash scripts/check-readme.sh; fi
-if wants NIGHTLY; then scope_now=NIGHTLY; section e2e-isolation python3 -m pytest tests/e2e/test_isolation.py; fi
+if wants NIGHTLY; then scope_now=NIGHTLY; section e2e-isolation python3 -m pytest -s tests/e2e/test_isolation.py; fi
 if wants SOAK; then scope_now=SOAK; section soak bash tests/e2e/run-soak.sh; fi
 if wants E2E; then scope_now=E2E
   case "${E2E:-}" in
