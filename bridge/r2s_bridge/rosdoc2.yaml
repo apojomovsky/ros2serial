@@ -1,0 +1,21 @@
+## rosdoc2 configuration for the r2s_bridge package (`rosdoc2 build
+## --package-path` reads the file named by the package.xml <export>).
+## The pinned rosdoc2 (ROSDOC2_VERSION in ci/versions.env) needs an
+## explicit `name` and `output_dir` on every builder entry and provides
+## only the `doxygen` and `sphinx` builders.
+
+type: 'rosdoc2 config'
+version: 1
+
+---
+
+settings: {}
+
+builders:
+    - doxygen:
+        name: 'r2s_bridge Public C/C++ API'
+        output_dir: 'generated/doxygen'
+    - sphinx:
+        name: 'r2s_bridge'
+        output_dir: ''
+        doxygen_xml_directory: 'generated/doxygen/xml'
