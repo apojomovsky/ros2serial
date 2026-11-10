@@ -108,6 +108,11 @@ def test_the_pic_scope_selects_its_task(tmp_path):
     assert args == ['pic'], args
 
 
+def test_the_stm32_scope_selects_its_task(tmp_path):
+    args, _ = select(tmp_path, STM32='1')
+    assert args == ['stm32'], args
+
+
 def test_full_forces_the_selected_tasks(tmp_path):
     args, _ = select(tmp_path, CORE='1', R2S_FULL='1')
     assert args == ['--force', 'core'], args

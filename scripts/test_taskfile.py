@@ -107,6 +107,7 @@ log="$R2S_TASK_LOG"
 [ -n "${EXAMPLES:-}" ] && echo "stub EXAMPLES=$EXAMPLES" >> "$log"
 [ -n "${ESP32:-}" ] && echo "stub ESP32=$ESP32" >> "$log"
 [ -n "${PIC:-}" ] && echo "stub PIC=$PIC" >> "$log"
+[ -n "${STM32:-}" ] && echo "stub STM32=$STM32" >> "$log"
 [ -n "${BUDGETS:-}" ] && echo "stub BUDGETS=$BUDGETS" >> "$log"
 [ -n "${FUZZ:-}" ] && echo "stub FUZZ=$FUZZ" >> "$log"
 [ -n "${README:-}" ] && echo "stub README=$README" >> "$log"
@@ -166,6 +167,7 @@ LEAKY_VARS = (
     'EXAMPLES',
     'ESP32',
     'PIC',
+    'STM32',
     'BUDGETS',
     'FUZZ',
     'README',
@@ -276,6 +278,26 @@ def test_a_pic_script_edit_reruns_pic_and_scripts_besides_lint(tmp_path):
     (repo / edited).write_text('probe\nprobe again\n')
     reran = run_task(repo)
     assert sorted(reran) == ['COMMITS=1', 'LINT=1', 'PIC=1', 'SCRIPTS=1'], reran
+
+
+@needs_task
+def test_an_stm32_script_edit_reruns_stm32_and_budgets_besides_lint(tmp_path):
+    """Editing the STM32 build stales its task and the budgets gate that
+    calls it. The port glue lives under ports/, which the scripts task
+    does not own, so scripts stays quiet. Lint and commits always run.
+    """
+    repo = fixture(tmp_path)
+    ran = run_task(repo)
+    assert 'STM32=1' in ran, ran
+    edited = 'ports/stm32/build.sh'
+    for name, task in tasks().items():
+        if name in ('default', 'stm32', 'budgets', 'lint', 'commits'):
+            continue
+        assert not matches(task, edited), f'{edited} also matches {name}'
+    (repo / edited).parent.mkdir(parents=True, exist_ok=True)
+    (repo / edited).write_text('probe\nprobe again\n')
+    reran = run_task(repo)
+    assert sorted(reran) == ['BUDGETS=1', 'COMMITS=1', 'LINT=1', 'STM32=1'], reran
 
 
 @needs_task
@@ -446,7 +468,7 @@ def test_soak_runs_on_schedule_outside_the_default_task(tmp_path):
 def test_the_local_task_is_the_default_set_without_the_ci_only_sections():
     """The pre-push hook and the takeoff run it; CI runs e2e and esp32."""
     ci_only = {'e2e-avr', 'e2e-posix', 'nightly', 'esp32'}
-    ci_only = {'e2e-avr', 'e2e-posix', 'nightly', 'esp32', 'pic'}
+    ci_only = {'e2e-avr', 'e2e-posix', 'nightly', 'esp32', 'pic', 'stm32'}
     local = list(tasks()['local']['deps'])
     assert local == [name for name in default_tasks() if name not in ci_only], local
     assert not ci_only & set(local), local

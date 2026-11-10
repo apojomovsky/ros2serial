@@ -59,6 +59,7 @@ SCOPES = (
     'EXAMPLES',
     'ESP32',
     'PIC',
+    'STM32',
     'BUDGETS',
     'FUZZ',
     'README',
@@ -309,6 +310,45 @@ def test_pic_scope_runs_its_section(tmp_path, monkeypatch):
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert '== pic' in result.stdout
+
+
+def test_stm32_scope_runs_its_section(tmp_path, monkeypatch):
+    # The stubbed Arm toolchain satisfies the lookup and touches each
+    # output, so the run links nothing real and downloads nothing. The
+    # stub stage source stands in for the SDK boot stage.
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    (stub / 'arm-none-eabi-gcc').write_text(
+        '#!/usr/bin/env bash\n'
+        'out=""\n'
+        'prev=""\n'
+        'for arg in "$@"; do\n'
+        '    if [ "$prev" = "-o" ]; then out="$arg"; fi\n'
+        '    prev="$arg"\n'
+        'done\n'
+        '[ -n "$out" ] && mkdir -p "$(dirname "$out")" && : > "$out"\n'
+        'exit 0\n'
+    )
+    (stub / 'arm-none-eabi-gcc').chmod(0o755)
+    (stub / 'arm-none-eabi-objcopy').write_text('#!/usr/bin/env bash\n: > "${@: -1}"\nexit 0\n')
+    (stub / 'arm-none-eabi-objcopy').chmod(0o755)
+    monkeypatch.setenv('R2S_ARM_GCC', str(stub / 'arm-none-eabi-gcc'))
+    monkeypatch.setenv('R2S_ARM_OBJCOPY', str(stub / 'arm-none-eabi-objcopy'))
+    sdk = tmp_path / 'sdk' / 'src' / 'rp2040' / 'boot_stage2'
+    sdk.mkdir(parents=True)
+    (sdk / 'boot2_w25q080.S').write_text('.cpu cortex-m0plus\n.thumb\n.section .entry\n b .\n')
+    (sdk / 'boot_stage2.ld').write_text(
+        'MEMORY { SRAM(rx) : ORIGIN = 0x20041f00, LENGTH = 252 }\n'
+    )
+    pad = sdk / 'pad_checksum'
+    pad.write_text('#!/usr/bin/env bash\n: > "$2"\nexit 0\n')
+    pad.chmod(0o755)
+    (sdk / 'asminclude').mkdir()
+    monkeypatch.setenv('R2S_PICO_SDK', str(tmp_path / 'sdk'))
+    result = run_scope(copy_tree(tmp_path), 'STM32', build_dir=tmp_path / 'build')
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '== stm32' in result.stdout
 
 
 def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):

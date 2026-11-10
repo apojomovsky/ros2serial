@@ -44,6 +44,9 @@ ESP32_SKETCHES = [
 ]
 
 
+STM32_BOARDS = ('bluepill', 'pico')
+
+
 def expected_firmware() -> list:
     """Every ELF path the example builds produce, keyed like the budgets."""
     names = ['cmake_minimal/hello_cmake']
@@ -52,6 +55,8 @@ def expected_firmware() -> list:
             names.append(f'{sketch}/{board}/{sketch}.ino.elf')
     for sketch in ESP32_SKETCHES:
         names.append(f'{sketch}/esp32/{sketch}.ino.elf')
+    for board in STM32_BOARDS:
+        names.append(f'stm32/{board}/firmware.elf')
     return sorted(names)
 
 
