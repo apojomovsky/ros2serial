@@ -645,3 +645,360 @@ void test_services_response_with_a_bad_status_is_refused(void)
     /* Refused, not acked: the frame count only holds the call's REQUEST. */
   TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
 }
+
+/* covers: SVR-1 */
+void test_services_configure_refuses_a_table_past_the_count(void)
+{
+  static r2s_service_t big[R2S_SERVICE_MAX_COUNT + 1u];
+
+  configure();
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS,
+    r2s_services_configure(big, (uint8_t)(R2S_SERVICE_MAX_COUNT + 1u)));
+}
+
+/* covers: SVR-7 */
+void test_services_note_status_ignores_a_bad_index_or_verdict(void)
+{
+  configure();
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_services_configure(table, 2));
+  r2s_services_note_status(0, R2S_SVC_STATUS_OK);
+  TEST_ASSERT_EQUAL_UINT8(R2S_SVC_STATUS_OK, r2s_services_status(0));
+    /* Past the table and past the verdicts: neither write sticks. */
+  r2s_services_note_status(2, R2S_SVC_STATUS_OK);
+  r2s_services_note_status(0, (uint8_t)(R2S_SVC_STATUS_NAME_CONFLICT + 1u));
+  TEST_ASSERT_EQUAL_UINT8(R2S_SVC_STATUS_OK, r2s_services_status(0));
+  TEST_ASSERT_EQUAL_UINT8(0xFFu, r2s_services_status(2));
+}
+
+/* covers: SVR-1, SVR-7 */
+void test_services_walk_answers_nothing_while_the_link_is_wedged(void)
+{
+    /* QUERY past the table and QUERY index 0: neither the plain STATUS
+     * nor the DECLARE goes out while the port takes nothing. */
+  const uint8_t past[] = {0x01u, 0x02u};
+  const uint8_t req[] = {0x01u, 0x00u};
+    /* DECLARE index 0, server role, the hash, "std_srvs/srv/Trigger" and
+     * "reset". */
+  const uint8_t declare[] = {0x02u, 0x00u, 0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u,
+    0x08u, 0x14u, 's', 't', 'd', '_', 's', 'r', 'v', 's',
+    '/', 's', 'r', 'v', '/', 'T', 'r', 'i', 'g', 'g',
+    'e', 'r', 0x05u, 'r', 'e', 's', 'e', 't'};
+
+  configure();
+  fake_port_tx_clear();
+  fake_port_set_tx_free(0u);
+  feed_host(7, 0, past, sizeof past);
+  feed_host(7, 1, req, sizeof req);
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    /* The wedge lifts: the next QUERY answers, with the DECLARE it held. */
+  fake_port_set_tx_free(0xFFFFu);
+  feed_host(7, 2, req, sizeof req);
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+  assert_tx(0, 7, 0, declare, sizeof declare);
+}
+
+/* covers: SVR-4, SVR-10 */
+void test_services_call_reports_busy_while_the_link_is_wedged(void)
+{
+  uint8_t req_id = 0xFFu;
+
+  configure();
+  connect();
+  fake_port_tx_clear();
+  fake_port_set_tx_free(0u);
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_TX_BUSY, r2s_service_call(1, NULL, 0, &req_id));
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+    /* The wedge lifts: the same call goes out, on rel seq 0. */
+  fake_port_set_tx_free(0xFFFFu);
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_service_call(1, NULL, 0, &req_id));
+  TEST_ASSERT_EQUAL_UINT8(0, req_id);
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+}
+
+/* covers: REL-2 */
+void test_services_retry_holds_while_the_link_is_wedged(void)
+{
+    /* REQUEST rel 0, req 0, index 1, empty Trigger request. */
+  const uint8_t want[] = {0x04u, 0x00u, 0x00u, 0x01u};
+  uint8_t req_id = 0xFFu;
+
+  configure();
+  connect();
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_service_call(1, NULL, 0, &req_id));
+  fake_port_set_tx_free(0u);
+  fake_port_advance(500);
+  r2s_spin_some();
+    /* The deadline passed but the frame never went out again. */
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+    /* The wedge lifts: the retry carries the same bytes on the next seq. */
+  fake_port_set_tx_free(0xFFFFu);
+  r2s_spin_some();
+  TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+  assert_tx(1, 7, 1, want, sizeof want);
+}
+
+/* covers: SVR-6, SVR-10 */
+void test_services_response_reports_busy_while_a_call_is_outstanding(void)
+{
+  const uint8_t answer[] = {0x01u};
+  uint8_t req_id = 0xFFu;
+
+  configure();
+  connect();
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_service_call(1, NULL, 0, &req_id));
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_TX_BUSY,
+    r2s_service_send_response(7, R2S_SVC_OK, answer, sizeof answer));
+    /* Nothing but the call's REQUEST went out. */
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+}
+
+/* covers: SVR-10 */
+void test_services_second_call_after_an_ack_reports_busy(void)
+{
+  const uint8_t ack[] = {0x07u, 0x00u};
+  uint8_t req_id = 0xFFu;
+
+  configure();
+  connect();
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_service_call(1, NULL, 0, &req_id));
+    /* The ack frees the stream, but the call is still outstanding. */
+  feed_host(6, 0, ack, sizeof ack);
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_TX_BUSY, r2s_service_call(1, NULL, 0, &req_id));
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+}
+
+/* covers: SVR-4 */
+void test_services_call_checks_every_argument(void)
+{
+  uint8_t req_id = 0xFFu;
+
+  configure();
+  connect();
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_service_call(1, NULL, 0, NULL));
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_service_call(2, NULL, 0, &req_id));
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_service_call(0, NULL, 0, &req_id));
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_service_call(1, NULL, 1, &req_id));
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+}
+
+/* covers: SVR-6 */
+void test_services_response_with_an_oversize_payload_sends_nothing(void)
+{
+  static uint8_t big[R2S_MAX_FRAME];
+  uint8_t req_id = 0xFFu;
+
+  configure();
+  connect();
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_service_call(1, NULL, 0, &req_id));
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS,
+    r2s_service_send_response(7, R2S_SVC_OK, big, sizeof big));
+    /* Nothing but the call's REQUEST went out. */
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+}
+
+/* covers: SVR-5 */
+void test_services_take_response_before_any_answer_is_empty(void)
+{
+  uint8_t req_id = 0xFFu;
+  uint8_t status = 0xFFu;
+  uint8_t payload[8];
+  uint16_t len = 0xFFFFu;
+
+  configure();
+  connect();
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_service_call(1, NULL, 0, &req_id));
+    /* The call is outstanding, but no RESPONSE has arrived. */
+  TEST_ASSERT_EQUAL_UINT8(R2S_SVC_EMPTY,
+                            r2s_service_take_response(&req_id, &status, payload, sizeof payload,
+    &len));
+}
+
+/* covers: SVR-4, SVR-5, REL-3 */
+void test_services_second_request_waits_for_the_take(void)
+{
+    /* Two REQUESTs on rel 0 and 1, req 7 then 8, index 0. */
+  const uint8_t first[] = {0x04u, 0x00u, 0x07u, 0x00u};
+  const uint8_t second[] = {0x04u, 0x01u, 0x08u, 0x00u};
+  const uint8_t ack0[] = {0x07u, 0x00u};
+  const uint8_t ack1[] = {0x07u, 0x01u};
+  uint8_t index = 0xFFu;
+  uint8_t req_id = 0xFFu;
+  uint8_t payload[8];
+  uint16_t len = 0xFFFFu;
+
+  configure();
+  connect();
+  fake_port_tx_clear();
+  feed_host(7, 0, first, sizeof first);
+  feed_host(7, 1, second, sizeof second);
+    /* Both are acked, each on its own rel seq; the slot still holds
+     * the first. */
+  TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+  assert_tx(0, 6, 0, ack0, sizeof ack0);
+  assert_tx(1, 6, 1, ack1, sizeof ack1);
+  TEST_ASSERT_EQUAL_INT8(R2S_OK,
+    r2s_service_take_request(&index, &req_id, payload, sizeof payload, &len));
+  TEST_ASSERT_EQUAL_UINT8(7, req_id);
+  TEST_ASSERT_EQUAL_UINT8(R2S_SVC_EMPTY,
+                            r2s_service_take_request(&index, &req_id, payload, sizeof payload,
+    &len));
+}
+
+/* covers: SVR-5, REL-3 */
+void test_services_response_with_a_wrong_rel_seq_is_dropped(void)
+{
+    /* RESPONSE rel 5, req 0, ok: ahead of the expected rel 0. */
+  const uint8_t response[] = {0x05u, 0x05u, 0x00u, 0x00u};
+  const uint8_t ack[] = {0x07u, 0x05u};
+  uint8_t req_id = 0xFFu;
+  uint8_t status = 0xFFu;
+  uint8_t payload[8];
+  uint16_t len = 0xFFFFu;
+
+  configure();
+  connect();
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_service_call(1, NULL, 0, &req_id));
+  feed_host(7, 1, response, sizeof response);
+    /* Acked on its own rel seq, but never applied. */
+  TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+  assert_tx(1, 6, 0, ack, sizeof ack);
+  TEST_ASSERT_EQUAL_UINT8(R2S_SVC_EMPTY,
+                            r2s_service_take_response(&req_id, &status, payload, sizeof payload,
+    &len));
+}
+
+/* covers: SVR-5 */
+void test_services_response_for_another_call_is_dropped(void)
+{
+    /* RESPONSE rel 0, req 1, ok: the call under req 0 is outstanding. */
+  const uint8_t other[] = {0x05u, 0x00u, 0x01u, 0x00u};
+    /* RESPONSE rel 1, req 0, ok: the answer to the outstanding call. */
+  const uint8_t answer[] = {0x05u, 0x01u, 0x00u, 0x00u, 0x01u};
+  const uint8_t ack[] = {0x07u, 0x00u};
+  uint8_t req_id = 0xFFu;
+  uint8_t status = 0xFFu;
+  uint8_t payload[8];
+  uint16_t len = 0xFFFFu;
+
+  configure();
+  connect();
+  fake_port_tx_clear();
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_service_call(1, NULL, 0, &req_id));
+  feed_host(7, 0, other, sizeof other);
+  TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+  assert_tx(1, 6, 0, ack, sizeof ack);
+  TEST_ASSERT_EQUAL_UINT8(R2S_SVC_EMPTY,
+                            r2s_service_take_response(&req_id, &status, payload, sizeof payload,
+    &len));
+    /* The outstanding call still answers. */
+  feed_host(7, 1, answer, sizeof answer);
+  TEST_ASSERT_EQUAL_INT8(R2S_OK,
+                           r2s_service_take_response(&req_id, &status, payload, sizeof payload,
+    &len));
+  TEST_ASSERT_EQUAL_UINT8(0, req_id);
+  TEST_ASSERT_EQUAL_UINT8(R2S_SVC_OK, status);
+}
+
+/* covers: SVR-4, REL-2 */
+void test_services_stray_ack_leaves_the_stream_whole(void)
+{
+  const uint8_t stray[] = {0x07u, 0x09u};
+  const uint8_t answer[] = {0x01u};
+  uint8_t req_id = 0xFFu;
+
+  configure();
+  connect();
+  fake_port_tx_clear();
+    /* Nothing outstanding: the stray ack changes nothing. */
+  feed_host(6, 0, stray, sizeof stray);
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_service_call(1, NULL, 0, &req_id));
+    /* A wrong rel seq never frees the stream either. */
+  feed_host(6, 1, stray, sizeof stray);
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_TX_BUSY,
+    r2s_service_send_response(7, R2S_SVC_OK, answer, sizeof answer));
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+}
+
+/* covers: SVR-7 */
+void test_services_status_with_a_reserved_verdict_is_refused(void)
+{
+    /* STATUS rel 0, index 0, verdict 9: reserved on the wire. */
+  const uint8_t verdict[] = {0x03u, 0x00u, 0x00u, 0x09u};
+
+  configure();
+  feed_host(7, 0, verdict, sizeof verdict);
+    /* Refused like a bad TOPIC_STATUS: the boot HELLO is the only frame. */
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+  TEST_ASSERT_EQUAL_UINT8(0xFFu, r2s_services_status(0));
+}
+
+/* covers: SVR-4, SVR-7 */
+void test_services_channel_frames_outside_the_walk_are_ignored(void)
+{
+  const uint8_t declare[] = {0x02u, 0x00u};
+  const uint8_t empty[1] = {0u};
+
+  configure();
+  connect();
+  fake_port_tx_clear();
+    /* An empty frame and a walk DECLARE, both outside any walk. */
+  feed_host(7, 0, empty, 0);
+  feed_host(7, 1, declare, sizeof declare);
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+}
+
+/* covers: SVR-4 */
+void test_services_unknown_opcode_is_refused(void)
+{
+    /* Opcode 9, rel 0: no service frame looks like this. */
+  const uint8_t unknown[] = {0x09u, 0x00u, 0x00u, 0x00u};
+
+  configure();
+  connect();
+  fake_port_tx_clear();
+  feed_host(7, 0, unknown, sizeof unknown);
+    /* Refused without an ack, like an undecodable SET. */
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+}
+
+/* covers: SVR-1 */
+void test_services_overlong_query_is_answered_with_hello(void)
+{
+    /* QUERY with a trailing byte: not a walk step. */
+  const uint8_t query[] = {0x01u, 0x00u, 0xFFu};
+  uint16_t boot_len = 0;
+  uint16_t len = 0;
+
+  configure();
+  feed_host(7, 0, query, sizeof query);
+    /* No walk step is taken: the answer has the boot HELLO's length,
+     * and the session is still announcing. A DECLARE would run past
+     * 40 bytes and a STATUS to 9. */
+  TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+  (void)fake_port_tx_frame(0, &boot_len);
+  (void)fake_port_tx_frame(1, &len);
+  TEST_ASSERT_EQUAL_UINT16(boot_len, len);
+  TEST_ASSERT_EQUAL_UINT8(0, r2s_connected());
+}
+
+/* covers: SVR-1 */
+void test_services_request_for_an_unknown_index_is_refused(void)
+{
+    /* REQUEST rel 0, req 7, index 9: past the announced table. */
+  const uint8_t request[] = {0x04u, 0x00u, 0x07u, 0x09u};
+
+  configure();
+  connect();
+  fake_port_tx_clear();
+  feed_host(7, 0, request, sizeof request);
+    /* Refused before its ack: nothing answers. */
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+}
