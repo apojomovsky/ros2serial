@@ -15,6 +15,7 @@
 
 #include <action_msgs/srv/cancel_goal.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <rosidl_typesupport_introspection_cpp/field_types.hpp>
 #include <tf2_msgs/action/lookup_transform.hpp>
 
 #include "r2s_bridge/action_types.hpp"
@@ -44,6 +45,8 @@ TEST(ActionTypes, LoadsLookupTransformHandles)
 TEST(ActionTypes, RejectsUnknownType)
 {
   EXPECT_THROW(ActionTypes("nope/action/Nope"), std::runtime_error);
+  EXPECT_THROW(ActionTypes("std_msgs/msg/String"), std::runtime_error)
+    << "a message is not an action: it has no action symbol";
 }
 
 TEST(ActionTypes, MovesAndFreesStructs)
@@ -62,6 +65,29 @@ TEST(ActionTypes, MovesAndFreesStructs)
   third = std::move(second);
   EXPECT_EQ(third.storage.size(), size);
   EXPECT_EQ(second.storage.size(), 0u);
+  // Moving constructs the target the same way: the source goes empty.
+  const auto *members = third.members;
+  ActionTypes::Struct fourth = std::move(third);
+  EXPECT_EQ(fourth.storage.size(), size);
+  EXPECT_EQ(fourth.members, members);
+  EXPECT_EQ(third.storage.size(), 0u);
+  EXPECT_EQ(third.members, nullptr);
+  // Assigning from a struct whose storage was released skips the finalizer.
+  ActionTypes::Struct cleared = types.make_goal();
+  cleared.storage.clear();
+  const auto *goal_members = cleared.members;
+  ActionTypes::Struct fifth;
+  fifth = std::move(cleared);
+  EXPECT_EQ(fifth.members, goal_members);
+  EXPECT_TRUE(fifth.storage.empty());
+  // Self-assignment is a guarded no-op.
+  ActionTypes::Struct self = types.make_goal();
+  const auto *self_members = self.members;
+  const auto self_size = self.storage.size();
+  ActionTypes::Struct &alias = self;
+  alias = std::move(self);
+  EXPECT_EQ(alias.members, self_members);
+  EXPECT_EQ(alias.storage.size(), self_size);
 }
 
 // The layout the rcl server reads through must match the generated C++
@@ -147,13 +173,104 @@ TEST(ActionTypes, RefusesStructsWithoutTheEnvelopeFields)
   EXPECT_EQ(types.feedback_of(goal), nullptr);
   EXPECT_FALSE(types.cancel_of(goal, goal_id, sec, nanosec));
   ActionTypes::Struct response = types.make_goal_response();
-  EXPECT_FALSE(types.fill_cancel_response(response, 0, goal_id, 0, 0u, true));
+  EXPECT_FALSE(types.fill_cancel_response(response, 0, goal_id, 0, 0u, true))
+    << "a goal response carries no goals to cancel";
+  ActionTypes::Struct result = types.make_result();
+  EXPECT_FALSE(types.fill_goal_response(result, 0, 0u, true))
+    << "a result carries no acceptance to stamp";
   ActionTypes::Struct empty;
+  EXPECT_FALSE(types.fill_cancel_response(empty, 0, goal_id, 0, 0u, true));
   EXPECT_FALSE(types.goal_id_of(empty, goal_id));
   EXPECT_EQ(types.goal_of(empty), nullptr);
   EXPECT_FALSE(types.fill_goal_response(empty, 0, 0u, true));
+  EXPECT_FALSE(types.result_id_of(empty, goal_id));
+  EXPECT_FALSE(types.fill_result_status(empty, 0));
   EXPECT_EQ(types.result_of(empty), nullptr);
+  EXPECT_FALSE(types.fill_feedback_id(empty, goal_id));
   EXPECT_EQ(types.feedback_of(empty), nullptr);
+  EXPECT_FALSE(types.cancel_of(empty, goal_id, sec, nanosec));
+  // A struct whose storage was released keeps its members but answers
+  // nothing: every accessor guards the empty storage as well.
+  ActionTypes::Struct cleared = types.make_goal_request();
+  cleared.storage.clear();
+  EXPECT_FALSE(types.goal_id_of(cleared, goal_id));
+  EXPECT_EQ(types.goal_of(cleared), nullptr);
+  EXPECT_FALSE(types.fill_goal_response(cleared, 0, 0u, true));
+  EXPECT_FALSE(types.result_id_of(cleared, goal_id));
+  EXPECT_FALSE(types.fill_result_status(cleared, 0));
+  EXPECT_EQ(types.result_of(cleared), nullptr);
+  EXPECT_FALSE(types.fill_feedback_id(cleared, goal_id));
+  EXPECT_EQ(types.feedback_of(cleared), nullptr);
+  EXPECT_FALSE(types.cancel_of(cleared, goal_id, sec, nanosec));
+  EXPECT_FALSE(types.fill_cancel_response(cleared, 0, goal_id, 0, 0u, true));
+}
+
+TEST(ActionTypes, RejectsHandBuiltLayouts)
+{
+  using rosidl_typesupport_introspection_cpp::MessageMember;
+  using rosidl_typesupport_introspection_cpp::MessageMembers;
+  using rosidl_typesupport_introspection_cpp::ROS_TYPE_MESSAGE;
+  using rosidl_typesupport_introspection_cpp::ROS_TYPE_STRING;
+  using rosidl_typesupport_introspection_cpp::ROS_TYPE_UINT8;
+  const ActionTypes types("tf2_msgs/action/LookupTransform");
+  std::array<std::uint8_t, 16> goal_id{};
+  // A layout with no fields finds nothing: every accessor refuses it.
+  // The members are built field by field so the test does not depend on
+  // the C struct initializer order.
+  MessageMembers no_fields{};
+  no_fields.member_count_ = 0u;
+  no_fields.members_ = nullptr;
+  ActionTypes::Struct missing;
+  missing.members = &no_fields;
+  missing.storage.resize(16u, 0u);
+  EXPECT_FALSE(types.goal_id_of(missing, goal_id));
+  EXPECT_EQ(types.goal_of(missing), nullptr);
+  EXPECT_FALSE(types.result_id_of(missing, goal_id));
+  EXPECT_EQ(types.result_of(missing), nullptr);
+  EXPECT_EQ(types.feedback_of(missing), nullptr);
+  // A field with the wrong type is not a sub-message.
+  MessageMember wrong_type{};
+  wrong_type.name_ = "goal_id";
+  wrong_type.type_id_ = ROS_TYPE_STRING;
+  MessageMembers wrong_parent{};
+  wrong_parent.member_count_ = 1u;
+  wrong_parent.members_ = &wrong_type;
+  ActionTypes::Struct wrong;
+  wrong.members = &wrong_parent;
+  wrong.storage.resize(16u, 0u);
+  EXPECT_FALSE(types.goal_id_of(wrong, goal_id));
+  // A message field without sub-members is refused.
+  MessageMember no_sub{};
+  no_sub.name_ = "goal_id";
+  no_sub.type_id_ = ROS_TYPE_MESSAGE;
+  no_sub.members_ = nullptr;
+  MessageMembers no_sub_parent{};
+  no_sub_parent.member_count_ = 1u;
+  no_sub_parent.members_ = &no_sub;
+  ActionTypes::Struct no_sub_struct;
+  no_sub_struct.members = &no_sub_parent;
+  no_sub_struct.storage.resize(16u, 0u);
+  EXPECT_FALSE(types.goal_id_of(no_sub_struct, goal_id));
+  // A message field whose type support carries no data is refused.
+  rosidl_message_type_support_t empty_ts{};
+  empty_ts.data = nullptr;
+  MessageMember no_data{};
+  no_data.name_ = "goal_id";
+  no_data.type_id_ = ROS_TYPE_MESSAGE;
+  no_data.members_ = &empty_ts;
+  MessageMembers no_data_parent{};
+  no_data_parent.member_count_ = 1u;
+  no_data_parent.members_ = &no_data;
+  ActionTypes::Struct no_data_struct;
+  no_data_struct.members = &no_data_parent;
+  no_data_struct.storage.resize(16u, 0u);
+  EXPECT_FALSE(types.goal_id_of(no_data_struct, goal_id));
+  // The fakes own no ROS storage: detach them before they destruct so no
+  // finalizer runs on the hand-built members.
+  missing.members = nullptr;
+  wrong.members = nullptr;
+  no_sub_struct.members = nullptr;
+  no_data_struct.members = nullptr;
 }
 
 TEST(ActionTypes, CancelExchangeMatchesGeneratedLayout)
