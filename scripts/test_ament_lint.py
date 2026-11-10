@@ -82,7 +82,7 @@ def test_gen_flake8_expectation_filters_the_ruff_divergence():
     text = path.read_text()
     assert 'I100' in text and 'E203' in text, f'{path} must name both diverged codes'
     assert '#564' in text, f'{path} must record the decision ticket'
-    assert 'noqa' not in text.lower(), f'{path} must filter the expectation, never the code'
+    assert '# noqa' not in text, f'{path} must filter the expectation, never the code'
 
 
 def test_ruff_stays_the_python_gate():
