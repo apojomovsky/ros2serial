@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The ros compat leg runs scenarios 1 to 4, like the static C++ leg.
-
-Compat is a side path, so it must not cost every run a fourth full
-leg. The runtime legs keep the whole file list. These tests read the
-same list files as the runner, so a list the runner cannot see fails here.
+"""The ros compat leg runs scenarios 1 to 4 plus the parameter and service
+scenarios its firmware carries; the static C++ leg reads the same list and
+skips those two from inside. The runtime legs keep the whole file list.
+These tests read the same list files as the runner, so a list the runner
+cannot see fails here.
 """
 
 import subprocess
@@ -18,6 +18,10 @@ SHORT = [
     'test_scenario_2_posix',
     'test_scenario_3_posix',
     'test_scenario_4_posix',
+]
+COMPAT = SHORT + [
+    'test_scenario_13_posix',
+    'test_scenario_14_posix',
 ]
 
 
@@ -51,8 +55,8 @@ def leg_block():
     raise AssertionError('run.sh carries no leg-to-list block')
 
 
-def test_the_compat_list_covers_scenarios_1_to_4():
-    assert entries('scenarios-compat.list') == SHORT
+def test_the_compat_list_covers_the_compat_scenarios():
+    assert entries('scenarios-compat.list') == COMPAT
 
 
 def test_the_runtime_list_starts_with_scenarios_1_to_4():
@@ -65,9 +69,9 @@ def test_the_runner_reads_the_leg_list():
     assert 'tests/e2e/legs.list' in RUN_SH.read_text()
 
 
-def test_compat_legs_cover_scenarios_1_to_4():
+def test_compat_legs_cover_the_compat_list():
     for leg in ('ros', 'static_cpp'):
-        assert files_for(leg).split() == SHORT
+        assert files_for(leg).split() == COMPAT
 
 
 def test_runtime_legs_run_the_whole_list():

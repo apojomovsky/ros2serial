@@ -36,7 +36,14 @@ if CPP_TREE.is_dir():
 
 packages = find_packages(include=['r2s_gen', 'r2s_gen.*'])
 package_dir = {}
-package_data = {'r2s_gen': ['snapshots/README.md', 'snapshots/*/*/msg/*.msg', 'schema/*.json']}
+package_data = {
+    'r2s_gen': [
+        'snapshots/README.md',
+        'snapshots/*/*/msg/*.msg',
+        'snapshots/*/*/srv/*.srv',
+        'schema/*.json',
+    ]
+}
 if CPP_STAGE.is_dir():
     packages.append('r2s_gen.cpp')
     package_dir['r2s_gen.cpp'] = 'cpp_stage'

@@ -75,6 +75,8 @@ extern const r2s_codec_table_t r2s_bundled_table_std_msgs_Bool;
 extern const r2s_codec_table_t r2s_bundled_table_std_msgs_Float32;
 extern const r2s_codec_table_t r2s_bundled_table_std_msgs_Header;
 extern const r2s_codec_table_t r2s_bundled_table_std_msgs_String;
+extern const r2s_codec_table_t r2s_bundled_table_std_srvs_Trigger_Request;
+extern const r2s_codec_table_t r2s_bundled_table_std_srvs_Trigger_Response;
 extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_TFMessage;
 
 /* One alias per bundled type for the C row spelling: the row names
@@ -158,6 +160,19 @@ extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_TFMessage;
 #define R2S_CTYPE_TABLE_std_msgs__msg__String (&r2s_bundled_table_std_msgs_String)
 #define R2S_CTYPE_INDEX_std_msgs__msg__String 0u
 #define R2S_CTYPE_NAME_std_msgs__msg__String "std_msgs/msg/String"
+/* std_srvs__srv__Trigger_Request: hash, table, index and wire name. */
+#define R2S_CTYPE_HASH_std_srvs__srv__Trigger_Request \
+  0xd0u, 0x10u, 0x82u, 0x53u, 0x74u, 0xceu, 0x89u, 0x18u
+#define R2S_CTYPE_TABLE_std_srvs__srv__Trigger_Request (&r2s_bundled_table_std_srvs_Trigger_Request)
+#define R2S_CTYPE_INDEX_std_srvs__srv__Trigger_Request 0u
+#define R2S_CTYPE_NAME_std_srvs__srv__Trigger_Request "std_srvs/srv/Trigger_Request"
+/* std_srvs__srv__Trigger_Response: hash, table, index and wire name. */
+#define R2S_CTYPE_HASH_std_srvs__srv__Trigger_Response \
+  0x2du, 0x94u, 0x6cu, 0x21u, 0xe2u, 0xfcu, 0x3fu, 0x1eu
+#define R2S_CTYPE_TABLE_std_srvs__srv__Trigger_Response \
+  (&r2s_bundled_table_std_srvs_Trigger_Response)
+#define R2S_CTYPE_INDEX_std_srvs__srv__Trigger_Response 0u
+#define R2S_CTYPE_NAME_std_srvs__srv__Trigger_Response "std_srvs/srv/Trigger_Response"
 /* tf2_msgs__msg__TFMessage: hash, table, index and wire name. */
 #define R2S_CTYPE_HASH_tf2_msgs__msg__TFMessage \
   0xe3u, 0x69u, 0xd0u, 0xf0u, 0x5au, 0x23u, 0xaeu, 0x52u
@@ -182,6 +197,10 @@ extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_TFMessage;
 #define R2S_CTYPE_TABLE_std_msgs R2S_error_expected_c_row_pkg__msg__Type
 #define R2S_CTYPE_INDEX_std_msgs R2S_error_expected_c_row_pkg__msg__Type
 #define R2S_CTYPE_NAME_std_msgs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_HASH_std_srvs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_TABLE_std_srvs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_INDEX_std_srvs R2S_error_expected_c_row_pkg__msg__Type
+#define R2S_CTYPE_NAME_std_srvs R2S_error_expected_c_row_pkg__msg__Type
 #define R2S_CTYPE_HASH_tf2_msgs R2S_error_expected_c_row_pkg__msg__Type
 #define R2S_CTYPE_TABLE_tf2_msgs R2S_error_expected_c_row_pkg__msg__Type
 #define R2S_CTYPE_INDEX_tf2_msgs R2S_error_expected_c_row_pkg__msg__Type
@@ -394,6 +413,8 @@ extern const r2s_codec_table_t r2s_bundled_table_std_msgs_Bool;
 extern const r2s_codec_table_t r2s_bundled_table_std_msgs_Float32;
 extern const r2s_codec_table_t r2s_bundled_table_std_msgs_Header;
 extern const r2s_codec_table_t r2s_bundled_table_std_msgs_String;
+extern const r2s_codec_table_t r2s_bundled_table_std_srvs_Trigger_Request;
+extern const r2s_codec_table_t r2s_bundled_table_std_srvs_Trigger_Response;
 extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_TFMessage;
 
 /* One scope map per package: a row names a C++ type, which the
@@ -583,6 +604,39 @@ constexpr uint16_t String_index = 0u;
 constexpr const char String_name[] = "std_msgs/msg/String";
 } // namespace msg
 } // namespace R2S_MAP_std_msgs
+
+namespace R2S_MAP_std_srvs
+{
+namespace srv
+{
+/* std_srvs::srv::Trigger_Request: hash, table, index and wire name. */
+constexpr uint8_t Trigger_Request_hash_0 = 0xd0u;
+constexpr uint8_t Trigger_Request_hash_1 = 0x10u;
+constexpr uint8_t Trigger_Request_hash_2 = 0x82u;
+constexpr uint8_t Trigger_Request_hash_3 = 0x53u;
+constexpr uint8_t Trigger_Request_hash_4 = 0x74u;
+constexpr uint8_t Trigger_Request_hash_5 = 0xceu;
+constexpr uint8_t Trigger_Request_hash_6 = 0x89u;
+constexpr uint8_t Trigger_Request_hash_7 = 0x18u;
+constexpr const r2s_codec_table_t *Trigger_Request_table =
+  &r2s_bundled_table_std_srvs_Trigger_Request;
+constexpr uint16_t Trigger_Request_index = 0u;
+constexpr const char Trigger_Request_name[] = "std_srvs/srv/Trigger_Request";
+/* std_srvs::srv::Trigger_Response: hash, table, index and wire name. */
+constexpr uint8_t Trigger_Response_hash_0 = 0x2du;
+constexpr uint8_t Trigger_Response_hash_1 = 0x94u;
+constexpr uint8_t Trigger_Response_hash_2 = 0x6cu;
+constexpr uint8_t Trigger_Response_hash_3 = 0x21u;
+constexpr uint8_t Trigger_Response_hash_4 = 0xe2u;
+constexpr uint8_t Trigger_Response_hash_5 = 0xfcu;
+constexpr uint8_t Trigger_Response_hash_6 = 0x3fu;
+constexpr uint8_t Trigger_Response_hash_7 = 0x1eu;
+constexpr const r2s_codec_table_t *Trigger_Response_table =
+  &r2s_bundled_table_std_srvs_Trigger_Response;
+constexpr uint16_t Trigger_Response_index = 0u;
+constexpr const char Trigger_Response_name[] = "std_srvs/srv/Trigger_Response";
+} // namespace srv
+} // namespace R2S_MAP_std_srvs
 
 namespace R2S_MAP_tf2_msgs
 {
@@ -814,6 +868,50 @@ constexpr const char TFMessage_name[] = "tf2_msgs/msg/TFMessage";
 #define R2S_MAP_std_msgs__msg__String_table R2S_error_cxx_rows_use_double_colon_not_underscores
 #define R2S_MAP_std_msgs__msg__String_index R2S_error_cxx_rows_use_double_colon_not_underscores
 #define R2S_MAP_std_msgs__msg__String_name R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Request_hash_0 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Request_hash_1 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Request_hash_2 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Request_hash_3 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Request_hash_4 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Request_hash_5 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Request_hash_6 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Request_hash_7 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Request_table \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Request_index \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Request_name \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Response_hash_0 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Response_hash_1 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Response_hash_2 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Response_hash_3 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Response_hash_4 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Response_hash_5 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Response_hash_6 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Response_hash_7 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Response_table \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Response_index \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_std_srvs__srv__Trigger_Response_name \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
 #define R2S_MAP_tf2_msgs__msg__TFMessage_hash_0 R2S_error_cxx_rows_use_double_colon_not_underscores
 #define R2S_MAP_tf2_msgs__msg__TFMessage_hash_1 R2S_error_cxx_rows_use_double_colon_not_underscores
 #define R2S_MAP_tf2_msgs__msg__TFMessage_hash_2 R2S_error_cxx_rows_use_double_colon_not_underscores

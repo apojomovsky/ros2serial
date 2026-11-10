@@ -14,6 +14,7 @@ extern "C" {
 
 extern "C" void r2s_runtime_test_reset(void);
 extern "C" void r2s_action_test_reset(void);
+extern "C" void r2s_service_test_reset(void);
 
 extern "C" void setUp(void)
 {
@@ -21,6 +22,7 @@ extern "C" void setUp(void)
   fake_port_reset();
   r2s_runtime_test_reset();
   r2s_action_test_reset();
+  r2s_service_test_reset();
 }
 
 extern "C" void tearDown(void)

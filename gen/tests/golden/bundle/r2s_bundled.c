@@ -38,6 +38,8 @@ R2S_SIZE_CHECK(std_msgs__msg__Bool);
 R2S_SIZE_CHECK(std_msgs__msg__Float32);
 R2S_SIZE_CHECK(std_msgs__msg__Header);
 R2S_SIZE_CHECK(std_msgs__msg__String);
+R2S_SIZE_CHECK(std_srvs__srv__Trigger_Request);
+R2S_SIZE_CHECK(std_srvs__srv__Trigger_Response);
 R2S_SIZE_CHECK(tf2_msgs__msg__TFMessage);
 
 const uint8_t R2S_FLASH r2s_bundled_records_builtin_interfaces_Time[] = {
@@ -1031,6 +1033,58 @@ const r2s_codec_table_t r2s_bundled_table_std_msgs_String = {
   1u,
 };
 
+const uint8_t R2S_FLASH r2s_bundled_records_std_srvs_Trigger_Request[] = {
+  R2S_U16_LO(sizeof(std_srvs__srv__Trigger_Request)),
+  R2S_U16_HI(sizeof(std_srvs__srv__Trigger_Request)),
+  0x00,
+  0x00,
+  0x00, /* std_srvs/srv/Trigger_Request */
+};
+
+/* No entries: one unread byte keeps the table symbol defined. */
+const uint8_t R2S_FLASH r2s_bundled_entries_std_srvs_Trigger_Request[1] = {0x00};
+
+const r2s_codec_table_t r2s_bundled_table_std_srvs_Trigger_Request = {
+  r2s_bundled_records_std_srvs_Trigger_Request,
+  1u,
+  r2s_bundled_entries_std_srvs_Trigger_Request,
+  0u,
+};
+
+const uint8_t R2S_FLASH r2s_bundled_records_std_srvs_Trigger_Response[] = {
+  R2S_U16_LO(sizeof(std_srvs__srv__Trigger_Response)),
+  R2S_U16_HI(sizeof(std_srvs__srv__Trigger_Response)),
+  0x00,
+  0x00,
+  0x02, /* std_srvs/srv/Trigger_Response */
+};
+
+const uint8_t R2S_FLASH r2s_bundled_entries_std_srvs_Trigger_Response[] = {
+  0x00,
+  0x00,
+  R2S_U16_LO(offsetof(std_srvs__srv__Trigger_Response, success)),
+  R2S_U16_HI(offsetof(std_srvs__srv__Trigger_Response, success)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* std_srvs/srv/Trigger_Response.success */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(std_srvs__srv__Trigger_Response, message)),
+  R2S_U16_HI(offsetof(std_srvs__srv__Trigger_Response, message)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* std_srvs/srv/Trigger_Response.message */
+};
+
+const r2s_codec_table_t r2s_bundled_table_std_srvs_Trigger_Response = {
+  r2s_bundled_records_std_srvs_Trigger_Response,
+  1u,
+  r2s_bundled_entries_std_srvs_Trigger_Response,
+  2u,
+};
+
 const uint8_t R2S_FLASH r2s_bundled_records_tf2_msgs_TFMessage[] = {
   R2S_U16_LO(sizeof(builtin_interfaces__msg__Time)),
   R2S_U16_HI(sizeof(builtin_interfaces__msg__Time)),
@@ -1256,4 +1310,6 @@ R2S_FIELD_CHECK(sensor_msgs__msg__Range, variance, variance);
 R2S_FIELD_CHECK(std_msgs__msg__Bool, data, data);
 R2S_FIELD_CHECK(std_msgs__msg__Float32, data, data);
 R2S_FIELD_CHECK(std_msgs__msg__String, data, data);
+R2S_FIELD_CHECK(std_srvs__srv__Trigger_Response, success, success);
+R2S_FIELD_CHECK(std_srvs__srv__Trigger_Response, message, message);
 R2S_FIELD_CHECK(tf2_msgs__msg__TFMessage, transforms, transforms.size);

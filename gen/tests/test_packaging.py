@@ -66,6 +66,9 @@ def test_pip_installs_the_generator_into_a_fresh_venv(tmp_path):
     assert (
         site_packages / 'r2s_gen' / 'snapshots' / 'jazzy' / 'sensor_msgs' / 'msg' / 'Imu.msg'
     ).is_file()
+    assert (
+        site_packages / 'r2s_gen' / 'snapshots' / 'jazzy' / 'std_srvs' / 'srv' / 'Trigger.srv'
+    ).is_file()
     assert (site_packages / 'r2s_gen' / 'schema' / 'r2s.schema.json').is_file()
 
 

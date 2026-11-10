@@ -75,7 +75,10 @@ def test_files_for_names_the_exact_bundle_set():
         'src/std_msgs/msg/float32.hpp',
         'src/std_msgs/msg/header.hpp',
         'src/std_msgs/msg/string.hpp',
+        'src/std_srvs/srv/trigger_request.hpp',
+        'src/std_srvs/srv/trigger_response.hpp',
         'src/tf2_msgs/msg/tf_message.hpp',
+        'src/std_srvs/srv/trigger.hpp',
     )
 
 
@@ -178,6 +181,23 @@ def test_the_bundle_ships_the_cpp_message_headers():
         path = f'src/{cpp.message_path(type_name)}'
         assert path in files
         assert 'namespace r2s' in files[path]
+
+
+def test_the_bundle_ships_the_trigger_service_header():
+    files = bundle.bundle('jazzy')
+    repository = msgs.MessageRepository(distro='jazzy')
+
+    assert 'src/std_srvs/srv/trigger.hpp' in files
+    header = files['src/std_srvs/srv/trigger.hpp']
+    assert 'struct Trigger' in header
+    assert 'using Request = Trigger_Request' in header
+    assert 'using Response = Trigger_Response' in header
+    assert 'std_srvs/srv/Trigger' in header
+    service_hash = typehash.service_hash(repository, 'std_srvs/srv/Trigger')
+    raw = bytes.fromhex(service_hash[len('RIHS01_') :])[:8]
+    hashed = ', '.join(f'0x{byte:02x}u' for byte in raw)
+    assert hashed in header
+    assert 'srv_traits<std_srvs::srv::Trigger_Request>' in header
 
 
 def test_the_bundle_command_writes_the_library_files(tmp_path, capsys):
@@ -1079,7 +1099,7 @@ def test_a_bundled_type_without_entries_keeps_its_table_defined(tmp_path, monkey
     text = bundle._bundled_c(resolved, {'test_msgs/msg/Empty': table}, 'jazzy')
 
     assert (
-        'const uint8_t R2S_FLASH r2s_bundled_entries_test_msgs_Empty[1] = { 0x00 };'
+        'const uint8_t R2S_FLASH r2s_bundled_entries_test_msgs_Empty[1] = {0x00};'
         in text.splitlines()
     )
 

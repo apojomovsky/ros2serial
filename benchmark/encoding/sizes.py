@@ -101,6 +101,11 @@ LAYOUTS = {
     'tf2_msgs/msg/TFMessage': [
         ('transforms', ('seq', ('nest', 'geometry_msgs/msg/TransformStamped'))),
     ],
+    'std_srvs/srv/Trigger_Request': [],
+    'std_srvs/srv/Trigger_Response': [
+        ('success', BOOL),
+        ('message', STR),
+    ],
 }
 
 # Fixed sizes a MAVLink-style dialect would use, from the bundle's
@@ -115,6 +120,7 @@ MAVLINK_BOUNDS = {
     'sensor_msgs/msg/JointState.velocity': 6,
     'sensor_msgs/msg/JointState.effort': 6,
     'tf2_msgs/msg/TFMessage.transforms': 1,
+    'std_srvs/srv/Trigger_Response.message': 16,
 }
 
 # Representative payloads, mirroring the spec vectors: the wide message and
@@ -267,6 +273,14 @@ REPRESENTATIVE = {
                 }
             ]
         },
+    },
+    'std_srvs/srv/Trigger_Request': {
+        'wide': {},
+        'narrow': None,
+    },
+    'std_srvs/srv/Trigger_Response': {
+        'wide': {'success': True, 'message': 'ok'},
+        'narrow': None,
     },
 }
 

@@ -13,7 +13,9 @@
 #include <string.h>
 #include <time.h>
 
+#include "r2s/r2s_services.h"
 #include "r2s/runtime.hpp"
+#include "r2s_posix_params.h"
 #include "r2s_posix_port.h"
 #include "ros2serial/builtin_interfaces/Time.h"
 #include "ros2serial/geometry_msgs/Twist.h"
@@ -21,6 +23,7 @@
 #include "ros2serial/sensor_msgs/JointState.h"
 #include "ros2serial/std_msgs/Float32.h"
 #include "ros2serial/std_msgs/String.h"
+#include "ros2serial/std_srvs/Trigger.h"
 
 namespace
 {
@@ -89,6 +92,16 @@ void on_joints(const sensor_msgs::JointState & msg)
   (void)msg;
   s_joints_count++;
   fprintf(stderr, "r2s_posix: joints n=%lu\n", static_cast<unsigned long>(s_joints_count));
+}
+
+/* Answers reset the way the C firmware does: success with the MCU's own
+ * text, so the ROS call proves the round trip carries MCU content. */
+void on_reset(
+  const std_srvs::Trigger::Request & req, std_srvs::Trigger::Response & res)
+{
+  (void)req;
+  res.success = true;
+  (void)snprintf(res.message, sizeof res.message, "%s", "ok");
 }
 
 void usage(FILE *out, const char *argv0)
@@ -220,6 +233,9 @@ int main(int argc, char **argv)
   uint32_t busy = 0u;
   unsigned log_booted = 0u;
   unsigned cap_armed = 0u;
+  unsigned trigger_called = 0u;
+  unsigned trigger_reported = 0u;
+  uint8_t trigger_req = 0xFFu;
 
   setvbuf(stderr, NULL, _IONBF, 0);
   if (argc < 2) {
@@ -325,6 +341,10 @@ int main(int argc, char **argv)
     ros::Subscriber<geometry_msgs::Twist> cmd_vel_sub(opts.sub != 0 ? opts.sub : "", &on_cmd_vel);
     ros::Subscriber<sensor_msgs::JointState> joints_sub(opts.joints != 0 ? opts.joints : "",
       &on_joints);
+    ros::ServiceServer<std_srvs::Trigger::Request, std_srvs::Trigger::Response> reset_srv("reset",
+      &on_reset);
+    ros::ServiceClient<std_srvs::Trigger::Request, std_srvs::Trigger::Response> trigger_cli(
+      "trigger");
     bool configured = true;
 
     (void)opts.node;
@@ -352,8 +372,14 @@ int main(int argc, char **argv)
     if (opts.joints != 0) {
       configured = nh.subscribe(joints_sub) && configured;
     }
+    configured = nh.advertiseService(reset_srv) && configured;
+    configured = nh.serviceClient(trigger_cli) && configured;
     if (!configured) {
       fprintf(stderr, "r2s_posix: cannot configure node '%s'\n", opts.node);
+      return 2;
+    }
+    if (r2s_posix_params_init() != 0) {
+      fprintf(stderr, "r2s_posix: cannot configure parameters\n");
       return 2;
     }
     fprintf(stderr, "r2s_posix: ready node=%s rate=%u\n", opts.node, opts.rate);
@@ -370,6 +396,9 @@ int main(int argc, char **argv)
                  * of queueing a burst for the reconnect. */
         last_pub = now;
         last_time = now;
+        trigger_called = 0u;
+        trigger_reported = 0u;
+        trigger_req = 0xFFu;
         if (cap_armed != 0u) {
           cap_armed = 0u;
           r2s_posix_set_tx_cap(0xFFFFu);
@@ -393,6 +422,36 @@ int main(int argc, char **argv)
                  * sees what the firmware stored. */
         if (publish_log_text(&log_pub, r2s_session_token())) {
           log_booted = 1u;
+        }
+      }
+      r2s_posix_params_report();
+      if (trigger_called == 0u) {
+                /* One call per connection, sent without waiting: a blocking
+                 * call would stall the publishes while the answer travels,
+                 * the way the C firmware avoids. Entry 1 is the trigger
+                 * client, announced after the reset server. */
+        uint8_t req_id = 0xFFu;
+
+        if (r2s_service_call(1u, NULL, 0u, &req_id) == R2S_OK) {
+          trigger_req = req_id;
+          trigger_called = 1u;
+        }
+      } else if (trigger_reported == 0u) {
+                /* The outcome marker goes out on log_text once the answer
+                 * arrives, so the service scenario observes the round trip
+                 * the same way it does for the C firmware. */
+        uint8_t req = 0xFFu;
+        uint8_t status = 0xFFu;
+        uint8_t payload[32];
+        uint16_t len = 0u;
+
+        if (r2s_service_take_response(&req, &status, payload, (uint16_t)sizeof payload,
+              &len) == R2S_OK && req == trigger_req)
+        {
+          if (opts.log_text != 0) {
+            (void)publish_log_text(&log_pub, 0x5E000000u | (uint32_t)status);
+          }
+          trigger_reported = 1u;
         }
       }
       if (opts.pub != 0) {

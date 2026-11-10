@@ -11,7 +11,9 @@ baseline, and exits nonzero only when cpplint on the bridge reports
 findings; ci.yml runs it as a continue-on-error job, so the gate stays
 non-blocking. copyright is the known divergence: the tree carries the SPDX
 two-liner (#549) which ament_copyright cannot read, so its count shows in
-the baseline without failing the run. The tests stub colcon, python3 and
+the baseline without failing the run. flake8 is the settled divergence: I100
+and E203 contradict the ruff gate (#564), so the gen expectation filters
+those codes instead of failing on them. The tests stub colcon, python3 and
 pytest, so they never build.
 """
 
@@ -73,6 +75,21 @@ def test_gen_has_env_gated_lint_tests():
         text = path.read_text()
         assert f'@pytest.mark.{linter}' in text, f'{path} misses its linter mark'
         assert 'R2S_AMENT_LINT' in text, f'{path} runs outside the advisory job'
+
+
+def test_gen_flake8_expectation_filters_the_ruff_divergence():
+    path = ROOT / 'gen' / 'tests' / 'test_flake8.py'
+    text = path.read_text()
+    assert 'I100' in text and 'E203' in text, f'{path} must name both diverged codes'
+    assert '#564' in text, f'{path} must record the decision ticket'
+    assert '# noqa' not in text, f'{path} must filter the expectation, never the code'
+
+
+def test_ruff_stays_the_python_gate():
+    path = ROOT / 'scripts' / 'lint-python.sh'
+    text = path.read_text()
+    assert 'python3 -m ruff check' in text, f'{path} must keep ruff check as the gate'
+    assert 'python3 -m ruff format --check' in text, f'{path} must keep ruff format as the gate'
 
 
 COLCON_STUB = """#!/usr/bin/env bash

@@ -80,6 +80,10 @@ def _installed_hash(prefix: Path, type_name: str) -> str | None:
         document = prefix / 'share' / package / 'action' / f'{name}.json'
     elif '/srv/' in type_name:
         package, _, name = type_name.partition('/srv/')
+        for suffix_text in ('_Request', '_Response'):
+            if name.endswith(suffix_text):
+                name = name[: -len(suffix_text)]
+                break
         document = prefix / 'share' / package / 'srv' / f'{name}.json'
     else:
         package, _, name = type_name.partition('/msg/')
