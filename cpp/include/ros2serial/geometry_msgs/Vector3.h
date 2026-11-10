@@ -7,6 +7,7 @@
 
 namespace geometry_msgs
 {
+/// The Vector3 message under its rosserial spelling.
 using Vector3 = msg::Vector3;
 } // namespace geometry_msgs
 

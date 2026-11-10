@@ -7,6 +7,7 @@
 
 namespace std_msgs
 {
+/// The Header message under its rosserial spelling.
 using Header = msg::Header;
 } // namespace std_msgs
 

@@ -7,6 +7,7 @@
 
 namespace std_msgs
 {
+/// The String message under its rosserial spelling.
 using String = msg::String;
 } // namespace std_msgs
 

@@ -7,9 +7,20 @@ namespace ros
 {
 
 template<typename MReq, typename MRes>
+/// The declaration a ported sketch names.
+/**
+ * Until X6 gives it a runtime, serviceClient refuses it.
+ *
+ * \tparam MReq the request message type.
+ * \tparam MRes the response message type.
+ */
 class ServiceClient
 {
 public:
+  /// Keeps the service name for the X6 runtime.
+  /**
+   * \param[in] service_name the service to call.
+   */
   ServiceClient(const char *service_name)
   : topic_(service_name)
   {

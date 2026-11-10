@@ -1,6 +1,6 @@
 /* rosserial-compatible NodeHandle: the sketch drives initNode, advertise,
  * subscribe and spinOnce as under ros_lib, and the layer registers the
- * topics on the runtime topic table the r2s:: API speaks. */
+ * topics on the runtime topic table the r2s API speaks. */
 #ifndef R2S_ROS_NODE_HANDLE_H
 #define R2S_ROS_NODE_HANDLE_H
 
@@ -15,44 +15,68 @@
 #include "ros2serial/ros/time.h"
 
 #ifdef ARDUINO
+/// A flash-resident string on AVR, as Arduino declares it.
 class __FlashStringHelper;
 #endif
 
 namespace ros
 {
 
-/* What one spinOnce() call reports. Only SPIN_OK occurs yet: the timeout
- * lands with setSpinTimeout (#417) and the stop request with services. */
+/// One spinOnce() outcome: the call served the link.
+/**
+ * Only SPIN_OK occurs yet: the timeout lands with setSpinTimeout (#417)
+ * and the stop request with services.
+ */
 const int SPIN_OK = 0;
+/// Reserved spinOnce() outcome for an unspecified failure.
 const int SPIN_ERR = -1;
+/// One spinOnce() outcome: the call ran past the spin timeout.
 const int SPIN_TIMEOUT = -2;
+/// Reserved spinOnce() outcome for a service stop request.
 const int SPIN_TX_STOP_REQUESTED = -3;
+/// Reserved spinOnce() outcome for the time channel.
 const int SPIN_TIME_RECV = -4;
 
-/* Stands in for the hardware type a ros_lib sketch names. The layer serves
- * the port the r2s glue binds, so the type is accepted and ignored. */
+/// Stands in for the hardware type a ros_lib sketch names.
+/**
+ * The layer serves the port the r2s glue binds, so the type is accepted
+ * and ignored.
+ */
 struct ArduinoHardware
 {
 };
 
-/* The node a ported sketch drives. The template parameters mirror ros_lib
- * and are accepted and ignored: every registration runs on the runtime's
- * fixed RAM table either way. */
 template<class Hardware = ArduinoHardware, int MAX_SUBSCRIBERS = 25, int MAX_PUBLISHERS = 25,
   int INPUT_SIZE = 512, int OUTPUT_SIZE = 512>
+/// The node a ported sketch drives.
+/**
+ * The template parameters mirror ros_lib and are accepted and ignored:
+ * every registration runs on the runtime's fixed RAM table either way.
+ *
+ * \tparam Hardware the port hardware type, accepted and ignored.
+ * \tparam MAX_SUBSCRIBERS the subscription limit, accepted and ignored.
+ * \tparam MAX_PUBLISHERS the publisher limit, accepted and ignored.
+ * \tparam INPUT_SIZE the receive buffer size, accepted and ignored.
+ * \tparam OUTPUT_SIZE the send buffer size, accepted and ignored.
+ */
 class NodeHandle_
 {
 public:
-    /* Owns the session's node. rosserial sketches name no node, so the
-     * announce carries this one. */
+  /// Owns the session's node.
+  /**
+   * rosserial sketches name no node, so the announce carries this one.
+   */
   NodeHandle_()
   : m_node("rosserial")
   {
   }
 
-    /* Starts the link. On Arduino this begins Serial at the stack's default
-     * baud; elsewhere the port opens out of band, as the runtime firmwares
-     * do, so there is nothing to start here. */
+  /// Starts the link.
+  /**
+   * On Arduino this begins Serial at the stack's default baud; elsewhere
+   * the port opens out of band, as the runtime firmwares do, so there is
+   * nothing to start here.
+   */
   void initNode()
   {
 #ifdef ARDUINO
@@ -60,8 +84,12 @@ public:
 #endif
   }
 
-    /* Announces the publisher's topic. Returns false when the table already
-     * closed with the first spin or is full, and announces nothing then. */
+  /// Announces the publisher's topic.
+  /**
+   * \param[in,out] p the publisher to announce.
+   * \return True with the topic announced, false when the table already
+   * closed with the first spin or is full, announcing nothing then.
+   */
   bool advertise(Publisher & p)
   {
     uint8_t id = 0xFFu;
@@ -77,7 +105,14 @@ public:
     return true;
   }
 
-    /* Announces the subscription. Returns false under the same refusals. */
+  /// Announces the subscription.
+  /**
+   * \tparam MsgT the message type being subscribed.
+   * \tparam ObjT the object type holding the callback.
+   * \param[in,out] s the subscription to announce.
+   * \return True with the topic announced, false under the same refusals
+   * as advertise().
+   */
   template<typename MsgT, typename ObjT> bool subscribe(Subscriber<MsgT, ObjT> & s)
   {
     uint8_t id = 0xFFu;
@@ -92,8 +127,17 @@ public:
     return true;
   }
 
-    /* Services land in X6, so naming one fails to compile with a message
-     * saying so, instead of linking a half present runtime. */
+  /// Names a service server, which fails to compile with a message.
+  /**
+   * Services land in X6, so naming one fails to compile instead of
+   * linking a half present runtime.
+   *
+   * \tparam MReq the request message type.
+   * \tparam MRes the response message type.
+   * \tparam ObjT the object type holding the callback.
+   * \param[in] srv the server that cannot be announced.
+   * \return False: this line is never reached.
+   */
   template<typename MReq, typename MRes, typename ObjT>
   bool advertiseService(ServiceServer<MReq, MRes, ObjT> & srv)
   {
@@ -103,8 +147,16 @@ public:
     return false;
   }
 
-    /* Services land in X6, so naming one fails to compile with a message
-     * saying so, instead of linking a half present runtime. */
+  /// Names a service client, which fails to compile with a message.
+  /**
+   * Services land in X6, so naming one fails to compile instead of
+   * linking a half present runtime.
+   *
+   * \tparam MReq the request message type.
+   * \tparam MRes the response message type.
+   * \param[in] srv the client that cannot be named.
+   * \return False: this line is never reached.
+   */
   template<typename MReq, typename MRes> bool serviceClient(ServiceClient<MReq, MRes> & srv)
   {
     (void)srv;
@@ -112,9 +164,14 @@ public:
     return false;
   }
 
-    /* Serves the link once: the first call binds the table and starts the
-     * handshake, the later ones move bytes and callbacks. A call running
-     * past the spin timeout reports SPIN_TIMEOUT instead. */
+  /// Serves the link once.
+  /**
+   * The first call binds the table and starts the handshake, the later
+   * ones move bytes and callbacks.
+   *
+   * \return SPIN_OK having served, or SPIN_TIMEOUT when the call ran
+   * past the spin timeout.
+   */
   int spinOnce()
   {
     uint32_t start = m_node.now();
@@ -126,15 +183,23 @@ public:
     return SPIN_OK;
   }
 
-    /* True while the handshake completed and user traffic may flow. */
+  /// True while the handshake completed and user traffic may flow.
+  /**
+   * \return Whether the session is connected.
+   */
   bool connected()
   {
     return m_node.connected();
   }
 
-    /* The shared clock: the host correction's anchor plus the ticks since
-     * it, {0, 0} while no correction anchors the clock. Without the time
-     * channel it is millis since boot, as an unsynced ros_lib clock is. */
+  /// The shared clock.
+  /**
+   * The host correction's anchor plus the ticks since it, {0, 0} while
+   * no correction anchors the clock. Without the time channel it is
+   * millis since boot, as an unsynced ros_lib clock is.
+   *
+   * \return The current time.
+   */
   Time now()
   {
     Time t;
@@ -152,21 +217,34 @@ public:
     return t;
   }
 
-    /* Bounds one spinOnce() call in milliseconds: a call running past it
-     * returns SPIN_TIMEOUT. Zero disables the bound, as in ros_lib. */
+  /// Bounds one spinOnce() call in milliseconds.
+  /**
+   * A call running past it returns SPIN_TIMEOUT. Zero disables the
+   * bound, as in ros_lib.
+   *
+   * \param[in] timeout the bound in milliseconds, or zero to disable.
+   */
   void setSpinTimeout(const uint32_t & timeout)
   {
     m_spin_timeout = timeout;
   }
 
-    /* The port handle sketches expect: the node's own hardware instance. */
+  /// The port handle sketches expect: the node's own hardware instance.
+  /**
+   * \return The node's hardware instance.
+   */
   Hardware * getHardware()
   {
     return &hardware_;
   }
 
-    /* Diagnostics on the log channel, one frame per call. Without the log
-     * channel they compile out, so one sketch builds for every tier. */
+  /// Logs a debug line on the log channel, one frame per call.
+  /**
+   * Without the log channel it compiles out, so one sketch builds for
+   * every tier.
+   *
+   * \param[in] msg the line to log.
+   */
   void logdebug(const char *msg)
   {
 #ifdef R2S_WITH_LOG
@@ -176,6 +254,13 @@ public:
 #endif
   }
 
+  /// Logs an info line on the log channel, one frame per call.
+  /**
+   * Without the log channel it compiles out, so one sketch builds for
+   * every tier.
+   *
+   * \param[in] msg the line to log.
+   */
   void loginfo(const char *msg)
   {
 #ifdef R2S_WITH_LOG
@@ -185,6 +270,13 @@ public:
 #endif
   }
 
+  /// Logs a warning line on the log channel, one frame per call.
+  /**
+   * Without the log channel it compiles out, so one sketch builds for
+   * every tier.
+   *
+   * \param[in] msg the line to log.
+   */
   void logwarn(const char *msg)
   {
 #ifdef R2S_WITH_LOG
@@ -194,6 +286,13 @@ public:
 #endif
   }
 
+  /// Logs an error line on the log channel, one frame per call.
+  /**
+   * Without the log channel it compiles out, so one sketch builds for
+   * every tier.
+   *
+   * \param[in] msg the line to log.
+   */
   void logerror(const char *msg)
   {
 #ifdef R2S_WITH_LOG
@@ -203,6 +302,13 @@ public:
 #endif
   }
 
+  /// Logs a fatal line on the log channel, one frame per call.
+  /**
+   * Without the log channel it compiles out, so one sketch builds for
+   * every tier.
+   *
+   * \param[in] msg the line to log.
+   */
   void logfatal(const char *msg)
   {
 #ifdef R2S_WITH_LOG
@@ -213,8 +319,12 @@ public:
   }
 
 #ifdef ARDUINO
-    /* Flash-text diagnostics: F() strings stay in flash on AVR instead of
-     * moving to RAM. */
+  /// Logs a debug line kept in flash on AVR.
+  /**
+   * F() strings stay in flash instead of moving to RAM.
+   *
+   * \param[in] msg the line to log.
+   */
   void logdebug(const __FlashStringHelper *msg)
   {
 #ifdef R2S_WITH_LOG
@@ -224,6 +334,12 @@ public:
 #endif
   }
 
+  /// Logs an info line kept in flash on AVR.
+  /**
+   * F() strings stay in flash instead of moving to RAM.
+   *
+   * \param[in] msg the line to log.
+   */
   void loginfo(const __FlashStringHelper *msg)
   {
 #ifdef R2S_WITH_LOG
@@ -233,6 +349,12 @@ public:
 #endif
   }
 
+  /// Logs a warning line kept in flash on AVR.
+  /**
+   * F() strings stay in flash instead of moving to RAM.
+   *
+   * \param[in] msg the line to log.
+   */
   void logwarn(const __FlashStringHelper *msg)
   {
 #ifdef R2S_WITH_LOG
@@ -242,6 +364,12 @@ public:
 #endif
   }
 
+  /// Logs an error line kept in flash on AVR.
+  /**
+   * F() strings stay in flash instead of moving to RAM.
+   *
+   * \param[in] msg the line to log.
+   */
   void logerror(const __FlashStringHelper *msg)
   {
 #ifdef R2S_WITH_LOG
@@ -251,6 +379,12 @@ public:
 #endif
   }
 
+  /// Logs a fatal line kept in flash on AVR.
+  /**
+   * F() strings stay in flash instead of moving to RAM.
+   *
+   * \param[in] msg the line to log.
+   */
   void logfatal(const __FlashStringHelper *msg)
   {
 #ifdef R2S_WITH_LOG
@@ -270,7 +404,7 @@ private:
   uint32_t m_spin_timeout = 0u;
 };
 
-/* The handle a ros_lib sketch names. */
+/// The handle a ros_lib sketch names.
 typedef NodeHandle_< > NodeHandle;
 
 } // namespace ros

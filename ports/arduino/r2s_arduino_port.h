@@ -13,11 +13,23 @@ namespace r2s
 {
 namespace detail
 {
-// Serves port from now on; the glue defaults to Serial without this call.
+/// Serves port from now on.
+/**
+ * The glue defaults to Serial without this call.
+ *
+ * \param[in,out] port the stream to serve.
+ */
 void arduino_port_attach(Stream & port);
 
-// Starts port at baud and serves it; the baud reaches HardwareSerial and
-// USB CDC alike through the concrete type, while the glue keeps a Stream.
+/// Starts port at baud and serves it.
+/**
+ * The baud reaches HardwareSerial and USB CDC alike through the
+ * concrete type, while the glue keeps a Stream.
+ *
+ * \tparam PortT the stream type, which must offer begin(unsigned long).
+ * \param[in,out] port the stream to start and serve.
+ * \param[in] baud the line speed to start it at.
+ */
 template<typename PortT> void arduino_port_begin(PortT & port, unsigned long baud)
 {
   port.begin(baud);
@@ -27,7 +39,7 @@ template<typename PortT> void arduino_port_begin(PortT & port, unsigned long bau
 } // namespace r2s
 
 #ifdef R2S_TESTING
-// Drops the selection and the boot state, so one host binary reboots.
+/// Drops the selection and the boot state, so one host binary reboots.
 void r2s_arduino_port_test_reset(void);
 #endif
 
