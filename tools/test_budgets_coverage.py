@@ -30,6 +30,12 @@ AVR_SKETCHES = [
     'arduino_xmacro_c',
 ]
 
+# The CH32V00x tier M proof: one static firmware on the CH32V003.
+CH32V_FIRMWARE = [
+    'ch32v_minimal/ch32v/ch32v_minimal.elf',
+]
+
+
 # The sketches scripts/build-examples-esp32.sh compiles for the ESP32.
 ESP32_SKETCHES = [
     'arduino_minimal',
@@ -50,6 +56,7 @@ PORT_FIRMWARE = ('stm32/firmware.elf', 'rp2040/firmware.elf')
 def expected_firmware() -> list:
     """Every ELF path the example builds produce, keyed like the budgets."""
     names = ['cmake_minimal/hello_cmake']
+    names.extend(CH32V_FIRMWARE)
     for sketch in AVR_SKETCHES:
         for board in ('uno', 'mega'):
             names.append(f'{sketch}/{board}/{sketch}.ino.elf')

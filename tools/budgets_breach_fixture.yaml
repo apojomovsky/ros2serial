@@ -48,3 +48,7 @@ firmware:
     flash: 1
     ram: 1
     stack: 1
+  ch32v_minimal/ch32v/ch32v_minimal.elf:
+    flash: 1
+    ram: 1
+    stack: 1

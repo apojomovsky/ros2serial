@@ -236,10 +236,11 @@ def collect(build_dir: Path) -> dict:
     stacks = {}
     for elf in sorted(elfs):
         name = elf.relative_to(build_dir).as_posix()
-        # The AVR call-graph analysis cannot read Xtensa or Arm firmware:
-        # the ESP32, STM32 and RP2040 builds report flash and RAM only,
-        # so they skip the stack analysis.
-        if size_report.elf_machine(elf) in (size_report.EM_XTENSA, size_report.EM_ARM):
+        # The AVR call-graph analysis cannot read Xtensa, Arm or RISC-V
+        # firmware: the ESP32, STM32, RP2040 and CH32V builds report flash
+        # and RAM only, so they skip the stack analysis.
+        machine = size_report.elf_machine(elf)
+        if machine in (size_report.EM_XTENSA, size_report.EM_ARM, size_report.EM_RISCV):
             continue
         source = _stack_source(build_dir, name)
         if not source.is_file():

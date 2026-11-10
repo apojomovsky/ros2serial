@@ -88,6 +88,13 @@ def elf_bytes(machine):
     return bytes(header)
 
 
+def test_elf_machine_reads_a_riscv_header(tmp_path):
+    firmware = tmp_path / 'ch32v' / 'ch32v_minimal.elf'
+    firmware.parent.mkdir(parents=True)
+    firmware.write_bytes(elf_bytes(0xF3))
+    assert size_report.elf_machine(firmware) == 0xF3
+
+
 def test_elf_machine_reads_an_xtensa_header(tmp_path):
     firmware = tmp_path / 'esp32.elf'
     firmware.write_bytes(elf_bytes(0x5E))
@@ -139,6 +146,19 @@ def test_measure_uses_the_xtensa_tools_for_xtensa_firmware(tmp_path, monkeypatch
     monkeypatch.setattr(size_report, '_run', fake_run(calls))
     sizes = size_report.measure(tmp_path)['arduino_minimal/esp32/arduino_minimal.ino.elf']
     assert 'xtensa-esp32-elf-size' in calls
+    assert 'avr-size' not in calls
+    assert sizes['flash'] == 8200
+
+
+def test_measure_uses_the_riscv_tools_for_riscv_firmware(tmp_path, monkeypatch):
+    empty_data_dir(tmp_path, monkeypatch)
+    firmware = tmp_path / 'ch32v_minimal' / 'ch32v' / 'ch32v_minimal.elf'
+    firmware.parent.mkdir(parents=True)
+    firmware.write_bytes(elf_bytes(0xF3))
+    calls = []
+    monkeypatch.setattr(size_report, '_run', fake_run(calls))
+    sizes = size_report.measure(tmp_path)['ch32v_minimal/ch32v/ch32v_minimal.elf']
+    assert 'riscv-none-elf-size' in calls
     assert 'avr-size' not in calls
     assert sizes['flash'] == 8200
 
