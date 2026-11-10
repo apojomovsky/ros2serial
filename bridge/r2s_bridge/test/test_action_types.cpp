@@ -332,6 +332,18 @@ TEST(ActionTypes, RejectsHandBuiltLayouts)
   bad_size_struct.members = &bad_size_parent;
   bad_size_struct.storage.resize(64u, 0u);
   EXPECT_FALSE(types.goal_id_of(bad_size_struct, goal_id));
+  // A status field with the wrong type is not an int8.
+  MessageMember bad_status{};
+  bad_status.name_ = "status";
+  bad_status.type_id_ = ROS_TYPE_STRING;
+  MessageMembers bad_status_parent{};
+  bad_status_parent.member_count_ = 1u;
+  bad_status_parent.members_ = &bad_status;
+  ActionTypes::Struct bad_status_struct;
+  bad_status_struct.members = &bad_status_parent;
+  bad_status_struct.storage.resize(16u, 0u);
+  EXPECT_FALSE(types.fill_result_status(bad_status_struct, 0));
+  bad_status_struct.members = nullptr;
   // The fakes own no ROS storage: detach them before they destruct so no
   // finalizer runs on the hand-built members.
   missing.members = nullptr;
