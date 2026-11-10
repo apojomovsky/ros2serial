@@ -34,6 +34,10 @@ bash "$root/scripts/build-examples.sh" || status=1
 bash "$root/scripts/build-examples-esp32.sh" || status=1
 # The CH32V firmware joins the same build tree the same way.
 bash "$root/scripts/build-examples-ch32v.sh" || status=1
+# The STM32 and RP2040 firmware join it the same way, measured with the
+# Arm toolchain beside the AVR and Xtensa ones.
+bash "$root/ports/stm32/build.sh" || status=1
+bash "$root/ports/rp2040/build.sh" || status=1
 if [ "$status" -ne 0 ]; then
   echo "budgets: the example builds failed" >&2
   exit 1
@@ -155,7 +159,8 @@ fi
   cat "$build/stack-table.md"
   echo
   echo "Stack comes from the non-LTO rebuild under stack/; flash and RAM from the shipped firmware."
-  echo "ESP32 and CH32V firmware report flash and RAM only; the AVR call-graph analysis covers neither Xtensa nor RISC-V."
+  echo "ESP32, STM32, RP2040 and CH32V firmware report flash and RAM only; the AVR call-graph"
+  echo "analysis covers neither Xtensa, Arm nor RISC-V."
 } >"$build/budgets-table.md"
 echo "TABLE $build/budgets-table.md"
 

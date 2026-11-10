@@ -86,10 +86,11 @@ and [Part II, Test strategy](00-design.md#test-strategy).
 | Spec and vectors | `spec/` | every scope, via vectors |
 | Generator | `gen/r2s_gen` | `GEN=1` |
 
-`ports/avr`, `ports/stm32` and `ports/epic-hal` hold the planned AVR,
-32-bit and PIC ports; each currently carries only a `.gitkeep`.
-`ports/ch32v` holds the CH32V003 glue, built with the pinned RISC-V
-toolchain and judged by the budgets gate.
+`ports/avr` and `ports/epic-hal` hold the planned AVR and PIC ports; each
+currently carries only a `.gitkeep`. `ports/ch32v` holds the CH32V003 glue,
+built with the pinned RISC-V toolchain and judged by the budgets gate.
+`ports/stm32` and `ports/rp2040` hold the STM32F103 and RP2040 glue;
+`ports/common` holds the firmware the two share.
 
 ## Generation pipeline
 

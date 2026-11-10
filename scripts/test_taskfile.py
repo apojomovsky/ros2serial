@@ -108,6 +108,8 @@ log="$R2S_TASK_LOG"
 [ -n "${ESP32:-}" ] && echo "stub ESP32=$ESP32" >> "$log"
 [ -n "${PIC:-}" ] && echo "stub PIC=$PIC" >> "$log"
 [ -n "${PLATFORMIO:-}" ] && echo "stub PLATFORMIO=$PLATFORMIO" >> "$log"
+[ -n "${STM32:-}" ] && echo "stub STM32=$STM32" >> "$log"
+[ -n "${RP2040:-}" ] && echo "stub RP2040=$RP2040" >> "$log"
 [ -n "${BUDGETS:-}" ] && echo "stub BUDGETS=$BUDGETS" >> "$log"
 [ -n "${FUZZ:-}" ] && echo "stub FUZZ=$FUZZ" >> "$log"
 [ -n "${README:-}" ] && echo "stub README=$README" >> "$log"
@@ -168,6 +170,8 @@ LEAKY_VARS = (
     'ESP32',
     'PIC',
     'PLATFORMIO',
+    'STM32',
+    'RP2040',
     'BUDGETS',
     'FUZZ',
     'README',
@@ -297,6 +301,73 @@ def test_a_pio_script_edit_reruns_platformio_and_scripts_besides_lint(tmp_path):
     (repo / edited).write_text('probe\nprobe again\n')
     reran = run_task(repo)
     assert sorted(reran) == ['COMMITS=1', 'LINT=1', 'PLATFORMIO=1', 'SCRIPTS=1'], reran
+
+
+@needs_task
+def test_an_stm32_script_edit_reruns_stm32_and_budgets_besides_lint(tmp_path):
+    """Editing the STM32 build stales its task and the budgets gate that
+    calls it. The port glue lives under ports/, which the scripts task
+    does not own, so scripts stays quiet. Lint and commits always run.
+    """
+    repo = fixture(tmp_path)
+    ran = run_task(repo)
+    assert 'STM32=1' in ran, ran
+    edited = 'ports/stm32/build.sh'
+    for name, task in tasks().items():
+        if name in ('default', 'stm32', 'budgets', 'lint', 'commits'):
+            continue
+        assert not matches(task, edited), f'{edited} also matches {name}'
+    (repo / edited).parent.mkdir(parents=True, exist_ok=True)
+    (repo / edited).write_text('probe\nprobe again\n')
+    reran = run_task(repo)
+    assert sorted(reran) == ['BUDGETS=1', 'COMMITS=1', 'LINT=1', 'STM32=1'], reran
+
+
+@needs_task
+def test_an_rp2040_script_edit_reruns_rp2040_and_budgets_besides_lint(tmp_path):
+    """Editing the RP2040 build stales its task and the budgets gate that
+    calls it. The STM32 task stays quiet: each port owns its directory,
+    and only the shared common sources wake both.
+    """
+    repo = fixture(tmp_path)
+    ran = run_task(repo)
+    assert 'RP2040=1' in ran, ran
+    edited = 'ports/rp2040/build.sh'
+    for name, task in tasks().items():
+        if name in ('default', 'rp2040', 'budgets', 'lint', 'commits'):
+            continue
+        assert not matches(task, edited), f'{edited} also matches {name}'
+    (repo / edited).parent.mkdir(parents=True, exist_ok=True)
+    (repo / edited).write_text('probe\nprobe again\n')
+    reran = run_task(repo)
+    assert sorted(reran) == ['BUDGETS=1', 'COMMITS=1', 'LINT=1', 'RP2040=1'], reran
+
+
+@needs_task
+def test_a_common_source_edit_reruns_both_ports_and_budgets(tmp_path):
+    """The shared firmware is one source for both ports: editing it stales
+    the stm32 task, the rp2040 task and the budgets gate that calls both
+    builds. Lint and commits always run; every other task stays quiet.
+    """
+    repo = fixture(tmp_path)
+    ran = run_task(repo)
+    assert 'STM32=1' in ran, ran
+    assert 'RP2040=1' in ran, ran
+    edited = 'ports/common/firmware.c'
+    for name, task in tasks().items():
+        if name in ('default', 'stm32', 'rp2040', 'budgets', 'lint', 'commits'):
+            continue
+        assert not matches(task, edited), f'{edited} also matches {name}'
+    (repo / edited).parent.mkdir(parents=True, exist_ok=True)
+    (repo / edited).write_text('probe\nprobe again\n')
+    reran = run_task(repo)
+    assert sorted(reran) == [
+        'BUDGETS=1',
+        'COMMITS=1',
+        'LINT=1',
+        'RP2040=1',
+        'STM32=1',
+    ], reran
 
 
 @needs_task
@@ -470,8 +541,8 @@ def test_the_local_task_holds_only_the_fast_gates():
     The local ritual keeps only the fast gates that catch the mistakes a
     push actually makes. Everything else (scripts, bridge, ament_lint,
     coverage, examples, budgets, readme, fuzz, plus e2e-avr, e2e-posix,
-    nightly, esp32, pic and platformio) stays in the default task and
-    runs in CI.
+    nightly, esp32, pic, platformio, stm32 and rp2040) stays in the
+    default task and runs in CI.
     """
     fast = ['lint', 'commits', 'core', 'gen', 'cpp', 'docs']
     local = list(tasks()['local']['deps'])
@@ -492,6 +563,8 @@ def test_the_local_task_holds_only_the_fast_gates():
         'esp32',
         'pic',
         'platformio',
+        'stm32',
+        'rp2040',
     }, ci_only
 
 

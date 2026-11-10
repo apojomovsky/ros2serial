@@ -50,6 +50,9 @@ ESP32_SKETCHES = [
 ]
 
 
+PORT_FIRMWARE = ('stm32/firmware.elf', 'rp2040/firmware.elf')
+
+
 def expected_firmware() -> list:
     """Every ELF path the example builds produce, keyed like the budgets."""
     names = ['cmake_minimal/hello_cmake']
@@ -59,6 +62,7 @@ def expected_firmware() -> list:
             names.append(f'{sketch}/{board}/{sketch}.ino.elf')
     for sketch in ESP32_SKETCHES:
         names.append(f'{sketch}/esp32/{sketch}.ino.elf')
+    names.extend(PORT_FIRMWARE)
     return sorted(names)
 
 

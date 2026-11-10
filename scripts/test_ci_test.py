@@ -60,6 +60,8 @@ SCOPES = (
     'ESP32',
     'PIC',
     'PLATFORMIO',
+    'STM32',
+    'RP2040',
     'BUDGETS',
     'FUZZ',
     'README',
@@ -386,12 +388,101 @@ def test_platformio_scope_runs_its_section(tmp_path, monkeypatch):
     assert '== platformio' in result.stdout
 
 
+def test_stm32_scope_runs_its_section(tmp_path, monkeypatch):
+    # The stubbed Arm toolchain satisfies the lookup and touches each
+    # output, so the run links nothing real and downloads nothing.
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    stub_arm_toolchain(stub)
+    monkeypatch.setenv('R2S_ARM_GCC', str(stub / 'arm-none-eabi-gcc'))
+    result = run_scope(copy_tree(tmp_path), 'STM32', build_dir=tmp_path / 'build')
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '== stm32' in result.stdout
+
+
+def test_rp2040_scope_runs_its_section(tmp_path, monkeypatch):
+    # The stubbed Arm toolchain satisfies the lookup and touches each
+    # output, so the run links nothing real and downloads nothing. The
+    # stub stage source stands in for the SDK boot stage.
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    stub_arm_toolchain(stub)
+    monkeypatch.setenv('R2S_ARM_GCC', str(stub / 'arm-none-eabi-gcc'))
+    monkeypatch.setenv('R2S_ARM_OBJCOPY', str(stub / 'arm-none-eabi-objcopy'))
+    sdk = tmp_path / 'sdk'
+    fixture_sdk(sdk)
+    monkeypatch.setenv('R2S_PICO_SDK', str(sdk))
+    result = run_scope(copy_tree(tmp_path), 'RP2040', build_dir=tmp_path / 'build')
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '== rp2040' in result.stdout
+
+
+def stub_arm_toolchain(stub):
+    """A stub Arm toolchain: compiles and objcopy touch their outputs."""
+    (stub / 'arm-none-eabi-gcc').write_text(
+        '#!/usr/bin/env bash\n'
+        'out=""\n'
+        'prev=""\n'
+        'for arg in "$@"; do\n'
+        '    if [ "$prev" = "-o" ]; then out="$arg"; fi\n'
+        '    prev="$arg"\n'
+        'done\n'
+        '[ -n "$out" ] && mkdir -p "$(dirname "$out")" && : > "$out"\n'
+        'exit 0\n',
+        encoding='utf-8',
+    )
+    (stub / 'arm-none-eabi-gcc').chmod(0o755)
+    (stub / 'arm-none-eabi-objcopy').write_text(
+        '#!/usr/bin/env bash\n: > "${@: -1}"\nexit 0\n', encoding='utf-8'
+    )
+    (stub / 'arm-none-eabi-objcopy').chmod(0o755)
+
+
+def fixture_sdk(sdk_dir):
+    """The boot stage tree the STM32 build reads: a stub stage stands in."""
+    stage = sdk_dir / 'src' / 'rp2040' / 'boot_stage2'
+    stage.mkdir(parents=True)
+    (stage / 'boot2_w25q080.S').write_text(
+        '.cpu cortex-m0plus\n.thumb\n.section .entry\n b .\n', encoding='utf-8'
+    )
+    (stage / 'boot_stage2.ld').write_text(
+        'MEMORY { SRAM(rx) : ORIGIN = 0x20041f00, LENGTH = 252 }\n', encoding='utf-8'
+    )
+    pad = stage / 'pad_checksum'
+    pad.write_text('#!/usr/bin/env bash\n: > "${@: -1}"\nexit 0\n')
+    pad.chmod(0o755)
+    (stage / 'asminclude').mkdir()
+
+
+PORT_FIRMWARE = ('stm32/firmware.elf', 'rp2040/firmware.elf')
+
+
+def plant_port_stack(build, su):
+    """The stack sources the gate needs beside the stub-linked firmware."""
+    for rel in PORT_FIRMWARE:
+        source = build / 'stack' / rel
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(b'')
+        (source.parent / 'firmware.su').write_text(su)
+
+
 def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):
     # The budgets run builds the ESP32 firmware too, whose stubbed install
     # plants its toolchain under the data dir: keep a scratch directory.
+    # The STM32 firmware builds with the stubbed Arm toolchain and SDK.
     monkeypatch.setenv('R2S_ARDUINO_DATA_DIR', str(tmp_path / 'arduino-data'))
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    stub_arm_toolchain(stub)
+    monkeypatch.setenv('R2S_ARM_GCC', str(stub / 'arm-none-eabi-gcc'))
+    monkeypatch.setenv('R2S_ARM_OBJCOPY', str(stub / 'arm-none-eabi-objcopy'))
+    sdk = tmp_path / 'sdk'
+    fixture_sdk(sdk)
+    monkeypatch.setenv('R2S_PICO_SDK', str(sdk))
     root = copy_tree(tmp_path)
-    stubs = stub_toolbox(tmp_path / 'bin')
+    stubs = stub_toolbox(stub)
     build = tmp_path / 'build' / 'examples'
     shipped = [
         'cmake_minimal/hello_cmake',
@@ -416,6 +507,7 @@ def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):
             source.parent.mkdir(parents=True, exist_ok=True)
             source.write_bytes(b'')
             (source.parent / 'firmware.su').write_text(su)
+    plant_port_stack(build, su)
     # The gate refuses a stale docs/budgets.md, so the run first refreshes
     # it from the stubbed measurements, the way make size-report does.
     env = {k: v for k, v in os.environ.items() if k not in SCOPES}
@@ -439,8 +531,18 @@ def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):
 
 def test_budgets_gate_fails_on_stale_docs(tmp_path, monkeypatch):
     # The checked-in docs/budgets.md holds real measurements, so a run
-    # over stubbed firmware must fail naming the stale copy.
+    # over stubbed firmware must fail naming the stale copy. The STM32
+    # firmware builds with the stubbed Arm toolchain and SDK, and its
+    # stack sources are planted so the failure stays about the docs.
     monkeypatch.setenv('R2S_ARDUINO_DATA_DIR', str(tmp_path / 'arduino-data'))
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    stub_arm_toolchain(stub)
+    monkeypatch.setenv('R2S_ARM_GCC', str(stub / 'arm-none-eabi-gcc'))
+    monkeypatch.setenv('R2S_ARM_OBJCOPY', str(stub / 'arm-none-eabi-objcopy'))
+    sdk = tmp_path / 'sdk'
+    fixture_sdk(sdk)
+    monkeypatch.setenv('R2S_PICO_SDK', str(sdk))
     root = copy_tree(tmp_path)
     build = tmp_path / 'build' / 'examples'
     fake = build / 'cmake_minimal' / 'hello_cmake'
@@ -448,8 +550,10 @@ def test_budgets_gate_fails_on_stale_docs(tmp_path, monkeypatch):
     fake.write_bytes(b'')
     fake.chmod(0o755)
     (build / 'cmake_minimal' / 'firmware.su').write_text('main:32:static\n')
+    plant_port_stack(build, 'main:32:static\n')
     # The gate builds every example, so the CH32V firmware needs its stub
-    # too before the run can reach the stale copy.
+    # too before the run can reach the stale copy: the helper above only
+    # plants the STM32 and RP2040 stack sources.
     ch32v = build / 'ch32v_minimal' / 'ch32v' / 'ch32v_minimal.elf'
     ch32v.parent.mkdir(parents=True, exist_ok=True)
     ch32v.write_bytes(b'')
