@@ -6,8 +6,9 @@ The generate layouts: the exact file set each layout writes, and the generate co
 
 Covers the G10 output contract: cmake writes the generated pair plus a
 CMakeLists static library, arduino writes library.properties plus the pair
-under src/, every file names the generator version and the config hash, and
-unsupported layouts, C++ output and compact handshakes fail precisely.
+under src/, platformio writes library.json plus the pair under src/, every
+file names the generator version and the config hash, and unsupported
+layouts, C++ output and compact handshakes fail precisely.
 """
 
 import re
@@ -86,9 +87,11 @@ def test_arduino_layout_names_its_exact_file_set():
 
 def test_an_unknown_layout_names_the_supported_ones():
     with pytest.raises(MessageError) as caught:
-        layouts.files_for('platformio')
+        layouts.files_for('zephyr')
 
-    assert str(caught.value) == "--layout: unknown layout 'platformio'; use one of: arduino, cmake"
+    assert str(caught.value) == (
+        "--layout: unknown layout 'zephyr'; use one of: arduino, cmake, platformio"
+    )
 
 
 def test_generate_writes_exactly_the_cmake_file_set(tmp_path):
@@ -240,12 +243,83 @@ def test_the_generate_command_rejects_an_unknown_layout(tmp_path, capsys):
                 '--out',
                 str(out),
                 '--layout',
-                'platformio',
+                'zephyr',
             ]
         )
         == 1
     )
-    assert "--layout: unknown layout 'platformio'" in capsys.readouterr().err
+    assert "--layout: unknown layout 'zephyr'" in capsys.readouterr().err
+
+
+def test_platformio_layout_names_its_exact_file_set():
+    assert layouts.files_for('platformio') == (
+        'library.json',
+        'src/r2s_generated.h',
+        'src/r2s_generated.c',
+    )
+
+
+def test_generate_writes_exactly_the_platformio_file_set(tmp_path):
+    _, files = generated('platformio', tmp_path)
+
+    assert sorted(files) == sorted(layouts.files_for('platformio'))
+
+
+def test_all_layouts_share_the_same_generated_pair(tmp_path):
+    _, cmake_files = generated('cmake', tmp_path)
+    _, arduino_files = generated('arduino', tmp_path)
+    _, platformio_files = generated('platformio', tmp_path)
+
+    assert platformio_files['src/r2s_generated.h'] == cmake_files['r2s_generated.h']
+    assert platformio_files['src/r2s_generated.c'] == cmake_files['r2s_generated.c']
+    assert arduino_files['src/r2s_generated.h'] == cmake_files['r2s_generated.h']
+    assert arduino_files['src/r2s_generated.c'] == cmake_files['r2s_generated.c']
+
+
+def test_the_platformio_manifest_names_the_node_and_the_toolchain(tmp_path):
+    import json
+
+    _, files = generated('platformio', tmp_path)
+
+    manifest = json.loads(files['library.json'])
+    assert manifest['name'] == 'r2s_posix'
+    assert manifest['version'] == __version__
+    assert manifest['frameworks'] == 'arduino'
+    assert manifest['platforms'] == ['atmelavr', 'espressif32']
+    assert manifest['headers'] == 'r2s_generated.h'
+    assert manifest['license'] == 'MIT'
+
+
+def test_the_platformio_manifest_carries_the_build_flags(tmp_path):
+    import json
+
+    _, files = generated('platformio', tmp_path)
+
+    manifest = json.loads(files['library.json'])
+    assert manifest['build']['flags'] == [
+        f'-D{define}' for define in layouts.build_defines(files['src/r2s_generated.h'])
+    ]
+
+
+def test_every_platformio_file_names_the_version_and_the_config_hash(tmp_path):
+    loaded, files = generated('platformio', tmp_path)
+    digest = topics.config_hash(loaded)
+
+    assert len(digest) == 16
+    for name, text in files.items():
+        assert f'r2s-gen {__version__}' in text, name
+        assert digest in text, name
+
+
+def test_the_platformio_library_json_matches_the_golden(tmp_path):
+    config_path = EXAMPLES / 'cmake_minimal' / 'r2s.yaml'
+    loaded = config.load(config_path)
+    repository = msgs.MessageRepository()
+    roots = [topic.type_name for topic in loaded.topics]
+    resolved = bounds.resolve(repository, roots, bounds=dict(loaded.bounds))
+    files = layouts.generate(loaded, resolved, repository, 'platformio', source=config_path.name)
+
+    assert files['library.json'] == (GOLDEN / 'library.json').read_text(encoding='utf-8')
 
 
 def configure_lib(tmp_path, files):
@@ -373,7 +447,7 @@ def test_the_arduino_properties_name_the_node_and_the_toolchain(tmp_path):
     assert 'architectures=avr,esp32' in properties.splitlines()
 
 
-@pytest.mark.parametrize('layout', ['cmake', 'arduino'])
+@pytest.mark.parametrize('layout', ['cmake', 'arduino', 'platformio'])
 def test_an_empty_topic_list_is_an_error_in_every_layout(tmp_path, layout):
     loaded = Config(node='r2s_posix', topics=(), bounds={})
     repository = msgs.MessageRepository()

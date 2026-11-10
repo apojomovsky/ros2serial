@@ -107,6 +107,7 @@ log="$R2S_TASK_LOG"
 [ -n "${EXAMPLES:-}" ] && echo "stub EXAMPLES=$EXAMPLES" >> "$log"
 [ -n "${ESP32:-}" ] && echo "stub ESP32=$ESP32" >> "$log"
 [ -n "${PIC:-}" ] && echo "stub PIC=$PIC" >> "$log"
+[ -n "${PLATFORMIO:-}" ] && echo "stub PLATFORMIO=$PLATFORMIO" >> "$log"
 [ -n "${BUDGETS:-}" ] && echo "stub BUDGETS=$BUDGETS" >> "$log"
 [ -n "${FUZZ:-}" ] && echo "stub FUZZ=$FUZZ" >> "$log"
 [ -n "${README:-}" ] && echo "stub README=$README" >> "$log"
@@ -166,6 +167,7 @@ LEAKY_VARS = (
     'EXAMPLES',
     'ESP32',
     'PIC',
+    'PLATFORMIO',
     'BUDGETS',
     'FUZZ',
     'README',
@@ -276,6 +278,25 @@ def test_a_pic_script_edit_reruns_pic_and_scripts_besides_lint(tmp_path):
     (repo / edited).write_text('probe\nprobe again\n')
     reran = run_task(repo)
     assert sorted(reran) == ['COMMITS=1', 'LINT=1', 'PIC=1', 'SCRIPTS=1'], reran
+
+
+@needs_task
+def test_a_pio_script_edit_reruns_platformio_and_scripts_besides_lint(tmp_path):
+    """Editing the PlatformIO build stales its task and the scripts task that
+    owns every script. Lint and commits always run; every other task,
+    including the budgets gate, stays quiet.
+    """
+    repo = fixture(tmp_path)
+    ran = run_task(repo)
+    assert 'PLATFORMIO=1' in ran, ran
+    edited = 'scripts/build-examples-pio.sh'
+    for name, task in tasks().items():
+        if name in ('default', 'platformio', 'scripts', 'lint', 'commits'):
+            continue
+        assert not matches(task, edited), f'{edited} also matches {name}'
+    (repo / edited).write_text('probe\nprobe again\n')
+    reran = run_task(repo)
+    assert sorted(reran) == ['COMMITS=1', 'LINT=1', 'PLATFORMIO=1', 'SCRIPTS=1'], reran
 
 
 @needs_task
@@ -446,7 +467,7 @@ def test_soak_runs_on_schedule_outside_the_default_task(tmp_path):
 def test_the_local_task_is_the_default_set_without_the_ci_only_sections():
     """The pre-push hook and the takeoff run it; CI runs e2e and esp32."""
     ci_only = {'e2e-avr', 'e2e-posix', 'nightly', 'esp32'}
-    ci_only = {'e2e-avr', 'e2e-posix', 'nightly', 'esp32', 'pic'}
+    ci_only = {'e2e-avr', 'e2e-posix', 'nightly', 'esp32', 'pic', 'platformio'}
     local = list(tasks()['local']['deps'])
     assert local == [name for name in default_tasks() if name not in ci_only], local
     assert not ci_only & set(local), local

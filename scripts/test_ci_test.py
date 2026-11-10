@@ -59,6 +59,7 @@ SCOPES = (
     'EXAMPLES',
     'ESP32',
     'PIC',
+    'PLATFORMIO',
     'BUDGETS',
     'FUZZ',
     'README',
@@ -309,6 +310,21 @@ def test_pic_scope_runs_its_section(tmp_path, monkeypatch):
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert '== pic' in result.stdout
+
+
+def test_platformio_scope_runs_its_section(tmp_path, monkeypatch):
+    # The stubbed PlatformIO install plants its binary under the data dir,
+    # so the run keeps a scratch directory instead of the shared cache.
+    monkeypatch.setenv('R2S_PIO_DATA_DIR', str(tmp_path / 'pio-data'))
+    result = run_scope(
+        copy_tree(tmp_path),
+        'PLATFORMIO',
+        stubs=stub_toolbox(tmp_path / 'bin'),
+        build_dir=tmp_path / 'build',
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '== platformio' in result.stdout
 
 
 def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):
