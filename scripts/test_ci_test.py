@@ -541,6 +541,14 @@ def test_nightly_scope_names_its_section():
     assert 'tests/e2e/test_isolation.py' in text
 
 
+def test_nightly_section_shows_pytest_output_live():
+    """The isolation wall-time lines must reach the job log, not pytest's capture."""
+    text = (ROOT / 'scripts' / 'ci-test.sh').read_text()
+    assert re.search(r'pytest -s tests/e2e/test_isolation\.py', text), (
+        'the NIGHTLY pytest run must pass -s so section wall times reach the log'
+    )
+
+
 def test_e2e_both_backend_runs_all_three_suites(tmp_path):
     """E2E=both runs the harness, the avr and the posix end-to-end suites in one scope."""
     copy = _minimal_suite(tmp_path / 'copy')
