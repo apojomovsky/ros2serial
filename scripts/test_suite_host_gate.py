@@ -154,6 +154,20 @@ def test_host_gate_refuses_at_once_when_asked_not_to_wait(tmp_path):
     assert 'host suite gate' in out.stderr
 
 
+def test_bad_gate_knobs_fail_with_a_clear_message(tmp_path):
+    """A nonsense cap or wait stops at once instead of running unlocked."""
+    cache = tmp_path / 'cache'
+    tree = minimal_suite(tmp_path / 'tree-b')
+    out = run_suite(tree, suite_env(cache, slots=0))
+    assert out.returncode == 2, out.stdout + out.stderr
+    assert 'R2S_SUITE_SLOTS' in out.stderr
+    env = suite_env(cache)
+    env['R2S_SUITE_HOST_WAIT_SECS'] = 'soon'
+    out = run_suite(tree, env)
+    assert out.returncode == 2, out.stdout + out.stderr
+    assert 'R2S_SUITE_HOST_WAIT_SECS' in out.stderr
+
+
 def test_queued_suite_runs_once_a_slot_frees(tmp_path):
     """A waiting suite takes the slot its holder releases and runs on."""
     cache = tmp_path / 'cache'
