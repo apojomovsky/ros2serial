@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 """Service loading: .srv files parse to Request and Response messages."""
 
 import pytest
