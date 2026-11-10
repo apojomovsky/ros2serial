@@ -14,6 +14,7 @@ staging without the downloads.
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -21,8 +22,11 @@ SCRIPT = ROOT / 'scripts' / 'build-examples-pio.sh'
 
 
 def run(args, cwd, tmp_path, extra_env=None):
+    # The interpreter's directory first, as the suite runs it: the generate
+    # step validates the config, which needs the image's jsonschema.
+    path = [str(Path(sys.executable).parent), '/usr/bin', '/bin', '/usr/local/bin']
     env = {
-        'PATH': '/usr/bin:/bin:/usr/local/bin',
+        'PATH': ':'.join(path),
         'HOME': str(tmp_path),
         'R2S_BUILD_DIR': str(tmp_path / 'b'),
         'R2S_CACHE_DIR': str(tmp_path / 'cache'),
@@ -34,10 +38,38 @@ def run(args, cwd, tmp_path, extra_env=None):
 
 
 def stub_pio(bin_dir):
-    """A PlatformIO stand-in that records its arguments and succeeds."""
+    """A PlatformIO stand-in that records its arguments and succeeds.
+
+    It mimics `pio ci` by leaving one firmware per named board under
+    .pio/build, so the gate's artifact check runs against the same layout
+    the real build produces.
+    """
     bin_dir.mkdir(parents=True, exist_ok=True)
     pio = bin_dir / 'pio'
-    pio.write_text('#!/usr/bin/env bash\necho "$@" >> "$R2S_PIO_LOG"\nexit 0\n')
+    pio.write_text(
+        '#!/usr/bin/env bash\n'
+        'echo "$@" >> "$R2S_PIO_LOG"\n'
+        'want_board=0\n'
+        'for arg in "$@"; do\n'
+        '  case "$arg" in\n'
+        '  --board)\n'
+        '    want_board=1\n'
+        '    ;;\n'
+        '  --board=*)\n'
+        '    mkdir -p ".pio/build/${arg#--board=}"\n'
+        '    : > ".pio/build/${arg#--board=}/firmware.elf"\n'
+        '    ;;\n'
+        '  *)\n'
+        '    if [ "$want_board" = 1 ]; then\n'
+        '      mkdir -p ".pio/build/$arg"\n'
+        '      : > ".pio/build/$arg/firmware.elf"\n'
+        '      want_board=0\n'
+        '    fi\n'
+        '    ;;\n'
+        '  esac\n'
+        'done\n'
+        'exit 0\n'
+    )
     pio.chmod(0o755)
     return pio
 
@@ -116,7 +148,6 @@ def test_the_build_invokes_pio_ci_for_both_boards(tmp_path):
         ROOT,
         tmp_path,
         extra_env={
-            'PATH': f'{bin_dir}:/usr/bin:/bin',
             'R2S_PIO_LOG': str(log),
             'R2S_PIO_BIN': str(bin_dir / 'pio'),
         },
@@ -125,8 +156,9 @@ def test_the_build_invokes_pio_ci_for_both_boards(tmp_path):
     assert result.returncode == 0, result.stderr
     assert log.is_file(), 'the build must invoke PlatformIO'
     invocation = log.read_text(encoding='utf-8')
-    assert 'ci' in invocation.split()
-    assert '--board' in invocation.split()
+    parts = invocation.split()
+    assert 'ci' in parts
+    assert any(part == '--board' or part.startswith('--board=') for part in parts)
     assert 'uno' in invocation
     assert 'mega' in invocation
-    assert '--lib' in invocation.split()
+    assert any(part == '--lib' or part.startswith('--lib=') for part in parts)

@@ -564,8 +564,8 @@ def test_a_pio_script_edit_runs_platformio_besides_lint(tmp_path):
     assert selected_jobs(repo, tmp_path) == [
         'bridge-images',
         'lint',
-        'platformio',
         'plan',
+        'platformio',
         'scripts',
     ]
 

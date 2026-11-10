@@ -317,9 +317,35 @@ def test_platformio_scope_runs_its_section(tmp_path, monkeypatch):
     # keeps a scratch directory instead of the shared cache.
     stub = tmp_path / 'bin'
     stub.mkdir()
-    (stub / 'pio').write_text('#!/usr/bin/env bash\nexit 0\n')
+    # Mimics `pio ci`: one firmware per named board under .pio/build, so
+    # the gate's artifact check runs against the same layout as the build.
+    (stub / 'pio').write_text(
+        '#!/usr/bin/env bash\n'
+        'echo "$@" >> "$R2S_PIO_LOG"\n'
+        'want_board=0\n'
+        'for arg in "$@"; do\n'
+        '  case "$arg" in\n'
+        '  --board)\n'
+        '    want_board=1\n'
+        '    ;;\n'
+        '  --board=*)\n'
+        '    mkdir -p ".pio/build/${arg#--board=}"\n'
+        '    : > ".pio/build/${arg#--board=}/firmware.elf"\n'
+        '    ;;\n'
+        '  *)\n'
+        '    if [ "$want_board" = 1 ]; then\n'
+        '      mkdir -p ".pio/build/$arg"\n'
+        '      : > ".pio/build/$arg/firmware.elf"\n'
+        '      want_board=0\n'
+        '    fi\n'
+        '    ;;\n'
+        '  esac\n'
+        'done\n'
+        'exit 0\n'
+    )
     (stub / 'pio').chmod(0o755)
     monkeypatch.setenv('R2S_PIO_BIN', str(stub / 'pio'))
+    monkeypatch.setenv('R2S_PIO_LOG', str(tmp_path / 'pio.log'))
     monkeypatch.setenv('R2S_PIO_DATA_DIR', str(tmp_path / 'pio-data'))
     result = run_scope(
         copy_tree(tmp_path),
