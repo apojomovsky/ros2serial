@@ -44,7 +44,7 @@
 #define UART_CR_UARTEN (1u << 0u)
 #define UART_CR_TXE (1u << 8u)
 #define UART_CR_RXE (1u << 9u)
-/* 125 MHz over 16 times 115200 gives 67.82: 67 and 52 sixtieths. */
+/* 125 MHz over 16 times 115200 gives 67.82: 67 and 52 sixty-fourths. */
 #define UART0_IBRD_VALUE 67u
 #define UART0_FBRD_VALUE 52u
 
@@ -154,8 +154,9 @@ __attribute__((section(".isr_vector"))) void (*const s_vectors[])(void) = {
   Default_Handler,
 };
 
-/* Releases UART0 and the pin bank from reset, bounded by a counter so a
- * stuck peripheral fails into the debugger rather than hanging boot. */
+/* Releases UART0 and the pin bank from reset, giving up after a bounded
+ * wait: a stuck peripheral leaves the UART idle and the firmware spins
+ * without a link instead of hanging boot. */
 static void release_resets(void)
 {
   uint32_t remaining = 1000000u;
