@@ -14,9 +14,10 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_compile_definitions(R2S_TESTING)
 # The same feature set the core's host tests use, so the runtime speaks the
 # same protocol there as on a board, plus the actions channel the action
-# server needs. The stack holds the deepest bundled closure: a stamp in a
-# header in a stamped transform in a TFMessage.
-add_compile_definitions(R2S_WITH_CODEC R2S_MAX_NEST=4 R2S_WITH_LOG R2S_WITH_TIME R2S_WITH_ACTIONS)
+# server needs and the services and parameters channels the compat layer
+# maps. The stack holds the deepest bundled closure: a stamp in a header in
+# a stamped transform in a TFMessage.
+add_compile_definitions(R2S_WITH_CODEC R2S_MAX_NEST=4 R2S_WITH_LOG R2S_WITH_TIME R2S_WITH_ACTIONS R2S_WITH_SERVICES R2S_WITH_PARAMS)
 set(R2S_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 set(R2S_WARNINGS -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow -Wundef)
@@ -94,6 +95,7 @@ endfunction()
 
 r2s_cpp_unit_test(tests/test_runtime.cpp r2s_runtime)
 r2s_cpp_unit_test(tests/test_action.cpp r2s_runtime)
+r2s_cpp_unit_test(tests/test_service.cpp r2s_runtime r2s_bundled)
 
 # The bundled tables the static test announces: the pinned generator output,
 # so the test speaks the tables the Arduino library ships. The frozen header
