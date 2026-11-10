@@ -16,6 +16,7 @@ from r2s_gen import config
 from r2s_gen import msgs
 from r2s_gen import services
 from r2s_gen.config import Config
+from r2s_gen.config import Service
 from support import write_message
 from support import write_service
 
@@ -94,6 +95,49 @@ def test_an_empty_service_section_emits_nothing(tmp_path):
 
     assert table.entries == ()
     assert services.roots(loaded) == []
+    assert services.emit_h(table) == (
+        '/* Services in configuration order: IDs run from 0, each service\n'
+        ' * names its request and response by the descriptor indices the\n'
+        ' * depth-first walk fixed (DSC-11), and the role byte is 0 when the\n'
+        ' * MCU serves the service and 1 when it calls it (SVR-2). */\n'
+        '\n'
+        '#define R2S_SERVICE_COUNT 0u'
+    )
+    assert services.emit_c(table) == (
+        '/* The announced services (SVR-2, SVR-7): the hashes are the first 8 bytes\n'
+        " * of each service's RIHS01 hash, and the request and response types are\n"
+        ' * descriptor indices into the shared table. */\n'
+        'const r2s_service_t R2S_FLASH r2s_services[R2S_SERVICE_COUNT] = {\n'
+        '};\n'
+    )
+
+
+def test_more_services_than_the_core_tracks_is_an_error(tmp_path):
+    many = tuple(
+        Service(name=f'service{i}', type_name='demo_srvs/srv/Spin', role='server')
+        for i in range(services.MAX_SERVICES + 1)
+    )
+    loaded = Config(node='base_controller', topics=(), services=many, distro='jazzy')
+    repository = msgs.MessageRepository(msg_paths=[tmp_path])
+
+    with pytest.raises(msgs.MessageError) as caught:
+        services.build(loaded, {}, repository)
+
+    over = services.MAX_SERVICES + 1
+    assert str(caught.value) == (
+        f'r2s.yaml: services: {over} services exceed the {services.MAX_SERVICES} '
+        'the core tracks; remove some services'
+    )
+
+
+def test_generate_returns_the_emitted_fragments(tmp_path):
+    loaded, resolved, repository = load_services(tmp_path)
+    table = build_loaded(loaded, resolved, repository)
+
+    assert services.generate(loaded, resolved, repository) == (
+        services.emit_h(table),
+        services.emit_c(table),
+    )
 
 
 def test_the_service_fragments_match_the_golden_pair(tmp_path):

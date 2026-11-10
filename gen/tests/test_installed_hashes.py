@@ -146,7 +146,12 @@ def test_bundled_action_hashes_match_the_installed_type_support():
     assert not mismatches, f'hash drift on {distro}: ' + '; '.join(mismatches)
 
 
-SERVICE_TYPES = ('std_srvs/srv/Trigger',)
+SERVICE_TYPES = (
+    'std_srvs/srv/Trigger',
+    # Nests CameraInfo, Header and Time: the walk must describe every
+    # nested message, not just the request and response.
+    'sensor_msgs/srv/SetCameraInfo',
+)
 
 
 def test_installed_service_hashes_match_the_generator():

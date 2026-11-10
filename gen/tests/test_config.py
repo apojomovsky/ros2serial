@@ -930,3 +930,33 @@ def test_an_absolute_service_name_is_an_error(tmp_path):
         f"{path}: services[0].name: '/reset' is not a relative service name; "
         'drop the leading slash, such as reset'
     )
+
+
+def test_a_service_name_with_a_space_is_an_error(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml',
+        'node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n'
+        '    direction: pub\nservices:\n  - name: re set\n    type: std_srvs/srv/Trigger\n'
+        '    role: server\n',
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: services[0].name: 're set' is not a valid service name; "
+        'use letters, digits, underscores and slashes, starting with a letter or underscore'
+    )
+
+
+def test_a_non_mapping_service_entry_reaches_the_model_check(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml',
+        'node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n'
+        '    direction: pub\nservices:\n  - reset\n',
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert 'services[0]' in str(caught.value)
