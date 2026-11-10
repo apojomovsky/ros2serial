@@ -424,6 +424,18 @@ def test_c_function_pointer_members_are_not_functions():
     assert check(text) == []
 
 
+def test_templated_param_type_commas_do_not_split():
+    text = (
+        '/// Announces the subscription.\n'
+        '/**\n'
+        ' * \\param[in,out] s the subscription to announce.\n'
+        ' * \\return True with the topic announced.\n'
+        ' */\n'
+        'template<typename MsgT, typename ObjT> bool subscribe(Subscriber<MsgT, ObjT> & s);\n'
+    )
+    assert check(text) == []
+
+
 def test_generated_header_is_skipped():
     generated = [
         CPP_INCLUDE / 'std_msgs' / 'msg' / 'bool.hpp',
