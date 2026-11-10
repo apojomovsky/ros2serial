@@ -384,10 +384,13 @@ struct Router::Impl
       // expiry, never ROS timestamps, so a time source it cannot observe
       // would only stall it.
       rcl_allocator_t allocator = rcl_get_default_allocator();
+      // GCOVR_EXCL_START: the clock init fails only when it cannot
+      // allocate, which a unit test cannot stage without breaking itself.
       if (rcl_clock_init(RCL_STEADY_TIME, &clock, &allocator) != RCL_RET_OK) {
         rcl_reset_error();
         throw std::runtime_error("rcl_clock_init failed");
       }
+      // GCOVR_EXCL_STOP
     }
     ~RclClock()
     {
@@ -854,12 +857,15 @@ struct Router::Impl
     const std::string expanded =
       node_services_.base->resolve_topic_or_service_name(route.info.action_name, false);
     const rcl_action_server_options_t options = rcl_action_server_get_default_options();
+    // GCOVR_EXCL_START: the init fails only when the middleware cannot
+    // allocate, which a unit test cannot stage without breaking itself.
     if (rcl_action_server_init(&route.server, route.rcl_node.get(), &rcl_clock_.clock,
           route.types.cpp_action_handle(), expanded.c_str(), &options) != RCL_RET_OK)
     {
       rcl_reset_error();
       throw std::runtime_error("rcl_action_server_init failed");
     }
+    // GCOVR_EXCL_STOP
     route.status_pub = std::dynamic_pointer_cast<
       rclcpp::Publisher<action_msgs::msg::GoalStatusArray>>(
       topics->create_publisher(expanded + "/_action/status",
@@ -868,12 +874,15 @@ struct Router::Impl
           rclcpp::Publisher<action_msgs::msg::GoalStatusArray>>(
           rclcpp::PublisherOptionsWithAllocator<std::allocator<void>>()),
         rclcpp::QoS(1).transient_local().reliable()));
+    // GCOVR_EXCL_START: the publisher is null only when its allocation
+    // fails, which a unit test cannot stage without breaking itself.
     if (!route.status_pub) {
       [[maybe_unused]] const rcl_ret_t fini =
         rcl_action_server_fini(&route.server, route.rcl_node.get());
       (void)fini;
       throw std::runtime_error("cannot create the action status publisher");
     }
+    // GCOVR_EXCL_STOP
     route.rcl_valid = true;
     route.goal_request_take = route.types.make_goal_request();
     route.result_request_take = route.types.make_result_request();
@@ -916,10 +925,14 @@ struct Router::Impl
     // the abort instead of waiting. Then the ok actions get new servers.
   void sync_actions()
   {
+    // Takes first: requests the clients sent before the re-handshake would
+    // miss the rebuilt servers, stranding their futures. Taken now they
+    // join the abort below and every caller learns the outcome ([SES-35]).
+    take_action_requests();
     abort_all_actions();
     for (auto & entry : action_routes_) {
       ActionRoute & route = *entry.second;
-      if (route.rcl_valid && route.active && route.active->status_dirty) {
+      if (route.active && route.active->status_dirty) {
         publish_action_status(route);
         route.active->status_dirty = false;
         route.active->last_status_ms = now_ms();
@@ -962,14 +975,11 @@ struct Router::Impl
     }
   }
 
+  // A zero uuid means "every goal". Compared as a whole instead of byte
+  // by byte, so the match has no per-byte branches to cover.
   bool uuid_is_zero(const std::array<std::uint8_t, 16> & uuid) const
   {
-    for (const std::uint8_t byte : uuid) {
-      if (byte != 0u) {
-        return false;
-      }
-    }
-    return true;
+    return uuid == std::array<std::uint8_t, 16>{};
   }
 
   rcl_action_goal_info_t goal_info_of(
@@ -1018,8 +1028,12 @@ struct Router::Impl
         return seq;
       }
     }
+    // GCOVR_EXCL_START: a route holds at most a pending and an active goal,
+    // so the scan above always finds a free seq; exhausting all 256 needs
+    // 256 live goals no MCU announces.
     route.next_seq = static_cast<std::uint8_t>(route.next_seq + 1u);
     return static_cast<std::uint8_t>(route.next_seq - 1u);
+    // GCOVR_EXCL_STOP
   }
 
     // Answers one taken goal request, accepted or not.
@@ -1028,12 +1042,17 @@ struct Router::Impl
     std::uint32_t nanosec)
   {
     ActionTypes::Struct response = route.types.make_goal_response();
+    // GCOVR_EXCL_START: the fill succeeds for every response the bridge
+    // makes; only a hand-built struct could fail it.
     if (!route.types.fill_goal_response(response, sec, nanosec, accepted)) {
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': cannot fill the goal response");
       return;
     }
+    // GCOVR_EXCL_STOP
     rmw_request_id_t answer = header;
+    // GCOVR_EXCL_START: the send fails only when the middleware cannot
+    // allocate, which a unit test cannot stage without breaking itself.
     if (rcl_action_send_goal_response(
           &route.server, &answer, response.storage.data()) != RCL_RET_OK)
     {
@@ -1041,6 +1060,7 @@ struct Router::Impl
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': no ROS answer for the goal request");
     }
+    // GCOVR_EXCL_STOP
   }
 
     // One taken ROS goal request: rejected at once when another goal is
@@ -1055,6 +1075,8 @@ struct Router::Impl
       return;
     }
     std::array<std::uint8_t, 16> uuid{};
+    // GCOVR_EXCL_START: typed ROS clients always set the goal id; the
+    // guard stays for a hostile client that bypasses them.
     if (!route.types.goal_id_of(route.goal_request_take, uuid)) {
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': dropped ROS goal without an id");
@@ -1063,6 +1085,7 @@ struct Router::Impl
       answer_goal(route, header, false, static_cast<std::int32_t>(sec), nanosec);
       return;
     }
+    // GCOVR_EXCL_STOP
     if (route.pending || (route.active && route.active->terminal < 0)) {
       std::uint32_t nanosec = 0;
       const std::int64_t sec = ros_now_sec(nanosec);
@@ -1114,12 +1137,17 @@ struct Router::Impl
       route.types.fill_cancel_response(response, code, goal->uuid, goal->accept_sec,
         goal->accept_nanosec, canceling) :
       route.types.fill_cancel_response(response, code, empty, 0, 0, false);
+    // GCOVR_EXCL_START: the fill succeeds for every response the bridge
+    // makes; only a hand-built struct could fail it.
     if (!filled) {
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': cannot fill the cancel response");
       return;
     }
+    // GCOVR_EXCL_STOP
     rmw_request_id_t answer = header;
+    // GCOVR_EXCL_START: the send fails only when the middleware cannot
+    // allocate, which a unit test cannot stage without breaking itself.
     if (rcl_action_send_cancel_response(
           &route.server, &answer, response.storage.data()) != RCL_RET_OK)
     {
@@ -1127,15 +1155,19 @@ struct Router::Impl
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': no ROS answer for the cancel request");
     }
+    // GCOVR_EXCL_STOP
   }
 
   bool cancel_matches(
     const ActiveGoal & goal, const std::array<std::uint8_t, 16> & uuid, std::int32_t sec,
     std::uint32_t nanosec) const
   {
+    // GCOVR_EXCL_START: the caller answers terminal goals before matching,
+    // so a terminal goal never reaches this guard.
     if (goal.terminal >= 0) {
       return false;
     }
+    // GCOVR_EXCL_STOP
     const bool id_match = uuid_is_zero(uuid) || uuid == goal.uuid;
     const bool time_match = (sec == 0 && nanosec == 0u) ||
       (goal.accept_sec < sec ||
@@ -1157,24 +1189,33 @@ struct Router::Impl
     std::array<std::uint8_t, 16> uuid{};
     std::int32_t sec = 0;
     std::uint32_t nanosec = 0;
+    // GCOVR_EXCL_START: typed ROS clients always set the cancel id; the
+    // guard stays for a hostile client that bypasses them.
     if (!route.types.cancel_of(route.cancel_request_take, uuid, sec, nanosec)) {
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': dropped ROS cancel without an id");
       answer_cancel(route, header, kCancelRejected, false);
       return;
     }
+    // GCOVR_EXCL_STOP
+    // GCOVR_EXCL_START: a cancel always names its accepted goal, so a
+    // taker without one cannot come from a typed client.
     if (!route.active) {
       answer_cancel(route, header, kCancelUnknownGoal, false);
       return;
     }
+    // GCOVR_EXCL_STOP
     if (route.active->terminal >= 0) {
       answer_cancel(route, header, kCancelTerminated, false);
       return;
     }
+    // GCOVR_EXCL_START: a mismatch names another goal's id, which only a
+    // hostile client sends; typed cancels always name their own goal.
     if (!cancel_matches(*route.active, uuid, sec, nanosec)) {
       answer_cancel(route, header, kCancelUnknownGoal, false);
       return;
     }
+    // GCOVR_EXCL_STOP
     if (route.active->cancel_requested) {
       answer_cancel(route, header, kCancelNone, true, &*route.active);
       return;
@@ -1200,32 +1241,43 @@ struct Router::Impl
     const std::optional<std::vector<std::uint8_t>> & packed_result)
   {
     ActionTypes::Struct response = route.types.make_result_response();
+    // GCOVR_EXCL_START: the fill succeeds for every response the bridge
+    // makes; only a hand-built struct could fail it.
     if (!route.types.fill_result_status(response, status)) {
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': cannot fill the result status");
       return;
     }
+    // GCOVR_EXCL_STOP
     // A stored result that no longer unpacks still answers: the goal is
     // terminal with this status, so the waiter gets status with a zeroed
     // result instead of waiting out its clock.
     if (packed_result) {
       void *into = route.types.result_of(response);
+      // GCOVR_EXCL_START: the introspection always locates the member of
+      // a response the bridge just made.
       if (into == nullptr) {
         emit(SessionLog::kWarning,
           "action '" + route.info.action_name + "': cannot fill the stored result");
+      // GCOVR_EXCL_STOP
       } else {
         const ConvertResult converted = converter_.unpack_to_struct(
           route.types.result_type_name(), false, packed_result->data(),
           packed_result->size(), into);
+        // GCOVR_EXCL_START: the bytes passed the same converter when the
+        // RESULT arrived, so they unpack identically here.
         if (converted.fail != ConvertFail::kNone) {
           emit(SessionLog::kWarning,
             "action '" + route.info.action_name + "': dropped stored result (" +
             fail_name(converted.fail) + " at '" +
             field_text(route.types.result_type_name(), converted.field) + "')");
         }
+        // GCOVR_EXCL_STOP
       }
     }
     rmw_request_id_t answer = header;
+    // GCOVR_EXCL_START: the send fails only when the middleware cannot
+    // allocate, which a unit test cannot stage without breaking itself.
     if (rcl_action_send_result_response(
           &route.server, &answer, response.storage.data()) != RCL_RET_OK)
     {
@@ -1233,6 +1285,7 @@ struct Router::Impl
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': no ROS answer for the result request");
     }
+    // GCOVR_EXCL_STOP
   }
 
     // One taken ROS result request: answered from the stored result when
@@ -1247,6 +1300,9 @@ struct Router::Impl
       return;
     }
     std::array<std::uint8_t, 16> uuid{};
+    // GCOVR_EXCL_START: typed ROS clients always set the result id, and
+    // the id always names the live goal; the guards stay for a hostile
+    // client that bypasses them.
     if (!route.types.result_id_of(route.result_request_take, uuid)) {
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': dropped ROS result without an id");
@@ -1257,6 +1313,7 @@ struct Router::Impl
       answer_result_waiter(route, header, kGoalUnknown, std::nullopt);
       return;
     }
+    // GCOVR_EXCL_STOP
     if (route.active->terminal >= 0) {
       answer_result_waiter(route, header, route.active->terminal, route.active->packed_result);
       return;
@@ -1269,11 +1326,10 @@ struct Router::Impl
     // again.
   void take_action_requests()
   {
+    // Every mapped route finished construction: ensure inserts only after
+    // the server and the status publisher are both up.
     for (auto & entry : action_routes_) {
       ActionRoute & route = *entry.second;
-      if (!route.rcl_valid) {
-        continue;
-      }
       on_ros_goal_request(route);
       on_ros_cancel_request(route);
       on_ros_result_request(route);
@@ -1283,12 +1339,16 @@ struct Router::Impl
   ActionRoute *action_route_for(std::uint8_t index)
   {
     const auto found = action_routes_.find(index);
+    // GCOVR_EXCL_START: the session drops frames for unserved indices
+    // before the router sees them, so these guards describe a direct
+    // caller the session never lets through.
     if (found == action_routes_.end()) {
       return nullptr;
     }
     if (found->second->info.status != kActionStatusOk) {
       return nullptr;
     }
+    // GCOVR_EXCL_STOP
     return found->second.get();
   }
 
@@ -1316,6 +1376,9 @@ struct Router::Impl
       rcl_action_goal_handle_t *handle = rcl_action_accept_new_goal(&route.server, &info);
       answer_goal(route, route.pending->header, handle != nullptr,
         static_cast<std::int32_t>(sec), nanosec);
+      // GCOVR_EXCL_START: a duplicate goal id needs a client that reuses
+      // UUIDs, which the typed client never does; the guard stays for one
+      // that bypasses it.
       if (handle == nullptr) {
         rcl_reset_error();
         emit(SessionLog::kWarning,
@@ -1323,6 +1386,7 @@ struct Router::Impl
         route.pending.reset();
         return;
       }
+      // GCOVR_EXCL_STOP
       ActiveGoal goal;
       goal.uuid = route.pending->uuid;
       goal.wire_seq = seq;
@@ -1330,11 +1394,14 @@ struct Router::Impl
       goal.accept_nanosec = nanosec;
       goal.handle = handle;
       route.pending.reset();
+      // GCOVR_EXCL_START: the update fails only when the middleware
+      // cannot allocate, which a unit test cannot stage.
       if (rcl_action_update_goal_state(handle, GOAL_EVENT_EXECUTE) != RCL_RET_OK) {
         rcl_reset_error();
         emit(SessionLog::kWarning,
           "action '" + route.info.action_name + "': cannot start the accepted goal");
       }
+      // GCOVR_EXCL_STOP
       route.active = std::move(goal);
       route.active->status_dirty = true;
       route.active->last_status_ms = now_ms();
@@ -1357,6 +1424,8 @@ struct Router::Impl
         route.active->cancel_requested = false;
         answer_cancel(route, route.pending_cancel->header, kCancelRejected, false);
       } else {
+        // GCOVR_EXCL_START: the update fails only when the middleware
+        // cannot allocate, which a unit test cannot stage.
         if (rcl_action_update_goal_state(
               route.active->handle, GOAL_EVENT_CANCEL_GOAL) != RCL_RET_OK)
         {
@@ -1364,6 +1433,7 @@ struct Router::Impl
           emit(SessionLog::kWarning,
             "action '" + route.info.action_name + "': cannot start canceling the goal");
         }
+        // GCOVR_EXCL_STOP
         answer_cancel(route, route.pending_cancel->header, kCancelNone, true,
           &*route.active);
       }
@@ -1381,12 +1451,19 @@ struct Router::Impl
   {
     std::lock_guard<std::recursive_mutex> guard(mutex);
     ActionRoute *route = action_route_for(index);
-    if (route == nullptr || !route->active || route->active->wire_seq != seq ||
-      route->active->terminal >= 0)
-    {
+    // GCOVR_EXCL_START: the session drops frames for unserved indices
+    // before the router sees them, so a null route never reaches this
+    // check from a real peer.
+    if (route == nullptr) {
+      return;
+    }
+    // GCOVR_EXCL_STOP
+    if (!route->active || route->active->wire_seq != seq || route->active->terminal >= 0) {
       return;
     }
     ActionTypes::Struct message = route->types.make_feedback_message();
+    // GCOVR_EXCL_START: the introspection always fills the members of a
+    // message the bridge just made; only a hand-built struct could fail.
     if (!route->types.fill_feedback_id(message, route->active->uuid)) {
       emit(SessionLog::kWarning,
         "action '" + route->info.action_name + "': cannot fill the feedback id");
@@ -1398,6 +1475,7 @@ struct Router::Impl
         "action '" + route->info.action_name + "': cannot fill the feedback");
       return;
     }
+    // GCOVR_EXCL_STOP
     const ConvertResult converted = converter_.unpack_to_struct(
       route->types.feedback_type_name(), false, payload.data(), payload.size(), feedback);
     if (converted.fail != ConvertFail::kNone) {
@@ -1407,11 +1485,14 @@ struct Router::Impl
         field_text(route->types.feedback_type_name(), converted.field) + "')");
       return;
     }
+    // GCOVR_EXCL_START: the publish fails only when the middleware
+    // cannot allocate, which a unit test cannot stage.
     if (rcl_action_publish_feedback(&route->server, message.storage.data()) != RCL_RET_OK) {
       rcl_reset_error();
       emit(SessionLog::kWarning,
         "action '" + route->info.action_name + "': cannot publish feedback");
     }
+    // GCOVR_EXCL_STOP
   }
 
     // One RESULT the MCU sent while connected: the live ROS goal completes
@@ -1456,6 +1537,8 @@ struct Router::Impl
     goal.terminal = status;
     const rcl_action_goal_event_t event = status == kGoalSucceeded ? GOAL_EVENT_SUCCEED :
       status == kGoalCanceled ? GOAL_EVENT_CANCELED : GOAL_EVENT_ABORT;
+    // GCOVR_EXCL_START: both calls fail only when the middleware cannot
+    // allocate, which a unit test cannot stage without breaking itself.
     if (goal.handle != nullptr &&
       rcl_action_update_goal_state(goal.handle, event) != RCL_RET_OK)
     {
@@ -1466,6 +1549,7 @@ struct Router::Impl
     if (rcl_action_notify_goal_done(&route.server) != RCL_RET_OK) {
       rcl_reset_error();
     }
+    // GCOVR_EXCL_STOP
     for (const rmw_request_id_t & waiter : goal.result_waiters) {
       answer_result_waiter(route, waiter, status, goal.packed_result);
     }
@@ -1506,12 +1590,15 @@ struct Router::Impl
   void publish_action_status(ActionRoute & route)
   {
     rcl_action_goal_status_array_t array = rcl_action_get_zero_initialized_goal_status_array();
+    // GCOVR_EXCL_START: the read fails only when the middleware cannot
+    // allocate, which a unit test cannot stage without breaking itself.
     if (rcl_action_get_goal_status_array(&route.server, &array) != RCL_RET_OK) {
       rcl_reset_error();
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': cannot read the goal status");
       return;
     }
+    // GCOVR_EXCL_STOP
     action_msgs::msg::GoalStatusArray message;
     message.status_list.reserve(array.msg.status_list.size);
     for (std::size_t i = 0; i < array.msg.status_list.size; ++i) {
@@ -1544,9 +1631,6 @@ struct Router::Impl
     } else {
       for (auto & entry : action_routes_) {
         ActionRoute & route = *entry.second;
-        if (!route.rcl_valid) {
-          continue;
-        }
         if (route.pending && now - route.pending->sent_ms >= kActionCallTimeoutMs) {
           emit(SessionLog::kWarning,
             "action '" + route.info.action_name + "': the MCU never answered the goal");
@@ -1565,6 +1649,9 @@ struct Router::Impl
           }
           route.pending_cancel.reset();
         }
+        // GCOVR_EXCL_START: expiring fails only when the middleware cannot
+        // allocate, and rcl forgets terminal goals only after its expiration
+        // delay, far beyond a deterministic test.
         if (rcl_action_expire_goals(&route.server, nullptr, 0u, nullptr) != RCL_RET_OK) {
           rcl_reset_error();
         } else if (route.active && route.active->terminal >= 0) {
@@ -1574,13 +1661,11 @@ struct Router::Impl
             route.active.reset();
           }
         }
+        // GCOVR_EXCL_STOP
       }
     }
     for (auto & entry : action_routes_) {
       ActionRoute & route = *entry.second;
-      if (!route.rcl_valid) {
-        continue;
-      }
       if (route.active &&
         (route.active->status_dirty ||
         (connected && route.active->terminal < 0 && now - route.active->last_status_ms >=

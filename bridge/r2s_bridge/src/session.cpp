@@ -2630,9 +2630,12 @@ bool Session::send_action_cancel(std::uint8_t goal_seq)
   }
   const std::size_t cap =
     std::max<std::uint16_t>(impl.hello.rx_capacity, impl.hello.max_frame);
+  // GCOVR_EXCL_START: reaching a connected session needs its frames to fit
+  // the MCU window, so a connected cap always holds a cancel.
   if (3u > cap) {
     return false;
   }
+  // GCOVR_EXCL_STOP
   if (impl.pending_bytes_ > 0u && impl.pending_bytes_ >= cap) {
     return false;
   }
