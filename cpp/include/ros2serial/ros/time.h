@@ -131,7 +131,7 @@ public:
 
   /// The signed span between two stamps.
   /**
-   * \param[in] rhs the earlier stamp.
+   * \param[in] rhs the stamp to subtract.
    * \return The span from rhs to this stamp.
    */
   Duration operator-(const Time & rhs) const
