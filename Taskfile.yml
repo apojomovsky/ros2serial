@@ -20,14 +20,19 @@ tasks:
     desc: Run every section whose inputs changed.
     deps: [lint, commits, scripts, core, gen, bridge, ament_lint, cpp, coverage, docs, examples, esp32, pic, budgets, readme, fuzz, e2e-avr, e2e-posix, nightly]
 
-  # What the pre-push hook and the takeoff run: the default set without the
-  # CI-only sections. The end-to-end ones (e2e-avr, e2e-posix and the nightly
-  # isolation pairs) assume a quiet host for their timing bounds, which a
-  # shared one is not; the ESP32 Arduino core and the epic-cc bundle install
-  # only in their CI jobs. CI runs all of them on every pull request.
+  # What the pre-push hook and the takeoff run: only the fast gates that
+  # catch the mistakes a push actually makes. Everything else stays in the
+  # default task and runs in CI on every pull request: scripts, bridge,
+  # ament_lint, coverage, examples, budgets, readme and fuzz are too slow
+  # for a host several agents push from under one suite lock, and the
+  # end-to-end ones (e2e-avr, e2e-posix and the nightly isolation pairs)
+  # assume a quiet host for their timing bounds, which a shared one is not;
+  # the ESP32 Arduino core and the epic-cc bundle install only in their CI
+  # jobs. A green push means the fast gates passed, never that the PR is
+  # green.
   local:
-    desc: Run every stale section but the CI-only ones, which CI runs.
-    deps: [lint, commits, scripts, core, gen, bridge, ament_lint, cpp, coverage, docs, examples, budgets, readme, fuzz]
+    desc: Run the stale fast gates; CI runs the rest on every pull request.
+    deps: [lint, commits, core, gen, cpp, docs]
 
   # The standing cheap gates: unlistable inputs must never skip them.
   lint:

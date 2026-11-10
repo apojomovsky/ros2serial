@@ -291,13 +291,21 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 | --- | --- | --- |
 | While editing | `make test CORE=1` (or the component being changed) | Seconds |
 | `pre-commit` hook | Format, warnings, unit tests of the touched component | Under 30 s |
-| `pre-push` hook | The stale tasks locally but the end-to-end ones (the `local` task), which CI runs; a fresh tree is a fast no-op | Cheap, minutes |
-| Takeoff (`make pre-pr-check TEST=1`) | The same stale tasks as the hook; scopes named on the command line and `R2S_FULL=1` still run locally | Cheap, minutes |
+| `pre-push` hook | Only the stale fast gates (`lint`, `commits`, `core`, `gen`, `cpp`, `docs`: the `local` task); a fresh tree is a fast no-op | Cheap, minutes |
+| Takeoff (`make pre-pr-check TEST=1`) | The same fast gates as the hook; scopes named on the command line and `R2S_FULL=1` still run locally | Cheap, minutes |
 | Every PR | Unit, component, contract, integration on posix, simavr scenarios, fuzz smoke (60 s per target), sanitizers, coverage, spec coverage, budgets, build matrix, golden, docs snippets | Under 15 min wall clock, in parallel jobs |
 | Nightly | Long fuzzing (30 min per target), mutation testing, extended property and model-based runs, long fault injection, soak (2 h), big-endian, Rolling, e2e isolation pairs | Hours |
 | Release | Everything above; on a tag the nightly jobs run first and gate the publish, then the hardware checklist on a Uno and a Mega, the full distro and RMW matrix, frozen-vector check | |
 
 When the PR suite exceeds its budget, the slowest tests are made faster or moved down a level; the budget is not raised without the maintainer's approval.
+
+A green push does not mean a green PR. The pre-push hook and the takeoff
+run only the `local` task (`lint`, `commits`, `core`, `gen`, `cpp`, `docs`):
+fast gates that catch the mistakes a push actually makes. Everything else
+(`scripts`, `bridge`, `ament_lint`, `coverage`, `examples`, `budgets`,
+`readme`, `fuzz`, the end-to-end legs, `esp32`, `pic`, `nightly`) runs in
+CI on every pull request, where parallel jobs keep it fast. A failure there
+still blocks the merge, no matter how green the push was.
 
 Each Taskfile task lists the files its section reads (`Taskfile.yml`), and the lint and commits tasks always run. `tools/taskfile_coverage.py` fails the lint section on a tracked file no task lists, so adding a file the suite should cover means listing it, and files no section reads carry their reason in that script's allowlist. Scopes named on the command line select their tasks, and `R2S_FULL=1` forces them. CI is where the suite runs: the plan gates each section job on its task status on the merge with master, and a PR merges only on green CI.
 
