@@ -7,6 +7,7 @@
 
 namespace geometry_msgs
 {
+/// The Transform message under its rosserial spelling.
 using Transform = msg::Transform;
 } // namespace geometry_msgs
 

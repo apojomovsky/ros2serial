@@ -13,24 +13,43 @@
 namespace ros
 {
 
-/* Member-function subscriber. Decodes into its own store, as ros_lib does,
- * then calls the object. No virtuals: subscribe() takes the concrete type,
- * so the layer never erases it. */
 template<typename MsgT, typename ObjT = void>
+/// Member-function subscriber.
+/**
+ * Decodes into its own store, as ros_lib does, then calls the object.
+ * No virtuals: subscribe() takes the concrete type, so the layer never
+ * erases it.
+ *
+ * \tparam MsgT the message type this subscriber receives.
+ * \tparam ObjT the object type holding the callback.
+ */
 class Subscriber
 {
 public:
+  /// The callback shape: a member function taking the decoded message.
   typedef void (ObjT::*CallbackT)(const MsgT &);
   MsgT msg;
 
-    /* Keeps the topic and the callback. The endpoint rides along for
-     * sketches written against ros_lib and changes nothing announced; the
-     * default is ros_lib's subscriber endpoint. */
+  /// Keeps the topic and the callback.
+  /**
+   * The endpoint rides along for sketches written against ros_lib and
+   * changes nothing announced; the default is ros_lib's subscriber
+   * endpoint.
+   *
+   * \param[in] topic what to listen on.
+   * \param[in] cb the member function to call.
+   * \param[in] obj the object to call it on.
+   * \param[in] endpoint the ros_lib endpoint, accepted and ignored.
+   */
   Subscriber(const char *topic, CallbackT cb, ObjT *obj, int endpoint = 1)
   : topic_(topic), id_(-1), m_callback(cb), m_object(obj), m_endpoint(endpoint)
   {
   }
 
+  /// The ros_lib endpoint this subscriber was built with.
+  /**
+   * \return The endpoint value from the constructor.
+   */
   int getEndpointType()
   {
     return m_endpoint;
@@ -40,10 +59,20 @@ public:
     /* Set by NodeHandle when it subscribes; -1 until then. */
   int id_;
 
-    /* Decodes the frame into the subscriber's store and calls it. Passed to
-     * the registry, which keeps the subscriber's address as the record, so
-     * the subscriber must outlive the spinning node. A bound violation
-     * reports the field like the runtime path, then drops the message. */
+  /// Decodes the frame into the subscriber's store and calls it.
+  /**
+   * Passed to the registry, which keeps the subscriber's address as
+   * the record, so the subscriber must outlive the spinning node. A
+   * bound violation reports the field like the runtime path, then drops
+   * the message.
+   *
+   * \param[in,out] record the subscriber to fill.
+   * \param[in] payload the frame bytes to decode.
+   * \param[in] len how many bytes payload holds.
+   * \param[in] narrow whether doubles travel 32-bit.
+   * \param[in] topic which topic the frame arrived on.
+   * \pre The subscriber outlives the spinning node.
+   */
   static void dispatch(
     void *record, const uint8_t *payload, uint16_t len, uint8_t narrow,
     uint8_t topic)
@@ -74,23 +103,40 @@ private:
   int m_endpoint;
 };
 
-/* Standalone-function subscriber. A capture-less lambda converts to the
- * function pointer the constructor takes. */
 template<typename MsgT>
+/// Standalone-function subscriber.
+/**
+ * A capture-less lambda converts to the function pointer the
+ * constructor takes.
+ *
+ * \tparam MsgT the message type this subscriber receives.
+ */
 class Subscriber<MsgT, void>
 {
 public:
+  /// The callback shape: a free function taking the decoded message.
   typedef void (*CallbackT)(const MsgT &);
   MsgT msg;
 
-    /* Keeps the topic and the callback. The endpoint rides along for
-     * sketches written against ros_lib and changes nothing announced; the
-     * default is ros_lib's subscriber endpoint. */
+  /// Keeps the topic and the callback.
+  /**
+   * The endpoint rides along for sketches written against ros_lib and
+   * changes nothing announced; the default is ros_lib's subscriber
+   * endpoint.
+   *
+   * \param[in] topic what to listen on.
+   * \param[in] cb the free function to call.
+   * \param[in] endpoint the ros_lib endpoint, accepted and ignored.
+   */
   Subscriber(const char *topic, CallbackT cb, int endpoint = 1)
   : topic_(topic), id_(-1), m_callback(cb), m_endpoint(endpoint)
   {
   }
 
+  /// The ros_lib endpoint this subscriber was built with.
+  /**
+   * \return The endpoint value from the constructor.
+   */
   int getEndpointType()
   {
     return m_endpoint;
@@ -100,10 +146,20 @@ public:
     /* Set by NodeHandle when it subscribes; -1 until then. */
   int id_;
 
-    /* Decodes the frame into the subscriber's store and calls it. Passed to
-     * the registry, which keeps the subscriber's address as the record, so
-     * the subscriber must outlive the spinning node. A bound violation
-     * reports the field like the runtime path, then drops the message. */
+  /// Decodes the frame into the subscriber's store and calls it.
+  /**
+   * Passed to the registry, which keeps the subscriber's address as
+   * the record, so the subscriber must outlive the spinning node. A
+   * bound violation reports the field like the runtime path, then drops
+   * the message.
+   *
+   * \param[in,out] record the subscriber to fill.
+   * \param[in] payload the frame bytes to decode.
+   * \param[in] len how many bytes payload holds.
+   * \param[in] narrow whether doubles travel 32-bit.
+   * \param[in] topic which topic the frame arrived on.
+   * \pre The subscriber outlives the spinning node.
+   */
   static void dispatch(
     void *record, const uint8_t *payload, uint16_t len, uint8_t narrow,
     uint8_t topic)
