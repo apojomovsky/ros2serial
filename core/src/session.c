@@ -113,7 +113,9 @@ static struct
   uint16_t rx_lost[R2S_SESSION_MAX_TOPICS];
   uint8_t tx_seq_ctrl;
   uint8_t tx_seq_hb;
+#if defined(R2S_WITH_PARAMS) || defined(R2S_WITH_SERVICES)
   uint8_t tx_seq_ack;
+#endif
   uint8_t tx_seq_time;
   uint32_t token;
   uint32_t last_host_tick;

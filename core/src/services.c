@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 /* services: the MCU side of the services channel. The table below is the
  * firmware's announced set; the slots hold one waiting REQUEST, one call
  * outcome and the outstanding MCU-to-host frame. The session calls in for

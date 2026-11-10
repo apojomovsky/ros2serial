@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 /* The MCU side of the services channel: the table it announces, the walk it
  * answers, and the REQUEST and RESPONSE frames it exchanges on the reliable
  * channel. */

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 /* services: the MCU side of the services channel (spec/protocol.md, section
  * 7.8). The table lives in RAM with the firmware's live values; the session
  * calls in for channel 7 frames. Compiled only with R2S_WITH_SERVICES. */
@@ -12,53 +14,71 @@
 extern "C" {
 #endif
 
-/* The opcodes of the services channel, in payload order. */
+/// SVC_QUERY: the host asks for the service table [SVR-7].
 #define R2S_SVC_OP_QUERY 0x01u
+/// SVC_DECLARE: one MCU service announcement.
 #define R2S_SVC_OP_DECLARE 0x02u
+/// SVC_STATUS: the host's verdict on one DECLARE.
 #define R2S_SVC_OP_STATUS 0x03u
+/// SVC_REQUEST: one call, either direction.
 #define R2S_SVC_OP_REQUEST 0x04u
+/// SVC_RESPONSE: one answer, either direction.
 #define R2S_SVC_OP_RESPONSE 0x05u
 
-/* The roles a DECLARE names [SVR-2]: the MCU serves the service, or the MCU
- * calls it. */
+/// The serving role a DECLARE names [SVR-2]: the MCU serves the service.
 #define R2S_SVC_SERVER 0u
+/// The calling role a DECLARE names: the MCU calls the service.
 #define R2S_SVC_CLIENT 1u
 
-/* The walk STATUS verdicts [SVR-7] name, mirroring the topic verdicts. */
+/// The walk accepted the DECLARE [SVR-7], mirroring the topic verdicts.
 #define R2S_SVC_STATUS_OK 0u
+/// The walk refused an unknown service type.
 #define R2S_SVC_STATUS_UNKNOWN_TYPE 1u
+/// The walk refused a type hash mismatch.
 #define R2S_SVC_STATUS_HASH_MISMATCH 2u
+/// The walk refused a name the table already holds.
 #define R2S_SVC_STATUS_NAME_CONFLICT 3u
 
-/* The RESPONSE status codes [SVR-6] names. */
+/// The call succeeded [SVR-6].
 #define R2S_SVC_OK 0u
+/// The RESPONSE names no known service.
 #define R2S_SVC_UNKNOWN_SERVICE 1u
+/// The RESPONSE carries a payload that does not unpack.
 #define R2S_SVC_BAD_PAYLOAD 2u
+/// The server was busy and took nothing.
 #define R2S_SVC_BUSY 3u
 
-/* How many verdicts the table may hold: the session stores the host's walk
- * verdict per entry, so the count stops here. The generated configuration
- * raises it together with the table when the firmware needs more. */
+/// How many verdicts the table may hold.
+/**
+ * The session stores the host's walk verdict per entry, so the count stops
+ * here. The generated configuration raises it together with the table when
+ * the firmware needs more.
+ */
 #ifndef R2S_SERVICE_MAX_COUNT
 #define R2S_SERVICE_MAX_COUNT 8u
 #endif
 
-/* What the take calls return with nothing waiting: not an error, so the
- * application polls them every spin. */
+/// What the take calls return with nothing waiting, so the application polls them every spin.
+/**
+ * Not an error.
+ */
 #define R2S_SVC_EMPTY 1
 
-/* What take_response reports for a call the timeout retired [SVR-8]: a local
- * report, never a wire status, so it shares no value with [SVR-6]. */
+/// What take_response reports for a call the timeout retired [SVR-8].
+/**
+ * A local report, never a wire status, so it shares no value with [SVR-6].
+ */
 #define R2S_SVC_TIMEOUT 4u
 
-/* Milliseconds without a RESPONSE before a call reports its timeout
- * [SVR-8]. */
+/// Milliseconds without a RESPONSE before a call reports its timeout [SVR-8].
 #ifndef R2S_SVC_CALL_TIMEOUT_MS
 #define R2S_SVC_CALL_TIMEOUT_MS 5000u
 #endif
 
-/* One service: the ROS type and service names, the role the MCU plays, and
- * the first 8 bytes of the type's RIHS01 hash. */
+/// One service: the ROS type and service names, the role the MCU plays.
+/**
+ * Plus the first 8 bytes of the type's RIHS01 hash.
+ */
 typedef struct
 {
   const char *type_name;
@@ -266,7 +286,7 @@ void r2s_services_note_reconnect(void);
 #endif
 
 #ifdef R2S_TESTING
-/* Host test builds only: the same reset, as r2s_test_reset() calls it. */
+/// Host test builds only: clears the service state, as r2s_test_reset() calls it.
 void r2s_services_test_reset(void);
 #endif
 
