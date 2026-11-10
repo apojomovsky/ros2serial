@@ -111,8 +111,10 @@ def test_fuzz_long_outlasts_its_targets_plus_the_image_floor():
         for step in job['steps']
         if 'R2S_FUZZ_SECONDS' in step.get('env', {})
     ]
-    assert len(seconds) == 1
-    need = len(fuzz_targets()) * seconds[0] // 60 + 30
+    assert len(seconds) >= 1
+    # The seeds-only coverage step carries R2S_FUZZ_SECONDS: 0; the timeout
+    # covers the longest timed run.
+    need = len(fuzz_targets()) * max(seconds) // 60 + 30
     assert job['timeout-minutes'] >= need, (
         f'fuzz-long needs {need} minutes, has {job["timeout-minutes"]}'
     )
