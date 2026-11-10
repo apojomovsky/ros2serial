@@ -5,6 +5,8 @@
 // installed rosidl_typesupport_cpp library.
 #include "r2s_bridge/type_support.hpp"
 
+#include "r2s_bridge/action_types.hpp"
+
 #include <algorithm>
 #include <exception>
 #include <memory>
@@ -54,6 +56,22 @@ std::uint8_t resolve_service_type(const ServiceInfo & info)
         // A malformed name, a missing package and an unloadable library all
         // refuse the service the same way ([SVR-7]).
     return kServiceStatusUnknownType;
+  }
+}
+
+std::uint8_t resolve_action_type(const ActionInfo & info)
+{
+  try {
+    const ActionTypes types(info.type_name);
+    const std::array<std::uint8_t, 8> installed = types.type_hash();
+        // Only the 8 wire bytes decide ([CTL-12]); the other 24 are ignored.
+    const bool matches = std::equal(
+      info.type_hash.begin(), info.type_hash.end(), installed.begin());
+    return matches ? kActionStatusOk : kActionStatusHashMismatch;
+  } catch (const std::exception &) {
+        // A malformed name, a missing package and an unloadable library all
+        // refuse the action the same way ([ACT-7]).
+    return kActionStatusUnknownType;
   }
 }
 
