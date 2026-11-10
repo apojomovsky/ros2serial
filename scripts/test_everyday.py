@@ -162,6 +162,7 @@ STRIPPED_SCOPES = (
     'ESP32',
     'PIC',
     'STM32',
+    'RP2040',
     'BUDGETS',
     'FUZZ',
     'README',

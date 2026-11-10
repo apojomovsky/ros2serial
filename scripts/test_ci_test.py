@@ -60,6 +60,7 @@ SCOPES = (
     'ESP32',
     'PIC',
     'STM32',
+    'RP2040',
     'BUDGETS',
     'FUZZ',
     'README',
@@ -314,41 +315,33 @@ def test_pic_scope_runs_its_section(tmp_path, monkeypatch):
 
 def test_stm32_scope_runs_its_section(tmp_path, monkeypatch):
     # The stubbed Arm toolchain satisfies the lookup and touches each
-    # output, so the run links nothing real and downloads nothing. The
-    # stub stage source stands in for the SDK boot stage.
+    # output, so the run links nothing real and downloads nothing.
     stub = tmp_path / 'bin'
     stub.mkdir()
-    (stub / 'arm-none-eabi-gcc').write_text(
-        '#!/usr/bin/env bash\n'
-        'out=""\n'
-        'prev=""\n'
-        'for arg in "$@"; do\n'
-        '    if [ "$prev" = "-o" ]; then out="$arg"; fi\n'
-        '    prev="$arg"\n'
-        'done\n'
-        '[ -n "$out" ] && mkdir -p "$(dirname "$out")" && : > "$out"\n'
-        'exit 0\n'
-    )
-    (stub / 'arm-none-eabi-gcc').chmod(0o755)
-    (stub / 'arm-none-eabi-objcopy').write_text('#!/usr/bin/env bash\n: > "${@: -1}"\nexit 0\n')
-    (stub / 'arm-none-eabi-objcopy').chmod(0o755)
+    stub_arm_toolchain(stub)
     monkeypatch.setenv('R2S_ARM_GCC', str(stub / 'arm-none-eabi-gcc'))
-    monkeypatch.setenv('R2S_ARM_OBJCOPY', str(stub / 'arm-none-eabi-objcopy'))
-    sdk = tmp_path / 'sdk' / 'src' / 'rp2040' / 'boot_stage2'
-    sdk.mkdir(parents=True)
-    (sdk / 'boot2_w25q080.S').write_text('.cpu cortex-m0plus\n.thumb\n.section .entry\n b .\n')
-    (sdk / 'boot_stage2.ld').write_text(
-        'MEMORY { SRAM(rx) : ORIGIN = 0x20041f00, LENGTH = 252 }\n'
-    )
-    pad = sdk / 'pad_checksum'
-    pad.write_text('#!/usr/bin/env bash\n: > "${@: -1}"\nexit 0\n')
-    pad.chmod(0o755)
-    (sdk / 'asminclude').mkdir()
-    monkeypatch.setenv('R2S_PICO_SDK', str(tmp_path / 'sdk'))
     result = run_scope(copy_tree(tmp_path), 'STM32', build_dir=tmp_path / 'build')
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert '== stm32' in result.stdout
+
+
+def test_rp2040_scope_runs_its_section(tmp_path, monkeypatch):
+    # The stubbed Arm toolchain satisfies the lookup and touches each
+    # output, so the run links nothing real and downloads nothing. The
+    # stub stage source stands in for the SDK boot stage.
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    stub_arm_toolchain(stub)
+    monkeypatch.setenv('R2S_ARM_GCC', str(stub / 'arm-none-eabi-gcc'))
+    monkeypatch.setenv('R2S_ARM_OBJCOPY', str(stub / 'arm-none-eabi-objcopy'))
+    sdk = tmp_path / 'sdk'
+    fixture_sdk(sdk)
+    monkeypatch.setenv('R2S_PICO_SDK', str(sdk))
+    result = run_scope(copy_tree(tmp_path), 'RP2040', build_dir=tmp_path / 'build')
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '== rp2040' in result.stdout
 
 
 def stub_arm_toolchain(stub):
@@ -388,13 +381,13 @@ def fixture_sdk(sdk_dir):
     (stage / 'asminclude').mkdir()
 
 
-STM32_BOARDS = ('bluepill', 'pico')
+PORT_FIRMWARE = ('stm32/firmware.elf', 'rp2040/firmware.elf')
 
 
-def plant_stm32_stack(build, su):
+def plant_port_stack(build, su):
     """The stack sources the gate needs beside the stub-linked firmware."""
-    for board in STM32_BOARDS:
-        source = build / 'stack' / 'stm32' / board / 'firmware.elf'
+    for rel in PORT_FIRMWARE:
+        source = build / 'stack' / rel
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_bytes(b'')
         (source.parent / 'firmware.su').write_text(su)
@@ -438,7 +431,7 @@ def test_budgets_scope_runs_its_section(tmp_path, monkeypatch):
             source.parent.mkdir(parents=True, exist_ok=True)
             source.write_bytes(b'')
             (source.parent / 'firmware.su').write_text(su)
-    plant_stm32_stack(build, su)
+    plant_port_stack(build, su)
     # The gate refuses a stale docs/budgets.md, so the run first refreshes
     # it from the stubbed measurements, the way make size-report does.
     env = {k: v for k, v in os.environ.items() if k not in SCOPES}
@@ -481,7 +474,7 @@ def test_budgets_gate_fails_on_stale_docs(tmp_path, monkeypatch):
     fake.write_bytes(b'')
     fake.chmod(0o755)
     (build / 'cmake_minimal' / 'firmware.su').write_text('main:32:static\n')
-    plant_stm32_stack(build, 'main:32:static\n')
+    plant_port_stack(build, 'main:32:static\n')
     result = run_scope(
         root, 'BUDGETS', stubs=stub_toolbox(tmp_path / 'bin'), build_dir=tmp_path / 'build'
     )

@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The STM32/RP2040 build gate stages the port glue and builds it.
+"""The STM32F103 build gate stages the port glue and builds it.
 
-`ports/stm32/build.sh` is the X2 acceptance step: it resolves the pinned
-xPack Arm toolchain (from the image, an override, or a verified fetch
-into the cache), generates the firmware pair from `ports/stm32/r2s.yaml`,
-stages the core with the Blue Pill and Pico port glue, then links one
-minimal firmware per target. A `--stage-only` run stages the sources and
-reports the build flags without invoking the toolchain, so the suite pins
-the staging without the downloads.
+`ports/stm32/build.sh` is the X2 Blue Pill step: it resolves the pinned
+xPack Arm toolchain (from the image, an override, or a verified fetch into
+the cache), generates the firmware pair from the shared `ports/common`
+config, stages the core with the Blue Pill glue, then links the minimal
+firmware. A `--stage-only` run stages the sources and reports the build
+flags without invoking the toolchain, so the suite pins the staging
+without the downloads.
 """
 
 import os
@@ -20,8 +20,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / 'ports' / 'stm32' / 'build.sh'
 VERSIONS = ROOT / 'ci' / 'versions.env'
-
-BOARDS = ('bluepill', 'pico')
 
 
 def run(args, cwd, tmp_path, extra_env=None):
@@ -57,38 +55,26 @@ def test_the_toolchain_hash_is_pinned_in_versions_env():
     assert re.fullmatch(r'[0-9a-f]{64}', pinned('ARM_GCC_SHA256')), pinned('ARM_GCC_SHA256')
 
 
-def test_the_sdk_version_is_pinned_in_versions_env():
-    assert pinned('PICO_SDK_VERSION').count('.') == 2, pinned('PICO_SDK_VERSION')
-
-
-def test_the_sdk_hash_is_pinned_in_versions_env():
-    import re
-
-    assert re.fullmatch(r'[0-9a-f]{64}', pinned('PICO_SDK_SHA256')), pinned('PICO_SDK_SHA256')
-
-
-def test_the_script_reads_all_four_pins_from_versions_env():
+def test_the_script_reads_both_pins_from_versions_env():
     text = SCRIPT.read_text(encoding='utf-8')
-    for name in ('ARM_GCC_VERSION', 'ARM_GCC_SHA256', 'PICO_SDK_VERSION', 'PICO_SDK_SHA256'):
+    for name in ('ARM_GCC_VERSION', 'ARM_GCC_SHA256'):
         assert name in text, name
     assert 'ci/versions.env' in text
 
 
-def test_the_script_builds_both_targets():
+def test_the_script_builds_the_blue_pill_only():
     text = SCRIPT.read_text(encoding='utf-8')
-    for board in BOARDS:
-        assert board in text, f'the build names no {board}'
+    assert 'bluepill' in text
+    assert 'cortex-m3' in text
+    assert 'stm32f103.ld' in text
+    assert 'pico' not in text.lower()
 
 
-def test_the_script_fetches_the_sdk_boot_stage_from_a_verified_tarball():
+def test_the_script_stages_the_shared_config_and_the_blue_pill_glue():
     text = SCRIPT.read_text(encoding='utf-8')
-    assert 'boot2_w25q080.S' in text
-    assert 'pad_checksum' in text
-    assert 'pico-sdk' in text
-    assert 'sha256sum' in text
-    # Boot stage intermediates stay under a build/ component, which the
-    # size and stack reporters skip, so only the firmware links measure.
-    assert '"$pico/build"' in text
+    assert 'ports/common' in text
+    for name in ('firmware.c', 'r2s_board.h', 'r2s.yaml', 'r2s_bluepill.c', 'stm32f103.ld'):
+        assert name in text, name
 
 
 def test_the_toolchain_cache_lands_beside_the_other_bundles():
@@ -124,21 +110,6 @@ def test_the_helper_fails_when_versions_env_names_no_arm_gcc(tmp_path):
     assert 'ARM_GCC_VERSION' in result.stderr
 
 
-def test_the_pico_build_fails_when_versions_env_names_no_pico_sdk(tmp_path):
-    versions = tmp_path / 'arm-only-versions.env'
-    versions.write_text('ARM_GCC_VERSION=14.2.1-1.1\nARM_GCC_SHA256=abc\n')
-    out = tmp_path / 'out'
-    result = run(
-        ['bash', str(SCRIPT), '--out', str(out)],
-        ROOT,
-        tmp_path,
-        extra_env={'R2S_VERSIONS_ENV': str(versions)},
-    )
-
-    assert result.returncode != 0
-    assert 'PICO_SDK_VERSION' in result.stderr
-
-
 def stub_path(bin_dir):
     """The stub toolchain first, then the suite interpreter for r2s-gen."""
     return os.pathsep.join(
@@ -147,7 +118,7 @@ def stub_path(bin_dir):
 
 
 def stub_arm(bin_dir, log):
-    """A stub Arm toolchain: compiles and objcopy touch their outputs."""
+    """A stub Arm toolchain: compiles touch their outputs."""
     bin_dir.mkdir(parents=True, exist_ok=True)
     gcc = bin_dir / 'arm-none-eabi-gcc'
     gcc.write_text(
@@ -163,29 +134,7 @@ def stub_arm(bin_dir, log):
         'exit 0\n'
     )
     gcc.chmod(0o755)
-    objcopy = bin_dir / 'arm-none-eabi-objcopy'
-    objcopy.write_text('#!/usr/bin/env bash\n: > "${@: -1}"\nexit 0\n')
-    objcopy.chmod(0o755)
-    size = bin_dir / 'arm-none-eabi-size'
-    size.write_text('#!/usr/bin/env bash\nexit 0\n')
-    size.chmod(0o755)
     return {'R2S_ARM_LOG': str(log)}
-
-
-def fixture_sdk(sdk_dir):
-    """The boot stage tree the build reads: a trivial stage plus the pad tool."""
-    stage = sdk_dir / 'src' / 'rp2040' / 'boot_stage2'
-    stage.mkdir(parents=True)
-    (stage / 'boot2_w25q080.S').write_text(
-        '.cpu cortex-m0plus\n.thumb\n.section .entry\n b .\n', encoding='utf-8'
-    )
-    (stage / 'boot_stage2.ld').write_text(
-        'MEMORY { SRAM(rx) : ORIGIN = 0x20041f00, LENGTH = 252 }\n'
-    )
-    pad = stage / 'pad_checksum'
-    pad.write_text('#!/usr/bin/env bash\n: > "${@: -1}"\nexit 0\n')
-    pad.chmod(0o755)
-    (stage / 'asminclude').mkdir()
 
 
 def test_stage_only_stages_the_firmware_sources_and_reports_the_flags(tmp_path):
@@ -197,9 +146,7 @@ def test_stage_only_stages_the_firmware_sources_and_reports_the_flags(tmp_path):
         'firmware.c',
         'r2s_board.h',
         'r2s_bluepill.c',
-        'r2s_pico.c',
         'stm32f103.ld',
-        'rp2040.ld',
         'r2s_generated.h',
         'r2s_generated.c',
     ):
@@ -214,33 +161,13 @@ def test_the_bluepill_build_invokes_arm_gcc_and_links_an_elf(tmp_path):
     bin_dir = tmp_path / 'bin'
     env = stub_arm(bin_dir, log)
     env['PATH'] = stub_path(bin_dir)
-    env['R2S_PICO_SDK'] = str(tmp_path / 'no-sdk')
     result = run(['bash', str(SCRIPT), '--out', str(out)], ROOT, tmp_path, extra_env=env)
 
     assert result.returncode == 0, result.stderr
-    assert (out / 'bluepill' / 'firmware.elf').is_file()
+    assert (out / 'firmware.elf').is_file()
     invocation = log.read_text(encoding='utf-8')
     assert 'cortex-m3' in invocation
     assert 'stm32f103.ld' in invocation
-
-
-def test_the_pico_build_links_the_sdk_boot_stage(tmp_path):
-    out = tmp_path / 'out'
-    log = tmp_path / 'arm.log'
-    bin_dir = tmp_path / 'bin'
-    env = stub_arm(bin_dir, log)
-    env['PATH'] = stub_path(bin_dir)
-    sdk = tmp_path / 'sdk'
-    fixture_sdk(sdk)
-    env['R2S_PICO_SDK'] = str(sdk)
-    result = run(['bash', str(SCRIPT), '--out', str(out)], ROOT, tmp_path, extra_env=env)
-
-    assert result.returncode == 0, result.stderr
-    assert (out / 'pico' / 'firmware.elf').is_file()
-    invocation = log.read_text(encoding='utf-8')
-    assert 'cortex-m0plus' in invocation
-    assert 'boot2_w25q080' in invocation
-    assert (out / 'pico' / 'firmware.bin').is_file()
 
 
 def test_the_build_fails_when_the_toolchain_is_missing(tmp_path):

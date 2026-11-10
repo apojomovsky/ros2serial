@@ -173,12 +173,12 @@ def test_measure_uses_the_arm_tools_for_arm_firmware(tmp_path, monkeypatch):
     cache.mkdir()
     monkeypatch.setenv('R2S_CACHE_DIR', str(cache))
     monkeypatch.setenv('PATH', '/usr/bin:/bin')
-    firmware = tmp_path / 'stm32' / 'bluepill' / 'firmware.elf'
+    firmware = tmp_path / 'stm32' / 'firmware.elf'
     firmware.parent.mkdir(parents=True)
     firmware.write_bytes(elf_bytes(0x28))
     calls = []
     monkeypatch.setattr(size_report, '_run', fake_run(calls))
-    sizes = size_report.measure(tmp_path)['stm32/bluepill/firmware.elf']
+    sizes = size_report.measure(tmp_path)['stm32/firmware.elf']
     assert 'arm-none-eabi-size' in calls
     assert 'avr-size' not in calls
     assert 'xtensa-esp32-elf-size' not in calls

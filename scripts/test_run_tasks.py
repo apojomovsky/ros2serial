@@ -113,6 +113,11 @@ def test_the_stm32_scope_selects_its_task(tmp_path):
     assert args == ['stm32'], args
 
 
+def test_the_rp2040_scope_selects_its_task(tmp_path):
+    args, _ = select(tmp_path, RP2040='1')
+    assert args == ['rp2040'], args
+
+
 def test_full_forces_the_selected_tasks(tmp_path):
     args, _ = select(tmp_path, CORE='1', R2S_FULL='1')
     assert args == ['--force', 'core'], args

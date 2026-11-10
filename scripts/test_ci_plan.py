@@ -43,6 +43,7 @@ OUTPUTS = (
     'esp32',
     'pic',
     'stm32',
+    'rp2040',
     'coverage',
     'docs',
     'mermaid',
@@ -73,6 +74,7 @@ SECTION_SCOPE = {
     'esp32': 'esp32',
     'pic-canary': 'pic',
     'stm32': 'stm32',
+    'rp2040': 'rp2040',
     'budgets': 'budgets',
     'nightly': 'nightly',
     'e2e-avr': 'e2e',
@@ -107,6 +109,7 @@ TASKS_WITH_CHECKSUMS = (
     'esp32',
     'pic',
     'stm32',
+    'rp2040',
     'budgets',
     'readme',
     'fuzz',
@@ -385,6 +388,7 @@ def test_section_jobs_save_their_checksums_on_master():
     assert saves['esp32'] == '.task/checksum/esp32'
     assert saves['pic-canary'] == '.task/checksum/pic'
     assert saves['stm32'] == '.task/checksum/stm32'
+    assert saves['rp2040'] == '.task/checksum/rp2040'
     assert saves['budgets'] == '.task/checksum/budgets'
     assert saves['e2e-avr'] == '.task/checksum/e2e-avr'
     assert saves['scripts-save'] == '.task/checksum/scripts'
@@ -568,6 +572,37 @@ def test_an_stm32_script_edit_runs_stm32_and_budgets_besides_lint(tmp_path):
         'budgets',
         'lint',
         'plan',
+        'stm32',
+    ]
+
+
+def test_an_rp2040_script_edit_runs_rp2040_and_budgets_besides_lint(tmp_path):
+    repo = test_taskfile.fixture(tmp_path)
+    establish(repo)
+    edited = repo / 'ports' / 'rp2040' / 'build.sh'
+    edited.parent.mkdir(parents=True, exist_ok=True)
+    edited.write_text('probe\nprobe again\n')
+    assert selected_jobs(repo, tmp_path) == [
+        'bridge-images',
+        'budgets',
+        'lint',
+        'plan',
+        'rp2040',
+    ]
+
+
+def test_a_common_source_edit_runs_both_ports_and_budgets(tmp_path):
+    repo = test_taskfile.fixture(tmp_path)
+    establish(repo)
+    edited = repo / 'ports' / 'common' / 'firmware.c'
+    edited.parent.mkdir(parents=True, exist_ok=True)
+    edited.write_text('probe\nprobe again\n')
+    assert selected_jobs(repo, tmp_path) == [
+        'bridge-images',
+        'budgets',
+        'lint',
+        'plan',
+        'rp2040',
         'stm32',
     ]
 

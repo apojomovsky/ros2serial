@@ -44,7 +44,7 @@ ESP32_SKETCHES = [
 ]
 
 
-STM32_BOARDS = ('bluepill', 'pico')
+PORT_FIRMWARE = ('stm32/firmware.elf', 'rp2040/firmware.elf')
 
 
 def expected_firmware() -> list:
@@ -55,8 +55,7 @@ def expected_firmware() -> list:
             names.append(f'{sketch}/{board}/{sketch}.ino.elf')
     for sketch in ESP32_SKETCHES:
         names.append(f'{sketch}/esp32/{sketch}.ino.elf')
-    for board in STM32_BOARDS:
-        names.append(f'stm32/{board}/firmware.elf')
+    names.extend(PORT_FIRMWARE)
     return sorted(names)
 
 
