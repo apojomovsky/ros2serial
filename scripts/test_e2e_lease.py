@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """e2e-lease.sh hands each concurrent suite its own domain and zenoh port.
 
 Two holders never share a slot, a dead holder frees its slot, and an

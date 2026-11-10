@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Every CI job carries a timeout-minutes bound near its usual duration.
 
 A hung job must fail with its logs instead of holding a runner until

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Build the libFuzzer targets and run each over its seed corpus, then fuzz it.
 # Usage: fuzz.sh; env TARGET picks one target (framer, rcobs_decode, session,
 # codec), default all four; env R2S_FUZZ_SECONDS sets the fuzz time per target,

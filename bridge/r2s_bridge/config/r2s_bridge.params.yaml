@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Example parameters for the r2s_bridge node, launched with
 # launch/r2s_bridge.launch.py. Every key below is a declared bridge parameter
 # (docs/00-design.md, Bridge specification); the launch argument port wins

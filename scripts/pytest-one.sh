@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Run one pytest selection in the image: pytest-one.sh '<path>[::name] [-k expr]'.
 # The host library builds first, as the GEN scope does, so the model tests
 # run against the current core.

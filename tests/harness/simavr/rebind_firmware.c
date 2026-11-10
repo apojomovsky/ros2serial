@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Rebind firmware for the simavr harness: a PROGMEM topic table behind the
  * C13 accessors, rebound to a RAM table with different content when the
  * host publishes on the trigger subscription (#233). The flash table binds

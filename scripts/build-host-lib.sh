@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Builds libr2s_host.so for the Python model-based session tests (T3): the
 # core plus the fake port and the handwritten test firmware, compiled with
 # R2S_TESTING as the host unit builds are. A second library builds the same

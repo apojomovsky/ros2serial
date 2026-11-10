@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The farm-shaped check: build and test the released packages outside the dev image.
 
 The ROS build farm builds from a clean chroot with no Docker and no network

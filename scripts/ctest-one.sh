@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Rerun core unit tests by name: ctest-one.sh '<regex>'. Builds the gcc config
 # only, then runs the matching tests there, so a bug fixer reruns just the
 # failing test without the port legs the full CORE scope adds.

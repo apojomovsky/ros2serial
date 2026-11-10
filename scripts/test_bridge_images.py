@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The bridge job's distro images are pins: scripts/bridge-images.sh reads them
 from ci/versions.env, and the workflow carries no image of its own."""
 

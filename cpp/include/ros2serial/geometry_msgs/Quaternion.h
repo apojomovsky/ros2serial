@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* rosserial spelling of the Quaternion message: the same struct the runtime
  * layer encodes, so no new traits are needed. */
 #ifndef R2S_ROS2SERIAL_GEOMETRY_MSGS_QUATERNION_H

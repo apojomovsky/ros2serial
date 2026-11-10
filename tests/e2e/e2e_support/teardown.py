@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Shared teardown for the launch_testing scenarios.
 
 Every scenario shuts its ROS context down in tearDownClass. Under load the

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # The lock a suite run of a tree takes: two runs of one tree must agree on it,
 # and two trees must never share one. A tree the dev image mounts keeps the
 # same path in every container, so the shared cache can key it; a tree made

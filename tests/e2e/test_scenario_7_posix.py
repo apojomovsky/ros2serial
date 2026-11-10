@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 7: an MCU reset is detected within 500 ms and re-handshakes.
 
 Restarting the firmware on the live relay looks like a reset board: the new

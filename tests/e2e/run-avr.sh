@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # The avr end-to-end suite: scenarios 1 to 4 against the slice sketch and
 # scenario 12 against the flood sketch, on an emulated Uno and Mega, plus
 # the baud matrix (the scenario 2 flow gates per baud per board) under the

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The header-applying tool: the bulk change runs through it, not by hand.
 
 apply_headers.py walks the same scope the gate checks, replaces the old full

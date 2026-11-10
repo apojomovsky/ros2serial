@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Compile the core and the static C++ sketch with epic-cc for two PIC parts.
 # The bundle lives outside the dev image: the pinned release downloads into
 # the cache, and a run without the toolchain skips instead of failing, so

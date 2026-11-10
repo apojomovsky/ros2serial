@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The simavr backend: the slice sketch on an emulated Uno or Mega.
 
 Each scenario spawns the board's ELF under r2s_simavr and talks to the pty

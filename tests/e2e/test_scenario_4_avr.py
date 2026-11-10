@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 4: namespace and remappings apply to the MCU's topics.
 
 The bridge is included under a namespace push and two remap rules; the

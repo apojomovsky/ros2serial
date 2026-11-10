@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Decide whether a failed master run died of infrastructure trouble.
 
 The retry workflow downloads each failed job's log and asks this script

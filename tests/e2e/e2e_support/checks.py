@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The assertions the scenarios share across backends.
 
 Each check takes plain data and a deadline, never ROS handles it creates

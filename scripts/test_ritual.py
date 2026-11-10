@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The takeoff ritual, the git hooks and the push helper, on throwaway repositories."""
 
 import os

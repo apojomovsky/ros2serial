@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* The action server through the fake port: registration, the walk bytes,
  * the goal and cancel callbacks, feedback and the terminal results. The
  * fake action carries Float32 goals, results and feedback, so the wire form

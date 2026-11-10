@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Push the current branch with the hooks, then confirm the remote ref matches
 # HEAD. Exit codes: 0 landed, 1 did not land, 2 usage, 3 remote unreachable.
 # A failed push is retried once; the pre-push suite stamp makes the retry cheap.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Static firmware for the simavr harness: the static C++ API over an
  * R2S_TOPICS list, announcing a Float32 topic and a Twist topic it
  * subscribes to, and echoing every Twist it receives on the battery topic.

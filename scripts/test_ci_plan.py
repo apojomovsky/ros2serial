@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The plan job runs only the sections whose inputs changed.
 
 ci.yml starts with a plan job that restores each task's last successful

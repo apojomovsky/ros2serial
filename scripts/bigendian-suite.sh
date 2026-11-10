@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # The big-endian test scope: runs inside the docker/bigendian image, never in
 # a pull request check. It cross-builds the core unit and vector tests for
 # s390x and runs them under qemu-s390x, then runs the generator reference

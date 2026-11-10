@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """with-retry.sh reruns a command until it passes, bounded and reporting.
 
 The readme echo runs its exact walkthrough command through this helper, so

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Two bridge sections side by side on one host: both pass without cross-talk.
 
 Each bridge-test.sh run leases its own DDS domain from the same slot pool

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 8: time sync end to end with a skewed MCU clock.
 
 The firmware ticks 5000 ppm fast. After the initial burst the bridge's

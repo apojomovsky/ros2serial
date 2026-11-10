@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* bm_api: what every benchmark framer provides. Each framer takes whole
  * frames in and out, so one host driver and one AVR firmware exercise all
  * of them the same way. Alternatives live here, never in core/src. */

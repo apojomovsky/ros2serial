@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The SPDX header gate: every hand-written source file carries the two-line header.
 
 The gate scans every tracked source file in the tree for the SPDX two-liner

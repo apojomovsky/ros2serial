@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* bm_cobs: standard COBS byte stuffing for the benchmark. Codes open the
  * block they describe, the mirror image of the shipped rCOBS. */
 #ifndef BM_COBS_H

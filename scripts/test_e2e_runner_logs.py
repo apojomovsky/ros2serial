@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The e2e runners keep every scenario launch behind its own log file.
 
 run.sh tees each launch_test into scenario-logs and reports the failed

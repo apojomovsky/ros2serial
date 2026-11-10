@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* bm_slip: SLIP after RFC 1055 for the benchmark. END marks the frame,
  * ESC quotes END and itself. */
 #ifndef BM_SLIP_H

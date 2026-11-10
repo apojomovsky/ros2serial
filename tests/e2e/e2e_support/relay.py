@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """One serial line between two pty slaves, joined by a relay thread.
 
 Bytes written on one slave come out of the other, so the bridge and the

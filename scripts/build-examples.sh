@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Build one example per generate layout: the cmake firmware for the ATmega328P
 # and the Arduino sketch for Uno and Mega. The layout outputs are checked in
 # under examples/ and pinned by the generator tests; this script only

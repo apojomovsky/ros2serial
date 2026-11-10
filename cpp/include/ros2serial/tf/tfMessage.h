@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* rosserial spelling of the tf array message: the struct the runtime layer
  * encodes, so no new traits are needed. The wire type keeps its ROS 2 name,
  * which the bridge resolves against the installed tf2_msgs support. */

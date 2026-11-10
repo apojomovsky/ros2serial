@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # The budgets gate: build the examples, measure flash, RAM and worst-case
 # stack, and judge the head numbers against tools/budgets.yaml. Both checkers
 # also run against a deliberately breached fixture that must fail, so the gate

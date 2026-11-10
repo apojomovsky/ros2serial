@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Scenario 9: the MCU's log lines appear on /rosout at every level.
 
 The firmware emits one plain line per level while connected; the bridge

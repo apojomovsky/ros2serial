@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The nightly mutation triage report never gates, but it must not lie.
 
 scripts/mutation_triage.py merges the normalized Mull and mutmut results

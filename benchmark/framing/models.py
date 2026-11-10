@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Python references for the P9 framing benchmark's alternative framers.
 
 rCOBS mirrors spec/protocol.md section 4 (the shipped core is the product;

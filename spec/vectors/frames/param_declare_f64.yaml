@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 name: param_declare
 covers: [PAR-1, PAR-2, PAR-3]
 topic_id: 3

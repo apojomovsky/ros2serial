@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 r"""List the comment blocks a branch adds and check the mechanical prose rules.
 
 The rules come from AGENTS.md (Expression conventions): a block of at most 20

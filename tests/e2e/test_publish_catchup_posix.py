@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The publisher keeps its 50 Hz count across a host scheduling stall.
 
 SIGSTOP freezes the firmware for half a second mid-window; a publisher

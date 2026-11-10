@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Unit tests for the shared scenario checks, with no ROS in the loop.
 
 Run directly: `python3 tests/e2e/checks_test.py`. The launch suite runs it

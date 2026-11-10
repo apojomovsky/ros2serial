@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* runtime: the ROS 2-named runtime API. Topics are registered while the
  * firmware runs, into the core's RAM topic table, so a sketch needs no
  * generated topic list. The core reaches the subscribers through one

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* Payloads for the framing benchmark. tools/test_framing_benchmark.py parses
  * the bm_p arrays below, so each one stays on bm_p<N> lines in this shape.
  * topic is 0x10 and seq counts the payloads; the driver adds the check. */

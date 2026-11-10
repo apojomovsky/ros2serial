@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # Does the repository's merge settings match the rule that a PR lands as one
 # commit, the PR title as the landed subject, and no message?
 # Usage: merge-settings.sh [owner/name]

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Write one version into every file of the repository that carries it.
 
 The release cut computes the next version and calls this: VERSION is the

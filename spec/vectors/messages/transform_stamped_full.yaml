@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 name: transform_stamped_full
 covers: [ENC-1, ENC-2, ENC-4, ENC-7]
 type: geometry_msgs/msg/TransformStamped

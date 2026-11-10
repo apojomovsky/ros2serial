@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """The ros compat leg runs scenarios 1 to 4, like the static C++ leg.
 
 Compat is a side path, so it must not cost every run a fourth full

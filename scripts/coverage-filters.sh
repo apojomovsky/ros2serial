@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # gcovr filter sets for scripts/coverage-gate.sh, one array per component.
 # The gate judges both sides with the base commit's copy of this file, so a
 # PR that narrows these still measures its head with the old set and a new

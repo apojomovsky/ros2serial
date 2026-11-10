@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 name: reset_zero_token
 covers: [SES-1, SES-2, SES-10, SES-11, SES-16, SES-17, SES-19, SES-20, SES-21, HB-2, HB-4, FRM-4]
 steps:

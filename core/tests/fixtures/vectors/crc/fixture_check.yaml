@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 # A fixture for the vector runner's self-test, not a conformance vector.
 covers: [CHK-2]
 cases:

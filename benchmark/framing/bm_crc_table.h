@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 /* bm_crc_table: CRC-16/MCRF4XX through a 256 entry table for the benchmark.
  * Same wire bytes as the shipped bitwise routine, traded flash for cycles. */
 #ifndef BM_CRC_TABLE_H

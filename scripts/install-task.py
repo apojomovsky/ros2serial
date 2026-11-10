@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Install the Task suite runner pinned in ci/versions.env.
 
 Downloads the release tarball, checks its sha256 against the pinned hash,

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Check 8 of the ritual: a wire rule and its vector change together.
 
 A section whose heading ends in `(local)` specifies bytes that never appear

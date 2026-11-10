@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
 """Size models for the encoding benchmark: packed, CDR and MAVLink-style.
 
 The packed model follows the wire rules in spec/protocol.md ([ENC-1] to
