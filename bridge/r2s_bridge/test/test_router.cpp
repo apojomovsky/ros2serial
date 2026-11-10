@@ -3477,6 +3477,24 @@ TEST_F(RouterNode, DropsAnUnackedCancelAfterThreeRetries)
 }
 
 // covers: SES-35
+TEST_F(RouterNode, DropsActionFramesBeforeHandshake)
+{
+  RouterFixture fixture("act_early", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  // An action frame before HELLO is dropped: the session is not handshaking.
+  fixture.deliver_frame(kHelperActions, 0u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  for (int i = 0; i < 5; ++i) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+  }
+  // The handshake still completes after the early frame.
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  EXPECT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+}
+
+// covers: SES-35
 TEST_F(RouterNode, RejectsTheCancelOfATerminalGoal)
 {
   RouterFixture fixture("act_termcancel", remapped(), RouterParams{},
