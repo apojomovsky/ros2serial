@@ -18,6 +18,9 @@
 #ifdef R2S_WITH_PARAMS
 #include "r2s/r2s_params.h"
 #endif
+#ifdef R2S_WITH_SERVICES
+#include "r2s/r2s_services.h"
+#endif
 #ifdef R2S_WITH_ACTIONS
 #include "r2s/r2s_actions.h"
 #endif
@@ -75,13 +78,18 @@
 #else
 #define R2S_FEATURE_PARAMS 0x00u
 #endif
+#ifdef R2S_WITH_SERVICES
+#define R2S_FEATURE_SERVICES 0x40u
+#else
+#define R2S_FEATURE_SERVICES 0x00u
+#endif
 #ifdef R2S_WITH_ACTIONS
 #define R2S_FEATURE_ACTIONS 0x88u
 #else
 #define R2S_FEATURE_ACTIONS 0x00u
 #endif
 #define R2S_FEATURE_BITS (R2S_FEATURE_BASE | R2S_FEATURE_LOG | R2S_FEATURE_TIME | \
-  R2S_FEATURE_PARAMS | R2S_FEATURE_ACTIONS)
+  R2S_FEATURE_PARAMS | R2S_FEATURE_SERVICES | R2S_FEATURE_ACTIONS)
 
 /* tick_hz is 1000 times a divisor of 10^6, so a tick converts to nanoseconds
  * with integer math alone (CTL-8). A failing build names the rule here. */
@@ -114,6 +122,12 @@ static struct
   uint16_t rx_lost[R2S_SESSION_MAX_TOPICS];
   uint8_t tx_seq_ctrl;
   uint8_t tx_seq_hb;
+#if defined(R2S_WITH_PARAMS) || defined(R2S_WITH_SERVICES) || defined(R2S_WITH_ACTIONS)
+    /* The ack channel's frame seq, shared by every reliable channel: one
+     * counter serves the acks the parameters, the services and the actions
+     * send (REL-4). */
+  uint8_t tx_seq_ack;
+#endif
   uint8_t tx_seq_time;
   uint32_t token;
   uint32_t last_host_tick;
@@ -121,11 +135,6 @@ static struct
   uint32_t last_hb_tick;
   uint32_t last_nack_tick;
   uint8_t heard;
-#if defined(R2S_WITH_PARAMS) || defined(R2S_WITH_ACTIONS)
-    /* The ack channel's frame seq, shared by every reliable channel: one
-     * counter serves the acks the parameters and the actions send (REL-4). */
-  uint8_t tx_seq_ack;
-#endif
 #ifdef R2S_WITH_PARAMS
     /* The reliable channel (REL-1 to REL-5): the frame seq of the parameter
      * channel, the next expected SET rel_seq and the next STATUS one, and
@@ -294,6 +303,9 @@ static void enter_announcing(uint32_t now)
 #ifdef R2S_WITH_PARAMS
   drop_reliable();
 #endif
+#ifdef R2S_WITH_SERVICES
+  r2s_services_note_reconnect();
+#endif
 #ifdef R2S_WITH_ACTIONS
 #if !defined(R2S_WITH_PARAMS)
   session.tx_seq_ack = 0u;
@@ -311,6 +323,9 @@ static void enter_connected(uint32_t now)
   session.tx_seq_hb = 0u;
 #ifdef R2S_WITH_PARAMS
   drop_reliable();
+#endif
+#ifdef R2S_WITH_SERVICES
+  r2s_services_note_reconnect();
 #endif
 #ifdef R2S_WITH_TIME
   session.tx_seq_time = 0u;
@@ -454,11 +469,12 @@ static void refuse(void)
  * calls it for frames that need no other answer. */
 static void answer_with_hello(uint32_t now);
 
-#if defined(R2S_WITH_PARAMS) || defined(R2S_WITH_ACTIONS)
+#if defined(R2S_WITH_PARAMS) || defined(R2S_WITH_SERVICES) || defined(R2S_WITH_ACTIONS)
 /* One ack for the reliable frame received, on the ack channel with the
  * channel and rel_seq it carried (REL-1). When the link cannot take bytes
  * the ack is dropped and the busy transmitter reported (REL-6): the
- * sender's retry brings the frame back. */
+ * sender's retry brings the frame back. The parameters, the services and
+ * the actions channels share it, each on its own rel_seq stream. */
 static void send_ack(uint8_t channel, uint8_t rel_seq)
 {
   if (r2s_tx_begin(6u, session.tx_seq_ack, 2u) != R2S_OK) {
@@ -471,6 +487,7 @@ static void send_ack(uint8_t channel, uint8_t rel_seq)
     session.tx_seq_ack++;
   }
 }
+#endif
 
 #ifdef R2S_WITH_ACTIONS
 /* The actions channel's ack: the single ack counter serves every reliable
@@ -479,7 +496,6 @@ void r2s_session_send_ack(uint8_t channel, uint8_t rel_seq)
 {
   send_ack(channel, rel_seq);
 }
-#endif
 #endif
 
 #ifdef R2S_WITH_PARAMS
@@ -745,6 +761,89 @@ static void params_poll(uint32_t now)
 }
 #endif
 
+#ifdef R2S_WITH_SERVICES
+/* An ack for the MCU-to-host services stream: frees it when it names the
+ * outstanding frame, and ignores anything else (REL-2). A stale ack in
+ * ANNOUNCING is answered like any other non-handshake frame. */
+static void on_service_ack(const uint8_t *payload, uint16_t len, uint32_t now)
+{
+  if (session.state == ANNOUNCING) {
+    answer_with_hello(now);
+    return;
+  }
+  if (len != 2u || payload[0] != 7u) {
+    return;
+  }
+  r2s_services_note_ack(payload[1]);
+}
+
+/* The services channel (SVR-7, SVR-9, SVR-4 to SVR-6, REL-3). Walk answers
+ * go out in ANNOUNCING; REQUEST and RESPONSE frames ride the reliable
+ * channel while connected, acked every time and applied at most once. */
+static void on_services(const uint8_t *payload, uint16_t len, uint32_t now)
+{
+    /* In ANNOUNCING a QUERY is answered the way SES-2 answers a TOPIC_REQ,
+     * a STATUS verdict is stored, and anything else is answered like any
+     * other non-handshake frame. */
+  if (session.state == ANNOUNCING) {
+    if (len == 2u && payload[0] == R2S_SVC_OP_QUERY) {
+      r2s_services_answer_query(payload[1]);
+    } else if (len == 4u && payload[0] == R2S_SVC_OP_STATUS) {
+            /* A reserved verdict is refused the way a bad TOPIC_STATUS is;
+             * anything else is stored. */
+      if (payload[3] > R2S_SVC_STATUS_NAME_CONFLICT) {
+        refuse();
+      } else {
+        r2s_services_note_status(payload[2], payload[3]);
+      }
+    } else {
+      answer_with_hello(now);
+    }
+    return;
+  }
+  if (len < 4u) {
+    refuse();
+    return;
+  }
+  switch (payload[0]) {
+    case R2S_SVC_OP_REQUEST: {
+        /* The frame carries rel_seq, req_id and the service index in that
+         * order (SVR-1). */
+        const r2s_service_t *service = r2s_services_get(payload[3]);
+
+        /* The host calls a service the MCU announced as one it calls
+         * itself: refused without an ack, like an undecodable SET. */
+        if (service == NULL || service->role != R2S_SVC_SERVER) {
+          refuse();
+          return;
+        }
+        send_ack(7u, payload[1]);
+        /* The frame was acked above; a full slot is refused and counted
+         * after it, since a conforming peer never sends one. */
+        if (r2s_services_apply_request(payload[1], payload[3], payload[2], payload + 4u,
+          (uint16_t)(len - 4u)) < 0)
+        {
+          refuse();
+        }
+        return;
+      }
+    case R2S_SVC_OP_RESPONSE:
+        /* A RESPONSE with a reserved status is refused before its ack. */
+      if (payload[3] > R2S_SVC_BUSY) {
+        refuse();
+        return;
+      }
+      send_ack(7u, payload[1]);
+      r2s_services_apply_response(payload[1], payload[2], payload[3], payload + 4u,
+        (uint16_t)(len - 4u));
+      return;
+    default:
+      break;
+  }
+  refuse();
+}
+#endif
+
 #ifdef R2S_WITH_TIME
 static uint32_t read_u32(const uint8_t *at)
 {
@@ -927,15 +1026,24 @@ static void on_frame(const r2s_frame_t *frame)
   } else if (topic == 3u) {
     on_params(payload, payload_len, frame->tick);
 #endif
-#if defined(R2S_WITH_PARAMS) || defined(R2S_WITH_ACTIONS)
+#if defined(R2S_WITH_PARAMS) || defined(R2S_WITH_SERVICES) || defined(R2S_WITH_ACTIONS)
   } else if (topic == 6u) {
+#if defined(R2S_WITH_PARAMS) || defined(R2S_WITH_ACTIONS)
     on_ack(payload, payload_len, frame->tick);
+#endif
+#ifdef R2S_WITH_SERVICES
+    on_service_ack(payload, payload_len, frame->tick);
+  #endif
+#endif
+#ifdef R2S_WITH_SERVICES
+  } else if (topic == 7u) {
+    on_services(payload, payload_len, frame->tick);
 #endif
   } else if (topic <= 6u) {
         /* The channels later tickets own (log, error report), and the
-         * parameters and ack channels in a build without them: accepted,
-         * and answered in ANNOUNCING like any other non-handshake frame,
-         * otherwise ignored. */
+         * parameters, services and ack channels in a build without them:
+         * accepted, and answered in ANNOUNCING like any other
+         * non-handshake frame, otherwise ignored. */
     if (session.state == ANNOUNCING) {
       answer_with_hello(frame->tick);
     }
@@ -1031,6 +1139,13 @@ void r2s_spin_some(void)
     params_poll(now);
   }
 #endif
+#ifdef R2S_WITH_SERVICES
+    /* The services timer runs on the same rule, after the parameters one,
+     * so the two streams keep their own cadence. */
+  if (session.state == CONNECTED) {
+    r2s_services_poll(now);
+  }
+#endif
 #ifdef R2S_WITH_ACTIONS
     /* The actions retransmit joins the same slot: a due response goes out
      * ahead of the periodic frame. */
@@ -1074,6 +1189,9 @@ void r2s_session_test_reset(void)
   session.tx_seq_hb = 0u;
 #ifdef R2S_WITH_PARAMS
   drop_reliable();
+#endif
+#ifdef R2S_WITH_SERVICES
+  r2s_services_note_reconnect();
 #endif
 #ifdef R2S_WITH_ACTIONS
 #if !defined(R2S_WITH_PARAMS)

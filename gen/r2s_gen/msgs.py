@@ -2,12 +2,13 @@
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
 """
-Message loading: .msg and .action definitions from the search paths and snapshots.
+Message loading: .msg, .srv and .action definitions from the search paths and snapshots.
 
-A repository resolves a canonical `package/msg/Type` or `package/action/Name`
-name to the first matching file and parses it into fields and constants.
-Nested types are loaded on demand, and the search order is the message paths,
-the sourced ROS prefixes, then the snapshot for the configured distro.
+A repository resolves a canonical `package/msg/Type`, `package/srv/Name` or
+`package/action/Name` name to the first matching file and parses it into
+fields and constants. Nested types are loaded on demand, and the search order
+is the message paths, the sourced ROS prefixes, then the snapshot for the
+configured distro.
 """
 
 from __future__ import annotations
@@ -129,6 +130,17 @@ class Action:
 ACTION_SUFFIXES = ('_Goal', '_Result', '_Feedback')
 
 
+@dataclass(frozen=True)
+class Service:
+    type_name: str
+    request: Message
+    response: Message
+    path: Path
+
+
+SERVICE_SUFFIXES = ('_Request', '_Response')
+
+
 def _action_base(type_name: str) -> str | None:
     for suffix in ACTION_SUFFIXES:
         if type_name.endswith(suffix):
@@ -138,7 +150,7 @@ def _action_base(type_name: str) -> str | None:
 
 def canonical_type_name(type_name: str) -> str:
     """
-    Return the canonical `package/msg/Type` or `package/action/Name` form of a type.
+    Return the canonical `package/msg/Type`, `package/srv/Name` or `package/action/Name` form.
 
     :param type_name: the type in any accepted form.
     :return: the canonical form.
@@ -147,11 +159,12 @@ def canonical_type_name(type_name: str) -> str:
     parts = type_name.split('/')
     if len(parts) == 2:
         return f'{parts[0]}/msg/{parts[1]}'
-    if len(parts) == 3 and parts[1] in ('msg', 'action'):
+    if len(parts) == 3 and parts[1] in ('msg', 'action', 'srv'):
         return type_name
     raise MessageError(
         type_name,
-        "expected a type as 'package/Type', 'package/msg/Type' or 'package/action/Type'",
+        "expected a type as 'package/Type', 'package/msg/Type', "
+        "'package/srv/Type' or 'package/action/Type'",
         'check the type name',
     )
 
@@ -290,6 +303,31 @@ def parse_message(text: str, type_name: str, path: Path) -> Message:
     return _parse_section(text, type_name, path, 1)
 
 
+def _service_base(type_name: str) -> str | None:
+    for suffix in SERVICE_SUFFIXES:
+        if type_name.endswith(suffix):
+            return type_name[: -len(suffix)]
+    return None
+
+
+def parse_service(text: str, type_name: str, path: Path) -> Service:
+    """Parse one .srv file into its request and response messages."""
+    package, _, name = type_name.partition('/srv/')
+    lines = text.splitlines()
+    marks = [index for index, raw in enumerate(lines, start=1) if raw.strip() == '---']
+    if len(marks) != 1:
+        raise MessageError(
+            str(path),
+            f"expected 1 '---' separator, found {len(marks)}",
+            "write the request, '---', the response",
+        )
+    request_text = '\n'.join(lines[: marks[0] - 1])
+    response_text = '\n'.join(lines[marks[0] :])
+    request = _parse_section(request_text, f'{package}/srv/{name}_Request', path, 1)
+    response = _parse_section(response_text, f'{package}/srv/{name}_Response', path, marks[0] + 1)
+    return Service(type_name=type_name, request=request, response=response, path=path)
+
+
 class MessageRepository:
     """
     Resolves message and action type names through the paths and a distro snapshot.
@@ -322,6 +360,7 @@ class MessageRepository:
         self._snapshot_root = Path(snapshot_root) if snapshot_root is not None else SNAPSHOTS
         self._cache: dict[str, Message] = {}
         self._actions: dict[str, Action] = {}
+        self._services: dict[str, Service] = {}
         self.warnings: tuple[str, ...] = ()
         if sourced_distro is not None and sourced_distro != distro:
             self.warnings = (
@@ -344,6 +383,38 @@ class MessageRepository:
         for prefix in self._ament_prefix_path:
             yield prefix / 'share' / relative
         yield self._snapshot_root / self._distro / relative
+
+    def _service_files(self, package: str, name: str):
+        relative = Path(package) / 'srv' / f'{name}.srv'
+        for root in self._msg_paths:
+            yield root / relative
+        for prefix in self._ament_prefix_path:
+            yield prefix / 'share' / relative
+        yield self._snapshot_root / self._distro / relative
+
+    def load_service(self, type_name: str) -> Service:
+        """The service definition of `type_name`, from the first file that has it."""
+        canonical = canonical_type_name(type_name)
+        if '/srv/' not in canonical:
+            raise MessageError(canonical, 'not a service type', "name it as 'package/srv/Name'")
+        base = _service_base(canonical)
+        service_name = canonical if base is None else base
+        package, _, name = service_name.partition('/srv/')
+        cached = self._services.get(service_name)
+        if cached is not None:
+            return cached
+        for path in self._service_files(package, name):
+            if path.is_file():
+                service = parse_service(path.read_text(encoding='utf-8'), service_name, path)
+                self._services[service_name] = service
+                self._cache[service.request.type_name] = service.request
+                self._cache[service.response.type_name] = service.response
+                return service
+        raise MessageError(
+            service_name,
+            'no service definition found',
+            'add its package to --msg-path or check the type name',
+        )
 
     def load_action(self, type_name: str) -> Action:
         """Load the action definition of `type_name`, from the first file that has it."""
@@ -376,6 +447,24 @@ class MessageRepository:
         cached = self._cache.get(canonical)
         if cached is not None:
             return cached
+        if '/srv/' in canonical:
+            base = _service_base(canonical)
+            if base is None:
+                raise MessageError(
+                    canonical,
+                    'a service has no message of its own',
+                    "name its request or response as 'package/srv/Name_Request'",
+                )
+            service = self.load_service(base)
+            if canonical == service.request.type_name:
+                return service.request
+            if canonical == service.response.type_name:
+                return service.response
+            raise MessageError(  # pragma: no cover - every service suffix returns above
+                canonical,
+                'not a request or response type',
+                "name it as 'package/srv/Name_Request' or '_Response'",
+            )
         if '/action/' in canonical:
             base = _action_base(canonical)
             if base is None:

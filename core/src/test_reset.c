@@ -11,6 +11,9 @@
 #ifdef R2S_WITH_PARAMS
 #include "r2s/r2s_params.h"
 #endif
+#ifdef R2S_WITH_SERVICES
+#include "r2s/r2s_services.h"
+#endif
 #ifdef R2S_WITH_ACTIONS
 #include "r2s/r2s_actions.h"
 #endif
@@ -25,6 +28,9 @@ void r2s_test_reset(void)
   r2s_session_test_reset();
 #ifdef R2S_WITH_PARAMS
   r2s_params_test_reset();
+#endif
+#ifdef R2S_WITH_SERVICES
+  r2s_services_test_reset();
 #endif
 #ifdef R2S_WITH_ACTIONS
   r2s_actions_test_reset();

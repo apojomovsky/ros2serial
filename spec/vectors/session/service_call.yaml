@@ -1,67 +1,33 @@
 name: service_call
 covers: [SVR-4, SVR-5, SVR-6, REL-3]
+# Exchange only, like param_set_reliable: the harness handshakes first, then
+# drives the host calls.
 steps:
+  - from: host
+    frame: "07 00 04 00 00 00 4d 66"
+    at_ms: 0
+    note: "ROS call: REQUEST rel 0, req 0, index 0, the empty Trigger request"
   - from: mcu
-    frame: "00 00 02 04 00 00 00 00 00 00 04 80 00 e8 03 00 00 cd 00 04 6e 6f 64 65 56 9a"
+    frame: "06 00 07 00 b3 05"
     at_ms: 0
+  - from: mcu
+    frame: "07 00 05 00 00 00 01 02 6f 6b 58 5d"
+    at_ms: 50
+    note: "RESPONSE rel 0, req 0, ok, the packed Trigger response"
   - from: host
-    frame: "00 00 01 04 dd 5c"
-    at_ms: 0
-  - from: host
-    frame: "03 00 01 00 34 3f"
+    frame: "06 00 07 00 b3 05"
     at_ms: 50
   - from: mcu
-    frame: "03 00 04 00 00 01 68 67"
+    frame: "07 01 04 01 01 00 0d 2e"
     at_ms: 100
-  - from: host
-    frame: "07 00 01 00 d8 4d"
-    at_ms: 100
-  - from: mcu
-    frame: "07 00 02 00 00 01 02 03 04 05 06 07 08 14 73 74 64 5f 73 72 76 73 2f 73 72 76 2f 54 72 69 67 67 65 72 05 72 65 73 65 74 f6 9c"
-    at_ms: 150
-  - from: host
-    frame: "07 01 03 00 00 00 28 3a"
-    at_ms: 150
-  - from: host
-    frame: "07 02 01 01 e9 e9"
-    at_ms: 200
-  - from: mcu
-    frame: "07 01 03 00 01 01 79 32"
-    at_ms: 250
-  - from: host
-    frame: "00 01 06 01 00 00 00 87 50"
-    at_ms: 250
-  - from: host
-    frame: "07 03 04 00 00 00 81 7b"
-    at_ms: 300
-    note: "server role: REQUEST rel 0, empty Trigger request"
-  - from: mcu
-    frame: "06 00 07 00 b3 05"
-    at_ms: 300
-  - from: host
-    frame: "07 04 04 00 00 00 5d 4b"
-    at_ms: 310
-    note: "retransmit with the next frame seq, same rel seq; the first ack was lost on the wire"
-  - from: mcu
-    frame: "06 01 07 00 6f 5f"
-    at_ms: 320
-    note: "the duplicate is acked again; the payload applied once"
-  - from: mcu
-    frame: "07 02 05 00 00 00 01 02 6f 6b a2 c6"
-    at_ms: 350
-  - from: host
-    frame: "06 00 07 00 b3 05"
-    at_ms: 350
-  - from: mcu
-    frame: "07 03 04 01 01 00 85 38"
-    at_ms: 400
-    note: "client role: REQUEST rel 1, req 1"
+    note: "MCU call: REQUEST rel 1, req 1, index 0, the empty Trigger request; its own rel stream"
   - from: host
     frame: "06 01 07 01 e6 4e"
-    at_ms: 400
+    at_ms: 100
   - from: host
-    frame: "07 05 05 01 01 00 01 02 6f 6b be b4"
-    at_ms: 450
+    frame: "07 01 05 01 01 00 01 02 6f 6b 5b 8b"
+    at_ms: 150
+    note: "ROS answer: RESPONSE rel 1, req 1, ok; the host rel stream"
   - from: mcu
-    frame: "06 02 07 01 82 a1"
-    at_ms: 450
+    frame: "06 01 07 01 e6 4e"
+    at_ms: 150

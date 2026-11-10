@@ -106,6 +106,22 @@ constexpr std::int64_t kHelloReqPeriodMs = 500;
 constexpr std::int64_t kTopicTimeoutMs = 200;
 constexpr int kTopicRetries = 3;
 
+// The services channel id and its opcodes (spec/protocol.md, 7.8).
+constexpr std::uint8_t kServicesTopic = 7u;
+constexpr std::uint8_t kSvcQuery = 0x01u;
+constexpr std::uint8_t kSvcDeclare = 0x02u;
+constexpr std::uint8_t kSvcStatus = 0x03u;
+constexpr std::uint8_t kSvcRequest = 0x04u;
+constexpr std::uint8_t kSvcResponse = 0x05u;
+constexpr std::uint8_t kSvcFeaturesBit = 0x40u;
+// The busiest RESPONSE status section 7.8 names; anything above is
+// reserved.
+constexpr std::uint8_t kSvcBusy = 0x03u;
+
+// The service walk's cadence, mirroring the parameter walk ([SVR-7]).
+constexpr std::int64_t kSvcTimeoutMs = 200;
+constexpr int kSvcRetries = 3;
+
 // The handshake mode byte ([CTL-1]).
 constexpr std::uint8_t kModeFull = 0u;
 
@@ -140,6 +156,9 @@ QueuedFrame control_slot(std::uint8_t topic_id, const std::vector<std::uint8_t> 
     slot.opcode = payload[0];
     if (topic_id == kControlTopic && payload[0] == kTopicStatus && payload.size() > 1u) {
       slot.sub = payload[1];
+    }
+    if (topic_id == kServicesTopic && payload[0] == kSvcStatus && payload.size() > 2u) {
+      slot.sub = payload[2];
     }
   }
   return slot;
@@ -279,9 +298,10 @@ struct Session::Impl
   Impl(
     SessionConfig in_config, const Clock & in_clock, const Clock & in_ros_clock,
     TransportFactory in_open,
-    TopicResolver in_resolve, SessionEvents in_events)
+    TopicResolver in_resolve, SessionEvents in_events, ServiceResolver in_resolve_service)
   : config(in_config), clock(in_clock), ros_clock(in_ros_clock), open(std::move(in_open)),
-    resolve(std::move(in_resolve)), events(std::move(in_events))
+    resolve(std::move(in_resolve)), events(std::move(in_events)),
+    resolve_service(std::move(in_resolve_service))
   {
     if (config.reconnect_period_ms <= 0 || config.boot_wait_ms <= 0 ||
       config.heartbeat_period_ms <= 0 ||
@@ -514,20 +534,49 @@ struct Session::Impl
   }
 
     // The walk after the topic walk ([PAR-7]): REQ per index while the MCU
-    // announced parameters, READY at once when it did not.
+    // announced parameters, the service walk at once when it did not.
   void start_param_walk()
   {
     awaiting_topic = false;
     awaiting_param_ = false;
     collected_params.clear();
     if ((hello.features & kParamFeaturesBit) == 0u) {
-      finish_handshake();
+      start_service_walk();
       return;
     }
     awaiting_param_ = true;
     param_index_ = 0;
     param_retries_ = 0;
     send_param_req();
+  }
+
+    // One SVC_QUERY for the walk's current index ([SVR-7]). The QUERY joins
+    // the [SES-33] slot list like PARAM_REQ, so a blocked link keeps the
+    // newest with the first seq; a timer retry is a new emission with the
+    // next seq.
+  void send_svc_query()
+  {
+    queue_frame(kServicesTopic, seq_svc_, {kSvcQuery, svc_index_});
+    ++seq_svc_;
+    flush();
+    svc_deadline_ms_ = now_ms() + kSvcTimeoutMs;
+  }
+
+    // The walk after the parameter walk ([SVR-7]): QUERY per index while the
+    // MCU announced services, READY at once when it did not.
+  void start_service_walk()
+  {
+    awaiting_param_ = false;
+    awaiting_svc_ = false;
+    collected_services.clear();
+    if ((hello.features & kSvcFeaturesBit) == 0u) {
+      finish_handshake();
+      return;
+    }
+    awaiting_svc_ = true;
+    svc_index_ = 0;
+    svc_retries_ = 0;
+    send_svc_query();
   }
 
     // One PARAM_SET emission with a fresh rel_seq: the index and the value
@@ -585,12 +634,21 @@ struct Session::Impl
   {
     rel_out_active_ = false;
     rel_pending_.clear();
+    svc_out_active_ = false;
+    svc_pending_requests_.clear();
+    svc_pending_response_ = false;
+    svc_mcu_req_active_ = false;
+    svc_host_req_active_ = false;
     const bool drop_front =
-      !queue_.empty() && queue_.front().topic_id == kParamsTopic && !queue_.front().control;
+      !queue_.empty() &&
+      (queue_.front().topic_id == kParamsTopic || queue_.front().topic_id == kServicesTopic) &&
+      !queue_.front().control;
     std::deque<QueuedFrame> kept;
     std::size_t kept_bytes = 0;
     for (std::size_t i = 0; i < queue_.size(); ++i) {
-      if (queue_[i].topic_id == kParamsTopic && !queue_[i].control) {
+      if ((queue_[i].topic_id == kParamsTopic || queue_[i].topic_id == kServicesTopic) &&
+        !queue_[i].control)
+      {
         continue;
       }
       kept_bytes += queue_[i].bytes.size();
@@ -690,6 +748,7 @@ struct Session::Impl
   {
     awaiting_topic = false;
     awaiting_param_ = false;
+    awaiting_svc_ = false;
     requested_index = 0;
     retries = 0;
     collected.clear();
@@ -706,13 +765,16 @@ struct Session::Impl
     collected.clear();
     awaiting_topic = true;
     awaiting_param_ = false;
+    awaiting_svc_ = false;
     clear_pending_control();
     drop_reliable();
         // A re-handshake drops the reliable state ([REL-5]); the walk and
         // the connected stream number their channel frames from 0.
     rel_next_ = 0;
+    rel_next_svc_ = 0;
     rel_expected_.clear();
     seq_params_ = 0;
+    seq_svc_ = 0;
     seq_ack_ = 0;
     if (requested_index < hello.topic_count) {
       send_topic_req();
@@ -736,6 +798,7 @@ struct Session::Impl
     const bool identical = had_handshake && collected == topics;
     topics = collected;
     params = collected_params;
+    services_ = collected_services;
     had_handshake = true;
     state = SessionState::kConnected;
     hello.token = assign_token();
@@ -749,6 +812,7 @@ struct Session::Impl
     seq_control = 0;
     seq_heartbeat = 0;
     seq_params_ = 0;
+    seq_svc_ = 0;
     seq_ack_ = 0;
     user_seq_.clear();
     expected_seq.clear();
@@ -1011,7 +1075,7 @@ struct Session::Impl
       }
       if (status == 1u) {
         awaiting_param_ = false;
-        finish_handshake();
+        start_service_walk();
       } else {
         ++param_index_;
         param_retries_ = 0;
@@ -1032,17 +1096,310 @@ struct Session::Impl
     }
   }
 
+    // One walk DECLARE kept for the services layer: the index, the SVR-2
+    // role, the hash and the names. Only a fully parseable DECLARE is kept:
+    // a short payload, an unknown role or names the length overruns leave
+    // no entry, while the walk still advances ([SVR-1], [SVR-2]).
+  void collect_svc_declare(const std::uint8_t *payload, std::uint16_t len)
+  {
+        // The caller only delivers walk answers of two bytes or more
+        // ([SVR-7]): the opcode and the declare index always parse.
+    ServiceInfo info;
+    info.index = payload[1];
+    Reader reader(payload + 2u, static_cast<std::uint16_t>(len - 2u));
+    std::uint8_t role = 0;
+    if (!reader.u8(role) || role > kServiceRoleClient) {
+      return;
+    }
+    info.role = role;
+    for (std::size_t i = 0; i < info.type_hash.size(); ++i) {
+      std::uint8_t byte = 0;
+      if (!reader.u8(byte)) {
+        return;
+      }
+      info.type_hash[i] = byte;
+    }
+    if (!reader.string(info.type_name) || !reader.string(info.service_name) ||
+      !reader.at_end())
+    {
+      return;
+    }
+    collected_services.push_back(info);
+  }
+
+    // One SVC_DECLARE answer ([SVR-7]): the entry is kept when it parses,
+    // named with the resolver's verdict, and answered with STATUS. The walk
+    // moves to the next index either way.
+  void on_service_declare(const std::uint8_t *payload, std::uint16_t len)
+  {
+    const std::size_t kept = collected_services.size();
+    collect_svc_declare(payload, len);
+    std::uint8_t verdict = kServiceStatusUnknownType;
+    if (collected_services.size() > kept) {
+      ServiceInfo & info = collected_services.back();
+      verdict = resolve_service ? resolve_service(info) : kServiceStatusUnknownType;
+      if (verdict == kServiceStatusOk) {
+        for (const ServiceInfo & seen : collected_services) {
+          if (seen.index != info.index && seen.service_name == info.service_name) {
+            verdict = kServiceStatusNameConflict;
+            log(SessionLog::kError,
+              "SVC refused: the name '" + info.service_name + "' is announced twice");
+            break;
+          }
+        }
+      } else if (verdict == kServiceStatusUnknownType) {
+        log(SessionLog::kError,
+          "SVC refused: unknown type '" + info.type_name + "' for service '" +
+          info.service_name + "'");
+      } else if (verdict == kServiceStatusHashMismatch) {
+        log(SessionLog::kError,
+          "SVC refused: the hash of '" + info.type_name +
+          "' is not the installed one, for service '" +
+          info.service_name + "'");
+      }
+      info.status = verdict;
+    }
+    const std::uint8_t index = payload[1];
+    queue_frame(kServicesTopic, seq_svc_, {kSvcStatus, 0x00u, index, verdict});
+    ++seq_svc_;
+    flush();
+    svc_index_ = static_cast<std::uint8_t>(index + 1u);
+    svc_retries_ = 0;
+    send_svc_query();
+  }
+
+    // The service walk's STATUS ([SVR-7]): 1 ends the walk at the index
+    // under request, anything else advances it. Plain replies under the
+    // requester's retry, never acked.
+  void on_service_status(const std::uint8_t *payload, std::uint16_t len)
+  {
+    if (len != 4u) {
+      return;
+    }
+    if (payload[2] != svc_index_) {
+      return;
+    }
+    if (payload[3] == 1u) {
+      awaiting_svc_ = false;
+      finish_handshake();
+    } else {
+      ++svc_index_;
+      svc_retries_ = 0;
+      send_svc_query();
+    }
+  }
+
+    // One SVC_REQUEST emission with a fresh rel_seq: the index, the req_id
+    // and the packed request travel after the opcode ([SVR-4]). Plain
+    // queueing, never a slot: pending REQUESTs replace at the index level
+    // instead ([SVR-10]).
+    // One REQUEST emission: the frame goes out and the stream tracks it,
+    // with the host's call under its req_id for the answer ([SVR-5]).
+  void emit_svc_request(
+    std::uint8_t index, std::uint8_t req, const std::vector<std::uint8_t> & payload,
+    std::uint8_t rel_seq)
+  {
+    std::vector<std::uint8_t> frame;
+    frame.reserve(payload.size() + 4u);
+    frame.push_back(kSvcRequest);
+    frame.push_back(rel_seq);
+    frame.push_back(req);
+    frame.push_back(index);
+    frame.insert(frame.end(), payload.begin(), payload.end());
+    svc_out_payload_ = frame;
+    queue_frame(kServicesTopic, seq_svc_, frame, false);
+    ++seq_svc_;
+    flush();
+    svc_out_active_ = true;
+    svc_out_rel_ = rel_seq;
+    svc_out_retries_ = 0;
+    svc_out_deadline_ms_ = now_ms() + kRelRetryMs;
+    svc_host_req_active_ = true;
+    svc_host_req_ = req;
+  }
+
+    // One RESPONSE emission: the frame goes out and the MCU's tracked call
+    // retires with it ([SVR-5]).
+  void emit_svc_response(
+    std::uint8_t req, std::uint8_t status, const std::vector<std::uint8_t> & payload,
+    std::uint8_t rel_seq)
+  {
+    std::vector<std::uint8_t> frame;
+    frame.reserve(payload.size() + 4u);
+    frame.push_back(kSvcResponse);
+    frame.push_back(rel_seq);
+    frame.push_back(req);
+    frame.push_back(status);
+    frame.insert(frame.end(), payload.begin(), payload.end());
+    svc_out_payload_ = frame;
+    queue_frame(kServicesTopic, seq_svc_, frame, false);
+    ++seq_svc_;
+    flush();
+    svc_out_active_ = true;
+    svc_out_rel_ = rel_seq;
+    svc_out_retries_ = 0;
+    svc_out_deadline_ms_ = now_ms() + kRelRetryMs;
+    svc_mcu_req_active_ = false;
+  }
+
+    // The pending answer goes out before the pending REQUESTs: it answers a
+    // live call under its own timeout ([SVR-5]).
+  void promote_svc_pending()
+  {
+    if (svc_pending_response_) {
+      const std::uint8_t rel_seq = rel_next_svc_++;
+      const std::uint8_t req = svc_pending_response_req_;
+      const std::uint8_t status = svc_pending_response_status_;
+      const std::vector<std::uint8_t> payload = svc_pending_response_payload_;
+      svc_pending_response_ = false;
+      emit_svc_response(req, status, payload, rel_seq);
+      return;
+    }
+    if (svc_pending_requests_.empty()) {
+      return;
+    }
+    const auto next = svc_pending_requests_.begin();
+    const std::uint8_t req = next->second.req;
+    const std::uint8_t index = next->first;
+    const std::vector<std::uint8_t> payload = next->second.payload;
+    svc_pending_requests_.erase(next);
+    const std::uint8_t rel_seq = rel_next_svc_++;
+    emit_svc_request(index, req, payload, rel_seq);
+  }
+
+    // The outstanding service frame's retry ([REL-2]): the same rel_seq
+    // under the next frame seq. Nothing unsent may wait for the link: a
+    // blocked link holds the retry without spending one, like a frame the
+    // link never carried. Spent retries drop the frame, count it and
+    // promote the next.
+  void poll_svc_reliable(std::int64_t now)
+  {
+    if (!svc_out_active_ || now < svc_out_deadline_ms_) {
+      return;
+    }
+    if (!queue_.empty()) {
+      return;
+    }
+    if (svc_out_retries_ >= kRelRetries) {
+      log(SessionLog::kWarning, "no ack for the service frame; the frame is dropped");
+      ++reliable_dropped_;
+      svc_out_active_ = false;
+      promote_svc_pending();
+      return;
+    }
+    ++svc_out_retries_;
+    svc_out_deadline_ms_ = now + kRelRetryMs;
+    queue_frame(kServicesTopic, seq_svc_, svc_out_payload_, false);
+    ++seq_svc_;
+    flush();
+  }
+
+    // One incoming service frame ([SVR-4] to [SVR-7], [REL-3]). Walk answers
+    // arrive while handshaking and are never acked; REQUEST and RESPONSE
+    // frames ride the reliable channel while connected, acked every time
+    // and applied at most once.
+  void on_services(const std::uint8_t *payload, std::uint16_t len)
+  {
+    if (len < 1u) {
+      return;
+    }
+    switch (payload[0]) {
+      case kSvcDeclare: {
+          if (state != SessionState::kHandshaking || !awaiting_svc_ || len < 2u ||
+            payload[1] != svc_index_)
+          {
+            return;
+          }
+          on_service_declare(payload, len);
+          return;
+        }
+      case kSvcStatus:
+        if (state == SessionState::kHandshaking && awaiting_svc_) {
+          on_service_status(payload, len);
+        }
+        return;
+      case kSvcRequest: {
+          if (state != SessionState::kConnected || len < 4u) {
+            return;
+          }
+          send_ack_frame(kServicesTopic, payload[1]);
+          std::uint8_t & expected = rel_expected_[kServicesTopic];
+          if (payload[1] != expected) {
+            return;
+          }
+          ++expected;
+          const std::uint8_t index = payload[3];
+          const ServiceInfo * known = nullptr;
+          for (const ServiceInfo & service : services_) {
+            if (service.index == index && service.status == kServiceStatusOk) {
+              known = &service;
+              break;
+            }
+          }
+          if (known == nullptr) {
+            log(SessionLog::kWarning, "SVC REQUEST for an unserved index is dropped");
+            return;
+          }
+          if (svc_mcu_req_active_) {
+            log(SessionLog::kWarning, "a second SVC REQUEST is dropped; the first is answered");
+            return;
+          }
+          svc_mcu_req_active_ = true;
+          svc_mcu_req_ = payload[2];
+          svc_mcu_index_ = index;
+          if (events.service_request) {
+            events.service_request(index, payload[2],
+              std::vector<std::uint8_t>(payload + 4u, payload + len));
+          }
+          return;
+        }
+      case kSvcResponse: {
+          if (state != SessionState::kConnected || len < 4u || payload[3] > kSvcBusy) {
+            return;
+          }
+          send_ack_frame(kServicesTopic, payload[1]);
+          std::uint8_t & expected = rel_expected_[kServicesTopic];
+          if (payload[1] != expected) {
+            return;
+          }
+          ++expected;
+          if (!svc_host_req_active_ || payload[2] != svc_host_req_) {
+            return;
+          }
+          svc_host_req_active_ = false;
+          if (events.service_response) {
+            events.service_response(payload[2], payload[3],
+              std::vector<std::uint8_t>(payload + 4u, payload + len));
+          }
+          return;
+        }
+      default:
+        break;
+    }
+  }
+
     // An ack for the outstanding SET clears it and promotes the oldest
     // pending one; anything else is a duplicate or a stranger ([REL-2]).
   void on_ack_frame(const std::uint8_t *payload, std::uint16_t len)
   {
-    if (state != SessionState::kConnected || len != 2u || payload[0] != kParamsTopic ||
-      !rel_out_active_ || payload[1] != rel_out_rel_)
-    {
+    if (state != SessionState::kConnected || len != 2u) {
       return;
     }
-    rel_out_active_ = false;
-    promote_pending();
+    if (payload[0] == kParamsTopic) {
+      if (!rel_out_active_ || payload[1] != rel_out_rel_) {
+        return;
+      }
+      rel_out_active_ = false;
+      promote_pending();
+      return;
+    }
+    if (payload[0] == kServicesTopic) {
+      if (!svc_out_active_ || payload[1] != svc_out_rel_) {
+        return;
+      }
+      svc_out_active_ = false;
+      promote_svc_pending();
+    }
   }
 
   void maybe_send_correction(std::int64_t now)
@@ -1267,6 +1624,10 @@ struct Session::Impl
       on_params(payload, len);
       return;
     }
+    if (topic_id == kServicesTopic) {
+      on_services(payload, len);
+      return;
+    }
     if (topic_id == kAckTopic) {
       on_ack_frame(payload, len);
       return;
@@ -1370,6 +1731,17 @@ struct Session::Impl
               send_param_req();
             }
           }
+        } else if (awaiting_svc_) {
+          if (now >= svc_deadline_ms_) {
+            if (svc_retries_ >= kSvcRetries) {
+              log(SessionLog::kWarning, "no SVC_DECLARE answered; the handshake starts over");
+              restart_handshake();
+              send_hello_req();
+            } else {
+              ++svc_retries_;
+              send_svc_query();
+            }
+          }
         } else if (now >= next_hello_req_ms) {
           send_hello_req();
         }
@@ -1384,6 +1756,7 @@ struct Session::Impl
             send_heartbeat();
           }
           poll_reliable(now);
+          poll_svc_reliable(now);
           maybe_send_ping(now);
                 // The correction floor needs no new PONG: with the estimate
                 // standing still the timer resends it on schedule ([SES-25]).
@@ -1423,6 +1796,7 @@ struct Session::Impl
   TransportFactory open;
   TopicResolver resolve;
   SessionEvents events;
+  ServiceResolver resolve_service;
 
   std::unique_ptr<Transport> transport;
   std::unique_ptr<FrameReader> reader;
@@ -1483,7 +1857,39 @@ struct Session::Impl
   int rel_out_retries_ = 0;
   std::int64_t rel_out_deadline_ms_ = 0;
   std::map<std::uint8_t, std::vector<std::uint8_t>> rel_pending_;
+    // The services walk ([SVR-7]): whether the parameter walk handed over,
+    // the index under request, its retries and its deadline.
+  bool awaiting_svc_ = false;
+  std::uint8_t svc_index_ = 0;
+  int svc_retries_ = 0;
+  std::int64_t svc_deadline_ms_ = 0;
+    // The services reliable stream ([REL-2], [SVR-4], [SVR-10]): one
+    // outstanding REQUEST or RESPONSE with its timer and retries, one
+    // pending REQUEST per index, one pending RESPONSE, and the next rel_seq
+    // of the channel's own stream. The MCU's outstanding call travels as
+    // its req_id and index, and the host's outstanding REQUEST as its req_id.
+  bool svc_out_active_ = false;
+  std::uint8_t svc_out_rel_ = 0;
+  std::vector<std::uint8_t> svc_out_payload_;
+  int svc_out_retries_ = 0;
+  std::int64_t svc_out_deadline_ms_ = 0;
+  struct SvcPendingRequest
+  {
+    std::uint8_t req = 0;
+    std::vector<std::uint8_t> payload;
+  };
+  std::map<std::uint8_t, SvcPendingRequest> svc_pending_requests_;
+  bool svc_pending_response_ = false;
+  std::uint8_t svc_pending_response_req_ = 0;
+  std::uint8_t svc_pending_response_status_ = 0;
+  std::vector<std::uint8_t> svc_pending_response_payload_;
+  bool svc_mcu_req_active_ = false;
+  std::uint8_t svc_mcu_req_ = 0;
+  std::uint8_t svc_mcu_index_ = 0;
+  bool svc_host_req_active_ = false;
+  std::uint8_t svc_host_req_ = 0;
   std::uint8_t rel_next_ = 0;
+  std::uint8_t rel_next_svc_ = 0;
   std::map<std::uint8_t, std::uint8_t> rel_expected_;
   std::uint32_t reliable_dropped_ = 0;
   std::uint32_t reliable_replaced_ = 0;
@@ -1494,6 +1900,10 @@ struct Session::Impl
     // READY keeps them for the parameters layer.
   std::vector<ParamInfo> collected_params;
   std::vector<ParamInfo> params;
+    // The service walk's DECLAREs ([SVR-7]): the walk collects them and
+    // READY keeps them for the services layer.
+  std::vector<ServiceInfo> collected_services;
+  std::vector<ServiceInfo> services_;
   Converter converter_;
   bool had_handshake = false;
   std::uint32_t next_token = 0u;
@@ -1517,6 +1927,9 @@ struct Session::Impl
     // restarting at each handshake and at READY ([FRM-4], [REL-5]).
   std::uint8_t seq_params_ = 0;
   std::uint8_t seq_ack_ = 0;
+    // The frame seq of the services channel, restarting at each handshake
+    // and at READY ([FRM-4], [SVR-4]).
+  std::uint8_t seq_svc_ = 0;
     // The seq the time channel shares between its PINGs and CORRECTIONs,
     // restarting at 0 after each handshake ([FRM-4], [FRM-5]).
   std::uint8_t seq_time = 0;
@@ -1527,9 +1940,10 @@ struct Session::Impl
 
 Session::Session(
   SessionConfig config, const Clock & clock, const Clock & ros_clock, TransportFactory open,
-  TopicResolver resolve, SessionEvents events)
-: impl_(std::make_unique<Impl>(config, clock, ros_clock, std::move(open), std::move(resolve),
-                                   std::move(events)))
+  TopicResolver resolve, SessionEvents events, ServiceResolver resolve_service)
+: impl_(std::make_unique<Impl>(
+    config, clock, ros_clock, std::move(open), std::move(resolve), std::move(events),
+    std::move(resolve_service)))
 {
 }
 
@@ -1559,6 +1973,11 @@ const std::vector<TopicInfo> & Session::topics() const
 const std::vector<ParamInfo> & Session::params() const
 {
   return impl_->params;
+}
+
+const std::vector<ServiceInfo> & Session::services() const
+{
+  return impl_->services_;
 }
 
 McuCounters Session::mcu_counters() const
@@ -1645,6 +2064,81 @@ bool Session::send_param_set(std::uint8_t index, const std::vector<std::uint8_t>
     } else {
       impl.rel_pending_.emplace(index, value);
     }
+  }
+  return true;
+}
+
+bool Session::send_service_request(
+  std::uint8_t index, std::uint8_t req_id, const std::vector<std::uint8_t> & payload)
+{
+  Impl & impl = *impl_;
+  if (impl.state != SessionState::kConnected) {
+    return false;
+  }
+  const ServiceInfo * known = nullptr;
+  for (const ServiceInfo & service : impl.services_) {
+    if (service.index == index) {
+      known = &service;
+      break;
+    }
+  }
+  if (known == nullptr || known->status != kServiceStatusOk) {
+    return false;
+  }
+  const std::size_t cap =
+    std::max<std::uint16_t>(impl.hello.rx_capacity, impl.hello.max_frame);
+  if (payload.size() + 4u > cap) {
+    return false;
+  }
+  if (impl.pending_bytes_ > 0u && impl.pending_bytes_ >= cap) {
+    return false;
+  }
+  if (!impl.svc_out_active_) {
+    const std::uint8_t rel_seq = impl.rel_next_svc_++;
+    impl.emit_svc_request(index, req_id, payload, rel_seq);
+  } else {
+    const auto found = impl.svc_pending_requests_.find(index);
+    if (found != impl.svc_pending_requests_.end()) {
+      found->second = Impl::SvcPendingRequest{req_id, payload};
+      ++impl.reliable_replaced_;
+    } else {
+      impl.svc_pending_requests_.emplace(index, Impl::SvcPendingRequest{req_id, payload});
+    }
+  }
+  return true;
+}
+
+bool Session::send_service_response(
+  std::uint8_t req_id, std::uint8_t status, const std::vector<std::uint8_t> & payload)
+{
+  Impl & impl = *impl_;
+  if (impl.state != SessionState::kConnected) {
+    return false;
+  }
+  if (!impl.svc_mcu_req_active_ || req_id != impl.svc_mcu_req_) {
+    return false;
+  }
+  const std::size_t cap =
+    std::max<std::uint16_t>(impl.hello.rx_capacity, impl.hello.max_frame);
+  if (payload.size() + 4u > cap) {
+    return false;
+  }
+  if (impl.pending_bytes_ > 0u && impl.pending_bytes_ >= cap) {
+    return false;
+  }
+  if (!impl.svc_out_active_) {
+    const std::uint8_t rel_seq = impl.rel_next_svc_++;
+    impl.emit_svc_response(req_id, status, payload, rel_seq);
+  } else if (impl.svc_pending_response_) {
+    impl.svc_pending_response_req_ = req_id;
+    impl.svc_pending_response_status_ = status;
+    impl.svc_pending_response_payload_ = payload;
+    ++impl.reliable_replaced_;
+  } else {
+    impl.svc_pending_response_ = true;
+    impl.svc_pending_response_req_ = req_id;
+    impl.svc_pending_response_status_ = status;
+    impl.svc_pending_response_payload_ = payload;
   }
   return true;
 }

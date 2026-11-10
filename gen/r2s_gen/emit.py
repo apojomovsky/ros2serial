@@ -213,5 +213,8 @@ def _c_name(type_name: str) -> str:
     if '/action/' in type_name:
         package, _, name = type_name.partition('/action/')
         return f'{package}__action__{name}'
+    if '/srv/' in type_name:
+        package, _, name = type_name.partition('/srv/')
+        return f'{package}__srv__{name}'
     package, _, name = type_name.partition('/msg/')
     return f'{package}__msg__{name}'

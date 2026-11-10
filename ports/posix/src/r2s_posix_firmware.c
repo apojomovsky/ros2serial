@@ -17,6 +17,7 @@
 #include "r2s/r2s.h"
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_port.h"
+#include "r2s/r2s_services.h"
 #include "r2s/r2s_session.h"
 #include "r2s_generated.h"
 
@@ -454,6 +455,131 @@ void r2s_on_joints(const sensor_msgs__msg__JointState *msg)
   fprintf(stderr, "r2s_posix: joints n=%lu\n", (unsigned long)s_joints_count);
 }
 
+/* The reset answer: success with "ok". A fieldless request decodes to
+ * nothing, so the take buffer only needs the frame headroom. */
+#define SVC_TAKE_CAP 8u
+
+/* A response whose send found the reliable stream busy stays pending under
+ * its req_id and goes out on a later tick; the take freed its slot, so no
+ * second request is taken while one answer waits. */
+static r2s_status_t publish_log_text(uint32_t value);
+
+static uint8_t s_answer_req = 0xFFu;
+
+/* The trigger call goes out once per connection; the outcome marker goes
+ * out on log_text once the answer arrives. 0xFF means nothing outstanding. */
+static uint8_t s_trigger_req = 0xFFu;
+static uint8_t s_trigger_called = 0u;
+static uint32_t s_marker_pending = 0xFFFFFFFFu;
+
+static r2s_status_t send_reset_answer(uint8_t req_id)
+{
+  std_srvs__srv__Trigger_Response response;
+  uint8_t payload[32];
+  r2s_codec_out_t out = {payload, (uint16_t)sizeof payload, 0u, 0u};
+  uint8_t field = 0xFFu;
+
+  memset(&response, 0, sizeof response);
+  response.success = 1u;
+  memcpy(response.message, "ok", 3u);
+  if (r2s_codec_encode(&r2s_generated_table, R2S_SERVICE_RESET_RESPONSE_TYPE, &response, 0u, &out,
+                         &field) != R2S_OK)
+  {
+    return R2S_ERR_BOUNDS;
+  }
+  return r2s_service_send_response(req_id, R2S_SVC_OK, payload, out.len);
+}
+
+static void answer_reset(void)
+{
+  if (s_answer_req != 0xFFu) {
+    if (send_reset_answer(s_answer_req) != R2S_ERR_TX_BUSY) {
+      s_answer_req = 0xFFu;
+    }
+    return;
+  }
+  for (;; ) {
+    uint8_t index;
+    uint8_t req;
+    uint8_t payload[SVC_TAKE_CAP];
+    uint16_t len = 0u;
+
+    if (r2s_service_take_request(&index, &req, payload, (uint16_t)sizeof payload, &len) != R2S_OK) {
+      return;
+    }
+    if (index != R2S_SERVICE_RESET_ID) {
+      continue;
+    }
+        /* A busy stream retries on a later tick; any other failure drops
+         * the answer, since retrying it could never succeed. */
+    if (send_reset_answer(req) == R2S_ERR_TX_BUSY) {
+      s_answer_req = req;
+      return;
+    }
+  }
+}
+
+static void call_trigger(void)
+{
+  if (s_trigger_called != 0u) {
+    return;
+  }
+  {
+    uint8_t req = 0xFFu;
+
+    if (r2s_service_call(R2S_SERVICE_TRIGGER_ID, NULL, 0u, &req) == R2S_OK) {
+      s_trigger_req = req;
+      s_trigger_called = 1u;
+    }
+  }
+}
+
+static void report_trigger_outcomes(void)
+{
+  for (;; ) {
+    uint8_t req;
+    uint8_t status;
+    uint8_t payload[32];
+    uint16_t len = 0u;
+
+    if (s_marker_pending == 0xFFFFFFFFu) {
+      if (r2s_service_take_response(&req, &status, payload, (uint16_t)sizeof payload,
+        &len) != R2S_OK)
+      {
+        return;
+      }
+      if (req != s_trigger_req) {
+        continue;
+      }
+      s_trigger_req = 0xFFu;
+      s_marker_pending = 0x5E000000u | (uint32_t)status;
+    }
+    if (publish_log_text(s_marker_pending) == R2S_OK) {
+      s_marker_pending = 0xFFFFFFFFu;
+    } else {
+      return;
+    }
+  }
+}
+
+/* Serves reset, calls trigger once per connection, and reports the call's
+ * outcome on log_text, so the end-to-end service scenario observes the
+ * round trip in both directions. */
+static void service_tick(void)
+{
+  answer_reset();
+  call_trigger();
+  report_trigger_outcomes();
+}
+
+static void service_reset_link(void)
+{
+  s_answer_req = 0xFFu;
+  s_trigger_req = 0xFFu;
+  s_trigger_called = 0u;
+  s_marker_pending = 0xFFFFFFFFu;
+}
+
 /* One log_text line: the value as 8 hex digits. Fixed width fits the
  * handwritten String bound of 8 characters for every id. */
 static r2s_status_t publish_log_text(uint32_t value)
@@ -545,6 +671,11 @@ int main(int argc, char **argv)
     fprintf(stderr, "r2s_posix: cannot configure parameters\n");
     return 2;
   }
+    /* The service table the bridge walks after the parameters. */
+  if (r2s_services_configure(r2s_services, R2S_SERVICE_COUNT) != R2S_OK) {
+    fprintf(stderr, "r2s_posix: cannot configure services\n");
+    return 2;
+  }
   r2s_init();
   fprintf(stderr, "r2s_posix: ready node=%s topics=%u rate=%u\n", opts.node, count, opts.rate);
   interval = (uint32_t)(1000u / opts.rate);
@@ -560,6 +691,7 @@ int main(int argc, char **argv)
              * queueing a burst for the reconnect. */
       last_pub = now;
       last_time = now;
+      service_reset_link();
       if (cap_armed != 0u) {
         cap_armed = 0u;
         r2s_posix_set_tx_cap(0xFFFFu);
@@ -575,6 +707,7 @@ int main(int argc, char **argv)
     }
         /* Applied SETs print here, so the suite reads the live values. */
     r2s_posix_params_report();
+    service_tick();
     if (opts.log_lines != 0u && (uint32_t)(now - last_log) >= LOG_PERIOD_MS) {
       emit_log_lines();
       last_log = now;

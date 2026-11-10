@@ -32,12 +32,24 @@ _REQUIRED_FIX = {
     'name': 'add name: <topic>',
     'type': 'add type: <package/msg/Type>',
     'direction': 'add direction: pub or direction: sub',
+    'services': 'add services: with one entry per service',
+    'role': 'add role: server or role: client',
+}
+
+_SERVICE_REQUIRED_FIX = {
+    'name': 'add name: <service>',
+    'type': 'add type: <package/srv/Type>',
+    'role': 'add role: server or role: client',
 }
 
 _TYPE_PROBLEM_FIX = {
     'node': ('expected a string', 'write the node name, such as node: base_controller'),
     'features': ('expected a list', 'write one feature per line, such as features: [time, log]'),
     'topics': ('expected a list', 'write one entry per topic, starting each with - name: <topic>'),
+    'services': (
+        'expected a list',
+        'write one entry per service, starting each with - name: <service>',
+    ),
     'name': ('expected a string', 'write the topic name, such as name: battery'),
     'type': ('expected a string', 'write package/msg/Type, such as std_msgs/msg/Float32'),
     'direction': ('expected a string', 'write direction: pub or direction: sub'),
@@ -75,11 +87,19 @@ class Topic:
 
 
 @dataclass(frozen=True)
+class Service:
+    name: str
+    type_name: str
+    role: str
+
+
+@dataclass(frozen=True)
 class Config:
     """One validated r2s.yaml: the node, its topics, and its limits."""
 
     node: str
     topics: tuple[Topic, ...] = ()
+    services: tuple[Service, ...] = ()
     distro: str = 'jazzy'
     handshake: str = 'full'
     tier: str = 'M'
@@ -106,6 +126,11 @@ def _string_keys(path: str | Path, data: dict) -> None:
         for index, entry in enumerate(topics):
             if isinstance(entry, dict):
                 _string_keys_at(f'{path}: topics[{index}]', entry)
+    services = data.get('services')
+    if isinstance(services, list):
+        for index, entry in enumerate(services):
+            if isinstance(entry, dict):
+                _string_keys_at(f'{path}: services[{index}]', entry)
     for section in ('bounds', 'limits'):
         mapping = data.get(section)
         if isinstance(mapping, dict):
@@ -225,7 +250,10 @@ def _describe(path: str, data: dict, error: Any) -> MessageError:
         return _describe_bound(where, data['bounds'][parts[1]])
     if error.validator == 'required':
         missing = sorted(key for key in error.validator_value if key not in error.instance)[0]
-        return MessageError(where, f"missing required key '{missing}'", _REQUIRED_FIX[missing])
+        fix = _REQUIRED_FIX[missing]
+        if parts and parts[0] == 'services':
+            fix = _SERVICE_REQUIRED_FIX.get(missing, fix)
+        return MessageError(where, f"missing required key '{missing}'", fix)
     if error.validator == 'additionalProperties':
         return _describe_unknown(where, error)
     if error.validator == 'type':
@@ -317,7 +345,8 @@ def _describe_enum(path: str, error: Any) -> MessageError:
 
 
 def _describe_pattern(path: str, error: Any) -> MessageError:
-    key = error.absolute_path[-1]
+    parts = list(error.absolute_path)
+    key = parts[-1] if parts else ''
     value = error.instance
     if key == 'node':
         return MessageError(
@@ -326,16 +355,24 @@ def _describe_pattern(path: str, error: Any) -> MessageError:
             'use letters, digits and underscores, starting with a letter',
         )
     if key == 'name':
+        kind = 'service' if parts and parts[0] == 'services' else 'topic'
+        example = 'reset' if kind == 'service' else 'battery'
         if isinstance(value, str) and value.startswith('/'):
             return MessageError(
                 path,
-                f"'{value}' is not a relative topic name",
-                'drop the leading slash, such as battery',
+                f"'{value}' is not a relative {kind} name",
+                f'drop the leading slash, such as {example}',
             )
         return MessageError(
             path,
-            f"'{value}' is not a valid topic name",
+            f"'{value}' is not a valid {kind} name",
             'use letters, digits, underscores and slashes, starting with a letter or underscore',
+        )
+    if key == 'type' and parts and parts[0] == 'services':
+        return MessageError(
+            path,
+            f"'{value}' is not a service type",
+            'write package/srv/Type, such as std_srvs/srv/Trigger',
         )
     return MessageError(
         path,
@@ -374,6 +411,23 @@ def _model(path: str | Path, data: dict) -> Config:
                 narrow_float64=entry.get('narrow_float64', False),
             )
         )
+    services = []
+    seen_services = set()
+    for index, entry in enumerate(data.get('services', [])):
+        if entry['name'] in seen_services:
+            raise MessageError(
+                f'{path}: services[{index}].name',
+                f"duplicate service name '{entry['name']}'",
+                'give each service its own name',
+            )
+        seen_services.add(entry['name'])
+        services.append(
+            Service(
+                name=entry['name'],
+                type_name=entry['type'],
+                role=entry['role'],
+            )
+        )
     bounds = {
         key: value
         for key, value in data.get('bounds', {}).items()
@@ -384,6 +438,7 @@ def _model(path: str | Path, data: dict) -> Config:
     return Config(
         node=data['node'],
         topics=tuple(topics),
+        services=tuple(services),
         distro=data.get('distro', 'jazzy'),
         handshake=data.get('handshake', 'full'),
         tier=data.get('tier', 'M'),

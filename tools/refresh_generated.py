@@ -11,6 +11,7 @@ runs it as part of the cut. Each group mirrors its golden test's inputs, so
 a drift between this script and the tests fails the suite.
 """
 
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -26,6 +27,7 @@ from r2s_gen import descriptors  # noqa: E402
 from r2s_gen import emit  # noqa: E402
 from r2s_gen import layouts  # noqa: E402
 from r2s_gen import msgs  # noqa: E402
+from r2s_gen import services  # noqa: E402
 from r2s_gen import topics  # noqa: E402
 from r2s_gen.bounds import ResolvedMessage  # noqa: E402
 
@@ -81,8 +83,13 @@ bounds:
 
 
 def _resolve(loaded: config.Config) -> tuple[msgs.MessageRepository, dict[str, ResolvedMessage]]:
-    repository = msgs.MessageRepository()
-    roots = [topic.type_name for topic in loaded.topics]
+    # The snapshots carry no services, so service definitions resolve from
+    # the installed distro, the same source the firmware's distro reads.
+    prefixes = [
+        Path(entry) for entry in os.environ.get('AMENT_PREFIX_PATH', '').split(os.pathsep) if entry
+    ]
+    repository = msgs.MessageRepository(ament_prefix_path=prefixes, distro=loaded.distro)
+    roots = [topic.type_name for topic in loaded.topics] + services.roots(loaded)
     return repository, bounds.resolve(repository, roots, bounds=dict(loaded.bounds))
 
 

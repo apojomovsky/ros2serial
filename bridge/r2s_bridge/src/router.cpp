@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <deque>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -20,10 +21,21 @@
 
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
+#include <rclcpp/create_generic_client.hpp>
 #include <rclcpp/create_generic_publisher.hpp>
 #include <rclcpp/create_generic_subscription.hpp>
 
+#if __has_include(<rclcpp/generic_service.hpp>)
+#include <rclcpp/create_generic_service.hpp>
+#include <rclcpp/generic_service.hpp>
+#define R2S_HAS_GENERIC_SERVICE 1
+#else
+#include <rcl/error_handling.h>
+#include <rcl/service.h>
+#endif
+
 #include "r2s_bridge/converter.hpp"
+#include "r2s_bridge/service_types.hpp"
 #include "r2s_bridge/type_support.hpp"
 extern "C" {
 #include "r2s/r2s.h"
@@ -41,6 +53,28 @@ constexpr std::uint8_t kReliableFlag = 0x08u;
 // deterministically uncreatable name stops retrying after its episode.
 constexpr int kRepairSpacingMs = 100;
 constexpr int kMaxRepairAttempts = 10;
+
+// The MCU call timeout ([SVR-8]): a call with no answer in this long is
+// reported to its caller, and its bookkeeping pruned.
+constexpr std::int64_t kServiceCallTimeoutMs = 5000;
+
+// How many ROS calls one service queues behind its in-flight one before the
+// router answers the newest straight away.
+constexpr std::size_t kMaxQueuedRosCalls = 3;
+
+// One wire status the router answers an MCU call with when it cannot serve
+// it ([SVR-6]).
+constexpr std::uint8_t kSvcStatusOk = 0u;
+constexpr std::uint8_t kSvcStatusBadPayload = 2u;
+constexpr std::uint8_t kSvcStatusBusy = 3u;
+
+// The ROS request identity the answer path carries: shared on the generic
+// service, a copied struct on the rcl fallback.
+#if defined(R2S_HAS_GENERIC_SERVICE)
+using RosCallHeader = std::shared_ptr<rmw_request_id_t>;
+#else
+using RosCallHeader = rmw_request_id_t;
+#endif
 
 // The link state the H8 snapshot reports, one word per state. The table order
 // follows the SessionState enumerators, so no branch can go untaken.
@@ -218,12 +252,15 @@ struct Router::Impl
     rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr in_topics, TransportFactory in_open,
     const Clock & in_clock, const Clock & in_ros_clock, RouterParams in_params, LogSink in_sink,
     SessionConfig session_config, LogSink in_mcu_sink,
-    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr in_node_params)
+    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr in_node_params,
+    NodeServiceInterfaces in_node_services)
   : topics(in_topics), params(std::move(in_params)), sink(std::move(in_sink)), clock(in_clock),
     mcu_sink(std::move(in_mcu_sink)), node_params_(std::move(in_node_params)),
+    node_services_(std::move(in_node_services)),
     session_(session_config, in_clock, in_ros_clock, std::move(in_open), resolve_topic_type,
       SessionEvents{log_event(), handshake_event(), user_event(), mcu_log_event(),
-        param_status_event()})
+        param_status_event(), service_request_event(), service_response_event()},
+      resolve_service_type)
   {
     if (!sink) {
       throw std::invalid_argument("r2s_bridge::Router: a log sink is required");
@@ -263,6 +300,73 @@ struct Router::Impl
     rclcpp::GenericPublisher::SharedPtr pub;
     rclcpp::GenericSubscription::SharedPtr sub;
     std::size_t publish_failures = 0;
+  };
+
+    // One ROS request taken for an MCU-served service, packed and waiting
+    // for its turn on the wire, or sent and waiting for the MCU.
+  struct RosCall
+  {
+    RosCallHeader header;
+    std::vector<std::uint8_t> packed;
+  };
+
+    // One ROS call in flight toward the MCU: the header answers the ROS
+    // caller when the MCU RESPONSE arrives, and the deadline prunes it
+    // ([SVR-8]).
+  struct InflightRosCall
+  {
+    RosCallHeader header;
+    std::int64_t sent_ms = 0;
+  };
+
+    // One MCU call in flight toward ROS: the future carries the ROS answer,
+    // and the deadline answers busy when ROS stays silent ([SVR-8]).
+  struct InflightMcuCall
+  {
+    InflightMcuCall(
+      std::uint8_t req_in, ServiceTypes::Struct request_in,
+      rclcpp::GenericClient::FutureAndRequestId future_in, std::int64_t seq_in,
+      std::int64_t sent_in)
+    : mcu_req(req_in), request(std::move(request_in)), future(std::move(future_in)),
+      future_seq(seq_in), sent_ms(sent_in) {}
+    std::uint8_t mcu_req = 0;
+    ServiceTypes::Struct request;
+    rclcpp::GenericClient::FutureAndRequestId future;
+    std::int64_t future_seq = 0;
+    std::int64_t sent_ms = 0;
+  };
+
+    // One routed service's endpoints. A server-role service is a ROS service
+    // answered from the MCU; a client-role service is a ROS client fed by
+    // MCU calls. Move-only: the rcl handle and the futures do not copy.
+  struct ServiceRoute
+  {
+    ServiceRoute(ServiceInfo in_info, ServiceTypes in_types)
+    : info(std::move(in_info)), types(std::move(in_types)) {}
+#if !defined(R2S_HAS_GENERIC_SERVICE)
+    ~ServiceRoute()
+    {
+      if (rcl_valid) {
+        [[maybe_unused]] const rcl_ret_t fini = rcl_service_fini(&rcl_service, rcl_node.get());
+        (void)fini;
+      }
+    }
+#endif
+    ServiceInfo info;
+    ServiceTypes types;
+#if defined(R2S_HAS_GENERIC_SERVICE)
+    rclcpp::GenericService::SharedPtr service;
+#else
+    rcl_service_t rcl_service = rcl_get_zero_initialized_service();
+    std::shared_ptr<rcl_node_t> rcl_node;
+    bool rcl_valid = false;
+    ServiceTypes::Struct take_storage;
+#endif
+    rclcpp::GenericClient::SharedPtr client;
+    std::map<std::uint8_t, InflightRosCall> ros_inflight;
+    std::uint8_t next_req = 0;
+    std::deque<RosCall> ros_queue;
+    std::map<std::uint8_t, InflightMcuCall> mcu_inflight;
   };
 
     // Poll-time repair attempts per topic missing despite an ok verdict: how
@@ -309,6 +413,24 @@ struct Router::Impl
       [this](std::uint8_t id, const std::vector<std::uint8_t> & payload) {
         on_user_frame(id, payload);
       };
+  }
+
+  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
+  service_request_event()
+  {
+    return [this](std::uint8_t index, std::uint8_t req,
+             const std::vector<std::uint8_t> & payload) {
+             on_service_request(index, req, payload);
+           };
+  }
+
+  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
+  service_response_event()
+  {
+    return [this](std::uint8_t req, std::uint8_t status,
+             const std::vector<std::uint8_t> & payload) {
+             on_service_response(req, status, payload);
+           };
   }
 
   void emit(SessionLog level, const std::string & text)
@@ -430,6 +552,10 @@ struct Router::Impl
         // Every handshake re-syncs the parameters: a reboot resets the MCU
         // to its defaults, so the current values go out again ([PAR-9]).
     sync_params();
+        // Services rebuild the same way: a re-handshake drops every
+        // in-flight call on both sides ([SVR-8], [REL-5]), so no ROS caller
+        // survives it.
+    sync_services();
   }
 
   void sync_routes()
@@ -445,6 +571,430 @@ struct Router::Impl
         continue;
       }
       ensure_route(info, SessionLog::kError);
+    }
+  }
+
+    // One ROS server for an MCU-served service: the distro's generic
+    // service where it has one, the rcl handle with introspection support
+    // where it does not (research ticket R4). Throws naming the service on
+    // any failure, so the caller refuses the route instead of serving it.
+  void make_ros_server(ServiceRoute & route)
+  {
+    if (node_services_.base == nullptr || node_services_.services == nullptr) {
+      throw std::invalid_argument("no node interfaces for the service server");
+    }
+#if defined(R2S_HAS_GENERIC_SERVICE)
+    auto callback = [this, index = route.info.index](
+                      std::shared_ptr<rmw_request_id_t> header,
+                      rclcpp::GenericService::SharedRequest request) {
+        std::lock_guard<std::recursive_mutex> guard(mutex);
+        on_ros_request(index, std::move(header), std::move(request));
+      };
+    route.service = rclcpp::create_generic_service(node_services_.base, node_services_.services,
+        route.info.service_name, route.info.type_name, std::move(callback), rclcpp::ServicesQoS(),
+        nullptr);
+#else
+    route.rcl_node = node_services_.base->get_shared_rcl_node_handle();
+        // rcl takes the name as given, so expand and remap it the way the
+        // node would for a managed service.
+    const std::string expanded =
+      node_services_.base->resolve_topic_or_service_name(route.info.service_name, true);
+    rcl_service_options_t options = rcl_service_get_default_options();
+    // GCOVR_EXCL_START: rcl_service_init fails only on a middleware fault
+    // which a unit test cannot inject; the success path is tested.
+    if (rcl_service_init(&route.rcl_service, route.rcl_node.get(),
+          route.types.cpp_service_handle(), expanded.c_str(), &options) != RCL_RET_OK)
+    {
+      rcl_reset_error();
+      throw std::runtime_error("rcl_service_init failed");
+    }
+    // GCOVR_EXCL_STOP
+    route.rcl_valid = true;
+    route.take_storage = route.types.make_request();
+#endif
+  }
+
+    // One ROS client for an MCU-called service: the generic client on every
+    // distro (research ticket R4). Throws naming the service on failure.
+  void make_ros_client(ServiceRoute & route)
+  {
+    if (node_services_.base == nullptr || node_services_.graph == nullptr ||
+      node_services_.services == nullptr)
+    {
+      throw std::invalid_argument("no node interfaces for the service client");
+    }
+    route.client = rclcpp::create_generic_client(node_services_.base, node_services_.graph,
+        node_services_.services, route.info.service_name, route.info.type_name);
+  }
+
+    // Gives one ok service its route: the introspection handles, then the
+    // ROS endpoints its role needs. A service whose type does not load
+    // never reaches here: the walk verdict refused it ([SVR-7]).
+  void ensure_service_route(const ServiceInfo & info)
+  {
+    std::unique_ptr<ServiceRoute> route;
+    try {
+      route = std::make_unique<ServiceRoute>(info, ServiceTypes(info.type_name));
+      // GCOVR_EXCL_START: resolve_service_type reports ok only after the
+      // same library and service handle load, so the constructor cannot
+      // throw for a routed service; a unit test cannot stage a failure
+      // between the verdict and this lookup.
+    } catch (const std::exception & failure) {
+      service_repairs_[info.index].reason = failure.what();
+      emit(SessionLog::kError,
+        "service '" + info.service_name + "': no route (" + failure.what() + ")");
+      return;
+    }
+    // GCOVR_EXCL_STOP
+    try {
+      if (info.role == kServiceRoleServer) {
+        make_ros_server(*route);
+      } else {
+        make_ros_client(*route);
+      }
+    } catch (const std::exception & failure) {
+      service_repairs_[info.index].reason = failure.what();
+      emit(SessionLog::kError,
+        "service '" + info.service_name + "': no endpoint (" + failure.what() + ")");
+      return;
+    }
+    service_repairs_.erase(info.index);
+    service_routes_[info.index] = std::move(route);
+  }
+
+  void sync_services()
+  {
+    service_routes_.clear();
+    service_repairs_.clear();
+    for (const ServiceInfo & info : session_.services()) {
+      if (info.status != kServiceStatusOk) {
+        continue;
+      }
+      ensure_service_route(info);
+    }
+  }
+
+    // One packed ROS request from the take path: queued behind the
+    // in-flight one, or answered empty when the queue is full. The packed
+    // bytes are already converted; the header answers the ROS caller.
+  void enqueue_ros_call(std::uint8_t index, RosCall call)
+  {
+    const auto found = service_routes_.find(index);
+    // GCOVR_EXCL_START: only the generic-service callback can hand over an
+    // index the routes dropped; the rcl take path always names a live route,
+    // and a unit test cannot feed the unbuilt callback.
+    if (found == service_routes_.end()) {
+      emit(SessionLog::kWarning,
+        "service index " + std::to_string(index) + ": no route for the ROS request");
+      return;
+    }
+    // GCOVR_EXCL_STOP
+    ServiceRoute & route = *found->second;
+    if (route.ros_queue.size() >= kMaxQueuedRosCalls) {
+      emit(SessionLog::kWarning,
+        "service '" + route.info.service_name + "': overloaded, a ROS call is dropped");
+      answer_ros_call(route, call.header, route.types.make_response());
+      return;
+    }
+    route.ros_queue.push_back(std::move(call));
+  }
+
+#if defined(R2S_HAS_GENERIC_SERVICE)
+    // One ROS request the generic service took: pack it now, so a failure
+    // answers its caller straight away instead of queueing garbage.
+  void on_ros_request(
+    std::uint8_t index, std::shared_ptr<rmw_request_id_t> header,
+    rclcpp::GenericService::SharedRequest request)
+  {
+    const auto found = service_routes_.find(index);
+    if (found == service_routes_.end()) {
+      return;
+    }
+    ServiceRoute & route = *found->second;
+    RosCall call;
+    call.header = std::move(header);
+    const ConvertResult result = converter_.pack_from_struct(route.types.request_type_name(), false,
+        request.get(), call.packed);
+    if (result.fail != ConvertFail::kNone) {
+      emit(SessionLog::kWarning, "service '" + route.info.service_name +
+        "': dropped ROS request (" + fail_name(result.fail) + " at '" +
+        field_text(route.types.request_type_name(), result.field) + "')");
+      answer_ros_call(route, call.header, route.types.make_response());
+      return;
+    }
+    enqueue_ros_call(index, std::move(call));
+  }
+#endif
+
+    // One MCU call while connected: unpack it into a ROS call, or answer
+    // busy when it does not unpack ([SVR-6]). A call for an index with no
+    // client is a caller bug; busy tells it to back off.
+  void on_service_request(
+    std::uint8_t index, std::uint8_t req, const std::vector<std::uint8_t> & payload)
+  {
+    std::lock_guard<std::recursive_mutex> guard(mutex);
+    const auto found = service_routes_.find(index);
+    // GCOVR_EXCL_START: the session drops REQUESTs for unknown indexes
+    // before the event fires, so this guard cannot trip; a unit test cannot
+    // fire the event past the session.
+    if (found == service_routes_.end() || found->second->client == nullptr) {
+      emit(SessionLog::kWarning,
+        "service index " + std::to_string(index) + ": no ROS client for the MCU call");
+      session_.send_service_response(req, kSvcStatusBusy, {});
+      return;
+    }
+    // GCOVR_EXCL_STOP
+    ServiceRoute & route = *found->second;
+    // GCOVR_EXCL_START: the session holds one MCU call per slot and drops
+    // the second before the event fires, so this guard cannot trip; a unit
+    // test cannot fire the event past the session.
+    if (route.mcu_inflight.count(req) != 0u) {
+      return;
+    }
+    // GCOVR_EXCL_STOP
+    ServiceTypes::Struct request = route.types.make_request();
+    const ConvertResult result = converter_.unpack_to_struct(route.types.request_type_name(), false,
+        payload.data(), payload.size(), request.storage.data());
+    if (result.fail != ConvertFail::kNone) {
+      emit(SessionLog::kWarning, "service '" + route.info.service_name +
+        "': dropped MCU call (" + fail_name(result.fail) + " at '" +
+        field_text(route.types.request_type_name(), result.field) + "')");
+      session_.send_service_response(req, kSvcStatusBadPayload, {});
+      return;
+    }
+    try {
+      auto sent = route.client->async_send_request(request.storage.data());
+      const std::int64_t seq = sent.request_id;
+      route.mcu_inflight.emplace(req, InflightMcuCall(req, std::move(request), std::move(sent),
+        seq, now_ms()));
+      // GCOVR_EXCL_START: the request above is converted and the client is
+      // live, so async_send_request cannot throw here; a unit test cannot
+      // stage a middleware failure underneath it.
+    } catch (const std::exception & failure) {
+      emit(SessionLog::kWarning,
+        "service '" + route.info.service_name + "': no ROS call (" + failure.what() + ")");
+      session_.send_service_response(req, kSvcStatusBusy, {});
+      return;
+    }
+    // GCOVR_EXCL_STOP
+  }
+
+    // One MCU answer while connected: the req names the ROS caller it
+    // belongs to. A nonzero status answers empty; anything for an unknown
+    // req already timed out and is ignored ([SVR-5], [SVR-6], [SVR-8]).
+  void on_service_response(
+    std::uint8_t req, std::uint8_t status, const std::vector<std::uint8_t> & payload)
+  {
+    std::lock_guard<std::recursive_mutex> guard(mutex);
+    for (auto & entry : service_routes_) {
+      ServiceRoute & route = *entry.second;
+      const auto found = route.ros_inflight.find(req);
+      if (found == route.ros_inflight.end()) {
+        continue;
+      }
+      InflightRosCall call = std::move(found->second);
+      route.ros_inflight.erase(found);
+      if (status == kSvcStatusOk) {
+        ServiceTypes::Struct response = route.types.make_response();
+        const ConvertResult result = converter_.unpack_to_struct(
+            route.types.response_type_name(), false, payload.data(), payload.size(),
+            response.storage.data());
+        if (result.fail != ConvertFail::kNone) {
+          emit(SessionLog::kWarning, "service '" + route.info.service_name +
+            "': dropped MCU answer (" + fail_name(result.fail) + " at '" +
+            field_text(route.types.response_type_name(), result.field) + "')");
+          answer_ros_call(route, call.header, route.types.make_response());
+        } else {
+          answer_ros_call(route, call.header, std::move(response));
+        }
+      } else {
+        emit(SessionLog::kWarning, "service '" + route.info.service_name +
+          "': the MCU answered status " + std::to_string(status));
+        answer_ros_call(route, call.header, route.types.make_response());
+      }
+      pump_ros_queue(route);
+      return;
+    }
+  }
+
+    // Answers one taken ROS request from a filled response struct. A zero
+    // response is the honest answer when the MCU never produced one.
+  void answer_ros_call(
+    ServiceRoute & route, const RosCallHeader & header, ServiceTypes::Struct response)
+  {
+#if defined(R2S_HAS_GENERIC_SERVICE)
+    // Single owner for the response bytes: the shared pointer aliases the
+    // bridge-owned struct, so its fini runs once and nothing is copied
+    // between owners with separate finis.
+    auto owned = std::make_shared<ServiceTypes::Struct>(std::move(response));
+    std::shared_ptr<void> shared(owned, owned->storage.data());
+    route.service->send_response(*header, shared);
+#else
+    rmw_request_id_t id = header;
+    // GCOVR_EXCL_START: the header comes from a live take and the response
+    // is filled, so rcl_send_response only fails on a middleware fault which
+    // a unit test cannot inject.
+    if (rcl_send_response(&route.rcl_service, &id, response.storage.data()) != RCL_RET_OK) {
+      rcl_reset_error();
+      emit(SessionLog::kWarning,
+        "service '" + route.info.service_name + "': no ROS answer (" +
+        std::to_string(id.sequence_number) + ")");
+    }
+    // GCOVR_EXCL_STOP
+#endif
+  }
+
+    // Sends the next queued ROS call while none is in flight: the session
+    // holds one outstanding frame per channel, so one in flight per service
+    // keeps every caller answerable ([SVR-4], [SVR-10]).
+  void pump_ros_queue(ServiceRoute & route)
+  {
+    if (!route.ros_inflight.empty() || route.ros_queue.empty()) {
+      return;
+    }
+    RosCall call = std::move(route.ros_queue.front());
+    route.ros_queue.pop_front();
+    std::uint8_t req = route.next_req++;
+    // GCOVR_EXCL_START: the id wraps only after 256 sends, and the queue
+    // holds 3 with one in flight, so the in-flight set can never collide in
+    // a unit test; the fuzz corpus cannot stage 256 answered calls either.
+    while (route.ros_inflight.count(req) != 0u) {
+      req = route.next_req++;
+    }
+    // GCOVR_EXCL_STOP
+    if (!session_.send_service_request(route.info.index, req, call.packed)) {
+      emit(SessionLog::kWarning,
+        "service '" + route.info.service_name + "': the link refused the ROS call");
+      answer_ros_call(route, call.header, route.types.make_response());
+      pump_ros_queue(route);
+      return;
+    }
+    InflightRosCall inflight;
+    inflight.header = std::move(call.header);
+    inflight.sent_ms = now_ms();
+    route.ros_inflight[req] = std::move(inflight);
+  }
+
+    // The session clock in milliseconds, for the call deadlines ([SVR-8]).
+  std::int64_t now_ms() const
+  {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(clock.now()).count();
+  }
+
+    // Takes pending ROS requests on the rcl fallback: the generic service
+    // feeds its own callback instead. A take that finds nothing resets the
+    // middleware error and moves on; the 1 ms poll takes again.
+  void take_ros_requests()
+  {
+#if !defined(R2S_HAS_GENERIC_SERVICE)
+    for (auto & entry : service_routes_) {
+      ServiceRoute & route = *entry.second;
+      if (!route.rcl_valid || route.info.role != kServiceRoleServer) {
+        continue;
+      }
+      rmw_service_info_t header{};
+      const rcl_ret_t taken =
+        rcl_take_request_with_info(&route.rcl_service, &header, route.take_storage.storage.data());
+      if (taken != RCL_RET_OK) {
+        rcl_reset_error();
+        continue;
+      }
+      RosCall call;
+      call.header = header.request_id;
+      const ConvertResult result = converter_.pack_from_struct(
+          route.types.request_type_name(), false, route.take_storage.storage.data(), call.packed);
+      if (result.fail != ConvertFail::kNone) {
+        emit(SessionLog::kWarning, "service '" + route.info.service_name +
+          "': dropped ROS request (" + fail_name(result.fail) + " at '" +
+          field_text(route.types.request_type_name(), result.field) + "')");
+        answer_ros_call(route, call.header, route.types.make_response());
+        continue;
+      }
+      enqueue_ros_call(route.info.index, std::move(call));
+    }
+#endif
+  }
+
+    // Moves every service route: queued ROS calls go out, answered MCU
+    // calls complete, and calls older than the call timeout report back
+    // ([SVR-8]) instead of leaking (research ticket R4).
+  void poll_services()
+  {
+    if (session_.state() != SessionState::kConnected) {
+      return;
+    }
+    take_ros_requests();
+    const std::int64_t now = now_ms();
+    for (auto & entry : service_routes_) {
+      ServiceRoute & route = *entry.second;
+      pump_ros_queue(route);
+      for (auto it = route.ros_inflight.begin(); it != route.ros_inflight.end();) {
+        if (now - it->second.sent_ms < kServiceCallTimeoutMs) {
+          ++it;
+          continue;
+        }
+        emit(SessionLog::kWarning, "service '" + route.info.service_name +
+          "': the MCU never answered, a ROS call is dropped");
+        answer_ros_call(route, it->second.header, route.types.make_response());
+        it = route.ros_inflight.erase(it);
+        pump_ros_queue(route);
+      }
+      for (auto it = route.mcu_inflight.begin(); it != route.mcu_inflight.end();) {
+        InflightMcuCall & call = it->second;
+        if (call.future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+          if (now - call.sent_ms >= kServiceCallTimeoutMs) {
+            emit(SessionLog::kWarning, "service '" + route.info.service_name +
+              "': no ROS answer, the MCU call is busy");
+            route.client->remove_pending_request(call.future_seq);
+            session_.send_service_response(call.mcu_req, kSvcStatusBusy, {});
+            it = route.mcu_inflight.erase(it);
+          } else {
+            ++it;
+          }
+          continue;
+        }
+        std::vector<std::uint8_t> packed;
+        const ConvertResult result = converter_.pack_from_struct(
+            route.types.response_type_name(), false, call.future.get().get(), packed);
+        const std::uint8_t mcu_req = call.mcu_req;
+        if (result.fail != ConvertFail::kNone) {
+          emit(SessionLog::kWarning, "service '" + route.info.service_name +
+            "': dropped ROS answer (" + fail_name(result.fail) + " at '" +
+            field_text(route.types.response_type_name(), result.field) + "')");
+          session_.send_service_response(mcu_req, kSvcStatusBusy, {});
+        } else if (!session_.send_service_response(mcu_req, kSvcStatusOk, packed)) {
+          emit(SessionLog::kWarning,
+            "service '" + route.info.service_name + "': the link refused the ROS answer");
+        }
+        it = route.mcu_inflight.erase(it);
+      }
+    }
+  }
+
+    // Retries service routes missing despite an ok verdict, the way the
+    // topic repair does: a transient creation failure must not lose the
+    // service while the handshake keeps reporting it ok.
+  void repair_missing_services(std::chrono::nanoseconds now)
+  {
+    if (session_.state() != SessionState::kConnected) {
+      return;
+    }
+    for (const ServiceInfo & info : session_.services()) {
+      if (info.status != kServiceStatusOk || service_routes_.count(info.index) != 0u) {
+        continue;
+      }
+      RepairState & state = service_repairs_[info.index];
+      if (state.attempts >= kMaxRepairAttempts) {
+        continue;
+      }
+      if (state.attempts > 0 &&
+        now - state.last_attempt < std::chrono::milliseconds(kRepairSpacingMs))
+      {
+        continue;
+      }
+      state.last_attempt = now;
+      ++state.attempts;
+      ensure_service_route(info);
     }
   }
 
@@ -664,6 +1214,7 @@ struct Router::Impl
   const Clock & clock;
   LogSink mcu_sink;
   rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params_;
+  NodeServiceInterfaces node_services_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_hook_;
     // One MCU parameter by ROS name: the SETs route by index. Only names
     // the layer itself declared are tracked, so a colliding node
@@ -683,6 +1234,10 @@ struct Router::Impl
     // Repair attempts by topic id: array indexing cannot miss, so the
     // diagnostics snapshot below needs no fallback branch.
   std::array<RepairState, 256> repairs_;
+    // One route per ok service by walk index, with repair attempts by index
+    // for routes missing despite an ok verdict.
+  std::map<std::uint8_t, std::unique_ptr<ServiceRoute>> service_routes_;
+  std::map<std::uint8_t, RepairState> service_repairs_;
     // Recursive: declaring a ROS parameter reenters through the on-set
     // hook on the same thread, which takes the guard again.
   std::recursive_mutex mutex;
@@ -693,11 +1248,12 @@ Router::Router(
   rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,
   const Clock & clock, const Clock & ros_clock, RouterParams params, LogSink sink,
   SessionConfig session_config, LogSink mcu_sink,
-  rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params)
+  rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params,
+  NodeServiceInterfaces node_services)
 : impl_(std::make_unique<Impl>(std::move(topics), std::move(open), clock, ros_clock,
     std::move(params),
                                    std::move(sink), std::move(session_config), std::move(mcu_sink),
-                                   std::move(node_params)))
+                                   std::move(node_params), std::move(node_services)))
 {
 }
 
@@ -709,6 +1265,8 @@ void Router::poll()
   const std::chrono::nanoseconds now = impl_->clock.now();
   std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
   impl_->repair_missing_routes(now);
+  impl_->repair_missing_services(now);
+  impl_->poll_services();
   impl_->scheduler_.poll(now, [this](std::uint8_t id, const std::vector<std::uint8_t> & payload) {
       return impl_->session_.send_user(id, payload);
     });

@@ -388,6 +388,7 @@ In `tests/e2e/`, each a launch_testing test parameterized by MCU backend (posix,
 11. A subscribed message that exceeds a bound is dropped, and the bridge logs the topic and the field path.
 12. Link saturation: the MCU publishes more than the link carries; publishes return `R2S_ERR_TX_BUSY`, no frame is corrupted, and the counters report it.
 13. Parameters: the bridge declares the MCU's parameters as its own ROS parameters after the handshake; a ROS parameter set reaches the MCU over the reliable channel, and a re-handshake re-pushes the current values.
+14. Services: a ROS call to the MCU's service returns the MCU's answer, and the MCU's call to a ROS service returns its answer. Only the C firmware serves services, so the other legs skip this scenario.
 
 These scenarios prove the system's user-visible goals. Edge cases of the parts they exercise are tested at the lower levels, not here.
 

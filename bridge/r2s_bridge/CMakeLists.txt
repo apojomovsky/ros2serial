@@ -28,6 +28,7 @@ add_library(r2s_bridge_component SHARED
   src/ros_clock.cpp
   src/router.cpp
   src/scheduler.cpp
+  src/service_types.cpp
   src/session.cpp
   src/termios_transport.cpp
   src/time_sync.cpp
@@ -172,6 +173,7 @@ if(BUILD_TESTING)
   find_package(rcl_interfaces REQUIRED)
   find_package(sensor_msgs REQUIRED)
   find_package(std_msgs REQUIRED)
+  find_package(std_srvs REQUIRED)
   find_package(tf2_msgs REQUIRED)
   ament_add_gtest(test_converter test/test_converter.cpp)
   target_compile_definitions(test_converter PRIVATE
@@ -184,6 +186,13 @@ if(BUILD_TESTING)
     sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
     std_msgs::std_msgs__rosidl_typesupport_cpp
     tf2_msgs::tf2_msgs__rosidl_typesupport_cpp)
+
+  # The service introspection test loads the service packages for real, so it
+  # needs std_srvs (found above) at build and test time.
+  ament_add_gtest(test_service_types test/test_service_types.cpp)
+  target_link_libraries(test_service_types
+    r2s_bridge_component
+    std_srvs::std_srvs__rosidl_typesupport_cpp)
 
   # openpty comes from libutil; the pty test uses it instead of a device.
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
@@ -212,7 +221,8 @@ if(BUILD_TESTING)
     r2s_bridge_test_support
     geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
     sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
-    std_msgs::std_msgs__rosidl_typesupport_cpp)
+    std_msgs::std_msgs__rosidl_typesupport_cpp
+    std_srvs::std_srvs__rosidl_typesupport_cpp)
 
   # A publish that fails on the ROS graph (a context shutting down under
   # the poll loop) is logged, counted and survived, never an abort.

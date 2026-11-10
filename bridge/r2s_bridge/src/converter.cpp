@@ -416,11 +416,17 @@ bool build_ops(
     return false;
   }
   for (std::uint32_t i = 0; i < members->member_count_; ++i) {
+    const MessageMember & member = members->members_[i];
+    // rosidl renders an empty message with one uint8 padding member, which
+    // the wire never carries: the generator's descriptors and the reference
+    // codec both encode such a message as zero bytes (spec [ENC-1]).
+    if (std::strcmp(member.name_, "structure_needs_at_least_one_member") == 0) {
+      continue;
+    }
     if (count >= kMaxPlanFields) {
       return false;
     }
     ++count;
-    const MessageMember & member = members->members_[i];
     Op op;
     op.type = member.type_id_;
     op.offset = member.offset_;
@@ -829,6 +835,56 @@ ConvertResult Converter::from_cdr(
   std::uint32_t counter = 0;
   std::uint8_t field = 0xFFu;
   const ConvertFail fail = encode_ops(plan->fields, storage.data(), narrow, packed, counter, field);
+  if (fail != ConvertFail::kNone) {
+    packed.clear();
+    return ConvertResult{fail, field};
+  }
+  return ConvertResult{};
+}
+
+ConvertResult Converter::unpack_to_struct(
+  const std::string & type_name, bool narrow, const std::uint8_t *data,
+  std::size_t size, void *storage)
+{
+  if (storage == nullptr) {
+    return ConvertResult{ConvertFail::kUnsupportedField, 0xFFu};
+  }
+  ConvertFail why = ConvertFail::kNone;
+  const std::shared_ptr<Plan> plan = get_plan(type_name, why);
+  if (plan == nullptr) {
+    return ConvertResult{why, 0xFFu};
+  }
+  Reader reader{data, data + size};
+  std::uint32_t counter = 0;
+  std::uint8_t field = 0xFFu;
+  const ConvertFail fail = decode_ops(plan->fields, static_cast<std::uint8_t *>(storage), reader,
+      narrow, counter, field);
+  if (fail != ConvertFail::kNone) {
+    return ConvertResult{fail, field};
+  }
+  if (reader.at != reader.end) {
+    return ConvertResult{ConvertFail::kTrailing, 0xFFu};
+  }
+  return ConvertResult{};
+}
+
+ConvertResult Converter::pack_from_struct(
+  const std::string & type_name, bool narrow, const void *storage,
+  std::vector<std::uint8_t> & packed)
+{
+  packed.clear();
+  if (storage == nullptr) {
+    return ConvertResult{ConvertFail::kUnsupportedField, 0xFFu};
+  }
+  ConvertFail why = ConvertFail::kNone;
+  const std::shared_ptr<Plan> plan = get_plan(type_name, why);
+  if (plan == nullptr) {
+    return ConvertResult{why, 0xFFu};
+  }
+  std::uint32_t counter = 0;
+  std::uint8_t field = 0xFFu;
+  const ConvertFail fail = encode_ops(plan->fields, static_cast<const std::uint8_t *>(storage),
+      narrow, packed, counter, field);
   if (fail != ConvertFail::kNone) {
     packed.clear();
     return ConvertResult{fail, field};

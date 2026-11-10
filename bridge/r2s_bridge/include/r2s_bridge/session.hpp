@@ -233,6 +233,66 @@ struct ParamInfo
   }
 };
 
+/// One service of section 7.8.
+/**
+ * The walk index, the SVR-2 role the DECLARE named, the first 8 bytes of
+ * the type's hash, and the names. Status is the host's verdict on the
+ * DECLARE, mirroring the topic verdicts.
+ */
+struct ServiceInfo
+{
+  std::uint8_t index = 0;  ///< The walk index.
+  std::uint8_t role = 0;  ///< The SVR-2 role the DECLARE named.
+  std::array<std::uint8_t, 8> type_hash{};  ///< The first 8 hash bytes.
+  std::string type_name;  ///< The announced ROS service type.
+  std::string service_name;  ///< The announced service name.
+  std::uint8_t status = 0;  ///< The host verdict on the DECLARE.
+  /// Two service announcements match when every field matches.
+  /**
+   * \param[in] other the announcement to compare.
+   * \return True when every field matches.
+   */
+  bool operator==(const ServiceInfo & other) const
+  {
+    return index == other.index && role == other.role && type_hash == other.type_hash &&
+           type_name == other.type_name && service_name == other.service_name &&
+           status == other.status;
+  }
+  /// Two service announcements differ when any field differs.
+  /**
+   * \param[in] other the announcement to compare.
+   * \return True when any field differs.
+   */
+  bool operator!=(const ServiceInfo & other) const
+  {
+    return !(*this == other);
+  }
+};
+
+/// The SVR-2 roles a DECLARE names.
+/**
+ * The MCU serves the service, or the MCU calls it.
+ */
+constexpr std::uint8_t kServiceRoleServer = 0u;
+/// The MCU calls the service named by the DECLARE.
+constexpr std::uint8_t kServiceRoleClient = 1u;
+
+/// The walk STATUS verdicts section 7.8 names, mirroring the topic verdicts.
+constexpr std::uint8_t kServiceStatusOk = 0u;
+/// The DECLARE named an unknown service type.
+constexpr std::uint8_t kServiceStatusUnknownType = 1u;
+/// The DECLARE carried a mismatching type hash.
+constexpr std::uint8_t kServiceStatusHashMismatch = 2u;
+/// The DECLARE named a service already announced.
+constexpr std::uint8_t kServiceStatusNameConflict = 3u;
+
+/// Names the section 7.8 verdict for one DECLARE.
+/**
+ * Like the topic resolver names the section 8.2 verdict. The service
+ * names and the announced hash are what the DECLARE carried.
+ */
+using ServiceResolver = std::function<std::uint8_t(const ServiceInfo &)>;
+
 /// The session's observable edge.
 /**
  * Log lines the bridge forwards to its loggers, one call per completed
@@ -255,6 +315,21 @@ struct SessionEvents
    * itself; this reports the verdicts the parameters layer (X5) consumes.
    */
   std::function<void(std::uint8_t, std::uint8_t)> param_status;
+  /// One REQUEST the MCU sent while connected.
+  /**
+   * As service index, wire req_id and packed payload. The bridge answers
+   * every reliable frame itself; this reports the calls the services
+   * layer consumes.
+   */
+  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
+  service_request;
+  /// One RESPONSE the MCU sent while connected.
+  /**
+   * As wire req_id, RESPONSE status and packed payload. This reports the
+   * answers the services layer consumes.
+   */
+  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
+  service_response;
 };
 
 /// The section 8.2 state machine.
@@ -277,12 +352,14 @@ public:
    * \param[in] open the port factory.
    * \param[in] resolve the TOPIC_STATUS verdicts.
    * \param[in] events the observable edge.
+   * \param[in] resolve_service the SVC_STATUS verdicts.
    * \throws std::invalid_argument when a period is not positive, or when
    * the time sync period is outside 1 to 5000 ms.
    */
   Session(
     SessionConfig config, const Clock & clock, const Clock & ros_clock, TransportFactory open,
-    TopicResolver resolve, SessionEvents events = SessionEvents());
+    TopicResolver resolve, SessionEvents events = SessionEvents(),
+    ServiceResolver resolve_service = ServiceResolver());
 
   /// Destroys the session and closes the link.
   ~Session();
@@ -330,6 +407,16 @@ public:
    * \return The announced parameters.
    */
   const std::vector<ParamInfo> & params() const;
+  /// The last completed handshake's services, in announcement order.
+  /**
+   * Empty before the first one. Every entry parsed cleanly: the walk
+   * advances past a short payload, an unknown role, or names the length
+   * overruns without keeping an entry, so the services layer reads the
+   * kept ones without rechecking them. Status is the walk's verdict.
+   *
+   * \return The announced services.
+   */
+  const std::vector<ServiceInfo> & services() const;
 
   /// The latest MCU heartbeat counters.
   /**
@@ -457,14 +544,42 @@ public:
    * \return How many SETs were dropped.
    */
   std::uint32_t reliable_dropped() const;
-
-  /// Queued SETs a newer SET to the same index replaced ([REL-7]).
+  /// Queued SETs and REQUESTs a newer frame to the same index replaced.
   /**
-   * For diagnostics.
+   * For diagnostics ([REL-7], [SVR-10]).
    *
-   * \return How many SETs were replaced.
+   * \return How many were replaced.
    */
   std::uint32_t reliable_replaced() const;
+  /// Queues one SVC_REQUEST on the reliable channel (SVR-4, SVR-10).
+  /**
+   * The req_id and the packed request bytes travel after the index. False
+   * unless connected, for an unknown index, a non-server entry, or a
+   * payload the MCU's announced limits cannot take; a queued REQUEST goes
+   * out behind the outstanding frame, at most one per index, with the
+   * next rel seq.
+   *
+   * \param[in] index which service to call.
+   * \param[in] req_id the wire id matching the RESPONSE.
+   * \param[in] payload the packed request bytes.
+   * \return True when the REQUEST queued.
+   */
+  bool send_service_request(
+    std::uint8_t index, std::uint8_t req_id, const std::vector<std::uint8_t> & payload);
+  /// Queues one SVC_RESPONSE answering the MCU's outstanding call (SVR-5).
+  /**
+   * The status and the packed response bytes travel after the req_id. A
+   * nonzero status carries no response payload. False unless connected or
+   * the req_id is not the MCU's outstanding call; a queued RESPONSE goes
+   * out before queued REQUESTs.
+   *
+   * \param[in] req_id the MCU call to answer.
+   * \param[in] status the outcome, 0 for success.
+   * \param[in] payload the packed response bytes.
+   * \return True when the RESPONSE queued.
+   */
+  bool send_service_response(
+    std::uint8_t req_id, std::uint8_t status, const std::vector<std::uint8_t> & payload);
 
   /// The MCU's announced maximum frame, 0 before the first HELLO.
   /**

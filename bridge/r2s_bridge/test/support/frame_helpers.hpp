@@ -138,6 +138,29 @@ inline std::vector<std::uint8_t> helper_topic(
   return p;
 }
 
+// The services channel id and its opcodes (spec/protocol.md, 7.8).
+constexpr std::uint8_t kHelperServices = 7u;
+constexpr std::uint8_t kHelperSvcQuery = 0x01u;
+constexpr std::uint8_t kHelperSvcDeclare = 0x02u;
+constexpr std::uint8_t kHelperSvcStatus = 0x03u;
+constexpr std::uint8_t kHelperSvcRequest = 0x04u;
+constexpr std::uint8_t kHelperSvcResponse = 0x05u;
+
+// One SVC_DECLARE payload: the opcode, index, SVR-2 role, the hash, the
+// type and the service name.
+inline std::vector<std::uint8_t> helper_service_declare(
+  std::uint8_t index, std::uint8_t role, const std::uint8_t *hash,
+  const std::string & type, const std::string & name)
+{
+  std::vector<std::uint8_t> p{kHelperSvcDeclare, index, role};
+  p.insert(p.end(), hash, hash + 8u);
+  p.push_back(static_cast<std::uint8_t>(type.size()));
+  p.insert(p.end(), type.begin(), type.end());
+  p.push_back(static_cast<std::uint8_t>(name.size()));
+  p.insert(p.end(), name.begin(), name.end());
+  return p;
+}
+
 // One PARAM_DECLARE payload: the opcode, index, PAR-2 type, PAR-4 flags,
 // the name and the default in its wire form (PAR-1, PAR-3).
 inline std::vector<std::uint8_t> helper_declare(

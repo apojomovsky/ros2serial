@@ -35,6 +35,23 @@ class Converter;
  */
 using LogSink = std::function<void(SessionLog, const std::string &)>;
 
+/// The node interfaces the service proxies need beyond topics.
+/**
+ * Base for the rcl handle behind the service server, graph for generic
+ * clients, services to register a generic service where the distro has
+ * one. All null skips the service proxies with a precise log, while
+ * topics keep routing.
+ */
+struct NodeServiceInterfaces
+{
+  /// The rcl handle behind the servers.
+  rclcpp::node_interfaces::NodeBaseInterface::SharedPtr base;
+  /// The graph behind the clients.
+  rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph;
+  /// The registry behind the servers.
+  rclcpp::node_interfaces::NodeServicesInterface::SharedPtr services;
+};
+
 /// The bridge parameters behind the pacing (docs/00-design.md, E4).
 struct RouterParams
 {
@@ -82,6 +99,7 @@ public:
    * \param[in] session_config the H4 link timing.
    * \param[in] mcu_sink where the MCU log lines go.
    * \param[in] node_params the parameters interface, or null to skip it.
+   * \param[in] node_services the service interfaces, or nulls to skip them.
    * \throws std::invalid_argument on a nonsense param (no QoS depth, a
    * budget outside 0 to 100, no baud, a negative default rate) or a
    * missing log sink.
@@ -90,7 +108,8 @@ public:
     rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics, TransportFactory open,
     const Clock & clock, const Clock & ros_clock, RouterParams params, LogSink sink,
     SessionConfig session_config = SessionConfig(), LogSink mcu_sink = LogSink(),
-    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params = nullptr);
+    rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params = nullptr,
+    NodeServiceInterfaces node_services = NodeServiceInterfaces());
 
   /// Destroys the router and its routes.
   ~Router();

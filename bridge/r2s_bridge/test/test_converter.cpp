@@ -1394,6 +1394,36 @@ TEST(ConverterFieldPath, StopsAtEmptyNestedArrays)
     EXPECT_EQ(converter.field_path("fake/msg/EmptyArr", 0), "items");
     EXPECT_EQ(converter.field_path("fake/msg/EmptyArr", 1), "");
 }
+
+// rosidl renders an empty message with one uint8 padding member; the wire
+// has no such byte (spec [ENC-1]), so the converter skips it both ways.
+TEST(ConverterPlans, SkipsTheRosidlPaddingMember)
+{
+    Converter converter;
+    MessageMember member{};
+    member.name_ = "structure_needs_at_least_one_member";
+    member.type_id_ = ROS_TYPE_UINT8;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "Padded";
+    members.member_count_ = 1;
+    members.size_of_ = 1;
+    members.members_ = &member;
+    members.init_function = fake_noop_init;
+    members.fini_function = fake_noop_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/Padded", &handle));
+    const std::uint8_t empty[1] = {0u};
+    std::uint8_t storage = 0xA5u;
+    const ConvertResult unpacked =
+      converter.unpack_to_struct("fake/msg/Padded", false, empty, 0, &storage);
+    EXPECT_EQ(unpacked.fail, ConvertFail::kNone);
+    std::vector<std::uint8_t> packed;
+    const ConvertResult packed_result =
+      converter.pack_from_struct("fake/msg/Padded", false, &storage, packed);
+    EXPECT_EQ(packed_result.fail, ConvertFail::kNone);
+    EXPECT_TRUE(packed.empty());
+}
 TEST(ConverterRoundTrip, PackedToCdrToPackedReturnsTheOriginal)
 {
     Converter converter;
@@ -1699,6 +1729,56 @@ TEST(ConverterFromCdr, RefusesAnOverlongString)
     EXPECT_EQ(result.fail, ConvertFail::kOverBound);
     EXPECT_EQ(result.field, 0u);
     EXPECT_TRUE(packed.empty()) << "no partial payload escapes";
+}
+
+TEST(ConverterGuards, RefusesUnpackWithoutStorage)
+{
+    Converter converter;
+    const std::uint8_t empty[1] = {0u};
+    const ConvertResult result =
+      converter.unpack_to_struct("std_msgs/msg/Bool", false, empty, 0, nullptr);
+    EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
+}
+
+TEST(ConverterGuards, RefusesUnpackOfUnknownType)
+{
+    Converter converter;
+    std_msgs::msg::Bool flag;
+    const std::uint8_t empty[1] = {0u};
+    const ConvertResult result =
+      converter.unpack_to_struct("nope/msg/Nope", false, empty, 0, &flag);
+    EXPECT_EQ(result.fail, ConvertFail::kUnknownType);
+}
+
+TEST(ConverterGuards, ReportsTruncatedUnpack)
+{
+    Converter converter;
+    std_msgs::msg::Bool flag;
+    const ConvertResult result =
+      converter.unpack_to_struct("std_msgs/msg/Bool", false, nullptr, 0, &flag);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+}
+
+TEST(ConverterGuards, RefusesPackWithoutStorage)
+{
+    Converter converter;
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+      converter.pack_from_struct("std_msgs/msg/Bool", false, nullptr, packed);
+    EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
+    EXPECT_TRUE(packed.empty());
+}
+
+TEST(ConverterGuards, RefusesPackOfUnknownType)
+{
+    Converter converter;
+    std_msgs::msg::Bool flag;
+    flag.data = true;
+    std::vector<std::uint8_t> packed;
+    const ConvertResult result =
+      converter.pack_from_struct("nope/msg/Nope", false, &flag, packed);
+    EXPECT_EQ(result.fail, ConvertFail::kUnknownType);
+    EXPECT_TRUE(packed.empty());
 }
 
 }  // namespace

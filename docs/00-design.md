@@ -57,7 +57,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 
 ## Scope: parity with rosserial
 
-*Status (0.2.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++, the reliable channel, rosserial-compatible runtime registration with the porting guide, and parameters in #155; specified: services and actions in #316; planned: #156 and #318 to #320 (#317 generator support lands with X10a).*
+*Status (0.2.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++, the reliable channel, rosserial-compatible runtime registration with the porting guide, parameters in #155, and services in #156; specified: services and actions in #316; planned: #318 to #320 (#317 generator support lands with X10a).*
 
 | Feature | Priority | Notes |
 | --- | --- | --- |
@@ -591,7 +591,7 @@ The generator targets a ROS distro explicitly (`distro:` in the config, default 
 
 ## Host bridge
 
-*Status (0.2.0): built: full-mode handshake, generic pub/sub, packed-to-CDR conversion, Uno boot handling, log forwarding, time-sync estimation, the reliable channel, rate limiting, launch namespace and remapping arguments, parameters in #155; planned: services in #156.*
+*Status (0.2.0): built: full-mode handshake, generic pub/sub, packed-to-CDR conversion, Uno boot handling, log forwarding, time-sync estimation, the reliable channel, rate limiting, launch namespace and remapping arguments, parameters in #155, services in #156.*
 
 - C++ (rclcpp), packaged as a component so several bridges (one per serial port) can share a process. The framing gives each link its own framer instance, so one process serves up to 16 live links (#122).
 - Generic publishers and subscriptions, plus introspection-based conversion from packed to CDR.

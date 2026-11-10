@@ -4,21 +4,20 @@ steps:
   - from: mcu
     frame: "00 00 02 04 00 00 00 00 00 00 04 80 00 e8 03 00 00 cd 00 04 6e 6f 64 65 56 9a"
     at_ms: 0
-  - from: host
-    frame: "07 00 04 00 00 00 4d 66"
-    at_ms: 50
-    note: "REQUEST while ANNOUNCING"
-  - from: mcu
-    frame: "00 01 02 04 00 00 00 00 00 00 04 80 00 e8 03 00 00 cd 00 04 6e 6f 64 65 9f 13"
-    at_ms: 150
-    note: "answered with HELLO and otherwise ignored"
-  - from: mcu
-    frame: "05 00 05 07 01 00 ff fd a7"
-    at_ms: 150
-    note: "a client send while not connected fails and is reported once"
+    note: "HELLO, protocol 4, params plus reliable plus services, no topics"
   - from: host
     frame: "03 00 01 00 34 3f"
-    at_ms: 200
+    at_ms: 50
+    note: "the walk starts"
+  - from: mcu
+    frame: "07 00 04 00 01 00 00 5b c3"
+    at_ms: 100
+    note: "REQUEST while announcing: ignored, not even acked"
   - from: mcu
     frame: "03 00 04 00 00 01 68 67"
-    at_ms: 250
+    at_ms: 150
+    note: "STATUS 1 ends the parameter walk"
+  - from: host
+    frame: "07 00 01 00 d8 4d"
+    at_ms: 150
+    note: "the service walk starts; the stray call changed nothing"

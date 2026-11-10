@@ -95,25 +95,58 @@ public:
     const std::string & type_name, bool narrow, const std::uint8_t *data,
     std::size_t size, std::vector<std::uint8_t> & cdr);
 
-  /// Converts one serialized CDR message of type_name to a packed payload.
+  /// Converts one packed payload of type_name into the caller's struct.
   /**
-   * Clears packed first. narrow packs float64s as binary32. The cached plan
-   * is shared with to_cdr. A CDR the middleware cannot read back, and a
-   * string or sequence longer than the wire varint holds, fail as
-   * kUnsupportedField and kOverBound; field names the same depth-first
-   * index to_cdr reports.
+   * Into storage, which the caller initialized for the same type. The cached
+   * plan is shared with to_cdr, and narrow is the same per-call input; no
+   * middleware handle is needed, so hand-installed plans convert too.
    *
    * \param[in] type_name the message type to convert.
    * \param[in] narrow true when float64s travel as binary32.
-   * \param[in] data the serialized message.
+   * \param[in] data the packed payload.
    * \param[in] size how many bytes data holds.
+   * \param[out] storage the initialized introspection struct.
+   * \return The outcome, with the bad field index on failure.
+   */
+  ConvertResult unpack_to_struct(
+    const std::string & type_name, bool narrow, const std::uint8_t *data,
+    std::size_t size, void *storage);
+
+  /// Converts one caller-owned introspection struct of type_name to packed.
+  /**
+   * Into packed, clearing packed first. The cached plan is shared with
+   * from_cdr, and narrow is the same per-call input; no middleware handle
+   * is needed, so hand-installed plans convert too.
+   *
+   * \param[in] type_name the message type to convert.
+   * \param[in] narrow true when float64s travel as binary32.
+   * \param[in] storage the caller-owned introspection struct.
    * \param[out] packed the packed payload.
    * \return The outcome, with the bad field index on failure.
-   * \throws std::bad_alloc when a plan or buffer cannot grow.
    */
-  ConvertResult from_cdr(
-    const std::string & type_name, bool narrow, const std::uint8_t *data,
-    std::size_t size, std::vector<std::uint8_t> & packed);
+  ConvertResult pack_from_struct(
+    const std::string & type_name, bool narrow, const void *storage,
+    std::vector<std::uint8_t> & packed);
+
+    /// Converts one serialized CDR message of type_name to a packed payload.
+    /**
+     * Clears packed first. narrow packs float64s as binary32. The cached plan
+     * is shared with to_cdr. A CDR the middleware cannot read back, and a
+     * string or sequence longer than the wire varint holds, fail as
+     * kUnsupportedField and kOverBound; field names the same depth-first
+     * index to_cdr reports.
+     *
+     * \param[in] type_name the message type to convert.
+     * \param[in] narrow true when float64s travel as binary32.
+     * \param[in] data the serialized message.
+     * \param[in] size how many bytes data holds.
+     * \param[out] packed the packed payload.
+     * \return The outcome, with the bad field index on failure.
+     * \throws std::bad_alloc when a plan or buffer cannot grow.
+     */
+    ConvertResult from_cdr(
+      const std::string & type_name, bool narrow, const std::uint8_t *data,
+      std::size_t size, std::vector<std::uint8_t> & packed);
 
   /// The dotted path of a depth-first field index ("linear.y").
   /**

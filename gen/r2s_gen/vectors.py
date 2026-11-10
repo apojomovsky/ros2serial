@@ -31,7 +31,8 @@ def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParse
     parser.add_argument(
         '--type',
         required=True,
-        help='the message type as package/msg/Type or package/action/Name_Goal',
+        help='the message type as package/msg/Type, package/srv/Name_Request '
+        'or package/action/Name_Goal',
     )
     parser.add_argument(
         '--message',

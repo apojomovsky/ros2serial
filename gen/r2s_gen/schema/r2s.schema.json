@@ -15,11 +15,12 @@
       "default": ["time", "log"]
     },
     "topics": {"type": "array", "items": {"$ref": "#/$defs/topic"}},
+    "services": {"type": "array", "items": {"$ref": "#/$defs/service"}},
     "bounds": {
       "type": "object",
       "properties": {"default_string_bound": {"type": "integer", "minimum": 0}},
       "patternProperties": {
-        "^[A-Za-z][A-Za-z0-9_]*/msg/[A-Za-z][A-Za-z0-9_]*\\.[A-Za-z][A-Za-z0-9_]*$": {"$ref": "#/$defs/bound"}
+        "^[A-Za-z][A-Za-z0-9_]*/(msg|srv)/[A-Za-z][A-Za-z0-9_]*\\.[A-Za-z][A-Za-z0-9_]*$": {"$ref": "#/$defs/bound"}
       },
       "additionalProperties": false
     },
@@ -30,6 +31,16 @@
     }
   },
   "$defs": {
+    "service": {
+      "type": "object",
+      "required": ["name", "type", "role"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*(/[A-Za-z_][A-Za-z0-9_]*)*$"},
+        "type": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*/srv/[A-Za-z][A-Za-z0-9_]*$"},
+        "role": {"type": "string", "enum": ["server", "client"]}
+      }
+    },
     "topic": {
       "type": "object",
       "required": ["name", "type", "direction"],

@@ -388,8 +388,8 @@ def test_an_unknown_root_key_is_an_error(tmp_path):
 
     assert str(caught.value) == (
         f"{path}: unknown key 'nodes'; "
-        'remove it (expected one of: bounds, distro, features, handshake, limits, node, tier, '
-        'topics)'
+        'remove it (expected one of: bounds, distro, features, handshake, limits, node, services, '
+        'tier, topics)'
     )
 
 
@@ -815,3 +815,151 @@ def test_an_underscore_topic_is_valid(tmp_path):
     )
 
     assert [topic.name for topic in loaded.topics] == ['_battery']
+
+
+def test_services_default_to_empty(tmp_path):
+    loaded = load_text(tmp_path, VALID)
+
+    assert loaded.services == ()
+
+
+def test_valid_services_load_with_roles(tmp_path):
+    loaded = load_text(
+        tmp_path,
+        'node: base_controller\ntopics:\n'
+        '  - name: battery\n    type: std_msgs/msg/Float32\n    direction: pub\n'
+        'services:\n'
+        '  - name: reset\n    type: std_srvs/srv/Trigger\n    role: server\n'
+        '  - name: trigger\n    type: std_srvs/srv/Trigger\n    role: client\n',
+    )
+
+    assert [(service.name, service.type_name, service.role) for service in loaded.services] == [
+        ('reset', 'std_srvs/srv/Trigger', 'server'),
+        ('trigger', 'std_srvs/srv/Trigger', 'client'),
+    ]
+
+
+def test_nonlist_services_is_an_error(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml', 'node: base_controller\ntopics: []\nservices:\n  name: reset\n'
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert (
+        str(caught.value) == f'{path}: services: expected a list; write one entry per service, '
+        'starting each with - name: <service>'
+    )
+
+
+def test_a_service_missing_role_is_an_error(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml',
+        'node: base_controller\ntopics: []\nservices:\n  - name: reset\n'
+        '    type: std_srvs/srv/Trigger\n',
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert (
+        str(caught.value) == f"{path}: services[0]: missing required key 'role'; "
+        'add role: server or role: client'
+    )
+
+
+def test_a_service_with_a_bad_role_is_an_error(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml',
+        'node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n'
+        '    direction: pub\nservices:\n  - name: reset\n    type: std_srvs/srv/Trigger\n'
+        '    role: pub\n',
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert (
+        str(caught.value) == f"{path}: services[0].role: 'pub' is not valid; "
+        'use one of: server, client'
+    )
+
+
+def test_duplicate_service_names_are_an_error(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml',
+        'node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n'
+        '    direction: pub\nservices:\n  - name: reset\n    type: std_srvs/srv/Trigger\n'
+        '    role: server\n  - name: reset\n    type: std_srvs/srv/Trigger\n'
+        '    role: client\n',
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: services[1].name: duplicate service name 'reset'; give each service its own name"
+    )
+
+
+def test_a_service_missing_type_is_an_error(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml',
+        'node: base_controller\ntopics: []\nservices:\n  - name: reset\n    role: server\n',
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert (
+        str(caught.value) == f"{path}: services[0]: missing required key 'type'; "
+        'add type: <package/srv/Type>'
+    )
+
+
+def test_an_absolute_service_name_is_an_error(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml',
+        'node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n'
+        '    direction: pub\nservices:\n  - name: /reset\n    type: std_srvs/srv/Trigger\n'
+        '    role: server\n',
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: services[0].name: '/reset' is not a relative service name; "
+        'drop the leading slash, such as reset'
+    )
+
+
+def test_a_service_name_with_a_space_is_an_error(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml',
+        'node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n'
+        '    direction: pub\nservices:\n  - name: re set\n    type: std_srvs/srv/Trigger\n'
+        '    role: server\n',
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: services[0].name: 're set' is not a valid service name; "
+        'use letters, digits, underscores and slashes, starting with a letter or underscore'
+    )
+
+
+def test_a_non_mapping_service_entry_reaches_the_model_check(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml',
+        'node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n'
+        '    direction: pub\nservices:\n  - reset\n',
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert 'services[0]' in str(caught.value)

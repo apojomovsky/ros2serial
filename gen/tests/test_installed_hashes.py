@@ -78,6 +78,9 @@ def _installed_hash(prefix: Path, type_name: str) -> str | None:
                 name = name[: -len(suffix_text)]
                 break
         document = prefix / 'share' / package / 'action' / f'{name}.json'
+    elif '/srv/' in type_name:
+        package, _, name = type_name.partition('/srv/')
+        document = prefix / 'share' / package / 'srv' / f'{name}.json'
     else:
         package, _, name = type_name.partition('/msg/')
         document = prefix / 'share' / package / 'msg' / f'{name}.json'
@@ -143,6 +146,32 @@ def test_bundled_action_hashes_match_the_installed_type_support():
     repository = msgs.MessageRepository(distro=distro)
     generated = {
         type_name: typehash.type_hash(repository, type_name) for type_name in ACTION_TYPES
+    }
+    mismatches = _mismatches(installed, generated)
+    assert not mismatches, f'hash drift on {distro}: ' + '; '.join(mismatches)
+
+
+SERVICE_TYPES = (
+    'std_srvs/srv/Trigger',
+    # Nests CameraInfo, Header and Time: the walk must describe every
+    # nested message, not just the request and response.
+    'sensor_msgs/srv/SetCameraInfo',
+)
+
+
+def test_installed_service_hashes_match_the_generator():
+    prefixes = _prefixes()
+    installed = _collect_installed(prefixes, SERVICE_TYPES)
+    distro = _snapshot_distro()
+    if distro is None:
+        pytest.skip('no supported ROS distro found: run in a ROS container (the bridge job does)')
+    missing = [type_name for type_name in SERVICE_TYPES if type_name not in installed]
+    assert not missing, f'no installed type description for {missing} under {prefixes}'
+    # The installed .srv files are authoritative; the snapshot carries no
+    # services, so the repository reads the install like the firmware's distro does.
+    repository = msgs.MessageRepository(ament_prefix_path=prefixes)
+    generated = {
+        type_name: typehash.service_hash(repository, type_name) for type_name in SERVICE_TYPES
     }
     mismatches = _mismatches(installed, generated)
     assert not mismatches, f'hash drift on {distro}: ' + '; '.join(mismatches)

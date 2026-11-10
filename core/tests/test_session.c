@@ -49,11 +49,17 @@ static const r2s_topic_t two_topics[] = {
 #else
 #define EXPECTED_FEATURES_BASE 0x0Fu
 #endif
-#ifdef R2S_WITH_ACTIONS
-#define EXPECTED_FEATURES (EXPECTED_FEATURES_BASE | 0x80u)
+#ifdef R2S_WITH_SERVICES
+#define EXPECTED_FEATURES_SVC 0x40u
 #else
-#define EXPECTED_FEATURES EXPECTED_FEATURES_BASE
+#define EXPECTED_FEATURES_SVC 0x00u
 #endif
+#ifdef R2S_WITH_ACTIONS
+#define EXPECTED_FEATURES_ACT 0x80u
+#else
+#define EXPECTED_FEATURES_ACT 0x00u
+#endif
+#define EXPECTED_FEATURES (EXPECTED_FEATURES_BASE | EXPECTED_FEATURES_SVC | EXPECTED_FEATURES_ACT)
 
 /* The TOPIC payload the one-topic table announces, byte for byte the payload
  * of spec/vectors/frames/topic.yaml. */
