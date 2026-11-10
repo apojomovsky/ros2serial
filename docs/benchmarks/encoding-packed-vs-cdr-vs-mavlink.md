@@ -5,7 +5,7 @@ encoding and the wire stay as they are; this write-up records the numbers
 and recommends keeping the per-topic narrow default. The `needs-decision`
 label stays on #144 for the maintainer's call.
 
-Scope: the thirteen bundled types, on representative payloads taken from the
+Scope: the sixteen bundled types, on representative payloads taken from the
 spec vectors (wide profile plus its narrow pair where narrowing changes
 anything). Byte counts are deterministic. Timing comes from simavr cycles,
 never wall clock.
@@ -58,6 +58,8 @@ Method:
 | `geometry_msgs/msg/TransformStamped` | narrow | 49 | 92 | 76 | 80 |
 | `tf2_msgs/msg/TFMessage` | wide | 78 | 100 | 104 | 105 |
 | `tf2_msgs/msg/TFMessage` | narrow | 50 | 100 | 76 | 80 |
+| `std_srvs/srv/Trigger_Request` | wide | 0 | 4 | 8 | 12 |
+| `std_srvs/srv/Trigger_Response` | wide | 4 | 15 | 25 | 29 |
 
 MAVLink figures are a model, not a real dialect: fields reordered
 largest first with the bundle's bounds, in a v1 or v2 envelope.
