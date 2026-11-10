@@ -299,7 +299,11 @@ def markdown_table(stacks: dict, budgets: dict, base: dict | None = None) -> str
         worst = stacks[name]
         cell = str(worst.get('total', '?'))
         if base is not None and name in base:
-            cell += f' (base {base[name].get("total", "?")})'
+            head, ref = worst.get('total', '?'), base[name].get('total', '?')
+            if isinstance(head, int) and isinstance(ref, int) and head != ref:
+                cell = f'{head} ({head - ref:+d} vs base {ref})'
+            else:
+                cell += f' (base {ref})'
         if worst.get('unknown'):
             cell += f'; unknown: {", ".join(worst["unknown"][:3])}'
             if len(worst['unknown']) > 3:

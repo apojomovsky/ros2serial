@@ -786,7 +786,7 @@ ros2serial/
 ├── tests/
 │   ├── e2e/                  shared end-to-end scenarios, run against posix and simavr (MPLAB SIM in Phase 5)
 │   └── harness/              simavr UART-to-pty harness, fault-injecting pty proxy
-├── tools/                    size_report.py, stack_report.py, budgets.yaml, vectors_check.py, zone_check.py
+├── tools/                    size_report.py, stack_report.py, budgets_table.py, budgets.yaml, vectors_check.py, zone_check.py
 ├── scratch/                  gitignored per-ticket experiments; nothing ships
 ├── docs/                     user documentation (published as the docs site)
 └── .github/workflows/
@@ -1192,7 +1192,7 @@ Scenario numbers in the tickets below refer to the key end-to-end scenarios in `
 
 | Workflow | Trigger | Jobs |
 | --- | --- | --- |
-| `ci.yml` | Push, PR and manual | `plan` (restores each task's checksums from the latest `master` run and reports the stale scopes each section job gates on; master pushes run the same selection as a pull request on the same diff, only manual runs force every section); `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `ament-lint` (advisory `ament_lint_common` on the ROS packages, `continue-on-error` until the cleanup tickets land); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component, fails on a drop); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `docs` (every code snippet in `README.md` and `docs/` extracted and compiled); `readme` (every Getting started command runs on simavr); `cpp`; `bridge` (colcon build and test in `ros:jazzy`, `ros:lyrical` and `ros:rolling`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `esp32` (example sketches for the ESP32 Dev Module at the pinned core); `pic-canary` (advisory, from Phase 2); `budgets` (size table as a PR comment, fails on budget breach); `nightly` (calls `nightly-jobs.yml` when the plan selects `NIGHTLY`, or on a pull request carrying the `fuzz-long` label; the long fuzzing runs on pull requests only with that label) |
+| `ci.yml` | Push, PR and manual | `plan` (restores each task's checksums from the latest `master` run and reports the stale scopes each section job gates on; master pushes run the same selection as a pull request on the same diff, only manual runs force every section); `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `ament-lint` (advisory `ament_lint_common` on the ROS packages, `continue-on-error` until the cleanup tickets land); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component, fails on a drop); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `docs` (every code snippet in `README.md` and `docs/` extracted and compiled); `readme` (every Getting started command runs on simavr); `cpp`; `bridge` (colcon build and test in `ros:jazzy`, `ros:lyrical` and `ros:rolling`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `esp32` (example sketches for the ESP32 Dev Module at the pinned core); `pic-canary` (advisory, from Phase 2); `budgets` (size table in the job summary with base deltas, fails on breach; generated `docs/budgets.md`, fails when stale); `nightly` (calls `nightly-jobs.yml` when the plan selects `NIGHTLY`, or on a pull request carrying the `fuzz-long` label; the long fuzzing runs on pull requests only with that label) |
 | `nightly.yml` | Schedule | Calls `nightly-jobs.yml`; files or comments on one `needs-triage` issue when the scheduled run fails |
 | `nightly-jobs.yml` | Reusable | `fuzz-long` (30 min per target); `e2e-isolation` (two e2e sections side by side) |
 | `release.yml` | Tag | Runs `nightly-jobs.yml` on a tag first, then the release with the Arduino library zip and the Python sdist and wheel attached: a full release marked Latest, or a pre-release when the tag carries a SemVer pre-release suffix; publishes nowhere else |
@@ -1337,7 +1337,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | P3 | Time: host estimator and scheduling | H4 | Simulated drift tests; scenario 8 |
 | P4 | Reconnect and reset handling | V1 | Scenarios 6 and 7 |
 | P5 | Range, Imu, JointState with bounds; error reports with field index | G8, H6 | Vectors; scenario 11 |
-| P6 | Budgets: `tools/size_report.py`, `tools/stack_report.py`, `tools/budgets.yaml`, PR comment | V4 | Job fails on a deliberate breach in a test PR |
+| P6 | Budgets: `tools/size_report.py`, `tools/stack_report.py`, `tools/budgets_table.py`, `tools/budgets.yaml`, `docs/budgets.md` | V4 | Job fails on a deliberate breach in a test PR |
 | P7 | Stack painting in simavr during the e2e scenarios | V4, R5 | Measured worst case reported next to the static figure |
 | P8 | Big-endian qemu job | C1 | Nightly green |
 | P9 | Framing and CRC benchmark (AVR Uno/Mega): rCOBS, COBS, SLIP, rosserial style | V4, R7 | Write-up in `docs/benchmarks/` |

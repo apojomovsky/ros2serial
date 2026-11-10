@@ -184,6 +184,15 @@ def check_sizes(measurements: dict, budgets: dict) -> list:
     return problems
 
 
+def _with_delta(head: object, base: object) -> str:
+    """A head number with its explicit move against base, or base when unchanged."""
+    if not isinstance(head, int) or not isinstance(base, int):
+        return f'{head} (base {base})'
+    if head == base:
+        return f'{head} (base {base})'
+    return f'{head} ({head - base:+d} vs base {base})'
+
+
 def markdown_table(measurements: dict, budgets: dict, base: dict | None = None) -> str:
     """A PR comment table: head against base and budget per firmware."""
     rows = [
@@ -195,8 +204,8 @@ def markdown_table(measurements: dict, budgets: dict, base: dict | None = None) 
         limits = budgets.get('firmware', {}).get(name, {})
         cells = [name, str(sizes.get('flash', '?')), str(sizes.get('ram', '?'))]
         if base is not None and name in base:
-            cells[1] += f' (base {base[name].get("flash", "?")})'
-            cells[2] += f' (base {base[name].get("ram", "?")})'
+            cells[1] = _with_delta(sizes.get('flash', '?'), base[name].get('flash', '?'))
+            cells[2] = _with_delta(sizes.get('ram', '?'), base[name].get('ram', '?'))
         cells += [str(limits.get('flash', 'n/a')), str(limits.get('ram', 'n/a'))]
         rows.append('| ' + ' | '.join(cells) + ' |')
     return '\n'.join(rows) + '\n'

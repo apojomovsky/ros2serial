@@ -47,6 +47,12 @@ PAGES = (
         'The wire format both sides prove.',
     ),
     Page('docs/00-design.md', 'design.html', 'Design', 'Why the system looks this way.'),
+    Page(
+        'docs/budgets.md',
+        'budgets.html',
+        'Size and stack budgets',
+        'Measured flash, RAM and stack per example and board.',
+    ),
     Page('CONTRIBUTING.md', 'contributing.html', 'Contributing', 'Tickets, branches and review.'),
     Page(
         'AGENTS.md', 'rules.html', 'Contributor rules', 'The conventions agents and humans follow.'

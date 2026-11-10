@@ -172,6 +172,22 @@ def test_collect_skips_xtensa_firmware(tmp_path, monkeypatch):
     assert all('esp32' not in elf for elf in calls)
 
 
+def test_markdown_table_reports_the_delta_against_base():
+    stacks = {'uno': {'total': 192}}
+    budgets = {'firmware': {'uno': {'stack': 200}}}
+    base = {'uno': {'total': 184}}
+    table = stack_report.markdown_table(stacks, budgets, base)
+    assert '192 (+8 vs base 184)' in table
+
+
+def test_markdown_table_marks_an_unchanged_stack_as_base():
+    stacks = {'uno': {'total': 192}}
+    budgets = {'firmware': {'uno': {'stack': 200}}}
+    base = {'uno': {'total': 192}}
+    table = stack_report.markdown_table(stacks, budgets, base)
+    assert '192 (base 192)' in table
+
+
 def test_collect_skips_cmake_compiler_id_frames(tmp_path, monkeypatch):
     fw = tmp_path / 'fw'
     fw.mkdir()
