@@ -412,6 +412,18 @@ def test_function_pointer_param_is_named():
     assert check(text) == []
 
 
+def test_c_function_pointer_members_are_not_functions():
+    text = (
+        '/// One subscriber record.\n'
+        'struct Subscriber\n'
+        '{\n'
+        '  const void *table;\n'
+        '  void (*callback)(const void *);\n'
+        '};\n'
+    )
+    assert check(text) == []
+
+
 def test_generated_header_is_skipped():
     generated = [
         CPP_INCLUDE / 'std_msgs' / 'msg' / 'bool.hpp',
