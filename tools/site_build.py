@@ -53,6 +53,12 @@ PAGES = (
         'Size and stack budgets',
         'Measured flash, RAM and stack per example and board.',
     ),
+    Page(
+        'docs/robustness.md',
+        'robustness.html',
+        'Mutation and fuzz numbers',
+        'Nightly scores, floors and seed coverage.',
+    ),
     Page('CONTRIBUTING.md', 'contributing.html', 'Contributing', 'Tickets, branches and review.'),
     Page(
         'AGENTS.md', 'rules.html', 'Contributor rules', 'The conventions agents and humans follow.'

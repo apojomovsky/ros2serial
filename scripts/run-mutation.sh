@@ -4,10 +4,11 @@
 
 # Nightly mutation testing: Mull over the core, mutmut over the generator.
 # Runs inside the docker/mutation image, never in a pull request check, and
-# always ends with a triage report in $R2S_MUTATION_OUT (never a gate: even
-# a score below the floor exits 0 once the report is written). Raw tool
-# outputs land next to the normalized inputs, so a wrong report bisects to
-# the boundary instead of the triage script. Usage, from the repository root:
+# always ends with a triage report in $R2S_MUTATION_OUT. A measured score
+# below its floor in tools/robustness.yaml fails the run once the report is
+# written, so the scheduled failure reporter files it. Raw tool outputs
+# land next to the normalized inputs, so a wrong report bisects to the
+# boundary instead of the triage script. Usage, from the repository root:
 #   R2S_MUTATION_OUT=mutation-report bash scripts/run-mutation.sh
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -148,5 +149,5 @@ print(f"mutmut: {len(mutants)} mutants")
 EOF
 
 python3 scripts/mutation_triage.py --mull "$out/mull.json" --mutmut "$out/mutmut.json" \
-  --equivalent mutation/equivalent.yaml --out "$out/report.md"
+  --equivalent mutation/equivalent.yaml --out "$out/report.md" --gate
 echo "report: $out/report.md"
