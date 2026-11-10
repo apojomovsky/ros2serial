@@ -13,9 +13,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_compile_definitions(R2S_TESTING)
 # The same feature set the core's host tests use, so the runtime speaks the
-# same protocol there as on a board. The stack holds the deepest bundled
-# closure: a stamp in a header in a stamped transform in a TFMessage.
-add_compile_definitions(R2S_WITH_CODEC R2S_MAX_NEST=4 R2S_WITH_LOG R2S_WITH_TIME)
+# same protocol there as on a board, plus the actions channel the action
+# server needs. The stack holds the deepest bundled closure: a stamp in a
+# header in a stamped transform in a TFMessage.
+add_compile_definitions(R2S_WITH_CODEC R2S_MAX_NEST=4 R2S_WITH_LOG R2S_WITH_TIME R2S_WITH_ACTIONS)
 set(R2S_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 set(R2S_WARNINGS -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow -Wundef)
@@ -34,7 +35,7 @@ add_library(r2s_core STATIC ${R2S_CORE_SOURCES})
 target_include_directories(r2s_core PUBLIC "${R2S_REPO_ROOT}/core/include")
 target_compile_options(r2s_core PRIVATE ${R2S_WARNINGS})
 
-add_library(r2s_runtime STATIC src/runtime.cpp)
+add_library(r2s_runtime STATIC src/runtime.cpp src/action.cpp)
 target_include_directories(r2s_runtime PUBLIC include)
 target_compile_options(r2s_runtime PRIVATE ${R2S_WARNINGS})
 target_link_libraries(r2s_runtime PUBLIC r2s_core)
@@ -92,6 +93,7 @@ function(r2s_cpp_unit_test source)
 endfunction()
 
 r2s_cpp_unit_test(tests/test_runtime.cpp r2s_runtime)
+r2s_cpp_unit_test(tests/test_action.cpp r2s_runtime)
 
 # The bundled tables the static test announces: the pinned generator output,
 # so the test speaks the tables the Arduino library ships. The frozen header
@@ -101,7 +103,9 @@ target_include_directories(r2s_bundled PUBLIC include)
 target_compile_options(r2s_bundled PRIVATE ${R2S_WARNINGS})
 target_link_libraries(r2s_bundled PUBLIC r2s_core)
 
-r2s_cpp_unit_test(tests/test_static.cpp r2s_bundled)
+# The static test resets the action registry through the shared hooks, so it
+# links the runtime library for the reset beside the bundled tables.
+r2s_cpp_unit_test(tests/test_static.cpp r2s_bundled r2s_runtime)
 
 # The rosserial-compatible API over the runtime registry and the bundled
 # tables, so the announce and the bytes are the ones a ported sketch sends.

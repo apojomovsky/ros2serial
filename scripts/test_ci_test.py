@@ -174,10 +174,10 @@ def stub_toolbox(path: Path) -> Path:
     """Fake the example toolchain: every build step succeeds and the ELF carries its symbols.
 
     The runtime sketches' firmware is checked for the runtime topic table and
-    the subscriber records, and the static ones for the generated receive
-    buffer, so the stub's nm prints the receive buffer always and the runtime
-    symbols only for the runtime sketches (whose paths name them): the static
-    firmware must not link the runtime table.
+    the subscriber records, the action sketch for the action table, and the
+    static ones for the generated receive buffer, so the stub's nm prints the
+    receive buffer always and the runtime symbols only for the sketches whose
+    paths name them: the static firmware must not link the runtime table.
     """
     path.mkdir(parents=True, exist_ok=True)
     (path / 'cmake').write_text('#!/usr/bin/env bash\nexit 0\n', encoding='utf-8')
@@ -223,6 +223,11 @@ def stub_toolbox(path: Path) -> Path:
         "        echo '00800460 000000e0 b r2s_runtime_topics'\n"
         "        echo '00800410 00000050 b r2s_runtime_subscribers'\n"
         "        echo '00800540 00000050 b r2s_runtime_publishers'\n"
+        '        ;;\n'
+        '    *arduino_action*)\n'
+        "        echo '00800460 00000030 b r2s_action_table'\n"
+        "        echo '00800410 00000018 b r2s_action_servers'\n"
+        "        echo '00800540 00000092 b fib'\n"
         '        ;;\n'
         'esac\n',
         encoding='utf-8',

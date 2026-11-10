@@ -14,6 +14,9 @@
 #ifdef R2S_WITH_SERVICES
 #include "r2s/r2s_services.h"
 #endif
+#ifdef R2S_WITH_ACTIONS
+#include "r2s/r2s_actions.h"
+#endif
 #include "r2s/r2s_rx.h"
 #include "r2s/r2s_session.h"
 #include "r2s/r2s_topics.h"
@@ -28,6 +31,9 @@ void r2s_test_reset(void)
 #endif
 #ifdef R2S_WITH_SERVICES
   r2s_services_test_reset();
+#endif
+#ifdef R2S_WITH_ACTIONS
+  r2s_actions_test_reset();
 #endif
   r2s_topics_test_reset();
   r2s_framer_test_reset();

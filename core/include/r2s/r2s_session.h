@@ -129,7 +129,19 @@ uint8_t r2s_session_topic_status(uint8_t index);
  */
 uint32_t r2s_session_token(void);
 
+#ifdef R2S_WITH_ACTIONS
+/// Sends one ack on the ack channel for this reliable channel and rel_seq.
+/**
+ * The actions layer answers through here [REL-1], so the single ack frame
+ * seq serves every reliable channel.
+ *
+ * \param[in] channel the reliable channel this clears.
+ * \param[in] rel_seq the rel seq this clears.
+ */
+void r2s_session_send_ack(uint8_t channel, uint8_t rel_seq);
+#endif
 /// The seq the next publish on the topic at index will carry.
+
 /**
  * Without advancing the topic's counter ([FRM-4], [FRM-5]).
  *

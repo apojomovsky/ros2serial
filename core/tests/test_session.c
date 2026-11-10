@@ -11,6 +11,7 @@
 #include "fake_port.h"
 #include "frames.h"
 #include "r2s/r2s.h"
+#include "r2s/r2s_actions.h"
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_session.h"
 #include "r2s/r2s_tx.h"
@@ -44,10 +45,21 @@ static const r2s_topic_t two_topics[] = {
 };
 
 #if DBL_MANT_DIG == FLT_MANT_DIG
-#define EXPECTED_FEATURES 0x5Fu
+#define EXPECTED_FEATURES_BASE 0x1Fu
 #else
-#define EXPECTED_FEATURES 0x4Fu
+#define EXPECTED_FEATURES_BASE 0x0Fu
 #endif
+#ifdef R2S_WITH_SERVICES
+#define EXPECTED_FEATURES_SVC 0x40u
+#else
+#define EXPECTED_FEATURES_SVC 0x00u
+#endif
+#ifdef R2S_WITH_ACTIONS
+#define EXPECTED_FEATURES_ACT 0x80u
+#else
+#define EXPECTED_FEATURES_ACT 0x00u
+#endif
+#define EXPECTED_FEATURES (EXPECTED_FEATURES_BASE | EXPECTED_FEATURES_SVC | EXPECTED_FEATURES_ACT)
 
 /* The TOPIC payload the one-topic table announces, byte for byte the payload
  * of spec/vectors/frames/topic.yaml. */
@@ -864,4 +876,54 @@ void test_session_a_spin_serves_at_most_eight_frames(void)
   TEST_ASSERT_EQUAL_UINT16((uint16_t)(before + 8u), r2s_framer_counters()->rx_frames);
   r2s_spin_some();
   TEST_ASSERT_EQUAL_UINT16((uint16_t)(before + 10u), r2s_framer_counters()->rx_frames);
+}
+
+/* Without the C++ layer the weak upcalls refuse: the goal is rejected while
+ * idle, and the cancel of an accepted goal is rejected while executing. */
+void test_session_actions_without_layer_refuse_goal_and_cancel(void)
+{
+    /* GOAL rel 0, goal 0, action 0, order 5. CANCEL rel 1, goal 0. */
+  const uint8_t goal[] = {0x04u, 0x00u, 0x00u, 0x00u, 0x05u, 0x00u, 0x00u, 0x00u};
+  const uint8_t cancel[] = {0x06u, 0x01u, 0x00u};
+  const uint8_t ack_goal[] = {0x08u, 0x00u};
+  const uint8_t ack_filler[] = {0x08u, 0x01u};
+  const uint8_t rejected_goal[] = {0x05u, 0x00u, 0x00u, 0x01u};
+  const uint8_t ack_cancel[] = {0x08u, 0x01u};
+  const uint8_t rejected_cancel[] = {0x07u, 0x02u, 0x00u, 0x01u};
+  const uint8_t hello_req[] = {0x01u, 0x01u};
+  const uint8_t topic_req[] = {0x03u, 0x00u};
+  const uint8_t topic_status[] = {0x05u, 0x10u, 0x00u};
+  const uint8_t ready[] = {0x06u, 0x01u, 0x00u, 0x00u, 0x00u};
+  const uint8_t query[] = {0x01u, 0x00u};
+  const uint8_t declare_ok[] = {0x03u, 0x00u, 0x00u, 0x00u};
+  static const r2s_action_t one_action[] = {
+    {{0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u, 0x18u}, "test_msgs/action/Fibonacci",
+      "spin"},
+  };
+
+  configure(one_topic, 1);
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_configure(one_action, 1));
+  feed_host(0, 0, hello_req, sizeof hello_req);
+  feed_host(0, 1, topic_req, sizeof topic_req);
+  feed_host(0, 2, topic_status, sizeof topic_status);
+  feed_host(8, 0, query, sizeof query);
+  feed_host(8, 1, declare_ok, sizeof declare_ok);
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_STATUS_OK, r2s_actions_status(0));
+  feed_host(0, 3, ready, sizeof ready);
+  TEST_ASSERT_EQUAL_UINT8(1, r2s_connected());
+  fake_port_tx_clear();
+  feed_host(8, 2, goal, sizeof goal);
+  TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+  assert_tx(0, 6, 0, ack_goal, sizeof ack_goal);
+  assert_tx(1, 8, 1, rejected_goal, sizeof rejected_goal);
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_IDLE, r2s_actions_state(0));
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_actions_answer_goal(0u, 0u, R2S_ACT_ACCEPTED));
+  feed_host(6, 0, ack_goal, sizeof ack_goal);
+  feed_host(6, 1, ack_filler, sizeof ack_filler);
+  fake_port_tx_clear();
+  feed_host(8, 3, cancel, sizeof cancel);
+  TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+  assert_tx(0, 6, 1, ack_cancel, sizeof ack_cancel);
+  assert_tx(1, 8, 3, rejected_cancel, sizeof rejected_cancel);
+  TEST_ASSERT_EQUAL_UINT8(R2S_ACT_EXECUTING, r2s_actions_state(0));
 }
