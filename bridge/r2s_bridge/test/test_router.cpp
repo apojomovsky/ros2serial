@@ -8,13 +8,6 @@
 // covers: LOG-1, LOG-2
 #include <gtest/gtest.h>
 
-#if defined(__linux__)
-#include <execinfo.h>
-#include <unistd.h>
-
-#include <csignal>
-#endif
-
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -45,37 +38,6 @@
 
 namespace r2s_bridge
 {
-
-#if defined(__linux__)
-// Temporary abort backtrace for the lyrical and rolling service-test abort;
-// reverted once the crash is root-caused.
-namespace
-{
-void print_abort_backtrace(int sig)
-{
-  void * frames[32];
-  const int depth = backtrace(frames, 32);
-  backtrace_symbols_fd(frames, depth, STDERR_FILENO);
-  signal(sig, SIG_DFL);
-  raise(sig);
-}
-struct AbortTracer : ::testing::Environment
-{
-  void SetUp() override
-  {
-    signal(SIGABRT, print_abort_backtrace);
-  }
-};
-struct AbortTracerRegistrar
-{
-  AbortTracerRegistrar()
-  {
-    ::testing::AddGlobalTestEnvironment(new AbortTracer);
-  }
-};
-const AbortTracerRegistrar kAbortTracerRegistrar{};
-}  // namespace
-#endif
 namespace test
 {
 namespace
