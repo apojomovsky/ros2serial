@@ -64,6 +64,105 @@ void on_cmd_vel(const geometry_msgs::msg::Twist &msg)
 }
 EOF
 sources+=("$build/check_static_sketch.cpp")
+# An action server sketch, runtime and static: the Fibonacci-like action
+# rides on the bundled Float32 descriptors for its goal, result and
+# feedback, proving both declaration paths compile for the board. The
+# static list expands after the traits and callbacks it names, since the
+# rows instantiate the server.
+cat >"$build/check_action_sketch.cpp" <<'EOF'
+#include <std_msgs/msg/float32.hpp>
+#include <r2s/action.hpp>
+struct Spin {
+    using Goal = std_msgs::msg::Float32;
+    using Result = std_msgs::msg::Float32;
+    using Feedback = std_msgs::msg::Float32;
+};
+namespace r2s
+{
+namespace action
+{
+template <> struct traits<Spin> {
+    static const char *action_name()
+    {
+        return "spin";
+    }
+    static const char *type_name()
+    {
+        return "test_msgs/action/Fibonacci";
+    }
+    static const uint8_t *type_hash()
+    {
+        static const uint8_t hash[8] = {0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u, 0x18u};
+        return hash;
+    }
+};
+} // namespace action
+} // namespace r2s
+r2s::action::GoalResponse on_spin_goal(const std_msgs::msg::Float32 &goal)
+{
+    (void)goal;
+    return r2s::action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+r2s::action::CancelResponse on_spin_cancel(const std_msgs::msg::Float32 &goal)
+{
+    (void)goal;
+    return r2s::action::CancelResponse::ACCEPT;
+}
+void on_spin_accepted(r2s::action::ServerGoalHandle<Spin> &handle)
+{
+    std_msgs::msg::Float32 feedback;
+    feedback.data = 1.0f;
+    (void)handle.publish_feedback(feedback);
+}
+r2s::action::Server<Spin> fib("spin", on_spin_goal, on_spin_cancel, on_spin_accepted);
+EOF
+cat >"$build/check_action_static.cpp" <<'EOF'
+#include <std_msgs/msg/float32.hpp>
+#include <r2s/action.hpp>
+struct StaticSpin {
+    using Goal = std_msgs::msg::Float32;
+    using Result = std_msgs::msg::Float32;
+    using Feedback = std_msgs::msg::Float32;
+};
+namespace r2s
+{
+namespace action
+{
+template <> struct traits<StaticSpin> {
+    static const char *action_name()
+    {
+        return "spin";
+    }
+    static const char *type_name()
+    {
+        return "test_msgs/action/Fibonacci";
+    }
+    static const uint8_t *type_hash()
+    {
+        static const uint8_t hash[8] = {0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u, 0x18u};
+        return hash;
+    }
+};
+} // namespace action
+} // namespace r2s
+r2s::action::GoalResponse on_static_goal(const std_msgs::msg::Float32 &goal)
+{
+    (void)goal;
+    return r2s::action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+r2s::action::CancelResponse on_static_cancel(const std_msgs::msg::Float32 &goal)
+{
+    (void)goal;
+    return r2s::action::CancelResponse::REJECT;
+}
+void on_static_accepted(r2s::action::ServerGoalHandle<StaticSpin> &handle)
+{
+    (void)handle;
+}
+#define R2S_ACTIONS(X) X(StaticSpin, static_fib, "spin", on_static_goal, on_static_cancel, on_static_accepted)
+R2S_ACTIONS(R2S_ACTION_X_SERVER)
+EOF
+action_sources=("$build/check_action_sketch.cpp" "$build/check_action_static.cpp")
 # The headers as a sketch includes them, with the package directories on
 # the path, so the spelling a sketch uses is the one that compiles.
 printf '#include <std_msgs/msg/float32.hpp>\n#include <geometry_msgs/msg/twist.hpp>\n' \
@@ -306,6 +405,16 @@ if ! avr-g++ "${flags[@]}" -fsyntax-only "$root/cpp/src/runtime.cpp"; then
   echo "avr-syntax: cpp/src/runtime.cpp did not compile"
   status=1
 fi
+# The action sketches and the registry source, with the actions channel on:
+# the channel is a build flag, so these prove the flag the sketches build
+# with.
+action_flags=("${flags[@]}" -DR2S_WITH_ACTIONS)
+for source in "${action_sources[@]}" "$root/cpp/src/action.cpp"; do
+  if ! avr-g++ "${action_flags[@]}" -fsyntax-only "$source"; then
+    echo "avr-syntax: $source did not compile"
+    status=1
+  fi
+done
 # The Arduino build of the rosserial sketch, so initNode's Serial branch
 # compiles against the same stub the TU above stages. The port glue lives
 # beside the sketch on a board, so its directory rides along here.
@@ -314,4 +423,4 @@ if ! avr-g++ "${flags[@]}" -fsyntax-only -DARDUINO -I "$root/ports/arduino" "$bu
   status=1
 fi
 [ "$status" = 0 ] || exit 1
-echo "avr-syntax ok: ${#sources[@]} translation units and the runtime source"
+echo "avr-syntax ok: ${#sources[@]} translation units, ${#action_sources[@]} action sketches and the runtime sources"

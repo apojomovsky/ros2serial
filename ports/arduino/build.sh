@@ -67,6 +67,8 @@ if [ "$no_bundle" = 0 ]; then
   cp ports/arduino/r2s_arduino_port.cpp ports/arduino/r2s_arduino_port.h "$lib/src/" || exit 1
   cp cpp/include/r2s/runtime.hpp "$lib/src/r2s/" || exit 1
   cp cpp/src/runtime.cpp "$lib/src/" || exit 1
+  cp cpp/include/r2s/action.hpp "$lib/src/r2s/" || exit 1
+  cp cpp/src/action.cpp "$lib/src/" || exit 1
   echo "arduino build: library staged at $lib"
 fi
 

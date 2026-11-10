@@ -11,6 +11,9 @@
 #ifdef R2S_WITH_PARAMS
 #include "r2s/r2s_params.h"
 #endif
+#ifdef R2S_WITH_ACTIONS
+#include "r2s/r2s_actions.h"
+#endif
 #include "r2s/r2s_rx.h"
 #include "r2s/r2s_session.h"
 #include "r2s/r2s_topics.h"
@@ -22,6 +25,9 @@ void r2s_test_reset(void)
   r2s_session_test_reset();
 #ifdef R2S_WITH_PARAMS
   r2s_params_test_reset();
+#endif
+#ifdef R2S_WITH_ACTIONS
+  r2s_actions_test_reset();
 #endif
   r2s_topics_test_reset();
   r2s_framer_test_reset();
