@@ -101,9 +101,9 @@ extern "C" {
  */
 typedef struct
 {
-  uint8_t type_hash[8];
-  const char *type_name;
-  const char *action_name;
+  uint8_t type_hash[8];  ///< The first 8 bytes of the RIHS01 type hash.
+  const char *type_name;  ///< The action type name the walk announces.
+  const char *action_name;  ///< The action name the walk announces.
 } r2s_action_t;
 
 #ifdef R2S_WITH_ACTIONS
