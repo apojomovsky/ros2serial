@@ -12,6 +12,7 @@ if(NOT CMAKE_CXX_STANDARD_REQUIRED)
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(action_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(rcl_action REQUIRED)
@@ -39,6 +40,7 @@ target_include_directories(r2s_bridge_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_link_libraries(r2s_bridge_component PUBLIC
+  action_msgs::action_msgs__rosidl_typesupport_cpp
   rclcpp::rclcpp
   rclcpp_components::component
   diagnostic_msgs::diagnostic_msgs__rosidl_typesupport_cpp
@@ -198,8 +200,7 @@ if(BUILD_TESTING)
     std_srvs::std_srvs__rosidl_typesupport_cpp)
 
   # The action introspection test loads the action packages for real, so it
-  # needs tf2_msgs and action_msgs at build and test time.
-  find_package(action_msgs REQUIRED)
+  # needs tf2_msgs and action_msgs targets (found at top level).
   ament_add_gtest(test_action_types test/test_action_types.cpp)
   target_link_libraries(test_action_types
     r2s_bridge_component
@@ -232,6 +233,7 @@ if(BUILD_TESTING)
   target_link_libraries(test_router
     r2s_bridge_component
     r2s_bridge_test_support
+    action_msgs::action_msgs__rosidl_typesupport_cpp
     geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
     rclcpp_action::rclcpp_action
     sensor_msgs::sensor_msgs__rosidl_typesupport_cpp

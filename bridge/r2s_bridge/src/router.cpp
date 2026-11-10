@@ -19,9 +19,11 @@
 #include <string>
 #include <utility>
 
+#include <action_msgs/msg/goal_status_array.hpp>
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <rclcpp/create_generic_client.hpp>
+#include <rclcpp/create_publisher.hpp>
 #include <rclcpp/create_generic_publisher.hpp>
 #include <rclcpp/create_generic_subscription.hpp>
 
@@ -34,6 +36,13 @@
 #include <rcl/service.h>
 #endif
 
+#include <rcl_action/action_server.h>
+#include <rcl_action/goal_handle.h>
+#include <rcl_action/goal_state_machine.h>
+#include <rcl_action/types.h>
+#include <rcl/time.h>
+
+#include "r2s_bridge/action_types.hpp"
 #include "r2s_bridge/converter.hpp"
 #include "r2s_bridge/service_types.hpp"
 #include "r2s_bridge/type_support.hpp"
@@ -67,6 +76,31 @@ constexpr std::size_t kMaxQueuedRosCalls = 3;
 constexpr std::uint8_t kSvcStatusOk = 0u;
 constexpr std::uint8_t kSvcStatusBadPayload = 2u;
 constexpr std::uint8_t kSvcStatusBusy = 3u;
+
+// The ROS goal states the bridge reports ([SES-35], action_msgs GoalStatus).
+constexpr std::int8_t kGoalSucceeded = 4;
+constexpr std::int8_t kGoalCanceled = 5;
+constexpr std::int8_t kGoalAborted = 6;
+constexpr std::int8_t kGoalUnknown = 0;
+
+// The CancelGoal verdicts the bridge answers a ROS cancel with
+// (action_msgs/srv/CancelGoal).
+constexpr std::int8_t kCancelNone = 0;
+constexpr std::int8_t kCancelRejected = 1;
+constexpr std::int8_t kCancelUnknownGoal = 2;
+constexpr std::int8_t kCancelTerminated = 3;
+
+// The MCU goal and cancel verdict the bridge waits for ([ACT-4], [ACT-5]):
+// anything else reads as refused.
+constexpr std::uint8_t kActDecisionAccepted = 0u;
+
+// The MCU call timeout ([SVR-8]) applies to goals and cancels the same way:
+// a call with no answer in this long reports back instead of leaking.
+constexpr std::int64_t kActionCallTimeoutMs = 5000;
+
+// How often an active goal republishes its status array while nothing
+// changes: clients joining late still see it.
+constexpr std::int64_t kActionStatusPeriodMs = 1000;
 
 // The ROS request identity the answer path carries: shared on the generic
 // service, a copied struct on the rcl fallback.
@@ -255,6 +289,7 @@ struct Router::Impl
     rclcpp::node_interfaces::NodeParametersInterface::SharedPtr in_node_params,
     NodeServiceInterfaces in_node_services)
   : topics(in_topics), params(std::move(in_params)), sink(std::move(in_sink)), clock(in_clock),
+    ros_clock(in_ros_clock),
     mcu_sink(std::move(in_mcu_sink)), node_params_(std::move(in_node_params)),
     node_services_(std::move(in_node_services)),
     session_(session_config, in_clock, in_ros_clock, std::move(in_open), resolve_topic_type,
@@ -262,7 +297,7 @@ struct Router::Impl
         param_status_event(), service_request_event(), service_response_event(),
         action_goal_response_event(), action_cancel_response_event(), action_feedback_event(),
         action_result_event()},
-      resolve_service_type)
+      resolve_service_type, resolve_action_type)
   {
     if (!sink) {
       throw std::invalid_argument("r2s_bridge::Router: a log sink is required");
@@ -338,6 +373,31 @@ struct Router::Impl
     std::int64_t sent_ms = 0;
   };
 
+    // The rcl clock behind the action servers: goal bookkeeping reads it
+    // for expiry, while stamps come from the router's own ROS clock.
+  struct RclClock
+  {
+    rcl_clock_t clock{};
+    RclClock()
+    {
+      // Steady time for goal bookkeeping: the bridge measures timeouts and
+      // expiry, never ROS timestamps, so a time source it cannot observe
+      // would only stall it.
+      rcl_allocator_t allocator = rcl_get_default_allocator();
+      if (rcl_clock_init(RCL_STEADY_TIME, &clock, &allocator) != RCL_RET_OK) {
+        rcl_reset_error();
+        throw std::runtime_error("rcl_clock_init failed");
+      }
+    }
+    ~RclClock()
+    {
+      [[maybe_unused]] const rcl_ret_t fini = rcl_clock_fini(&clock);
+      (void)fini;
+    }
+    RclClock(const RclClock &) = delete;
+    RclClock & operator=(const RclClock &) = delete;
+  };
+
     // One routed service's endpoints. A server-role service is a ROS service
     // answered from the MCU; a client-role service is a ROS client fed by
     // MCU calls. Move-only: the rcl handle and the futures do not copy.
@@ -369,6 +429,76 @@ struct Router::Impl
     std::uint8_t next_req = 0;
     std::deque<RosCall> ros_queue;
     std::map<std::uint8_t, InflightMcuCall> mcu_inflight;
+  };
+
+    // A ROS goal request taken but not yet answered by the MCU: the header
+    // answers the ROS client once the GOAL_RESP arrives ([ACT-4]).
+  struct PendingGoal
+  {
+    rmw_request_id_t header{};
+    std::array<std::uint8_t, 16> uuid{};
+    std::uint8_t wire_seq = 0;
+    std::int64_t sent_ms = 0;
+  };
+
+    // A ROS cancel request taken but not yet answered by the MCU ([ACT-5]).
+  struct PendingCancel
+  {
+    rmw_request_id_t header{};
+    std::int64_t sent_ms = 0;
+  };
+
+    // One ROS goal the bridge owns for the MCU: the UUID ROS knows it by,
+    // the wire seq the MCU knows it by, and the stored terminal result.
+    // A new goal replaces a terminal one; an abort keeps nobody waiting.
+  struct ActiveGoal
+  {
+    std::array<std::uint8_t, 16> uuid{};
+    std::uint8_t wire_seq = 0;
+    std::int32_t accept_sec = 0;
+    std::uint32_t accept_nanosec = 0;
+    bool cancel_requested = false;
+    rcl_action_goal_handle_t *handle = nullptr;
+    std::int8_t terminal = -1;
+    // The terminal result as wire bytes: unpacked fresh for every waiter,
+    // so no struct is ever copied with its heap buffers ([SES-35]).
+    std::optional<std::vector<std::uint8_t>> packed_result;
+    std::vector<rmw_request_id_t> result_waiters;
+    std::int64_t last_status_ms = 0;
+    bool status_dirty = true;
+  };
+
+    // One routed action's endpoints: the rcl action server the ROS clients
+    // talk to, answered from the MCU over the reliable channel. Move-only:
+    // the rcl handle and the introspection structs do not copy.
+  struct ActionRoute
+  {
+    ActionRoute(ActionInfo in_info, ActionTypes in_types)
+    : info(std::move(in_info)), types(std::move(in_types)) {}
+    ~ActionRoute()
+    {
+      if (rcl_valid) {
+        [[maybe_unused]] const rcl_ret_t fini =
+          rcl_action_server_fini(&server, rcl_node.get());
+        (void)fini;
+      }
+    }
+    ActionInfo info;
+    ActionTypes types;
+    rcl_action_server_t server = rcl_action_get_zero_initialized_server();
+    std::shared_ptr<rcl_node_t> rcl_node;
+    // The status array goes out over a plain rclcpp publisher: rcl's own
+    // status publish hangs in the dev image (see the follow-up), while
+    // takes, sends and the goal state machine all behave.
+    rclcpp::Publisher<action_msgs::msg::GoalStatusArray>::SharedPtr status_pub;
+    bool rcl_valid = false;
+    std::uint8_t next_seq = 0;
+    std::optional<PendingGoal> pending;
+    std::optional<PendingCancel> pending_cancel;
+    std::optional<ActiveGoal> active;
+    ActionTypes::Struct goal_request_take;
+    ActionTypes::Struct result_request_take;
+    ActionTypes::Struct cancel_request_take;
   };
 
     // Poll-time repair attempts per topic missing despite an ok verdict: how
@@ -437,24 +567,34 @@ struct Router::Impl
 
   std::function<void(std::uint8_t, std::uint8_t)> action_goal_response_event()
   {
-    return [this](std::uint8_t, std::uint8_t) {};
+    return [this](std::uint8_t seq, std::uint8_t decision) {
+             on_action_goal_response(seq, decision);
+           };
   }
 
   std::function<void(std::uint8_t, std::uint8_t)> action_cancel_response_event()
   {
-    return [this](std::uint8_t, std::uint8_t) {};
+    return [this](std::uint8_t seq, std::uint8_t decision) {
+             on_action_cancel_response(seq, decision);
+           };
   }
 
   std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
   action_feedback_event()
   {
-    return [this](std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &) {};
+    return [this](std::uint8_t seq, std::uint8_t index,
+             const std::vector<std::uint8_t> & payload) {
+             on_action_feedback(seq, index, payload);
+           };
   }
 
   std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
   action_result_event()
   {
-    return [this](std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &) {};
+    return [this](std::uint8_t seq, std::uint8_t outcome,
+             const std::vector<std::uint8_t> & payload) {
+             on_action_result(seq, outcome, payload);
+           };
   }
 
   void emit(SessionLog level, const std::string & text)
@@ -580,6 +720,9 @@ struct Router::Impl
         // in-flight call on both sides ([SVR-8], [REL-5]), so no ROS caller
         // survives it.
     sync_services();
+        // Actions rebuild the same way: a re-handshake aborts every active
+        // goal ([SES-35], [REL-5]), so no ROS client waits on a dead MCU.
+    sync_actions();
   }
 
   void sync_routes()
@@ -695,6 +838,756 @@ struct Router::Impl
         continue;
       }
       ensure_service_route(info);
+    }
+  }
+
+    // One ROS action server for an MCU action: the rcl server the ROS
+    // clients talk to, with the introspection handles the conversions use.
+    // Throws naming the action on any failure, so the caller refuses the
+    // route instead of serving it.
+  void make_ros_action_server(ActionRoute & route)
+  {
+    if (node_services_.base == nullptr) {
+      throw std::invalid_argument("no node interfaces for the action server");
+    }
+    route.rcl_node = node_services_.base->get_shared_rcl_node_handle();
+    const std::string expanded =
+      node_services_.base->resolve_topic_or_service_name(route.info.action_name, false);
+    const rcl_action_server_options_t options = rcl_action_server_get_default_options();
+    if (rcl_action_server_init(&route.server, route.rcl_node.get(), &rcl_clock_.clock,
+          route.types.cpp_action_handle(), expanded.c_str(), &options) != RCL_RET_OK)
+    {
+      rcl_reset_error();
+      throw std::runtime_error("rcl_action_server_init failed");
+    }
+    route.status_pub = std::dynamic_pointer_cast<
+      rclcpp::Publisher<action_msgs::msg::GoalStatusArray>>(
+      topics->create_publisher(expanded + "/_action/status",
+        rclcpp::create_publisher_factory<action_msgs::msg::GoalStatusArray,
+          std::allocator<void>,
+          rclcpp::Publisher<action_msgs::msg::GoalStatusArray>>(
+          rclcpp::PublisherOptionsWithAllocator<std::allocator<void>>()),
+        rclcpp::QoS(1).transient_local().reliable()));
+    if (!route.status_pub) {
+      [[maybe_unused]] const rcl_ret_t fini =
+        rcl_action_server_fini(&route.server, route.rcl_node.get());
+      (void)fini;
+      throw std::runtime_error("cannot create the action status publisher");
+    }
+    route.rcl_valid = true;
+    route.goal_request_take = route.types.make_goal_request();
+    route.result_request_take = route.types.make_result_request();
+    route.cancel_request_take = route.types.make_cancel_request();
+  }
+
+    // Gives one ok action its route: the introspection handles, then the
+    // rcl action server. An action whose type does not load never reaches
+    // here: the walk verdict refused it ([ACT-7]).
+  void ensure_action_route(const ActionInfo & info)
+  {
+    std::unique_ptr<ActionRoute> route;
+    try {
+      route = std::make_unique<ActionRoute>(info, ActionTypes(info.type_name));
+      // GCOVR_EXCL_START: resolve_action_type reports ok only after the
+      // same library and action handle load, so the constructor cannot
+      // throw for a routed action; a unit test cannot stage a failure
+      // between the verdict and this lookup.
+    } catch (const std::exception & failure) {
+      action_repairs_[info.index].reason = failure.what();
+      emit(SessionLog::kError,
+        "action '" + info.action_name + "': no route (" + failure.what() + ")");
+      return;
+    }
+    // GCOVR_EXCL_STOP
+    try {
+      make_ros_action_server(*route);
+    } catch (const std::exception & failure) {
+      action_repairs_[info.index].reason = failure.what();
+      emit(SessionLog::kError,
+        "action '" + info.action_name + "': no endpoint (" + failure.what() + ")");
+      return;
+    }
+    action_repairs_.erase(info.index);
+    action_routes_[info.index] = std::move(route);
+  }
+
+    // Every handshake aborts the live goals first ([SES-35]): the MCU drops
+    // its side on the re-handshake ([REL-5]), so every ROS client learns
+    // the abort instead of waiting. Then the ok actions get new servers.
+  void sync_actions()
+  {
+    abort_all_actions();
+    for (auto & entry : action_routes_) {
+      ActionRoute & route = *entry.second;
+      if (route.rcl_valid && route.active && route.active->status_dirty) {
+        publish_action_status(route);
+        route.active->status_dirty = false;
+        route.active->last_status_ms = now_ms();
+      }
+    }
+    action_routes_.clear();
+    action_repairs_.clear();
+    for (const ActionInfo & info : session_.actions()) {
+      if (info.status != kActionStatusOk) {
+        continue;
+      }
+      ensure_action_route(info);
+    }
+  }
+
+    // Retries actions missing despite an ok verdict, the way the service
+    // repair does: a transient creation failure must not lose the action
+    // while the handshake keeps reporting it ok.
+  void repair_missing_actions(std::chrono::nanoseconds now)
+  {
+    if (session_.state() != SessionState::kConnected) {
+      return;
+    }
+    for (const ActionInfo & info : session_.actions()) {
+      if (info.status != kActionStatusOk || action_routes_.count(info.index) != 0u) {
+        continue;
+      }
+      RepairState & state = action_repairs_[info.index];
+      if (state.attempts >= kMaxRepairAttempts) {
+        continue;
+      }
+      if (state.attempts > 0 &&
+        now - state.last_attempt < std::chrono::milliseconds(kRepairSpacingMs))
+      {
+        continue;
+      }
+      state.last_attempt = now;
+      ++state.attempts;
+      ensure_action_route(info);
+    }
+  }
+
+  bool uuid_is_zero(const std::array<std::uint8_t, 16> & uuid) const
+  {
+    for (const std::uint8_t byte : uuid) {
+      if (byte != 0u) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  rcl_action_goal_info_t goal_info_of(
+    const std::array<std::uint8_t, 16> & uuid, std::int32_t sec, std::uint32_t nanosec) const
+  {
+    rcl_action_goal_info_t info{};
+    static_assert(sizeof(info.goal_id.uuid) == 16u, "a goal id is 16 bytes");
+    std::memcpy(info.goal_id.uuid, uuid.data(), uuid.size());
+    info.stamp.sec = sec;
+    info.stamp.nanosec = nanosec;
+    return info;
+  }
+
+  std::int64_t ros_now_sec(std::uint32_t & nanosec) const
+  {
+    const std::int64_t now_ns =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(ros_clock.now()).count();
+    nanosec = static_cast<std::uint32_t>(now_ns % 1000000000LL);
+    return now_ns / 1000000000LL;
+  }
+
+    // The wire seq for a new goal on a route: its own counter, skipping seqs
+    // another route still holds, so every live goal has a unique seq even
+    // though RESULT names no action ([ACT-1]). Pending goals count too: the
+    // MCU may accept them all, and then they are live with equal standing.
+    // The counter restarts with each handshake ([ACT-2]).
+  std::uint8_t choose_goal_seq(ActionRoute & route)
+  {
+    for (int tries = 0; tries < 256; ++tries) {
+      const std::uint8_t seq = static_cast<std::uint8_t>(route.next_seq + tries);
+      bool clash = false;
+      for (const auto & entry : action_routes_) {
+        const ActionRoute & other = *entry.second;
+        if (&other == &route) {
+          continue;
+        }
+        if ((other.pending && other.pending->wire_seq == seq) ||
+          (other.active && other.active->wire_seq == seq))
+        {
+          clash = true;
+          break;
+        }
+      }
+      if (!clash) {
+        route.next_seq = static_cast<std::uint8_t>(seq + 1u);
+        return seq;
+      }
+    }
+    route.next_seq = static_cast<std::uint8_t>(route.next_seq + 1u);
+    return static_cast<std::uint8_t>(route.next_seq - 1u);
+  }
+
+    // Answers one taken goal request, accepted or not.
+  void answer_goal(
+    ActionRoute & route, const rmw_request_id_t & header, bool accepted, std::int32_t sec,
+    std::uint32_t nanosec)
+  {
+    ActionTypes::Struct response = route.types.make_goal_response();
+    if (!route.types.fill_goal_response(response, sec, nanosec, accepted)) {
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': cannot fill the goal response");
+      return;
+    }
+    rmw_request_id_t answer = header;
+    if (rcl_action_send_goal_response(
+          &route.server, &answer, response.storage.data()) != RCL_RET_OK)
+    {
+      rcl_reset_error();
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': no ROS answer for the goal request");
+    }
+  }
+
+    // One taken ROS goal request: rejected at once when another goal is
+    // live, packed and sent to the MCU otherwise ([SES-35], [ACT-3]).
+  void on_ros_goal_request(ActionRoute & route)
+  {
+    rmw_request_id_t header{};
+    if (rcl_action_take_goal_request(
+          &route.server, &header, route.goal_request_take.storage.data()) != RCL_RET_OK)
+    {
+      rcl_reset_error();
+      return;
+    }
+    std::array<std::uint8_t, 16> uuid{};
+    if (!route.types.goal_id_of(route.goal_request_take, uuid)) {
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': dropped ROS goal without an id");
+      std::uint32_t nanosec = 0;
+      const std::int64_t sec = ros_now_sec(nanosec);
+      answer_goal(route, header, false, static_cast<std::int32_t>(sec), nanosec);
+      return;
+    }
+    if (route.pending || (route.active && route.active->terminal < 0)) {
+      std::uint32_t nanosec = 0;
+      const std::int64_t sec = ros_now_sec(nanosec);
+      answer_goal(route, header, false, static_cast<std::int32_t>(sec), nanosec);
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': rejected, a goal is already active");
+      return;
+    }
+    const void *goal = route.types.goal_of(route.goal_request_take);
+    std::vector<std::uint8_t> packed;
+    const ConvertResult converted = goal == nullptr ?
+      ConvertResult{ConvertFail::kUnsupportedField, 0xFFu} :
+      converter_.pack_from_struct(route.types.goal_type_name(), false, goal, packed);
+    if (converted.fail != ConvertFail::kNone) {
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': dropped ROS goal (" +
+        fail_name(converted.fail) + " at '" +
+        field_text(route.types.goal_type_name(), converted.field) + "')");
+      std::uint32_t nanosec = 0;
+      const std::int64_t sec = ros_now_sec(nanosec);
+      answer_goal(route, header, false, static_cast<std::int32_t>(sec), nanosec);
+      return;
+    }
+    const std::uint8_t seq = choose_goal_seq(route);
+    if (!session_.send_action_goal(route.info.index, seq, packed)) {
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': the link refused the ROS goal");
+      std::uint32_t nanosec = 0;
+      const std::int64_t sec = ros_now_sec(nanosec);
+      answer_goal(route, header, false, static_cast<std::int32_t>(sec), nanosec);
+      return;
+    }
+    PendingGoal pending;
+    pending.header = header;
+    pending.uuid = uuid;
+    pending.wire_seq = seq;
+    pending.sent_ms = now_ms();
+    route.pending = pending;
+  }
+
+    // Answers one taken cancel request against one route.
+  void answer_cancel(
+    ActionRoute & route, const rmw_request_id_t & header, std::int8_t code, bool canceling,
+    const ActiveGoal *goal = nullptr)
+  {
+    ActionTypes::Struct response = route.types.make_cancel_response();
+    const std::array<std::uint8_t, 16> empty{};
+    const bool filled = goal != nullptr ?
+      route.types.fill_cancel_response(response, code, goal->uuid, goal->accept_sec,
+        goal->accept_nanosec, canceling) :
+      route.types.fill_cancel_response(response, code, empty, 0, 0, false);
+    if (!filled) {
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': cannot fill the cancel response");
+      return;
+    }
+    rmw_request_id_t answer = header;
+    if (rcl_action_send_cancel_response(
+          &route.server, &answer, response.storage.data()) != RCL_RET_OK)
+    {
+      rcl_reset_error();
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': no ROS answer for the cancel request");
+    }
+  }
+
+  bool cancel_matches(
+    const ActiveGoal & goal, const std::array<std::uint8_t, 16> & uuid, std::int32_t sec,
+    std::uint32_t nanosec) const
+  {
+    if (goal.terminal >= 0) {
+      return false;
+    }
+    const bool id_match = uuid_is_zero(uuid) || uuid == goal.uuid;
+    const bool time_match = (sec == 0 && nanosec == 0u) ||
+      (goal.accept_sec < sec ||
+      (goal.accept_sec == sec && goal.accept_nanosec <= nanosec));
+    return id_match && time_match;
+  }
+
+    // One taken ROS cancel request: matched against the live goal, forwarded
+    // to the MCU, and answered when the MCU answers ([ACT-5]).
+  void on_ros_cancel_request(ActionRoute & route)
+  {
+    rmw_request_id_t header{};
+    if (rcl_action_take_cancel_request(
+          &route.server, &header, route.cancel_request_take.storage.data()) != RCL_RET_OK)
+    {
+      rcl_reset_error();
+      return;
+    }
+    std::array<std::uint8_t, 16> uuid{};
+    std::int32_t sec = 0;
+    std::uint32_t nanosec = 0;
+    if (!route.types.cancel_of(route.cancel_request_take, uuid, sec, nanosec)) {
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': dropped ROS cancel without an id");
+      answer_cancel(route, header, kCancelRejected, false);
+      return;
+    }
+    if (!route.active) {
+      answer_cancel(route, header, kCancelUnknownGoal, false);
+      return;
+    }
+    if (route.active->terminal >= 0) {
+      answer_cancel(route, header, kCancelTerminated, false);
+      return;
+    }
+    if (!cancel_matches(*route.active, uuid, sec, nanosec)) {
+      answer_cancel(route, header, kCancelUnknownGoal, false);
+      return;
+    }
+    if (route.active->cancel_requested) {
+      answer_cancel(route, header, kCancelNone, true, &*route.active);
+      return;
+    }
+    if (!session_.send_action_cancel(route.active->wire_seq)) {
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': the link refused the ROS cancel");
+      answer_cancel(route, header, kCancelRejected, false);
+      return;
+    }
+    PendingCancel pending;
+    pending.header = header;
+    pending.sent_ms = now_ms();
+    route.pending_cancel = pending;
+    route.active->cancel_requested = true;
+  }
+
+    // Answers one waiting result request from the stored terminal result:
+    // the packed bytes unpack into a fresh struct per waiter, so nothing
+    // is ever copied with its heap buffers.
+  void answer_result_waiter(
+    ActionRoute & route, const rmw_request_id_t & header, std::int8_t status,
+    const std::optional<std::vector<std::uint8_t>> & packed_result)
+  {
+    ActionTypes::Struct response = route.types.make_result_response();
+    if (!route.types.fill_result_status(response, status)) {
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': cannot fill the result status");
+      return;
+    }
+    if (packed_result) {
+      void *into = route.types.result_of(response);
+      if (into == nullptr) {
+        emit(SessionLog::kWarning,
+          "action '" + route.info.action_name + "': cannot fill the stored result");
+        return;
+      }
+      const ConvertResult converted = converter_.unpack_to_struct(
+        route.types.result_type_name(), false, packed_result->data(), packed_result->size(),
+        into);
+      if (converted.fail != ConvertFail::kNone) {
+        emit(SessionLog::kWarning,
+          "action '" + route.info.action_name + "': dropped stored result (" +
+          fail_name(converted.fail) + " at '" +
+          field_text(route.types.result_type_name(), converted.field) + "')");
+        return;
+      }
+    }
+    rmw_request_id_t answer = header;
+    if (rcl_action_send_result_response(
+          &route.server, &answer, response.storage.data()) != RCL_RET_OK)
+    {
+      rcl_reset_error();
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': no ROS answer for the result request");
+    }
+  }
+
+    // One taken ROS result request: answered from the stored result when
+    // terminal, queued behind the MCU otherwise.
+  void on_ros_result_request(ActionRoute & route)
+  {
+    rmw_request_id_t header{};
+    if (rcl_action_take_result_request(
+          &route.server, &header, route.result_request_take.storage.data()) != RCL_RET_OK)
+    {
+      rcl_reset_error();
+      return;
+    }
+    std::array<std::uint8_t, 16> uuid{};
+    if (!route.types.result_id_of(route.result_request_take, uuid)) {
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': dropped ROS result without an id");
+      answer_result_waiter(route, header, kGoalUnknown, std::nullopt);
+      return;
+    }
+    if (!route.active || route.active->uuid != uuid) {
+      answer_result_waiter(route, header, kGoalUnknown, std::nullopt);
+      return;
+    }
+    if (route.active->terminal >= 0) {
+      answer_result_waiter(route, header, route.active->terminal, route.active->packed_result);
+      return;
+    }
+    route.active->result_waiters.push_back(header);
+  }
+
+    // Takes pending ROS requests on every action server: a take that finds
+    // nothing resets the middleware error and moves on; the 1 ms poll takes
+    // again.
+  void take_action_requests()
+  {
+    for (auto & entry : action_routes_) {
+      ActionRoute & route = *entry.second;
+      if (!route.rcl_valid) {
+        continue;
+      }
+      on_ros_goal_request(route);
+      on_ros_cancel_request(route);
+      on_ros_result_request(route);
+    }
+  }
+
+  ActionRoute *action_route_for(std::uint8_t index)
+  {
+    const auto found = action_routes_.find(index);
+    if (found == action_routes_.end()) {
+      return nullptr;
+    }
+    if (found->second->info.status != kActionStatusOk) {
+      return nullptr;
+    }
+    return found->second.get();
+  }
+
+    // One GOAL_RESP the MCU sent while connected: the pending ROS goal is
+    // accepted or refused ([ACT-4]). A response for no pending goal is a
+    // stale duplicate and is ignored.
+  void on_action_goal_response(std::uint8_t seq, std::uint8_t decision)
+  {
+    std::lock_guard<std::recursive_mutex> guard(mutex);
+    for (auto & entry : action_routes_) {
+      ActionRoute & route = *entry.second;
+      if (!route.pending || route.pending->wire_seq != seq) {
+        continue;
+      }
+      std::uint32_t nanosec = 0;
+      const std::int64_t sec = ros_now_sec(nanosec);
+      if (decision != kActDecisionAccepted) {
+        answer_goal(route, route.pending->header, false, static_cast<std::int32_t>(sec),
+          nanosec);
+        route.pending.reset();
+        return;
+      }
+      const rcl_action_goal_info_t info = goal_info_of(route.pending->uuid,
+          static_cast<std::int32_t>(sec), nanosec);
+      rcl_action_goal_handle_t *handle = rcl_action_accept_new_goal(&route.server, &info);
+      answer_goal(route, route.pending->header, handle != nullptr,
+        static_cast<std::int32_t>(sec), nanosec);
+      if (handle == nullptr) {
+        rcl_reset_error();
+        emit(SessionLog::kWarning,
+          "action '" + route.info.action_name + "': the goal id is already tracked");
+        route.pending.reset();
+        return;
+      }
+      ActiveGoal goal;
+      goal.uuid = route.pending->uuid;
+      goal.wire_seq = seq;
+      goal.accept_sec = static_cast<std::int32_t>(sec);
+      goal.accept_nanosec = nanosec;
+      goal.handle = handle;
+      route.pending.reset();
+      if (rcl_action_update_goal_state(handle, GOAL_EVENT_EXECUTE) != RCL_RET_OK) {
+        rcl_reset_error();
+        emit(SessionLog::kWarning,
+          "action '" + route.info.action_name + "': cannot start the accepted goal");
+      }
+      route.active = std::move(goal);
+      route.active->status_dirty = true;
+      route.active->last_status_ms = now_ms();
+      return;
+    }
+  }
+
+    // One CANCEL_RESP the MCU sent while connected: the pending ROS cancel
+    // is accepted or refused ([ACT-5]). A response for no pending cancel is
+    // a stale duplicate and is ignored.
+  void on_action_cancel_response(std::uint8_t seq, std::uint8_t decision)
+  {
+    std::lock_guard<std::recursive_mutex> guard(mutex);
+    for (auto & entry : action_routes_) {
+      ActionRoute & route = *entry.second;
+      if (!route.pending_cancel || !route.active || route.active->wire_seq != seq) {
+        continue;
+      }
+      if (decision != kActDecisionAccepted) {
+        route.active->cancel_requested = false;
+        answer_cancel(route, route.pending_cancel->header, kCancelRejected, false);
+      } else {
+        if (rcl_action_update_goal_state(
+              route.active->handle, GOAL_EVENT_CANCEL_GOAL) != RCL_RET_OK)
+        {
+          rcl_reset_error();
+          emit(SessionLog::kWarning,
+            "action '" + route.info.action_name + "': cannot start canceling the goal");
+        }
+        answer_cancel(route, route.pending_cancel->header, kCancelNone, true,
+          &*route.active);
+      }
+      route.pending_cancel.reset();
+      route.active->status_dirty = true;
+      return;
+    }
+  }
+
+    // One FEEDBACK the MCU sent while connected: published to the ROS goal
+    // when it names the live one, dropped otherwise. Feedback rides best
+    // effort and is never acked ([ACT-3]).
+  void on_action_feedback(
+    std::uint8_t seq, std::uint8_t index, const std::vector<std::uint8_t> & payload)
+  {
+    std::lock_guard<std::recursive_mutex> guard(mutex);
+    ActionRoute *route = action_route_for(index);
+    if (route == nullptr || !route->active || route->active->wire_seq != seq ||
+      route->active->terminal >= 0)
+    {
+      return;
+    }
+    ActionTypes::Struct message = route->types.make_feedback_message();
+    if (!route->types.fill_feedback_id(message, route->active->uuid)) {
+      emit(SessionLog::kWarning,
+        "action '" + route->info.action_name + "': cannot fill the feedback id");
+      return;
+    }
+    void *feedback = route->types.feedback_of(message);
+    if (feedback == nullptr) {
+      emit(SessionLog::kWarning,
+        "action '" + route->info.action_name + "': cannot fill the feedback");
+      return;
+    }
+    const ConvertResult converted = converter_.unpack_to_struct(
+      route->types.feedback_type_name(), false, payload.data(), payload.size(), feedback);
+    if (converted.fail != ConvertFail::kNone) {
+      emit(SessionLog::kWarning,
+        "action '" + route->info.action_name + "': dropped feedback (" +
+        fail_name(converted.fail) + " at '" +
+        field_text(route->types.feedback_type_name(), converted.field) + "')");
+      return;
+    }
+    if (rcl_action_publish_feedback(&route->server, message.storage.data()) != RCL_RET_OK) {
+      rcl_reset_error();
+      emit(SessionLog::kWarning,
+        "action '" + route->info.action_name + "': cannot publish feedback");
+    }
+  }
+
+    // One RESULT the MCU sent while connected: the live ROS goal completes
+    // with its outcome, and every waiter learns it ([ACT-6], [ACT-8]). A
+    // result for no live goal is a stale duplicate and is ignored. The
+    // bridge owns the goal seqs uniquely across actions, so at most one
+    // live goal carries the seq.
+  void on_action_result(
+    std::uint8_t seq, std::uint8_t outcome, const std::vector<std::uint8_t> & payload)
+  {
+    std::lock_guard<std::recursive_mutex> guard(mutex);
+    for (auto & entry : action_routes_) {
+      ActionRoute & route = *entry.second;
+      if (!route.active || route.active->wire_seq != seq || route.active->terminal >= 0) {
+        continue;
+      }
+      const std::int8_t status = outcome == 4 ? kGoalSucceeded :
+        outcome == 5 ? kGoalCanceled : kGoalAborted;
+      ActionTypes::Struct check = route.types.make_result();
+      const ConvertResult converted = converter_.unpack_to_struct(
+        route.types.result_type_name(), false, payload.data(), payload.size(),
+        check.storage.data());
+      if (converted.fail != ConvertFail::kNone) {
+        emit(SessionLog::kWarning,
+          "action '" + route.info.action_name + "': dropped result (" +
+          fail_name(converted.fail) + " at '" +
+          field_text(route.types.result_type_name(), converted.field) + "'), aborting");
+        route.active->packed_result.reset();
+        complete_action_goal(route, kGoalAborted);
+        return;
+      }
+      route.active->packed_result = payload;
+      complete_action_goal(route, status);
+      return;
+    }
+  }
+
+    // Reports one terminal goal to its ROS waiters and the status array.
+  void complete_action_goal(ActionRoute & route, std::int8_t status)
+  {
+    ActiveGoal & goal = *route.active;
+    goal.terminal = status;
+    const rcl_action_goal_event_t event = status == kGoalSucceeded ? GOAL_EVENT_SUCCEED :
+      status == kGoalCanceled ? GOAL_EVENT_CANCELED : GOAL_EVENT_ABORT;
+    if (goal.handle != nullptr &&
+      rcl_action_update_goal_state(goal.handle, event) != RCL_RET_OK)
+    {
+      rcl_reset_error();
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': cannot move the goal to its terminal state");
+    }
+    if (rcl_action_notify_goal_done(&route.server) != RCL_RET_OK) {
+      rcl_reset_error();
+    }
+    for (const rmw_request_id_t & waiter : goal.result_waiters) {
+      answer_result_waiter(route, waiter, status, goal.packed_result);
+    }
+    goal.result_waiters.clear();
+    goal.status_dirty = true;
+  }
+
+    // Aborts every live ROS goal: disconnects, timeouts and resets end the
+    // goal as ABORTED instead of leaving the client waiting ([SES-35]).
+  void abort_all_actions()
+  {
+    for (auto & entry : action_routes_) {
+      ActionRoute & route = *entry.second;
+      if (route.pending) {
+        std::uint32_t nanosec = 0;
+        const std::int64_t sec = ros_now_sec(nanosec);
+        answer_goal(route, route.pending->header, false, static_cast<std::int32_t>(sec),
+          nanosec);
+        route.pending.reset();
+      }
+      if (route.pending_cancel) {
+        answer_cancel(route, route.pending_cancel->header, kCancelRejected, false);
+        route.pending_cancel.reset();
+      }
+      if (route.active && route.active->terminal < 0) {
+        route.active->packed_result.reset();
+        complete_action_goal(route, kGoalAborted);
+        route.active->cancel_requested = false;
+      }
+    }
+  }
+
+    // Publishes one route's status array over a plain rclcpp publisher.
+    // rcl_action_publish_status hangs in the dev image (both stock RMWs,
+    // with a valid server and array and no prior error): the goal tracking
+    // still comes from rcl, only the transport is worked around. Filed as a
+    // follow-up for whoever can reproduce it outside this tree.
+  void publish_action_status(ActionRoute & route)
+  {
+    rcl_action_goal_status_array_t array = rcl_action_get_zero_initialized_goal_status_array();
+    if (rcl_action_get_goal_status_array(&route.server, &array) != RCL_RET_OK) {
+      rcl_reset_error();
+      emit(SessionLog::kWarning,
+        "action '" + route.info.action_name + "': cannot read the goal status");
+      return;
+    }
+    action_msgs::msg::GoalStatusArray message;
+    message.status_list.reserve(array.msg.status_list.size);
+    for (std::size_t i = 0; i < array.msg.status_list.size; ++i) {
+      const rcl_action_goal_status_t & entry = array.msg.status_list.data[i];
+      action_msgs::msg::GoalStatus status;
+      static_assert(sizeof(status.goal_info.goal_id.uuid) == 16u, "a goal id is 16 bytes");
+      std::memcpy(status.goal_info.goal_id.uuid.data(), entry.goal_info.goal_id.uuid,
+        status.goal_info.goal_id.uuid.size());
+      status.goal_info.stamp.sec = entry.goal_info.stamp.sec;
+      status.goal_info.stamp.nanosec = entry.goal_info.stamp.nanosec;
+      status.status = entry.status;
+      message.status_list.push_back(status);
+    }
+    route.status_pub->publish(message);
+  }
+
+    // Moves every action route: ROS requests taken, pending MCU answers
+    // timed out, terminal goals expired per the rcl defaults, and the
+    // status array published on change and while a goal is live.
+  void poll_actions()
+  {
+    const bool connected = session_.state() == SessionState::kConnected;
+    const std::int64_t now = now_ms();
+    // Takes run whether or not the link is up: the ROS side answers from
+    // stored state while down, and a disconnect aborts below instead of
+    // stranding the take.
+    take_action_requests();
+    if (!connected) {
+      abort_all_actions();
+    } else {
+      for (auto & entry : action_routes_) {
+        ActionRoute & route = *entry.second;
+        if (!route.rcl_valid) {
+          continue;
+        }
+        if (route.pending && now - route.pending->sent_ms >= kActionCallTimeoutMs) {
+          emit(SessionLog::kWarning,
+            "action '" + route.info.action_name + "': the MCU never answered the goal");
+          std::uint32_t nanosec = 0;
+          const std::int64_t sec = ros_now_sec(nanosec);
+          answer_goal(route, route.pending->header, false, static_cast<std::int32_t>(sec),
+            nanosec);
+          route.pending.reset();
+        }
+        if (route.pending_cancel && now - route.pending_cancel->sent_ms >= kActionCallTimeoutMs) {
+          emit(SessionLog::kWarning,
+            "action '" + route.info.action_name + "': the MCU never answered the cancel");
+          answer_cancel(route, route.pending_cancel->header, kCancelRejected, false);
+          if (route.active) {
+            route.active->cancel_requested = false;
+          }
+          route.pending_cancel.reset();
+        }
+        if (rcl_action_expire_goals(&route.server, nullptr, 0u, nullptr) != RCL_RET_OK) {
+          rcl_reset_error();
+        } else if (route.active && route.active->terminal >= 0) {
+          const rcl_action_goal_info_t info = goal_info_of(route.active->uuid,
+              route.active->accept_sec, route.active->accept_nanosec);
+          if (!rcl_action_server_goal_exists(&route.server, &info)) {
+            route.active.reset();
+          }
+        }
+      }
+    }
+    for (auto & entry : action_routes_) {
+      ActionRoute & route = *entry.second;
+      if (!route.rcl_valid) {
+        continue;
+      }
+      if (route.active &&
+        (route.active->status_dirty ||
+        (connected && route.active->terminal < 0 && now - route.active->last_status_ms >=
+        kActionStatusPeriodMs)))
+      {
+        publish_action_status(route);
+        route.active->status_dirty = false;
+        route.active->last_status_ms = now;
+      }
     }
   }
 
@@ -1236,6 +2129,7 @@ struct Router::Impl
   RouterParams params;
   LogSink sink;
   const Clock & clock;
+  const Clock & ros_clock;
   LogSink mcu_sink;
   rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_params_;
   NodeServiceInterfaces node_services_;
@@ -1262,6 +2156,11 @@ struct Router::Impl
     // for routes missing despite an ok verdict.
   std::map<std::uint8_t, std::unique_ptr<ServiceRoute>> service_routes_;
   std::map<std::uint8_t, RepairState> service_repairs_;
+    // One route per ok action by walk index, with repair attempts by index
+    // for routes missing despite an ok verdict.
+  std::map<std::uint8_t, std::unique_ptr<ActionRoute>> action_routes_;
+  std::map<std::uint8_t, RepairState> action_repairs_;
+  RclClock rcl_clock_;
     // Recursive: declaring a ROS parameter reenters through the on-set
     // hook on the same thread, which takes the guard again.
   std::recursive_mutex mutex;
@@ -1290,7 +2189,9 @@ void Router::poll()
   std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
   impl_->repair_missing_routes(now);
   impl_->repair_missing_services(now);
+  impl_->repair_missing_actions(now);
   impl_->poll_services();
+  impl_->poll_actions();
   impl_->scheduler_.poll(now, [this](std::uint8_t id, const std::vector<std::uint8_t> & payload) {
       return impl_->session_.send_user(id, payload);
     });
