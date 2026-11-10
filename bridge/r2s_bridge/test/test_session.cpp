@@ -3912,6 +3912,300 @@ TEST(ServiceExchange, DropsServiceStateOnRehandshake)
   EXPECT_EQ(requests.size(), 1u);
 }
 
+// covers: SVR-1, SVR-7
+TEST(ServiceWalk, IgnoresADeclareWithAShortHash)
+{
+  SessionConfig config;
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0x4Cu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  const auto walked = drain_decoded(fixture);
+  ASSERT_FALSE(walked.empty());
+  EXPECT_EQ(walked.back()[2], kHelperSvcQuery);
+  EXPECT_EQ(walked.back()[3], 0x00u);
+  // Three hash bytes where eight belong: no entry is kept, so the verdict
+  // is unknown and the walk moves on.
+  fixture.deliver_frame(kHelperServices, 0u,
+    {kHelperSvcDeclare, 0x00u, 0x00u, 0x01u, 0x02u, 0x03u});
+  const auto next = drain_decoded(fixture);
+  ASSERT_EQ(next.size(), 2u);
+  EXPECT_EQ(next[0][2], kHelperSvcStatus);
+  EXPECT_EQ(next[0][4], 0x00u);
+  EXPECT_EQ(next[0][5], 0x01u);
+  EXPECT_EQ(next[1][2], kHelperSvcQuery);
+  EXPECT_EQ(next[1][3], 0x01u);
+}
+
+// covers: SVR-7
+TEST(ServiceWalk, IgnoresAShortStatus)
+{
+  SessionConfig config;
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0x4Cu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  const auto walked = drain_decoded(fixture);
+  ASSERT_FALSE(walked.empty());
+  EXPECT_EQ(walked.back()[2], kHelperSvcQuery);
+  EXPECT_EQ(walked.back()[3], 0x00u);
+  // Two bytes where four belong: the walk does not move.
+  fixture.deliver_frame(kHelperServices, 0u, {kHelperSvcStatus, 0x00u});
+  EXPECT_TRUE(drain_decoded(fixture).empty());
+  fixture.deliver_frame(kHelperServices, 1u, svc_declare(0u, 0x00u, "reset"));
+  const auto next = drain_decoded(fixture);
+  ASSERT_EQ(next.size(), 2u);
+  EXPECT_EQ(next[0][2], kHelperSvcStatus);
+  EXPECT_EQ(next[0][5], 0x00u);
+  EXPECT_EQ(next[1][2], kHelperSvcQuery);
+  EXPECT_EQ(next[1][3], 0x01u);
+}
+
+// covers: SVR-7
+TEST(ServiceWalk, IgnoresAStatusForAnotherIndex)
+{
+  SessionConfig config;
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0x4Cu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  const auto walked = drain_decoded(fixture);
+  ASSERT_FALSE(walked.empty());
+  EXPECT_EQ(walked.back()[2], kHelperSvcQuery);
+  EXPECT_EQ(walked.back()[3], 0x00u);
+  // The verdict names index 9 while index 0 is under request.
+  fixture.deliver_frame(kHelperServices, 0u, {kHelperSvcStatus, 0x00u, 0x09u, 0x01u});
+  EXPECT_TRUE(drain_decoded(fixture).empty());
+  fixture.deliver_frame(kHelperServices, 1u, svc_declare(0u, 0x00u, "reset"));
+  const auto next = drain_decoded(fixture);
+  ASSERT_EQ(next.size(), 2u);
+  EXPECT_EQ(next[0][5], 0x00u);
+  EXPECT_EQ(next[1][3], 0x01u);
+}
+
+// covers: SVR-7
+TEST(ServiceWalk, AdvancesPastAZeroVerdict)
+{
+  SessionConfig config;
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0x4Cu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  const auto walked = drain_decoded(fixture);
+  ASSERT_FALSE(walked.empty());
+  EXPECT_EQ(walked.back()[2], kHelperSvcQuery);
+  EXPECT_EQ(walked.back()[3], 0x00u);
+  // Only verdict 1 ends the walk at the index under request.
+  fixture.deliver_frame(kHelperServices, 0u, {kHelperSvcStatus, 0x00u, 0x00u, 0x00u});
+  const auto next = drain_decoded(fixture);
+  ASSERT_EQ(next.size(), 1u);
+  EXPECT_EQ(next[0][2], kHelperSvcQuery);
+  EXPECT_EQ(next[0][3], 0x01u);
+}
+
+// covers: SVR-1, SVR-7
+TEST(ServiceWalk, IgnoresADeclareWhileConnected)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  handshake_with_services(fixture);
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperServices, 3u, svc_declare(0u, 0x00u, "reset"));
+  EXPECT_TRUE(drain_decoded(fixture).empty());
+}
+
+// covers: SVR-4
+TEST(ServiceExchange, IgnoresAnEmptyServiceFrame)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  handshake_with_services(fixture);
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperServices, 3u, {});
+  EXPECT_TRUE(drain_decoded(fixture).empty());
+}
+
+// covers: SVR-4
+TEST(ServiceExchange, DropsARequestWithAWrongRelSeq)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  std::vector<std::tuple<std::uint8_t, std::uint8_t, std::vector<std::uint8_t>>> requests;
+  SessionEvents events;
+  events.service_request =
+    [&requests](std::uint8_t index, std::uint8_t req, const std::vector<std::uint8_t> & payload) {
+      requests.emplace_back(index, req, payload);
+    };
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  handshake_with_services(fixture);
+  drain_decoded(fixture);
+  // Rel 5 ahead of the expected rel 0: acked, never applied.
+  fixture.deliver_frame(kHelperServices, 3u, {kHelperSvcRequest, 0x05u, 0x07u, 0x00u});
+  EXPECT_TRUE(requests.empty());
+  const auto units = drain_decoded(fixture);
+  ASSERT_EQ(units.size(), 1u);
+  EXPECT_EQ(units[0], with_check({kAck, 0u, kHelperServices, 0x05u}));
+}
+
+// covers: SVR-4
+TEST(ServiceExchange, IgnoresAnUnknownServiceOpcode)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  handshake_with_services(fixture);
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperServices, 3u, {0x09u, 0x00u, 0x00u, 0x00u});
+  EXPECT_TRUE(drain_decoded(fixture).empty());
+}
+
+// covers: REL-2
+TEST(ServiceExchange, HoldsTheRetryWhileTheLinkIsWedged)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  handshake_with_services(fixture);
+  EXPECT_TRUE(fixture.session().send_service_request(0u, 4u, {}));
+  drain_decoded(fixture);
+  fixture.block_writes();
+  EXPECT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(8u, 0xAAu)));
+  // The deadline passes with the queue full: no retry spends itself.
+  fixture.advance_to(600);
+  EXPECT_TRUE(drain_decoded(fixture).empty());
+  // The wedge lifts: the queued user frame flushes, then the retry goes
+  // out on the same rel seq. One window only: the retry re-arms its own
+  // deadline, and a second window would spend it again.
+  fixture.allow_writes();
+  fixture.advance_to(700);
+  const auto units = drain_decoded(fixture);
+  ASSERT_EQ(units.size(), 2u);
+  EXPECT_EQ(units[0][0], 0x10u) << "the queued user frame flushes first";
+  EXPECT_EQ(units[1][2], kHelperSvcRequest);
+  EXPECT_EQ(units[1][3], 0x00u);
+}
+
+// covers: SVR-4
+TEST(ServiceExchange, RefusesToSendForAnUnknownService)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  handshake_with_services(fixture);
+  EXPECT_FALSE(fixture.session().send_service_request(9u, 4u, {}));
+}
+
+// covers: SVR-4
+TEST(ServiceExchange, RefusesToSendPastTheLinkCapacity)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  handshake_with_services(fixture);
+  // The handshake caps the frame at 515 bytes.
+  EXPECT_FALSE(fixture.session().send_service_request(
+    0u, 4u, std::vector<std::uint8_t>(1100u, 0xAAu)));
+}
+
+// covers: SVR-4
+TEST(ServiceExchange, RefusesToSendWhileTheQueueIsFull)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  handshake_with_services(fixture);
+  drain_decoded(fixture);
+  fixture.block_writes();
+  EXPECT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(1100u, 0xAAu)));
+  EXPECT_FALSE(fixture.session().send_service_request(0u, 4u, {}));
+}
+
+// covers: SVR-5
+TEST(ServiceExchange, RefusesAnOversizeAnswer)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  handshake_with_services(fixture);
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperServices, 3u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
+  // The handshake caps the frame at 515 bytes.
+  EXPECT_FALSE(fixture.session().send_service_response(
+    7u, 0u, std::vector<std::uint8_t>(1100u, 0xAAu)));
+}
+
+// covers: SVR-5
+TEST(ServiceExchange, RefusesAnAnswerWhileTheQueueIsFull)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  handshake_with_services(fixture);
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperServices, 3u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
+  fixture.block_writes();
+  EXPECT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(1100u, 0xAAu)));
+  EXPECT_FALSE(fixture.session().send_service_response(7u, 0u, {0x01u}));
+}
+
+// covers: SVR-5, SVR-10
+TEST(ServiceExchange, ReplacesAPendingAnswer)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;}};
+  handshake_with_services(fixture);
+  EXPECT_TRUE(fixture.session().send_service_request(0u, 1u, {}));
+  fixture.deliver_frame(kHelperServices, 3u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
+  drain_decoded(fixture);
+  // The stream is busy, so both answers queue and the newer replaces.
+  EXPECT_TRUE(fixture.session().send_service_response(7u, 0u, {0x01u}));
+  EXPECT_TRUE(fixture.session().send_service_response(7u, 0u, {0x02u}));
+  EXPECT_EQ(fixture.session().reliable_replaced(), 1u);
+  // The ack frees the stream: the replacing answer goes out.
+  fixture.deliver_frame(kAck, 0u, {kHelperServices, 0x00u});
+  const auto answered = drain_decoded(fixture);
+  ASSERT_EQ(answered.size(), 1u);
+  EXPECT_EQ(answered[0],
+    with_check({kHelperServices, 1u, kHelperSvcResponse, 0x01u, 0x07u, 0x00u, 0x02u}));
+}
+
 // covers: SVR-5, SVR-10
 TEST(ServiceExchange, PrioritizesTheAnswerOverQueuedRequests)
 {
