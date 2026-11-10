@@ -1205,22 +1205,24 @@ struct Router::Impl
         "action '" + route.info.action_name + "': cannot fill the result status");
       return;
     }
+    // A stored result that no longer unpacks still answers: the goal is
+    // terminal with this status, so the waiter gets status with a zeroed
+    // result instead of waiting out its clock.
     if (packed_result) {
       void *into = route.types.result_of(response);
       if (into == nullptr) {
         emit(SessionLog::kWarning,
           "action '" + route.info.action_name + "': cannot fill the stored result");
-        return;
-      }
-      const ConvertResult converted = converter_.unpack_to_struct(
-        route.types.result_type_name(), false, packed_result->data(), packed_result->size(),
-        into);
-      if (converted.fail != ConvertFail::kNone) {
-        emit(SessionLog::kWarning,
-          "action '" + route.info.action_name + "': dropped stored result (" +
-          fail_name(converted.fail) + " at '" +
-          field_text(route.types.result_type_name(), converted.field) + "')");
-        return;
+      } else {
+        const ConvertResult converted = converter_.unpack_to_struct(
+          route.types.result_type_name(), false, packed_result->data(),
+          packed_result->size(), into);
+        if (converted.fail != ConvertFail::kNone) {
+          emit(SessionLog::kWarning,
+            "action '" + route.info.action_name + "': dropped stored result (" +
+            fail_name(converted.fail) + " at '" +
+            field_text(route.types.result_type_name(), converted.field) + "')");
+        }
       }
     }
     rmw_request_id_t answer = header;

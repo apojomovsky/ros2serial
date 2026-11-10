@@ -2899,8 +2899,6 @@ TEST_F(RouterNode, RunsTwoActionsWithUniqueWireGoals)
   fixture.deliver_frame(kHelperActions, 6u, {kHelperActGoalResp, 0x01u, 0x01u, 0x00u});
   ASSERT_TRUE(spin_until_ready(fixture, first));
   ASSERT_TRUE(spin_until_ready(fixture, second));
-  for (const auto & line : fixture.logged()) {
-  }
   ASSERT_NE(first.get(), nullptr);
   ASSERT_NE(second.get(), nullptr);
 
