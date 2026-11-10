@@ -239,7 +239,12 @@ def test_the_header_reads_the_bundle_bytes_of_its_closure(type_name):
     for line in descriptors.entry_lines(table):
         assert line in bundled, line
     assert f'const uint8_t R2S_FLASH r2s_bundled_records_{suffix}[] = {{' in bundled
-    assert f'const uint8_t R2S_FLASH r2s_bundled_entries_{suffix}[] = {{' in bundled
+    if table.entries:
+        assert f'const uint8_t R2S_FLASH r2s_bundled_entries_{suffix}[] = {{' in bundled
+    else:
+        # An empty message carries no fields, so the bundle keeps the table
+        # symbol defined with one unread byte instead of an entries array.
+        assert f'r2s_bundled_entries_{suffix}[1]' in bundled
 
 
 @pytest.mark.parametrize('type_name', bundle.BUNDLED_TYPES)

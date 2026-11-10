@@ -75,10 +75,10 @@ def test_files_for_names_the_exact_bundle_set():
         'src/std_msgs/msg/float32.hpp',
         'src/std_msgs/msg/header.hpp',
         'src/std_msgs/msg/string.hpp',
-        'src/std_srvs/srv/trigger.hpp',
         'src/std_srvs/srv/trigger_request.hpp',
         'src/std_srvs/srv/trigger_response.hpp',
         'src/tf2_msgs/msg/tf_message.hpp',
+        'src/std_srvs/srv/trigger.hpp',
     )
 
 
@@ -197,7 +197,7 @@ def test_the_bundle_ships_the_trigger_service_header():
     raw = bytes.fromhex(service_hash[len('RIHS01_') :])[:8]
     hashed = ', '.join(f'0x{byte:02x}u' for byte in raw)
     assert hashed in header
-    assert 'srv_traits<Trigger_Request>' in header
+    assert 'srv_traits<std_srvs::srv::Trigger_Request>' in header
 
 
 def test_the_bundle_command_writes_the_library_files(tmp_path, capsys):

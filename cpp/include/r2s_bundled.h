@@ -4,7 +4,7 @@
 
 /* The bundle's content hash, kept in this one place so adding a type
  * or bound does not rewrite every generated banner. */
-#define R2S_BUNDLE_HASH "bd47a2f1749fa28e"
+#define R2S_BUNDLE_HASH "aaa7b84a1de54c8c"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -149,6 +149,17 @@ typedef struct std_msgs__msg__String
   char data[17];
 } std_msgs__msg__String;
 
+typedef struct std_srvs__srv__Trigger_Request
+{
+  uint8_t structure_needs_at_least_one_member;
+} std_srvs__srv__Trigger_Request;
+
+typedef struct std_srvs__srv__Trigger_Response
+{
+  uint8_t success;
+  char message[17];
+} std_srvs__srv__Trigger_Response;
+
 typedef struct tf2_msgs__msg__TFMessage
 {
   struct
@@ -259,6 +270,20 @@ R2S_COUNT_CHECK(tf2_msgs__msg__TFMessage, transforms, 1, 1);
 #define R2S_BUNDLED_TABLE_std_msgs_String r2s_bundled_table_std_msgs_String
 #define R2S_BUNDLED_HASH_std_msgs_String \
   0xdfu, 0x66u, 0x8cu, 0x74u, 0x04u, 0x82u, 0xbbu, 0xd4u
+
+/* Bundle index, table and hash of std_srvs/srv/Trigger_Request: the sketch header maps each
+ * row to these facts through its package scope maps, so an unknown type fails naming the row. */
+#define R2S_BUNDLED_INDEX_std_srvs_Trigger_Request 0u
+#define R2S_BUNDLED_TABLE_std_srvs_Trigger_Request r2s_bundled_table_std_srvs_Trigger_Request
+#define R2S_BUNDLED_HASH_std_srvs_Trigger_Request \
+  0xd0u, 0x10u, 0x82u, 0x53u, 0x74u, 0xceu, 0x89u, 0x18u
+
+/* Bundle index, table and hash of std_srvs/srv/Trigger_Response: the sketch header maps each
+ * row to these facts through its package scope maps, so an unknown type fails naming the row. */
+#define R2S_BUNDLED_INDEX_std_srvs_Trigger_Response 0u
+#define R2S_BUNDLED_TABLE_std_srvs_Trigger_Response r2s_bundled_table_std_srvs_Trigger_Response
+#define R2S_BUNDLED_HASH_std_srvs_Trigger_Response \
+  0x2du, 0x94u, 0x6cu, 0x21u, 0xe2u, 0xfcu, 0x3fu, 0x1eu
 
 /* Bundle index, table and hash of tf2_msgs/msg/TFMessage: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */
