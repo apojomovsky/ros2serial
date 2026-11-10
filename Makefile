@@ -38,7 +38,7 @@ $(if $(_SCOPE_ERROR),$(error $(_SCOPE_ERROR)))
 
 .PHONY: help bootstrap doctor check test test-core test-gen test-bridge test-cpp test-scripts \
 	test-all e2e-posix e2e-avr pytest ctest fmt shell image exec ci-local compile fuzz size-report \
-	vectors regen docs-gen lint check-warnings setup-hooks pre-pr-check guard-main-clone cache-dir
+	vectors regen rosdoc2 docs-gen lint check-warnings setup-hooks pre-pr-check guard-main-clone cache-dir
 
 ##@Everyday
 
@@ -125,6 +125,9 @@ vectors: guard-main-clone cache-dir ## Validate every vector file and regenerate
 
 regen: cache-dir ## Regenerate every version-stamped generated file (goldens, example and cpp libraries, posix sources)
 	@$(call in_image,python3 tools/refresh_generated.py)
+
+rosdoc2: guard-main-clone cache-dir ## Advisory API docs build: doxygen counts plus rosdoc2 per package
+	@$(call in_image,bash scripts/rosdoc2.sh)
 
 docs-gen: ## Not built yet (pending G1 and H1): will regenerate reference docs
 	@$(call pending,docs-gen,G1 and H1 in docs/00-design.md)

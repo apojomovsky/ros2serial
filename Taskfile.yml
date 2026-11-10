@@ -150,6 +150,8 @@ tasks:
       - gen/setup.py
       - gen/setup.cfg
       - gen/package.xml
+      - gen/rosdoc2.yaml
+      - gen/doc/**
       - gen/resource/**
       - spec/**
       # The model tests drive the real core through the host library.

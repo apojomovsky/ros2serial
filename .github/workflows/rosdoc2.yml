@@ -1,0 +1,62 @@
+name: rosdoc2
+
+# Advisory documentation build: doxygen warning counts plus rosdoc2 build
+# for each ROS package. Advisory on purpose until the bridge headers gain
+# their Doxygen comments in #544, so continue-on-error keeps red visible
+# without blocking the merge. This stays a separate workflow instead of a
+# ci.yml job so the doc build needs no plan or Taskfile changes.
+#
+# docs.ros.org picks each released package up once the rosdistro release
+# adds a doc block for this repository (bloom L2 in docs/00-design.md):
+#   repositories:
+#     ros2serial:
+#       doc:
+#         type: git
+#         url: https://github.com/apojomovsky/ros2serial.git
+#         version: <the rosdistro branch used at release>
+# Each package's rosdoc2.yaml is found through its package.xml <export>.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The doc images, resolved from ci/versions.env before the job starts: a
+  # job's container is fixed before any step runs, so a job of its own
+  # resolves the pins first. Shared with the bridge job's setup.
+  pins:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.pins.outputs.matrix }}
+      images: ${{ steps.pins.outputs.images }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - id: pins
+        run: bash scripts/bridge-images.sh >> "$GITHUB_OUTPUT"
+
+  rosdoc2:
+    needs: pins
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    continue-on-error: true
+    # One distro proves the shared doc config; the pages do not vary by
+    # distro the way compiled code does.
+    container:
+      image: ${{ fromJSON(needs.pins.outputs.images).jazzy }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Install doc tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends doxygen python3-pip
+          pip install --break-system-packages "rosdoc2==$(grep ^ROSDOC2_VERSION= ci/versions.env | cut -d= -f2)"
+      - name: Advisory doc build
+        run: bash scripts/rosdoc2.sh
+        env:
+          R2S_BUILD_DIR: /tmp/r2s-build
