@@ -138,9 +138,8 @@ bool write_bool(const MessageMembers *parent, void *storage, const char *field, 
   const MessageMember *member = find_member(parent, field);
   // GCOV_EXCL_BR_START: installed bool fields always match
   if (member == nullptr || member->type_id_ != ROS_TYPE_BOOLEAN) {
-    return false;
+    return false;  // GCOVR_EXCL_LINE: defensive return, unreachable with installed types
   }
-  // GCOV_EXCL_BR_STOP
   auto *base = static_cast<std::uint8_t *>(storage);
   const std::uint8_t byte = value ? 1u : 0u;
   std::memcpy(base + member->offset_, &byte, sizeof(byte));
