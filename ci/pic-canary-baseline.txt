@@ -8,7 +8,8 @@
 # reported "new gap" line into this file, and check it in with the fix.
 # Remove a line as soon as its compile succeeds: the canary fails on a
 # baseline entry that stops reproducing, so a closed gap asks to shrink
-# the file instead of hiding the improvement.
+# the file instead of hiding the improvement. Extra context, such as the
+# upstream issue number, goes in a # comment: entries keep three fields.
 p16f1938 | core C sources | isel: plain ptr arg with multiple terms not yet supported
 p16f1938 | static C++ sketch | isel: plain ptr arg with multiple terms not yet supported
 p18f4550 | core C sources | legalize: intrinsic llvm.memset.p0.i16 must carry a dst

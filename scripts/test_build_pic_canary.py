@@ -215,8 +215,8 @@ def test_a_known_toolchain_gap_warns_and_stays_green(tmp_path):
     assert '::warning::pic-canary' in result.stdout, result.stdout
     body = summary.read_text(encoding='utf-8')
     for target in TARGETS:
-        assert KNOWN_SIGS[target] in body, body
-        assert target in body, body
+        for label in LABELS:
+            assert f'{target} ({label}): {KNOWN_SIGS[target]}' in body, body
 
 
 def test_the_baseline_lists_each_known_gap(tmp_path):
@@ -256,8 +256,53 @@ def test_a_new_error_signature_fails_and_names_target_label_signature(tmp_path):
     assert result.returncode != 0, result.stdout + result.stderr
     out = result.stdout + result.stderr
     assert 'p18f4550' in out, out
+    assert 'static C++ sketch' in out, out
+    assert 'core C sources' in out, out
     assert 'regalloc: out of registers spilling i8' in out, out
     assert 'baseline' in out.lower(), out
+
+
+def test_a_new_gap_in_one_label_only_fails_that_label(tmp_path):
+    # The key carries the label: a known signature on one label of a
+    # target stays green while a new one on the other label fails.
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    compiler = stub / 'epic-cc'
+    compiler.write_text(
+        '#!/usr/bin/env bash\n'
+        'label=core\n'
+        'for arg in "$@"; do\n'
+        '    case "$arg" in *canary_static.cpp) label=static ;; esac\n'
+        'done\n'
+        'target=""\n'
+        'prev=""\n'
+        'for arg in "$@"; do\n'
+        '    if [ "$prev" = "--target" ]; then target="$arg"; fi\n'
+        '    prev="$arg"\n'
+        'done\n'
+        'if [ "$target/$label" = "p16f1938/static" ]; then\n'
+        '    echo "epic-cc: internal compiler error: isel: one-off static failure" >&2\n'
+        'elif [ "$target" = "p16f1938" ]; then\n'
+        f'    echo "epic-cc: internal compiler error: {KNOWN_SIGS["p16f1938"]}" >&2\n'
+        'else\n'
+        f'    echo "epic-cc: internal compiler error: {KNOWN_SIGS["p18f4550"]}" >&2\n'
+        'fi\n'
+        'exit 1\n',
+        encoding='utf-8',
+    )
+    compiler.chmod(compiler.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    result = run_script(
+        {
+            'R2S_EPIC_CC_BIN': str(compiler),
+            'R2S_BUILD_DIR': str(tmp_path / 'build'),
+        },
+        tmp_path,
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    out = result.stdout + result.stderr
+    assert 'p16f1938' in out, out
+    assert 'static C++ sketch' in out, out
+    assert 'one-off static failure' in out, out
 
 
 def test_a_reworded_diagnostic_is_a_new_gap(tmp_path):
@@ -328,6 +373,26 @@ def test_a_stale_baseline_entry_fails_and_is_reported(tmp_path):
     assert result.returncode != 0, result.stdout + result.stderr
     out = result.stdout + result.stderr + summary.read_text(encoding='utf-8')
     assert 'no longer broken' in out, out
+
+
+def test_a_malformed_baseline_fails_the_run(tmp_path):
+    # A baseline line naming no target, label and signature triple is
+    # wiring, not a gap, so it fails with a precise message.
+    for bad in ('this line has no fields\n', 'p16f1938 | core C sources | isel: x |\n'):
+        baseline = tmp_path / 'baseline.txt'
+        baseline.write_text(bad, encoding='utf-8')
+        compiler = stub_compiler(tmp_path / 'bin')
+        result = run_script(
+            {
+                'R2S_EPIC_CC_BIN': str(compiler),
+                'R2S_BUILD_DIR': str(tmp_path / 'build'),
+                'R2S_PIC_CANARY_BASELINE': str(baseline),
+            },
+            tmp_path,
+        )
+        out = result.stdout + result.stderr
+        assert result.returncode != 0, out
+        assert 'bad baseline line' in out, out
 
 
 def test_a_missing_baseline_fails_the_run(tmp_path):

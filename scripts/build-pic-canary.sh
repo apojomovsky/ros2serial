@@ -203,12 +203,13 @@ while IFS= read -r line; do
   line=${line%$'\r'}
   line=$(trim "$line")
   case "$line" in ''|'#'*) continue ;; esac
+  pipes=${line//[^|]/}
   IFS='|' read -r b_target b_label b_sig b_extra <<<"$line"
   b_target=$(trim "$b_target")
   b_label=$(trim "$b_label")
   b_sig=$(trim "$b_sig")
   b_extra=$(trim "${b_extra:-}")
-  [ -n "$b_target" ] && [ -n "$b_label" ] && [ -n "$b_sig" ] && [ -z "$b_extra" ] || {
+  [ -n "$b_target" ] && [ -n "$b_label" ] && [ -n "$b_sig" ] && [ -z "$b_extra" ] && [ "${#pipes}" = 2 ] || {
     echo "build-pic-canary: bad baseline line (want 'target | label | signature'): $line" >&2
     exit 1
   }
