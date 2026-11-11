@@ -156,9 +156,10 @@ done
 # Scenarios 15 and 16 drive the example sketches themselves, with the same
 # channel flags scripts/build-examples.sh compiles them with: the service
 # example with the services channel on, the action example with the actions
-# channel on, both capped at 128-byte frames. Both run the default baud
-# only: the baud matrix walks the slice flow, not the examples.
-svex="$extras -DR2S_WITH_SERVICES -DR2S_MAX_FRAME=128"
+# channel on. The service example caps at 64-byte frames and the action at
+# 128, and both run the default baud only: the baud matrix walks the slice
+# flow, not the examples.
+svex="$extras -DR2S_WITH_SERVICES -DR2S_MAX_FRAME=64"
 aex="$extras -DR2S_WITH_ACTIONS -DR2S_MAX_FRAME=128"
 for board in uno mega; do
   mcu=atmega328p

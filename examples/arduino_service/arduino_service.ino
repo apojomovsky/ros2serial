@@ -2,16 +2,13 @@
 // Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
 /* Arduino service example: the service API on Uno and Mega, serving
- * reset and calling trigger (both std_srvs Trigger), the same pair the
- * C++ service test covers. The server answers reset with success and
- * the sketch's own text; the client calls trigger once per connection
- * and drops the answer, so the sketch shows both directions without a
- * second sketch. Try it with: ros2 service call /reset std_srvs/srv/Trigger
- * (bridge launch as in the README walkthrough). The sketch builds with
- * R2S_WITH_SERVICES, which the bundled flags leave out, and caps the
- * frame at 128: the bundle's 325-byte frames would leave the Uno no room
- * beside the service answer buffer. RAM cost: 1564 bytes on Uno, about
- * 0.3 KB over the minimal sketch (measured by scripts/build-examples.sh). */
+ * reset and calling trigger (both std_srvs Trigger). The server answers
+ * with success and the sketch's text; the client calls once per
+ * connection, showing both directions without a second sketch. Try: ros2
+ * service call /reset std_srvs/srv/Trigger (bridge as in the README).
+ * Builds with R2S_WITH_SERVICES, capped at 64-byte frames: the service
+ * channel keeps three frame-sized buffers, and 128-byte frames crash the
+ * Uno handshake. RAM cost: 1244 bytes on Uno. */
 
 #include <stdio.h>
 

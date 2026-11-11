@@ -273,9 +273,9 @@ done
 # The service sketch builds against the same runtime library with the
 # services channel on: the bundled flags leave the channel out, so its
 # compile adds the flag. Its Trigger-only exchange fits small frames, so
-# it also caps the frame at 128: the bundle's 325-byte frames would leave
-# the Uno no room beside the service answer buffer.
-svex="$extras -DR2S_WITH_SERVICES -DR2S_MAX_FRAME=128"
+# it caps the frame at 64: the service channel keeps three frame-sized
+# buffers, and 128-byte frames crash the Uno on their first QUERY.
+svex="$extras -DR2S_WITH_SERVICES -DR2S_MAX_FRAME=64"
 for board in uno mega; do
   out="$build/arduino_service/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" \
