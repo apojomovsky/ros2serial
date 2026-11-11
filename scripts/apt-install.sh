@@ -6,19 +6,21 @@
 # transient mirror failure costs seconds instead of a whole rerun. Usage:
 #   apt-install.sh update
 #   apt-install.sh install -y --no-install-recommends <packages...>
-# Bound: 3 attempts with a 5 second backoff between them, plus apt's own
-# Acquire::Retries=3 inside each attempt. Runner logs show single blips
-# clearing on the second attempt, while a third attempt has never turned a
-# genuine failure (a removed package, a wrong name) into a success; it only
-# spends two apt runs and ten seconds before the real error still fails the
-# job. R2S_APT_RETRY_DELAY overrides the backoff; the tests set it to 0.
+# Bound: 5 attempts, waiting 20, 40, 60, then 80 seconds between them:
+# about three minutes of backoff in total, plus apt's own
+# Acquire::Retries=3 inside each attempt. Runner logs show a two minute
+# mirror outage clearing on a later attempt, while a fifth attempt has never
+# turned a genuine failure (a removed package, a wrong name) into a success;
+# it only spends a few apt runs and minutes before the real error still fails
+# the job. R2S_APT_RETRY_DELAY overrides the base backoff step in seconds;
+# the tests set it to 0.
 set -uo pipefail
 
 usage() { echo "usage: apt-install.sh update | install [APT-ARGS...]" >&2; }
 [ $# -ge 1 ] || { usage; exit 2; }
 
-tries=3
-delay="${R2S_APT_RETRY_DELAY:-5}"
+tries=5
+delay="${R2S_APT_RETRY_DELAY:-20}"
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
 
@@ -35,12 +37,15 @@ while [ "$attempt" -lt "$tries" ]; do
         exit 0
     fi
     rc=${PIPESTATUS[0]}
-    if [ "$attempt" -ge "$tries" ] || ! grep -Eiq "$retryable" "$tmp"; then
-        echo "apt-install.sh: attempt $attempt/$tries failed (rc=$rc), giving up" >&2
+    if [ "$attempt" -ge "$tries" ]; then
+        echo "apt-install.sh: package index still unreachable after $tries attempts (rc=$rc); rerun the job" >&2
         exit "$rc"
     fi
-    echo "apt-install.sh: attempt $attempt/$tries failed (rc=$rc), retrying in ${delay}s" >&2
-    sleep "$delay"
+    if ! grep -Eiq "$retryable" "$tmp"; then
+        echo "apt-install.sh: attempt $attempt/$tries failed (rc=$rc), not retryable, giving up" >&2
+        exit "$rc"
+    fi
+    pause=$((attempt * delay))
+    echo "apt-install.sh: attempt $attempt/$tries failed (rc=$rc), retrying in ${pause}s" >&2
+    sleep "$pause"
 done
-echo "apt-install.sh: $tries attempts failed, last rc=$rc" >&2
-exit "$rc"
