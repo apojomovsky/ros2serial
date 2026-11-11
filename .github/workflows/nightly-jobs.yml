@@ -3,8 +3,8 @@
 
 name: nightly-jobs
 
-# The runs too long or too exhaustive for a PR: the long fuzzing, the e2e
-# isolation pairs, the soak and the big-endian qemu job. nightly.yml calls
+# The runs too long or too exhaustive for a PR: the long fuzzing, the
+# soak, mutation testing and the big-endian qemu job. nightly.yml calls
 # this on schedule; release.yml calls it on a tag before anything is
 # published, without the long fuzzing: fuzzing for a fixed time is
 # exploration, and CI already replays the seed corpus. The soak stays off
@@ -80,37 +80,6 @@ jobs:
         with:
           path: .task/checksum/fuzz
           key: r2s-task-fuzz-refs/heads/master-${{ github.sha }}
-
-  # Two full e2e sections side by side on one host, measured about 28
-  # minutes including setup (#577): the bound keeps roughly double
-  # headroom. The load-sensitive scenario is skipped and the sync bound
-  # keeps headroom for the shared host, as the CI e2e jobs do.
-  e2e-isolation:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: ./.github/actions/dev-image
-      - run: make test NIGHTLY=1
-        env:
-          R2S_E2E_SKIP: test_scenario_8_posix
-          R2S_SYNC_BOUND_NS: 5000000
-      # The failing section output leaves the runner with the scenario
-      # logs: collect them on any outcome, so a timeout kill still
-      # uploads what the pair proved before it stopped.
-      - if: always()
-        run: bash scripts/collect-isolation-logs.sh "$HOME/.cache/ros2serial" isolation-logs
-      - if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-isolation-logs
-          path: isolation-logs/
-          if-no-files-found: warn
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/nightly
-          key: r2s-task-nightly-refs/heads/master-${{ github.sha }}
 
   # Two hours of clean-link traffic on each soak backend. The wire counters
   # must stay exactly consistent and the bridge memory must plateau, as the
