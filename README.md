@@ -19,6 +19,7 @@ data: 0.0
 ## Contents
 
 - [Getting started](#getting-started)
+- [Porting to a new board](#porting-to-a-new-board)
 - [How it fits together](#how-it-fits-together)
 - [What works today](#what-works-today)
 - [Limits](#limits)
@@ -188,6 +189,23 @@ Serial only, best effort, bounded messages. The figures below come from `tools/b
 
 - WiFi or other network transports: ros2serial stays serial-only; see [Vision and non-goals](docs/00-design.md#vision-and-non-goals)
 - Real-hardware checklist ([#95](https://github.com/apojomovsky/ros2serial/issues/95))
+
+## Porting to a new board
+
+A port is four C functions behind `core/include/r2s/r2s_port.h`, a
+build script, and a host test. Copy the skeleton, rename it, fill in
+the clock tree and pins, then build and test on the host:
+
+```sh
+cp -r ports/template ports/myboard
+# rename as docs/04-porting.md says, then build and test on the host:
+bash ports/myboard/build.sh
+bash ports/myboard/run.sh
+```
+
+The full contract, the tick rules, and the tier budgets live in
+[Port to a new board](docs/04-porting.md). A layout gate for new ports
+is proposed in [#606](https://github.com/apojomovsky/ros2serial/issues/606).
 
 ## rosserial and micro-ROS
 

@@ -126,10 +126,11 @@ tasks:
       - core/**
       # Vectors replay through the conformance runners.
       - spec/**
-      # The scope runs the posix, arduino and ch32v port contract tests.
+      # The scope runs the posix, arduino, ch32v and template port tests.
       - ports/posix/**
       - ports/arduino/**
       - ports/ch32v/**
+      - ports/template/**
     cmds:
       - CORE=1 bash scripts/ci-test.sh
 

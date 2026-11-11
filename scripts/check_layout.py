@@ -38,6 +38,7 @@ REQUIRED_DIRS = [
     'ports/stm32',
     'ports/rp2040',
     'ports/common',
+    'ports/template',
     'ports/epic-hal',
     'examples',
     'tests/e2e',
@@ -62,6 +63,14 @@ GITIGNORED = ['scratch/', '.worktrees/']
 # The alias is a link, so a copy cannot drift from the rulebook it stands for.
 RULEBOOK_ALIAS = 'CLAUDE.md'
 RULEBOOK = 'AGENTS.md'
+# common/ stages shared sources into firmware builds instead of being a
+# port. stm32 and rp2040 predate the host-test prong and carry no run.sh,
+# so their CI check stays the firmware build.
+PORTS_SHARED = 'ports/common'
+PORTS_WITHOUT_HOST_TEST = {'ports/stm32', 'ports/rp2040'}
+PORT_BUILD_SCRIPTS = ('build.sh', 'run.sh')
+PORT_CONTRACT_SYMBOLS = ('r2s_port_read', 'r2s_port_tick')
+PORT_SOURCE_SUFFIXES = ('.c', '.h', '.cpp', '.hpp')
 
 
 def tracked_files(root: Path) -> set[str]:
@@ -101,6 +110,53 @@ def gitkeep_problems(root: Path) -> list[str]:
     return problems
 
 
+def is_port_placeholder(port: Path) -> bool:
+    """A directory holding only a .gitkeep is a future port, not a port yet."""
+    files = [p for p in port.rglob('*') if p.is_file()]
+    return bool(files) and all(p.name == '.gitkeep' for p in files)
+
+
+def port_has_implementation(port: Path) -> bool:
+    """One port source outside tests/ names both contract symbols. Tests
+    name them too, and so does the template build script that checks for
+    them, so neither counts as the implementation."""
+    for path in sorted(port.rglob('*')):
+        if not path.is_file() or path.suffix not in PORT_SOURCE_SUFFIXES:
+            continue
+        if 'tests' in path.relative_to(port).parts:
+            continue
+        try:
+            text = path.read_text()
+        except (OSError, UnicodeDecodeError):
+            continue
+        if all(symbol in text for symbol in PORT_CONTRACT_SYMBOLS):
+            return True
+    return False
+
+
+def port_problems(root: Path) -> list[str]:
+    """Each port proves its build script, its host test and its source."""
+    problems = []
+    ports = root / 'ports'
+    if not ports.is_dir():
+        return problems
+    for port in sorted(p for p in ports.iterdir() if p.is_dir()):
+        name = f'ports/{port.name}'
+        if name == PORTS_SHARED or is_port_placeholder(port):
+            continue
+        if not any((port / script).is_file() for script in PORT_BUILD_SCRIPTS):
+            problems.append(f'{name} has no build script (build.sh or run.sh)')
+        if name not in PORTS_WITHOUT_HOST_TEST and not (
+            (port / 'run.sh').is_file() or (port / 'tests').is_dir()
+        ):
+            problems.append(f'{name} has no host test (run.sh or tests/)')
+        if not port_has_implementation(port):
+            problems.append(
+                f'{name} has no implementation (a source naming r2s_port_read and r2s_port_tick)'
+            )
+    return problems
+
+
 def check(root: Path) -> list[str]:
     problems = []
     for d in REQUIRED_DIRS:
@@ -133,6 +189,7 @@ def check(root: Path) -> list[str]:
             if pattern not in lines:
                 problems.append(f'.gitignore does not ignore {pattern}')
     problems.extend(gitkeep_problems(root))
+    problems.extend(port_problems(root))
     for p in sorted(root.glob('*.md')):
         if re.fullmatch(r'proposal-v\d+\.md|engineering-practices\.md', p.name):
             problems.append(f'superseded document still at the root: {p.name}')
