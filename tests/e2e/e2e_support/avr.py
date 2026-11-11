@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The simavr backend: the slice sketch on an emulated Uno or Mega.
+"""The simavr backend: the scenario's firmware on an emulated Uno or Mega.
 
 Each scenario spawns the board's ELF under r2s_simavr and talks to the pty
 the harness announces, reusing the bridge launcher and the shared checks.
@@ -62,12 +62,19 @@ def harness_binary():
 def firmware_image(board, flavor='slice', baud=None):
     """The board's ELF of one flavor, built by tests/e2e/run-avr.sh.
 
-    The slice carries scenarios 1 to 4; the flood feeds scenario 12. A baud
-    names one matrix image; the default baud keeps the legacy file name.
+    The slice carries scenarios 1 to 4; the flood feeds scenario 12; the
+    service example feeds scenario 15 and the action example scenario 16.
+    A baud names one matrix image; the default baud keeps the legacy file
+    name. Only the slice runs the baud matrix, so the example flavors take
+    no baud.
     """
     given = os.environ.get('R2S_E2E_AVR_FW', '')
     assert given, 'R2S_E2E_AVR_FW is unset: run tests/e2e/run-avr.sh, which builds the firmware'
-    assert flavor in ('slice', 'flood'), f'unknown firmware flavor {flavor!r}: want slice or flood'
+    assert flavor in ('slice', 'flood', 'service', 'action'), (
+        f'unknown firmware flavor {flavor!r}: want slice, flood, service or action'
+    )
+    if flavor in ('service', 'action'):
+        assert baud is None, f'no baud matrix for the {flavor} example firmware'
     if baud is None or str(baud) == '115200':
         name = f'{flavor}-{board_mcu(board)}.elf'
     else:
