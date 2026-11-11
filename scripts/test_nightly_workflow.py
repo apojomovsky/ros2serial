@@ -418,6 +418,43 @@ def test_the_mutation_run_gates_on_its_floors():
     assert '--gate' in runner
 
 
+def test_the_mutation_run_measures_the_bridge_and_scores_it():
+    runner = (ROOT / 'scripts' / 'run-mutation.sh').read_text(encoding='utf-8')
+    assert 'mutation/bridge' in runner
+    assert '--bridge' in runner
+
+
+def test_the_mutation_reporter_tolerates_surviving_mutants():
+    """The reporter must not fail on survivors: gating belongs to the triage
+    script's --gate, and a reporter that errors on any survivor would fail
+    the nightly before the report is scored."""
+    runner = (ROOT / 'scripts' / 'run-mutation.sh').read_text(encoding='utf-8')
+    reporter_lines = [
+        line for line in runner.splitlines() if line.strip().startswith('mull-reporter')
+    ]
+    assert reporter_lines, 'no mull-reporter call left in scripts/run-mutation.sh'
+    assert all('--allow-surviving' in line for line in reporter_lines), reporter_lines
+
+
+def test_the_mutation_enumeration_handles_ctest_hash_numbering():
+    """ctest -N prints `  Test   #1: name`, never `Test 1: name`: the nightly
+    mutation job died on `no test binaries found` until the enumeration
+    matched the hash. Every Test-matching sed in the runner must parse it."""
+    import re
+    import subprocess
+
+    runner = (ROOT / 'scripts' / 'run-mutation.sh').read_text(encoding='utf-8')
+    sample = 'Test project /tmp/cb\n  Test   #1: test_foo.test_bar\n  Test #2: test_baz\n'
+    exprs = [expr for expr in re.findall(r"sed -n '([^']*)'", runner) if 'Test' in expr]
+    assert exprs, 'no Test enumeration left in scripts/run-mutation.sh'
+    for expr in exprs:
+        out = subprocess.run(
+            ['sed', '-n', expr], input=sample, capture_output=True, text=True, check=False
+        ).stdout
+        assert 'test_foo.test_bar' in out, expr
+        assert 'test_baz' in out, expr
+
+
 def test_the_mutation_job_still_publishes_its_report_when_it_gates():
     steps = mutation_job()['steps']
     assert any('upload-artifact' in str(step.get('uses', '')) for step in steps)

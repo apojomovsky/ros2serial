@@ -64,3 +64,11 @@ def test_the_docs_page_is_published_on_the_site():
 
     sources = [page.source for page in site_build.PAGES]
     assert 'docs/robustness.md' in sources
+
+
+def test_the_docs_page_names_the_bridge_measurement_pipeline():
+    text = DOCS.read_text(encoding='utf-8')
+    assert 'mutation/bridge' in text, 'docs/robustness.md names no bridge pipeline'
+    bridge_rows = [line for line in text.splitlines() if 'bridge' in line and '70%' in line]
+    assert bridge_rows, 'no bridge row carries the 70% floor'
+    assert not any('no data' in line for line in bridge_rows), 'the bridge row still reads no data'
