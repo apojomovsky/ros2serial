@@ -102,3 +102,27 @@ def test_missing_subcommand_is_a_usage_error(tmp_path):
     bindir, _, _, stub_env = make_stub(tmp_path, fail_until=0)
     result = run_helper(bindir, stub_env)
     assert result.returncode == 2, result.stderr
+
+
+APT_CALL_SITES = (
+    'Dockerfile',
+    'docker/bigendian/Dockerfile',
+    'docker/mutation/Dockerfile',
+    '.github/workflows/ci.yml',
+    '.github/workflows/farm.yml',
+    '.github/workflows/rosdoc2.yml',
+)
+
+
+def test_every_apt_call_site_uses_the_shared_helper():
+    """No bare apt-get remains where the helper should run instead."""
+    for site in APT_CALL_SITES:
+        text = (ROOT / site).read_text(encoding='utf-8')
+        assert 'apt-install.sh' in text, f'{site} bypasses the shared helper'
+    offenders = []
+    for site in APT_CALL_SITES:
+        lines = (ROOT / site).read_text(encoding='utf-8').splitlines()
+        for number, line in enumerate(lines, 1):
+            if 'apt-get' in line and 'apt-install' not in line:
+                offenders.append(f'{site}:{number}: {line.strip()}')
+    assert not offenders, 'bare apt-get calls the helper must cover:\n' + '\n'.join(offenders)

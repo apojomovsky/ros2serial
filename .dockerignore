@@ -1,2 +1,7 @@
-# The image copies nothing from the build context.
+# The image copies only the shared apt helper; the toolchains still come
+# from pinned network fetches, so a helper edit rebuilds the layers that
+# install packages.
 *
+!scripts/
+scripts/*
+!scripts/apt-install.sh

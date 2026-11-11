@@ -7,7 +7,8 @@ ARG ROS_IMAGE=ros:jazzy-ros-base-noble
 FROM ${ROS_IMAGE} AS base
 ARG DEBIAN_FRONTEND=noninteractive
 ARG AVR_GCC_VERSION
-RUN apt-get update && apt-get install -y --no-install-recommends \
+COPY scripts/apt-install.sh /usr/local/bin/apt-install.sh
+RUN apt-install.sh update && apt-install.sh install -y --no-install-recommends \
         gcc-avr avr-libc binutils-avr simavr libsimavr-dev libelf-dev \
         build-essential clang clang-format clang-tidy cppcheck cmake ninja-build ccache \
         libclang-rt-18-dev $([ "$(dpkg --print-architecture)" = amd64 ] && echo gcc-multilib g++-multilib) \
