@@ -60,9 +60,19 @@ swapped=0
 while [ "$attempt" -lt "$tries" ]; do
     attempt=$((attempt + 1))
     if apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true "$@" 2>&1 | tee "$tmp"; then
-        exit 0
+        rc=0
+        # apt-get update exits 0 even when every index is ignored, so a
+        # silent update must not count as success: treat it as failed and
+        # let the loop swap mirrors and retry below.
+        if [ "$1" = update ] && grep -Eiq 'Failed to fetch|Could not resolve' "$tmp"; then
+            echo "apt-install.sh: update exited 0 with failed fetches; treating as failure" >&2
+            rc=1
+        else
+            exit 0
+        fi
+    else
+        rc=${PIPESTATUS[0]}
     fi
-    rc=${PIPESTATUS[0]}
     if grep -Eiq 'Could not resolve' "$tmp" && [ "$swapped" -eq 0 ] && [ "$attempt" -lt "$tries" ]; then
         swap_ubuntu_mirror
         swapped=1
