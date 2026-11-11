@@ -13,6 +13,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / 'scripts' / 'build-release-artifacts.sh'
 
+sys.path.insert(0, str(ROOT / 'gen'))
+
+from r2s_gen import layouts  # noqa: E402
+
 
 def sdist_from_clean_copy(tmp_path: Path) -> tuple[Path, Path]:
     """An sdist built from a clean copy of the tree, as the ticket reproduces it."""
@@ -64,6 +68,47 @@ def test_the_arduino_zip_stages_the_bundle_and_the_core(tmp_path):
         assert name in names, name
     assert not [name for name in names if name.endswith('test_reset.c')]
     assert sorted(out.glob('r2s_gen-*.tar.gz')) and sorted(out.glob('r2s_gen-*.whl'))
+
+
+def test_the_arduino_zip_is_the_platformio_artifact(tmp_path):
+    """PlatformIO installs Arduino-format libraries, so the release ships no
+    separate PlatformIO package: the Arduino zip carries the manifest, the
+    sources under src/ and the flags the PlatformIO layout expects."""
+    out, result = build(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    (zip_path,) = sorted(out.glob('ros2serial-arduino-*.zip'))
+    staged = tmp_path / 'pio'
+    with zipfile.ZipFile(zip_path) as archive:
+        archive.extractall(staged)
+    lib = staged / 'ros2serial'
+    props = (lib / 'library.properties').read_text(encoding='utf-8').splitlines()
+    version = (ROOT / 'VERSION').read_text(encoding='utf-8').strip()
+    assert 'name=ros2serial' in props
+    assert f'version={version}' in props
+    assert 'architectures=avr,esp32' in props
+    files = [path for path in lib.rglob('*') if path.is_file()]
+    assert files, 'the zip stages no files'
+    assert not [
+        path
+        for path in files
+        if path.relative_to(lib).parts[0] != 'src' and path.name != 'library.properties'
+    ], 'every staged file but the manifest sits under src/'
+    for name in (
+        'src/ros2serial.h',
+        'src/r2s_bundled.h',
+        'src/r2s_bundled.c',
+        'src/r2s_arduino_port.cpp',
+        'src/r2s_arduino_port.h',
+        'src/r2s/r2s_codec.h',
+        'src/runtime.cpp',
+    ):
+        assert (lib / name).is_file(), name
+    defines = layouts.build_defines((lib / 'src/r2s_bundled.h').read_text(encoding='utf-8'))
+    assert 'R2S_WITH_CODEC' in defines
+    for prefix in ('R2S_MAX_FRAME=', 'R2S_MAX_NEST='):
+        matches = [define for define in defines if define.startswith(prefix)]
+        assert len(matches) == 1, defines
+        assert matches[0].removeprefix(prefix).isdigit(), defines
 
 
 def test_an_unknown_distro_fails_loudly(tmp_path):

@@ -3,8 +3,9 @@
 
 """The nightly and release workflows run what is too long for a PR.
 
-The e2e isolation pairs left the SCRIPTS scope for a reusable workflow
-beside the long fuzzing. nightly.yml calls it on schedule and files an
+The e2e isolation pairs left the SCRIPTS scope for their own pull
+request job in ci.yml, beside the long fuzzing that stays in the
+reusable workflow. nightly.yml calls it on schedule and files an
 issue when the scheduled run fails; release.yml calls it on a tag before
 anything is published. These tests pin that contract from the files.
 """
@@ -52,14 +53,18 @@ def test_the_scheduled_nightly_keeps_the_long_fuzzing():
             assert (job.get('with') or {}).get('fuzz', True) is True
 
 
-def test_the_reusable_workflow_holds_fuzzing_isolation_soak_mutation_and_big_endian():
+def test_the_reusable_workflow_holds_fuzzing_soak_mutation_and_big_endian():
     assert set(workflow(JOBS)['jobs']) == {
         'fuzz-long',
-        'e2e-isolation',
         'soak',
         'mutation',
         'big-endian',
     }
+
+
+def test_the_isolation_job_lives_in_ci_not_the_reusable_workflow():
+    assert 'e2e-isolation' in workflow(CI)['jobs']
+    assert 'e2e-isolation' not in workflow(JOBS)['jobs']
 
 
 def test_the_soak_runs_only_when_the_caller_asks_for_it():
@@ -90,8 +95,8 @@ def ci_nightly_call():
     return next(iter(calls.values()))
 
 
-def test_pr_ci_runs_the_reusable_nightly_jobs_when_the_plan_selects_nightly():
-    job = ci_nightly_call()
+def test_pr_ci_runs_the_isolation_job_when_the_plan_selects_nightly():
+    job = workflow(CI)['jobs']['e2e-isolation']
     needs = job['needs'] if isinstance(job['needs'], list) else [job['needs']]
     assert 'plan' in needs
     condition = str(job.get('if', ''))
@@ -100,10 +105,23 @@ def test_pr_ci_runs_the_reusable_nightly_jobs_when_the_plan_selects_nightly():
     assert 'needs.plan.outputs.nightly' in condition
 
 
+def test_the_isolation_job_keeps_its_sixty_minute_budget():
+    job = workflow(CI)['jobs']['e2e-isolation']
+    assert job['timeout-minutes'] >= 60, (
+        f'isolation needs 60 minutes, has {job["timeout-minutes"]}'
+    )
+
+
 def test_pr_ci_runs_the_nightly_caller_for_the_fuzz_long_label():
     job = ci_nightly_call()
     condition = str(job.get('if', ''))
     assert "contains(github.event.pull_request.labels.*.name, 'fuzz-long')" in condition
+
+
+def test_the_nightly_caller_ignores_the_plan_nightly_scope():
+    job = ci_nightly_call()
+    condition = str(job.get('if', ''))
+    assert 'needs.plan.outputs.nightly' not in condition
 
 
 def test_pr_ci_leaves_out_the_long_fuzzing_without_the_label():
@@ -135,7 +153,7 @@ def test_fuzz_long_keeps_its_half_hour_per_target():
 
 
 def test_the_isolation_job_runs_the_nightly_scope_with_both_envs():
-    steps = steps_of(workflow(JOBS), 'e2e-isolation')
+    steps = steps_of(workflow(CI), 'e2e-isolation')
     assert any('./.github/actions/dev-image' in str(step.get('uses', '')) for step in steps)
     runs = [step for step in steps if 'make test NIGHTLY=1' in str(step.get('run', ''))]
     assert len(runs) == 1
@@ -145,7 +163,7 @@ def test_the_isolation_job_runs_the_nightly_scope_with_both_envs():
 
 
 def test_the_isolation_job_collects_section_logs_on_any_outcome():
-    steps = steps_of(workflow(JOBS), 'e2e-isolation')
+    steps = steps_of(workflow(CI), 'e2e-isolation')
     collects = [
         step for step in steps if 'scripts/collect-isolation-logs.sh' in str(step.get('run', ''))
     ]

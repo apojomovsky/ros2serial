@@ -5,8 +5,10 @@ name: release
 
 # Releases from a maintainer's v* tag: build the Arduino library zip from
 # the G11 bundle and the Python sdist and wheel, and attach them to a GitHub
-# release. A plain version tag becomes a full release marked Latest; a tag
-# with a SemVer pre-release suffix (as in v0.2.0-rc.1) becomes a pre-release.
+# release. PlatformIO consumes the same zip, since it installs Arduino-format
+# libraries, so there is no separate PlatformIO package. A plain version tag
+# becomes a full release marked Latest, while a tag with a SemVer pre-release
+# suffix (as in v0.2.0-rc.1) becomes a pre-release.
 # Nothing is published elsewhere: no PyPI, no Arduino Library Manager, no
 # buildfarm. Pull requests touching this workflow or the artifact script, and
 # manual dispatches, run the same build without publishing. The tag is pushed
