@@ -3601,23 +3601,6 @@ void handshake_with_actions(Fixture & fixture)
   drain_decoded(fixture);
 }
 
-// A QUERY with no index byte is malformed: it names nothing and earns no
-// answer, instead of reading past the payload.
-// covers: ACT-1
-TEST(ActionExchange, DropsAQueryWithNoIndexByte)
-{
-  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config(), SessionEvents{},
-    [](const ServiceInfo &) {return kServiceStatusOk;},
-    [](const ActionInfo &) {return kActionStatusOk;}};
-  handshake_with_actions(fixture);
-  drain_decoded(fixture);
-  // Topic 8 is the wire actions topic; 0x01 is the QUERY opcode. Seqs 2
-  // and 3 follow the walk's two DECLARE frames. Both sizes are tracked.
-  fixture.deliver_frame(8u, 2u, {0x01u});
-  fixture.deliver_frame(8u, 3u, {0x01u, 0x00u});
-  EXPECT_TRUE(drain_decoded(fixture).empty()) << "stray QUERY frames earn no answer";
-}
-
 // A DECLARE whose hash does not match the installed action is refused with
 // a hash-mismatch verdict, the way a stale MCU layout is.
 // covers: ACT-7

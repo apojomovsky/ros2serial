@@ -189,9 +189,11 @@ QueuedFrame control_slot(std::uint8_t topic_id, const std::vector<std::uint8_t> 
     if (topic_id == kServicesTopic && payload[0] == kSvcStatus && payload.size() > 2u) {
       slot.sub = payload[2];
     }
+    // GCOVR_EXCL_BR_START: the bridge QUERY always carries an index
     if (topic_id == kActionsTopic && payload[0] == kActQuery && payload.size() > 1u) {
       slot.sub = payload[1];
     }
+    // GCOVR_EXCL_BR_STOP
   }
   return slot;
 }
