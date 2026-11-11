@@ -20,7 +20,8 @@ ARG PYTEST_VERSION=9.1.1
 ARG HYPOTHESIS_VERSION=6.170.12
 ARG PYYAML_VERSION=6.0.3
 ARG JSONSCHEMA_VERSION=4.26.0
-RUN apt-get update && apt-get install -y --no-install-recommends \
+COPY scripts/apt-install.sh /usr/local/bin/apt-install.sh
+RUN apt-install.sh update && apt-install.sh install -y --no-install-recommends \
         clang-${CLANG_VERSION} cmake ninja-build python3 python3-venv python3-pip \
         gcc g++ curl ca-certificates make git \
         libgtest-dev libyaml-cpp-dev \
@@ -37,7 +38,7 @@ RUN curl -sSL -o /tmp/mull.deb \
         https://github.com/mull-project/mull/releases/download/${MULL_VERSION}/Mull-${MULL_VERSION}-ubuntu-amd64-24.04.deb \
     && curl -sSL -o /tmp/mull-llvm.deb \
         https://github.com/mull-project/mull/releases/download/${MULL_VERSION}/Mull-18-${MULL_VERSION}-LLVM-${LLVM_VERSION}-ubuntu-amd64-24.04.deb \
-    && apt-get update && apt-get install -y /tmp/mull.deb /tmp/mull-llvm.deb \
+    && apt-install.sh update && apt-install.sh install -y /tmp/mull.deb /tmp/mull-llvm.deb \
     && rm /tmp/mull.deb /tmp/mull-llvm.deb \
     && mull-runner --version
 RUN python3 -m venv /opt/mutmut \

@@ -27,7 +27,8 @@ ARG PYTEST_VERSION=9.1.1
 ARG HYPOTHESIS_VERSION=6.170.12
 ARG PYYAML_VERSION=6.0.3
 ARG JSONSCHEMA_VERSION=4.26.0
-RUN apt-get update && apt-get install -y --no-install-recommends \
+COPY scripts/apt-install.sh /usr/local/bin/apt-install.sh
+RUN apt-install.sh update && apt-install.sh install -y --no-install-recommends \
         gcc-s390x-linux-gnu g++-s390x-linux-gnu qemu-user \
         build-essential clang-format cmake ninja-build \
         python3 python3-venv python3-pip git make \

@@ -406,7 +406,7 @@ def test_the_mutation_image_resolves_the_mull_package_dependencies():
     dockerfile = (ROOT / 'docker' / 'mutation' / 'Dockerfile').read_text(encoding='utf-8')
     assert 'Mull-18-' in dockerfile and 'LLVM-' in dockerfile
     assert 'Mull-${MULL_VERSION}-ubuntu' in dockerfile
-    assert 'apt-get install' in dockerfile and 'dpkg -i' not in dockerfile
+    assert 'apt-install.sh install' in dockerfile and 'dpkg -i' not in dockerfile
 
 
 def fuzz_long_job():
