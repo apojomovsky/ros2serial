@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <string>
 
+#include "r2s_bridge/action_types.hpp"
 #include "r2s_bridge/session.hpp"
 #include "r2s_bridge/type_support.hpp"
 
@@ -95,6 +96,78 @@ TEST(TopicStatus, CodesMatchTheSpec)
     EXPECT_EQ(kTopicStatusUnknownType, 1u);
     EXPECT_EQ(kTopicStatusHashMismatch, 2u);
     EXPECT_EQ(kTopicStatusNameConflict, 3u);
+}
+
+// The installed type support answers one announced action the same way
+// (spec/protocol.md, 7.9).
+// covers: ACT-7
+ActionInfo announced_action(std::string type, std::array<std::uint8_t, 8> hash)
+{
+  ActionInfo info;
+  info.index = 0u;
+  info.type_hash = hash;
+  info.type_name = std::move(type);
+  info.action_name = "spin";
+  return info;
+}
+
+TEST(ActionResolve, AcceptsTheInstalledHash)
+{
+    const ActionTypes types("tf2_msgs/action/LookupTransform");
+    EXPECT_EQ(resolve_action_type(announced_action("tf2_msgs/action/LookupTransform",
+        types.type_hash())), kActionStatusOk);
+}
+
+TEST(ActionResolve, RejectsAModifiedHash)
+{
+    const ActionTypes types("tf2_msgs/action/LookupTransform");
+    for (std::size_t i = 0; i < 8u; ++i) {
+    auto hash = types.type_hash();
+    hash[i] ^= 0x01u;
+    EXPECT_EQ(resolve_action_type(announced_action("tf2_msgs/action/LookupTransform", hash)),
+        kActionStatusHashMismatch) << "flipping wire byte " << i << " must refuse the action";
+    }
+}
+
+TEST(ActionResolve, RejectsAnUnknownPackage)
+{
+    const ActionTypes types("tf2_msgs/action/LookupTransform");
+    EXPECT_EQ(resolve_action_type(announced_action("no_such_pkg/action/Nope", types.type_hash())),
+      kActionStatusUnknownType);
+}
+
+TEST(ActionStatus, CodesMatchTheSpec)
+{
+    EXPECT_EQ(kActionStatusOk, 0u);
+    EXPECT_EQ(kActionStatusUnknownType, 1u);
+    EXPECT_EQ(kActionStatusHashMismatch, 2u);
+    EXPECT_EQ(kActionStatusNameConflict, 3u);
+}
+
+TEST(ActionInfo, InequalityNamesEachField)
+{
+    ActionInfo base;
+    base.index = 0x03u;
+    base.type_hash = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
+    base.type_name = "tf2_msgs/action/LookupTransform";
+    base.action_name = "spin";
+    EXPECT_TRUE(base == base);
+    EXPECT_FALSE(base != base);
+    ActionInfo changed = base;
+    changed.index = 0x04u;
+    EXPECT_TRUE(base != changed);
+    changed = base;
+    changed.type_hash[0] ^= 0x01u;
+    EXPECT_TRUE(base != changed);
+    changed = base;
+    changed.type_name = "tf2_msgs/action/FollowJointTrajectory";
+    EXPECT_TRUE(base != changed);
+    changed = base;
+    changed.action_name = "nudge";
+    EXPECT_TRUE(base != changed);
+    changed = base;
+    changed.status = kActionStatusUnknownType;
+    EXPECT_TRUE(base != changed);
 }
 
 }  // namespace r2s_bridge

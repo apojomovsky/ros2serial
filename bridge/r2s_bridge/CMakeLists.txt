@@ -12,14 +12,17 @@ if(NOT CMAKE_CXX_STANDARD_REQUIRED)
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(action_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
+find_package(rcl_action REQUIRED)
 find_package(rmw REQUIRED)
 find_package(rosidl_runtime_cpp REQUIRED)
 find_package(rosidl_typesupport_introspection_cpp REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 
 add_library(r2s_bridge_component SHARED
+  src/action_types.cpp
   src/bridge.cpp
   src/converter.cpp
   src/core_port.cpp
@@ -37,9 +40,11 @@ target_include_directories(r2s_bridge_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_link_libraries(r2s_bridge_component PUBLIC
+  action_msgs::action_msgs__rosidl_typesupport_cpp
   rclcpp::rclcpp
   rclcpp_components::component
   diagnostic_msgs::diagnostic_msgs__rosidl_typesupport_cpp
+  rcl_action::rcl_action
   rmw::rmw
   rosidl_runtime_cpp::rosidl_runtime_cpp
   rosidl_typesupport_introspection_cpp::rosidl_typesupport_introspection_cpp)
@@ -194,6 +199,14 @@ if(BUILD_TESTING)
     r2s_bridge_component
     std_srvs::std_srvs__rosidl_typesupport_cpp)
 
+  # The action introspection test loads the action packages for real, so it
+  # needs tf2_msgs and action_msgs targets (found at top level).
+  ament_add_gtest(test_action_types test/test_action_types.cpp)
+  target_link_libraries(test_action_types
+    r2s_bridge_component
+    action_msgs::action_msgs__rosidl_typesupport_cpp
+    tf2_msgs::tf2_msgs__rosidl_typesupport_cpp)
+
   # openpty comes from libutil; the pty test uses it instead of a device.
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
   target_link_libraries(test_termios_transport r2s_bridge_component util)
@@ -214,15 +227,19 @@ if(BUILD_TESTING)
 
   # The router drives a real node with a scripted link and real type support,
   # covering remapping, QoS and both traffic directions end to end.
+  find_package(rclcpp_action REQUIRED)
   ament_add_gtest(test_router test/test_router.cpp)
   target_include_directories(test_router PRIVATE ${R2S_CORE_DIR}/include)
   target_link_libraries(test_router
     r2s_bridge_component
     r2s_bridge_test_support
+    action_msgs::action_msgs__rosidl_typesupport_cpp
     geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
+    rclcpp_action::rclcpp_action
     sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
     std_msgs::std_msgs__rosidl_typesupport_cpp
-    std_srvs::std_srvs__rosidl_typesupport_cpp)
+    std_srvs::std_srvs__rosidl_typesupport_cpp
+    tf2_msgs::tf2_msgs__rosidl_typesupport_cpp)
 
   # A publish that fails on the ROS graph (a context shutting down under
   # the poll loop) is logged, counted and survived, never an abort.

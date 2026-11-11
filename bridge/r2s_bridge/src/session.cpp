@@ -10,11 +10,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <deque>
 #include <map>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -122,6 +122,35 @@ constexpr std::uint8_t kSvcBusy = 0x03u;
 constexpr std::int64_t kSvcTimeoutMs = 200;
 constexpr int kSvcRetries = 3;
 
+// The actions channel id and its opcodes (spec/protocol.md, 7.9).
+constexpr std::uint8_t kActionsTopic = 8u;
+constexpr std::uint8_t kActQuery = 0x01u;
+constexpr std::uint8_t kActDeclare = 0x02u;
+constexpr std::uint8_t kActStatus = 0x03u;
+constexpr std::uint8_t kActGoal = 0x04u;
+constexpr std::uint8_t kActGoalResp = 0x05u;
+constexpr std::uint8_t kActCancel = 0x06u;
+constexpr std::uint8_t kActCancelResp = 0x07u;
+constexpr std::uint8_t kActFeedback = 0x08u;
+constexpr std::uint8_t kActResult = 0x09u;
+constexpr std::uint8_t kActFeaturesBit = 0x80u;
+// The GOAL_RESP decisions ([ACT-4]), the CANCEL_RESP decisions ([ACT-5])
+// and the RESULT outcomes ([ACT-6]): anything else is reserved.
+constexpr std::uint8_t kActAccepted = 0x00u;
+constexpr std::uint8_t kActRejected = 0x01u;
+constexpr std::uint8_t kActBusy = 0x02u;
+constexpr std::uint8_t kActUnknownAction = 0x03u;
+constexpr std::uint8_t kActCancelAccepted = 0x00u;
+constexpr std::uint8_t kActCancelRejected = 0x01u;
+constexpr std::uint8_t kActUnknownGoal = 0x02u;
+constexpr std::uint8_t kActSucceeded = 0x04u;
+constexpr std::uint8_t kActCanceled = 0x05u;
+constexpr std::uint8_t kActAborted = 0x06u;
+
+// The action walk's cadence, mirroring the service walk ([ACT-7]).
+constexpr std::int64_t kActTimeoutMs = 200;
+constexpr int kActRetries = 3;
+
 // The handshake mode byte ([CTL-1]).
 constexpr std::uint8_t kModeFull = 0u;
 
@@ -160,6 +189,11 @@ QueuedFrame control_slot(std::uint8_t topic_id, const std::vector<std::uint8_t> 
     if (topic_id == kServicesTopic && payload[0] == kSvcStatus && payload.size() > 2u) {
       slot.sub = payload[2];
     }
+    // GCOVR_EXCL_BR_START: the bridge QUERY always carries an index
+    if (topic_id == kActionsTopic && payload[0] == kActQuery && payload.size() > 1u) {
+      slot.sub = payload[1];
+    }
+    // GCOVR_EXCL_BR_STOP
   }
   return slot;
 }
@@ -298,10 +332,12 @@ struct Session::Impl
   Impl(
     SessionConfig in_config, const Clock & in_clock, const Clock & in_ros_clock,
     TransportFactory in_open,
-    TopicResolver in_resolve, SessionEvents in_events, ServiceResolver in_resolve_service)
+    TopicResolver in_resolve, SessionEvents in_events, ServiceResolver in_resolve_service,
+    ActionResolver in_resolve_action)
   : config(in_config), clock(in_clock), ros_clock(in_ros_clock), open(std::move(in_open)),
     resolve(std::move(in_resolve)), events(std::move(in_events)),
-    resolve_service(std::move(in_resolve_service))
+    resolve_service(std::move(in_resolve_service)),
+    resolve_action(std::move(in_resolve_action))
   {
     if (config.reconnect_period_ms <= 0 || config.boot_wait_ms <= 0 ||
       config.heartbeat_period_ms <= 0 ||
@@ -563,20 +599,49 @@ struct Session::Impl
   }
 
     // The walk after the parameter walk ([SVR-7]): QUERY per index while the
-    // MCU announced services, READY at once when it did not.
+    // MCU announced services, the action walk at once when it did not.
   void start_service_walk()
   {
     awaiting_param_ = false;
     awaiting_svc_ = false;
     collected_services.clear();
     if ((hello.features & kSvcFeaturesBit) == 0u) {
-      finish_handshake();
+      start_action_walk();
       return;
     }
     awaiting_svc_ = true;
     svc_index_ = 0;
     svc_retries_ = 0;
     send_svc_query();
+  }
+
+    // One ACT_QUERY for the walk's current index ([ACT-7]). The QUERY joins
+    // the [SES-33] slot list like SVC_QUERY, so a blocked link keeps the
+    // newest with the first seq; a timer retry is a new emission with the
+    // next seq.
+  void send_act_query()
+  {
+    queue_frame(kActionsTopic, seq_act_, {kActQuery, act_index_});
+    ++seq_act_;
+    flush();
+    act_deadline_ms_ = now_ms() + kActTimeoutMs;
+  }
+
+    // The walk after the service walk ([ACT-7]): QUERY per index while the
+    // MCU announced actions, READY at once when it did not.
+  void start_action_walk()
+  {
+    awaiting_svc_ = false;
+    awaiting_act_ = false;
+    collected_actions.clear();
+    if ((hello.features & kActFeaturesBit) == 0u) {
+      finish_handshake();
+      return;
+    }
+    awaiting_act_ = true;
+    act_index_ = 0;
+    act_retries_ = 0;
+    send_act_query();
   }
 
     // One PARAM_SET emission with a fresh rel_seq: the index and the value
@@ -639,14 +704,21 @@ struct Session::Impl
     svc_pending_response_ = false;
     svc_mcu_req_active_ = false;
     svc_host_req_active_ = false;
+    act_out_active_ = false;
+    act_pending_goals_.clear();
+    act_pending_cancel_ = false;
+    act_host_goals_.clear();
+    act_host_cancels_.clear();
     const bool drop_front =
       !queue_.empty() &&
-      (queue_.front().topic_id == kParamsTopic || queue_.front().topic_id == kServicesTopic) &&
+      (queue_.front().topic_id == kParamsTopic || queue_.front().topic_id == kServicesTopic ||
+      queue_.front().topic_id == kActionsTopic) &&
       !queue_.front().control;
     std::deque<QueuedFrame> kept;
     std::size_t kept_bytes = 0;
     for (std::size_t i = 0; i < queue_.size(); ++i) {
-      if ((queue_[i].topic_id == kParamsTopic || queue_[i].topic_id == kServicesTopic) &&
+      if ((queue_[i].topic_id == kParamsTopic || queue_[i].topic_id == kServicesTopic ||
+        queue_[i].topic_id == kActionsTopic) &&
         !queue_[i].control)
       {
         continue;
@@ -749,6 +821,7 @@ struct Session::Impl
     awaiting_topic = false;
     awaiting_param_ = false;
     awaiting_svc_ = false;
+    awaiting_act_ = false;
     requested_index = 0;
     retries = 0;
     collected.clear();
@@ -766,15 +839,18 @@ struct Session::Impl
     awaiting_topic = true;
     awaiting_param_ = false;
     awaiting_svc_ = false;
+    awaiting_act_ = false;
     clear_pending_control();
     drop_reliable();
         // A re-handshake drops the reliable state ([REL-5]); the walk and
         // the connected stream number their channel frames from 0.
     rel_next_ = 0;
     rel_next_svc_ = 0;
+    rel_next_act_ = 0;
     rel_expected_.clear();
     seq_params_ = 0;
     seq_svc_ = 0;
+    seq_act_ = 0;
     seq_ack_ = 0;
     if (requested_index < hello.topic_count) {
       send_topic_req();
@@ -799,6 +875,7 @@ struct Session::Impl
     topics = collected;
     params = collected_params;
     services_ = collected_services;
+    actions_ = collected_actions;
     had_handshake = true;
     state = SessionState::kConnected;
     hello.token = assign_token();
@@ -814,6 +891,10 @@ struct Session::Impl
     seq_params_ = 0;
     seq_svc_ = 0;
     seq_ack_ = 0;
+        // The actions channel keeps numbering across READY: the walk's
+        // QUERYs and the connected GOALs share one frame seq, as the MCU
+        // core and the session vectors show (spec/vectors/session). Only
+        // a re-handshake restarts it, in start_topic_walk.
     user_seq_.clear();
     expected_seq.clear();
     last_rx_ms = now_ms();
@@ -1181,11 +1262,99 @@ struct Session::Impl
     }
     if (payload[3] == 1u) {
       awaiting_svc_ = false;
-      finish_handshake();
+      start_action_walk();
     } else {
       ++svc_index_;
       svc_retries_ = 0;
       send_svc_query();
+    }
+  }
+
+    // One walk DECLARE kept for the actions layer: the index, the hash and
+    // the names. Only a fully parseable DECLARE is kept: a short payload
+    // or names the length overruns leave no entry, while the walk still
+    // advances ([ACT-1]).
+  void collect_act_declare(const std::uint8_t *payload, std::uint16_t len)
+  {
+        // The caller only delivers walk answers of two bytes or more
+        // ([ACT-7]): the opcode and the declare index always parse.
+    ActionInfo info;
+    info.index = payload[1];
+    Reader reader(payload + 2u, static_cast<std::uint16_t>(len - 2u));
+    for (std::size_t i = 0; i < info.type_hash.size(); ++i) {
+      std::uint8_t byte = 0;
+      if (!reader.u8(byte)) {
+        return;
+      }
+      info.type_hash[i] = byte;
+    }
+    if (!reader.string(info.type_name) || !reader.string(info.action_name) ||
+      !reader.at_end())
+    {
+      return;
+    }
+    collected_actions.push_back(info);
+  }
+
+    // One ACT_DECLARE answer ([ACT-7]): the entry is kept when it parses,
+    // named with the resolver's verdict, and answered with STATUS. The walk
+    // moves to the next index either way.
+  void on_action_declare(const std::uint8_t *payload, std::uint16_t len)
+  {
+    const std::size_t kept = collected_actions.size();
+    collect_act_declare(payload, len);
+    std::uint8_t verdict = kActionStatusUnknownType;
+    if (collected_actions.size() > kept) {
+      ActionInfo & info = collected_actions.back();
+      verdict = resolve_action ? resolve_action(info) : kActionStatusUnknownType;
+      if (verdict == kActionStatusOk) {
+        for (const ActionInfo & seen : collected_actions) {
+          if (seen.index != info.index && seen.action_name == info.action_name) {
+            verdict = kActionStatusNameConflict;
+            log(SessionLog::kError,
+              "ACT refused: the name '" + info.action_name + "' is announced twice");
+            break;
+          }
+        }
+      } else if (verdict == kActionStatusUnknownType) {
+        log(SessionLog::kError,
+          "ACT refused: unknown type '" + info.type_name + "' for action '" +
+          info.action_name + "'");
+      } else if (verdict == kActionStatusHashMismatch) {  // GCOVR_EXCL_LINE: all verdicts tested
+        log(SessionLog::kError,
+          "ACT refused: the hash of '" + info.type_name +
+          "' is not the installed one, for action '" +
+          info.action_name + "'");
+      }
+      info.status = verdict;
+    }
+    const std::uint8_t index = payload[1];
+    queue_frame(kActionsTopic, seq_act_, {kActStatus, 0x00u, index, verdict});
+    ++seq_act_;
+    flush();
+    act_index_ = static_cast<std::uint8_t>(index + 1u);
+    act_retries_ = 0;
+    send_act_query();
+  }
+
+    // The action walk's STATUS ([ACT-7]): 1 ends the walk at the index
+    // under request, anything else advances it. Plain replies under the
+    // requester's retry, never acked.
+  void on_action_status(const std::uint8_t *payload, std::uint16_t len)
+  {
+    if (len != 4u) {
+      return;
+    }
+    if (payload[2] != act_index_) {
+      return;
+    }
+    if (payload[3] == 1u) {
+      awaiting_act_ = false;
+      finish_handshake();
+    } else {
+      ++act_index_;
+      act_retries_ = 0;
+      send_act_query();
     }
   }
 
@@ -1294,6 +1463,103 @@ struct Session::Impl
     flush();
   }
 
+    // One ACT_GOAL emission with a fresh rel_seq: the goal_seq, the index
+    // and the packed goal travel after the opcode ([ACT-1]). Plain
+    // queueing, never a slot: pending GOALs replace at the index level.
+  void emit_act_goal(
+    std::uint8_t index, std::uint8_t goal_seq, const std::vector<std::uint8_t> & payload,
+    std::uint8_t rel_seq)
+  {
+    std::vector<std::uint8_t> frame;
+    frame.reserve(payload.size() + 4u);
+    frame.push_back(kActGoal);
+    frame.push_back(rel_seq);
+    frame.push_back(goal_seq);
+    frame.push_back(index);
+    frame.insert(frame.end(), payload.begin(), payload.end());
+    act_out_payload_ = frame;
+    queue_frame(kActionsTopic, seq_act_, frame, false);
+    ++seq_act_;
+    flush();
+    act_out_active_ = true;
+    act_out_rel_ = rel_seq;
+    act_out_retries_ = 0;
+    act_out_deadline_ms_ = now_ms() + kRelRetryMs;
+    act_host_goals_.insert(goal_seq);
+  }
+
+    // One ACT_CANCEL emission with a fresh rel_seq: the goal_seq travels
+    // after the opcode ([ACT-1]).
+  void emit_act_cancel(std::uint8_t goal_seq, std::uint8_t rel_seq)
+  {
+    act_out_payload_ = {kActCancel, rel_seq, goal_seq};
+    queue_frame(kActionsTopic, seq_act_, act_out_payload_, false);
+    ++seq_act_;
+    flush();
+    act_out_active_ = true;
+    act_out_rel_ = rel_seq;
+    act_out_retries_ = 0;
+    act_out_deadline_ms_ = now_ms() + kRelRetryMs;
+    act_host_cancels_.insert(goal_seq);
+  }
+
+    // The pending CANCEL goes out before the pending GOALs: it answers a
+    // live goal under its own retry. GOALs promote in index order.
+  void promote_act_pending()
+  {
+    if (act_pending_cancel_) {
+      const std::uint8_t goal_seq = act_pending_cancel_goal_;
+      act_pending_cancel_ = false;
+      const std::uint8_t rel_seq = rel_next_act_++;
+      emit_act_cancel(goal_seq, rel_seq);
+      return;
+    }
+    if (act_pending_goals_.empty()) {
+      return;
+    }
+    const auto next = act_pending_goals_.begin();
+    const std::uint8_t index = next->first;
+    const std::uint8_t goal_seq = next->second.goal_seq;
+    const std::vector<std::uint8_t> payload = next->second.payload;
+    act_pending_goals_.erase(next);
+    const std::uint8_t rel_seq = rel_next_act_++;
+    emit_act_goal(index, goal_seq, payload, rel_seq);
+  }
+
+    // The outstanding action frame's retry ([REL-2]): the same rel_seq
+    // under the next frame seq. Spent retries drop the frame, count it and
+    // promote the next.
+  void poll_act_reliable(std::int64_t now)
+  {
+    if (!act_out_active_ || now < act_out_deadline_ms_) {
+      return;
+    }
+    if (!queue_.empty()) {
+      return;
+    }
+    if (act_out_retries_ >= kRelRetries) {
+      log(SessionLog::kWarning, "no ack for the action frame; the frame is dropped");
+      ++reliable_dropped_;
+      act_out_active_ = false;
+        // A dropped frame ends that wire goal: a late answer names a seq
+        // nothing tracks anymore and is ignored as stale.
+      // Only GOAL and CANCEL frames retry, both carrying the goal_seq
+      // at index 2, so a drop ends that wire goal or cancel outright.
+      if (act_out_payload_[0] == kActGoal) {
+        act_host_goals_.erase(act_out_payload_[2]);
+      } else {
+        act_host_cancels_.erase(act_out_payload_[2]);
+      }
+      promote_act_pending();
+      return;
+    }
+    ++act_out_retries_;
+    act_out_deadline_ms_ = now + kRelRetryMs;
+    queue_frame(kActionsTopic, seq_act_, act_out_payload_, false);
+    ++seq_act_;
+    flush();
+  }
+
     // One incoming service frame ([SVR-4] to [SVR-7], [REL-3]). Walk answers
     // arrive while handshaking and are never acked; REQUEST and RESPONSE
     // frames ride the reliable channel while connected, acked every time
@@ -1378,6 +1644,114 @@ struct Session::Impl
     }
   }
 
+    // One incoming action frame ([ACT-1], [ACT-3] to [ACT-8]). Walk answers
+    // arrive while handshaking and are never acked; GOAL_RESP, CANCEL_RESP
+    // and RESULT ride the reliable channel while connected, acked every
+    // time and applied at most once. FEEDBACK is best effort: never acked.
+  void on_actions(const std::uint8_t *payload, std::uint16_t len)
+  {
+    if (len < 1u) {
+      return;
+    }
+    switch (payload[0]) {
+      case kActDeclare: {
+          if (state != SessionState::kHandshaking || !awaiting_act_ || len < 2u ||
+            payload[1] != act_index_)
+          {
+            return;
+          }
+          on_action_declare(payload, len);
+          return;
+        }
+      case kActStatus:
+        if (state == SessionState::kHandshaking && awaiting_act_) {
+          on_action_status(payload, len);
+        }
+        return;
+      case kActGoalResp: {
+          if (state != SessionState::kConnected || len != 4u || payload[3] > kActUnknownAction) {
+            return;
+          }
+          send_ack_frame(kActionsTopic, payload[1]);
+          std::uint8_t & expected = rel_expected_[kActionsTopic];
+          if (payload[1] != expected) {
+            return;
+          }
+          ++expected;
+          if (act_host_goals_.count(payload[2]) == 0u) {
+            return;
+          }
+          act_host_goals_.erase(payload[2]);
+          if (events.action_goal_response) {
+            events.action_goal_response(payload[2], payload[3]);
+          }
+          return;
+        }
+      case kActCancelResp: {
+          if (state != SessionState::kConnected || len != 4u || payload[3] > kActUnknownGoal) {
+            return;
+          }
+          send_ack_frame(kActionsTopic, payload[1]);
+          std::uint8_t & expected = rel_expected_[kActionsTopic];
+          if (payload[1] != expected) {
+            return;
+          }
+          ++expected;
+          if (act_host_cancels_.count(payload[2]) == 0u) {
+            return;
+          }
+          act_host_cancels_.erase(payload[2]);
+          if (events.action_cancel_response) {
+            events.action_cancel_response(payload[2], payload[3]);
+          }
+          return;
+        }
+      case kActFeedback: {
+          if (state != SessionState::kConnected || len < 3u) {
+            return;
+          }
+          const std::uint8_t goal_seq = payload[1];
+          const std::uint8_t index = payload[2];
+          const ActionInfo * known = nullptr;
+          for (const ActionInfo & action : actions_) {
+            if (action.index == index && action.status == kActionStatusOk) {
+              known = &action;
+              break;
+            }
+          }
+          if (known == nullptr) {
+            log(SessionLog::kWarning, "ACT FEEDBACK for an unserved index is dropped");
+            return;
+          }
+          if (events.action_feedback) {
+            events.action_feedback(goal_seq, index,
+              std::vector<std::uint8_t>(payload + 3u, payload + len));
+          }
+          return;
+        }
+      case kActResult: {
+          if (state != SessionState::kConnected || len < 4u || payload[3] > kActAborted ||
+            payload[3] < kActSucceeded)
+          {
+            return;
+          }
+          send_ack_frame(kActionsTopic, payload[1]);
+          std::uint8_t & expected = rel_expected_[kActionsTopic];
+          if (payload[1] != expected) {
+            return;
+          }
+          ++expected;
+          if (events.action_result) {
+            events.action_result(payload[2], payload[3],
+              std::vector<std::uint8_t>(payload + 4u, payload + len));
+          }
+          return;
+        }
+      default:
+        break;
+    }
+  }
+
     // An ack for the outstanding SET clears it and promotes the oldest
     // pending one; anything else is a duplicate or a stranger ([REL-2]).
   void on_ack_frame(const std::uint8_t *payload, std::uint16_t len)
@@ -1399,6 +1773,13 @@ struct Session::Impl
       }
       svc_out_active_ = false;
       promote_svc_pending();
+    }
+    if (payload[0] == kActionsTopic) {
+      if (!act_out_active_ || payload[1] != act_out_rel_) {
+        return;
+      }
+      act_out_active_ = false;
+      promote_act_pending();
     }
   }
 
@@ -1628,6 +2009,10 @@ struct Session::Impl
       on_services(payload, len);
       return;
     }
+    if (topic_id == kActionsTopic) {
+      on_actions(payload, len);
+      return;
+    }
     if (topic_id == kAckTopic) {
       on_ack_frame(payload, len);
       return;
@@ -1742,6 +2127,17 @@ struct Session::Impl
               send_svc_query();
             }
           }
+        } else if (awaiting_act_) {
+          if (now >= act_deadline_ms_) {
+            if (act_retries_ >= kActRetries) {
+              log(SessionLog::kWarning, "no ACT_DECLARE answered; the handshake starts over");
+              restart_handshake();
+              send_hello_req();
+            } else {
+              ++act_retries_;
+              send_act_query();
+            }
+          }
         } else if (now >= next_hello_req_ms) {
           send_hello_req();
         }
@@ -1757,6 +2153,7 @@ struct Session::Impl
           }
           poll_reliable(now);
           poll_svc_reliable(now);
+          poll_act_reliable(now);
           maybe_send_ping(now);
                 // The correction floor needs no new PONG: with the estimate
                 // standing still the timer resends it on schedule ([SES-25]).
@@ -1797,6 +2194,7 @@ struct Session::Impl
   TopicResolver resolve;
   SessionEvents events;
   ServiceResolver resolve_service;
+  ActionResolver resolve_action;
 
   std::unique_ptr<Transport> transport;
   std::unique_ptr<FrameReader> reader;
@@ -1888,8 +2286,38 @@ struct Session::Impl
   std::uint8_t svc_mcu_index_ = 0;
   bool svc_host_req_active_ = false;
   std::uint8_t svc_host_req_ = 0;
+    // The actions walk ([ACT-7]): whether the service walk handed over,
+    // the index under request, its retries and its deadline.
+  bool awaiting_act_ = false;
+  std::uint8_t act_index_ = 0;
+  int act_retries_ = 0;
+  std::int64_t act_deadline_ms_ = 0;
+    // The actions reliable stream ([REL-2], [ACT-3]): one outstanding GOAL
+    // or CANCEL with its timer and retries, one pending GOAL per index,
+    // one pending CANCEL, and the next rel_seq of the channel's own
+    // stream. The host's outstanding GOAL and CANCEL travel with their
+    // goal_seq for the answer.
+  bool act_out_active_ = false;
+  std::uint8_t act_out_rel_ = 0;
+  std::vector<std::uint8_t> act_out_payload_;
+  int act_out_retries_ = 0;
+  std::int64_t act_out_deadline_ms_ = 0;
+  struct ActPendingGoal
+  {
+    std::uint8_t goal_seq = 0;
+    std::vector<std::uint8_t> payload;
+  };
+  std::map<std::uint8_t, ActPendingGoal> act_pending_goals_;
+  bool act_pending_cancel_ = false;
+  std::uint8_t act_pending_cancel_goal_ = 0;
+    // The host's GOALs and CANCELs awaiting the MCU's answer, by wire
+    // goal_seq. Several actions may hold one each while connected, and
+    // answers may arrive in any order, so one slot per kind is not enough.
+  std::set<std::uint8_t> act_host_goals_;
+  std::set<std::uint8_t> act_host_cancels_;
   std::uint8_t rel_next_ = 0;
   std::uint8_t rel_next_svc_ = 0;
+  std::uint8_t rel_next_act_ = 0;
   std::map<std::uint8_t, std::uint8_t> rel_expected_;
   std::uint32_t reliable_dropped_ = 0;
   std::uint32_t reliable_replaced_ = 0;
@@ -1904,6 +2332,10 @@ struct Session::Impl
     // READY keeps them for the services layer.
   std::vector<ServiceInfo> collected_services;
   std::vector<ServiceInfo> services_;
+    // The action walk's DECLAREs ([ACT-7]): the walk collects them and
+    // READY keeps them for the actions layer.
+  std::vector<ActionInfo> collected_actions;
+  std::vector<ActionInfo> actions_;
   Converter converter_;
   bool had_handshake = false;
   std::uint32_t next_token = 0u;
@@ -1930,6 +2362,9 @@ struct Session::Impl
     // The frame seq of the services channel, restarting at each handshake
     // and at READY ([FRM-4], [SVR-4]).
   std::uint8_t seq_svc_ = 0;
+    // The frame seq of the actions channel, restarting at each handshake
+    // and at READY ([FRM-4], [ACT-3]).
+  std::uint8_t seq_act_ = 0;
     // The seq the time channel shares between its PINGs and CORRECTIONs,
     // restarting at 0 after each handshake ([FRM-4], [FRM-5]).
   std::uint8_t seq_time = 0;
@@ -1940,10 +2375,11 @@ struct Session::Impl
 
 Session::Session(
   SessionConfig config, const Clock & clock, const Clock & ros_clock, TransportFactory open,
-  TopicResolver resolve, SessionEvents events, ServiceResolver resolve_service)
+  TopicResolver resolve, SessionEvents events, ServiceResolver resolve_service,
+  ActionResolver resolve_action)
 : impl_(std::make_unique<Impl>(
     config, clock, ros_clock, std::move(open), std::move(resolve), std::move(events),
-    std::move(resolve_service)))
+    std::move(resolve_service), std::move(resolve_action)))
 {
 }
 
@@ -1978,6 +2414,11 @@ const std::vector<ParamInfo> & Session::params() const
 const std::vector<ServiceInfo> & Session::services() const
 {
   return impl_->services_;
+}
+
+const std::vector<ActionInfo> & Session::actions() const
+{
+  return impl_->actions_;
 }
 
 McuCounters Session::mcu_counters() const
@@ -2139,6 +2580,76 @@ bool Session::send_service_response(
     impl.svc_pending_response_req_ = req_id;
     impl.svc_pending_response_status_ = status;
     impl.svc_pending_response_payload_ = payload;
+  }
+  return true;
+}
+
+bool Session::send_action_goal(
+  std::uint8_t index, std::uint8_t goal_seq, const std::vector<std::uint8_t> & payload)
+{
+  Impl & impl = *impl_;
+  if (impl.state != SessionState::kConnected) {
+    return false;
+  }
+  const ActionInfo * known = nullptr;
+  for (const ActionInfo & action : impl.actions_) {
+    if (action.index == index) {
+      known = &action;
+      break;
+    }
+  }
+  if (known == nullptr || known->status != kActionStatusOk) {
+    return false;
+  }
+  const std::size_t cap =
+    std::max<std::uint16_t>(impl.hello.rx_capacity, impl.hello.max_frame);
+  if (payload.size() + 4u > cap) {
+    return false;
+  }
+  if (impl.pending_bytes_ > 0u && impl.pending_bytes_ >= cap) {
+    return false;
+  }
+  if (!impl.act_out_active_) {
+    const std::uint8_t rel_seq = impl.rel_next_act_++;
+    impl.emit_act_goal(index, goal_seq, payload, rel_seq);
+  } else {
+    const auto found = impl.act_pending_goals_.find(index);
+    if (found != impl.act_pending_goals_.end()) {
+      found->second = Impl::ActPendingGoal{goal_seq, payload};
+      ++impl.reliable_replaced_;
+    } else {
+      impl.act_pending_goals_.emplace(index, Impl::ActPendingGoal{goal_seq, payload});
+    }
+  }
+  return true;
+}
+
+bool Session::send_action_cancel(std::uint8_t goal_seq)
+{
+  Impl & impl = *impl_;
+  if (impl.state != SessionState::kConnected) {
+    return false;
+  }
+  const std::size_t cap =
+    std::max<std::uint16_t>(impl.hello.rx_capacity, impl.hello.max_frame);
+  // GCOVR_EXCL_START: reaching a connected session needs its frames to fit
+  // the MCU window, so a connected cap always holds a cancel.
+  if (3u > cap) {
+    return false;
+  }
+  // GCOVR_EXCL_STOP
+  if (impl.pending_bytes_ > 0u && impl.pending_bytes_ >= cap) {
+    return false;
+  }
+  if (!impl.act_out_active_) {
+    const std::uint8_t rel_seq = impl.rel_next_act_++;
+    impl.emit_act_cancel(goal_seq, rel_seq);
+  } else if (impl.act_pending_cancel_) {
+    impl.act_pending_cancel_goal_ = goal_seq;
+    ++impl.reliable_replaced_;
+  } else {
+    impl.act_pending_cancel_ = true;
+    impl.act_pending_cancel_goal_ = goal_seq;
   }
   return true;
 }
