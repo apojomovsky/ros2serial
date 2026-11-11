@@ -78,7 +78,10 @@ def test_files_for_names_the_exact_bundle_set():
         'src/std_srvs/srv/trigger_request.hpp',
         'src/std_srvs/srv/trigger_response.hpp',
         'src/tf2_msgs/msg/tf_message.hpp',
+        'src/builtin_interfaces/msg/duration.hpp',
+        'src/tf2_msgs/msg/tf2_error.hpp',
         'src/std_srvs/srv/trigger.hpp',
+        'src/tf2_msgs/action/lookup_transform.hpp',
     )
 
 
@@ -1176,3 +1179,64 @@ def test_a_cxx_sketch_links_against_the_c_library(tmp_path):
     )
 
     assert linked.returncode == 0, linked.stderr
+
+
+ACTION_PARTS = (
+    'tf2_msgs/action/LookupTransform_Goal',
+    'tf2_msgs/action/LookupTransform_Result',
+    'tf2_msgs/action/LookupTransform_Feedback',
+)
+
+
+def test_the_bundle_ships_the_lookup_transform_action_header():
+    header = files()['src/tf2_msgs/action/lookup_transform.hpp']
+
+    assert 'struct LookupTransform_Goal\n{' in header
+    assert 'struct LookupTransform_Result\n{' in header
+    assert 'struct LookupTransform_Feedback\n{' in header
+    assert 'struct msg_traits<tf2_msgs::action::LookupTransform_Goal>' in header
+
+
+def test_the_action_header_tables_match_the_bundle_tables():
+    header = files()['src/tf2_msgs/action/lookup_transform.hpp']
+    bundled_h = files()['src/r2s_bundled.h']
+    bundled_c = files()['src/r2s_bundled.c']
+    repository = msgs.MessageRepository(distro='jazzy')
+    resolved = bounds.resolve(
+        repository,
+        list(ACTION_PARTS),
+        bounds=dict(bundle.BUNDLE_BOUNDS),
+        default_string_bound=bundle.DEFAULT_STRING_BOUND,
+    )
+    table = descriptors.build(resolved, list(ACTION_PARTS))
+
+    for part in ACTION_PARTS:
+        suffix = cpp.suffix(part)
+        index = table.index_of[part]
+        assert f'extern const r2s_codec_table_t r2s_bundled_table_{suffix};' in header
+        assert f'return {index}u;' in header
+        assert f'#define R2S_BUNDLED_INDEX_{suffix} {index}u' in bundled_h
+        assert f'const uint8_t R2S_FLASH r2s_bundled_records_{suffix}[] = {{' in bundled_c
+        assert f'const uint8_t R2S_FLASH r2s_bundled_entries_{suffix}[] = {{' in bundled_c
+
+
+def test_the_bundle_ships_the_action_nested_headers():
+    header = files()['src/tf2_msgs/action/lookup_transform.hpp']
+
+    for path in (
+        'src/builtin_interfaces/msg/duration.hpp',
+        'src/tf2_msgs/msg/tf2_error.hpp',
+        'src/tf2_msgs/action/lookup_transform.hpp',
+    ):
+        assert path in files(), path
+        if path != 'src/tf2_msgs/action/lookup_transform.hpp':
+            assert f'#include "{path.removeprefix("src/")}"' in header, path
+
+
+def test_every_action_include_resolves_to_a_shipped_file():
+    header = files()['src/tf2_msgs/action/lookup_transform.hpp']
+
+    for include in re.findall(r'#include "(.*\.hpp)"', header):
+        if include.startswith('r2s/'):
+            continue
+        assert f'src/{include}' in files(), include

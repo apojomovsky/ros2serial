@@ -82,6 +82,11 @@ def emit_bundled(resolved, repository, type_name, distro='jazzy'):
     return cpp.emit_message_hpp(resolved, type_name, repository=repository, distro=distro)
 
 
+# Action parts ship in the action header, not in a message header: the action
+# and bundle tests cover them, so the message-header proofs below skip them.
+MESSAGE_TYPES = tuple(name for name in bundle.BUNDLED_TYPES if '/action/' not in name)
+
+
 def frozen(type_name):
     """Read the frozen header of a type, as the tree holds it."""
     return (CPP_INCLUDE / cpp.message_path(type_name)).read_text(encoding='utf-8')
@@ -170,7 +175,7 @@ def test_the_trait_is_a_specialization_of_the_primary_template(tmp_path):
     assert 'template<>\nstruct msg_traits<pkg::msg::One>\n{' in header
 
 
-@pytest.mark.parametrize('type_name', bundle.BUNDLED_TYPES)
+@pytest.mark.parametrize('type_name', MESSAGE_TYPES)
 def test_the_frozen_header_is_emitted(type_name):
     resolved, repository = bundled_resolved()
 
@@ -179,7 +184,7 @@ def test_the_frozen_header_is_emitted(type_name):
     assert header == frozen(type_name)
 
 
-@pytest.mark.parametrize('type_name', bundle.BUNDLED_TYPES)
+@pytest.mark.parametrize('type_name', MESSAGE_TYPES)
 def test_the_frozen_header_compiles_on_the_host(tmp_path, type_name):
     source = tmp_path / 'check.cpp'
     source.write_text(f'#include "{cpp.message_path(type_name)}"\n', encoding='utf-8')
@@ -207,7 +212,7 @@ def test_the_frozen_header_compiles_on_the_host(tmp_path, type_name):
     assert compiled.returncode == 0, compiled.stderr
 
 
-@pytest.mark.parametrize('type_name', bundle.BUNDLED_TYPES)
+@pytest.mark.parametrize('type_name', MESSAGE_TYPES)
 def test_the_frozen_header_ties_its_struct_to_the_c_struct(type_name):
     header = frozen(type_name)
     c_name = cpp.cpp_type(type_name).replace('::', '__').replace('pkg___', '__msg__')
@@ -216,7 +221,7 @@ def test_the_frozen_header_ties_its_struct_to_the_c_struct(type_name):
     assert 'R2S_CPP_SAME_OFFSET' in header
 
 
-@pytest.mark.parametrize('type_name', bundle.BUNDLED_TYPES)
+@pytest.mark.parametrize('type_name', MESSAGE_TYPES)
 def test_the_header_names_the_bundle_table_of_its_closure(type_name):
     resolved, repository = bundled_resolved()
     header = emit_bundled(resolved, repository, type_name)
@@ -227,7 +232,7 @@ def test_the_header_names_the_bundle_table_of_its_closure(type_name):
     assert f'const r2s_codec_table_t r2s_bundled_table_{suffix}' in bundled['src/r2s_bundled.c']
 
 
-@pytest.mark.parametrize('type_name', bundle.BUNDLED_TYPES)
+@pytest.mark.parametrize('type_name', MESSAGE_TYPES)
 def test_the_header_reads_the_bundle_bytes_of_its_closure(type_name):
     """The header's table is the bundle's, so the bytes are the bundle's bytes."""
     resolved, repository = bundled_resolved()
@@ -248,7 +253,7 @@ def test_the_header_reads_the_bundle_bytes_of_its_closure(type_name):
         assert f'r2s_bundled_entries_{suffix}[1]' in bundled
 
 
-@pytest.mark.parametrize('type_name', bundle.BUNDLED_TYPES)
+@pytest.mark.parametrize('type_name', MESSAGE_TYPES)
 def test_the_type_index_is_the_records_own_index(type_name):
     resolved, repository = bundled_resolved()
     table = descriptors.build(resolved, [type_name])
@@ -257,7 +262,7 @@ def test_the_type_index_is_the_records_own_index(type_name):
     assert f'return {table.index_of[type_name]}u;' in header
 
 
-@pytest.mark.parametrize('type_name', bundle.BUNDLED_TYPES)
+@pytest.mark.parametrize('type_name', MESSAGE_TYPES)
 def test_the_type_index_is_the_index_the_bundle_announces(type_name):
     resolved, repository = bundled_resolved()
     header = emit_bundled(resolved, repository, type_name)
@@ -268,7 +273,7 @@ def test_the_type_index_is_the_index_the_bundle_announces(type_name):
     assert f'return {announced};' in header
 
 
-@pytest.mark.parametrize('type_name', bundle.BUNDLED_TYPES)
+@pytest.mark.parametrize('type_name', MESSAGE_TYPES)
 def test_the_header_carries_the_hash_the_topic_table_announces(type_name):
     resolved, repository = bundled_resolved()
     header = emit_bundled(resolved, repository, type_name)
