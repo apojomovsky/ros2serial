@@ -46,7 +46,7 @@ static int check_ms_converts_and_wraps(void)
   CHECK(r2s_ch32v_ms(0u, 6000u) == 0u);
   CHECK(r2s_ch32v_ms(6000u, 6000u) == 1u);
   CHECK(r2s_ch32v_ms(5999u, 6000u) == 0u);
-  /* A full 32-bit count wraps the same way the tick the core reads does. */
+  /* A full 32-bit delta converts to the whole milliseconds it holds. */
   CHECK(r2s_ch32v_ms(0xFFFFFFFFu, 6000u) == 715827u);
   return 0;
 }
@@ -113,13 +113,57 @@ static int check_read_stops_at_empty(void)
   return 0;
 }
 
-static int check_tick_reads_the_systick(void)
+static int check_tick_counts_from_boot(void)
 {
   reset_all();
   R2S_CH32V_TEST_stk.CNT = 60000u;
   CHECK(r2s_port_tick() == 10u);
-  R2S_CH32V_TEST_stk.CNT = 0u;
+  return 0;
+}
+
+static int check_tick_carries_fractions(void)
+{
+  /* Leftover counts join the next delta, so the tick stays near 1 ms. */
+  reset_all();
+  R2S_CH32V_TEST_stk.CNT = 5999u;
   CHECK(r2s_port_tick() == 0u);
+  R2S_CH32V_TEST_stk.CNT = 6000u;
+  CHECK(r2s_port_tick() == 1u);
+  R2S_CH32V_TEST_stk.CNT = 11999u;
+  CHECK(r2s_port_tick() == 1u);
+  R2S_CH32V_TEST_stk.CNT = 12000u;
+  CHECK(r2s_port_tick() == 2u);
+  return 0;
+}
+
+static int check_tick_survives_the_systick_wrap(void)
+{
+  /* The 32-bit count wraps near 715827 ms; the tick must carry on. */
+  reset_all();
+  R2S_CH32V_TEST_stk.CNT = 0xFFFFFFFFu;
+  CHECK(r2s_port_tick() == 715827u);
+  R2S_CH32V_TEST_stk.CNT = 705u;
+  CHECK(r2s_port_tick() == 715828u);
+  return 0;
+}
+
+static int check_tick_wraps_at_2_pow_32(void)
+{
+  /* 6007 steps of 715000 ms cross 2^32; each step lands exactly. */
+  uint32_t i;
+  uint32_t prev = 0u;
+
+  reset_all();
+  CHECK(r2s_port_tick() == 0u);
+  for (i = 0u; i < 6007u; i++) {
+    uint32_t now;
+
+    R2S_CH32V_TEST_stk.CNT += 4290000000u;
+    now = r2s_port_tick();
+    CHECK(now - prev == 715000u);
+    prev = now;
+  }
+  CHECK(prev == 37704u);
   return 0;
 }
 
@@ -141,7 +185,10 @@ int main(void)
   failures += check_init_maps_pd5_pd6();
   failures += check_write_sends_bytes_in_order();
   failures += check_read_stops_at_empty();
-  failures += check_tick_reads_the_systick();
+  failures += check_tick_counts_from_boot();
+  failures += check_tick_carries_fractions();
+  failures += check_tick_survives_the_systick_wrap();
+  failures += check_tick_wraps_at_2_pow_32();
   failures += check_tx_reports_blocking();
   if (failures != 0) {
     printf("%d checks failed\n", failures);
