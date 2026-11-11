@@ -3622,7 +3622,8 @@ TEST(ActionExchange, DropsAQueryWithNoIndexByte)
 TEST(ActionExchange, RefusesAnActionDeclareWithABadHash)
 {
   Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config(), SessionEvents{},
-    [](const ServiceInfo &) {return kServiceStatusOk;}};
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusHashMismatch;}};
   fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0xCCu, 1000u));
   fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
   fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
