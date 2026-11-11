@@ -85,6 +85,9 @@ def test_transient_fetch_failure_is_retried_then_succeeds(tmp_path):
     assert 'Acquire::Retries=3' in argv_log.read_text(), (
         'the helper must pass apt its own per-fetch retries'
     )
+    assert 'Acquire::ForceIPv4=true' in argv_log.read_text(), (
+        'the helper must force IPv4: the runners have no working IPv6 route'
+    )
 
 
 def test_persistent_failure_surfaces_the_real_error(tmp_path):
