@@ -6,10 +6,10 @@
 The arduino_service sketch serves reset and calls trigger (both std_srvs
 Trigger). The ROS client calls /reset and reads the MCU's answer, proving
 the ROS-initiated round trip with MCU-generated content. The ROS server on
-/trigger answers the MCU's once-per-connection call, proving the
-MCU-initiated round trip the same way. The server is created before the
-handshake finishes, so the MCU's single call per connection always finds
-it. The sketch announces no topics, so the handshake check waits for the
+/trigger answers the MCU's periodic call, proving the MCU-initiated round
+trip the same way: the sketch calls every few seconds while connected, so
+a call lands after the server exists no matter when the link came up. The
+sketch announces no topics, so the handshake check waits for the
 connected link alone.
 """
 
@@ -71,9 +71,8 @@ class TestScenario15(unittest.TestCase):
         node = rclpy.create_node('e2e_s15_probe')
         try:
             bridge_support.wait_for_bridge(node)
-            # The server exists before the handshake finishes, and the
-            # bridge builds its client proxy at the handshake, so the
-            # MCU's single call per connection always finds it.
+            # The server exists before the handshake finishes, so the
+            # bridge answers the MCU's calls from the first one on.
             served = []
             server = node.create_service(
                 Trigger,
