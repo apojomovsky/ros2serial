@@ -156,10 +156,18 @@ def stub_compiler(path: Path) -> Path:
 
 
 def test_the_stubbed_toolchain_compiles_c_and_cpp_for_both_targets(tmp_path):
+    # A clean compile closes every gap, so the run needs an empty baseline:
+    # against the recorded one the same run must report stale entries.
+    baseline = tmp_path / 'baseline.txt'
+    baseline.write_text('# no known gaps\n', encoding='utf-8')
     build = tmp_path / 'build'
     compiler = stub_compiler(tmp_path / 'bin')
     result = run_script(
-        {'R2S_EPIC_CC_BIN': str(compiler), 'R2S_BUILD_DIR': str(build)},
+        {
+            'R2S_EPIC_CC_BIN': str(compiler),
+            'R2S_BUILD_DIR': str(build),
+            'R2S_PIC_CANARY_BASELINE': str(baseline),
+        },
         tmp_path,
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -229,11 +237,12 @@ def test_the_baseline_lists_each_known_gap(tmp_path):
 def test_a_new_error_signature_fails_and_names_target_label_signature(tmp_path):
     # A compiler message the baseline never recorded is a new break: the
     # canary fails and names the target, the label and the signature.
+    new_sig = 'regalloc: out of registers spilling i8'
     compiler = target_aware_stub(
         tmp_path / 'bin',
         {
-            'p16f1938': 'epic-cc: internal compiler error: isel: plain ptr arg with multiple terms not yet supported',
-            'p18f4550': 'epic-cc: internal compiler error: regalloc: out of registers spilling i8',
+            'p16f1938': f'epic-cc: internal compiler error: {KNOWN_SIGS["p16f1938"]}',
+            'p18f4550': f'epic-cc: internal compiler error: {new_sig}',
         },
     )
     result = run_script(
@@ -254,10 +263,11 @@ def test_a_new_error_signature_fails_and_names_target_label_signature(tmp_path):
 def test_a_reworded_diagnostic_is_a_new_gap(tmp_path):
     # The match is strict about the message itself: a reworded diagnostic
     # never silently matches the recorded signature.
+    reworded = 'isel: plain ptr arg with several terms not yet supported'
     compiler = target_aware_stub(
         tmp_path / 'bin',
         {
-            'p16f1938': 'epic-cc: internal compiler error: isel: plain ptr arg with several terms not yet supported',
+            'p16f1938': f'epic-cc: internal compiler error: {reworded}',
             'p18f4550': f'epic-cc: internal compiler error: {KNOWN_SIGS["p18f4550"]}',
         },
     )
@@ -275,16 +285,14 @@ def test_a_reworded_diagnostic_is_a_new_gap(tmp_path):
 def test_line_number_churn_still_matches_the_baseline(tmp_path):
     # File and line prefixes move with every edit, so the match strips them
     # and only the message itself decides.
-    compiler = target_aware_stub(
-        tmp_path / 'bin',
-        {
-            target: (
-                f'canary.c:{123 + i}:4: epic-cc: internal compiler error: '
-                f'{KNOWN_SIGS[target]} [at line {456 + i}]'
-            )
-            for i, target in enumerate(TARGETS)
-        },
-    )
+    churn = {}
+    for i, target in enumerate(TARGETS):
+        color = '\x1b[1m' if i == 0 else ''
+        churn[target] = (
+            f'canary.c:{123 + i}:4: epic-cc: internal compiler error: '
+            f'{color}{KNOWN_SIGS[target]} [at line {456 + i}]'
+        )
+    compiler = target_aware_stub(tmp_path / 'bin', churn)
     result = run_script(
         {
             'R2S_EPIC_CC_BIN': str(compiler),

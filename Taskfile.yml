@@ -451,6 +451,7 @@ tasks:
       - scripts/with-build-lock.sh
       - scripts/e2e-lease.sh
       - scripts/build-pic-canary.sh
+      - ci/pic-canary-baseline.txt
       - core/**
       - cpp/**
       # The checked-in bundled tables the canary links.
