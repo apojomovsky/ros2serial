@@ -8,11 +8,16 @@
 #   apt-install.sh install -y --no-install-recommends <packages...>
 # Bound: 5 attempts, waiting 20, 40, 60, then 80 seconds between them:
 # about three minutes of backoff in total, plus apt's own
-# Acquire::Retries=3 inside each attempt. Runner logs show a two minute
-# mirror outage clearing on a later attempt, while a fifth attempt has never
-# turned a genuine failure (a removed package, a wrong name) into a success;
-# it only spends a few apt runs and minutes before the real error still fails
-# the job. R2S_APT_RETRY_DELAY overrides the base backoff step in seconds;
+# Acquire::Retries=3 inside each attempt. Every invocation also passes
+# Acquire::ForceIPv4=true: the runners resolve the Ubuntu mirrors to IPv6
+# first but have no working IPv6 route, so without the flag apt ignores the
+# mirrors and every Ubuntu package reports no installation candidate. The
+# flag is the cure; the retries stay as a safety net for genuinely
+# transient fetch failures. Runner logs show a two minute mirror outage
+# clearing on a later attempt, while a fifth attempt has never turned a
+# genuine failure (a removed package, a wrong name) into a success; it only
+# spends a few apt runs and minutes before the real error still fails the
+# job. R2S_APT_RETRY_DELAY overrides the base backoff step in seconds;
 # the tests set it to 0.
 set -uo pipefail
 
@@ -33,7 +38,7 @@ attempt=0
 rc=1
 while [ "$attempt" -lt "$tries" ]; do
     attempt=$((attempt + 1))
-    if apt-get -o Acquire::Retries=3 "$@" 2>&1 | tee "$tmp"; then
+    if apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true "$@" 2>&1 | tee "$tmp"; then
         exit 0
     fi
     rc=${PIPESTATUS[0]}
