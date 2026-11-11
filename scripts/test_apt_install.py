@@ -93,8 +93,9 @@ def test_persistent_failure_surfaces_the_real_error(tmp_path):
     bindir, count, argv_log, stub_env = make_stub(tmp_path, fail_until=99, line=line)
     result = run_helper(bindir, stub_env, 'install', '-y', 'gone')
     assert result.returncode != 0, 'a missing package reported success'
-    assert attempts(count) == 3, 'the attempts were not bounded at 3'
+    assert attempts(count) == 5, 'the attempts were not bounded at 5'
     assert line in result.stdout + result.stderr, 'the last apt error never reached the log'
+    assert 'rerun the job' in result.stderr, 'the give-up must name the remedy'
 
 
 def test_missing_subcommand_is_a_usage_error(tmp_path):
