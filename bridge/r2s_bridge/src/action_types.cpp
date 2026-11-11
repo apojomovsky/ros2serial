@@ -81,14 +81,13 @@ bool read_time(
   const MessageMembers *time_members = nested_members(member);
   const MessageMember *sec_member = find_member(time_members, "sec");
   const MessageMember *nsec_member = find_member(time_members, "nanosec");
-  // GCOVR_EXCL_START: installed time fields always carry sec and nanosec;
-  // only a hand-built layout could miss them.
+  // GCOV_EXCL_BR_START: installed time fields always carry sec and nanosec
   if (sec_member == nullptr || sec_member->type_id_ != ROS_TYPE_INT32 ||
     nsec_member == nullptr || nsec_member->type_id_ != ROS_TYPE_UINT32)
   {
     return false;
   }
-  // GCOVR_EXCL_STOP
+  // GCOV_EXCL_BR_STOP
   const auto *base = static_cast<const std::uint8_t *>(storage) + member->offset_;
   std::memcpy(&sec, base + sec_member->offset_, sizeof(sec));
   std::memcpy(&nanosec, base + nsec_member->offset_, sizeof(nanosec));
@@ -123,11 +122,13 @@ bool write_time(
   const MessageMembers *time_members = nested_members(member);
   const MessageMember *sec_member = find_member(time_members, "sec");
   const MessageMember *nsec_member = find_member(time_members, "nanosec");
+  // GCOV_EXCL_BR_START: installed time fields always carry sec and nanosec
   if (sec_member == nullptr || sec_member->type_id_ != ROS_TYPE_INT32 ||
     nsec_member == nullptr || nsec_member->type_id_ != ROS_TYPE_UINT32)
   {
     return false;
   }
+  // GCOV_EXCL_BR_STOP
   auto *base = static_cast<std::uint8_t *>(storage) + member->offset_;
   std::memcpy(base + sec_member->offset_, &sec, sizeof(sec));
   std::memcpy(base + nsec_member->offset_, &nanosec, sizeof(nanosec));
@@ -137,12 +138,11 @@ bool write_time(
 bool write_bool(const MessageMembers *parent, void *storage, const char *field, bool value)
 {
   const MessageMember *member = find_member(parent, field);
-  // GCOVR_EXCL_START: installed bool fields always match; only a
-  // hand-built layout could miss them.
+  // GCOV_EXCL_BR_START: installed bool fields always match
   if (member == nullptr || member->type_id_ != ROS_TYPE_BOOLEAN) {
     return false;
   }
-  // GCOVR_EXCL_STOP
+  // GCOV_EXCL_BR_STOP
   auto *base = static_cast<std::uint8_t *>(storage);
   const std::uint8_t byte = value ? 1u : 0u;
   std::memcpy(base + member->offset_, &byte, sizeof(byte));
@@ -152,12 +152,11 @@ bool write_bool(const MessageMembers *parent, void *storage, const char *field, 
 bool write_int8(const MessageMembers *parent, void *storage, const char *field, std::int8_t value)
 {
   const MessageMember *member = find_member(parent, field);
-  // GCOVR_EXCL_BR_START: installed int8 fields always match; only a
-  // hand-built layout could miss them.
+  // GCOV_EXCL_BR_START: installed int8 fields always match
   if (member == nullptr || member->type_id_ != ROS_TYPE_INT8) {
     return false;
   }
-  // GCOVR_EXCL_BR_STOP
+  // GCOV_EXCL_BR_STOP
   auto *base = static_cast<std::uint8_t *>(storage);
   std::memcpy(base + member->offset_, &value, sizeof(value));
   return true;
