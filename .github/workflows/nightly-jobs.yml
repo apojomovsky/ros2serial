@@ -96,12 +96,13 @@ jobs:
         env:
           R2S_SOAK_SECONDS: 7200
 
-  # Nightly-only mutation testing in its own image: Mull over the core,
-  # mutmut over the generator. It publishes a triage report to the run
-  # summary and an artifact, and a measured score below its floor in
-  # tools/robustness.yaml fails this job once the report is written, so
-  # the scheduled failure reporter files the regression. Pull requests
-  # and the pre-PR ritual never run it: the gate is nightly-only.
+  # Nightly-only mutation testing in its own image: Mull over the core
+  # and the ROS-free bridge harness, mutmut over the generator. It
+  # publishes a triage report to the run summary and an artifact, and a
+  # measured score below its floor in tools/robustness.yaml fails this job
+  # once the report is written, so the scheduled failure reporter files
+  # the regression. Pull requests and the pre-PR ritual never run it: the
+  # gate is nightly-only.
   mutation:
     if: ${{ inputs.mutation }}
     runs-on: ubuntu-24.04

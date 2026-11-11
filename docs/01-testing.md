@@ -279,7 +279,7 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 
 - **Spec coverage is 100%:** every spec ID has at least one test (`tools/spec_coverage.py`).
 - **Error-path coverage is 100%:** every `R2S_ERR_*` code and every counter is triggered by at least one test.
-- **Mutation testing** runs nightly with Mull (the core) and mutmut (the generator); research ticket R13 confirms the tools. A measured score below its floor in `tools/robustness.yaml` fails the nightly once the triage report is written; areas the run does not measure yet read no data and never fail. Surviving mutants are triaged: either a test is added, or the mutant is recorded as equivalent with a one-line reason.
+- **Mutation testing** runs nightly with Mull (the core and the ROS-free bridge harness in `mutation/bridge`) and mutmut (the generator); research ticket R13 confirms the tools. A measured score below its floor in `tools/robustness.yaml` fails the nightly once the triage report is written; areas the run does not measure yet read no data and never fail. Surviving mutants are triaged: either a test is added, or the mutant is recorded as equivalent with a one-line reason.
 - Lines excluded from coverage carry an exclusion comment with a reason, and the exclusions are counted in the report. A changed line that is excluded without a reason fails the gate, naming the file and line.
 - A changed line in a generated file, or in a file the package does not measure, is ignored and reported as ignored, never silently dropped.
 - Branch coverage excludes compiler-generated exception edges: every gcovr measurement passes `--exclude-throw-branches`, so the arcs of calls that never throw in tests never enter the denominator.

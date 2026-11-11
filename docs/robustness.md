@@ -9,23 +9,27 @@ change, only a regression on the schedule.
 ## Mutation scores
 
 Mull mutates the core C code and runs the core unit binaries; mutmut
-mutates the generator and runs the generator suite. Each run normalizes
-its tool output and `scripts/mutation_triage.py` scores every area:
+mutates the generator and runs the generator suite; Mull also mutates
+the bridge's ROS-free classes and runs their harness binaries. Each run
+normalizes its tool output and `scripts/mutation_triage.py` scores every
+area:
 
 | area | floor | measured by |
 | --- | --- | --- |
 | core | 85% | Mull over the core unit binaries |
 | cpp | 75% | not measured yet, reads no data |
 | gen | 80% | mutmut over the generator suite |
-| bridge | 70% | not measured yet, reads no data |
+| bridge | 70% | Mull over the harness in `mutation/bridge` |
 
 The floors repeat `tools/robustness.yaml`, which is the single source the
 triage script reads; `scripts/test_robustness.py` fails when this page or
-the script drifts from that file. The C++ layer and the bridge have floors
-but no pipeline yet: Mull over the bridge needs ROS in the mutation image
-plus a Mull-frontend colcon build, which research ticket R13 never
-trialled. That pipeline is tracked in #571, and
-until it lands both rows read no data instead of a score.
+the script drifts from that file. Only the C++ layer still reads no
+data. The bridge harness compiles the scheduler, the time sync, the
+framing and the core port slot with their gtest binaries, all without
+ROS, so the existing mutation image measures them with no ROS install.
+The rclcpp shell around those classes has no harness yet and stays out
+of the score; the core framing sources the harness links stay out too,
+since the core row owns them.
 
 A measured score below its floor fails the nightly job after the report
 is written, and the scheduled failure reporter files the regression.
@@ -92,4 +96,12 @@ R2S_FUZZ_SECONDS=0 R2S_FUZZ_COVERAGE=1 R2S_FUZZ_ARTIFACTS_DIR=fuzz-artifacts bas
 ```
 
 The coverage summary prints per target, and the full report lands in
-`fuzz-artifacts/coverage/fuzz-coverage.md`.
+`fuzz-artifacts/coverage/fuzz-coverage.md`. The bridge harness configures
+and runs on its own in either image, which is how its binaries are
+checked outside the nightly (the mutation image adds the Mull flags):
+
+```sh
+cmake -S mutation/bridge -B /tmp/bridge-harness -G Ninja
+cmake --build /tmp/bridge-harness
+ctest --test-dir /tmp/bridge-harness
+```

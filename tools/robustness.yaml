@@ -5,8 +5,8 @@
 # floors from here when it gates the nightly run, and docs/robustness.md
 # repeats them for readers; scripts/test_robustness.py fails when the two
 # drift apart. The floors match docs/01-testing.md, section 6: only the
-# nightly measures them, and the bridge row stays documentary until the
-# bridge pipeline lands in its own issue.
+# nightly measures them. The bridge floor scores the ROS-free harness in
+# mutation/bridge; the cpp row stays documentary until it gets a pipeline.
 mutation_floors:
   core: 85
   cpp: 75

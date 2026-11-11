@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+# Which bridge mutants Mull tries, and which paths it never touches. The
+# harness compiles only the ROS-free bridge classes, so the rclcpp shell
+# never reaches the frontend; the core framing sources ride along for the
+# link but the core row owns them. Test files, the fake transport and the
+# manual clock only measure the tests against themselves, and the system
+# headers carry libc++ and gtest internals, not product code.
+mutators:
+  - cxx_add_to_sub
+  - cxx_sub_to_add
+  - cxx_mul_to_div
+  - cxx_div_to_mul
+  - cxx_rem_to_div
+  - cxx_remove_void_call
+  - cxx_eq_to_ne
+  - cxx_ne_to_eq
+  - cxx_lt_to_le
+  - cxx_le_to_lt
+  - cxx_gt_to_ge
+  - cxx_ge_to_gt
+excludePaths:
+  - .*test.*
+  - .*core/src.*
+  - .*core/include.*
+  - /usr/.*

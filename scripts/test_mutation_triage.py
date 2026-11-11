@@ -21,31 +21,49 @@ ROOT = Path(__file__).resolve().parent.parent
 TRIAGE = ROOT / 'scripts' / 'mutation_triage.py'
 
 
-def run_triage(directory, mull, mutmut, equivalent=(), extra=()):
+def run_triage(directory, mull, mutmut, equivalent=(), extra=(), bridge=None):
     (directory / 'mull.json').write_text(json.dumps(mull), encoding='utf-8')
     (directory / 'mutmut.json').write_text(json.dumps(mutmut), encoding='utf-8')
     body = ''.join(f'- mutant: {mutant!r}\n  reason: {reason}\n' for mutant, reason in equivalent)
     (directory / 'equivalent.yaml').write_text(body, encoding='utf-8')
     out = directory / 'report.md'
+    args = [
+        sys.executable,
+        str(TRIAGE),
+        '--mull',
+        str(directory / 'mull.json'),
+        '--mutmut',
+        str(directory / 'mutmut.json'),
+        '--equivalent',
+        str(directory / 'equivalent.yaml'),
+        '--out',
+        str(out),
+        *extra,
+    ]
+    if bridge is not None:
+        (directory / 'bridge.json').write_text(json.dumps(bridge), encoding='utf-8')
+        args += ['--bridge', str(directory / 'bridge.json')]
     result = subprocess.run(
-        [
-            sys.executable,
-            str(TRIAGE),
-            '--mull',
-            str(directory / 'mull.json'),
-            '--mutmut',
-            str(directory / 'mutmut.json'),
-            '--equivalent',
-            str(directory / 'equivalent.yaml'),
-            '--out',
-            str(out),
-            *extra,
-        ],
+        args,
         capture_output=True,
         text=True,
         check=False,
     )
     return result, out.read_text(encoding='utf-8') if out.is_file() else ''
+
+
+def bridge_results(killed, total):
+    mutants = [
+        {
+            'id': f'bridge:bridge/r2s_bridge/src/scheduler.cpp:{i}:cxx_add_to_sub',
+            'file': 'bridge/r2s_bridge/src/scheduler.cpp',
+            'line': i,
+            'mutator': 'cxx_add_to_sub',
+            'outcome': 'killed' if i <= killed else 'survived',
+        }
+        for i in range(1, total + 1)
+    ]
+    return {'component': 'bridge', 'mutants': mutants}
 
 
 def weakened_crc_results():
@@ -232,3 +250,54 @@ def test_the_gate_rejects_a_floors_file_missing_a_component(tmp_path):
     result, _ = run_triage(tmp_path, mull, mutmut, extra=('--gate', '--floors', str(floors)))
     assert result.returncode != 0
     assert 'cpp' in result.stderr
+
+
+def test_the_report_scores_the_bridge_from_its_own_results(tmp_path):
+    mull = {'component': 'core', 'mutants': []}
+    mutmut = {'component': 'gen', 'mutants': []}
+    result, report = run_triage(tmp_path, mull, mutmut, bridge=bridge_results(3, 4))
+    assert result.returncode == 0, result.stderr
+    bridge_row = next(line for line in report.splitlines() if line.startswith('| bridge '))
+    assert '| 3 ' in bridge_row
+    assert '| 4 ' in bridge_row
+    assert '75%' in bridge_row
+    assert 'no data' not in bridge_row
+
+
+def test_the_gate_fails_a_bridge_score_below_its_floor(tmp_path):
+    mull = {'component': 'core', 'mutants': []}
+    mutmut = {'component': 'gen', 'mutants': []}
+    result, report = run_triage(
+        tmp_path, mull, mutmut, bridge=bridge_results(1, 2), extra=('--gate',)
+    )
+    assert result.returncode != 0
+    assert 'bridge' in result.stderr
+    assert '50%' in result.stderr
+    assert '70%' in result.stderr
+    assert report.strip() != ''
+
+
+def test_the_gate_passes_a_bridge_score_at_its_floor(tmp_path):
+    mull = {'component': 'core', 'mutants': []}
+    mutmut = {'component': 'gen', 'mutants': []}
+    result, _ = run_triage(tmp_path, mull, mutmut, bridge=bridge_results(7, 10), extra=('--gate',))
+    assert result.returncode == 0, result.stderr
+
+
+def test_an_unmeasured_bridge_never_fails_the_gate(tmp_path):
+    mull = {'component': 'core', 'mutants': []}
+    mutmut = {'component': 'gen', 'mutants': []}
+    result, report = run_triage(
+        tmp_path, mull, mutmut, bridge={'component': 'bridge', 'mutants': []}, extra=('--gate',)
+    )
+    assert result.returncode == 0, result.stderr
+    assert 'no data' in report
+
+
+def test_a_bridge_survivor_needs_triage_like_a_core_one(tmp_path):
+    mull = {'component': 'core', 'mutants': []}
+    mutmut = {'component': 'gen', 'mutants': []}
+    result, report = run_triage(tmp_path, mull, mutmut, bridge=bridge_results(0, 1))
+    assert result.returncode == 0, result.stderr
+    assert 'bridge/r2s_bridge/src/scheduler.cpp:1' in report
+    assert 'needs triage' in report.lower()

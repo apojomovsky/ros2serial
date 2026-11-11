@@ -6,13 +6,15 @@
 
 Mull and mutmut speak different formats, so scripts/run-mutation.sh
 normalizes each into {"component", "mutants": [{id, file, line, mutator,
-outcome}]} before calling this. This script scores each component against
-the floors in tools/robustness.yaml (which repeat docs/01-testing.md,
-section 6), lists the surviving mutants that still need a test, and
-records the acknowledged equivalents with their reasons. Without --gate
-a low score only shows in the report; with it a measured score below its
-floor fails, so the nightly run goes red. Malformed input always fails,
-so a broken nightly run is loud.
+outcome}]} before calling this: mull.json for the core, mutmut.json for
+the generator, bridge.json for the ROS-free bridge harness. This script
+scores each component against the floors in tools/robustness.yaml (which
+repeat docs/01-testing.md, section 6), lists the surviving mutants that
+still need a test, and records the acknowledged equivalents with their
+reasons. Without --gate a low score only shows in the report; with it a
+measured score below its floor fails, so the nightly run goes red. An
+area without results reads no data and never fails. Malformed input
+always fails, so a broken nightly run is loud.
 """
 
 import argparse
@@ -97,6 +99,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--mull', required=True)
     parser.add_argument('--mutmut', required=True)
+    parser.add_argument('--bridge', default=None)
     parser.add_argument('--equivalent', required=True)
     parser.add_argument('--out', required=True)
     parser.add_argument('--gate', action='store_true')
@@ -104,6 +107,8 @@ def main():
     args = parser.parse_args()
     floors = load_floors(args.floors)
     results = [load_json(args.mull), load_json(args.mutmut)]
+    if args.bridge is not None:
+        results.append(load_json(args.bridge))
     check_results(results, floors)
     known = load_equivalent(args.equivalent)
     by_component = {result['component']: result.get('mutants', []) for result in results}
