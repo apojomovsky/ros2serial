@@ -11,8 +11,8 @@
 #include "r2s_template_port.h"
 #include "r2s_template_regs.h"
 
-/* Counts per millisecond at the 1 MHz timer clock the init assumes. */
-#define R2S_TEMPLATE_COUNTS_PER_MS 1000u
+/* Counts per millisecond at the 1 kHz timer clock the init runs. */
+#define R2S_TEMPLATE_COUNTS_PER_MS 1u
 
 #ifdef R2S_TEMPLATE_HOST_TEST
 r2s_template_uart_t R2S_TEMPLATE_TEST_uart;
@@ -42,7 +42,8 @@ void r2s_template_init(uint32_t clk_hz, uint32_t baud)
     R2S_TEMPLATE_CTL_RE);
   R2S_TEMPLATE_UART->BRR = r2s_template_brr(clk_hz, baud);
 
-  /* Free-running: the tick reads CNT with no interrupt. */
+  /* Free-running from here: the tick reads CNT with no interrupt. */
+  R2S_TEMPLATE_TIMER->CTL = R2S_TEMPLATE_TIMER_STE;
   R2S_TEMPLATE_TIMER->CNT = 0u;
 }
 

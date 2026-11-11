@@ -19,6 +19,7 @@ typedef struct
 
 typedef struct
 {
+  volatile uint32_t CTL;
   volatile uint32_t CNT;
 } r2s_template_timer_t;
 

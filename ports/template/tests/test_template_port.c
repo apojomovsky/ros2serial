@@ -42,14 +42,13 @@ static int check_brr_refuses_zero_baud(void)
 
 static int check_ms_converts_and_wraps(void)
 {
-  /* 1000 counts make a millisecond at the 1 MHz timer clock. */
-  CHECK(r2s_template_ms(0u, 1000u) == 0u);
-  CHECK(r2s_template_ms(1000u, 1000u) == 1u);
-  CHECK(r2s_template_ms(999u, 1000u) == 0u);
+  /* 1 count makes a millisecond at the 1 kHz timer clock. */
+  CHECK(r2s_template_ms(0u, 1u) == 0u);
+  CHECK(r2s_template_ms(1u, 1u) == 1u);
   /* A full 32-bit count wraps the same way the tick the core reads does. */
-  CHECK(r2s_template_ms(0xFFFFFFFFu, 1000u) == 4294967u);
+  CHECK(r2s_template_ms(0xFFFFFFFFu, 1u) == 0xFFFFFFFFu);
   /* A zero rate would divide by zero, so the helper reports 0 instead. */
-  CHECK(r2s_template_ms(1000u, 0u) == 0u);
+  CHECK(r2s_template_ms(1u, 0u) == 0u);
   return 0;
 }
 
@@ -97,8 +96,21 @@ static int check_tick_reads_the_timer(void)
 {
   reset_all();
   R2S_TEMPLATE_TEST_timer.CNT = 60000u;
-  CHECK(r2s_port_tick() == 60u);
+  CHECK(r2s_port_tick() == 60000u);
   R2S_TEMPLATE_TEST_timer.CNT = 0u;
+  CHECK(r2s_port_tick() == 0u);
+  /* The tick wraps at 2^32, the way r2s_port.h promises. */
+  R2S_TEMPLATE_TEST_timer.CNT = 0xFFFFFFFFu;
+  CHECK(r2s_port_tick() == 0xFFFFFFFFu);
+  return 0;
+}
+
+static int check_init_starts_the_tick(void)
+{
+  reset_all();
+  r2s_template_init(48000000u, 115200u);
+  /* The tick source runs free from init, which the port claims. */
+  CHECK((R2S_TEMPLATE_TEST_timer.CTL & R2S_TEMPLATE_TIMER_STE) != 0u);
   CHECK(r2s_port_tick() == 0u);
   return 0;
 }
@@ -121,6 +133,7 @@ int main(void)
   failures += check_write_sends_bytes_in_order();
   failures += check_read_stops_at_empty();
   failures += check_tick_reads_the_timer();
+  failures += check_init_starts_the_tick();
   failures += check_tx_reports_blocking();
   if (failures != 0) {
     printf("%d template checks failed\n", failures);
