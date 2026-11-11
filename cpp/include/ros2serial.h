@@ -22,6 +22,7 @@
  * needs only this header, and after the bundled limits above so the
  * limits stay the bundle's on every toolchain. */
 #ifdef __cplusplus
+#include <builtin_interfaces/msg/duration.hpp>
 #include <builtin_interfaces/msg/time.hpp>
 #include <geometry_msgs/msg/quaternion.hpp>
 #include <geometry_msgs/msg/twist.hpp>
@@ -31,6 +32,8 @@
 #include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/header.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <tf2_msgs/action/lookup_transform.hpp>
+#include <tf2_msgs/msg/tf2_error.hpp>
 #endif
 
 /* A C++ sketch without a topic list uses the runtime API: it declares
@@ -77,6 +80,9 @@ extern const r2s_codec_table_t r2s_bundled_table_std_msgs_Header;
 extern const r2s_codec_table_t r2s_bundled_table_std_msgs_String;
 extern const r2s_codec_table_t r2s_bundled_table_std_srvs_Trigger_Request;
 extern const r2s_codec_table_t r2s_bundled_table_std_srvs_Trigger_Response;
+extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_LookupTransform_Feedback;
+extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_LookupTransform_Goal;
+extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_LookupTransform_Result;
 extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_TFMessage;
 
 /* One alias per bundled type for the C row spelling: the row names
@@ -173,6 +179,29 @@ extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_TFMessage;
   (&r2s_bundled_table_std_srvs_Trigger_Response)
 #define R2S_CTYPE_INDEX_std_srvs__srv__Trigger_Response 0u
 #define R2S_CTYPE_NAME_std_srvs__srv__Trigger_Response "std_srvs/srv/Trigger_Response"
+/* tf2_msgs__action__LookupTransform_Feedback: hash, table, index and wire name. */
+#define R2S_CTYPE_HASH_tf2_msgs__action__LookupTransform_Feedback \
+  0x2du, 0xa0u, 0xb0u, 0x2fu, 0x99u, 0x0fu, 0x04u, 0x40u
+#define R2S_CTYPE_TABLE_tf2_msgs__action__LookupTransform_Feedback \
+  (&r2s_bundled_table_tf2_msgs_LookupTransform_Feedback)
+#define R2S_CTYPE_INDEX_tf2_msgs__action__LookupTransform_Feedback 10u
+#define R2S_CTYPE_NAME_tf2_msgs__action__LookupTransform_Feedback \
+  "tf2_msgs/action/LookupTransform_Feedback"
+/* tf2_msgs__action__LookupTransform_Goal: hash, table, index and wire name. */
+#define R2S_CTYPE_HASH_tf2_msgs__action__LookupTransform_Goal \
+  0x81u, 0x5eu, 0xfcu, 0x29u, 0x4au, 0xd1u, 0x7cu, 0x81u
+#define R2S_CTYPE_TABLE_tf2_msgs__action__LookupTransform_Goal \
+  (&r2s_bundled_table_tf2_msgs_LookupTransform_Goal)
+#define R2S_CTYPE_INDEX_tf2_msgs__action__LookupTransform_Goal 2u
+#define R2S_CTYPE_NAME_tf2_msgs__action__LookupTransform_Goal "tf2_msgs/action/LookupTransform_Goal"
+/* tf2_msgs__action__LookupTransform_Result: hash, table, index and wire name. */
+#define R2S_CTYPE_HASH_tf2_msgs__action__LookupTransform_Result \
+  0x06u, 0x1du, 0x44u, 0x23u, 0xafu, 0x53u, 0x52u, 0xffu
+#define R2S_CTYPE_TABLE_tf2_msgs__action__LookupTransform_Result \
+  (&r2s_bundled_table_tf2_msgs_LookupTransform_Result)
+#define R2S_CTYPE_INDEX_tf2_msgs__action__LookupTransform_Result 9u
+#define R2S_CTYPE_NAME_tf2_msgs__action__LookupTransform_Result \
+  "tf2_msgs/action/LookupTransform_Result"
 /* tf2_msgs__msg__TFMessage: hash, table, index and wire name. */
 #define R2S_CTYPE_HASH_tf2_msgs__msg__TFMessage \
   0xe3u, 0x69u, 0xd0u, 0xf0u, 0x5au, 0x23u, 0xaeu, 0x52u
@@ -415,6 +444,9 @@ extern const r2s_codec_table_t r2s_bundled_table_std_msgs_Header;
 extern const r2s_codec_table_t r2s_bundled_table_std_msgs_String;
 extern const r2s_codec_table_t r2s_bundled_table_std_srvs_Trigger_Request;
 extern const r2s_codec_table_t r2s_bundled_table_std_srvs_Trigger_Response;
+extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_LookupTransform_Feedback;
+extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_LookupTransform_Goal;
+extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_LookupTransform_Result;
 extern const r2s_codec_table_t r2s_bundled_table_tf2_msgs_TFMessage;
 
 /* One scope map per package: a row names a C++ type, which the
@@ -637,6 +669,52 @@ constexpr uint16_t Trigger_Response_index = 0u;
 constexpr const char Trigger_Response_name[] = "std_srvs/srv/Trigger_Response";
 } // namespace srv
 } // namespace R2S_MAP_std_srvs
+
+namespace R2S_MAP_tf2_msgs
+{
+namespace action
+{
+/* tf2_msgs::action::LookupTransform_Feedback: hash, table, index and wire name. */
+constexpr uint8_t LookupTransform_Feedback_hash_0 = 0x2du;
+constexpr uint8_t LookupTransform_Feedback_hash_1 = 0xa0u;
+constexpr uint8_t LookupTransform_Feedback_hash_2 = 0xb0u;
+constexpr uint8_t LookupTransform_Feedback_hash_3 = 0x2fu;
+constexpr uint8_t LookupTransform_Feedback_hash_4 = 0x99u;
+constexpr uint8_t LookupTransform_Feedback_hash_5 = 0x0fu;
+constexpr uint8_t LookupTransform_Feedback_hash_6 = 0x04u;
+constexpr uint8_t LookupTransform_Feedback_hash_7 = 0x40u;
+constexpr const r2s_codec_table_t *LookupTransform_Feedback_table =
+  &r2s_bundled_table_tf2_msgs_LookupTransform_Feedback;
+constexpr uint16_t LookupTransform_Feedback_index = 10u;
+constexpr const char LookupTransform_Feedback_name[] = "tf2_msgs/action/LookupTransform_Feedback";
+/* tf2_msgs::action::LookupTransform_Goal: hash, table, index and wire name. */
+constexpr uint8_t LookupTransform_Goal_hash_0 = 0x81u;
+constexpr uint8_t LookupTransform_Goal_hash_1 = 0x5eu;
+constexpr uint8_t LookupTransform_Goal_hash_2 = 0xfcu;
+constexpr uint8_t LookupTransform_Goal_hash_3 = 0x29u;
+constexpr uint8_t LookupTransform_Goal_hash_4 = 0x4au;
+constexpr uint8_t LookupTransform_Goal_hash_5 = 0xd1u;
+constexpr uint8_t LookupTransform_Goal_hash_6 = 0x7cu;
+constexpr uint8_t LookupTransform_Goal_hash_7 = 0x81u;
+constexpr const r2s_codec_table_t *LookupTransform_Goal_table =
+  &r2s_bundled_table_tf2_msgs_LookupTransform_Goal;
+constexpr uint16_t LookupTransform_Goal_index = 2u;
+constexpr const char LookupTransform_Goal_name[] = "tf2_msgs/action/LookupTransform_Goal";
+/* tf2_msgs::action::LookupTransform_Result: hash, table, index and wire name. */
+constexpr uint8_t LookupTransform_Result_hash_0 = 0x06u;
+constexpr uint8_t LookupTransform_Result_hash_1 = 0x1du;
+constexpr uint8_t LookupTransform_Result_hash_2 = 0x44u;
+constexpr uint8_t LookupTransform_Result_hash_3 = 0x23u;
+constexpr uint8_t LookupTransform_Result_hash_4 = 0xafu;
+constexpr uint8_t LookupTransform_Result_hash_5 = 0x53u;
+constexpr uint8_t LookupTransform_Result_hash_6 = 0x52u;
+constexpr uint8_t LookupTransform_Result_hash_7 = 0xffu;
+constexpr const r2s_codec_table_t *LookupTransform_Result_table =
+  &r2s_bundled_table_tf2_msgs_LookupTransform_Result;
+constexpr uint16_t LookupTransform_Result_index = 9u;
+constexpr const char LookupTransform_Result_name[] = "tf2_msgs/action/LookupTransform_Result";
+} // namespace action
+} // namespace R2S_MAP_tf2_msgs
 
 namespace R2S_MAP_tf2_msgs
 {
@@ -911,6 +989,72 @@ constexpr const char TFMessage_name[] = "tf2_msgs/msg/TFMessage";
 #define R2S_MAP_std_srvs__srv__Trigger_Response_index \
   R2S_error_cxx_rows_use_double_colon_not_underscores
 #define R2S_MAP_std_srvs__srv__Trigger_Response_name \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Feedback_hash_0 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Feedback_hash_1 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Feedback_hash_2 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Feedback_hash_3 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Feedback_hash_4 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Feedback_hash_5 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Feedback_hash_6 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Feedback_hash_7 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Feedback_table \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Feedback_index \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Feedback_name \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Goal_hash_0 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Goal_hash_1 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Goal_hash_2 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Goal_hash_3 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Goal_hash_4 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Goal_hash_5 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Goal_hash_6 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Goal_hash_7 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Goal_table \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Goal_index \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Goal_name \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Result_hash_0 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Result_hash_1 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Result_hash_2 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Result_hash_3 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Result_hash_4 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Result_hash_5 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Result_hash_6 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Result_hash_7 \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Result_table \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Result_index \
+  R2S_error_cxx_rows_use_double_colon_not_underscores
+#define R2S_MAP_tf2_msgs__action__LookupTransform_Result_name \
   R2S_error_cxx_rows_use_double_colon_not_underscores
 #define R2S_MAP_tf2_msgs__msg__TFMessage_hash_0 R2S_error_cxx_rows_use_double_colon_not_underscores
 #define R2S_MAP_tf2_msgs__msg__TFMessage_hash_1 R2S_error_cxx_rows_use_double_colon_not_underscores
