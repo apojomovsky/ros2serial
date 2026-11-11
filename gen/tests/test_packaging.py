@@ -26,7 +26,9 @@ def copied_package(tmp_path: Path) -> Path:
     """Copy the package, so a build leaves its artifacts out of the repository."""
     package = tmp_path / 'gen'
     shutil.copytree(
-        PACKAGE, package, ignore=shutil.ignore_patterns('__pycache__', '*.egg-info', 'build')
+        PACKAGE,
+        package,
+        ignore=shutil.ignore_patterns('__pycache__', '*.egg-info', 'build', 'firmware_stage'),
     )
     # The wheel ships the C++ layer's tree as package data, so the copy
     # carries it beside the package, where setup.py looks for it.

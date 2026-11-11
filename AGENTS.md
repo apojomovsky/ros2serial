@@ -22,7 +22,12 @@ tracked files.
 
 ## Build and toolchain
 
-- Everything runs in the Docker dev image: avr-gcc and avr-libc, arduino-cli with a pinned AVR core, a host gcc of version 10 or newer, ROS Jazzy, simavr, Python tooling. Nothing toolchain-related is installed on the host.
+Users install into native ROS workspaces with rosdep and colcon, run the bridge
+with ros2 launch or ros2 run, and prepare firmware through the installed
+r2s_gen executables and Arduino CLI. The make and Docker rules below govern
+repository development and CI, not installation into a robot workspace.
+
+- Contributor builds and validation run in the Docker dev image: avr-gcc and avr-libc, arduino-cli with a pinned AVR core, a host gcc of version 10 or newer, ROS Jazzy, simavr, Python tooling. Nothing toolchain-related is installed on the host.
 - Stages: `base`, `dev`, `ci` (an empty alias of `dev`), `release`. The container runs as the caller's uid locally and the runner's uid in CI, so files stay host-owned.
 - Every pinned version lives in `ci/versions.env`. **A pin is a migration, not housekeeping:** the pins set code size and behavior, which the budgets measure, so bumping one is its own PR with the size report showing the effect.
 - Caches live under `~/.cache/ros2serial/`. No registry cache or dedicated builder: the image builds from apt and pip in minutes, and CI keeps its layers in the GitHub Actions cache (`.github/actions/dev-image`).

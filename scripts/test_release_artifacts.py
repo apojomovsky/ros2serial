@@ -24,9 +24,13 @@ def sdist_from_clean_copy(tmp_path: Path) -> tuple[Path, Path]:
     shutil.copytree(
         ROOT / 'gen',
         work / 'gen',
-        ignore=shutil.ignore_patterns('__pycache__', '*.egg-info', 'build', 'dist'),
+        ignore=shutil.ignore_patterns(
+            '__pycache__', '*.egg-info', 'build', 'dist', 'firmware_stage'
+        ),
     )
     shutil.copytree(ROOT / 'cpp', work / 'cpp', ignore=shutil.ignore_patterns('__pycache__'))
+    for directory in ('core/include', 'core/src', 'ports/arduino', 'examples'):
+        shutil.copytree(ROOT / directory, work / directory)
     dist = tmp_path / 'dist'
     dist.mkdir()
     result = subprocess.run(
@@ -173,3 +177,22 @@ def test_installing_the_sdist_ships_the_cpp_tree(tmp_path):
     assert (cpp_tree / 'include' / 'r2s' / 'runtime.hpp').is_file()
     assert (cpp_tree / 'include' / 'r2s_bundled.h').is_file()
     assert (cpp_tree / 'src' / 'runtime.cpp').is_file()
+    staged = subprocess.run(
+        [str(venv / 'bin' / 'r2s-arduino'), 'library', '--out', str(tmp_path / 'library')],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert staged.returncode == 0, staged.stdout + staged.stderr
+    assert (tmp_path / 'library/src/session.c').is_file()
+
+
+def test_release_wheel_contains_firmware_assets(tmp_path):
+    out, result = build(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    (wheel,) = sorted(out.glob('r2s_gen-*.whl'))
+    with zipfile.ZipFile(wheel) as archive:
+        names = archive.namelist()
+    assert 'r2s_gen/firmware/core/src/session.c' in names
+    assert 'r2s_gen/firmware/ports/arduino/r2s_arduino_port.cpp' in names
+    assert 'r2s_gen/firmware/examples/button_led/button_led.ino' in names

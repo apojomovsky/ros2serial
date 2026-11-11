@@ -162,41 +162,10 @@ def test_the_bundle_hash_lives_in_the_bundled_header_only():
     ]
 
 
-WORDS = {
-    'one': 1,
-    'two': 2,
-    'three': 3,
-    'four': 4,
-    'five': 5,
-    'six': 6,
-    'seven': 7,
-    'eight': 8,
-    'nine': 9,
-    'ten': 10,
-    'eleven': 11,
-    'twelve': 12,
-    'thirteen': 13,
-    'fourteen': 14,
-    'fifteen': 15,
-    'sixteen': 16,
-    'seventeen': 17,
-    'eighteen': 18,
-    'nineteen': 19,
-    'twenty': 20,
-}
-
-
-def test_readme_bundled_types_match_the_bundle():
-    line = next(
-        line
-        for line in (ROOT / 'README.md').read_text(encoding='utf-8').splitlines()
-        if 'common types' in line
-    )
-    assert re.search(r'ships (\w+) common types', line).group(1) in WORDS
-    assert WORDS[re.search(r'ships (\w+) common types', line).group(1)] == len(
-        bundle.BUNDLED_TYPES
-    )
-    assert re.findall(r'`([^`]+)`', line) == list(bundle.BUNDLED_TYPES)
+def test_documented_bundled_types_match_the_bundle():
+    text = (ROOT / 'docs/firmware.md').read_text(encoding='utf-8')
+    documented = re.findall(r'^\| `([^`]+)` \|$', text, re.MULTILINE)
+    assert documented == list(bundle.BUNDLED_TYPES)
 
 
 def _path_without_mergiraf():

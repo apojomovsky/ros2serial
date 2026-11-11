@@ -29,11 +29,11 @@ and the firmware exchanges rCOBS frames with one bridge node over a
 serial link. The bridge republishes the MCU topics on the ROS 2 graph
 and forwards subscriptions back. `r2s-gen` runs at build time only: it
 turns the topic list into C sources the firmware compiles, so no Python
-ships on either side of the wire. The wire today is protocol v2
-([GEN-2] in `spec/protocol.md`). Parameters (ID 3) and the
-reliable-channel ack (ID 6) stay reserved under [SYS-3] pending S5, and
-services and actions stay out pending S8, so no section here claims
-their behavior. See [Part I, Architecture](00-design.md#architecture)
+ships on either side of the wire. The wire format is defined in
+[spec/protocol.md](../spec/protocol.md). Parameters and services use the reliable
+channel; MCU action support exists while host integration remains in progress.
+For user setup, start with the [README](../README.md); this page describes
+implementation boundaries. See [Part I, Architecture](00-design.md#architecture)
 and [Part I, Declaring topics](00-design.md#declaring-topics).
 
 ## Containers
@@ -117,8 +117,8 @@ flowchart LR
 `r2s-gen check` validates `r2s.yaml` without emitting anything, and
 `r2s-gen generate --layout arduino|cmake` emits the structs (`emit.py`),
 the descriptors (`descriptors.py`), the topic table and publish
-wrappers (`topics.py`), with bounds resolved by `bounds.py`. Layouts today
-are `arduino` and `cmake`; `compact` handshakes need the node map, which
+wrappers (`topics.py`), with bounds resolved by `bounds.py`. Layouts include
+`arduino`, `cmake` and `platformio`; `compact` handshakes need the node map, which
 `generate` does not emit yet, so use `handshake: full`. The
 firmware announces each topic in a TOPIC frame; the bridge resolves the
 type support, compares the hash, and answers TOPIC_STATUS. Sketches that
@@ -173,8 +173,7 @@ code the MCU states are the `ANNOUNCING` and `CONNECTED` values in
 HELLO), and the host states are the `SessionState` values in
 `bridge/r2s_bridge/include/r2s_bridge/session.hpp`. The reliable
 channel rides these two machines without claiming a transition here.
-Pending work adds rules the same way: services in
-#156, actions in #317 to #320.
+The host action integration remains tracked in #319 and #320.
 
 ```mermaid
 stateDiagram-v2
@@ -204,5 +203,5 @@ waits `boot_wait_ms` after opening the port (a Uno resets on open),
 walks one TOPIC_REQ per index with retries, sends READY with a nonzero
 token, then heartbeats and runs the time sync (PING, PONG,
 CORRECTION on ID 1). A HELLO with a new token means the MCU reset. See
-[Part I, Protocol draft](00-design.md#protocol-draft-v1) and
+[Part I, Protocol draft](00-design.md#protocol-draft-v4) and
 [Part II, Protocol details](00-design.md#protocol-details).

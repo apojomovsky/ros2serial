@@ -5,7 +5,6 @@
 
 import json
 import os
-from pathlib import Path
 
 from r2s_gen import arduino
 
@@ -14,9 +13,13 @@ def test_library_contains_runtime_core_port_and_example(tmp_path):
     out = tmp_path / 'library'
     assert arduino.main(['library', '--out', str(out), '--distro', 'jazzy']) == 0
     for name in (
-        'src/r2s/r2s.h', 'src/session.c', 'src/runtime.cpp',
-        'src/r2s_arduino_port.cpp', 'src/ros2serial/ros.h',
-        'src/std_msgs/msg/bool.hpp', 'examples/button_led/button_led.ino',
+        'src/r2s/r2s.h',
+        'src/session.c',
+        'src/runtime.cpp',
+        'src/r2s_arduino_port.cpp',
+        'src/ros2serial/ros.h',
+        'src/std_msgs/msg/bool.hpp',
+        'examples/button_led/button_led.ino',
     ):
         assert (out / name).is_file(), name
     assert not (out / 'src/test_reset.c').exists()
@@ -51,10 +54,18 @@ def test_compile_passes_limits_and_paths_without_shell_expansion(tmp_path, monke
     monkeypatch.setenv('CAPTURE', str(capture))
     sketch = library / 'examples/button_led'
     out = tmp_path / 'firmware'
-    result = arduino.main([
-        'compile', '--library', str(library), '--fqbn', 'arduino:avr:uno',
-        '--out', str(out), str(sketch),
-    ])
+    result = arduino.main(
+        [
+            'compile',
+            '--library',
+            str(library),
+            '--fqbn',
+            'arduino:avr:uno',
+            '--out',
+            str(out),
+            str(sketch),
+        ]
+    )
     assert result == 7
     args = json.loads(capture.read_text())
     assert args[0] == 'compile'
@@ -68,10 +79,21 @@ def test_compile_passes_limits_and_paths_without_shell_expansion(tmp_path, monke
 
 
 def test_compile_rejects_incomplete_library(tmp_path, capsys):
-    assert arduino.main([
-        'compile', '--library', str(tmp_path), '--fqbn', 'arduino:avr:uno',
-        '--out', str(tmp_path / 'out'), str(tmp_path),
-    ]) == 1
+    assert (
+        arduino.main(
+            [
+                'compile',
+                '--library',
+                str(tmp_path),
+                '--fqbn',
+                'arduino:avr:uno',
+                '--out',
+                str(tmp_path / 'out'),
+                str(tmp_path),
+            ]
+        )
+        == 1
+    )
     assert 'r2s_bundled.h' in capsys.readouterr().err
 
 
@@ -79,8 +101,19 @@ def test_compile_reports_missing_arduino_cli(tmp_path, monkeypatch, capsys):
     library = tmp_path / 'library'
     assert arduino.main(['library', '--out', str(library)]) == 0
     monkeypatch.setenv('PATH', '')
-    assert arduino.main([
-        'compile', '--library', str(library), '--fqbn', 'arduino:avr:uno',
-        '--out', str(tmp_path / 'out'), str(library / 'examples/button_led'),
-    ]) == 1
+    assert (
+        arduino.main(
+            [
+                'compile',
+                '--library',
+                str(library),
+                '--fqbn',
+                'arduino:avr:uno',
+                '--out',
+                str(tmp_path / 'out'),
+                str(library / 'examples/button_led'),
+            ]
+        )
+        == 1
+    )
     assert 'arduino-cli' in capsys.readouterr().err

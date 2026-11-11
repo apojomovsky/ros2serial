@@ -1,0 +1,139 @@
+# Custom messages and firmware generation
+
+Use the bundled types for the shortest Arduino path. Use `r2s-gen` when you need
+a custom `.msg`, different string/array bounds, or static C firmware.
+The same ROS interface must be available on the host and to the generator.
+
+## Define and build the ROS interface
+
+Create a normal ROS interface package, for example `my_robot_interfaces`, with
+`msg/SensorReading.msg`:
+
+```text
+float32 temperature
+uint16 status
+```
+
+Its `package.xml` needs `ament_cmake` as a build tool,
+`rosidl_default_generators` as a build dependency, `rosidl_default_runtime` as an
+execution dependency, and membership in `rosidl_interface_packages`.
+Its `CMakeLists.txt` uses the standard interface generation pattern:
+
+```text
+cmake_minimum_required(VERSION 3.22)
+project(my_robot_interfaces)
+find_package(ament_cmake REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+rosidl_generate_interfaces(${PROJECT_NAME} "msg/SensorReading.msg")
+ament_export_dependencies(rosidl_default_runtime)
+ament_package()
+```
+
+Build and source it before running the bridge or resolving installed interfaces:
+
+```sh
+cd ~/ros2_ws
+colcon build --packages-up-to my_robot_interfaces
+source install/setup.bash
+ros2 interface show my_robot_interfaces/msg/SensorReading
+```
+
+The bridge loads host C++ type support dynamically. Installing just a `.msg`
+file or just its Python class is insufficient.
+
+## Generate explicitly with ros2 run
+
+Create `r2s.yaml` in your firmware project:
+
+```yaml
+node: sensor_board
+distro: jazzy
+topics:
+  - name: reading
+    type: my_robot_interfaces/msg/SensorReading
+    direction: pub
+  - name: enabled
+    type: std_msgs/msg/Bool
+    direction: sub
+```
+
+```sh
+ros2 run r2s_gen r2s-gen check --config r2s.yaml
+ros2 run r2s_gen r2s-gen generate --config r2s.yaml --layout cmake --out generated
+```
+
+The generator searches explicit `--msg-path` directories first, then the sourced
+workspace, then bundled definitions. A message search path contains package
+directories, so `--msg-path ~/ros2_ws/src` can resolve
+`~/ros2_ws/src/my_robot_interfaces/msg/SensorReading.msg` before it is installed.
+Use the same distro for generation and the bridge.
+
+The result contains `r2s_generated.h`, `r2s_generated.c`, and a CMake wrapper.
+The header provides fixed-storage message types, typed publish functions such as
+`r2s_publish_reading`, and declarations for handlers such as `r2s_on_enabled`.
+Implement the subscription handler in your firmware. Do not edit generated files.
+
+## Generate as part of colcon build
+
+The `r2s_rosidl` package installs `r2s_generate_firmware()`, a CMake helper that
+runs the same generator. It currently lives inside `gen/`; pass that nested
+package explicitly so colcon discovers it alongside the enclosing package:
+
+```sh
+cd ~/ros2_ws
+colcon build --base-paths src src/ros2serial/gen/r2s_rosidl \
+  --packages-up-to r2s_rosidl --cmake-args -DBUILD_TESTING=OFF
+source install/setup.bash
+```
+
+Create an `ament_cmake` package named `sensor_firmware` in `src/`, with your
+`r2s.yaml`. Declare `ament_cmake` and `r2s_rosidl` as build tool dependencies and
+`my_robot_interfaces` as a build dependency. Use this `CMakeLists.txt`:
+
+```text
+cmake_minimum_required(VERSION 3.22)
+project(sensor_firmware)
+find_package(ament_cmake REQUIRED)
+find_package(r2s_rosidl REQUIRED)
+r2s_generate_firmware(CONFIG r2s.yaml MSG_PATHS ..)
+ament_package()
+```
+
+```sh
+colcon build --base-paths src src/ros2serial/gen/r2s_rosidl \
+  --packages-up-to sensor_firmware --cmake-args -DBUILD_TESTING=OFF
+```
+
+Sources appear under `build/sensor_firmware/r2s_generated/`.
+`OUTPUT_DIR` changes that destination; `MSG_PATHS` accepts directories relative
+to the firmware package. Invalid configurations fail the build with the
+field or type that needs attention.
+
+This step generates sources. It does not cross-compile or flash the MCU.
+Compile them with your board toolchain and the matching ros2serial core and
+port. The emitted CMake library accepts `R2S_CORE_DIR` pointing to the checkout's
+`core/`; link it with your application and port implementation. The repository's
+`examples/cmake_minimal` is a complete AVR C firmware showing that boundary.
+The Arduino compile helper is for bundled runtime sketches, not this generated
+static API. `--layout arduino` and `--layout platformio` emit alternative wrappers;
+they also require the core and port to be staged by the firmware build.
+
+## Bounds and unsupported input
+
+For unbounded strings and sequences, choose storage bounds explicitly:
+
+```yaml
+bounds:
+  default_string_bound: 16
+  std_msgs/msg/Header.frame_id: 24
+  sensor_msgs/msg/JointState.name: [4, 12]
+  sensor_msgs/msg/JointState.position: 4
+  sensor_msgs/msg/JointState.velocity: 4
+  sensor_msgs/msg/JointState.effort: 4
+```
+
+These bounds apply to the MCU storage; they do not alter the ROS interface.
+Unsupported fields fail generation. Compact handshake and `--cpp` output are
+not implemented: use the default full handshake and generated C API.
+See the [generator specification](00-design.md#code-generator-specification)
+for the schema and [troubleshooting](troubleshooting.md) for hash mismatches.

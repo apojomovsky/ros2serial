@@ -18,7 +18,7 @@ fi
 # The walkthrough commands below stay quoted in the README's Getting started
 # section. A renamed command fails here, naming the missing line.
 anchors=(
-  "## Getting started"
+  "## Emulated Uno"
   "pip install ./gen"
   "ports/posix/run.sh --build-only"
   "r2s_posix_firmware"
@@ -37,9 +37,14 @@ anchors=(
   "boot_wait_ms"
 )
 for anchor in "${anchors[@]}"; do
-  grep -qF "$anchor" README.md || { echo "check-readme: README.md lacks '$anchor'" >&2; exit 1; }
+  grep -qF "$anchor" docs/without-hardware.md || { echo "check-readme: docs/without-hardware.md lacks '$anchor'" >&2; exit 1; }
 done
-echo "check-readme: every walkthrough command is present in README.md"
+for anchor in 'ros2 run r2s_gen r2s-arduino library' 'ros2 run r2s_gen r2s-arduino compile' \
+  'colcon build --packages-up-to r2s_bridge r2s_gen' 'arduino-cli upload' \
+  'ros2 launch r2s_bridge' 'ros2 topic echo /button' 'ros2 topic pub --once /led'; do
+  grep -qF "$anchor" README.md || { echo "check-readme: README.md lacks $anchor" >&2; exit 1; }
+done
+echo "check-readme: native and simulation walkthrough commands are present"
 
 command -v colcon >/dev/null 2>&1 || { echo "colcon not found: run it in a ROS container"; exit 1; }
 : "${ROS_DISTRO:?ROS_DISTRO is not set: run it in a ROS container}"
@@ -87,11 +92,19 @@ R2S_BUILD_DIR=$PWD/build bash tests/harness/simavr/run.sh --build-only || exit 1
 sim=build/harness/simavr/r2s_simavr
 # The bridge build the walkthrough runs, from the repo root, exactly as
 # documented: build outputs land under build/, which the checkout ignores.
-colcon build --base-paths bridge --build-base build/bridge/build --install-base build/bridge/install || exit 1
+colcon build --base-paths bridge gen gen/r2s_rosidl --packages-up-to r2s_bridge r2s_gen r2s_rosidl --build-base build/bridge/build --install-base build/bridge/install --cmake-args -DBUILD_TESTING=OFF || exit 1
 # shellcheck source=/dev/null
 set +u
 source build/bridge/install/setup.bash
 set -u
+ros2 run r2s_gen r2s-gen version || exit 1
+ros2 run r2s_gen r2s-arduino library --out "$work/installed-library" || exit 1
+ros2 run r2s_gen r2s-arduino compile --library "$work/installed-library" \
+  --fqbn arduino:avr:uno --out "$work/button-led" \
+  "$work/installed-library/examples/button_led" || exit 1
+ros2 run r2s_gen r2s-arduino compile --library "$work/installed-library" \
+  --fqbn arduino:avr:mega --out "$work/button-led-mega" \
+  "$work/installed-library/examples/button_led" || exit 1
 
 sim_pid=""
 bridge_pid=""
@@ -207,3 +220,24 @@ echo "check-readme: posix walkthrough is green"
 for pid in ${posix_pids:-}; do killtree "$pid"; done
 posix_pids=""
 echo "check-readme: walkthrough is green"
+
+# The real-board quickstart uses installed executables; simulation verifies
+# its topic exchange here without claiming physical GPIO validation.
+"$sim" --mcu atmega328p --firmware "$work/button-led/button_led.ino.elf" \
+  --run-ms 300000 >"$work/button-led-sim.log" 2>&1 &
+sim_pid=$!
+pty=""
+for _ in $(seq 1 40); do
+  pty=$(grep -m1 "r2s_simavr: pty=" "$work/button-led-sim.log" 2>/dev/null || true)
+  pty=${pty##*=}
+  case "$pty" in /dev/*) break ;; *) pty="" ;; esac
+  sleep 0.5
+done
+[ -n "$pty" ] || { echo "check-readme: button/LED UART missing" >&2; exit 1; }
+ros2 launch r2s_bridge r2s_bridge.launch.py port:="$pty" >"$work/button-led-bridge.log" 2>&1 &
+bridge_pid=$!
+bash scripts/with-retry.sh --tries 3 --timeout 20 --out "$work/button.txt" -- \
+  ros2 topic echo /button std_msgs/msg/Bool --once || exit 1
+grep -Eq 'data: (true|false)' "$work/button.txt" || exit 1
+timeout 30 ros2 topic pub --once /led std_msgs/msg/Bool '{data: true}' || exit 1
+echo "check-readme: installed button/LED walkthrough is green"

@@ -12,7 +12,9 @@ not promises.
 
 ## What you need
 
-Docker, `make` and `git`. Nothing else goes on the host.
+Docker, `make` and `git`. Contributor toolchains run in the dev image.
+To use ros2serial in your robot, follow the native ROS workspace
+[installation guide](docs/installation.md).
 
 The compiler, ROS 2, the simulator and the Python tooling all live in
 the dev image. That keeps every machine identical, which is why a local
@@ -114,7 +116,8 @@ the same work twice.
 Create one branch per issue, from `master`:
 
 ```sh
-git checkout -b fix/123-short-slug master
+git worktree add .worktrees/123-short-slug -b fix/123-short-slug master
+cd .worktrees/123-short-slug
 ```
 
 The name is `<type>/<issue>-<slug>`: the commit type (`fix`, `feat`,

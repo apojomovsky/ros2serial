@@ -229,7 +229,7 @@ done
 # their topics while they run, so the staged bundle above serves them all
 # with no new stage. Each firmware links the runtime topic table, which a
 # static sketch would not.
-for sketch in arduino_hello arduino_blink arduino_button arduino_servo arduino_range; do
+for sketch in arduino_hello arduino_blink arduino_button arduino_button_led arduino_servo arduino_range; do
   for board in uno mega; do
     out="$build/$sketch/$board"
     arduino-cli compile --fqbn "arduino:avr:$board" \
@@ -444,6 +444,7 @@ fi
 # The example timing tests drive each loop on the host against a scripted
 # tick: resync for the examples, catch-up for the slice. No DDS is involved.
 bash "$root/examples/tests/run.sh" || status=1
+python3 -m pytest "$root/examples/tests/test_button_led.py" -q || status=1
 
 # Hello and blink run on an emulated Uno: the two sketches need no
 # peripheral, so CI proves the link beyond the compile. Only the Uno image
