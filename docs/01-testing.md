@@ -267,7 +267,7 @@ The core's host tests run on Unity, vendored unchanged at `core/tests/vendor/uni
 
 ## 6. How much is enough
 
-Coverage is a floor that catches untested code; mutation score is the measure of how well the code is checked. Both are judged head-vs-base on PRs (a PR may not lower them) and against the absolute floors below.
+Coverage is a floor that catches untested code; mutation score is the measure of how well the code is checked. Both are judged against the absolute floors below. On PRs the gate judges the lines the pull request changes: every added or modified measured line must be covered or carry a reasoned exclusion, even when the whole-package figure dips.
 
 | Component | Line coverage | Branch coverage | Mutation score (nightly) |
 | --- | --- | --- | --- |
@@ -279,10 +279,11 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 
 - **Spec coverage is 100%:** every spec ID has at least one test (`tools/spec_coverage.py`).
 - **Error-path coverage is 100%:** every `R2S_ERR_*` code and every counter is triggered by at least one test.
-- **Mutation testing** runs nightly with Mull (the core) and mutmut (the generator); research ticket R13 confirms the tools. A measured score below its floor in `tools/robustness.yaml` fails the nightly once the triage report is written; areas the run does not measure yet read no data and never fail. Surviving mutants are triaged: either a test is added, or the mutant is recorded as equivalent with a one-line reason.
-- Lines excluded from coverage carry an exclusion comment with a reason, and the exclusions are counted in the report.
+- **Mutation testing** runs nightly with Mull (the core and the ROS-free bridge harness in `mutation/bridge`) and mutmut (the generator); research ticket R13 confirms the tools. A measured score below its floor in `tools/robustness.yaml` fails the nightly once the triage report is written; areas the run does not measure yet read no data and never fail. Surviving mutants are triaged: either a test is added, or the mutant is recorded as equivalent with a one-line reason.
+- Lines excluded from coverage carry an exclusion comment with a reason, and the exclusions are counted in the report. A changed line that is excluded without a reason fails the gate, naming the file and line.
+- A changed line in a generated file, or in a file the package does not measure, is ignored and reported as ignored, never silently dropped.
 - Branch coverage excludes compiler-generated exception edges: every gcovr measurement passes `--exclude-throw-branches`, so the arcs of calls that never throw in tests never enter the denominator.
-- Core, bridge and gen are measured head-vs-base, and their floors fail the gate; the `cpp/` and `scripts/`/`tools/` floors are not gated yet.
+- Core, bridge and gen are judged per changed line and against their floors; the `cpp/` and `scripts/`/`tools/` floors are not gated yet. The base is still measured with the same command and reported next to the head figure, so the comparison stays honest.
 - The floors start at these values from the first ticket of each component, rather than being raised later: tests are written first, so there is no untested backlog to catch up on.
 
 ## 7. When tests run
@@ -410,7 +411,7 @@ These scenarios prove the system's user-visible goals. Edge cases of the parts t
 | T1 | Core test support: state structs with `r2s_test_reset()`, the scriptable fake port and its own tests, randomized test order | C1 | A test can script a full handshake byte by byte and assert on decoded TX frames |
 | T2 | Spec IDs in `spec/protocol.md` and `tools/spec_coverage.py` | S1, B4 | CI fails on an uncovered ID and on a test naming an unknown ID |
 | T3 | `libr2s_host` and the Python session model; model-based tests | T1, C8, G4 | Hypothesis state machine finds a deliberately injected session bug |
-| T4 | Coverage gates per component, head-vs-base | C1, G1, H1 | A PR lowering coverage fails |
+| T4 | Coverage gates per component, changed lines plus floors | C1, G1, H1 | A PR with an uncovered changed line, or below a floor, fails |
 | T5 | Mutation testing nightly with triage report | R13, T4 | Report published; a deliberately weakened test shows up as a surviving mutant |
 | T6 | Docs snippet extraction and compilation | B2 | A broken snippet in `README.md` fails CI |
 | T7 | Soak job (posix and simavr, 2 h nightly) | V1, V3 | Runs nightly; fails on counter drift or memory growth |
