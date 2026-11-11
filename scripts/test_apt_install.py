@@ -57,14 +57,50 @@ def make_stub(tmp_path, fail_until, rc=100, line='boom'):
     count = tmp_path / 'count'
     argv_log = tmp_path / 'argv'
     argv_log.write_text('')
+    sources = tmp_path / 'apt-etc'
+    (sources / 'sources.list.d').mkdir(parents=True, exist_ok=True)
     stub_env = {
         'COUNT_FILE': str(count),
         'ARGV_LOG': str(argv_log),
         'FAIL_UNTIL': str(fail_until),
         'FAIL_RC': str(rc),
         'FAIL_LINE': line,
+        'R2S_APT_SOURCES_DIR': str(sources),
     }
     return bindir, count, argv_log, stub_env
+
+
+UBUNTU_SOURCES = """Types: deb
+URIs: http://archive.ubuntu.com/ubuntu/
+Suites: noble noble-updates
+Components: main universe
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb
+URIs: http://security.ubuntu.com/ubuntu/
+Suites: noble-security
+Components: main universe
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+"""
+
+ONE_LINE_SOURCES = 'deb http://archive.ubuntu.com/ubuntu/ noble main universe\n'
+
+# A source that never mentions the Ubuntu mirrors: the fallback must leave
+# it byte-identical.
+OTHER_SOURCES = """Types: deb
+URIs: http://packages.ros.org/ros2/ubuntu/
+Suites: noble
+Components: main
+"""
+
+
+def write_ubuntu_sources(tmp_path):
+    """Fixture apt sources: deb822, one-line and an unrelated file."""
+    sources = tmp_path / 'apt-etc'
+    (sources / 'sources.list.d').mkdir(parents=True, exist_ok=True)
+    (sources / 'sources.list.d' / 'ubuntu.sources').write_text(UBUNTU_SOURCES)
+    (sources / 'sources.list').write_text(ONE_LINE_SOURCES)
+    (sources / 'sources.list.d' / 'other.sources').write_text(OTHER_SOURCES)
 
 
 def attempts(count_file):
@@ -99,6 +135,40 @@ def test_persistent_failure_surfaces_the_real_error(tmp_path):
     assert attempts(count) == 5, 'the attempts were not bounded at 5'
     assert line in result.stdout + result.stderr, 'the last apt error never reached the log'
     assert 'rerun the job' in result.stderr, 'the give-up must name the remedy'
+
+
+def test_resolve_failure_swaps_in_the_azure_mirror(tmp_path):
+    """A `Could not resolve` rewrites Ubuntu sources, then the retry runs."""
+    write_ubuntu_sources(tmp_path)
+    line = 'W: Failed to fetch http://archive.ubuntu.com/ubuntu/ '
+    line += "Could not resolve 'archive.ubuntu.com'"
+    bindir, count, argv_log, stub_env = make_stub(tmp_path, fail_until=1, line=line)
+    result = run_helper(bindir, stub_env, 'update')
+    assert result.returncode == 0, result.stderr
+    assert attempts(count) == 2, 'the retry after the swap never ran'
+    sources = tmp_path / 'apt-etc'
+    ubuntu = (sources / 'sources.list.d' / 'ubuntu.sources').read_text()
+    assert 'azure.archive.ubuntu.com' in ubuntu, 'the deb822 sources kept the dead host'
+    assert 'http://archive.ubuntu.com' not in ubuntu, 'the old archive host survived'
+    assert 'http://security.ubuntu.com' not in ubuntu, 'the old security host survived'
+    one_line = (sources / 'sources.list').read_text()
+    assert 'azure.archive.ubuntu.com' in one_line, 'the one-line sources kept the dead host'
+    assert 'http://archive.ubuntu.com' not in one_line
+    other = (sources / 'sources.list.d' / 'other.sources').read_text()
+    assert other == OTHER_SOURCES, 'a source without Ubuntu mirrors was rewritten'
+    assert 'azure.archive.ubuntu.com' in result.stderr, 'the swap was not announced'
+
+
+def test_no_resolve_failure_leaves_sources_untouched(tmp_path):
+    """Without a resolve failure the sources stay byte-identical."""
+    write_ubuntu_sources(tmp_path)
+    bindir, count, argv_log, stub_env = make_stub(tmp_path, fail_until=99, line='E: boom')
+    result = run_helper(bindir, stub_env, 'update')
+    assert result.returncode != 0, 'a failing command reported success'
+    sources = tmp_path / 'apt-etc'
+    assert (sources / 'sources.list.d' / 'ubuntu.sources').read_text() == UBUNTU_SOURCES
+    assert (sources / 'sources.list').read_text() == ONE_LINE_SOURCES
+    assert (sources / 'sources.list.d' / 'other.sources').read_text() == OTHER_SOURCES
 
 
 def test_missing_subcommand_is_a_usage_error(tmp_path):
