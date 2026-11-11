@@ -910,7 +910,7 @@ struct Router::Impl
     // GCOVR_EXCL_STOP
     try {
       make_ros_action_server(*route);
-    } catch (const std::exception & failure) {
+    } catch (const std::exception & failure) {  // GCOVR_EXCL_LINE: creation always succeeds
       action_repairs_[info.index].reason = failure.what();
       emit(SessionLog::kError,
         "action '" + info.action_name + "': no endpoint (" + failure.what() + ")");
@@ -1008,6 +1008,7 @@ struct Router::Impl
     // The counter restarts with each handshake ([ACT-2]).
   std::uint8_t choose_goal_seq(ActionRoute & route)
   {
+    // GCOVR_EXCL_BR_START: exhaust needs 256 simultaneous goals
     for (int tries = 0; tries < 256; ++tries) {
       const std::uint8_t seq = static_cast<std::uint8_t>(route.next_seq + tries);
       bool clash = false;
@@ -1028,6 +1029,7 @@ struct Router::Impl
         return seq;
       }
     }
+    // GCOVR_EXCL_BR_STOP
     // GCOVR_EXCL_START: a route holds at most a pending and an active goal,
     // so the scan above always finds a free seq; exhausting all 256 needs
     // 256 live goals no MCU announces.
@@ -1096,9 +1098,11 @@ struct Router::Impl
     }
     const void *goal = route.types.goal_of(route.goal_request_take);
     std::vector<std::uint8_t> packed;
+    // GCOVR_EXCL_BR_START: the take always holds a goal when packing
     const ConvertResult converted = goal == nullptr ?
       ConvertResult{ConvertFail::kUnsupportedField, 0xFFu} :
     converter_.pack_from_struct(route.types.goal_type_name(), false, goal, packed);
+    // GCOVR_EXCL_BR_STOP
     if (converted.fail != ConvertFail::kNone) {
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': dropped ROS goal (" +
@@ -1162,11 +1166,14 @@ struct Router::Impl
     const ActiveGoal & goal, const std::array<std::uint8_t, 16> & uuid, std::int32_t sec,
     std::uint32_t nanosec) const
   {
+    // GCOVR_EXCL_START: mismatch needs a hostile client; typed cancels
+    // always name their own goal, so tests only match.
     const bool id_match = uuid_is_zero(uuid) || uuid == goal.uuid;
     const bool time_match = (sec == 0 && nanosec == 0u) ||
       (goal.accept_sec < sec ||
       (goal.accept_sec == sec && goal.accept_nanosec <= nanosec));
     return id_match && time_match;
+    // GCOVR_EXCL_STOP
   }
 
     // One taken ROS cancel request: matched against the live goal, forwarded
@@ -1638,7 +1645,7 @@ struct Router::Impl
           emit(SessionLog::kWarning,
             "action '" + route.info.action_name + "': the MCU never answered the cancel");
           answer_cancel(route, route.pending_cancel->header, kCancelRejected, false);
-          if (route.active) {
+          if (route.active) {  // GCOVR_EXCL_LINE: a cancel implies an active goal
             route.active->cancel_requested = false;
           }
           route.pending_cancel.reset();

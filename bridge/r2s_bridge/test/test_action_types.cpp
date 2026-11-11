@@ -90,6 +90,21 @@ TEST(ActionTypes, MovesAndFreesStructs)
   EXPECT_EQ(alias.storage.size(), self_size);
 }
 
+// Assigning over a struct whose storage was released but whose members
+// survive skips the finalizer: there is nothing initialized to free.
+TEST(ActionTypes, MoveAssignOverClearedStorageSkipsFini)
+{
+  const ActionTypes types("tf2_msgs/action/LookupTransform");
+  ActionTypes::Struct cleared = types.make_goal();
+  cleared.storage.clear();
+  ASSERT_NE(cleared.members, nullptr);
+  ActionTypes::Struct source = types.make_goal();
+  const std::size_t size = source.storage.size();
+  cleared = std::move(source);
+  EXPECT_EQ(cleared.storage.size(), size);
+  EXPECT_EQ(source.storage.size(), 0u);
+}
+
 // The layout the rcl server reads through must match the generated C++
 // types: fill through the introspection handles, read back through the
 // real structs.

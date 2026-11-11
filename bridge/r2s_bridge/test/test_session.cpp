@@ -3601,6 +3601,68 @@ void handshake_with_actions(Fixture & fixture)
   drain_decoded(fixture);
 }
 
+// A QUERY with no index byte is malformed: it names nothing and earns no
+// answer, instead of reading past the payload.
+// covers: ACT-1
+TEST(ActionExchange, DropsAQueryWithNoIndexByte)
+{
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
+  handshake_with_actions(fixture);
+  drain_decoded(fixture);
+  // Topic 8 is the wire actions topic; 0x01 is the QUERY opcode.
+  fixture.deliver_frame(8u, 0u, {0x01u});
+  EXPECT_TRUE(drain_decoded(fixture).empty()) << "an index-less QUERY earns no answer";
+}
+
+// A DECLARE whose hash does not match the installed action is refused with
+// a hash-mismatch verdict, the way a stale MCU layout is.
+// covers: ACT-7
+TEST(ActionExchange, RefusesAnActionDeclareWithABadHash)
+{
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u, {kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> bad_hash{9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u};
+  fixture.deliver_frame(kHelperActions, 0u,
+    helper_action_declare(0u, bad_hash.data(), "test_msgs/action/Fibonacci", "spin"));
+  const auto units = drain_decoded(fixture);
+  ASSERT_FALSE(units.empty()) << "the refusal answers the DECLARE";
+  EXPECT_EQ(units[0][2], kHelperActStatus) << "the answer is a status verdict";
+  EXPECT_EQ(units[0][5], kActionStatusHashMismatch) << "the verdict names the hash mismatch";
+}
+
+// An unacked GOAL is retried then dropped: the drop forgets that wire goal,
+// so a late answer for it is stale and ignored.
+// covers: ACT-4
+TEST(ActionExchange, DropsAnUnackedGoalAfterRetries)
+{
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
+  handshake_with_actions(fixture);
+  drain_decoded(fixture);
+  ASSERT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x01u}));
+  drain_decoded(fixture);
+  fixture.advance_to(3000);
+  EXPECT_EQ(fixture.session().reliable_dropped(), 1u) << "the unacked GOAL is dropped";
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
+// An unacked CANCEL is retried then dropped the same way: the drop forgets
+// that wire cancel.
+// covers: ACT-4
+TEST(ActionExchange, DropsAnUnackedCancelAfterRetries)
+{
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
+  handshake_with_actions(fixture);
+  drain_decoded(fixture);
+  ASSERT_TRUE(fixture.session().send_action_cancel(0x00u));
+  drain_decoded(fixture);
+  fixture.advance_to(3000);
+  EXPECT_EQ(fixture.session().reliable_dropped(), 1u) << "the unacked CANCEL is dropped";
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
 // covers: ACT-7
 TEST(ActionReplay, ReplaysActionWalk)
 {

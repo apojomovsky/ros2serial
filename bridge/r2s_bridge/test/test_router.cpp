@@ -2495,6 +2495,18 @@ bool wait_for_wire_goal(
   return false;
 }
 
+// A CANCEL_RESP with no cancel pending names nothing: it is a stale
+// duplicate and is ignored without touching any route.
+// covers: ACT-5
+TEST_F(RouterNode, IgnoresACancelResponseWithNoPendingCancel)
+{
+  RouterFixture fixture("stray_cancel", remapped(), RouterParams{});
+  handshake_with_actions(fixture);
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActCancelResp, 0x00u, 0x00u, 0x00u});
+  rclcpp::spin_some(fixture.node());
+  EXPECT_TRUE(fixture.logged().empty()) << "a stray cancel response stays silent";
+}
+
 // covers: SES-35, ACT-2, ACT-3, ACT-8
 TEST_F(RouterNode, AcceptsAGoalAndStreamsFeedbackAndResult)
 {
@@ -4256,6 +4268,31 @@ TEST_F(RouterNode, DropsAWrongIndexDeclareDuringTheWalk)
     fixture.node(), "spin");
   EXPECT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)))
       << "the bridge recovers from a wrong-index declare";
+}
+
+TEST_F(RouterNode, DropsAnEarlyDeclareBeforeTheActionsWalk)
+{
+  RouterFixture fixture("act_earlydeclare", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  // A DECLARE before the walk reaches actions arrives while nothing is
+  // awaited: dropped, and the walk still completes afterwards.
+  const std::array<std::uint8_t, 8> hash =
+    installed_action_hash("tf2_msgs/action/LookupTransform");
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0xCCu));
+  fixture.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  fixture.deliver_frame(kHelperActions, 0u,
+    helper_action_declare(0u, hash.data(), "tf2_msgs/action/LookupTransform", "early"));
+  for (int i = 0; i < 5; ++i) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+  }
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  EXPECT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)))
+      << "the bridge recovers from an early declare";
 }
 
 }  // namespace

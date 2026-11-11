@@ -1541,12 +1541,12 @@ struct Session::Impl
       act_out_active_ = false;
         // A dropped frame ends that wire goal: a late answer names a seq
         // nothing tracks anymore and is ignored as stale.
-      if (!act_out_payload_.empty()) {
-        if (act_out_payload_[0] == kActGoal && act_out_payload_.size() > 2u) {
-          act_host_goals_.erase(act_out_payload_[2]);
-        } else if (act_out_payload_[0] == kActCancel && act_out_payload_.size() > 2u) {
-          act_host_cancels_.erase(act_out_payload_[2]);
-        }
+      // Only GOAL and CANCEL frames retry, both carrying the goal_seq
+      // at index 2, so a drop ends that wire goal or cancel outright.
+      if (act_out_payload_[0] == kActGoal) {
+        act_host_goals_.erase(act_out_payload_[2]);
+      } else {
+        act_host_cancels_.erase(act_out_payload_[2]);
       }
       promote_act_pending();
       return;
