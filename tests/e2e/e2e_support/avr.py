@@ -63,18 +63,17 @@ def firmware_image(board, flavor='slice', baud=None):
     """The board's ELF of one flavor, built by tests/e2e/run-avr.sh.
 
     The slice carries scenarios 1 to 4; the flood feeds scenario 12; the
-    service example feeds scenario 15 and the action example scenario 16.
-    A baud names one matrix image; the default baud keeps the legacy file
-    name. Only the slice runs the baud matrix, so the example flavors take
-    no baud.
+    service example feeds scenario 15. A baud names one matrix image; the
+    default baud keeps the legacy file name. Only the slice runs the baud
+    matrix, so the service flavor takes no baud.
     """
     given = os.environ.get('R2S_E2E_AVR_FW', '')
     assert given, 'R2S_E2E_AVR_FW is unset: run tests/e2e/run-avr.sh, which builds the firmware'
-    assert flavor in ('slice', 'flood', 'service', 'action'), (
-        f'unknown firmware flavor {flavor!r}: want slice, flood, service or action'
+    assert flavor in ('slice', 'flood', 'service'), (
+        f'unknown firmware flavor {flavor!r}: want slice, flood or service'
     )
-    if flavor in ('service', 'action'):
-        assert baud is None, f'no baud matrix for the {flavor} example firmware'
+    if flavor == 'service':
+        assert baud is None, 'no baud matrix for the service example firmware'
     if baud is None or str(baud) == '115200':
         name = f'{flavor}-{board_mcu(board)}.elf'
     else:

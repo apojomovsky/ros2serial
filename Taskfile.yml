@@ -586,10 +586,9 @@ tasks:
       - cpp/**
       - bridge/**
       - ports/arduino/**
-      # Scenarios 15 and 16 compile the example sketches they drive, so the
-      # e2e-avr leg watches those sketches beside its own firmware.
+      # Scenario 15 compiles the service example it drives, so the
+      # e2e-avr leg watches that sketch beside its own firmware.
       - examples/arduino_service/**
-      - examples/arduino_action/**
       # The shared leg files. The posix runner, the posix scenarios and the
       # posix firmware helper stay with the posix leg; the isolation pairs
       # run in the e2e-isolation job and the soak checks in the nightly

@@ -3,10 +3,10 @@
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
 # The avr end-to-end suite: scenarios 1 to 4 against the slice sketch,
-# scenario 12 against the flood sketch, scenario 15 against the service
-# example and scenario 16 against the action example, on an emulated Uno
-# and Mega, plus the baud matrix (the scenario 2 flow gates per baud per
-# board) under the first RMW only. It stages the Arduino library at build
+# scenario 12 against the flood sketch and scenario 15 against the service
+# example, on an emulated Uno and Mega, plus the baud matrix (the scenario
+# 2 flow gates per baud per board) under the first RMW only. It stages the
+# Arduino library at build
 # time, compiles the sketches for both boards with burst-sized serial
 # rings, and runs every scenario under each RMW. Builds go under
 # R2S_BUILD_DIR, so the tree stays clean; the suite runs this script for
@@ -68,9 +68,9 @@ cp core/include/r2s/*.h "$exstage/src/r2s/" || exit 1
 cp core/src/*.c "$exstage/src/" || exit 1
 rm -f "$exstage/src/test_reset.c"
 cp ports/arduino/r2s_arduino_port.cpp ports/arduino/r2s_arduino_port.h "$exstage/src/" || exit 1
-cp cpp/include/r2s/runtime.hpp cpp/include/r2s/action.hpp cpp/include/r2s/service.hpp \
+cp cpp/include/r2s/runtime.hpp cpp/include/r2s/service.hpp \
   "$exstage/src/r2s/" || exit 1
-cp cpp/src/runtime.cpp cpp/src/action.cpp cpp/src/service.cpp "$exstage/src/" || exit 1
+cp cpp/src/runtime.cpp cpp/src/service.cpp "$exstage/src/" || exit 1
 # The core never includes the bundled header, so the limits travel as -D
 # flags read from it: the same set the cmake layout passes as definitions.
 # A library sets none of its own flags on this toolchain, hence --build-property.
@@ -153,14 +153,10 @@ for board in uno mega; do
   avr-size "$out/avr_flood.ino.elf" || exit 1
   mv "$out/avr_flood.ino.elf" "$build/fw/flood-$mcu.elf" || exit 1
 done
-# Scenarios 15 and 16 drive the example sketches themselves, with the same
-# channel flags scripts/build-examples.sh compiles them with: the service
-# example with the services channel on, the action example with the actions
-# channel on. The service example caps at 64-byte frames and the action at
-# 128, and both run the default baud only: the baud matrix walks the slice
-# flow, not the examples.
+# Scenario 15 drives the service example itself, with the same channel
+# flags scripts/build-examples.sh compiles it with. It runs the default
+# baud only: the baud matrix walks the slice flow, not the example.
 svex="$extras -DR2S_WITH_SERVICES -DR2S_MAX_FRAME=64"
-aex="$extras -DR2S_WITH_ACTIONS -DR2S_MAX_FRAME=128"
 for board in uno mega; do
   mcu=atmega328p
   [ "$board" = mega ] && mcu=atmega2560
@@ -171,13 +167,6 @@ for board in uno mega; do
     --library "$exstage" --output-dir "$out" examples/arduino_service || exit 1
   avr-size "$out/arduino_service.ino.elf" || exit 1
   mv "$out/arduino_service.ino.elf" "$build/fw/service-$mcu.elf" || exit 1
-  out="$build/fw/$board-action"
-  arduino-cli compile --fqbn "arduino:avr:$board" \
-    --build-property "compiler.c.extra_flags=$aex" \
-    --build-property "compiler.cpp.extra_flags=$aex" \
-    --library "$exstage" --output-dir "$out" examples/arduino_action || exit 1
-  avr-size "$out/arduino_action.ino.elf" || exit 1
-  mv "$out/arduino_action.ino.elf" "$build/fw/action-$mcu.elf" || exit 1
 done
 export R2S_E2E_AVR_FW=$build/fw
 [ "$build_only" = 1 ] && exit 0
@@ -194,10 +183,10 @@ echo '{}' >"$R2S_E2E_AVR_STACK_OUT" || exit 1
 # scripts/build-examples.sh uses for its stack/ dir. Same sources and
 # flags, only the optimizer differs, and the table names which binary
 # each column comes from.
-for flavor in slice flood service action; do
+for flavor in slice flood service; do
   # The slice and flood sketches live in tests/e2e and link the slice
-  # stage; the example sketches live in examples and link the runtime
-  # stage with their channel flags, the same split the firmware builds
+  # stage; the service example lives in examples and links the runtime
+  # stage with its channel flags, the same split the firmware builds
   # above use.
   sketch=avr_slice
   skdir=tests/e2e
@@ -215,13 +204,6 @@ for flavor in slice flood service action; do
     sklib=$exstage
     cflags="$svex -fno-lto -fstack-usage"
     cppflags="$svex -fno-lto -fstack-usage"
-    ;;
-  action)
-    sketch=arduino_action
-    skdir=examples
-    sklib=$exstage
-    cflags="$aex -fno-lto -fstack-usage"
-    cppflags="$aex -fno-lto -fstack-usage"
     ;;
   esac
   for board in uno mega; do
@@ -320,7 +302,7 @@ for rmw in $rmws; do
   fi
   for board in $boards; do
     export R2S_E2E_BOARD=$board
-    for scenario in 1 2 3 4 12 15 16; do
+    for scenario in 1 2 3 4 12 15; do
       # Same R2S_E2E_SKIP contract as run.sh, matched on the avr file name.
       case " ${R2S_E2E_SKIP:-} " in
         *" test_scenario_${scenario}_avr "*) echo "skip test_scenario_${scenario}_avr (R2S_E2E_SKIP)" ;;

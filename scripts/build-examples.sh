@@ -514,9 +514,10 @@ fi
 # tick: resync for the examples, catch-up for the slice. No DDS is involved.
 bash "$root/examples/tests/run.sh" || status=1
 
-# Hello and blink run on an emulated Uno: the two sketches need no
-# peripheral, so CI proves the link beyond the compile. Only the Uno image
-# runs to keep the added time small; the Mega firmware still builds above.
+# Hello, blink and the action example run on an emulated Uno: the three
+# sketches need no peripheral, so CI proves the link beyond the compile.
+# Only the Uno image runs to keep the added time small; the Mega firmware
+# still builds above.
 # The budgets gate rebuilds everything with stack instrumentation, so it
 # skips this behavior leg and judges sizes only. R2S_EXAMPLES_NO_SIMAVR does
 # the same for the stubbed scope test, whose fake toolchain cannot produce
@@ -530,8 +531,10 @@ if [ -z "${R2S_STACK_BUILD:-}" ] && [ -z "${R2S_EXAMPLES_NO_SIMAVR:-}" ]; then
   sim_fw=$(mktemp -d "${TMPDIR:-/tmp}/r2s-examples-simavr.XXXXXX") || status=1
   cp "$build/arduino_hello/uno/arduino_hello.ino.elf" "$sim_fw/hello-atmega328p.elf" || status=1
   cp "$build/arduino_blink/uno/arduino_blink.ino.elf" "$sim_fw/blink-atmega328p.elf" || status=1
+  cp "$build/arduino_action/uno/arduino_action.ino.elf" "$sim_fw/action-atmega328p.elf" || status=1
   R2S_SIMAVR_BIN="$sim_harness/r2s_simavr" R2S_SIMAVR_FW="$sim_fw" \
-    python3 -m pytest "$root/examples/tests/test_examples_simavr.py" -q || status=1
+    python3 -m pytest "$root/examples/tests/test_examples_simavr.py" \
+    "$root/examples/tests/test_examples_simavr_action.py" -q || status=1
   rm -rf "$sim_fw" || status=1
 fi
 
