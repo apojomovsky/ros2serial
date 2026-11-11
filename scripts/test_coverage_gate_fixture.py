@@ -433,3 +433,12 @@ def test_the_gate_ignores_a_changed_file_with_no_coverage_data(tmp_path):
     result = run_gate(repo, run_env, '96 91', '96 91')
     assert result.returncode == 0, result.stdout + result.stderr
     assert 'with no coverage data: core/src/ghost.c' in result.stdout
+
+
+def test_the_gate_reaches_a_verdict_with_no_base_to_compare(tmp_path):
+    repo, run_env = fixture(tmp_path)
+    result = run_gate(repo, run_env, '96 91', '96 91', {'COMMIT_RANGE': 'no-such-branch..HEAD'})
+    assert 'unbound variable' not in result.stderr, result.stdout + result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'no base to compare with; checking the floors only' in result.stdout
+    assert 'coverage: core line 96.00% branch 91.00%: ok' in result.stdout
