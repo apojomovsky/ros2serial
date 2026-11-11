@@ -23,6 +23,14 @@ firmware:
     flash: 16500
     ram: 1600
     stack: 210
+  arduino_service/uno/arduino_service.ino.elf:
+    flash: 16000
+    ram: 1900
+    stack: 200
+  arduino_service/mega/arduino_service.ino.elf:
+    flash: 16500
+    ram: 1900
+    stack: 210
   arduino_xmacro/uno/arduino_xmacro.ino.elf:
     flash: 12000
     ram: 1250

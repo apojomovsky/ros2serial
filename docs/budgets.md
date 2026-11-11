@@ -56,6 +56,8 @@ base in the job summary.
 | arduino_range/esp32/arduino_range.ino.elf | 275324 | 330400 | 75569 | 90700 | n/a | n/a |
 | arduino_range/mega/arduino_range.ino.elf | 8774 | 10400 | 1073 | 1290 | 230 | 264 |
 | arduino_range/uno/arduino_range.ino.elf | 8438 | 9950 | 1073 | 1290 | 221 | 256 |
+| arduino_service/mega/arduino_service.ino.elf | 13992 | 16500 | 1564 | 1900 | 176 | 210 |
+| arduino_service/uno/arduino_service.ino.elf | 13652 | 16000 | 1564 | 1900 | 168 | 200 |
 | arduino_servo/esp32/arduino_servo.ino.elf | 286079 | 343300 | 77757 | 93400 | n/a | n/a |
 | arduino_servo/mega/arduino_servo.ino.elf | 9612 | 11400 | 1085 | 1320 | 16 | 32 |
 | arduino_servo/uno/arduino_servo.ino.elf | 9134 | 10900 | 1085 | 1320 | 13 | 32 |
