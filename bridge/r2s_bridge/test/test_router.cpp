@@ -4080,6 +4080,123 @@ TEST_F(RouterNode, DropsTheGoalThatDoesNotPack)
   EXPECT_FALSE(goal_wire) << "the unpackable goal never reaches the wire";
 }
 
+// covers: SES-35
+TEST_F(RouterNode, DropsALateActionDeclare)
+{
+  RouterFixture fixture("act_latedeclare", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+  // A DECLARE after the handshake is stale: the walk already finished, so
+  // the session drops it and the action server stays up.
+  const std::array<std::uint8_t, 8> stale_hash =
+    installed_action_hash("tf2_msgs/action/LookupTransform");
+  fixture.deliver_frame(kHelperActions, 2u,
+    helper_action_declare(0u, stale_hash.data(), "tf2_msgs/action/LookupTransform", "spin2"));
+  for (int i = 0; i < 5; ++i) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+  }
+  EXPECT_TRUE(client->wait_for_action_server(std::chrono::milliseconds(200)))
+      << "the action server survives a stale declare";
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  EXPECT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload))
+      << "goals still flow after the stale declare";
+}
+
+// covers: SES-35
+TEST_F(RouterNode, DropsAGoalResponseWithABadDecision)
+{
+  RouterFixture fixture("act_baddecision", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> wire;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, wire));
+  // A decision byte outside the protocol is not a response: dropped.
+  // The dropped frame does not advance the rel sequence.
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0xFFu});
+  for (int i = 0; i < 5; ++i) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+  }
+  EXPECT_FALSE(goal_handle.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+      << "a bad decision answers nothing";
+  // The live goal still completes on a good response.
+  fixture.deliver_frame(kHelperActions, 3u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAckTopic, 3u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+  EXPECT_NE(goal_handle.get(), nullptr);
+}
+
+// covers: SES-35
+TEST_F(RouterNode, DropsAResultWithABadOutcome)
+{
+  RouterFixture fixture("act_badresult", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> wire;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, wire));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+  ASSERT_NE(goal_handle.get(), nullptr);
+  // An outcome byte outside the protocol is not a result: dropped.
+  Converter converter;
+  tf2_msgs::action::LookupTransform_Result result;
+  const auto packed = pack_action(
+    "tf2_msgs/action/LookupTransform_Result", &result, converter);
+  std::vector<std::uint8_t> bad{kHelperActResult, 0x00u, 0x00u, 0xFFu};
+  bad.insert(bad.end(), packed.begin(), packed.end());
+  fixture.deliver_frame(kHelperActions, 3u, bad);
+  auto result_future = client->async_get_result(goal_handle.get());
+  for (int i = 0; i < 5; ++i) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+  }
+  EXPECT_FALSE(result_future.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+      << "a bad outcome completes nothing";
+  // The live goal still completes on a good result.
+  // The dropped bad frame was refused before its rel was checked.
+  std::vector<std::uint8_t> good{kHelperActResult, 0x01u, 0x00u, 0x04u};
+  good.insert(good.end(), packed.begin(), packed.end());
+  fixture.deliver_frame(kHelperActions, 4u, good);
+  ASSERT_TRUE(spin_until_ready(fixture, result_future));
+  EXPECT_EQ(result_future.get().code, rclcpp_action::ResultCode::SUCCEEDED);
+}
+
+// covers: SES-35
+TEST_F(RouterNode, DropsASpuriousActionAck)
+{
+  RouterFixture fixture("act_badack", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  // An ack with nothing outstanding names no live frame: dropped, and the
+  // link stays up for real traffic afterwards.
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x7Fu});
+  for (int i = 0; i < 5; ++i) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+  }
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  EXPECT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)))
+      << "the bridge survives a spurious ack";
+}
+
 }  // namespace
 }  // namespace test
 }  // namespace r2s_bridge
