@@ -565,8 +565,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4.2.2
       - run: |
-          apt-get update
-          apt-get install -y --no-install-recommends "ros-${DISTRO}-rmw-cyclonedds-cpp" "ros-${DISTRO}-rmw-zenoh-cpp"
+          bash scripts/apt-install.sh update
+          bash scripts/apt-install.sh install -y --no-install-recommends "ros-${DISTRO}-rmw-cyclonedds-cpp" "ros-${DISTRO}-rmw-zenoh-cpp"
         env:
           DISTRO: ${{ matrix.distro }}
       # The distro images carry no dev image: the runner installs pinned Task.

@@ -56,7 +56,7 @@ def test_the_farm_job_builds_tests_and_smokes_the_released_packages():
 
 def test_the_farm_job_refreshes_apt_lists_before_rosdep():
     text = WORKFLOW.read_text(encoding='utf-8')
-    assert text.index('apt-get update') < text.index('rosdep install'), (
+    assert text.index('apt-install.sh update') < text.index('rosdep install'), (
         'rosdep installs from apt, so stale package lists fail the job'
     )
 

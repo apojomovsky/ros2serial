@@ -56,8 +56,8 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - name: Install doc tools
         run: |
-          apt-get update
-          apt-get install -y --no-install-recommends doxygen python3-pip
+          bash scripts/apt-install.sh update
+          bash scripts/apt-install.sh install -y --no-install-recommends doxygen python3-pip
           pip install --break-system-packages "rosdoc2==$(grep ^ROSDOC2_VERSION= ci/versions.env | cut -d= -f2)"
       - name: Advisory doc build
         run: bash scripts/rosdoc2.sh
