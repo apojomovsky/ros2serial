@@ -99,6 +99,13 @@ if [ "$build_only" = 0 ]; then
     echo "-- core: ch32v FAILED"
     failed+=("ch32v")
   fi
+  echo "-- core: template"
+  if bash "$root/ports/template/run.sh"; then
+    echo "-- core: template ok"
+  else
+    echo "-- core: template FAILED"
+    failed+=("template")
+  fi
   echo "-- core: avr-flash"
   if bash "$root/core/tests/avr/check.sh"; then
     echo "-- core: avr-flash ok"
