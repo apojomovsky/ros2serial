@@ -188,7 +188,8 @@ PORT_IMPL = (
 
 def test_ports_template_is_required(tmp_path):
     make_skeleton(tmp_path)
-    assert 'missing directory: ports/template' in check_layout.check(tmp_path)
+    (tmp_path / 'ports/template').rmdir()
+    assert check_layout.check(tmp_path) == ['missing directory: ports/template']
 
 
 def test_a_port_without_a_build_script_is_named(tmp_path):

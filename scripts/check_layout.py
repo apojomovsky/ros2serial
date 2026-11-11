@@ -39,6 +39,7 @@ REQUIRED_DIRS = [
     'ports/rp2040',
     'ports/common',
     'ports/epic-hal',
+    'ports/template',
     'examples',
     'tests/e2e',
     'tests/harness',
@@ -101,8 +102,58 @@ def gitkeep_problems(root: Path) -> list[str]:
     return problems
 
 
+# Sources staged into firmware builds, not a port of its own.
+PORTS_SHARED = frozenset({'common'})
+
+# Firmware-only ports that predate the host-test rule: CI builds their
+# firmware, and they carry no run.sh yet.
+PORTS_WITHOUT_HOST_TEST = frozenset({'stm32', 'rp2040'})
+
+PORT_SOURCES = ('.c', '.h', '.cpp', '.hpp')
+
+
+def ports_problems(root: Path, files: set[str]) -> list[str]:
+    """A directory under ports/ ships its contract, its build and its test."""
+    problems = []
+    ports = root / 'ports'
+    if not ports.is_dir():
+        return problems
+    for child in sorted(p for p in ports.iterdir() if p.is_dir()):
+        name = child.name
+        if name in PORTS_SHARED:
+            continue
+        owned = sorted(p for p in files if p == f'ports/{name}' or p.startswith(f'ports/{name}/'))
+        if not owned or all(p.rsplit('/', 1)[-1] == '.gitkeep' for p in owned):
+            continue
+        if f'ports/{name}/build.sh' not in files and f'ports/{name}/run.sh' not in files:
+            problems.append(f'ports/{name}: no build script (build.sh or run.sh)')
+        if name not in PORTS_WITHOUT_HOST_TEST and (
+            f'ports/{name}/run.sh' not in files
+            and not any(p.startswith(f'ports/{name}/tests/') for p in owned)
+        ):
+            problems.append(f'ports/{name}: no host test (run.sh or tests/)')
+        found = False
+        for p in owned:
+            if not p.endswith(PORT_SOURCES):
+                continue
+            try:
+                text = (root / p).read_text()
+            except OSError:
+                continue
+            if 'r2s_port_read' in text and 'r2s_port_tick' in text:
+                found = True
+                break
+        if not found:
+            problems.append(
+                f'ports/{name}: no port implementation'
+                ' (a source naming r2s_port_read and r2s_port_tick)'
+            )
+    return problems
+
+
 def check(root: Path) -> list[str]:
     problems = []
+    files = tracked_files(root)
     for d in REQUIRED_DIRS:
         if not (root / d).is_dir():
             problems.append(f'missing directory: {d}')
@@ -133,6 +184,7 @@ def check(root: Path) -> list[str]:
             if pattern not in lines:
                 problems.append(f'.gitignore does not ignore {pattern}')
     problems.extend(gitkeep_problems(root))
+    problems.extend(ports_problems(root, files))
     for p in sorted(root.glob('*.md')):
         if re.fullmatch(r'proposal-v\d+\.md|engineering-practices\.md', p.name):
             problems.append(f'superseded document still at the root: {p.name}')
