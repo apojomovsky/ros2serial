@@ -18,16 +18,23 @@ HELPER = ROOT / 'scripts' / 'apt-install.sh'
 
 STUB = """#!/usr/bin/env bash
 # A stub apt-get: counts its runs, records its argv, then fails until
-# the count passes FAIL_UNTIL. Every line it prints is the "apt output"
-# the helper must match or surface.
+# the count passes FAIL_UNTIL. Runs up to DIRTY_UNTIL print FAIL_LINE
+# but still exit 0, like an update that ignores every mirror.
+# Every line it prints is the "apt output" the helper must match
+# or surface.
 count=$(cat "$COUNT_FILE" 2>/dev/null || echo 0)
 count=$((count + 1))
 echo "$count" >"$COUNT_FILE"
 printf '%s\\n' "$*" >>"$ARGV_LOG"
-echo "$FAIL_LINE (attempt $count)"
+if [ "$count" -le "${DIRTY_UNTIL:-0}" ]; then
+    echo "$FAIL_LINE (attempt $count)"
+    exit 0
+fi
 if [ "$count" -le "$FAIL_UNTIL" ]; then
+    echo "$FAIL_LINE (attempt $count)"
     exit "$FAIL_RC"
 fi
+echo "all good (attempt $count)"
 exit 0
 """
 
@@ -47,7 +54,7 @@ def run_helper(bindir, stub_env, *args):
     )
 
 
-def make_stub(tmp_path, fail_until, rc=100, line='boom'):
+def make_stub(tmp_path, fail_until, rc=100, line='boom', dirty_until=0):
     """A bin dir whose `apt-get` fails until past the fail_until-th run."""
     bindir = tmp_path / 'bin'
     bindir.mkdir()
@@ -65,6 +72,7 @@ def make_stub(tmp_path, fail_until, rc=100, line='boom'):
         'FAIL_UNTIL': str(fail_until),
         'FAIL_RC': str(rc),
         'FAIL_LINE': line,
+        'DIRTY_UNTIL': str(dirty_until),
         'R2S_APT_SOURCES_DIR': str(sources),
     }
     return bindir, count, argv_log, stub_env
@@ -169,6 +177,20 @@ def test_no_resolve_failure_leaves_sources_untouched(tmp_path):
     assert (sources / 'sources.list.d' / 'ubuntu.sources').read_text() == UBUNTU_SOURCES
     assert (sources / 'sources.list').read_text() == ONE_LINE_SOURCES
     assert (sources / 'sources.list.d' / 'other.sources').read_text() == OTHER_SOURCES
+
+
+def test_update_that_ignores_every_mirror_is_retried_after_swap(tmp_path):
+    """An update exiting 0 with failed fetches swaps mirrors and reruns."""
+    write_ubuntu_sources(tmp_path)
+    line = 'W: Failed to fetch http://archive.ubuntu.com/ubuntu/ '
+    line += "Could not resolve 'archive.ubuntu.com'"
+    bindir, count, argv_log, stub_env = make_stub(tmp_path, fail_until=0, line=line, dirty_until=1)
+    result = run_helper(bindir, stub_env, 'update')
+    assert result.returncode == 0, result.stderr
+    assert attempts(count) == 2, 'the ignored update was reported as success'
+    ubuntu = (tmp_path / 'apt-etc' / 'sources.list.d' / 'ubuntu.sources').read_text()
+    assert 'azure.archive.ubuntu.com' in ubuntu, 'the swap never ran'
+    assert 'azure.archive.ubuntu.com' in result.stderr, 'the swap was not announced'
 
 
 def test_missing_subcommand_is_a_usage_error(tmp_path):
