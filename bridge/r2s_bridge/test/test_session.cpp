@@ -2595,15 +2595,18 @@ TEST(SessionLink, DropsAnActionCancelWhenTheTxWindowIsFull)
   fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
   fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
   ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
-  // Fill the 515-byte MCU window behind the blocked link: three user
-  // frames stay queued because nothing flushes.
+  // One user frame leaves room: a CANCEL still queues behind it.
   ASSERT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(200u, 0xAAu)));
+  EXPECT_TRUE(fixture.session().send_action_cancel(0x00u))
+      << "a partial window still queues the cancel";
+  // Fill the 515-byte MCU window behind the blocked link: two more user
+  // frames stay queued because nothing flushes.
   ASSERT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(200u, 0xBBu)));
   ASSERT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(200u, 0xCCu)));
   EXPECT_GE(fixture.session().pending_bytes(), 515u) << "the window is full";
   // A CANCEL while the window is full is dropped at once: the MCU could
   // not receive it, so the bridge refuses to queue it.
-  EXPECT_FALSE(fixture.session().send_action_cancel(0x00u))
+  EXPECT_FALSE(fixture.session().send_action_cancel(0x01u))
       << "a full window drops the cancel instead of queuing it";
 }
 
