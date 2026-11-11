@@ -783,6 +783,7 @@ ros2serial/
 │   ├── stm32/                Phase 3: one small STM32; ESP32 build-only via the Arduino layout
 │   ├── rp2040/                Phase 3: RP2040
 │   ├── common/               Phase 3: firmware shared by the stm32 and rp2040 ports
+│   ├── template/             the skeleton a new port copies (see docs/04-porting.md)
 │   └── epic-hal/             Phase 5: epic-hal serial and tick glue for PIC
 ├── examples/                 one directory per example, each built in CI
 ├── tests/
