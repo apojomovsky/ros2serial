@@ -135,6 +135,37 @@ def test_a_100_column_python_line_fails_the_push(tmp_path):
     assert 'wide.py:1:' in out, out
 
 
+def test_two_refs_in_one_push_are_both_checked(tmp_path):
+    """Findings gather across push lines, so a second ref hides nothing."""
+    require_cpplint()
+    require_ruff()
+    _, wt = fixture(tmp_path)
+    stage_python_config(wt)
+    cpp_line = 'int ' + 'v' * 92 + ' = 0;'
+    assert len(cpp_line) == 101, len(cpp_line)
+    py_line = ("x = '" + 'y' * 100)[:99] + "'"
+    assert len(py_line) == 100, len(py_line)
+    commit(
+        wt,
+        {'bridge/r2s_bridge/src/overflow.cpp': 'int v = 0;\n' + cpp_line + '\n'},
+        'feat(bridge): stage the relay',
+    )
+    first = git(wt, 'rev-parse', 'HEAD').stdout.strip()
+    git(wt, 'branch', 'feat/2-other')
+    commit(wt, {'gen/r2s_gen/wide.py': py_line + '\n'}, 'feat(gen): stage a table')
+    second = git(wt, 'rev-parse', 'HEAD').stdout.strip()
+    ref1 = 'refs/heads/feat/1-thing'
+    ref2 = 'refs/heads/feat/2-other'
+    zero_oid = '0' * 40
+    line1 = f'{ref1} {second} ' + f'{ref1} {first}\n'
+    line2 = f'{ref2} {first} ' + f'{ref2} {zero_oid}\n'
+    result = pre_push(wt, line1 + line2)
+    out = result.stdout + result.stderr
+    assert result.returncode != 0, out
+    assert 'overflow.cpp:2:' in out, out
+    assert 'wide.py:1:' in out, out
+
+
 def test_a_clean_change_passes_the_push(tmp_path):
     """Lines exactly at each limit are accepted, so the gate never over-blocks."""
     require_cpplint()

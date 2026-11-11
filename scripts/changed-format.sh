@@ -5,11 +5,13 @@
 # changed-format.sh: pre-push format gate on the lines a push adds. Reads
 # git pre-push lines on stdin, diffs each updated ref, and runs ament_cpplint
 # on C/C++ plus ruff check and ruff format on Python, failing on a finding.
-# Only added lines are judged: most of the tree carries cpplint findings CI
-# never gates (header guards, include order), so file scope would block
-# pushes CI accepts. Width owner is cpplint at 100 columns, the same 100 as
-# uncrustify code_width; uncrustify judges whole-format and runs only with
-# its pinned binary. A missing tool prints one SKIP line and never blocks.
+# cpplint and ruff check findings count only on added lines: most of the tree
+# carries findings CI never gates (header guards, include order), so file
+# scope would block pushes CI accepts. ruff format and uncrustify judge whole
+# touched files, which holds because the tree is clean under both at their
+# pinned versions. Width owner is cpplint at 100 columns, the same 100 as
+# uncrustify code_width; bridge files stay with ament through the c-format
+# exclusion, as in CI. A missing tool prints one SKIP line and never blocks.
 set -uo pipefail
 zero=0000000000000000000000000000000000000000
 base=${BASE:-origin/master}
