@@ -113,7 +113,7 @@ rosdep install --from-paths gen bridge --ignore-src -r -y --rosdistro "$ROS_DIST
 | 43031770668 | rolling | 21s | 85s | 136s | 15% |
 | 43045051035 | jazzy | 107s | skipped | 135s | fail |
 | 43045051035 | rolling | 107s | skipped | 132s | fail |
-| 43045051035 | lyrical | 107s | skipped | 131s | fail |
+| 43045051035 | lyrical | 109s | skipped | 133s | fail |
 
 Over the last 10 `farm` runs (30 legs): 27 failures, 3 successes. All
 failures are the apt mirror outage inside the rosdep step (`Failed to
