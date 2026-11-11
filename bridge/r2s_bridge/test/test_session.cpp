@@ -2587,6 +2587,39 @@ TEST(SessionLink, ScansQueuedControlsForANewSlot)
 }
 
 // covers: SES-35, REL-2
+TEST(SessionLink, DropsAnActionGoalWhenTheTxWindowIsFull)
+{
+  Fixture fixture(
+    [](const TopicInfo &) { return std::uint8_t{0}; }, SessionConfig(), SessionEvents(),
+    ServiceResolver(), [](const ActionInfo &) { return kActionStatusOk; });
+  fixture.block_writes();
+  fixture.advance_to(2600);
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(3u, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> action_hash{1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
+  fixture.deliver_frame(kHelperActions, 0u,
+    helper_action_declare(0u, action_hash.data(), "test_msgs/action/Fibonacci", "spin"));
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActStatus, 0x00u, 0x01u, 0x01u});
+  ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+  // One user frame leaves room: a GOAL still queues behind it.
+  ASSERT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(200u, 0xAAu)));
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}))
+      << "a partial window still queues the goal";
+  // Fill the 515-byte MCU window behind the blocked link: two more user
+  // frames stay queued because nothing flushes.
+  ASSERT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(200u, 0xBBu)));
+  ASSERT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(200u, 0xCCu)));
+  EXPECT_GE(fixture.session().pending_bytes(), 515u) << "the window is full";
+  // A GOAL while the window is full is dropped at once: the MCU could
+  // not receive it, so the bridge refuses to queue it.
+  EXPECT_FALSE(fixture.session().send_action_goal(0u, 0x01u, {0x05u}))
+      << "a full window drops the goal instead of queuing it";
+}
+
+// covers: SES-35, REL-2
 TEST(SessionLink, DropsAnActionCancelWhenTheTxWindowIsFull)
 {
   Fixture fixture;

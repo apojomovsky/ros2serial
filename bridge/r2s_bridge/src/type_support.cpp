@@ -67,8 +67,7 @@ std::uint8_t resolve_action_type(const ActionInfo & info)
     const bool matches = std::equal(
       info.type_hash.begin(), info.type_hash.end(), installed.begin());
     return matches ? kActionStatusOk : kActionStatusHashMismatch;
-  // Catch body runs (unknown-type test); gcov miscounts the taken arc.
-  } catch (const std::exception &) {  // GCOV_EXCL_BR_LINE
+  } catch (const std::exception &) {  // GCOV_EXCL_BR_LINE: body runs, arc miscounted
         // A malformed name, a missing package and an unloadable library all
         // refuse the action the same way ([ACT-7]).
     return kActionStatusUnknownType;
