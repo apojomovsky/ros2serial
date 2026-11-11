@@ -81,13 +81,11 @@ bool read_time(
   const MessageMembers *time_members = nested_members(member);
   const MessageMember *sec_member = find_member(time_members, "sec");
   const MessageMember *nsec_member = find_member(time_members, "nanosec");
-  // GCOV_EXCL_BR_START: installed time fields always carry sec and nanosec
   if (sec_member == nullptr || sec_member->type_id_ != ROS_TYPE_INT32 ||
     nsec_member == nullptr || nsec_member->type_id_ != ROS_TYPE_UINT32)
   {
-    return false;
+    return false;  // GCOVR_EXCL_LINE: defensive return, unreachable with installed types
   }
-  // GCOV_EXCL_BR_STOP
   const auto *base = static_cast<const std::uint8_t *>(storage) + member->offset_;
   std::memcpy(&sec, base + sec_member->offset_, sizeof(sec));
   std::memcpy(&nanosec, base + nsec_member->offset_, sizeof(nanosec));
