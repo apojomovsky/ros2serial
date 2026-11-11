@@ -2,38 +2,54 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-# Compile the template port against the real core with the host compiler.
-# This proves a copied port still matches the contract after its renames,
-# before its own test runs. Builds go under R2S_BUILD_DIR, so the tree
-# stays clean. Usage: build.sh [--out DIR]
+# Compile the port in this directory against the real core with the host
+# compiler, then prove the port object defines the contract's symbols.
+# Copying this directory to ports/<name>/ and renaming its sources is
+# enough: every path below derives from this script's location, so the
+# copy checks itself under its own name. Builds go under R2S_BUILD_DIR,
+# so the tree stays clean. Usage: build.sh [--out DIR]
 set -uo pipefail
-root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+port_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+port=$(basename "$port_dir")
+port_upper=$(echo "$port" | tr '[:lower:]' '[:upper:]')
+root=$(cd "$port_dir/../.." && pwd)
 cd "$root" || exit 2
-build=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/ports/template
+build=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/ports/$port
+self="ports/$port/build.sh"
+# One lock for the port build directory, held for the entire run: build
+# and test runs of one tree must not write the same objects at once.
+lock_var="R2S_${port_upper}_BUILD_LOCKED"
+if [ -z "${!lock_var:-}" ]; then
+  mkdir -p "$build" || exit 1
+  exec env "$lock_var=1" bash "$root/scripts/with-build-lock.sh" "$build/.lock" \
+    bash "$port_dir/build.sh" "$@"
+fi
+mkdir -p "$build" || exit 1
 
 out=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --out)
-      [ "$#" -ge 2 ] || { echo "ports/template/build.sh: '--out' needs a value" >&2; exit 2; }
+      [ "$#" -ge 2 ] || { echo "$self: '--out' needs a value" >&2; exit 2; }
       out=$2
       shift 2
       ;;
-    -h|--help) echo "usage: ports/template/build.sh [--out DIR]" >&2; exit 0 ;;
-    *) echo "ports/template/build.sh: unknown option '$1'" >&2; exit 2 ;;
+    -h|--help) echo "usage: $self [--out DIR]" >&2; exit 0 ;;
+    *) echo "$self: unknown option '$1'" >&2; exit 2 ;;
   esac
 done
 [ -n "$out" ] || out="$build/obj"
 mkdir -p "$out" || exit 1
 
+command -v nm >/dev/null 2>&1 || { echo "$self: nm not found" >&2; exit 1; }
 cc=${CC:-gcc}
 # The core compiles with its defaults, so the port meets the contract as
 # the firmware would see it; test_reset stays out of a non-test build.
 "$cc" -std=c99 -Werror -Wall -Wextra -Wconversion -Wshadow \
   -Wstrict-prototypes -Wmissing-prototypes -Wundef \
-  -I"$root/core/include" -I"$root/ports/template" \
-  -c "$root/ports/template/r2s_template_port.c" \
-  -o "$out/r2s_template_port.o" || exit 1
+  -I"$root/core/include" -I"$port_dir" \
+  -c "$port_dir/r2s_${port}_port.c" \
+  -o "$out/r2s_${port}_port.o" || exit 1
 status=0
 for src in "$root"/core/src/*.c; do
   case "$src" in
@@ -46,5 +62,13 @@ for src in "$root"/core/src/*.c; do
     -I"$root/core/include" \
     -c "$src" -o "$out/$name.o" || status=1
 done
-[ "$status" -eq 0 ] || { echo "template build: compilation failed" >&2; exit 1; }
-echo "template build: port and core compile at $out"
+[ "$status" -eq 0 ] || { echo "$self: compilation failed" >&2; exit 1; }
+
+# Compiling alone cannot tell a port that forgot a contract function,
+# so the defined symbols are listed: each of the four must be there.
+missing=""
+for sym in r2s_port_read r2s_port_write r2s_port_tx_free r2s_port_tick; do
+  nm "$out/r2s_${port}_port.o" | grep -q " T $sym$" || missing="$missing $sym"
+done
+[ -z "$missing" ] || { echo "$self: no defined symbol for$missing" >&2; exit 1; }
+echo "$port build: port and core compile, and the port defines the contract, at $out"
