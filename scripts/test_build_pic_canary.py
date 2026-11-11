@@ -16,11 +16,55 @@ import stat
 import subprocess
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / 'scripts' / 'build-pic-canary.sh'
 VERSIONS = ROOT / 'ci' / 'versions.env'
+BASELINE = ROOT / 'ci' / 'pic-canary-baseline.txt'
 
 TARGETS = ('p16f1938', 'p18f4550')
+LABELS = ('core C sources', 'static C++ sketch')
+
+# The node ids after the p16 diagnostic change from run to run.
+_P16_IDS = '[(1, "106"), (1, "146")]'
+
+# The real epic-cc failures, per target, as the compiler prints them.
+RAW_SIGS = {
+    'p16f1938': f'isel: plain ptr arg with multiple terms not yet supported: {_P16_IDS}',
+    'p18f4550': 'legalize: intrinsic llvm.memset.p0.i16 must carry a dst',
+}
+
+# The normalized form the baseline pins: locations and volatile compiler
+# ids stripped, the diagnostic wording kept exact.
+NORM_SIGS = {
+    'p16f1938': 'isel: plain ptr arg with multiple terms not yet supported: [(, ""), (, "")]',
+    'p18f4550': RAW_SIGS['p18f4550'],
+}
+
+
+def target_aware_stub(path: Path, message_for_target) -> Path:
+    """A fake epic-cc that fails each compile with its target's message."""
+    path.mkdir(parents=True, exist_ok=True)
+    compiler = path / 'epic-cc'
+    lines = [
+        '#!/usr/bin/env bash',
+        'target=""',
+        'prev=""',
+        'for arg in "$@"; do',
+        '    if [ "$prev" = "--target" ]; then target="$arg"; fi',
+        '    prev="$arg"',
+        'done',
+        'case "$target" in',
+    ]
+    for target, message in message_for_target.items():
+        # Single quotes: the messages carry double-quoted compiler ids.
+        lines += [f"    {target}) echo '{message}' >&2 ;;"]
+    lines += ['    *) echo "epic-cc: internal compiler error: unknown target" >&2 ;;']
+    lines += ['esac', 'exit 1']
+    compiler.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    compiler.chmod(compiler.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return compiler
 
 
 def pinned(name):
@@ -123,10 +167,18 @@ def stub_compiler(path: Path) -> Path:
 
 
 def test_the_stubbed_toolchain_compiles_c_and_cpp_for_both_targets(tmp_path):
+    # A clean compile closes every gap, so the run needs an empty baseline:
+    # against the recorded one the same run must report stale entries.
+    baseline = tmp_path / 'baseline.txt'
+    baseline.write_text('# no known gaps\n', encoding='utf-8')
     build = tmp_path / 'build'
     compiler = stub_compiler(tmp_path / 'bin')
     result = run_script(
-        {'R2S_EPIC_CC_BIN': str(compiler), 'R2S_BUILD_DIR': str(build)},
+        {
+            'R2S_EPIC_CC_BIN': str(compiler),
+            'R2S_BUILD_DIR': str(build),
+            'R2S_PIC_CANARY_BASELINE': str(baseline),
+        },
         tmp_path,
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -157,16 +209,10 @@ def test_a_known_toolchain_gap_warns_and_stays_green(tmp_path):
     # The recorded epic-cc internal compiler errors are the toolchain's gap,
     # not the core's: the run warns, records the gap in the job summary, and
     # passes, so the advisory job stays green and the finding stays visible.
-    stub = tmp_path / 'bin'
-    stub.mkdir()
-    compiler = stub / 'epic-cc'
-    compiler.write_text(
-        '#!/usr/bin/env bash\n'
-        'echo "epic-cc: internal compiler error: isel: plain ptr arg with multiple terms" >&2\n'
-        'exit 1\n',
-        encoding='utf-8',
+    compiler = target_aware_stub(
+        tmp_path / 'bin',
+        {target: f'epic-cc: internal compiler error: {RAW_SIGS[target]}' for target in TARGETS},
     )
-    compiler.chmod(compiler.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     summary = tmp_path / 'summary.md'
     result = run_script(
         {
@@ -178,7 +224,230 @@ def test_a_known_toolchain_gap_warns_and_stays_green(tmp_path):
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert '::warning::pic-canary' in result.stdout, result.stdout
-    assert 'isel: plain ptr arg' in summary.read_text(encoding='utf-8')
+    body = summary.read_text(encoding='utf-8')
+    for target in TARGETS:
+        for label in LABELS:
+            assert f'{target} ({label}): {RAW_SIGS[target]}' in body, body
+
+
+def test_the_baseline_lists_each_known_gap(tmp_path):
+    assert BASELINE.is_file(), 'ci/pic-canary-baseline.txt is missing'
+    entries = [
+        line.strip()
+        for line in BASELINE.read_text(encoding='utf-8').splitlines()
+        if line.strip() and not line.strip().startswith('#')
+    ]
+    assert len(entries) == len(TARGETS) * len(LABELS), entries
+    for target in TARGETS:
+        for label in LABELS:
+            match = [line for line in entries if line.startswith(f'{target} | {label} | ')]
+            assert len(match) == 1, f'no baseline line for {target} ({label}): {entries}'
+            assert match[0] == f'{target} | {label} | {NORM_SIGS[target]}', match
+
+
+def test_a_new_error_signature_fails_and_names_target_label_signature(tmp_path):
+    # A compiler message the baseline never recorded is a new break: the
+    # canary fails and names the target, the label and the signature.
+    new_sig = 'regalloc: out of registers spilling i8'
+    compiler = target_aware_stub(
+        tmp_path / 'bin',
+        {
+            'p16f1938': f'epic-cc: internal compiler error: {RAW_SIGS["p16f1938"]}',
+            'p18f4550': f'epic-cc: internal compiler error: {new_sig}',
+        },
+    )
+    result = run_script(
+        {
+            'R2S_EPIC_CC_BIN': str(compiler),
+            'R2S_BUILD_DIR': str(tmp_path / 'build'),
+            'GITHUB_STEP_SUMMARY': str(tmp_path / 'summary.md'),
+        },
+        tmp_path,
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    out = result.stdout + result.stderr
+    assert 'p18f4550' in out, out
+    assert 'static C++ sketch' in out, out
+    assert 'core C sources' in out, out
+    assert 'regalloc: out of registers spilling i8' in out, out
+    assert 'baseline' in out.lower(), out
+
+
+def test_a_new_gap_in_one_label_only_fails_that_label(tmp_path):
+    # The key carries the label: a known signature on one label of a
+    # target stays green while a new one on the other label fails.
+    stub = tmp_path / 'bin'
+    stub.mkdir()
+    compiler = stub / 'epic-cc'
+    compiler.write_text(
+        '#!/usr/bin/env bash\n'
+        'label=core\n'
+        'for arg in "$@"; do\n'
+        '    case "$arg" in *canary_static.cpp) label=static ;; esac\n'
+        'done\n'
+        'target=""\n'
+        'prev=""\n'
+        'for arg in "$@"; do\n'
+        '    if [ "$prev" = "--target" ]; then target="$arg"; fi\n'
+        '    prev="$arg"\n'
+        'done\n'
+        'if [ "$target/$label" = "p16f1938/static" ]; then\n'
+        '    echo "epic-cc: internal compiler error: isel: one-off static failure" >&2\n'
+        'elif [ "$target" = "p16f1938" ]; then\n'
+        f'    echo "epic-cc: internal compiler error: {RAW_SIGS["p16f1938"]}" >&2\n'
+        'else\n'
+        f'    echo "epic-cc: internal compiler error: {RAW_SIGS["p18f4550"]}" >&2\n'
+        'fi\n'
+        'exit 1\n',
+        encoding='utf-8',
+    )
+    compiler.chmod(compiler.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    result = run_script(
+        {
+            'R2S_EPIC_CC_BIN': str(compiler),
+            'R2S_BUILD_DIR': str(tmp_path / 'build'),
+        },
+        tmp_path,
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    out = result.stdout + result.stderr
+    assert 'p16f1938' in out, out
+    assert 'static C++ sketch' in out, out
+    assert 'one-off static failure' in out, out
+
+
+def test_a_reworded_diagnostic_is_a_new_gap(tmp_path):
+    # The match is strict about the message itself: a reworded diagnostic
+    # never silently matches the recorded signature.
+    reworded = 'isel: plain ptr arg with several terms not yet supported'
+    compiler = target_aware_stub(
+        tmp_path / 'bin',
+        {
+            'p16f1938': f'epic-cc: internal compiler error: {reworded}',
+            'p18f4550': f'epic-cc: internal compiler error: {RAW_SIGS["p18f4550"]}',
+        },
+    )
+    result = run_script(
+        {
+            'R2S_EPIC_CC_BIN': str(compiler),
+            'R2S_BUILD_DIR': str(tmp_path / 'build'),
+        },
+        tmp_path,
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert 'several terms' in result.stdout + result.stderr
+
+
+def test_line_number_churn_still_matches_the_baseline(tmp_path):
+    # File and line prefixes move with every edit, so the match strips them
+    # and only the message itself decides.
+    churn = {}
+    for i, target in enumerate(TARGETS):
+        color = '\x1b[1m' if i == 0 else ''
+        churn[target] = (
+            f'canary.c:{123 + i}:4: epic-cc: internal compiler error: '
+            f'{color}{RAW_SIGS[target]} [at line {456 + i}]'
+        )
+    compiler = target_aware_stub(tmp_path / 'bin', churn)
+    result = run_script(
+        {
+            'R2S_EPIC_CC_BIN': str(compiler),
+            'R2S_BUILD_DIR': str(tmp_path / 'build'),
+        },
+        tmp_path,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_stale_baseline_entry_fails_and_is_reported(tmp_path):
+    # A baseline entry that stops reproducing is news: the run reports it
+    # instead of keeping the improvement hidden.
+    baseline = tmp_path / 'baseline.txt'
+    baseline.write_text(
+        'p16f1938 | core C sources | isel: no longer broken\n'
+        'p16f1938 | static C++ sketch | isel: no longer broken\n'
+        'p18f4550 | core C sources | legalize: no longer broken\n'
+        'p18f4550 | static C++ sketch | legalize: no longer broken\n',
+        encoding='utf-8',
+    )
+    compiler = stub_compiler(tmp_path / 'bin')
+    summary = tmp_path / 'summary.md'
+    result = run_script(
+        {
+            'R2S_EPIC_CC_BIN': str(compiler),
+            'R2S_BUILD_DIR': str(tmp_path / 'build'),
+            'R2S_PIC_CANARY_BASELINE': str(baseline),
+            'GITHUB_STEP_SUMMARY': str(summary),
+        },
+        tmp_path,
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    out = result.stdout + result.stderr + summary.read_text(encoding='utf-8')
+    assert 'no longer broken' in out, out
+
+
+def test_a_malformed_baseline_fails_the_run(tmp_path):
+    # A baseline line naming no target, label and signature triple is
+    # wiring, not a gap, so it fails with a precise message.
+    for bad in ('this line has no fields\n', 'p16f1938 | core C sources | isel: x |\n'):
+        baseline = tmp_path / 'baseline.txt'
+        baseline.write_text(bad, encoding='utf-8')
+        compiler = stub_compiler(tmp_path / 'bin')
+        result = run_script(
+            {
+                'R2S_EPIC_CC_BIN': str(compiler),
+                'R2S_BUILD_DIR': str(tmp_path / 'build'),
+                'R2S_PIC_CANARY_BASELINE': str(baseline),
+            },
+            tmp_path,
+        )
+        out = result.stdout + result.stderr
+        assert result.returncode != 0, out
+        assert 'bad baseline line' in out, out
+
+
+def test_a_missing_baseline_fails_the_run(tmp_path):
+    # A baseline the script cannot read is wiring, not a gap, so it fails.
+    compiler = stub_compiler(tmp_path / 'bin')
+    result = run_script(
+        {
+            'R2S_EPIC_CC_BIN': str(compiler),
+            'R2S_BUILD_DIR': str(tmp_path / 'build'),
+            'R2S_PIC_CANARY_BASELINE': str(tmp_path / 'no-such-baseline.txt'),
+        },
+        tmp_path,
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+
+
+def test_the_failure_says_how_to_update_the_baseline(tmp_path):
+    compiler = target_aware_stub(
+        tmp_path / 'bin',
+        {
+            target: 'epic-cc: internal compiler error: isel: brand new failure'
+            for target in TARGETS
+        },
+    )
+    result = run_script(
+        {
+            'R2S_EPIC_CC_BIN': str(compiler),
+            'R2S_BUILD_DIR': str(tmp_path / 'build'),
+        },
+        tmp_path,
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    out = result.stdout + result.stderr
+    assert 'ci/pic-canary-baseline.txt' in out, out
+
+
+def test_ci_warns_on_pull_requests_and_fails_nightly_and_manual():
+    workflow = yaml.safe_load((ROOT / '.github' / 'workflows' / 'ci.yml').read_text())
+    job = workflow['jobs'].get('pic-canary')
+    assert job is not None, 'ci.yml has no pic-canary job'
+    assert job.get('continue-on-error') == "${{ github.event_name == 'pull_request' }}", (
+        'the canary must stay advisory on pull requests and fail '
+        'nightly and manual runs instead of staying green everywhere'
+    )
 
 
 def test_a_broken_override_fails_the_run(tmp_path):

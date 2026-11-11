@@ -1,0 +1,16 @@
+# Known epic-cc gaps for the PIC canary (issue #594): one line per gap.
+# Fields: <target> | <label> | <signature>. Lines starting with # are
+# comments, blank lines are skipped. The signature is the normalized
+# compiler message: file and line numbers are stripped before comparing,
+# so a reworded diagnostic never silently matches.
+#
+# To update: reproduce the failure locally with make test PIC=1, copy the
+# reported "new gap" line into this file, and check it in with the fix.
+# Remove a line as soon as its compile succeeds: the canary fails on a
+# baseline entry that stops reproducing, so a closed gap asks to shrink
+# the file instead of hiding the improvement. Extra context, such as the
+# upstream issue number, goes in a # comment: entries keep three fields.
+p16f1938 | core C sources | isel: plain ptr arg with multiple terms not yet supported: [(, ""), (, "")]
+p16f1938 | static C++ sketch | isel: plain ptr arg with multiple terms not yet supported: [(, ""), (, "")]
+p18f4550 | core C sources | legalize: intrinsic llvm.memset.p0.i16 must carry a dst
+p18f4550 | static C++ sketch | legalize: intrinsic llvm.memset.p0.i16 must carry a dst
