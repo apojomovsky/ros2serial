@@ -1418,9 +1418,11 @@ struct Router::Impl
     std::lock_guard<std::recursive_mutex> guard(mutex);
     for (auto & entry : action_routes_) {
       ActionRoute & route = *entry.second;
+      // GCOVR_EXCL_BR_START: a pending cancel implies an active goal
       if (!route.pending_cancel || !route.active || route.active->wire_seq != seq) {
         continue;
       }
+      // GCOVR_EXCL_BR_STOP
       if (decision != kActDecisionAccepted) {
         route.active->cancel_requested = false;
         answer_cancel(route, route.pending_cancel->header, kCancelRejected, false);

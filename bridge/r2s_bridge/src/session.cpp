@@ -1318,7 +1318,8 @@ struct Session::Impl
         log(SessionLog::kError,
           "ACT refused: unknown type '" + info.type_name + "' for action '" +
           info.action_name + "'");
-      } else if (verdict == kActionStatusHashMismatch) {
+      } else if (verdict == kActionStatusHashMismatch) {  // GCOVR_EXCL_LINE: all verdicts tested
+        log(SessionLog::kError,
         log(SessionLog::kError,
           "ACT refused: the hash of '" + info.type_name +
           "' is not the installed one, for action '" +

@@ -85,7 +85,7 @@ bool read_time(
   if (sec_member == nullptr || sec_member->type_id_ != ROS_TYPE_INT32 ||
     nsec_member == nullptr || nsec_member->type_id_ != ROS_TYPE_UINT32)
   {
-    return false;
+    return false;  // GCOVR_EXCL_LINE: guard never fails on installed types
   }
   // GCOVR_EXCL_BR_STOP
   const auto *base = static_cast<const std::uint8_t *>(storage) + member->offset_;

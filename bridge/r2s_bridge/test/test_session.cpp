@@ -3611,8 +3611,9 @@ TEST(ActionExchange, DropsAQueryWithNoIndexByte)
     [](const ActionInfo &) {return kActionStatusOk;}};
   handshake_with_actions(fixture);
   drain_decoded(fixture);
-  // Topic 8 is the wire actions topic; 0x01 is the QUERY opcode.
-  fixture.deliver_frame(8u, 0u, {0x01u});
+  // Topic 8 is the wire actions topic; 0x01 is the QUERY opcode. Seq 2
+  // follows the walk's two DECLARE frames.
+  fixture.deliver_frame(8u, 2u, {0x01u});
   EXPECT_TRUE(drain_decoded(fixture).empty()) << "an index-less QUERY earns no answer";
 }
 
