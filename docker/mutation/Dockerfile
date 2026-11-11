@@ -22,8 +22,15 @@ ARG PYYAML_VERSION=6.0.3
 ARG JSONSCHEMA_VERSION=4.26.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
         clang-${CLANG_VERSION} cmake ninja-build python3 python3-venv python3-pip \
-        gcc curl ca-certificates make git \
+        gcc g++ curl ca-certificates make git \
+        libgtest-dev libyaml-cpp-dev \
     && rm -rf /var/lib/apt/lists/*
+# libgtest-dev ships only sources: the bridge harness links the static
+# libraries, so build them once here instead of on every nightly run.
+RUN cmake -S /usr/src/googletest/googletest -B /tmp/gtest-build -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build /tmp/gtest-build -j"$(nproc)" \
+    && cp /tmp/gtest-build/lib/libgtest*.a /usr/lib/x86_64-linux-gnu/ \
+    && rm -rf /tmp/gtest-build
 # Both debs: the LLVM build depends on the base package and the LLVM
 # libraries, so apt resolves them instead of a bare dpkg install.
 RUN curl -sSL -o /tmp/mull.deb \
