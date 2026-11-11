@@ -8,7 +8,7 @@
  * service call /reset std_srvs/srv/Trigger (bridge as in the README).
  * Builds with R2S_WITH_SERVICES, capped at 64-byte frames: the service
  * channel keeps three frame-sized buffers, and 128-byte frames crash the
- * Uno handshake. RAM cost: 1244 bytes on Uno. */
+ * Uno handshake. RAM cost: 1247 bytes on Uno. */
 
 #include <stdio.h>
 
