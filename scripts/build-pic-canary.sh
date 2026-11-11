@@ -186,14 +186,17 @@ baseline=${R2S_PIC_CANARY_BASELINE:-"$root/ci/pic-canary-baseline.txt"}
 trim() {
   printf '%s\n' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
-# The message without its locations: file:line tokens, bare line and
-# column numbers and empty brackets go, the wording itself stays exact.
+# The message without its volatile parts: file:line tokens, bare line and
+# column numbers, quoted and tuple numbers (unstable compiler ids) and
+# empty brackets go, the wording itself stays exact.
 normalize_sig() {
   printf '%s\n' "$1" |
     sed -E -e 's/\x1b\[[0-9;]*[A-Za-z]//g' \
       -e 's/[A-Za-z0-9_.\/+~-]+\.(c|h|cpp|hpp|cc|cxx):[0-9]+(:[0-9]+)?//g' \
       -e 's/(at |in )?lines? [0-9]+(-[0-9]+)?//g' \
       -e 's/(at |in )?col(umn)?s? [0-9]+//g' \
+      -e 's/"[0-9]+"/""/g' \
+      -e 's/\(([0-9]+),/(,/g' -e 's/, ([0-9]+)\)/, )/g' \
       -e 's/\[\]//g' -e 's/\(\)//g' \
       -e 's/[[:space:]][[:space:]]*/ /g' -e 's/^ //;s/ $//'
 }

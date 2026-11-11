@@ -26,10 +26,20 @@ BASELINE = ROOT / 'ci' / 'pic-canary-baseline.txt'
 TARGETS = ('p16f1938', 'p18f4550')
 LABELS = ('core C sources', 'static C++ sketch')
 
-# The recorded epic-cc failures the baseline pins, per target.
-KNOWN_SIGS = {
-    'p16f1938': 'isel: plain ptr arg with multiple terms not yet supported',
+# The node ids after the p16 diagnostic change from run to run.
+_P16_IDS = '[(1, "106"), (1, "146")]'
+
+# The real epic-cc failures, per target, as the compiler prints them.
+RAW_SIGS = {
+    'p16f1938': f'isel: plain ptr arg with multiple terms not yet supported: {_P16_IDS}',
     'p18f4550': 'legalize: intrinsic llvm.memset.p0.i16 must carry a dst',
+}
+
+# The normalized form the baseline pins: locations and volatile compiler
+# ids stripped, the diagnostic wording kept exact.
+NORM_SIGS = {
+    'p16f1938': 'isel: plain ptr arg with multiple terms not yet supported: [(, ""), (, "")]',
+    'p18f4550': RAW_SIGS['p18f4550'],
 }
 
 
@@ -48,7 +58,8 @@ def target_aware_stub(path: Path, message_for_target) -> Path:
         'case "$target" in',
     ]
     for target, message in message_for_target.items():
-        lines += [f'    {target}) echo "{message}" >&2 ;;']
+        # Single quotes: the messages carry double-quoted compiler ids.
+        lines += [f"    {target}) echo '{message}' >&2 ;;"]
     lines += ['    *) echo "epic-cc: internal compiler error: unknown target" >&2 ;;']
     lines += ['esac', 'exit 1']
     compiler.write_text('\n'.join(lines) + '\n', encoding='utf-8')
@@ -200,7 +211,7 @@ def test_a_known_toolchain_gap_warns_and_stays_green(tmp_path):
     # passes, so the advisory job stays green and the finding stays visible.
     compiler = target_aware_stub(
         tmp_path / 'bin',
-        {target: f'epic-cc: internal compiler error: {KNOWN_SIGS[target]}' for target in TARGETS},
+        {target: f'epic-cc: internal compiler error: {RAW_SIGS[target]}' for target in TARGETS},
     )
     summary = tmp_path / 'summary.md'
     result = run_script(
@@ -216,7 +227,7 @@ def test_a_known_toolchain_gap_warns_and_stays_green(tmp_path):
     body = summary.read_text(encoding='utf-8')
     for target in TARGETS:
         for label in LABELS:
-            assert f'{target} ({label}): {KNOWN_SIGS[target]}' in body, body
+            assert f'{target} ({label}): {RAW_SIGS[target]}' in body, body
 
 
 def test_the_baseline_lists_each_known_gap(tmp_path):
@@ -231,7 +242,7 @@ def test_the_baseline_lists_each_known_gap(tmp_path):
         for label in LABELS:
             match = [line for line in entries if line.startswith(f'{target} | {label} | ')]
             assert len(match) == 1, f'no baseline line for {target} ({label}): {entries}'
-            assert KNOWN_SIGS[target] in match[0], match
+            assert match[0] == f'{target} | {label} | {NORM_SIGS[target]}', match
 
 
 def test_a_new_error_signature_fails_and_names_target_label_signature(tmp_path):
@@ -241,7 +252,7 @@ def test_a_new_error_signature_fails_and_names_target_label_signature(tmp_path):
     compiler = target_aware_stub(
         tmp_path / 'bin',
         {
-            'p16f1938': f'epic-cc: internal compiler error: {KNOWN_SIGS["p16f1938"]}',
+            'p16f1938': f'epic-cc: internal compiler error: {RAW_SIGS["p16f1938"]}',
             'p18f4550': f'epic-cc: internal compiler error: {new_sig}',
         },
     )
@@ -283,9 +294,9 @@ def test_a_new_gap_in_one_label_only_fails_that_label(tmp_path):
         'if [ "$target/$label" = "p16f1938/static" ]; then\n'
         '    echo "epic-cc: internal compiler error: isel: one-off static failure" >&2\n'
         'elif [ "$target" = "p16f1938" ]; then\n'
-        f'    echo "epic-cc: internal compiler error: {KNOWN_SIGS["p16f1938"]}" >&2\n'
+        f'    echo "epic-cc: internal compiler error: {RAW_SIGS["p16f1938"]}" >&2\n'
         'else\n'
-        f'    echo "epic-cc: internal compiler error: {KNOWN_SIGS["p18f4550"]}" >&2\n'
+        f'    echo "epic-cc: internal compiler error: {RAW_SIGS["p18f4550"]}" >&2\n'
         'fi\n'
         'exit 1\n',
         encoding='utf-8',
@@ -313,7 +324,7 @@ def test_a_reworded_diagnostic_is_a_new_gap(tmp_path):
         tmp_path / 'bin',
         {
             'p16f1938': f'epic-cc: internal compiler error: {reworded}',
-            'p18f4550': f'epic-cc: internal compiler error: {KNOWN_SIGS["p18f4550"]}',
+            'p18f4550': f'epic-cc: internal compiler error: {RAW_SIGS["p18f4550"]}',
         },
     )
     result = run_script(
@@ -335,7 +346,7 @@ def test_line_number_churn_still_matches_the_baseline(tmp_path):
         color = '\x1b[1m' if i == 0 else ''
         churn[target] = (
             f'canary.c:{123 + i}:4: epic-cc: internal compiler error: '
-            f'{color}{KNOWN_SIGS[target]} [at line {456 + i}]'
+            f'{color}{RAW_SIGS[target]} [at line {456 + i}]'
         )
     compiler = target_aware_stub(tmp_path / 'bin', churn)
     result = run_script(
