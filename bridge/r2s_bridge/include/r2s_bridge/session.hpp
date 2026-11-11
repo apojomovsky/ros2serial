@@ -563,6 +563,15 @@ public:
    */
   bool time_available() const;
 
+  /// Whether the MCU's `double` is 32 bits, so float64 travels narrow.
+  /**
+   * The HELLO features byte carries it ([CTL-2] bit 4). Actions pack and
+   * unpack against it where topics use their narrow flag.
+   *
+   * \return True when the handshake announced 32-bit doubles.
+   */
+  bool narrow_float64() const;
+
   /// The H8 time sync values.
   /**
    * The fitted ROS time at MCU tick zero, the fitted drift, the latest

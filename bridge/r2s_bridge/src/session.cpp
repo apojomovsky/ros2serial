@@ -67,6 +67,9 @@ constexpr int kRelRetries = 3;
 // per index, a 200 ms timeout, at most 3 retries. Bit 2 of the HELLO
 // features announces the parameters ([CTL-2]).
 constexpr std::uint8_t kParamFeaturesBit = 0x04u;
+// Bit 4 says the MCU's `double` is 32 bits, so every float64 travels narrow
+// ([CTL-2], [ENC-12]).
+constexpr std::uint8_t kDouble32FeaturesBit = 0x10u;
 // Bits 6 and 7 announce services and actions, and only ride the reliable
 // channel: a HELLO that sets either without bit 3 is refused ([CTL-17]).
 constexpr std::uint8_t kReliableFeaturesBit = 0x08u;
@@ -423,6 +426,7 @@ struct Session::Impl
   {
     sync.reset();
     time_supported_ = false;
+    narrow_float64_ = false;
     pings_sent = 0;
     ping_outstanding = false;
     correction_sent_ = false;
@@ -904,6 +908,7 @@ struct Session::Impl
     reset_time();
     sync.emplace(hello.tick_hz);
     time_supported_ = (hello.features & 0x01u) != 0u;
+    narrow_float64_ = (hello.features & kDouble32FeaturesBit) != 0u;
     connected_ms_ = now_ms();
     next_ping_ms_ = connected_ms_;
     ping_id = 0;
@@ -2221,6 +2226,10 @@ struct Session::Impl
     // Whether the MCU announced time support ([CTL-2] bit 0). Without it the
     // host sends no PING: the firmware could never answer one.
   bool time_supported_ = false;
+    // Whether the MCU's `double` is 32 bits ([CTL-2] bit 4). Actions ride
+    // it where topics ride their narrow flag: the action walk announces no
+    // flags of its own.
+  bool narrow_float64_ = false;
   bool ping_outstanding = false;
   std::uint8_t ping_id = 0;
   std::uint8_t last_ping_id_ = 0;
@@ -2451,6 +2460,11 @@ std::uint32_t Session::resets() const
 bool Session::time_available() const
 {
   return impl_->correction_sent_ && impl_->sync.has_value() && impl_->sync->has_estimate();
+}
+
+bool Session::narrow_float64() const
+{
+  return impl_->narrow_float64_;
 }
 
 std::int64_t Session::time_offset_ns() const

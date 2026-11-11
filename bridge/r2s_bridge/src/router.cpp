@@ -1101,7 +1101,8 @@ struct Router::Impl
     // GCOVR_EXCL_BR_START: the take always holds a goal when packing
     const ConvertResult converted = goal == nullptr ?
       ConvertResult{ConvertFail::kUnsupportedField, 0xFFu} :
-    converter_.pack_from_struct(route.types.goal_type_name(), false, goal, packed);
+    converter_.pack_from_struct(
+      route.types.goal_type_name(), session_.narrow_float64(), goal, packed);
     // GCOVR_EXCL_BR_STOP
     if (converted.fail != ConvertFail::kNone) {
       emit(SessionLog::kWarning,
@@ -1263,8 +1264,8 @@ struct Router::Impl
       // GCOVR_EXCL_STOP
       } else {
         const ConvertResult converted = converter_.unpack_to_struct(
-          route.types.result_type_name(), false, packed_result->data(),
-          packed_result->size(), into);
+          route.types.result_type_name(), session_.narrow_float64(),
+          packed_result->data(), packed_result->size(), into);
         // GCOVR_EXCL_START: the bytes passed the same converter when the
         // RESULT arrived, so they unpack identically here.
         if (converted.fail != ConvertFail::kNone) {
@@ -1480,7 +1481,8 @@ struct Router::Impl
     }
     // GCOVR_EXCL_STOP
     const ConvertResult converted = converter_.unpack_to_struct(
-      route->types.feedback_type_name(), false, payload.data(), payload.size(), feedback);
+      route->types.feedback_type_name(), session_.narrow_float64(), payload.data(), payload.size(),
+      feedback);
     if (converted.fail != ConvertFail::kNone) {
       emit(SessionLog::kWarning,
         "action '" + route->info.action_name + "': dropped feedback (" +
@@ -1516,7 +1518,7 @@ struct Router::Impl
         outcome == 5 ? kGoalCanceled : kGoalAborted;
       ActionTypes::Struct check = route.types.make_result();
       const ConvertResult converted = converter_.unpack_to_struct(
-        route.types.result_type_name(), false, payload.data(), payload.size(),
+        route.types.result_type_name(), session_.narrow_float64(), payload.data(), payload.size(),
         check.storage.data());
       if (converted.fail != ConvertFail::kNone) {
         emit(SessionLog::kWarning,
