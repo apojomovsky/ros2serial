@@ -10,6 +10,13 @@
 #include "r2s_ch32v_port.h"
 #include "r2s_ch32v_regs.h"
 
+/* Millisecond tick state: the last count seen, the accumulated tick, and
+ * the leftover counts short of a millisecond. The target zeroes these at
+ * boot with .bss; the host reset below does the same for each check. */
+static uint32_t s_tick_last;
+static uint32_t s_tick_ms;
+static uint32_t s_tick_frac;
+
 #ifdef R2S_CH32V_HOST_TEST
 r2s_ch32v_rcc_t R2S_CH32V_TEST_rcc;
 r2s_ch32v_gpio_t R2S_CH32V_TEST_gpiod;
@@ -33,6 +40,9 @@ void r2s_ch32v_test_regs_reset(void)
   R2S_CH32V_TEST_usart1 = usart1;
   R2S_CH32V_TEST_stk = stk;
   R2S_CH32V_TEST_flash = flash;
+  s_tick_last = 0u;
+  s_tick_ms = 0u;
+  s_tick_frac = 0u;
   /* The host has no clock tree, so the init waits see settled hardware. */
   R2S_CH32V_TEST_rcc.CTLR = R2S_CH32V_RCC_CTLR_PLLRDY;
   R2S_CH32V_TEST_rcc.CFGR0 = R2S_CH32V_RCC_CFGR0_SWS_PLL;
@@ -119,5 +129,20 @@ uint16_t r2s_port_tx_free(void)
 
 uint32_t r2s_port_tick(void)
 {
-  return r2s_ch32v_ms(R2S_CH32V_STK->CNT, R2S_CH32V_CNT_PER_MS);
+  uint32_t now = R2S_CH32V_STK->CNT;
+  uint32_t delta = now - s_tick_last;
+  uint32_t frac;
+
+  /* The raw count wraps every 715827 ms, so the tick accumulates count
+   * differences instead of converting the raw count. The subtraction
+   * stays correct across the wrap, and the 32-bit tick wraps at 2^32. */
+  s_tick_last = now;
+  s_tick_ms += r2s_ch32v_ms(delta, R2S_CH32V_CNT_PER_MS);
+  frac = s_tick_frac + (delta % R2S_CH32V_CNT_PER_MS);
+  if (frac >= R2S_CH32V_CNT_PER_MS) {
+    frac -= R2S_CH32V_CNT_PER_MS;
+    s_tick_ms++;
+  }
+  s_tick_frac = frac;
+  return s_tick_ms;
 }
