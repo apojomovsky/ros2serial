@@ -2636,7 +2636,8 @@ bool Session::send_action_cancel(std::uint8_t goal_seq)
     return false;
   }
   // GCOVR_EXCL_STOP
-  if (impl.pending_bytes_ > 0u && impl.pending_bytes_ >= cap) {  // GCOV_EXCL_BR_LINE: drop covered by TxWindowIsFull
+  // Full-window drop is covered by TxWindowIsFull but gcov miscounts the sub-arc.
+  if (impl.pending_bytes_ > 0u && impl.pending_bytes_ >= cap) {  // GCOV_EXCL_BR_LINE
     return false;
   }
   if (!impl.act_out_active_) {
