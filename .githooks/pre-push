@@ -8,6 +8,7 @@
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 zero=0000000000000000000000000000000000000000
+input=$(cat)
 while read -r local_ref local_oid remote_ref remote_oid; do
   [ -z "${local_ref:-}" ] && continue
   [ "$remote_oid" = "$zero" ] || [ "$local_oid" = "$zero" ] && continue
@@ -17,12 +18,17 @@ while read -r local_ref local_oid remote_ref remote_oid; do
       exit 1
     fi
   fi
-done
+done <<<"$input"
 
 base=${BASE:-origin/master}
 if git rev-parse --verify -q "$base" >/dev/null; then
   python3 "$root/scripts/prose_check.py" --verify --base "$base" || exit 1
 fi
+
+# Format gate on the pushed lines only: line length and the other cheap
+# rules fail here in a second instead of as a red PR check minutes later.
+# A missing tool prints one SKIP line and never blocks; CI runs everything.
+printf '%s\n' "$input" | bash "$root/scripts/changed-format.sh" || exit 1
 
 # The checksums decide what runs: tasks whose inputs match their last
 # successful run are a fast no-op, so pushing the same tree twice costs
