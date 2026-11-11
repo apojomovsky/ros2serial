@@ -454,3 +454,12 @@ def test_a_user_action_header_compiles_as_cxx(tmp_path):
     )
 
     assert compiled.returncode == 0, compiled.stderr
+
+
+def test_a_bundled_action_hash_matches_the_installed_action():
+    repository = msgs.MessageRepository()
+
+    assert (
+        typehash.action_hash(repository, 'tf2_msgs/action/LookupTransform')
+        == 'RIHS01_0b8adf6bc0b5958879e3265b41a457e03558fe523890a81252c70eba97a82c5d'
+    )
