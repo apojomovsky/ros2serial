@@ -148,7 +148,7 @@ patch_diff() {
 }
 
 gate_component() {
-  local component=$1 head_out=$2 base_out=$3 detail=$4 diff=$5 names=$6
+  local component=$1 head_out=$2 base_out=${3:-} detail=${4:-} diff=${5:-} names=${6:-}
   # The patch judges the changed lines, the floors judge the whole package.
   # With no base the floors alone judge, so a missing base never passes
   # silently and the patch has nothing to diff against.
