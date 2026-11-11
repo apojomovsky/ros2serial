@@ -46,9 +46,9 @@ sleeps, or busy-loops. The tick is a free-running counter that wraps at
 cores, so the reader needs no lock. It must never block or sleep, and
 it should stay near 1 ms accuracy, since the host estimates the MCU
 clock from it during time sync. The rate is announced in the handshake.
-The template runs its timer at 1 kHz and reads the counter as the tick; ch32v reads
-the SysTick count; Arduino reads `micros()`; the posix port reads
-`CLOCK_MONOTONIC`.
+The template runs its timer at 1 kHz and reads the counter as the tick; ch32v
+accumulates the SysTick count into a millisecond tick; Arduino reads `micros()`;
+the posix port reads `CLOCK_MONOTONIC`.
 
 ## Transport and budgets
 
