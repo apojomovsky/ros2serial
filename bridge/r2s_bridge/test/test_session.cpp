@@ -3638,7 +3638,10 @@ TEST(ActionExchange, RefusesAnActionDeclareWithABadHash)
 // covers: ACT-4
 TEST(ActionExchange, DropsAnUnackedGoalAfterRetries)
 {
-  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
+  SessionConfig config = quiet_config();
+  config.link_timeout_ms = 3600000;
+  config.time_sync_enabled = false;
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config};
   handshake_with_actions(fixture);
   drain_decoded(fixture);
   ASSERT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x01u}));
@@ -3651,9 +3654,12 @@ TEST(ActionExchange, DropsAnUnackedGoalAfterRetries)
 // An unacked CANCEL is retried then dropped the same way: the drop forgets
 // that wire cancel.
 // covers: ACT-4
-TEST(ActionExchange, DropsAnUnackedCancelAfterRetries)
+TEST(ActionExchange, DropsAnUnackedCancelAfterRetriesExhausted)
 {
-  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
+  SessionConfig config = quiet_config();
+  config.link_timeout_ms = 3600000;
+  config.time_sync_enabled = false;
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config};
   handshake_with_actions(fixture);
   drain_decoded(fixture);
   ASSERT_TRUE(fixture.session().send_action_cancel(0x00u));
