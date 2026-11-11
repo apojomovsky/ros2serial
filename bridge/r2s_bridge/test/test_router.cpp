@@ -4197,6 +4197,67 @@ TEST_F(RouterNode, DropsASpuriousActionAck)
       << "the bridge survives a spurious ack";
 }
 
+TEST_F(RouterNode, DropsMalformedActionFrames)
+{
+  RouterFixture fixture("act_malformed", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+  // Short frames are dropped by length before any field is read: a
+  // GOAL_RESP without a decision and a RESULT without an outcome.
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u});
+  fixture.deliver_frame(kHelperActions, 3u, {kHelperActResult, 0x01u, 0x00u});
+  for (int i = 0; i < 5; ++i) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+  }
+  // A wrong-index DECLARE during the next handshake is dropped: the
+  // session is already past the actions walk.
+  EXPECT_TRUE(client->wait_for_action_server(std::chrono::milliseconds(200)))
+      << "the bridge survives malformed action frames";
+}
+
+TEST_F(RouterNode, DropsAWrongIndexDeclareDuringTheWalk)
+{
+  RouterFixture fixture("act_badindex", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0xCCu));
+  fixture.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  // A DECLARE before the walk reaches actions arrives while no action is
+  // awaited: dropped without touching the walk state.
+  const std::array<std::uint8_t, 8> early_hash =
+    installed_action_hash("tf2_msgs/action/LookupTransform");
+  fixture.deliver_frame(kHelperActions, 0u,
+    helper_action_declare(0u, early_hash.data(), "tf2_msgs/action/LookupTransform", "early"));
+  fixture.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  // A truncated DECLARE mid-walk is dropped by length before any field is
+  // read; a DECLARE for the wrong index is dropped by index check.
+  fixture.deliver_frame(kHelperActions, 1u, std::vector<std::uint8_t>{kHelperActDeclare});
+  const std::array<std::uint8_t, 8> hash =
+    installed_action_hash("tf2_msgs/action/LookupTransform");
+  fixture.deliver_frame(kHelperActions, 2u,
+    helper_action_declare(5u, hash.data(), "tf2_msgs/action/LookupTransform", "spin"));
+  for (int i = 0; i < 5; ++i) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+  }
+  // The walk completes on the correctly indexed DECLARE.
+  fixture.deliver_frame(kHelperActions, 1u,
+    helper_action_declare(0u, hash.data(), "tf2_msgs/action/LookupTransform", "spin"));
+  fixture.deliver_frame(kHelperActions, 2u,
+    std::vector<std::uint8_t>{kHelperActStatus, 0x00u, 0x01u, 0x01u});
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  EXPECT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)))
+      << "the bridge recovers from a wrong-index declare";
+}
+
 }  // namespace
 }  // namespace test
 }  // namespace r2s_bridge
