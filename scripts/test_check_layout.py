@@ -20,6 +20,23 @@ def make_skeleton(root: Path) -> None:
     # The alias is a link, so the rulebook it points at cannot drift.
     (root / 'CLAUDE.md').unlink(missing_ok=True)
     (root / 'CLAUDE.md').symlink_to('AGENTS.md')
+    # Every port proves its build, its host test and its implementation,
+    # except the shared staging area, which is not a port.
+    for port in sorted((root / 'ports').iterdir()):
+        if port.is_dir() and port.name != 'common':
+            make_port(root, port.name)
+
+
+def make_port(root: Path, name: str) -> None:
+    """Minimal valid port: a build script, a host test and one source
+    naming both port contract symbols."""
+    port = root / 'ports' / name
+    (port / 'build.sh').write_text('#!/usr/bin/env bash\n')
+    (port / 'tests').mkdir(exist_ok=True)
+    (port / 'tests' / f'test_{name}_port.c').write_text('pass\n')
+    (port / f'r2s_{name}_port.c').write_text(
+        'void r2s_port_read(void) {}\nvoid r2s_port_tick(void) {}\n'
+    )
 
 
 def track_all(root: Path) -> None:
@@ -161,3 +178,110 @@ def test_an_untracked_neighbour_does_not_count(tmp_path):
 def test_repository_matches_the_layout():
     root = Path(check_layout.__file__).resolve().parent.parent
     assert check_layout.check(root) == []
+
+
+def test_template_is_a_required_directory(tmp_path):
+    import shutil
+
+    make_skeleton(tmp_path)
+    shutil.rmtree(tmp_path / 'ports/template')
+    assert check_layout.check(tmp_path) == ['missing directory: ports/template']
+
+
+def test_port_without_a_build_script_fails(tmp_path):
+    make_skeleton(tmp_path)
+    (tmp_path / 'ports/arduino/build.sh').unlink()
+    assert check_layout.check(tmp_path) == [
+        'ports/arduino has no build script (build.sh or run.sh)'
+    ]
+
+
+def test_run_sh_alone_is_a_build_script(tmp_path):
+    make_skeleton(tmp_path)
+    (tmp_path / 'ports/arduino/build.sh').unlink()
+    (tmp_path / 'ports/arduino/run.sh').write_text('#!/usr/bin/env bash\n')
+    assert check_layout.check(tmp_path) == []
+
+
+def test_port_without_a_host_test_fails(tmp_path):
+    import shutil
+
+    make_skeleton(tmp_path)
+    shutil.rmtree(tmp_path / 'ports/arduino/tests')
+    assert check_layout.check(tmp_path) == ['ports/arduino has no host test (run.sh or tests/)']
+
+
+def test_run_sh_alone_is_a_host_test(tmp_path):
+    import shutil
+
+    make_skeleton(tmp_path)
+    shutil.rmtree(tmp_path / 'ports/arduino/tests')
+    (tmp_path / 'ports/arduino/run.sh').write_text('#!/usr/bin/env bash\n')
+    assert check_layout.check(tmp_path) == []
+
+
+def test_port_without_an_implementation_fails(tmp_path):
+    make_skeleton(tmp_path)
+    (tmp_path / 'ports/arduino/r2s_arduino_port.c').write_text('void setup(void) {}\n')
+    assert check_layout.check(tmp_path) == [
+        'ports/arduino has no implementation (a source naming r2s_port_read and r2s_port_tick)'
+    ]
+
+
+def test_test_sources_do_not_count_as_an_implementation(tmp_path):
+    """Symbols under tests/ prove the test, not the port, so they pass nothing."""
+    make_skeleton(tmp_path)
+    (tmp_path / 'ports/arduino/r2s_arduino_port.c').write_text('void setup(void) {}\n')
+    (tmp_path / 'ports/arduino/tests/test_arduino_port.c').write_text(
+        'void r2s_port_read(void) {}\nvoid r2s_port_tick(void) {}\n'
+    )
+    assert check_layout.check(tmp_path) == [
+        'ports/arduino has no implementation (a source naming r2s_port_read and r2s_port_tick)'
+    ]
+
+
+def test_a_build_script_naming_the_symbols_is_not_an_implementation(tmp_path):
+    """The template build script lists the contract symbols it checks for."""
+    make_skeleton(tmp_path)
+    (tmp_path / 'ports/arduino/r2s_arduino_port.c').write_text('void setup(void) {}\n')
+    (tmp_path / 'ports/arduino/build.sh').write_text('r2s_port_read r2s_port_tick\n')
+    assert check_layout.check(tmp_path) == [
+        'ports/arduino has no implementation (a source naming r2s_port_read and r2s_port_tick)'
+    ]
+
+
+def test_common_is_not_a_port(tmp_path):
+    make_skeleton(tmp_path)
+    (tmp_path / 'ports/common/firmware.c').write_text('shared\n')
+    assert check_layout.check(tmp_path) == []
+
+
+def test_a_gitkeep_only_directory_is_not_a_port(tmp_path):
+    import shutil
+
+    make_skeleton(tmp_path)
+    port = tmp_path / 'ports/avr'
+    (port / 'build.sh').unlink()
+    (port / 'r2s_avr_port.c').unlink()
+    shutil.rmtree(port / 'tests')
+    (port / '.gitkeep').write_text('')
+    assert check_layout.check(tmp_path) == []
+
+
+def test_stm32_and_rp2040_are_exempt_from_the_host_test(tmp_path):
+    import shutil
+
+    make_skeleton(tmp_path)
+    for name in ('stm32', 'rp2040'):
+        shutil.rmtree(tmp_path / 'ports' / name / 'tests')
+    assert check_layout.check(tmp_path) == []
+
+
+def test_stm32_still_needs_a_build_script_and_an_implementation(tmp_path):
+    make_skeleton(tmp_path)
+    (tmp_path / 'ports/stm32/build.sh').unlink()
+    (tmp_path / 'ports/stm32/r2s_stm32_port.c').write_text('void setup(void) {}\n')
+    assert check_layout.check(tmp_path) == [
+        'ports/stm32 has no build script (build.sh or run.sh)',
+        'ports/stm32 has no implementation (a source naming r2s_port_read and r2s_port_tick)',
+    ]
