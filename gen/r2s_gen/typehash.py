@@ -152,6 +152,192 @@ def _event_info_description() -> dict:
     }
 
 
+def _nested(name: str) -> dict:
+    """Return the field type of a nested message field."""
+    return {
+        'type_id': _NESTED_TYPE_ID,
+        'capacity': 0,
+        'string_capacity': 0,
+        'nested_type_name': name,
+    }
+
+
+def _bounded_nested(name: str) -> dict:
+    """Return the field type of a nested message sequence bound to one element."""
+    return {
+        'type_id': _BOUNDED_SEQUENCE_OFFSET + _NESTED_TYPE_ID,
+        'capacity': 1,
+        'string_capacity': 0,
+        'nested_type_name': name,
+    }
+
+
+def _uuid_description() -> dict:
+    """Return the `unique_identifier_msgs/msg/UUID` message, fixed by its package design."""
+    return {
+        'type_name': 'unique_identifier_msgs/msg/UUID',
+        'fields': [
+            {
+                'name': 'uuid',
+                'type': {
+                    'type_id': _ARRAY_OFFSET + _PRIMITIVE_TYPE_IDS['uint8'],
+                    'capacity': 16,
+                    'string_capacity': 0,
+                    'nested_type_name': '',
+                },
+            },
+        ],
+    }
+
+
+def action_hash(repository: msgs.MessageRepository, type_name: str) -> str:
+    """Return the `RIHS01_` hash of a `package/action/Name`, equal to the installed action hash.
+
+    The action description names its goal, result and feedback messages, the
+    synthesized send-goal and get-result services and the feedback message;
+    the goal ID, the event info and every nested message but the goal, the
+    result and the feedback load from fixed descriptions or the repository
+    like any other message.
+    """
+    action = repository.load_action(type_name)
+    goal_name = action.goal.type_name
+    result_name = action.result.type_name
+    feedback_name = action.feedback.type_name
+    send_goal = f'{action.type_name}_SendGoal'
+    get_result = f'{action.type_name}_GetResult'
+    root = {
+        'type_name': action.type_name,
+        'fields': [
+            {'name': name, 'type': _nested(nested)}
+            for name, nested in (
+                ('goal', goal_name),
+                ('result', result_name),
+                ('feedback', feedback_name),
+                ('send_goal_service', send_goal),
+                ('get_result_service', get_result),
+                ('feedback_message', f'{action.type_name}_FeedbackMessage'),
+            )
+        ],
+    }
+    send_goal_root = {
+        'type_name': send_goal,
+        'fields': [
+            {'name': 'request_message', 'type': _nested(f'{send_goal}_Request')},
+            {'name': 'response_message', 'type': _nested(f'{send_goal}_Response')},
+            {'name': 'event_message', 'type': _nested(f'{send_goal}_Event')},
+        ],
+    }
+    send_goal_request = {
+        'type_name': f'{send_goal}_Request',
+        'fields': [
+            {'name': 'goal_id', 'type': _nested('unique_identifier_msgs/msg/UUID')},
+            {'name': 'goal', 'type': _nested(goal_name)},
+        ],
+    }
+    send_goal_response = {
+        'type_name': f'{send_goal}_Response',
+        'fields': [
+            {
+                'name': 'accepted',
+                'type': {
+                    'type_id': _PRIMITIVE_TYPE_IDS['bool'],
+                    'capacity': 0,
+                    'string_capacity': 0,
+                    'nested_type_name': '',
+                },
+            },
+            {'name': 'stamp', 'type': _nested('builtin_interfaces/msg/Time')},
+        ],
+    }
+    get_result_root = {
+        'type_name': get_result,
+        'fields': [
+            {'name': 'request_message', 'type': _nested(f'{get_result}_Request')},
+            {'name': 'response_message', 'type': _nested(f'{get_result}_Response')},
+            {'name': 'event_message', 'type': _nested(f'{get_result}_Event')},
+        ],
+    }
+    get_result_request = {
+        'type_name': f'{get_result}_Request',
+        'fields': [
+            {'name': 'goal_id', 'type': _nested('unique_identifier_msgs/msg/UUID')},
+        ],
+    }
+    get_result_response = {
+        'type_name': f'{get_result}_Response',
+        'fields': [
+            {
+                'name': 'status',
+                'type': {
+                    'type_id': _PRIMITIVE_TYPE_IDS['int8'],
+                    'capacity': 0,
+                    'string_capacity': 0,
+                    'nested_type_name': '',
+                },
+            },
+            {'name': 'result', 'type': _nested(result_name)},
+        ],
+    }
+    descriptions: dict[str, dict] = {
+        action.type_name: root,
+        goal_name: _individual_description(action.goal),
+        result_name: _individual_description(action.result),
+        feedback_name: _individual_description(action.feedback),
+        send_goal: send_goal_root,
+        f'{send_goal}_Request': send_goal_request,
+        f'{send_goal}_Response': send_goal_response,
+        f'{send_goal}_Event': _goal_event(send_goal),
+        get_result: get_result_root,
+        f'{get_result}_Request': get_result_request,
+        f'{get_result}_Response': get_result_response,
+        f'{get_result}_Event': _goal_event(get_result),
+        f'{action.type_name}_FeedbackMessage': {
+            'type_name': f'{action.type_name}_FeedbackMessage',
+            'fields': [
+                {'name': 'goal_id', 'type': _nested('unique_identifier_msgs/msg/UUID')},
+                {'name': 'feedback', 'type': _nested(feedback_name)},
+            ],
+        },
+        'unique_identifier_msgs/msg/UUID': _uuid_description(),
+        'service_msgs/msg/ServiceEventInfo': _event_info_description(),
+        'builtin_interfaces/msg/Time': _individual_description(
+            repository.load('builtin_interfaces/msg/Time')
+        ),
+    }
+    queue = [
+        field['type']['nested_type_name']
+        for name in (goal_name, result_name, feedback_name)
+        for field in descriptions[name]['fields']
+        if field['type']['nested_type_name']
+    ]
+    while queue:
+        name = queue.pop()
+        if name in descriptions:
+            continue
+        message = repository.load(name)
+        descriptions[name] = _individual_description(message)
+        queue.extend(
+            field['type']['nested_type_name']
+            for field in descriptions[name]['fields']
+            if field['type']['nested_type_name']
+        )
+    full = _full_description(action.type_name, descriptions)
+    digest = hashlib.sha256(json.dumps(full, separators=(', ', ': ')).encode('utf-8')).hexdigest()
+    return f'RIHS01_{digest}'
+
+
+def _goal_event(service_name: str) -> dict:
+    """Return the event description of one goal service, fixed by the service event design."""
+    return {
+        'type_name': f'{service_name}_Event',
+        'fields': [
+            {'name': 'info', 'type': _nested('service_msgs/msg/ServiceEventInfo')},
+            {'name': 'request', 'type': _bounded_nested(f'{service_name}_Request')},
+            {'name': 'response', 'type': _bounded_nested(f'{service_name}_Response')},
+        ],
+    }
+
+
 def service_hash(repository: msgs.MessageRepository, type_name: str) -> str:
     """Return the `RIHS01_` hash of a `package/srv/Name`, equal to the installed service hash.
 
