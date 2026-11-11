@@ -46,7 +46,7 @@ sleeps, or busy-loops. The tick is a free-running counter that wraps at
 cores, so the reader needs no lock. It must never block or sleep, and
 it should stay near 1 ms accuracy, since the host estimates the MCU
 clock from it during time sync. The rate is announced in the handshake.
-The template reads a timer counter divided to milliseconds; ch32v reads
+The template runs its timer at 1 kHz and reads the counter as the tick; ch32v reads
 the SysTick count; Arduino reads `micros()`; the posix port reads
 `CLOCK_MONOTONIC`.
 
@@ -97,9 +97,19 @@ mv ports/myboard/r2s_template_regs.h ports/myboard/r2s_myboard_regs.h
 mv ports/myboard/tests/test_template_port.c ports/myboard/tests/test_myboard_port.c
 ```
 
-Then rename `TEMPLATE` to `MYBOARD` in the four files and the two
-scripts, and point the two base addresses in `r2s_myboard_regs.h` at the
-new device:
+Then rename `TEMPLATE` to `MYBOARD` in the four files, in both
+cases: the type names, the register macros, the `R2S_MYBOARD_HOST_TEST`
+flag, and the `#include` lines all move to the new name.
+
+```sh
+sed -i 's/TEMPLATE/MYBOARD/g; s/template/myboard/g' \
+  ports/myboard/r2s_myboard_port.c ports/myboard/r2s_myboard_port.h \
+  ports/myboard/r2s_myboard_regs.h ports/myboard/tests/test_myboard_port.c
+```
+
+The two scripts need no edits: they find their sources from their own
+directory, so the copy builds and tests under its own name. Point the
+two base addresses in `r2s_myboard_regs.h` at the new device:
 
 ```text
 r2s_template_uart_t -> r2s_myboard_uart_t (rename the types)
@@ -117,20 +127,19 @@ bash ports/myboard/run.sh
 ```
 
 The build compiles the port with the host compiler against
-`core/include`, so a rename that drifts from the contract fails there.
-The run compiles the port with `R2S_MYBOARD_HOST_TEST` against the fake
+`core/include`, then lists the port object for the four contract
+symbols, so a rename that drifts from the contract fails there. The run
+compiles the port with `R2S_MYBOARD_HOST_TEST` against the fake
 registers and runs `tests/test_myboard_port.c`. Extend that test for
 each behavior the new init adds: the divisor for the new clock, the pin
 mapping, the tick rate.
 
-The layout gate keeps new ports complete: `scripts/check_layout.py`
-fails a `ports/` directory missing a build script (`build.sh` or
-`run.sh`), a host test (`run.sh` or `tests/`), or an implementation (a
-source naming `r2s_port_read` and `r2s_port_tick`). `ports/common/` is
-shared sources, not a port, and a directory holding only a `.gitkeep`
-is a placeholder, not a port yet. The `stm32` and `rp2040` ports predate
-the host-test rule and carry no `run.sh`; their CI check is the firmware
-build.
+A layout gate that fails `ports/` directories missing a build script,
+host test or implementation is proposed in
+[#606](https://github.com/apojomovsky/ros2serial/issues/606); until it
+lands, the checklist below is the review. `ports/common/` is shared
+sources, not a port, and a directory holding only a `.gitkeep` is a
+placeholder, not a port yet.
 
 ## Checklist
 
@@ -138,5 +147,5 @@ build.
   empty-read and zero-length cases.
 - The tick runs free at 1000 Hz, wraps at 2^32, and never blocks.
 - The host test passes, and `build.sh` compiles the port against the
-  real core.
+  real core and proves its four symbols.
 - The firmware meets its tier budget under `make size-report`.

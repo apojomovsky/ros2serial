@@ -204,9 +204,9 @@ bash ports/myboard/build.sh
 bash ports/myboard/run.sh
 ```
 
-The full contract, the tick rules, the tier budgets, and the layout
-gate that keeps new ports complete live in
-[Port to a new board](docs/04-porting.md).
+The full contract, the tick rules, and the tier budgets live in
+[Port to a new board](docs/04-porting.md). A layout gate for new ports
+is proposed in [#606](https://github.com/apojomovsky/ros2serial/issues/606).
 
 ## rosserial and micro-ROS
 
