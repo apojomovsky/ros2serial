@@ -161,3 +161,109 @@ def test_an_untracked_neighbour_does_not_count(tmp_path):
 def test_repository_matches_the_layout():
     root = Path(check_layout.__file__).resolve().parent.parent
     assert check_layout.check(root) == []
+
+
+def make_port(root: Path, name: str, files: dict[str, str]) -> None:
+    """A ports/<name>/ directory holding files, named by relative path."""
+    for rel, text in files.items():
+        path = root / 'ports' / name / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+
+PORT_IMPL = (
+    '#include "r2s/r2s_port.h"\n'
+    'uint16_t r2s_port_read(uint8_t *buf, uint16_t max)\n'
+    '{\n'
+    '  (void)buf;\n'
+    '  (void)max;\n'
+    '  return 0u;\n'
+    '}\n'
+    'uint32_t r2s_port_tick(void)\n'
+    '{\n'
+    '  return 0u;\n'
+    '}\n'
+)
+
+
+def test_ports_template_is_required(tmp_path):
+    make_skeleton(tmp_path)
+    assert 'missing directory: ports/template' in check_layout.check(tmp_path)
+
+
+def test_a_port_without_a_build_script_is_named(tmp_path):
+    make_skeleton(tmp_path)
+    make_port(
+        tmp_path,
+        'demo',
+        {
+            'r2s_demo_port.c': PORT_IMPL,
+            'tests/test_demo_port.c': 'int main(void)\n{\n  return 0;\n}\n',
+        },
+    )
+    assert check_layout.check(tmp_path) == ['ports/demo: no build script (build.sh or run.sh)']
+
+
+def test_a_port_without_a_host_test_is_named(tmp_path):
+    make_skeleton(tmp_path)
+    make_port(
+        tmp_path,
+        'demo',
+        {
+            'build.sh': '#!/usr/bin/env bash\n',
+            'r2s_demo_port.c': PORT_IMPL,
+        },
+    )
+    assert check_layout.check(tmp_path) == ['ports/demo: no host test (run.sh or tests/)']
+
+
+def test_a_port_without_an_implementation_is_named(tmp_path):
+    make_skeleton(tmp_path)
+    make_port(
+        tmp_path,
+        'demo',
+        {
+            'build.sh': '#!/usr/bin/env bash\n',
+            'run.sh': '#!/usr/bin/env bash\n',
+        },
+    )
+    assert check_layout.check(tmp_path) == [
+        'ports/demo: no port implementation (a source naming r2s_port_read and r2s_port_tick)'
+    ]
+
+
+def test_a_complete_port_passes(tmp_path):
+    make_skeleton(tmp_path)
+    make_port(
+        tmp_path,
+        'demo',
+        {
+            'build.sh': '#!/usr/bin/env bash\n',
+            'run.sh': '#!/usr/bin/env bash\n',
+            'r2s_demo_port.c': PORT_IMPL,
+            'tests/test_demo_port.c': 'int main(void)\n{\n  return 0;\n}\n',
+        },
+    )
+    assert check_layout.check(tmp_path) == []
+
+
+def test_firmware_only_ports_keep_the_build_check(tmp_path):
+    """stm32 and rp2040 predate the host-test rule: no run.sh yet."""
+    make_skeleton(tmp_path)
+    for name in ('stm32', 'rp2040'):
+        make_port(
+            tmp_path,
+            name,
+            {
+                'build.sh': '#!/usr/bin/env bash\n',
+                f'r2s_{name}.c': PORT_IMPL,
+            },
+        )
+    assert check_layout.check(tmp_path) == []
+
+
+def test_common_and_placeholders_are_not_ports(tmp_path):
+    make_skeleton(tmp_path)
+    make_port(tmp_path, 'common', {'firmware.c': 'int main(void)\n{\n  return 0;\n}\n'})
+    make_port(tmp_path, 'avr', {'.gitkeep': ''})
+    assert check_layout.check(tmp_path) == []
