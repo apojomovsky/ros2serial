@@ -3606,7 +3606,9 @@ void handshake_with_actions(Fixture & fixture)
 // covers: ACT-1
 TEST(ActionExchange, DropsAQueryWithNoIndexByte)
 {
-  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config()};
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config(), SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
   handshake_with_actions(fixture);
   drain_decoded(fixture);
   // Topic 8 is the wire actions topic; 0x01 is the QUERY opcode.
@@ -3629,8 +3631,14 @@ TEST(ActionExchange, RefusesAnActionDeclareWithABadHash)
     helper_action_declare(0u, bad_hash.data(), "test_msgs/action/Fibonacci", "spin"));
   const auto units = drain_decoded(fixture);
   ASSERT_FALSE(units.empty()) << "the refusal answers the DECLARE";
-  EXPECT_EQ(units[0][2], kHelperActStatus) << "the answer is a status verdict";
-  EXPECT_EQ(units[0][5], kActionStatusHashMismatch) << "the verdict names the hash mismatch";
+  bool refused = false;
+  for (const auto & unit : units) {
+    if (unit.size() > 5u && unit[2] == kHelperActStatus && unit[4] == 0u) {
+      EXPECT_EQ(unit[5], kActionStatusHashMismatch) << "the verdict names the hash mismatch";
+      refused = true;
+    }
+  }
+  EXPECT_TRUE(refused) << "a status verdict refuses the bad DECLARE";
 }
 
 // An unacked GOAL is retried then dropped: the drop forgets that wire goal,
@@ -3641,7 +3649,9 @@ TEST(ActionExchange, DropsAnUnackedGoalAfterRetries)
   SessionConfig config = quiet_config();
   config.link_timeout_ms = 3600000;
   config.time_sync_enabled = false;
-  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config};
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
   handshake_with_actions(fixture);
   drain_decoded(fixture);
   ASSERT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x01u}));
@@ -3659,7 +3669,9 @@ TEST(ActionExchange, DropsAnUnackedCancelAfterRetriesExhausted)
   SessionConfig config = quiet_config();
   config.link_timeout_ms = 3600000;
   config.time_sync_enabled = false;
-  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config};
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
   handshake_with_actions(fixture);
   drain_decoded(fixture);
   ASSERT_TRUE(fixture.session().send_action_cancel(0x00u));
