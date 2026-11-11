@@ -71,6 +71,10 @@ add_executable(test_fake_transport "${R2S_BRIDGE_DIR}/test/test_fake_transport.c
 target_link_libraries(test_fake_transport PRIVATE r2s_bridge_test_support GTest::gtest GTest::gtest_main)
 add_test(NAME test_fake_transport COMMAND test_fake_transport)
 
+add_executable(test_core_port "${R2S_BRIDGE_DIR}/test/test_core_port.cpp")
+target_link_libraries(test_core_port PRIVATE r2s_bridge_test_support GTest::gtest GTest::gtest_main)
+add_test(NAME test_core_port COMMAND test_core_port)
+
 add_executable(test_framing "${R2S_BRIDGE_DIR}/test/test_framing.cpp")
 target_compile_definitions(test_framing PRIVATE
   R2S_FRAMES_VECTOR_DIR="${R2S_REPO_ROOT}/spec/vectors/frames")
