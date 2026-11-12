@@ -981,6 +981,8 @@ struct Session::Impl
       ++resets;
       log(SessionLog::kWarning,
         "HELLO while connected: the MCU reset, the handshake starts over");
+    } else if (state == SessionState::kHandshaking) {
+      log(SessionLog::kWarning, "HELLO while handshaking: the handshake starts over");
     }
     state = SessionState::kHandshaking;
     start_topic_walk();
