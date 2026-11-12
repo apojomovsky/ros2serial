@@ -19,7 +19,8 @@ flowchart LR
 **Under active development.** This guide follows `master`. Uno and Mega firmware
 is tested in simulation; real-board validation is still tracked in
 [#95](https://github.com/apojomovsky/ros2serial/issues/95).
-Use matching firmware and host packages from the same checkout.
+The current wire format is protocol v4. Use matching firmware and host packages
+from the same checkout.
 
 ## Connect your first board
 
