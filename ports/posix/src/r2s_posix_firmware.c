@@ -591,8 +591,9 @@ static void service_reset_link(void)
 #define ACTION_FEEDBACK_PERIOD_MS 200u
 #define ACTION_FEEDBACK_COUNT 10u
 
-/* 0xFF in s_goal_seq means no goal is running; the seq restarts at 0 after
- * every handshake, so the first goal of a connection needs no sentinel. */
+/* s_goal_active tells a live goal from none: the wire seq wraps through
+ * 0xFF on a long connection, so the seq itself cannot be the sentinel. */
+static uint8_t s_goal_active = 0u;
 static uint8_t s_goal_index = 0xFFu;
 static uint8_t s_goal_seq = 0xFFu;
 static uint8_t s_feedbacks = 0u;
@@ -605,6 +606,7 @@ void r2s_action_on_goal(uint8_t index, uint8_t goal_seq, const uint8_t *payload,
 {
   (void)payload;
   (void)len;
+  s_goal_active = 1u;
   s_goal_index = index;
   s_goal_seq = goal_seq;
   s_feedbacks = 0u;
@@ -656,6 +658,7 @@ static r2s_status_t send_spin_result(uint8_t outcome)
 
 static void action_reset_link(void)
 {
+  s_goal_active = 0u;
   s_goal_index = 0xFFu;
   s_goal_seq = 0xFFu;
   s_feedbacks = 0u;
@@ -667,7 +670,7 @@ static void action_reset_link(void)
 
 static void action_tick(uint32_t now)
 {
-  if (s_goal_seq == 0xFFu) {
+  if (s_goal_active == 0u) {
     return;
   }
     /* A busy answer retries on a later tick; the goal it answers stays put. */
