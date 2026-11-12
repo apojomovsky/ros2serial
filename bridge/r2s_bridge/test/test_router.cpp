@@ -1456,6 +1456,86 @@ TEST_F(RouterNode, CallsTheMcuServiceAndReturnsItsAnswer)
   EXPECT_TRUE(response->message.empty());
 }
 
+// covers: SES-19, SES-34, SVR-8
+TEST_F(RouterNode, RehandshakeAnswersTheInflightRosCall)
+{
+    RouterFixture fixture("svc_rehs", remapped(), RouterParams{});
+    fixture.handshake_with_services();
+    auto client = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+    ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+    auto future =
+      client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+    // Spin until the packed empty request reaches the wire.
+    const auto start = std::chrono::steady_clock::now();
+    bool found = false;
+    while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+      fixture.advance(20u);
+      rclcpp::spin_some(fixture.node());
+      for (const auto & unit : fixture.drain()) {
+        const auto decoded = fixture.checked_decode(unit);
+        if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+          decoded[2] == kHelperSvcRequest)
+        {
+          found = true;
+        }
+      }
+      if (found) {
+        break;
+      }
+    }
+    ASSERT_TRUE(found) << "the REQUEST never reached the wire";
+    // A second call queues behind the in-flight one: the link carries one
+    // frame at a time ([SVR-4], [SVR-10]).
+    auto queued =
+      client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+    for (int i = 0; i < 5; ++i) {
+      fixture.advance(20u);
+      rclcpp::spin_some(fixture.node());
+    }
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      EXPECT_FALSE(decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+        << "the queued call stays queued while one is in flight";
+    }
+    // No ROS server on trigger: the MCU call waits like the timeout test.
+    fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
+    fixture.advance(100u);
+    rclcpp::spin_some(fixture.node());
+    // A HELLO while connected re-handshakes before anyone answers: every
+    // dropped waiter must be retired, never left hanging.
+    fixture.handshake_with_services();
+    // The answers need spins to reach the client futures: the rebuilt
+    // service churns discovery between the send and the take.
+    const auto answered_at = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - answered_at < std::chrono::seconds(10)) {
+      rclcpp::spin_some(fixture.node());
+      if (future.wait_for(std::chrono::seconds(0)) == std::future_status::ready &&
+        queued.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+      {
+        break;
+      }
+    }
+    ASSERT_EQ(future.wait_for(std::chrono::seconds(0)), std::future_status::ready)
+      << "the re-handshake orphaned the ROS call";
+    ASSERT_EQ(queued.wait_for(std::chrono::seconds(0)), std::future_status::ready)
+      << "the re-handshake orphaned the queued call";
+    EXPECT_FALSE(future.get()->success) << "the dropped call reports failure";
+    EXPECT_FALSE(queued.get()->success) << "the dropped queued call reports failure";
+    // Past the MCU call timeout the retired req answers nothing late.
+    for (int i = 0; i < 12; ++i) {
+      fixture.advance(500u);
+      rclcpp::spin_some(fixture.node());
+      fixture.deliver_frame(kAckTopic, static_cast<std::uint8_t>(i), {kServicesTopic, 0x00u});
+    }
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      EXPECT_FALSE(decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcResponse && decoded[4] == 0x07u)
+        << "no late answer for the retired MCU call";
+    }
+}
+
 // covers: SES-34, SVR-4, SVR-5
 TEST_F(RouterNode, ForwardsTheMcuCallAndAnswersIt)
 {
