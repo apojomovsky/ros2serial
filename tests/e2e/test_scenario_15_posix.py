@@ -261,6 +261,10 @@ class TestScenario15(unittest.TestCase):
                 clock=time.monotonic,
             )
             self.assertLessEqual(took, TOPIC_BUDGET, 're-handshake took longer than 3 s')
+            self.assertTrue(
+                client.wait_for_server(timeout_sec=ACTION_TIMEOUT),
+                'the spin action server never came back after the reset',
+            )
             followups = []
             followup = self._send_goal(node, client, followups)
             self.assertTrue(followup.accepted, 'the reset link took no new goal')

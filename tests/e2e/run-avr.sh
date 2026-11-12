@@ -53,6 +53,11 @@ cp core/include/r2s/*.h "$stage/src/r2s/" || exit 1
 cp core/src/*.c "$stage/src/" || exit 1
 rm -f "$stage/src/test_reset.c"
 cp ports/arduino/r2s_arduino_port.cpp ports/arduino/r2s_arduino_port.h "$stage/src/" || exit 1
+# The action registry joins the staged library: the slice serves spin, so it
+# needs the layer beside the core. Without the actions flag the source stays
+# an empty translation unit, so the flood sketch below links unchanged.
+cp cpp/include/r2s/action.hpp "$stage/src/r2s/" || exit 1
+cp cpp/src/action.cpp "$stage/src/" || exit 1
 # The core never includes the bundled header, so the limits travel as -D
 # flags read from it: the same set the cmake layout passes as definitions.
 # A library sets none of its own flags on this toolchain, hence --build-property.
@@ -96,6 +101,10 @@ for baud in $bauds; do
   esac
 done
 serial_flags="-DSERIAL_RX_BUFFER_SIZE=256 -DSERIAL_TX_BUFFER_SIZE=256"
+# The action slice rebuilds the same rings at 192 bytes: the 128-byte frame
+# cap below leaves the Uno short of stack beside the action buffers, and 192
+# bytes still hold a full max frame with room for small control frames.
+slice_serial_flags="-DSERIAL_RX_BUFFER_SIZE=192 -DSERIAL_TX_BUFFER_SIZE=192"
 mkdir -p "$build/fw" || exit 1
 # Scenarios 1 to 4 run the default baud under its legacy file name, so the
 # 115200 image builds even when the matrix narrows past it.
@@ -109,9 +118,17 @@ for baud in $build_bauds; do
     mcu=atmega328p
     [ "$board" = mega ] && mcu=atmega2560
     out="$build/fw/$board-$baud"
+    # The slice serves the spin action: the bundled flags leave the channel
+    # out, so its compile adds the flag the way the action example does. The
+    # 325-byte bundle frames would leave the Uno no room beside the action
+    # retry and encode buffers, so the slice caps the frame at what its own
+    # traffic needs: the LookupTransform result is the largest frame it
+    # sends, far below the bundle's joint-heavy worst case, which the slice
+    # never announces. One action is all the slice serves.
+    slice_flags="-DR2S_WITH_ACTIONS -DR2S_MAX_FRAME=128 -DR2S_ACTION_MAX_COUNT=1"
     arduino-cli compile --fqbn "arduino:avr:$board" \
-      --build-property "compiler.c.extra_flags=$extras" \
-      --build-property "compiler.cpp.extra_flags=$serial_flags -DR2S_BAUD=$baud" \
+      --build-property "compiler.c.extra_flags=$extras $slice_flags" \
+      --build-property "compiler.cpp.extra_flags=$slice_serial_flags -DR2S_BAUD=$baud $slice_flags" \
       --library "$stage" --output-dir "$out" tests/e2e/avr_slice || exit 1
     avr-size "$out/avr_slice.ino.elf" || exit 1
     mv "$out/avr_slice.ino.elf" "$build/fw/slice-$mcu-$baud.elf" || exit 1
@@ -161,9 +178,15 @@ for flavor in slice flood; do
     rm -rf "$sw"
     mkdir -p "$sw" || exit 1
     cppflags="$serial_flags -fno-lto -fstack-usage"
+    [ "$flavor" = slice ] && cppflags="$slice_serial_flags -fno-lto -fstack-usage"
+    cflags="$extras -fno-lto -fstack-usage"
+    # Same slice action flags as the firmware build above, so the static
+    # figures describe the shipped binary.
+    [ "$flavor" = slice ] && cppflags="$cppflags $slice_flags"
+    [ "$flavor" = slice ] && cflags="$cflags $slice_flags"
     [ "$flavor" = flood ] && cppflags="$cppflags -DR2S_TEST_TX_CAP=16"
     arduino-cli compile --fqbn "arduino:avr:$board" \
-      --build-property "compiler.c.extra_flags=$extras -fno-lto -fstack-usage" \
+      --build-property "compiler.c.extra_flags=$cflags" \
       --build-property "compiler.cpp.extra_flags=$cppflags" \
       --build-property "compiler.c.elf.extra_flags=-fno-lto" \
       --library "$stage" --build-path "$sw" "tests/e2e/$sketch" || exit 1
@@ -251,7 +274,7 @@ for rmw in $rmws; do
   fi
   for board in $boards; do
     export R2S_E2E_BOARD=$board
-    for scenario in 1 2 3 4 12; do
+    for scenario in 1 2 3 4 12 15; do
       # Same R2S_E2E_SKIP contract as run.sh, matched on the avr file name.
       case " ${R2S_E2E_SKIP:-} " in
         *" test_scenario_${scenario}_avr "*) echo "skip test_scenario_${scenario}_avr (R2S_E2E_SKIP)" ;;
