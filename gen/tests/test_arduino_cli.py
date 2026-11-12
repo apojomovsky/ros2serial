@@ -5,7 +5,10 @@
 
 import json
 import os
+import runpy
+import sys
 
+import pytest
 from r2s_gen import arduino
 
 
@@ -117,3 +120,43 @@ def test_compile_reports_missing_arduino_cli(tmp_path, monkeypatch, capsys):
         == 1
     )
     assert 'arduino-cli' in capsys.readouterr().err
+
+
+def test_compile_rejects_a_sketch_path_that_is_not_a_directory(tmp_path, capsys):
+    # A typo in the sketch argument must name the path, not reach arduino-cli
+    # and fail with its own message.
+    library = tmp_path / 'library'
+    assert arduino.main(['library', '--out', str(library)]) == 0
+    missing = tmp_path / 'examples' / 'no_such_sketch'
+    assert (
+        arduino.main(
+            [
+                'compile',
+                '--library',
+                str(library),
+                '--fqbn',
+                'arduino:avr:uno',
+                '--out',
+                str(tmp_path / 'out'),
+                str(missing),
+            ]
+        )
+        == 1
+    )
+    assert str(missing) in capsys.readouterr().err
+
+
+def test_main_returns_the_parser_exit_code_without_a_command():
+    # argparse leaves through SystemExit; the entry point turns that into a
+    # return code so a caller never sees a traceback for a usage error.
+    assert arduino.main([]) == 2
+
+
+def test_running_the_module_as_a_script_exits_with_main(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        sys, 'argv', ['r2s-arduino', 'library', '--out', str(tmp_path / 'script-library')]
+    )
+    with pytest.raises(SystemExit) as raised:
+        runpy.run_module('r2s_gen.arduino', run_name='__main__')
+    assert raised.value.code == 0
+    assert (tmp_path / 'script-library' / 'src/r2s/r2s.h').is_file()
