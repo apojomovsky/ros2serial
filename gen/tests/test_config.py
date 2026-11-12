@@ -1050,7 +1050,8 @@ def test_an_absolute_action_name_is_an_error(tmp_path):
     path = write(
         tmp_path / 'r2s.yaml',
         'node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n'
-        '    direction: pub\nactions:\n  - name: /spin\n    type: tf2_msgs/action/LookupTransform\n',
+        '    direction: pub\nactions:\n  - name: /spin\n'
+        '    type: tf2_msgs/action/LookupTransform\n',
     )
 
     with pytest.raises(MessageError) as caught:
@@ -1066,7 +1067,8 @@ def test_an_action_name_with_a_space_is_an_error(tmp_path):
     path = write(
         tmp_path / 'r2s.yaml',
         'node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n'
-        '    direction: pub\nactions:\n  - name: sp in\n    type: tf2_msgs/action/LookupTransform\n',
+        '    direction: pub\nactions:\n  - name: sp in\n'
+        '    type: tf2_msgs/action/LookupTransform\n',
     )
 
     with pytest.raises(MessageError) as caught:

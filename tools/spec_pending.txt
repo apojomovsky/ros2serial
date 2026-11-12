@@ -4,4 +4,3 @@
 # may join the list.
 CTL-11  Y3
 DSC-27  C9
-ENC-12  C9
