@@ -61,6 +61,9 @@ class TestHarnessArgv(unittest.TestCase):
     def test_argv_paints_the_stack(self):
         self.assertIn('--stack-paint', avr.harness_argv('uno'))
 
+    def test_argv_paces_the_harness_to_the_wall_clock(self):
+        self.assertIn('--pace', avr.harness_argv('uno'))
+
     def test_argv_names_the_board_mcu_and_slice_firmware(self):
         argv = avr.harness_argv('uno')
         self.assertIn('atmega328p', argv)
