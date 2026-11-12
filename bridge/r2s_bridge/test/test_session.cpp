@@ -974,6 +974,21 @@ TEST(SessionConnected, HelloWhileConnectedLogsTheReset)
     EXPECT_NE(logged[0].find("HELLO while connected"), std::string::npos) << logged[0];
 }
 
+TEST(SessionHandshake, HelloWhileHandshakingLogsTheRestart)
+{
+    std::vector<std::string> logged;
+    SessionEvents events;
+    events.log = [&logged](SessionLog, const std::string & text) {logged.push_back(text);};
+    Fixture fixture([](const TopicInfo &) {return std::uint8_t{0};}, SessionConfig(), events);
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u));
+    ASSERT_EQ(fixture.session().state(), SessionState::kHandshaking);
+    logged.clear();
+    fixture.deliver_frame(kControl, 0u, hello_payload(5u, 1u));
+    ASSERT_EQ(logged.size(), 1u) << "a HELLO that restarts the walk logs its own restart";
+    EXPECT_NE(logged[0].find("HELLO while handshaking"), std::string::npos) << logged[0];
+}
+
 TEST(SessionConnected, RecordsTheMcuCountersFromAHeartbeat)
 {
     Fixture fixture;
