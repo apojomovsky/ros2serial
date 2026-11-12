@@ -1498,6 +1498,10 @@ TEST_F(RouterNode, RehandshakeAnswersTheInflightRosCall)
         decoded[2] == kHelperSvcRequest)
         << "the queued call stays queued while one is in flight";
     }
+    // No ROS server on trigger: the MCU call waits like the timeout test.
+    fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
+    fixture.advance(100u);
+    rclcpp::spin_some(fixture.node());
     // A HELLO while connected re-handshakes before anyone answers: every
     // dropped waiter must be retired, never left hanging.
     fixture.handshake_with_services();
