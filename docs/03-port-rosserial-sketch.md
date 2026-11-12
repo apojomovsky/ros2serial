@@ -14,7 +14,8 @@ plus the `tf` broadcaster from
 (see [Broadcast tf](#broadcast-tf)), the services and parameters from
 [#447](https://github.com/apojomovsky/ros2serial/issues/447)
 (see [Services](#services) and [Parameters](#parameters)).
-Actions are not there yet; see [Not yet](#not-yet).
+Actions have no rosserial original, so the native server stands alone;
+see [Not yet](#not-yet).
 
 What does not change: the wiring, the bridge launch, and the ROS 2
 side. The sketch still opens the serial port at 115200 baud, the
@@ -402,6 +403,9 @@ builds either way. And the announce closes with the first spin, like
 topics: `advertiseService` and `serviceClient` past it announce
 nothing and return false. Without the services channel the calls
 compile and report the refusal, so one sketch builds for every tier.
+The `examples/arduino_service` sketch shows both directions on the
+native API: it serves `reset` and calls `trigger`, with the same
+Trigger pair the ported sketch above uses.
 
 ## Parameters
 
@@ -466,6 +470,8 @@ naming the rule.
 
 ## Not yet
 
-The MCU action API and generator exist, but the bridge's ROS action server is
-still tracked in [#319](https://github.com/apojomovsky/ros2serial/issues/319).
-See [action status](services-and-parameters.md#actions) before porting that code.
+rosserial never had actions, so there is nothing to port: the native
+`r2s::action::Server` serves goals straight from the sketch, as
+`examples/arduino_action` shows with one Fibonacci-like goal. The bridge
+presents that goal as a ROS 2 action server
+([#584](https://github.com/apojomovsky/ros2serial/pull/584)).

@@ -105,11 +105,52 @@ report_action_ram() {
   echo "  actions the sketch registers: $registered"
 }
 
+# The RAM the service path costs, printed from the linked ELF: the service
+# table the core announces, the records beside it, and the marginal cost
+# of one service. The table is sized for the worst case, so the per-service
+# figure divides the table by its capacity, not by the services the sketch
+# registered. The server's answer buffer lives in the sketch's own Server
+# object, so its size is printed too.
+report_service_ram() {
+  local elf=$1 board=$2 sketch=$3 flags=$4
+  local table servers capacity per_service
+  local reset_srv trigger_cli registered
+
+  table=$(avr-nm --print-size "$elf" 2>/dev/null | awk '$4 == "r2s_service_table" { print $2; exit }')
+  servers=$(avr-nm --print-size "$elf" 2>/dev/null | awk '$4 == "r2s_service_servers" { print $2; exit }')
+  if [ -z "$table" ]; then
+    echo "arduino_service ($board): the firmware links no service table" >&2
+    return 1
+  fi
+  # avr-nm prints the sizes in hex, so they are read as hex numbers.
+  table=$((16#${table}))
+  servers=$((16#${servers:-0}))
+  capacity=$(printf '%s\n' "$flags" | awk '{ for (i = 1; i < NF; i++) if ($i ~ /R2S_SERVICE_MAX_COUNT=/) print $i }' |
+    cut -d= -f2)
+  if [ -z "$capacity" ]; then
+    capacity=$(awk '/^#define R2S_SERVICE_MAX_COUNT/ { print $3 }' "$root/core/include/r2s/r2s_services.h" | tr -d 'u')
+  fi
+  per_service=0
+  if [ -n "$capacity" ] && [ "$capacity" -gt 0 ]; then
+    per_service=$((table / capacity))
+  fi
+  reset_srv=$(avr-nm --print-size "$elf" 2>/dev/null | awk '$4 == "reset_srv" { print $2; exit }')
+  trigger_cli=$(avr-nm --print-size "$elf" 2>/dev/null | awk '$4 == "trigger_cli" { print $2; exit }')
+  reset_srv=$((16#${reset_srv:-0}))
+  trigger_cli=$((16#${trigger_cli:-0}))
+  registered=$(grep -c -e 'r2s::Service<' -e 'r2s::Client<' "$sketch")
+  echo "arduino_service ($board): service RAM"
+  echo "  service table: $table bytes for $capacity services ($per_service bytes per service)"
+  echo "  server records: $servers bytes"
+  echo "  sketch objects: reset_srv $reset_srv bytes, trigger_cli $trigger_cli bytes"
+  echo "  services the sketch registers: $registered"
+}
+
 status=0
 for sketch in examples/arduino_minimal/arduino_minimal.ino examples/arduino_xmacro/arduino_xmacro.ino \
   examples/arduino_hello/arduino_hello.ino examples/arduino_blink/arduino_blink.ino \
   examples/arduino_button/arduino_button.ino examples/arduino_servo/arduino_servo.ino \
-  examples/arduino_range/arduino_range.ino; do
+  examples/arduino_range/arduino_range.ino examples/arduino_service/arduino_service.ino; do
   # The port glue lives in the library now: a sketch defining a port function
   # or opening its own linkage block would shadow or split it, so it fails.
   # Calls and comments still name the port API, so only a definition counts:
@@ -147,6 +188,10 @@ cp cpp/src/runtime.cpp "$stage/src/" || status=1
 # the same stage unchanged.
 cp cpp/include/r2s/action.hpp "$stage/src/r2s/" || status=1
 cp cpp/src/action.cpp "$stage/src/" || status=1
+# The service registry joins the runtime library the same way: without the
+# services flag the source stays an empty translation unit.
+cp cpp/include/r2s/service.hpp "$stage/src/r2s/" || status=1
+cp cpp/src/service.cpp "$stage/src/" || status=1
 # The core never includes the generated header, so the limits travel as -D
 # flags read from it: the same set the cmake layout passes as definitions.
 # A library cannot set its own flags on this toolchain, hence --build-property.
@@ -223,6 +268,26 @@ for board in uno mega; do
   fi
   report_action_ram "$out/arduino_action.ino.elf" "$board" examples/arduino_action/arduino_action.ino \
     "$aextras" || status=1
+done
+
+# The service sketch builds against the same runtime library with the
+# services channel on: the bundled flags leave the channel out, so its
+# compile adds the flag. Its Trigger-only exchange fits small frames, so
+# it caps the frame at 64: the service channel keeps three frame-sized
+# buffers, and 128-byte frames crash the Uno on their first QUERY.
+svex="$extras -DR2S_WITH_SERVICES -DR2S_MAX_FRAME=64"
+for board in uno mega; do
+  out="$build/arduino_service/$board"
+  arduino-cli compile --fqbn "arduino:avr:$board" \
+    --build-property "compiler.c.extra_flags=$svex -fstack-usage" \
+    --build-property "compiler.cpp.extra_flags=$svex -fstack-usage" \
+    --library "$stage" --build-path "$out/build" --output-dir "$out" examples/arduino_service || status=1
+  if ! elf_has_symbol "$out/arduino_service.ino.elf" r2s_service_table; then
+    echo "arduino_service ($board): the firmware links no service table" >&2
+    status=1
+  fi
+  report_service_ram "$out/arduino_service.ino.elf" "$board" examples/arduino_service/arduino_service.ino \
+    "$svex" || status=1
 done
 
 # The task sketches build against the same runtime library: they register
@@ -405,14 +470,18 @@ done
 # without LTO under stack/. Same sources and defines, only the optimizer
 # differs, and the deeper non-LTO paths overestimate rather than hide.
 if [ -n "${R2S_STACK_BUILD:-}" ]; then
-  for sketch in arduino_minimal arduino_action arduino_hello arduino_blink arduino_button arduino_servo arduino_range \
-    arduino_xmacro arduino_static arduino_xmacro_c; do
+  for sketch in arduino_minimal arduino_action arduino_service arduino_hello arduino_blink arduino_button arduino_servo \
+    arduino_range arduino_xmacro arduino_static arduino_xmacro_c; do
     # The runtime sketches share the minimal stage; the static C++ and C
     # sketches keep their own.
     case "$sketch" in
     arduino_action)
       sstage_lib=$stage
       sflags=$aextras
+      ;;
+    arduino_service)
+      sstage_lib=$stage
+      sflags=$svex
       ;;
     arduino_xmacro)
       sstage_lib=$xstage
@@ -446,9 +515,10 @@ fi
 bash "$root/examples/tests/run.sh" || status=1
 python3 -m pytest "$root/examples/tests/test_button_led.py" -q || status=1
 
-# Hello and blink run on an emulated Uno: the two sketches need no
-# peripheral, so CI proves the link beyond the compile. Only the Uno image
-# runs to keep the added time small; the Mega firmware still builds above.
+# Hello, blink and the action example run on an emulated Uno: the three
+# sketches need no peripheral, so CI proves the link beyond the compile.
+# Only the Uno image runs to keep the added time small; the Mega firmware
+# still builds above.
 # The budgets gate rebuilds everything with stack instrumentation, so it
 # skips this behavior leg and judges sizes only. R2S_EXAMPLES_NO_SIMAVR does
 # the same for the stubbed scope test, whose fake toolchain cannot produce
@@ -462,8 +532,10 @@ if [ -z "${R2S_STACK_BUILD:-}" ] && [ -z "${R2S_EXAMPLES_NO_SIMAVR:-}" ]; then
   sim_fw=$(mktemp -d "${TMPDIR:-/tmp}/r2s-examples-simavr.XXXXXX") || status=1
   cp "$build/arduino_hello/uno/arduino_hello.ino.elf" "$sim_fw/hello-atmega328p.elf" || status=1
   cp "$build/arduino_blink/uno/arduino_blink.ino.elf" "$sim_fw/blink-atmega328p.elf" || status=1
+  cp "$build/arduino_action/uno/arduino_action.ino.elf" "$sim_fw/action-atmega328p.elf" || status=1
   R2S_SIMAVR_BIN="$sim_harness/r2s_simavr" R2S_SIMAVR_FW="$sim_fw" \
-    python3 -m pytest "$root/examples/tests/test_examples_simavr.py" -q || status=1
+    python3 -m pytest "$root/examples/tests/test_examples_simavr.py" \
+    "$root/examples/tests/test_examples_simavr_action.py" -q || status=1
   rm -rf "$sim_fw" || status=1
 fi
 
