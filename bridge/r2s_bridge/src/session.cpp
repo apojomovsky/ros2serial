@@ -974,6 +974,8 @@ struct Session::Impl
         // ([SES-19], [SES-21]).
     if (state == SessionState::kConnected) {
       ++resets;
+      log(SessionLog::kWarning,
+        "HELLO while connected: the MCU reset, the handshake starts over");
     }
     state = SessionState::kHandshaking;
     start_topic_walk();
