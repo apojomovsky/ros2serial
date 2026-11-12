@@ -1741,8 +1741,8 @@ struct Router::Impl
     ServiceRoute & route = *found->second;
     RosCall call;
     call.header = std::move(header);
-    const ConvertResult result = converter_.pack_from_struct(route.types.request_type_name(), false,
-        request.get(), call.packed);
+    const ConvertResult result = converter_.pack_from_struct(
+        route.types.request_type_name(), session_.narrow_float64(), request.get(), call.packed);
     if (result.fail != ConvertFail::kNone) {
       emit(SessionLog::kWarning, "service '" + route.info.service_name +
         "': dropped ROS request (" + fail_name(result.fail) + " at '" +
@@ -1781,8 +1781,9 @@ struct Router::Impl
     }
     // GCOVR_EXCL_STOP
     ServiceTypes::Struct request = route.types.make_request();
-    const ConvertResult result = converter_.unpack_to_struct(route.types.request_type_name(), false,
-        payload.data(), payload.size(), request.storage.data());
+    const ConvertResult result = converter_.unpack_to_struct(
+        route.types.request_type_name(), session_.narrow_float64(), payload.data(), payload.size(),
+        request.storage.data());
     if (result.fail != ConvertFail::kNone) {
       emit(SessionLog::kWarning, "service '" + route.info.service_name +
         "': dropped MCU call (" + fail_name(result.fail) + " at '" +
@@ -1825,8 +1826,8 @@ struct Router::Impl
       if (status == kSvcStatusOk) {
         ServiceTypes::Struct response = route.types.make_response();
         const ConvertResult result = converter_.unpack_to_struct(
-            route.types.response_type_name(), false, payload.data(), payload.size(),
-            response.storage.data());
+            route.types.response_type_name(), session_.narrow_float64(), payload.data(),
+            payload.size(), response.storage.data());
         if (result.fail != ConvertFail::kNone) {
           emit(SessionLog::kWarning, "service '" + route.info.service_name +
             "': dropped MCU answer (" + fail_name(result.fail) + " at '" +
@@ -1930,7 +1931,8 @@ struct Router::Impl
       RosCall call;
       call.header = header.request_id;
       const ConvertResult result = converter_.pack_from_struct(
-          route.types.request_type_name(), false, route.take_storage.storage.data(), call.packed);
+          route.types.request_type_name(), session_.narrow_float64(),
+          route.take_storage.storage.data(), call.packed);
       if (result.fail != ConvertFail::kNone) {
         emit(SessionLog::kWarning, "service '" + route.info.service_name +
           "': dropped ROS request (" + fail_name(result.fail) + " at '" +
@@ -1983,7 +1985,8 @@ struct Router::Impl
         }
         std::vector<std::uint8_t> packed;
         const ConvertResult result = converter_.pack_from_struct(
-            route.types.response_type_name(), false, call.future.get().get(), packed);
+            route.types.response_type_name(), session_.narrow_float64(), call.future.get().get(),
+            packed);
         const std::uint8_t mcu_req = call.mcu_req;
         if (result.fail != ConvertFail::kNone) {
           emit(SessionLog::kWarning, "service '" + route.info.service_name +
