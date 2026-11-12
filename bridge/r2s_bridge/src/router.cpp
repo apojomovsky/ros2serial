@@ -834,6 +834,27 @@ struct Router::Impl
 
   void sync_services()
   {
+    // Every handshake rebuilds the routes: a call sent under the old
+    // numbering can never be answered, so each waiting ROS caller learns
+    // the drop instead of hanging ([SES-34], [SVR-8]). MCU calls retire
+    // the same way: the MCU dropped its side ([REL-5]), so the ROS
+    // futures go.
+    for (auto & entry : service_routes_) {
+      ServiceRoute & route = *entry.second;
+      for (const RosCall & queued : route.ros_queue) {
+        emit(SessionLog::kWarning, "service '" + route.info.service_name +
+          "': the re-handshake drops a ROS call");
+        answer_ros_call(route, queued.header, route.types.make_response());
+      }
+      for (const auto & inflight : route.ros_inflight) {
+        emit(SessionLog::kWarning, "service '" + route.info.service_name +
+          "': the re-handshake drops a ROS call");
+        answer_ros_call(route, inflight.second.header, route.types.make_response());
+      }
+      for (const auto & mcu : route.mcu_inflight) {
+        route.client->remove_pending_request(mcu.second.future_seq);
+      }
+    }
     service_routes_.clear();
     service_repairs_.clear();
     for (const ServiceInfo & info : session_.services()) {
