@@ -223,7 +223,8 @@ public:
   explicit Fixture(
     TopicResolver resolve = [] (const TopicInfo &) {return std::uint8_t{0};},
     SessionConfig config = SessionConfig(), SessionEvents events = SessionEvents(),
-    ServiceResolver service_resolve = ServiceResolver())
+    ServiceResolver service_resolve = ServiceResolver(),
+    ActionResolver action_resolve = ActionResolver())
   {
     session_ = std::make_unique<Session>(
       config,
@@ -234,7 +235,8 @@ public:
       },
       std::move(resolve),
       std::move(events),
-      std::move(service_resolve));
+      std::move(service_resolve),
+      std::move(action_resolve));
   }
 
     // Moves time one tick at a time, polling after each, so a timer fires on
@@ -388,7 +390,8 @@ std::pair<std::string, std::vector<Step>> load_steps(const std::string & path)
 
 void replay_transcript(
   const std::string & path, SessionConfig config = SessionConfig(),
-  ServiceResolver service_resolve = ServiceResolver())
+  ServiceResolver service_resolve = ServiceResolver(),
+  ActionResolver action_resolve = ActionResolver())
 {
   ASSERT_TRUE(std::filesystem::exists(path)) << path << ": the transcript is missing";
   const auto [name, steps] = load_steps(path);
@@ -396,7 +399,7 @@ void replay_transcript(
 
   Fixture fixture{
     [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
-    std::move(service_resolve)};
+    std::move(service_resolve), std::move(action_resolve)};
   std::vector<std::size_t> expected;
   for (std::size_t i = 0; i < steps.size(); ++i) {
     if (steps[i].from_host) {
@@ -2583,6 +2586,63 @@ TEST(SessionLink, ScansQueuedControlsForANewSlot)
         << "the walk queues behind the blocked link without coalescing";
 }
 
+// covers: SES-35, REL-2
+TEST(SessionLink, DropsAnActionGoalWhenTheTxWindowIsFull)
+{
+  Fixture fixture(
+    [](const TopicInfo &) { return std::uint8_t{0}; }, SessionConfig(), SessionEvents(),
+    ServiceResolver(), [](const ActionInfo &) { return kActionStatusOk; });
+  fixture.block_writes();
+  fixture.advance_to(2600);
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(3u, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> action_hash{1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
+  fixture.deliver_frame(kHelperActions, 0u,
+    helper_action_declare(0u, action_hash.data(), "test_msgs/action/Fibonacci", "spin"));
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActStatus, 0x00u, 0x01u, 0x01u});
+  ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+  // One user frame leaves room: a GOAL still queues behind it.
+  ASSERT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(200u, 0xAAu)));
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}))
+      << "a partial window still queues the goal";
+  // Fill the 515-byte MCU window behind the blocked link: two more user
+  // frames stay queued because nothing flushes.
+  ASSERT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(200u, 0xBBu)));
+  ASSERT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(200u, 0xCCu)));
+  EXPECT_GE(fixture.session().pending_bytes(), 515u) << "the window is full";
+  // A GOAL while the window is full is dropped at once: the MCU could
+  // not receive it, so the bridge refuses to queue it.
+  EXPECT_FALSE(fixture.session().send_action_goal(0u, 0x01u, {0x05u}))
+      << "a full window drops the goal instead of queuing it";
+}
+
+// covers: SES-35, REL-2
+TEST(SessionLink, DropsAnActionCancelWhenTheTxWindowIsFull)
+{
+  Fixture fixture;
+  fixture.block_writes();
+  fixture.advance_to(2600);
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u));
+  fixture.deliver_frame(kControl, 0u, topic_payload(0u, 0x10u, "battery"));
+  ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+  // One user frame leaves room: a CANCEL still queues behind it.
+  ASSERT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(200u, 0xAAu)));
+  EXPECT_TRUE(fixture.session().send_action_cancel(0x00u))
+      << "a partial window still queues the cancel";
+  // Fill the 515-byte MCU window behind the blocked link: two more user
+  // frames stay queued because nothing flushes.
+  ASSERT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(200u, 0xBBu)));
+  ASSERT_TRUE(fixture.session().send_user(0x10u, std::vector<std::uint8_t>(200u, 0xCCu)));
+  EXPECT_GE(fixture.session().pending_bytes(), 515u) << "the window is full";
+  // A CANCEL while the window is full is dropped at once: the MCU could
+  // not receive it, so the bridge refuses to queue it.
+  EXPECT_FALSE(fixture.session().send_action_cancel(0x01u))
+      << "a full window drops the cancel instead of queuing it";
+}
+
 // The reliable channel and the parameter walk (X4): the session answers the
 // walk, sends PARAM_SETs stop-and-wait, and acks every reliable frame.
 
@@ -3513,6 +3573,1040 @@ TEST(ServiceReplay, ReplaysServiceCall)
           expected.size()) << name << ": the transcript's service frames did not all go out";
 }
 
+// The actions channel: the walk after the services, and the GOAL, CANCEL,
+// FEEDBACK and RESULT exchange on the reliable channel (spec/protocol.md,
+// 7.9).
+// covers: ACT-1, ACT-2, ACT-7
+
+// One action DECLARE for the walk tests: the resolver answers ok to every
+// DECLARE, so the hash is a placeholder.
+std::vector<std::uint8_t> act_declare(std::uint8_t index, const std::string & name)
+{
+  const std::array<std::uint8_t, 8> hash{1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
+  return helper_action_declare(index, hash.data(), "test_msgs/action/Fibonacci", name);
+}
+
+// A connected session with services and actions: one topic, no parameters,
+// no services, one action "spin". Time sync stays off and the heartbeat is
+// quiet, so only action traffic is captured.
+void handshake_with_actions(Fixture & fixture)
+{
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u, {kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperActions, 0u, act_declare(0u, "spin"));
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActStatus, 0x00u, 0x01u, 0x01u});
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+  drain_decoded(fixture);
+}
+
+// A DECLARE whose hash does not match the installed action is refused with
+// a hash-mismatch verdict, the way a stale MCU layout is.
+// covers: ACT-7
+TEST(ActionExchange, RefusesAnActionDeclareWithABadHash)
+{
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, quiet_config(), SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusHashMismatch;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u, {kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> bad_hash{9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u};
+  fixture.deliver_frame(kHelperActions, 0u,
+    helper_action_declare(0u, bad_hash.data(), "test_msgs/action/Fibonacci", "spin"));
+  const auto units = drain_decoded(fixture);
+  ASSERT_FALSE(units.empty()) << "the refusal answers the DECLARE";
+  bool refused = false;
+  for (const auto & unit : units) {
+    if (unit.size() > 5u && unit[2] == kHelperActStatus && unit[4] == 0u) {
+      EXPECT_EQ(unit[5], kActionStatusHashMismatch) << "the verdict names the hash mismatch";
+      refused = true;
+    }
+  }
+  EXPECT_TRUE(refused) << "a status verdict refuses the bad DECLARE";
+}
+
+// An unacked GOAL is retried then dropped: the drop forgets that wire goal,
+// so a late answer for it is stale and ignored.
+// covers: ACT-4
+TEST(ActionExchange, DropsAnUnackedGoalAfterRetries)
+{
+  SessionConfig config = quiet_config();
+  config.link_timeout_ms = 3600000;
+  config.time_sync_enabled = false;
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  drain_decoded(fixture);
+  ASSERT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x01u}));
+  drain_decoded(fixture);
+  fixture.advance_to(3000);
+  EXPECT_EQ(fixture.session().reliable_dropped(), 1u) << "the unacked GOAL is dropped";
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
+// An unacked CANCEL is retried then dropped the same way: the drop forgets
+// that wire cancel.
+// covers: ACT-4
+TEST(ActionExchange, DropsAnUnackedCancelAfterRetriesExhausted)
+{
+  SessionConfig config = quiet_config();
+  config.link_timeout_ms = 3600000;
+  config.time_sync_enabled = false;
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  drain_decoded(fixture);
+  ASSERT_TRUE(fixture.session().send_action_cancel(0x00u));
+  drain_decoded(fixture);
+  fixture.advance_to(3000);
+  EXPECT_EQ(fixture.session().reliable_dropped(), 1u) << "the unacked CANCEL is dropped";
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
+// covers: ACT-7
+TEST(ActionReplay, ReplaysActionWalk)
+{
+  SessionConfig config;
+  config.time_sync_enabled = false;
+  replay_transcript(
+    std::string(R2S_SESSION_VECTOR_DIR) + "/action_walk.yaml", config,
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;});
+}
+
+// Replays one action transcript after the scripted handshake: the
+// transcript's host GOAL and CANCEL go out through send_action_goal and
+// send_action_cancel, the way the router will drive them. Only action and
+// ack traffic is compared: control, time and heartbeat frames depend on
+// pre-history the transcripts do not carry, and other transcripts cover
+// them.
+// covers: ACT-2, ACT-3, ACT-8
+void replay_action_exchange(const std::string & file)
+{
+  const std::string path = std::string(R2S_SESSION_VECTOR_DIR) + "/" + file;
+  ASSERT_TRUE(std::filesystem::exists(path)) << path << ": the transcript is missing";
+  const auto [name, steps] = load_steps(path);
+  ASSERT_FALSE(steps.empty()) << name;
+
+  SessionEvents events;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, SessionConfig(), std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+
+  std::vector<std::size_t> expected;
+  for (std::size_t i = 0; i < steps.size(); ++i) {
+    if (steps[i].from_host && steps[i].decoded.size() > 2u &&
+      (steps[i].decoded[0] == kHelperActions || steps[i].decoded[0] == kAck))
+    {
+      expected.push_back(i);
+    }
+  }
+  ASSERT_FALSE(expected.empty()) << name << ": no action or ack step drives the exchange";
+  std::size_t next = 0u;
+  const auto check = [&](const std::vector<std::uint8_t> & unit) {
+      if (unit.size() < 3u || (unit[0] != kHelperActions && unit[0] != kAck)) {
+        return;
+      }
+      ASSERT_LT(next, expected.size()) << name << ": the session wrote more than the transcript";
+      EXPECT_EQ(unit, steps[expected[next]].decoded) << name << " host step " << expected[next];
+      ++next;
+    };
+  for (std::size_t i = 0; i < steps.size(); ++i) {
+    const Step & step = steps[i];
+    SCOPED_TRACE(name + " step " + std::to_string(i));
+    fixture.advance_to(step.at_ms);
+    const bool is_goal = step.decoded.size() > 7u && step.decoded[0] == kHelperActions &&
+      step.decoded[2] == kHelperActGoal;
+    const bool is_cancel = step.decoded.size() > 5u && step.decoded[0] == kHelperActions &&
+      step.decoded[2] == kHelperActCancel;
+    if (!step.from_host) {
+      fixture.deliver(step.decoded);
+    } else if (is_goal) {
+      EXPECT_TRUE(fixture.session().send_action_goal(step.decoded[5], step.decoded[4],
+        {step.decoded.begin() + 6, step.decoded.end() - 2}));
+    } else if (is_cancel) {
+      EXPECT_TRUE(fixture.session().send_action_cancel(step.decoded[4]));
+    }
+    for (const auto & unit : drain_decoded(fixture)) {
+      check(unit);
+    }
+  }
+  if (next < expected.size()) {
+    fixture.advance_to(steps.back().at_ms + 500);
+    for (const auto & unit : drain_decoded(fixture)) {
+      check(unit);
+    }
+  }
+  EXPECT_EQ(next, expected.size()) << name << ": the transcript's frames did not all go out";
+}
+
+// covers: ACT-2, ACT-3, ACT-8
+TEST(ActionReplay, ReplaysActionGoal)
+{
+  replay_action_exchange("action_goal.yaml");
+}
+
+// covers: ACT-5, ACT-8
+TEST(ActionReplay, ReplaysActionCancel)
+{
+  replay_action_exchange("action_cancel.yaml");
+}
+
+// covers: ACT-4, ACT-8
+TEST(ActionReplay, ReplaysActionSecondGoal)
+{
+  replay_action_exchange("action_second_goal.yaml");
+}
+
+// covers: ACT-8, ACT-9
+TEST(ActionReplay, ReplaysActionResetAbort)
+{
+  replay_action_exchange("action_reset_abort.yaml");
+}
+
+// covers: ACT-7
+TEST(ActionWalk, StartsAfterTheServiceWalk)
+{
+  SessionConfig config;
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  drain_decoded(fixture);
+  fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperServices, 1u, {kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  const auto units = drain_decoded(fixture);
+  ASSERT_EQ(units.size(), 1u);
+  EXPECT_EQ(units[0][0], kHelperActions);
+  EXPECT_EQ(units[0][2], kHelperActQuery) << "the action walk starts with index 0";
+  EXPECT_EQ(units[0][3], 0x00u);
+  EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
+}
+
+// covers: ACT-7
+TEST(ActionWalk, SkipsWhenTheMcuAnnouncesNoActions)
+{
+  SessionConfig config;
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x4Cu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u, svc_declare(0u, 0x00u, "reset"));
+  fixture.deliver_frame(kHelperServices, 1u, {kHelperSvcStatus, 0x00u, 0x01u, 0x01u});
+  const auto units = drain_decoded(fixture);
+  ASSERT_FALSE(units.empty());
+  EXPECT_EQ(units.back()[2], 0x06u) << "READY goes out with no action walk";
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+  EXPECT_TRUE(fixture.session().actions().empty());
+}
+
+// covers: ACT-7
+TEST(ActionWalk, RecordsVerdicts)
+{
+  SessionConfig config;
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo & info) {
+      if (info.action_name == "spin") {
+        return kActionStatusOk;
+      }
+      if (info.action_name == "old") {
+        return kActionStatusHashMismatch;
+      }
+      return kActionStatusUnknownType;
+    }};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u, {kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperActions, 0u, act_declare(0u, "spin"));
+  fixture.deliver_frame(kHelperActions, 1u, act_declare(1u, "spin"));
+  fixture.deliver_frame(kHelperActions, 2u, act_declare(2u, "old"));
+  fixture.deliver_frame(kHelperActions, 3u, act_declare(3u, "missing"));
+  fixture.deliver_frame(kHelperActions, 4u, {kHelperActStatus, 0x00u, 0x04u, 0x01u});
+  const auto units = drain_decoded(fixture);
+  ASSERT_EQ(units.size(), 9u);
+  EXPECT_EQ(units[0], with_check({kHelperActions, 1u, kHelperActStatus, 0x00u, 0x00u, 0x00u}));
+  EXPECT_EQ(units[2], with_check({kHelperActions, 3u, kHelperActStatus, 0x00u, 0x01u, 0x03u}));
+  EXPECT_EQ(units[4], with_check({kHelperActions, 5u, kHelperActStatus, 0x00u, 0x02u, 0x02u}));
+  EXPECT_EQ(units[6], with_check({kHelperActions, 7u, kHelperActStatus, 0x00u, 0x03u, 0x01u}));
+  ASSERT_EQ(fixture.session().actions().size(), 4u);
+  EXPECT_EQ(fixture.session().actions()[0].status, kActionStatusOk);
+  EXPECT_EQ(fixture.session().actions()[1].status, kActionStatusNameConflict);
+  EXPECT_EQ(fixture.session().actions()[2].status, kActionStatusHashMismatch);
+  EXPECT_EQ(fixture.session().actions()[3].status, kActionStatusUnknownType);
+}
+
+// covers: ACT-7
+TEST(ActionWalk, GivesUpAfterThreeRetries)
+{
+  SessionConfig config;
+  config.heartbeat_period_ms = 3600000;
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u, {kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  drain_decoded(fixture);
+  for (int retry = 0; retry < 3; ++retry) {
+    fixture.advance_to(200u * static_cast<std::uint32_t>(retry + 1u) + 100u);
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 1u);
+    EXPECT_EQ(units[0][2], kHelperActQuery) << "the walk retries the QUERY";
+  }
+  fixture.advance_to(900u);
+  const auto units = drain_decoded(fixture);
+  ASSERT_EQ(units.size(), 1u);
+  EXPECT_EQ(units[0][2], 0x01u) << "a HELLO_REQ, not another ACT_QUERY";
+}
+
+// covers: ACT-7
+TEST(ActionWalk, ReportsUnknownTypeWithoutAResolver)
+{
+  SessionConfig config;
+  config.time_sync_enabled = false;
+  Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u, {kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperActions, 0u, act_declare(0u, "spin"));
+  const auto units = drain_decoded(fixture);
+  ASSERT_EQ(units.size(), 2u);
+  EXPECT_EQ(units[0], with_check({kHelperActions, 1u, kHelperActStatus, 0x00u, 0x00u, 0x01u}));
+}
+
+// covers: ACT-3, ACT-4
+TEST(ActionExchange, SendsGoalsOnTheirOwnStream)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u, svc_declare(0u, 0x00u, "reset"));
+  fixture.deliver_frame(kHelperServices, 1u, {kHelperSvcStatus, 0x00u, 0x01u, 0x01u});
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperActions, 2u, act_declare(0u, "spin"));
+  fixture.deliver_frame(kHelperActions, 3u, {kHelperActStatus, 0x00u, 0x01u, 0x01u});
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+  drain_decoded(fixture);
+  EXPECT_TRUE(fixture.session().send_service_request(0u, 0x09u, {0x01u}));
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}));
+  const auto units = drain_decoded(fixture);
+  ASSERT_EQ(units.size(), 2u);
+  EXPECT_EQ(units[0], with_check({kHelperServices, 0u, kHelperSvcRequest, 0x00u, 0x09u, 0x00u,
+      0x01u}));
+  EXPECT_EQ(units[1], with_check({kHelperActions, 3u, kHelperActGoal, 0x00u, 0x00u, 0x00u,
+      0x05u})) << "the action frame seq continues the walk, its rel_seq starts at 0";
+}
+
+// covers: ACT-3
+TEST(ActionExchange, QueuesOnePendingGoalPerIndex)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x01u}));
+  drain_decoded(fixture);
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x01u, {0x02u}));
+  EXPECT_EQ(fixture.session().reliable_replaced(), 0u);
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x02u, {0x03u}));
+  EXPECT_EQ(fixture.session().reliable_replaced(), 1u) << "a newer GOAL replaces the pending one";
+  fixture.deliver_frame(kAck, 0u, {kHelperActions, 0x00u});
+  fixture.session().poll();
+  const auto units = drain_decoded(fixture);
+  ASSERT_EQ(units.size(), 1u);
+  EXPECT_EQ(units[0], with_check({kHelperActions, 4u, kHelperActGoal, 0x01u, 0x02u, 0x00u,
+      0x03u}));
+}
+
+// covers: ACT-3, ACT-4
+TEST(ActionExchange, AppliesGoalResponsesInEitherOrder)
+{
+  std::vector<std::uint8_t> answered;
+  SessionEvents events;
+  events.action_goal_response = [&](std::uint8_t seq, std::uint8_t) {
+      answered.push_back(seq);
+    };
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x01u}));
+  drain_decoded(fixture);
+  // The second GOAL queues behind the unacked first and goes out once the
+  // MCU acks rel 0; both stay tracked until their own GOAL_RESP arrives.
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x01u, {0x02u}));
+  fixture.deliver_frame(kAck, 0u, {kHelperActions, 0x00u});
+  fixture.session().poll();
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActGoalResp, 0x00u, 0x01u, 0x00u});
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x01u, 0x00u, 0x00u});
+  ASSERT_EQ(answered.size(), 2u);
+  EXPECT_EQ(answered[0], 0x01u) << "the later goal's answer applies first";
+  EXPECT_EQ(answered[1], 0x00u);
+}
+
+// covers: ACT-4
+TEST(ActionExchange, AppliesTheGoalResponseOnce)
+{
+  int calls = 0;
+  std::uint8_t decision = 0xFFu;
+  SessionEvents events;
+  events.action_goal_response = [&](std::uint8_t, std::uint8_t got) {
+      ++calls;
+      decision = got;
+    };
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}));
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  EXPECT_EQ(calls, 1) << "the duplicate applies once";
+  EXPECT_EQ(decision, 0x00u);
+  const auto units = drain_decoded(fixture);
+  ASSERT_EQ(units.size(), 2u);
+  EXPECT_EQ(units[0], with_check({kAck, 0u, kHelperActions, 0x00u}));
+  EXPECT_EQ(units[1], with_check({kAck, 1u, kHelperActions, 0x00u}))
+    << "every reliable frame is acked, even the duplicate";
+}
+
+// covers: ACT-4
+TEST(ActionExchange, RefusesABadGoalResponseDecision)
+{
+  int calls = 0;
+  SessionEvents events;
+  events.action_goal_response = [&](std::uint8_t, std::uint8_t) {++calls;};
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}));
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActGoalResp, 0x00u, 0x00u, 0x04u});
+  EXPECT_EQ(calls, 0) << "decision 4 is reserved and refused";
+}
+
+// covers: ACT-5
+TEST(ActionExchange, ReportsTheCancelResponse)
+{
+  int calls = 0;
+  std::uint8_t decision = 0xFFu;
+  SessionEvents events;
+  events.action_cancel_response = [&](std::uint8_t, std::uint8_t got) {
+      ++calls;
+      decision = got;
+    };
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}));
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAck, 0u, {kHelperActions, 0x00u});
+  fixture.session().poll();
+  drain_decoded(fixture);
+  EXPECT_TRUE(fixture.session().send_action_cancel(0x00u));
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperActions, 3u, {kHelperActCancelResp, 0x01u, 0x00u, 0x00u});
+  EXPECT_EQ(calls, 1);
+  EXPECT_EQ(decision, 0x00u);
+}
+
+// covers: ACT-1
+TEST(ActionExchange, DropsFeedbackForAnUnservedIndex)
+{
+  int calls = 0;
+  SessionEvents events;
+  events.action_feedback = [&](std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &) {
+      ++calls;
+    };
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActFeedback, 0x00u, 0x07u, 0x01u});
+  EXPECT_EQ(calls, 0) << "feedback for an unknown index is dropped";
+  EXPECT_TRUE(drain_decoded(fixture).empty()) << "feedback is never acked";
+}
+
+// covers: ACT-1
+TEST(ActionExchange, ReportsFeedbackAndResult)
+{
+  std::vector<std::uint8_t> feedback;
+  std::uint8_t outcome = 0xFFu;
+  std::vector<std::uint8_t> result;
+  SessionEvents events;
+  events.action_feedback = [&](std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> & got) {
+      feedback = got;
+    };
+  events.action_result =
+    [&](std::uint8_t, std::uint8_t got, const std::vector<std::uint8_t> & got_payload) {
+      outcome = got;
+      result = got_payload;
+    };
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActFeedback, 0x00u, 0x00u, 0x09u});
+  EXPECT_EQ(feedback, std::vector<std::uint8_t>({0x09u}));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActResult, 0x00u, 0x00u, 0x04u, 0x07u});
+  EXPECT_EQ(outcome, 0x04u);
+  EXPECT_EQ(result, std::vector<std::uint8_t>({0x07u}));
+  const auto units = drain_decoded(fixture);
+  ASSERT_EQ(units.size(), 1u) << "only the RESULT is acked";
+  EXPECT_EQ(units[0], with_check({kAck, 0u, kHelperActions, 0x00u}));
+}
+
+// covers: ACT-6
+TEST(ActionExchange, RefusesAReservedOutcome)
+{
+  int calls = 0;
+  SessionEvents events;
+  events.action_result = [&](std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &) {
+      ++calls;
+    };
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActResult, 0x00u, 0x00u, 0x03u, 0x07u});
+  EXPECT_EQ(calls, 0) << "outcome 3 is reserved and refused";
+}
+
+// covers: ACT-3
+TEST(ActionExchange, RefusesToSendWhileNotConnected)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  EXPECT_FALSE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}));
+  EXPECT_FALSE(fixture.session().send_action_cancel(0x00u));
+}
+
+// covers: ACT-3
+TEST(ActionExchange, RefusesToSendForAnUnknownAction)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  EXPECT_FALSE(fixture.session().send_action_goal(0x03u, 0x00u, {0x05u}));
+}
+
+// covers: REL-2
+TEST(ActionExchange, RetriesThenGivesUp)
+{
+  SessionConfig config = quiet_config();
+  config.link_timeout_ms = 3600000;
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}));
+  drain_decoded(fixture);
+  for (int retry = 0; retry < 3; ++retry) {
+    fixture.advance_to(500u * static_cast<std::uint32_t>(retry + 1u));
+    EXPECT_EQ(drain_decoded(fixture).size(), 1u) << "the GOAL retries with its rel_seq";
+  }
+  fixture.advance_to(2500u);
+  EXPECT_TRUE(drain_decoded(fixture).empty()) << "spent retries drop the GOAL";
+  EXPECT_EQ(fixture.session().reliable_dropped(), 1u);
+}
+
+// covers: REL-5
+TEST(ActionExchange, DropsActionStateOnRehandshake)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}));
+  drain_decoded(fixture);
+  fixture.deliver_frame(kControl, 5u, hello_payload(0x44u, 1u, 4u, 0xCCu, 1000u));
+  EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
+  EXPECT_FALSE(fixture.session().send_action_goal(0u, 0x01u, {0x05u}))
+    << "a re-handshake drops the reliable state";
+}
+
+// covers: ACT-1
+TEST(ActionExchange, IgnoresAnUnknownActionOpcode)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  fixture.deliver_frame(kHelperActions, 1u, {0x0Au, 0x00u, 0x00u});
+  EXPECT_TRUE(drain_decoded(fixture).empty());
+}
+
+// covers: ACT-7
+TEST(ActionWalk, DropsMalformedDeclares)
+{
+  SessionConfig config;
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u, {kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  drain_decoded(fixture);
+  // A DECLARE cut after three hash bytes parses nothing: the walk answers
+  // unknown type and moves on.
+  fixture.deliver_frame(kHelperActions, 0u, {kHelperActDeclare, 0x00u, 0x01u, 0x02u, 0x03u});
+  // A DECLARE with a full hash but a truncated name parses nothing either.
+  std::vector<std::uint8_t> short_name{kHelperActDeclare, 0x01u, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u,
+    4u, 's', 'p'};
+  fixture.deliver_frame(kHelperActions, 1u, short_name);
+  fixture.deliver_frame(kHelperActions, 2u, act_declare(2u, "spin"));
+  fixture.deliver_frame(kHelperActions, 3u, {kHelperActStatus, 0x00u, 0x03u, 0x01u});
+  const auto units = drain_decoded(fixture);
+  // Each DECLARE is answered and the walk queries on: three STATUS answers
+  // interleaved with three QUERY frames, then the READY that ends it.
+  ASSERT_EQ(units.size(), 7u);
+  EXPECT_EQ(units[0], with_check({kHelperActions, 1u, kHelperActStatus, 0x00u, 0x00u, 0x01u}));
+  EXPECT_EQ(units[2], with_check({kHelperActions, 3u, kHelperActStatus, 0x00u, 0x01u, 0x01u}));
+  EXPECT_EQ(units[4], with_check({kHelperActions, 5u, kHelperActStatus, 0x00u, 0x02u, 0x00u}));
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
+// covers: ACT-7
+TEST(ActionWalk, IgnoresABadStatusAndAdvancesOnZero)
+{
+  SessionConfig config;
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0xCCu, 1000u));
+  // A DECLARE before the walk starts and a STATUS while the walk has not
+  // reached actions are both ignored.
+  fixture.deliver_frame(kHelperActions, 1u, act_declare(0u, "spin"));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActStatus, 0x00u, 0x00u, 0x01u});
+  EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u, {kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  drain_decoded(fixture);
+  // A short STATUS, one for the wrong index and one with a reserved
+  // decision are ignored, as is a DECLARE for an index the walk is not
+  // asking for.
+  fixture.deliver_frame(kHelperActions, 3u, {kHelperActStatus, 0x00u});
+  fixture.deliver_frame(kHelperActions, 4u, {kHelperActStatus, 0x00u, 0x05u, 0x01u});
+  fixture.deliver_frame(kHelperActions, 5u, {kHelperActStatus, 0x00u, 0x00u, 0x07u});
+  fixture.deliver_frame(kHelperActions, 6u, act_declare(9u, "spin"));
+  // A STATUS 0 advances the walk to the next index.
+  fixture.deliver_frame(kHelperActions, 7u, {kHelperActStatus, 0x00u, 0x00u, 0x00u});
+  const auto units = drain_decoded(fixture);
+  ASSERT_EQ(units.size(), 1u);
+  EXPECT_EQ(units[0], with_check({kHelperActions, 1u, kHelperActQuery, 0x01u}))
+    << "the walk asks for index 1 next";
+  fixture.deliver_frame(kHelperActions, 8u, act_declare(1u, "spin"));
+  fixture.deliver_frame(kHelperActions, 9u, {kHelperActStatus, 0x00u, 0x02u, 0x01u});
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+  // A STATUS after the walk ended is ignored.
+  fixture.deliver_frame(kHelperActions, 10u, {kHelperActStatus, 0x00u, 0x01u, 0x01u});
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
+// covers: ACT-1, ACT-4, ACT-5, ACT-6
+TEST(ActionWalk, IgnoresActionFramesWhileWalking)
+{
+  int calls = 0;
+  SessionEvents events;
+  events.action_goal_response = [&](std::uint8_t, std::uint8_t) {++calls;};
+  events.action_cancel_response = [&](std::uint8_t, std::uint8_t) {++calls;};
+  events.action_feedback =
+    [&](std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &) {++calls;};
+  events.action_result =
+    [&](std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &) {++calls;};
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  // Action frames before the walk reaches actions are all ignored, as is
+  // a short RESULT.
+  fixture.deliver_frame(kHelperActions, 0u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActCancelResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActFeedback, 0x00u, 0x00u, 0x09u});
+  fixture.deliver_frame(kHelperActions, 3u, {kHelperActResult, 0x00u, 0x00u, 0x04u, 0x09u});
+  fixture.deliver_frame(kHelperActions, 4u, {kHelperActResult, 0x00u, 0x00u});
+  EXPECT_EQ(calls, 0);
+  EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
+}
+
+// covers: ACT-7
+TEST(ActionWalk, RefusesADeclareWithATruncatedName)
+{
+  SessionConfig config;
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u, {kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  drain_decoded(fixture);
+  // A valid type name with a cut-off action name parses nothing: the walk
+  // answers unknown type and moves on.
+  std::vector<std::uint8_t> cut = act_declare(0u, "spin");
+  cut.pop_back();
+  cut.pop_back();
+  fixture.deliver_frame(kHelperActions, 0u, cut);
+  fixture.deliver_frame(kHelperActions, 1u, act_declare(1u, "spin"));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActStatus, 0x00u, 0x02u, 0x01u});
+  const auto units = drain_decoded(fixture);
+  ASSERT_EQ(units.size(), 5u);
+  EXPECT_EQ(units[0], with_check({kHelperActions, 1u, kHelperActStatus, 0x00u, 0x00u, 0x01u}));
+  EXPECT_EQ(units[2], with_check({kHelperActions, 3u, kHelperActStatus, 0x00u, 0x01u, 0x00u}));
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
+// covers: ACT-7
+TEST(ActionWalk, RefusesADeclareWithTrailingBytes)
+{
+  SessionConfig config;
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u, {kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  drain_decoded(fixture);
+  // Valid strings with a byte left over parse nothing: the walk answers
+  // unknown type and moves on.
+  std::vector<std::uint8_t> trailing = act_declare(0u, "spin");
+  trailing.push_back(0x00u);
+  fixture.deliver_frame(kHelperActions, 0u, trailing);
+  fixture.deliver_frame(kHelperActions, 1u, act_declare(1u, "spin"));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActStatus, 0x00u, 0x02u, 0x01u});
+  const auto units = drain_decoded(fixture);
+  ASSERT_EQ(units.size(), 5u);
+  EXPECT_EQ(units[0], with_check({kHelperActions, 1u, kHelperActStatus, 0x00u, 0x00u, 0x01u}));
+  EXPECT_EQ(units[2], with_check({kHelperActions, 3u, kHelperActStatus, 0x00u, 0x01u, 0x00u}));
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
+// covers: ACT-3
+TEST(ActionExchange, PromotesAPendingCancelOnAck)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}));
+  drain_decoded(fixture);
+  // An ack for another rel_seq applies to nothing.
+  fixture.deliver_frame(kAck, 0u, {kHelperActions, 0x09u});
+  fixture.session().poll();
+  EXPECT_TRUE(drain_decoded(fixture).empty());
+  // The CANCEL queues behind the unacked GOAL; a second CANCEL replaces it.
+  EXPECT_TRUE(fixture.session().send_action_cancel(0x00u));
+  EXPECT_TRUE(fixture.session().send_action_cancel(0x01u));
+  EXPECT_EQ(fixture.session().reliable_replaced(), 1u);
+  EXPECT_TRUE(drain_decoded(fixture).empty()) << "nothing goes out before the ack";
+  fixture.deliver_frame(kAck, 0u, {kHelperActions, 0x00u});
+  fixture.session().poll();
+  const auto units = drain_decoded(fixture);
+  ASSERT_EQ(units.size(), 1u);
+  EXPECT_EQ(units[0], with_check({kHelperActions, 4u, kHelperActCancel, 0x01u, 0x01u}))
+    << "the ack promotes the newest pending CANCEL";
+}
+
+// covers: REL-2
+TEST(ActionExchange, DropsAnUnackedCancelAfterRetries)
+{
+  int calls = 0;
+  SessionEvents events;
+  events.action_cancel_response = [&](std::uint8_t, std::uint8_t) {++calls;};
+  SessionConfig config = quiet_config();
+  config.link_timeout_ms = 3600000;
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}));
+  drain_decoded(fixture);
+  fixture.deliver_frame(kAck, 0u, {kHelperActions, 0x00u});
+  fixture.session().poll();
+  drain_decoded(fixture);
+  EXPECT_TRUE(fixture.session().send_action_cancel(0x00u));
+  drain_decoded(fixture);
+  for (int retry = 0; retry < 3; ++retry) {
+    fixture.advance_to(500u * static_cast<std::uint32_t>(retry + 1u));
+    EXPECT_EQ(drain_decoded(fixture).size(), 1u) << "the CANCEL retries with its rel_seq";
+  }
+  fixture.advance_to(2500u);
+  EXPECT_TRUE(drain_decoded(fixture).empty()) << "spent retries drop the CANCEL";
+  EXPECT_EQ(fixture.session().reliable_dropped(), 1u);
+  // A late CANCEL_RESP for the dropped CANCEL names an untracked goal: it
+  // carries rel 0, the first rel the link sees.
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActCancelResp, 0x00u, 0x00u, 0x00u});
+  EXPECT_EQ(calls, 0);
+}
+
+// covers: ACT-5
+TEST(ActionExchange, RefusesAReservedCancelDecision)
+{
+  int calls = 0;
+  SessionEvents events;
+  events.action_cancel_response = [&](std::uint8_t, std::uint8_t) {++calls;};
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}));
+  drain_decoded(fixture);
+  EXPECT_TRUE(fixture.session().send_action_cancel(0x00u));
+  drain_decoded(fixture);
+  // Decision 3 is reserved and refused, like an unknown goal.
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActCancelResp, 0x00u, 0x00u, 0x03u});
+  EXPECT_EQ(calls, 0);
+}
+
+// covers: ACT-1, ACT-4, ACT-5, ACT-6
+TEST(ActionExchange, IgnoresStaleActionFrames)
+{
+  int goal_calls = 0;
+  int cancel_calls = 0;
+  int feedback_calls = 0;
+  int result_calls = 0;
+  SessionEvents events;
+  events.action_goal_response = [&](std::uint8_t, std::uint8_t) {++goal_calls;};
+  events.action_cancel_response = [&](std::uint8_t, std::uint8_t) {++cancel_calls;};
+  events.action_feedback = [&](std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &) {
+      ++feedback_calls;
+    };
+  events.action_result = [&](std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &) {
+      ++result_calls;
+    };
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  // An empty action frame, a DECLARE outside the walk, a short CANCEL_RESP
+  // and a short FEEDBACK are all refused.
+  fixture.deliver_frame(kHelperActions, 1u, {});
+  fixture.deliver_frame(kHelperActions, 2u, act_declare(0u, "spin"));
+  fixture.deliver_frame(kHelperActions, 3u, {kHelperActCancelResp, 0x00u});
+  fixture.deliver_frame(kHelperActions, 4u, {kHelperActFeedback, 0x00u});
+  EXPECT_EQ(goal_calls + cancel_calls + feedback_calls + result_calls, 0);
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+  // Track a GOAL and a CANCEL, then answer each twice and with an unknown
+  // seq: only the first answers apply.
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}));
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperActions, 5u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  EXPECT_EQ(goal_calls, 1);
+  fixture.deliver_frame(kAck, 0u, {kHelperActions, 0x00u});
+  fixture.session().poll();
+  drain_decoded(fixture);
+  EXPECT_TRUE(fixture.session().send_action_cancel(0x00u));
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperActions, 6u, {kHelperActCancelResp, 0x01u, 0x00u, 0x00u});
+  EXPECT_EQ(cancel_calls, 1);
+  fixture.deliver_frame(kHelperActions, 7u, {kHelperActCancelResp, 0x01u, 0x00u, 0x00u});
+  fixture.deliver_frame(kHelperActions, 8u, {kHelperActCancelResp, 0x02u, 0x09u, 0x00u});
+  EXPECT_EQ(cancel_calls, 1) << "a duplicate and an unknown seq apply nothing";
+  // A GOAL_RESP for an untracked seq applies nothing either.
+  fixture.deliver_frame(kHelperActions, 9u, {kHelperActGoalResp, 0x03u, 0x07u, 0x00u});
+  EXPECT_EQ(goal_calls, 1) << "the earlier accept stands; the stray applies nothing";
+  // A RESULT with a stale rel and a stray ack are ignored too.
+  fixture.deliver_frame(kHelperActions, 10u, {kHelperActResult, 0x00u, 0x00u, 0x04u, 0x07u});
+  fixture.deliver_frame(kAck, 1u, {kHelperActions, 0x09u});
+  EXPECT_EQ(result_calls, 0);
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+}
+
+// covers: ACT-7
+TEST(ActionExchange, RefusesAGoalForARefusedAction)
+{
+  int calls = 0;
+  SessionEvents events;
+  events.action_feedback = [&](std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &) {
+      ++calls;
+    };
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusUnknownType;}};
+  fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0xCCu, 1000u));
+  fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+  fixture.deliver_frame(kParams, 0u, {kParamStatus, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kHelperServices, 0u, {kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  drain_decoded(fixture);
+  fixture.deliver_frame(kHelperActions, 0u, act_declare(0u, "spin"));
+  fixture.deliver_frame(kHelperActions, 1u, {kHelperActStatus, 0x00u, 0x01u, 0x01u});
+  EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+  EXPECT_FALSE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}))
+    << "a refused action takes no goals";
+  // Feedback for a refused action is dropped too.
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActFeedback, 0x00u, 0x00u, 0x09u});
+  EXPECT_EQ(calls, 0);
+}
+
+// covers: REL-2, REL-5
+TEST(ActionExchange, DropsAQueuedGoalOnRehandshake)
+{
+  int calls = 0;
+  SessionEvents events;
+  events.action_goal_response = [&](std::uint8_t, std::uint8_t) {++calls;};
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, std::move(events),
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  // The link wedges with the GOAL still queued: the re-handshake drops the
+  // reliable state, answering nothing, and the late GOAL_RESP is ignored.
+  fixture.block_writes();
+  EXPECT_TRUE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}));
+  fixture.deliver_frame(kControl, 5u, hello_payload(0x44u, 1u, 4u, 0xCCu, 1000u));
+  EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
+  fixture.deliver_frame(kHelperActions, 5u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  EXPECT_EQ(calls, 0);
+  // Unwedging restarts the walk from scratch: the dropped GOAL is gone.
+  fixture.allow_writes();
+  fixture.session().poll();
+  for (const auto & unit : drain_decoded(fixture)) {
+    EXPECT_TRUE(unit.size() < 3u || unit[2] != kHelperActGoal)
+      << "the queued GOAL never goes out";
+  }
+}
+
+// covers: ACT-3
+TEST(ActionExchange, RefusesAnOversizeGoal)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  EXPECT_FALSE(fixture.session().send_action_goal(0u, 0x00u,
+          std::vector<std::uint8_t>(600u, 0xAAu)))
+    << "a goal past the MCU window never leaves";
+}
+
+// covers: ACT-3
+TEST(ActionExchange, RefusesCallsOnAFullLink)
+{
+  SessionConfig config = quiet_config();
+  config.time_sync_enabled = false;
+  Fixture fixture{
+    [](const TopicInfo &) {return std::uint8_t{0};}, config, SessionEvents{},
+    [](const ServiceInfo &) {return kServiceStatusOk;},
+    [](const ActionInfo &) {return kActionStatusOk;}};
+  handshake_with_actions(fixture);
+  fixture.block_writes();
+  // Topics 16 and up never coalesce, so both frames stay queued.
+  EXPECT_TRUE(fixture.session().send_user(16u, std::vector<std::uint8_t>(400u, 0xABu)));
+  EXPECT_TRUE(fixture.session().send_user(17u, std::vector<std::uint8_t>(200u, 0xABu)));
+  EXPECT_FALSE(fixture.session().send_action_goal(0u, 0x00u, {0x05u}))
+    << "a queued GOAL would overflow the link window";
+  EXPECT_FALSE(fixture.session().send_action_cancel(0x00u))
+    << "a queued CANCEL would overflow the link window";
+}
+
 // covers: SVR-7
 TEST(ServiceWalk, StartsAfterTheParameterWalk)
 {
@@ -3766,7 +4860,7 @@ TEST(ServiceWalk, ReportsUnknownTypeWithoutAResolver)
   fixture.deliver_frame(kHelperServices, 0u, svc_declare(0u, 0x00u, "reset"));
   const auto units = drain_decoded(fixture);
   const auto status = std::find_if(units.begin(), units.end(), [](const auto & unit) {
-    return unit.size() >= 6u && unit[0] == kHelperServices && unit[2] == kHelperSvcStatus;
+        return unit.size() >= 6u && unit[0] == kHelperServices && unit[2] == kHelperSvcStatus;
   });
   ASSERT_TRUE(status != units.end()) << "the walk answers the DECLARE";
   EXPECT_EQ(
@@ -3795,7 +4889,7 @@ TEST(ServiceWalk, ReportsAResolverConflict)
   fixture.deliver_frame(kHelperServices, 0u, svc_declare(0u, 0x00u, "reset"));
   const auto units = drain_decoded(fixture);
   const auto status = std::find_if(units.begin(), units.end(), [](const auto & unit) {
-    return unit.size() >= 6u && unit[0] == kHelperServices && unit[2] == kHelperSvcStatus;
+        return unit.size() >= 6u && unit[0] == kHelperServices && unit[2] == kHelperSvcStatus;
   });
   ASSERT_TRUE(status != units.end()) << "the walk answers the DECLARE";
   EXPECT_EQ(
@@ -3816,7 +4910,7 @@ TEST(ServiceExchange, SendsRequestsOnTheirOwnStream)
   fixture.deliver_frame(kControl, 0u, hello_payload(0x44u, 1u, 4u, 0x4Cu, 1000u));
   fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
   fixture.deliver_frame(kParams, 0u,
-  {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x03u, 'l', 'e', 'd', 0x01u});
+    {kParamDeclare, 0x00u, 0x00u, 0x00u, 0x03u, 'l', 'e', 'd', 0x01u});
   fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x01u, 0x01u});
   fixture.deliver_frame(kHelperServices, 0u, svc_declare(0u, 0x00u, "reset"));
   fixture.deliver_frame(kHelperServices, 1u, {kHelperSvcStatus, 0x00u, 0x01u, 0x01u});

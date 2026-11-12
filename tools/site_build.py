@@ -84,6 +84,12 @@ PAGES = (
         'Keep the sketch, swap the includes, fix the fields.',
     ),
     Page(
+        'docs/04-porting.md',
+        'porting.html',
+        'Port to a new board',
+        'The contract, the budgets and the template skeleton.',
+    ),
+    Page(
         'spec/protocol.md',
         'protocol.html',
         'Protocol reference',

@@ -293,6 +293,58 @@ constexpr std::uint8_t kServiceStatusNameConflict = 3u;
  */
 using ServiceResolver = std::function<std::uint8_t(const ServiceInfo &)>;
 
+/// One action of section 7.9.
+/**
+ * The walk index, the first 8 bytes of the type's hash, and the names.
+ * Status is the host's verdict on the DECLARE, mirroring the topic
+ * verdicts. Every MCU action is one it serves; the bridge is the ROS 2
+ * action server on its behalf.
+ */
+struct ActionInfo
+{
+  std::uint8_t index = 0;  ///< The walk index.
+  std::array<std::uint8_t, 8> type_hash{};  ///< The first 8 hash bytes.
+  std::string type_name;  ///< The announced ROS action type.
+  std::string action_name;  ///< The announced action name.
+  std::uint8_t status = 0;  ///< The host verdict on the DECLARE.
+  /// Two action announcements match when every field matches.
+  /**
+   * \param[in] other the announcement to compare.
+   * \return True when every field matches.
+   */
+  bool operator==(const ActionInfo & other) const
+  {
+    return index == other.index && type_hash == other.type_hash &&
+           type_name == other.type_name && action_name == other.action_name &&
+           status == other.status;
+  }
+  /// Two action announcements differ when any field differs.
+  /**
+   * \param[in] other the announcement to compare.
+   * \return True when any field differs.
+   */
+  bool operator!=(const ActionInfo & other) const
+  {
+    return !(*this == other);
+  }
+};
+
+/// The walk STATUS verdicts section 7.9 names, mirroring the topic verdicts.
+constexpr std::uint8_t kActionStatusOk = 0u;
+/// The DECLARE named an unknown action type.
+constexpr std::uint8_t kActionStatusUnknownType = 1u;
+/// The DECLARE carried a mismatching type hash.
+constexpr std::uint8_t kActionStatusHashMismatch = 2u;
+/// The DECLARE named an action already announced.
+constexpr std::uint8_t kActionStatusNameConflict = 3u;
+
+/// Names the section 7.9 verdict for one DECLARE.
+/**
+ * Like the service resolver names the section 7.8 verdict. The action
+ * names and the announced hash are what the DECLARE carried.
+ */
+using ActionResolver = std::function<std::uint8_t(const ActionInfo &)>;
+
 /// The session's observable edge.
 /**
  * Log lines the bridge forwards to its loggers, one call per completed
@@ -330,6 +382,30 @@ struct SessionEvents
    */
   std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
   service_response;
+  /// One GOAL_RESP the MCU sent while connected.
+  /**
+   * As wire goal_seq and decision. The bridge answers every reliable
+   * frame itself; this reports the verdicts the actions layer consumes.
+   */
+  std::function<void(std::uint8_t, std::uint8_t)> action_goal_response;
+  /// One CANCEL_RESP the MCU sent while connected.
+  /**
+   * As wire goal_seq and decision, for the actions layer.
+   */
+  std::function<void(std::uint8_t, std::uint8_t)> action_cancel_response;
+  /// One FEEDBACK the MCU sent while connected.
+  /**
+   * As wire goal_seq, action index and packed payload, for the actions
+   * layer. Feedback is best effort and never acked.
+   */
+  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
+  action_feedback;
+  /// One RESULT the MCU sent while connected.
+  /**
+   * As wire goal_seq, outcome and packed payload, for the actions layer.
+   */
+  std::function<void(std::uint8_t, std::uint8_t, const std::vector<std::uint8_t> &)>
+  action_result;
 };
 
 /// The section 8.2 state machine.
@@ -353,13 +429,15 @@ public:
    * \param[in] resolve the TOPIC_STATUS verdicts.
    * \param[in] events the observable edge.
    * \param[in] resolve_service the SVC_STATUS verdicts.
+   * \param[in] resolve_action the ACT_STATUS verdicts.
    * \throws std::invalid_argument when a period is not positive, or when
    * the time sync period is outside 1 to 5000 ms.
    */
   Session(
     SessionConfig config, const Clock & clock, const Clock & ros_clock, TransportFactory open,
     TopicResolver resolve, SessionEvents events = SessionEvents(),
-    ServiceResolver resolve_service = ServiceResolver());
+    ServiceResolver resolve_service = ServiceResolver(),
+    ActionResolver resolve_action = ActionResolver());
 
   /// Destroys the session and closes the link.
   ~Session();
@@ -417,6 +495,16 @@ public:
    * \return The announced services.
    */
   const std::vector<ServiceInfo> & services() const;
+  /// The last completed handshake's actions, in announcement order.
+  /**
+   * Empty before the first one. Every entry parsed cleanly: the walk
+   * advances past a short payload or names the length overruns without
+   * keeping an entry, so the actions layer reads the kept ones without
+   * rechecking them. Status is the walk's verdict.
+   *
+   * \return The announced actions.
+   */
+  const std::vector<ActionInfo> & actions() const;
 
   /// The latest MCU heartbeat counters.
   /**
@@ -580,6 +668,29 @@ public:
    */
   bool send_service_response(
     std::uint8_t req_id, std::uint8_t status, const std::vector<std::uint8_t> & payload);
+  /// Queues one ACT_GOAL on the reliable channel (ACT-3).
+  /**
+   * The goal_seq, the action index and the packed goal bytes travel after
+   * the rel_seq. False unless connected or for an unknown index; a queued
+   * GOAL goes out behind the outstanding frame, at most one per index.
+   *
+   * \param[in] index which action to start.
+   * \param[in] goal_seq the wire goal this GOAL carries.
+   * \param[in] payload the packed goal bytes.
+   * \return True when the GOAL queued.
+   */
+  bool send_action_goal(
+    std::uint8_t index, std::uint8_t goal_seq, const std::vector<std::uint8_t> & payload);
+  /// Queues one ACT_CANCEL on the reliable channel (ACT-3).
+  /**
+   * The goal_seq travels after the rel_seq. False unless connected; a
+   * queued CANCEL goes out behind the outstanding frame, replacing any
+   * queued CANCEL.
+   *
+   * \param[in] goal_seq the wire goal this CANCEL carries.
+   * \return True when the CANCEL queued.
+   */
+  bool send_action_cancel(std::uint8_t goal_seq);
 
   /// The MCU's announced maximum frame, 0 before the first HELLO.
   /**

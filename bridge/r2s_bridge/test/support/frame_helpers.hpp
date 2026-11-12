@@ -161,6 +161,33 @@ inline std::vector<std::uint8_t> helper_service_declare(
   return p;
 }
 
+// The actions channel id and its opcodes (spec/protocol.md, 7.9).
+constexpr std::uint8_t kHelperActions = 8u;
+constexpr std::uint8_t kHelperActQuery = 0x01u;
+constexpr std::uint8_t kHelperActDeclare = 0x02u;
+constexpr std::uint8_t kHelperActStatus = 0x03u;
+constexpr std::uint8_t kHelperActGoal = 0x04u;
+constexpr std::uint8_t kHelperActGoalResp = 0x05u;
+constexpr std::uint8_t kHelperActCancel = 0x06u;
+constexpr std::uint8_t kHelperActCancelResp = 0x07u;
+constexpr std::uint8_t kHelperActFeedback = 0x08u;
+constexpr std::uint8_t kHelperActResult = 0x09u;
+
+// One ACT_DECLARE payload: the opcode, index, the hash, the type and the
+// action name. Every MCU action is one it serves, so no role travels.
+inline std::vector<std::uint8_t> helper_action_declare(
+  std::uint8_t index, const std::uint8_t *hash,
+  const std::string & type, const std::string & name)
+{
+  std::vector<std::uint8_t> p{kHelperActDeclare, index};
+  p.insert(p.end(), hash, hash + 8u);
+  p.push_back(static_cast<std::uint8_t>(type.size()));
+  p.insert(p.end(), type.begin(), type.end());
+  p.push_back(static_cast<std::uint8_t>(name.size()));
+  p.insert(p.end(), name.begin(), name.end());
+  return p;
+}
+
 // One PARAM_DECLARE payload: the opcode, index, PAR-2 type, PAR-4 flags,
 // the name and the default in its wire form (PAR-1, PAR-3).
 inline std::vector<std::uint8_t> helper_declare(

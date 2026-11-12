@@ -117,6 +117,7 @@ the firmware announces its names and types when it connects.
 | Use parameters, services, or understand action support | [Services and parameters](docs/services-and-parameters.md) |
 | Find an example for a sensor or actuator | [Examples](examples/README.md) |
 | Port a ROS 1 rosserial sketch | [Migration guide](docs/03-port-rosserial-sketch.md) |
+| Run ros2serial on a board of my own | [Porting guide](docs/04-porting.md) |
 | Diagnose a board that does not connect | [Troubleshooting](docs/troubleshooting.md) |
 | Try the system without a board | [Without hardware](docs/without-hardware.md) |
 
@@ -135,9 +136,11 @@ support remains development work. Measurements are in
 [Size and stack budgets](docs/budgets.md).
 
 Topics use best-effort serial delivery: this is not full DDS QoS on the MCU.
-Parameters and services use a separate reliable channel. Host action integration
-is still being completed. WiFi and other network transports are outside the
-project's scope.
+Parameters and services use a separate reliable channel. Actions are served on
+the MCU through `r2s_actions.h`, and the bridge presents them as a ROS 2 action
+server; a ROS-driven example is still being finished
+([#320](https://github.com/apojomovsky/ros2serial/issues/320)). WiFi and other
+network transports are outside the project's scope.
 
 Coming from **rosserial**, you get the same basic sketch-to-ROS workflow in ROS 2,
 with a compatibility API for existing sketches. **micro-ROS** provides a broader

@@ -129,7 +129,7 @@ Pass the title the PR will carry as `make pre-pr-check PR_TITLE="<title>"`, so t
 - `commit-msg`: Conventional Commits, no trailers, no em-dashes. Every commit is checked, except that git's own `Merge ...` message is accepted while a merge is in progress, which is how a branch catches up with `master`.
 - Every hook and the suite run tests without the repository-local git variables git exports to hooks (`scripts/clean-git-env.sh`, `conftest.py`), so a test's throwaway repository never writes to the real one.
 - `pre-commit`: format check on staged files (clang-format, ruff), warning check on touched C and C++, trailing whitespace.
-- `pre-push`: refuse force pushes unless approved, run the prose verify, then only the stale fast gates (the `local` task: `lint`, `commits`, `core`, `gen`, `cpp`, `docs`; everything else runs in CI on every pull request). A fresh tree is a fast no-op once every checksum matches, so pushing the same tree twice costs nothing. A green push does not mean a green PR.
+- `pre-push`: refuse force pushes unless approved, run the prose verify, then the changed-files format gate (`scripts/changed-format.sh`: ament_cpplint on C/C++ and ruff on Python, judged on the pushed lines only, one SKIP line per missing tool), then only the stale fast gates (the `local` task: `lint`, `commits`, `core`, `gen`, `cpp`, `docs`; everything else runs in CI on every pull request). A fresh tree is a fast no-op once every checksum matches, so pushing the same tree twice costs nothing. A green push does not mean a green PR.
 
 ## Ground rules
 

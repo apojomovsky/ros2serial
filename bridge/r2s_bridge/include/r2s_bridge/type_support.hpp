@@ -39,6 +39,18 @@ std::uint8_t resolve_topic_type(const TopicInfo & info);
  */
 std::uint8_t resolve_service_type(const ServiceInfo & info);
 
+/// The ACT_STATUS verdict for one announced action.
+/**
+ * Ok when the installed action hash matches, unknown type when the action
+ * type does not load, hash mismatch otherwise. Never throws; a failed load
+ * is verdict 1. Needs no node: it opens the installed library and closes
+ * it again when done.
+ *
+ * \param[in] info the announced action to judge.
+ * \return The verdict, one of the kActionStatus codes.
+ */
+std::uint8_t resolve_action_type(const ActionInfo & info);
+
 }  // namespace r2s_bridge
 
 #endif  // R2S_BRIDGE__TYPE_SUPPORT_HPP_

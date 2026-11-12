@@ -565,8 +565,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4.2.2
       - run: |
-          apt-get update
-          apt-get install -y --no-install-recommends "ros-${DISTRO}-rmw-cyclonedds-cpp" "ros-${DISTRO}-rmw-zenoh-cpp"
+          bash scripts/apt-install.sh update
+          bash scripts/apt-install.sh install -y --no-install-recommends "ros-${DISTRO}-rmw-cyclonedds-cpp" "ros-${DISTRO}-rmw-zenoh-cpp"
         env:
           DISTRO: ${{ matrix.distro }}
       # The distro images carry no dev image: the runner installs pinned Task.
@@ -720,16 +720,18 @@ jobs:
           key: r2s-task-esp32-refs/heads/master-${{ github.sha }}
 
   # The PIC canary: the core and the static C++ sketch compile with
-  # epic-cc for PIC16F1938 and PIC18F4550. Advisory until Phase 5, so a
-  # red canary never blocks the pull request. The bundle installs into
-  # a cache directory, never into the dev image, and a run without the
-  # toolchain skips with a message instead of failing.
+  # epic-cc for PIC16F1938 and PIC18F4550. New epic-cc failures fail the
+  # script against ci/pic-canary-baseline.txt, but only outside pull
+  # requests: epic-cc is not ours to fix, so a red canary never blocks
+  # a pull request. The bundle installs into a cache directory, never
+  # into the dev image, and a run without the toolchain skips instead
+  # of failing.
   pic-canary:
     needs: plan
     if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.pic == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    continue-on-error: true
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image

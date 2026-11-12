@@ -20,8 +20,9 @@ an `.ino` of the same name. Copy a sketch out of the library before adapting it.
 | `servo` | | `servo` (Float32) | Command an actuator |
 | `range` | `range` (Range) | | Fill a sensor message; reading is a placeholder |
 | `minimal` | `battery` (Float32) | `cmd_vel` (Twist) | Typical robot interface |
+| `service` | | `reset` (Trigger) | Serve a service; the MCU also calls `trigger` |
 | `static`, `xmacro`, `xmacro_c` | See sketch | See sketch | Static topic declarations |
-| `action` | Action feedback/result | Action goals | MCU API; host integration pending |
+| `action` | Action feedback/result | Action goals | MCU API; the bridge serves it to ROS 2 |
 
 Compile topic examples with the library's required settings, then upload and
 launch the bridge as shown in the README:

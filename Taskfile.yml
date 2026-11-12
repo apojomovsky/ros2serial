@@ -126,10 +126,11 @@ tasks:
       - core/**
       # Vectors replay through the conformance runners.
       - spec/**
-      # The scope runs the posix, arduino and ch32v port contract tests.
+      # The scope runs the posix, arduino, ch32v and template port tests.
       - ports/posix/**
       - ports/arduino/**
       - ports/ch32v/**
+      - ports/template/**
     cmds:
       - CORE=1 bash scripts/ci-test.sh
 
@@ -454,6 +455,7 @@ tasks:
       - scripts/with-build-lock.sh
       - scripts/e2e-lease.sh
       - scripts/build-pic-canary.sh
+      - ci/pic-canary-baseline.txt
       - core/**
       - cpp/**
       # The checked-in bundled tables the canary links.

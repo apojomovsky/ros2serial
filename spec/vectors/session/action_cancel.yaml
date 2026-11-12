@@ -8,9 +8,6 @@ steps:
     frame: "00 00 02 04 00 00 00 00 00 00 04 80 00 e8 03 00 00 cd 00 04 6e 6f 64 65 56 9a"
     at_ms: 0
   - from: host
-    frame: "00 00 01 04 dd 5c"
-    at_ms: 0
-  - from: host
     frame: "03 00 01 00 34 3f"
     at_ms: 50
   - from: mcu
@@ -21,7 +18,7 @@ steps:
     at_ms: 100
     note: "no services here; the action walk follows the service walk"
   - from: mcu
-    frame: "07 00 03 00 01 01 3d 39"
+    frame: "07 00 03 00 00 01 e5 20"
     at_ms: 150
     note: "empty service walk ends at once"
   - from: host
@@ -42,7 +39,7 @@ steps:
     at_ms: 300
     note: "STATUS 1 ends the action walk"
   - from: host
-    frame: "00 01 06 01 00 00 00 87 50"
+    frame: "00 00 06 01 00 00 00 ac 54"
     at_ms: 300
   - from: host
     frame: "08 03 04 00 00 00 05 00 00 00 20 5b"
