@@ -88,11 +88,19 @@ def test_stage_only_reports_a_bad_header_as_an_r2s_gen_error(tmp_path):
 
 def test_the_quickstart_leads_with_the_uno_and_names_no_build_property():
     text = (ROOT / 'README.md').read_text(encoding='utf-8')
-    started = text.index('## Getting started')
+    started = text.index('## Connect your first board')
     body = text[started:]
-    assert 'ports/arduino/build.sh' in body
+    # The helper installed by the workspace is the route, not a script a user
+    # has to find relative to a checkout.
+    assert 'ros2 run r2s_gen r2s-arduino' in body
+    assert 'ports/arduino/build.sh' not in body
+    # The Uno comes first; the virtual MCU only appears as a later option.
     uno = body.index('Uno')
-    posix = body.index('posix')
-    assert uno < posix, 'the quickstart must reach the Uno before the posix virtual MCU'
+    assert 'arduino:avr:uno' in body
+    posix = body.find('posix')
+    assert posix == -1 or uno < posix, (
+        'the quickstart must reach the Uno before the posix virtual MCU'
+    )
+    # Limits ride in with the library, so no build property is ever typed by
+    # a user: the helper supplies them.
     assert 'compiler.c.extra_flags' not in body
-    assert 'build/uno/arduino_minimal.ino.elf' in body

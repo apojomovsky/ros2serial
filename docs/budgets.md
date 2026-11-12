@@ -47,6 +47,8 @@ base in the job summary.
 | arduino_button/esp32/arduino_button.ino.elf | 277980 | 333600 | 75841 | 91100 | n/a | n/a |
 | arduino_button/mega/arduino_button.ino.elf | 9454 | 11200 | 1077 | 1300 | 190 | 216 |
 | arduino_button/uno/arduino_button.ino.elf | 8724 | 10300 | 1077 | 1300 | 181 | 208 |
+| arduino_button_led/mega/arduino_button_led.ino.elf | 12520 | n/a | 1181 | n/a | 191 | n/a |
+| arduino_button_led/uno/arduino_button_led.ino.elf | 11786 | n/a | 1181 | n/a | 182 | n/a |
 | arduino_hello/esp32/arduino_hello.ino.elf | 275380 | 330500 | 75497 | 90600 | n/a | n/a |
 | arduino_hello/mega/arduino_hello.ino.elf | 10278 | 12200 | 1097 | 1320 | 179 | 208 |
 | arduino_hello/uno/arduino_hello.ino.elf | 9946 | 11800 | 1097 | 1320 | 171 | 192 |

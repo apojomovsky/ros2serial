@@ -25,14 +25,11 @@ node of its own.
 
 ## 1. Install the library
 
-Follow the README walkthrough steps 1 and 2 first: the generator, the
-bundle, the core, the Arduino port glue, and the runtime layer. Then
-add the compatibility headers, which live in `cpp/include` and ride
-into the library beside the runtime header:
+Build and source the ROS workspace as shown in [Installation](installation.md),
+then prepare the complete library, including the compatibility headers:
 
 ```sh
-LIB=~/Arduino/libraries/ros2serial
-cp -r cpp/include/ros2serial "$LIB/src/"
+ros2 run r2s_gen r2s-arduino library --out firmware/ros2serial
 ```
 
 ## 2. Swap the includes
@@ -312,34 +309,18 @@ topic, or a message that does not fit.
 
 ## 6. Compile and run
 
-Compile the ported sketch the way the README compiles the example:
-the same library, the same limit flags read from the bundle, the
-board of your choice:
+Compile a topic-only ported sketch with the installed helper:
 
 ```sh
-EXTRAS=$(python3 - "$LIB/src/r2s_bundled.h" <<'EOF'
-import sys
-
-from r2s_gen import layouts
-from r2s_gen.msgs import MessageError
-
-try:
-    defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
-except (MessageError, OSError) as error:
-    print(f"r2s-gen: error: {error}", file=sys.stderr)
-    raise SystemExit(1)
-print(" ".join("-D" + define for define in defines))
-EOF
-)
-arduino-cli compile --fqbn arduino:avr:uno \
-  --build-property "compiler.c.extra_flags=$EXTRAS" \
-  --build-property "compiler.cpp.extra_flags=$EXTRAS" \
-  --library "$LIB" path/to/your_sketch
+ros2 run r2s_gen r2s-arduino compile \
+  --library firmware/ros2serial --fqbn arduino:avr:uno \
+  --out firmware/build path/to/your_sketch
 ```
 
-Run it exactly as the README runs the example: start the firmware on
-simavr (or flash it), launch the bridge on the port, and watch the
-topic. The bridge default baud is 115200, matching `initNode`.
+Upload with Arduino CLI and launch the bridge as in the [README](../README.md).
+The bridge default baud is 115200, matching `initNode`.
+Services and parameters require their feature flags in every translation unit;
+see [Services and parameters](services-and-parameters.md).
 
 ## Broadcast tf
 
@@ -491,4 +472,6 @@ naming the rule.
 
 rosserial never had actions, so there is nothing to port: the native
 `r2s::action::Server` serves goals straight from the sketch, as
-`examples/arduino_action` shows with one Fibonacci-like goal.
+`examples/arduino_action` shows with one Fibonacci-like goal. The bridge
+presents that goal as a ROS 2 action server
+([#584](https://github.com/apojomovsky/ros2serial/pull/584)).

@@ -29,6 +29,49 @@ class Page:
 PAGES = (
     Page('README.md', 'walkthrough.html', 'Walkthrough', 'Install, run and flash the examples.'),
     Page(
+        'docs/installation.md',
+        'installation.html',
+        'Installation',
+        'Build and install in a ROS workspace.',
+    ),
+    Page(
+        'docs/firmware.md',
+        'firmware.html',
+        'Firmware',
+        'Add publishers and subscriptions to your sketch.',
+    ),
+    Page(
+        'docs/robot-integration.md',
+        'robot-integration.html',
+        'Robot integration',
+        'Launch, namespace and configure your boards.',
+    ),
+    Page(
+        'docs/custom-interfaces.md',
+        'custom-interfaces.html',
+        'Custom interfaces',
+        'Generate firmware from your ROS messages.',
+    ),
+    Page(
+        'docs/services-and-parameters.md',
+        'services-and-parameters.html',
+        'Services and parameters',
+        'Optional channels and action status.',
+    ),
+    Page(
+        'docs/troubleshooting.md',
+        'troubleshooting.html',
+        'Troubleshooting',
+        'Diagnose serial links and missing topics.',
+    ),
+    Page(
+        'docs/without-hardware.md',
+        'without-hardware.html',
+        'Without hardware',
+        'Virtual MCU and emulator workflows.',
+    ),
+    Page('examples/README.md', 'examples.html', 'Examples', 'Find a sketch for your task.'),
+    Page(
         'docs/02-architecture.md',
         'architecture.html',
         'Architecture',
