@@ -155,6 +155,23 @@ def test_bundled_action_hashes_match_the_installed_type_support():
     assert not mismatches, f'hash drift on {distro}: ' + '; '.join(mismatches)
 
 
+COMPOSED_ACTION_TYPES = ('tf2_msgs/action/LookupTransform',)
+
+
+def test_composed_action_hashes_match_the_installed_type_support():
+    prefixes = _prefixes()
+    installed = _collect_installed(prefixes, COMPOSED_ACTION_TYPES)
+    distro = _snapshot_distro()
+    if distro is None:
+        pytest.skip('no supported ROS distro found: run in a ROS container (the bridge job does)')
+    missing = [t for t in COMPOSED_ACTION_TYPES if t not in installed]
+    assert not missing, f'no installed type description for {missing} under {prefixes}'
+    repository = msgs.MessageRepository(distro=distro)
+    generated = {t: typehash.action_hash(repository, t) for t in COMPOSED_ACTION_TYPES}
+    mismatches = _mismatches(installed, generated)
+    assert not mismatches, f'hash drift on {distro}: ' + '; '.join(mismatches)
+
+
 SERVICE_TYPES = (
     'std_srvs/srv/Trigger',
     # Nests CameraInfo, Header and Time: the walk must describe every
