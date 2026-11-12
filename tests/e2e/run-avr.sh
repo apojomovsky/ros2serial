@@ -3,8 +3,9 @@
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
 # The avr end-to-end suite: scenarios 1 to 4 against the slice sketch,
-# scenario 12 against the flood sketch and scenario 15 against the service
-# example, on an emulated Uno and Mega, plus the baud matrix (the scenario
+# scenario 12 against the flood sketch, scenario 15 against the service
+# example and scenario 16 against the action slice, on an emulated Uno and
+# Mega, plus the baud matrix (the scenario
 # 2 flow gates per baud per board) under the first RMW only. It stages the
 # Arduino library at build
 # time, compiles the sketches for both boards with burst-sized serial
