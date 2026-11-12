@@ -6,7 +6,8 @@
  * bundled Float32 descriptors, so the example needs no r2s.yaml and no
  * generated output; the library ships the runtime layer and the bundled
  * message types. The sketch builds with R2S_WITH_ACTIONS, which the
- * bundled flags leave out. */
+ * bundled flags leave out. RAM cost: 1319 bytes on Uno (measured by
+ * scripts/build-examples.sh). */
 
 #include <ros2serial.h>
 
