@@ -1456,6 +1456,43 @@ TEST_F(RouterNode, CallsTheMcuServiceAndReturnsItsAnswer)
   EXPECT_TRUE(response->message.empty());
 }
 
+// covers: SES-19, SES-34, SVR-8
+TEST_F(RouterNode, RehandshakeAnswersTheInflightRosCall)
+{
+    RouterFixture fixture("svc_rehs", remapped(), RouterParams{});
+    fixture.handshake_with_services();
+    auto client = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+    ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+    auto future =
+      client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+    // Spin until the packed empty request reaches the wire.
+    const auto start = std::chrono::steady_clock::now();
+    bool found = false;
+    while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+      fixture.advance(20u);
+      rclcpp::spin_some(fixture.node());
+      for (const auto & unit : fixture.drain()) {
+        const auto decoded = fixture.checked_decode(unit);
+        if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+          decoded[2] == kHelperSvcRequest)
+        {
+          found = true;
+        }
+      }
+      if (found) {
+        break;
+      }
+    }
+    ASSERT_TRUE(found) << "the REQUEST never reached the wire";
+    // A HELLO while connected re-handshakes before the MCU answers: the
+    // dropped call must be answered, never left hanging.
+    fixture.handshake_with_services();
+    rclcpp::spin_some(fixture.node());
+    ASSERT_EQ(future.wait_for(std::chrono::seconds(10)), std::future_status::ready)
+      << "the re-handshake orphaned the ROS call";
+    EXPECT_FALSE(future.get()->success) << "the dropped call reports failure";
+}
+
 // covers: SES-34, SVR-4, SVR-5
 TEST_F(RouterNode, ForwardsTheMcuCallAndAnswersIt)
 {
