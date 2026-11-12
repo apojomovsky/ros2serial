@@ -160,3 +160,26 @@ def test_running_the_module_as_a_script_exits_with_main(tmp_path, monkeypatch):
         runpy.run_module('r2s_gen.arduino', run_name='__main__')
     assert raised.value.code == 0
     assert (tmp_path / 'script-library' / 'src/r2s/r2s.h').is_file()
+
+
+def test_assets_prefer_the_installed_package(tmp_path, monkeypatch):
+    # Installed beside the wheel the assets sit in the package directory; from
+    # a checkout they sit two levels up. Both layouts must resolve.
+    package = tmp_path / 'r2s_gen'
+    (package / 'firmware').mkdir(parents=True)
+    (package / 'cpp').mkdir()
+    monkeypatch.setattr(arduino, '__file__', str(package / 'arduino.py'))
+    assets, cpp = arduino._assets()
+    assert assets == package / 'firmware'
+    assert cpp == package / 'cpp'
+
+
+def test_library_rejects_an_incomplete_installation(tmp_path, monkeypatch, capsys):
+    # A package built without its firmware assets must fail before it creates
+    # a library that looks ready and is not.
+    empty = tmp_path / 'broken'
+    empty.mkdir()
+    monkeypatch.setattr(arduino, '_assets', lambda: (empty, empty))
+    assert arduino.main(['library', '--out', str(tmp_path / 'library')]) == 1
+    assert 'missing firmware assets' in capsys.readouterr().err
+    assert not (tmp_path / 'library').exists()
