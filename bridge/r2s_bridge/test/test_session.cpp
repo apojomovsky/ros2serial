@@ -959,6 +959,21 @@ TEST(SessionConnected, ResetsOnAHelloWithNoToken)
     EXPECT_EQ(fixture.drain_units().size(), 1u) << "the TOPIC_REQ of the new table";
 }
 
+TEST(SessionConnected, HelloWhileConnectedLogsTheReset)
+{
+    std::vector<std::string> logged;
+    SessionEvents events;
+    events.log = [&logged](SessionLog, const std::string & text) {logged.push_back(text);};
+    Fixture fixture([](const TopicInfo &) {return std::uint8_t{0};}, SessionConfig(), events);
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    logged.clear();
+    fixture.deliver_frame(kControl, 0u, hello_payload(1u, 0u));
+    ASSERT_EQ(logged.size(), 1u) << "a HELLO while connected logs its own re-handshake";
+    EXPECT_NE(logged[0].find("HELLO while connected"), std::string::npos) << logged[0];
+}
+
 TEST(SessionConnected, RecordsTheMcuCountersFromAHeartbeat)
 {
     Fixture fixture;
