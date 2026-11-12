@@ -470,8 +470,8 @@ done
 # without LTO under stack/. Same sources and defines, only the optimizer
 # differs, and the deeper non-LTO paths overestimate rather than hide.
 if [ -n "${R2S_STACK_BUILD:-}" ]; then
-  for sketch in arduino_minimal arduino_action arduino_service arduino_hello arduino_blink arduino_button arduino_servo \
-    arduino_range arduino_xmacro arduino_static arduino_xmacro_c; do
+  for sketch in arduino_minimal arduino_action arduino_service arduino_hello arduino_blink arduino_button \
+    arduino_button_led arduino_servo arduino_range arduino_xmacro arduino_static arduino_xmacro_c; do
     # The runtime sketches share the minimal stage; the static C++ and C
     # sketches keep their own.
     case "$sketch" in
