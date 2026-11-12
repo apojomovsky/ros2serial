@@ -55,9 +55,10 @@
 #define HELLO_NACK_MS 100u
 
 /* The CTL-2 feature bits this build sets: bit 0 for time, bit 1 for logging,
- * bits 2 and 3 for parameters and the reliable channel, bits 3 and 7 for
- * actions and the reliable channel; bit 4 is informational. Each bit rides
- * on the switch of the calls it announces. */
+ * bits 2 and 3 for parameters and the reliable channel, bits 3 and 6 for
+ * services and the reliable channel, bits 3 and 7 for actions and the
+ * reliable channel; bit 4 is informational. Each bit rides on the switch
+ * of the calls it announces. */
 #if DBL_MANT_DIG == FLT_MANT_DIG
 #define R2S_FEATURE_BASE 0x10u
 #else
@@ -79,7 +80,7 @@
 #define R2S_FEATURE_PARAMS 0x00u
 #endif
 #ifdef R2S_WITH_SERVICES
-#define R2S_FEATURE_SERVICES 0x40u
+#define R2S_FEATURE_SERVICES 0x48u
 #else
 #define R2S_FEATURE_SERVICES 0x00u
 #endif

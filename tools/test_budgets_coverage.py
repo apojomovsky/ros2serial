@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 AVR_SKETCHES = [
     'arduino_minimal',
     'arduino_action',
+    'arduino_service',
     'arduino_hello',
     'arduino_blink',
     'arduino_button',

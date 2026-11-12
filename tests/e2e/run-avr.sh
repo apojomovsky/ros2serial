@@ -2,14 +2,16 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-# The avr end-to-end suite: scenarios 1 to 4 against the slice sketch and
-# scenario 12 against the flood sketch, on an emulated Uno and Mega, plus
-# the baud matrix (the scenario 2 flow gates per baud per board) under the
-# first RMW only. It stages the Arduino library at build time, compiles the
-# sketches for both boards with burst-sized serial rings, and runs every
-# scenario under each RMW. Builds go under R2S_BUILD_DIR, so the tree stays
-# clean; the suite runs this script for E2E=avr. R2S_RMWS, R2S_E2E_BOARDS
-# and R2S_E2E_BAUDS narrow their loops for a quicker iteration.
+# The avr end-to-end suite: scenarios 1 to 4 against the slice sketch,
+# scenario 12 against the flood sketch and scenario 15 against the service
+# example, on an emulated Uno and Mega, plus the baud matrix (the scenario
+# 2 flow gates per baud per board) under the first RMW only. It stages the
+# Arduino library at build
+# time, compiles the sketches for both boards with burst-sized serial
+# rings, and runs every scenario under each RMW. Builds go under
+# R2S_BUILD_DIR, so the tree stays clean; the suite runs this script for
+# E2E=avr. R2S_RMWS, R2S_E2E_BOARDS and R2S_E2E_BAUDS narrow their loops
+# for a quicker iteration.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$root" || exit 2
@@ -53,6 +55,22 @@ cp core/include/r2s/*.h "$stage/src/r2s/" || exit 1
 cp core/src/*.c "$stage/src/" || exit 1
 rm -f "$stage/src/test_reset.c"
 cp ports/arduino/r2s_arduino_port.cpp ports/arduino/r2s_arduino_port.h "$stage/src/" || exit 1
+# The example sketches build against their own runtime library stage: the
+# bundle plus the core, the port glue and the runtime layers, staged the
+# same way scripts/build-examples.sh stages them. It stays separate from
+# the slice stage above so the runtime registry never links into the slice
+# or flood firmware.
+exstage="$build/avr_examples"
+rm -rf "$exstage"
+mkdir -p "$exstage/src/r2s" || exit 1
+PYTHONPATH="$root/gen" python3 -m r2s_gen.cli bundle --distro jazzy --out "$exstage" || exit 1
+cp core/include/r2s/*.h "$exstage/src/r2s/" || exit 1
+cp core/src/*.c "$exstage/src/" || exit 1
+rm -f "$exstage/src/test_reset.c"
+cp ports/arduino/r2s_arduino_port.cpp ports/arduino/r2s_arduino_port.h "$exstage/src/" || exit 1
+cp cpp/include/r2s/runtime.hpp cpp/include/r2s/service.hpp \
+  "$exstage/src/r2s/" || exit 1
+cp cpp/src/runtime.cpp cpp/src/service.cpp "$exstage/src/" || exit 1
 # The core never includes the bundled header, so the limits travel as -D
 # flags read from it: the same set the cmake layout passes as definitions.
 # A library sets none of its own flags on this toolchain, hence --build-property.
@@ -135,6 +153,21 @@ for board in uno mega; do
   avr-size "$out/avr_flood.ino.elf" || exit 1
   mv "$out/avr_flood.ino.elf" "$build/fw/flood-$mcu.elf" || exit 1
 done
+# Scenario 15 drives the service example itself, with the same channel
+# flags scripts/build-examples.sh compiles it with. It runs the default
+# baud only: the baud matrix walks the slice flow, not the example.
+svex="$extras -DR2S_WITH_SERVICES -DR2S_MAX_FRAME=64"
+for board in uno mega; do
+  mcu=atmega328p
+  [ "$board" = mega ] && mcu=atmega2560
+  out="$build/fw/$board-service"
+  arduino-cli compile --fqbn "arduino:avr:$board" \
+    --build-property "compiler.c.extra_flags=$svex" \
+    --build-property "compiler.cpp.extra_flags=$svex" \
+    --library "$exstage" --output-dir "$out" examples/arduino_service || exit 1
+  avr-size "$out/arduino_service.ino.elf" || exit 1
+  mv "$out/arduino_service.ino.elf" "$build/fw/service-$mcu.elf" || exit 1
+done
 export R2S_E2E_AVR_FW=$build/fw
 [ "$build_only" = 1 ] && exit 0
 
@@ -150,9 +183,29 @@ echo '{}' >"$R2S_E2E_AVR_STACK_OUT" || exit 1
 # scripts/build-examples.sh uses for its stack/ dir. Same sources and
 # flags, only the optimizer differs, and the table names which binary
 # each column comes from.
-for flavor in slice flood; do
+for flavor in slice flood service; do
+  # The slice and flood sketches live in tests/e2e and link the slice
+  # stage; the service example lives in examples and links the runtime
+  # stage with its channel flags, the same split the firmware builds
+  # above use.
   sketch=avr_slice
-  [ "$flavor" = flood ] && sketch=avr_flood
+  skdir=tests/e2e
+  sklib=$stage
+  cflags="$extras -fno-lto -fstack-usage"
+  cppflags="$serial_flags -fno-lto -fstack-usage"
+  case "$flavor" in
+  flood)
+    sketch=avr_flood
+    cppflags="$cppflags -DR2S_TEST_TX_CAP=16"
+    ;;
+  service)
+    sketch=arduino_service
+    skdir=examples
+    sklib=$exstage
+    cflags="$svex -fno-lto -fstack-usage"
+    cppflags="$svex -fno-lto -fstack-usage"
+    ;;
+  esac
   for board in uno mega; do
     mcu=atmega328p
     [ "$board" = mega ] && mcu=atmega2560
@@ -160,13 +213,11 @@ for flavor in slice flood; do
     sw="$build/stack-fw/$label"
     rm -rf "$sw"
     mkdir -p "$sw" || exit 1
-    cppflags="$serial_flags -fno-lto -fstack-usage"
-    [ "$flavor" = flood ] && cppflags="$cppflags -DR2S_TEST_TX_CAP=16"
     arduino-cli compile --fqbn "arduino:avr:$board" \
-      --build-property "compiler.c.extra_flags=$extras -fno-lto -fstack-usage" \
+      --build-property "compiler.c.extra_flags=$cflags" \
       --build-property "compiler.cpp.extra_flags=$cppflags" \
       --build-property "compiler.c.elf.extra_flags=-fno-lto" \
-      --library "$stage" --build-path "$sw" "tests/e2e/$sketch" || exit 1
+      --library "$sklib" --build-path "$sw" "$skdir/$sketch" || exit 1
     mv "$sw/$sketch.ino.elf" "$sw/$label.elf" || exit 1
   done
 done
@@ -251,7 +302,7 @@ for rmw in $rmws; do
   fi
   for board in $boards; do
     export R2S_E2E_BOARD=$board
-    for scenario in 1 2 3 4 12; do
+    for scenario in 1 2 3 4 12 15; do
       # Same R2S_E2E_SKIP contract as run.sh, matched on the avr file name.
       case " ${R2S_E2E_SKIP:-} " in
         *" test_scenario_${scenario}_avr "*) echo "skip test_scenario_${scenario}_avr (R2S_E2E_SKIP)" ;;
