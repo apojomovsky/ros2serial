@@ -1240,3 +1240,12 @@ def test_every_action_include_resolves_to_a_shipped_file():
         if include.startswith('r2s/'):
             continue
         assert f'src/{include}' in files(), include
+
+
+def test_the_bundle_ships_every_frozen_action_nested_header():
+    root = Path(__file__).resolve().parents[2]
+    for type_name in bundle.ACTION_NESTED_HEADERS:
+        path = f'src/{cpp.message_path(type_name)}'
+        assert path in files(), path
+        frozen = root / 'cpp' / 'include' / Path(path).relative_to('src')
+        assert files()[path] == frozen.read_text(encoding='utf-8'), path
