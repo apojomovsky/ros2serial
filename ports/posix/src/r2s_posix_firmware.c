@@ -585,9 +585,11 @@ static void service_reset_link(void)
 /* The spin goal the firmware runs: one accepted goal at a time, a paced
  * empty feedback, then the fixed transform result. The e2e action scenario
  * cancels, drops and resets inside the feedback window below, so the run
- * stays slow enough to observe and fast enough to finish. */
+ * stays slow enough to observe and fast enough to finish. The window is
+ * generous because simulated time can outrun the wall clock: the avr slice
+ * shares this pacing, and its test must still land its kill mid-goal. */
 #define ACTION_FEEDBACK_PERIOD_MS 200u
-#define ACTION_FEEDBACK_COUNT 4u
+#define ACTION_FEEDBACK_COUNT 10u
 
 /* 0xFF in s_goal_seq means no goal is running; the seq restarts at 0 after
  * every handshake, so the first goal of a connection needs no sentinel. */
