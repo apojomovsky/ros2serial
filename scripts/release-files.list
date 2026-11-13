@@ -34,6 +34,7 @@ examples/cmake_minimal/lib/r2s_generated.c
 examples/cmake_minimal/lib/r2s_generated.h
 ports/posix/src/r2s_generated.c
 ports/posix/src/r2s_generated.h
+cpp/include/builtin_interfaces/msg/duration.hpp
 cpp/include/builtin_interfaces/msg/time.hpp
 cpp/include/geometry_msgs/msg/quaternion.hpp
 cpp/include/geometry_msgs/msg/transform.hpp
@@ -53,4 +54,6 @@ cpp/include/std_msgs/msg/string.hpp
 cpp/include/std_srvs/srv/trigger.hpp
 cpp/include/std_srvs/srv/trigger_request.hpp
 cpp/include/std_srvs/srv/trigger_response.hpp
+cpp/include/tf2_msgs/action/lookup_transform.hpp
+cpp/include/tf2_msgs/msg/tf2_error.hpp
 cpp/include/tf2_msgs/msg/tf_message.hpp
