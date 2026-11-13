@@ -254,6 +254,13 @@ compile_one() {
   fi
 }
 for target in p16f1938 p18f4550; do
+  # Tier S (PIC16F1938 class) is the compact build: no codec, log or
+  # time, which is what the design budgets for that part. The full
+  # feature set does not fit its 16K-word flash. Tier M gets the lot.
+  case "$target" in
+  p16f1938) defines=() ;;
+  *) defines=(-DR2S_WITH_CODEC -DR2S_MAX_NEST=4 -DR2S_WITH_LOG -DR2S_WITH_TIME) ;;
+  esac
   compile_one "$target" "core C sources" \
     "${sources[@]}" "$build/canary_port.c" "$build/canary_c.c" \
     -o "$build/canary_c_$target.hex"

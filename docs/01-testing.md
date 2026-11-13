@@ -349,7 +349,7 @@ The SCRIPTS scope runs in CI as one job per shard over the collected node ids, s
 | System, PIC | The same scenarios under MPLAB SIM | epic-hal mdb gate | Phase 5 |
 | Soak | Two hours of traffic on posix and simavr | launch_testing | Nightly |
 | Build matrix and docs | Examples for Uno and Mega (both registration paths), PlatformIO, bare AVR; every code snippet in `README.md` and `docs/` extracted and compiled | arduino/compile-sketches, `pio ci`, make | Every PR |
-| PIC canary | Core and static C++ compile with epic-cc for PIC16F1938 and PIC18F4550 | epic-cc release bundle | Every PR from Phase 2, advisory until Phase 5 |
+| PIC canary | Core and static C++ compile with epic-cc for PIC16F1938 (compact build) and PIC18F4550 (full feature set) | epic-cc release bundle | Every PR from Phase 2, advisory until Phase 5 |
 | Budgets and performance | Flash, RAM and worst-case stack per example and tier; cycles per byte for framing and codec in simavr | avr-size, `tools/stack_report.py`, simavr cycle counts | Every PR |
 | Hardware in the loop | Real Uno and Mega | Self-hosted runner, `workflow_dispatch` by maintainers only | Phase 1 onwards; PIC boards in Phase 5 |
 
