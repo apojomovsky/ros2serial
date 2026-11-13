@@ -22,6 +22,7 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
+from r2s_gen import actions
 from r2s_gen import bounds
 from r2s_gen import config
 from r2s_gen import msgs
@@ -268,7 +269,11 @@ def run(args: argparse.Namespace) -> int:
     try:
         loaded = config.load(args.config)
         repository = _repository(args, loaded.distro)
-        roots = [topic.type_name for topic in loaded.topics] + services.roots(loaded)
+        roots = (
+            [topic.type_name for topic in loaded.topics]
+            + services.roots(loaded)
+            + actions.roots(loaded)
+        )
         resolved = bounds.resolve(repository, roots, bounds=dict(loaded.bounds))
         files = generate(loaded, resolved, repository, args.layout, args.config, args.cpp)
         _write(args.out, files)
