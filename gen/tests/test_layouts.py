@@ -205,6 +205,54 @@ bounds:
 SPIN_TEXT = 'int32 order\n---\nint32[] sequence\n'
 
 
+ACTION_TEXT = """\
+node: r2s_spin
+topics:
+  - name: battery
+    type: std_msgs/msg/Float32
+    direction: pub
+actions:
+  - name: spin
+    type: demo_msgs/action/Spin
+"""
+
+SPIN_ACTION_TEXT = 'int32 order\n---\nint32 sequence\n---\nint32 partial\n'
+
+
+def write_action(root, type_name, text):
+    package, _, name = type_name.partition('/action/')
+    path = root / package / 'action' / f'{name}.action'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding='utf-8')
+    return path
+
+
+def test_the_generate_command_resolves_action_roots(tmp_path, capsys):
+    write_action(tmp_path / 'messages', 'demo_msgs/action/Spin', SPIN_ACTION_TEXT)
+    out = tmp_path / 'out'
+
+    assert (
+        cli.main(
+            [
+                'generate',
+                '--config',
+                str(write_config(ACTION_TEXT, tmp_path)),
+                '--out',
+                str(out),
+                '--layout',
+                'cmake',
+                '--msg-path',
+                str(tmp_path / 'messages'),
+            ]
+        )
+        == 0
+    )
+    header = (out / 'r2s_generated.h').read_text(encoding='utf-8')
+    source = (out / 'r2s_generated.c').read_text(encoding='utf-8')
+    assert 'demo_msgs__action__Spin_Goal' in header
+    assert 'spin' in source
+
+
 def test_the_generate_command_resolves_service_roots(tmp_path, capsys):
     write_service(tmp_path / 'messages', 'demo_srvs/srv/Spin', SPIN_TEXT)
     out = tmp_path / 'out'
