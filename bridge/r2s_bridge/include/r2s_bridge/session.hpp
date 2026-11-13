@@ -573,13 +573,13 @@ public:
   bool narrow_float64() const;
 
   /// The H8 time sync values.
-/**
- * The fitted ROS time at MCU tick zero, the fitted drift, the latest
- * round trip. Zero while unavailable.
- *
- * \return The fitted offset in nanoseconds.
- */
-std::int64_t time_offset_ns() const;
+  /**
+   * The fitted ROS time at MCU tick zero, the fitted drift, the latest
+   * round trip. Zero while unavailable.
+   *
+   * \return The fitted offset in nanoseconds.
+   */
+  std::int64_t time_offset_ns() const;
 
   /// The fitted drift of the H8 time sync values.
   /**
