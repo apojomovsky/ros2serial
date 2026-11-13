@@ -101,6 +101,28 @@ LAYOUTS = {
     'tf2_msgs/msg/TFMessage': [
         ('transforms', ('seq', ('nest', 'geometry_msgs/msg/TransformStamped'))),
     ],
+    'builtin_interfaces/msg/Duration': [
+        ('sec', I32),
+        ('nanosec', U32),
+    ],
+    'tf2_msgs/msg/TF2Error': [
+        ('error', U8),
+        ('error_string', STR),
+    ],
+    'tf2_msgs/action/LookupTransform_Goal': [
+        ('target_frame', STR),
+        ('source_frame', STR),
+        ('source_time', ('nest', 'builtin_interfaces/msg/Time')),
+        ('timeout', ('nest', 'builtin_interfaces/msg/Duration')),
+        ('target_time', ('nest', 'builtin_interfaces/msg/Time')),
+        ('fixed_frame', STR),
+        ('advanced', BOOL),
+    ],
+    'tf2_msgs/action/LookupTransform_Result': [
+        ('transform', ('nest', 'geometry_msgs/msg/TransformStamped')),
+        ('error', ('nest', 'tf2_msgs/msg/TF2Error')),
+    ],
+    'tf2_msgs/action/LookupTransform_Feedback': [],
     'std_srvs/srv/Trigger_Request': [],
     'std_srvs/srv/Trigger_Response': [
         ('success', BOOL),
@@ -273,6 +295,46 @@ REPRESENTATIVE = {
                 }
             ]
         },
+    },
+    'tf2_msgs/action/LookupTransform_Goal': {
+        'wide': {
+            'target_frame': 'odom',
+            'source_frame': 'base',
+            'source_time': {'sec': 7, 'nanosec': 8},
+            'timeout': {'sec': 5, 'nanosec': 0},
+            'target_time': {'sec': 7, 'nanosec': 8},
+            'fixed_frame': '',
+            'advanced': False,
+        },
+        'narrow': None,
+    },
+    'tf2_msgs/action/LookupTransform_Result': {
+        'wide': {
+            'transform': {
+                'header': {'stamp': {'sec': 7, 'nanosec': 8}, 'frame_id': 'odom'},
+                'child_frame_id': 'base',
+                'transform': {
+                    'translation': {'x': 1.5, 'y': -2.0, 'z': 0.5},
+                    'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0},
+                },
+            },
+            'error': {'error': 0, 'error_string': ''},
+        },
+        'narrow': {
+            'transform': {
+                'header': {'stamp': {'sec': 7, 'nanosec': 8}, 'frame_id': 'odom'},
+                'child_frame_id': 'base',
+                'transform': {
+                    'translation': {'x': 1.5, 'y': -2.0, 'z': 0.5},
+                    'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0},
+                },
+            },
+            'error': {'error': 0, 'error_string': ''},
+        },
+    },
+    'tf2_msgs/action/LookupTransform_Feedback': {
+        'wide': {},
+        'narrow': None,
     },
     'std_srvs/srv/Trigger_Request': {
         'wide': {},
