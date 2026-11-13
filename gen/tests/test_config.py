@@ -778,6 +778,15 @@ def test_a_nonstring_bounds_key_is_an_error(tmp_path):
     assert str(caught.value) == f'{path}: bounds: key 1 must be a string; quote the key'
 
 
+def test_a_nonmapping_action_entry_is_an_error(tmp_path):
+    path = write(tmp_path / 'r2s.yaml', 'node: base_controller\ntopics: []\nactions:\n  - spin\n')
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == f'{path}: actions[0]: expected a mapping object; fix the value'
+
+
 def test_a_non_utf8_file_is_an_error(tmp_path):
     path = tmp_path / 'r2s.yaml'
     path.write_bytes('node: base_controller # caf\xe9\ntopics: []\n'.encode('latin-1'))
