@@ -166,6 +166,9 @@ tasks:
       - spec/**
       # The model tests drive the real core through the host library.
       - core/**
+      - cpp/**
+      - ports/arduino/**
+      - examples/arduino_*/**
       # The golden tests compare the checked-in generated outputs.
       - examples/cmake_minimal/lib/**
     cmds:
@@ -526,6 +529,8 @@ tasks:
       - scripts/e2e-lease.sh
       - scripts/check-readme.sh
       - README.md
+      - docs/installation.md
+      - docs/without-hardware.md
       # The walkthrough installs the generator, stages the library from the
       # core, the runtime layer and the port glue, compiles the minimal
       # sketch, then runs it on the harness against a built bridge.
@@ -535,6 +540,7 @@ tasks:
       - cpp/**
       - ports/arduino/**
       - examples/arduino_minimal/**
+      - examples/arduino_button_led/**
       - bridge/**
       - tests/harness/**
     cmds:

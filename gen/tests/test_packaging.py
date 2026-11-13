@@ -26,12 +26,16 @@ def copied_package(tmp_path: Path) -> Path:
     """Copy the package, so a build leaves its artifacts out of the repository."""
     package = tmp_path / 'gen'
     shutil.copytree(
-        PACKAGE, package, ignore=shutil.ignore_patterns('__pycache__', '*.egg-info', 'build')
+        PACKAGE,
+        package,
+        ignore=shutil.ignore_patterns('__pycache__', '*.egg-info', 'build', 'firmware_stage'),
     )
     # The wheel ships the C++ layer's tree as package data, so the copy
     # carries it beside the package, where setup.py looks for it.
     if CPP_TREE.is_dir():
         shutil.copytree(CPP_TREE, tmp_path / 'cpp', ignore=shutil.ignore_patterns('__pycache__'))
+    for directory in ('core', 'ports/arduino', 'examples'):
+        shutil.copytree(ROOT / directory, tmp_path / directory)
     return package
 
 
@@ -70,6 +74,15 @@ def test_pip_installs_the_generator_into_a_fresh_venv(tmp_path):
         site_packages / 'r2s_gen' / 'snapshots' / 'jazzy' / 'std_srvs' / 'srv' / 'Trigger.srv'
     ).is_file()
     assert (site_packages / 'r2s_gen' / 'schema' / 'r2s.schema.json').is_file()
+    library = tmp_path / 'standalone-library'
+    staged = run(
+        [str(venv / 'bin' / 'r2s-arduino'), 'library', '--out', str(library)],
+        cwd=tmp_path,
+        env=clean_env(),
+    )
+    assert staged.returncode == 0, staged.stdout + staged.stderr
+    assert (library / 'src/session.c').is_file()
+    assert (library / 'examples/button_led/button_led.ino').is_file()
 
 
 def test_the_wheel_ships_the_cpp_tree(tmp_path):

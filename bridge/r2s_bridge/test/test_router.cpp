@@ -1456,6 +1456,160 @@ TEST_F(RouterNode, CallsTheMcuServiceAndReturnsItsAnswer)
   EXPECT_TRUE(response->message.empty());
 }
 
+// covers: SVR-4, ENC-12
+TEST_F(RouterNode, PacksTheRosCallNarrowOn32BitDoubleMcus)
+{
+  RouterFixture fixture("svc_narrow_ros", remapped(), RouterParams{});
+  // Bit 4 says the MCU double is 32 bits, so every float64 travels narrow.
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0x5Cu));
+  fixture.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  fixture.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> hash =
+    installed_service_hash("sensor_msgs/srv/SetCameraInfo");
+  fixture.deliver_frame(kServicesTopic, 0u,
+    helper_service_declare(0u, 0x00u, hash.data(), "sensor_msgs/srv/SetCameraInfo", "cam"));
+  fixture.deliver_frame(kServicesTopic, 1u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x01u, 0x01u});
+  auto client = fixture.node()->create_client<sensor_msgs::srv::SetCameraInfo>("cam");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+  auto request = std::make_shared<sensor_msgs::srv::SetCameraInfo::Request>();
+  for (std::size_t i = 0; i < request->camera_info.k.size(); ++i) {
+    request->camera_info.k[i] = static_cast<double>(i) + 1.0;
+  }
+  auto future = client->async_send_request(request);
+  // Spin until the packed request reaches the wire.
+  const auto start = std::chrono::steady_clock::now();
+  std::uint8_t req = 0u;
+  std::vector<std::uint8_t> wire_payload;
+  bool found = false;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 7u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+      {
+        req = decoded[4];
+        EXPECT_EQ(decoded[5], 0x00u) << "the REQUEST names the cam service";
+        wire_payload =
+          std::vector<std::uint8_t>(decoded.begin() + 6u, decoded.end() - 2u);
+        found = true;
+      }
+    }
+    if (found) {
+      break;
+    }
+  }
+  ASSERT_TRUE(found) << "the REQUEST never reached the wire";
+  // The reference converter packs the same request narrow: the K array as
+  // binary32, which is shorter than the wide form.
+  Converter converter;
+  std::vector<std::uint8_t> want;
+  const ConvertResult packed_request = converter.pack_from_struct(
+      "sensor_msgs/srv/SetCameraInfo_Request", true, request.get(), want);
+  ASSERT_EQ(packed_request.fail, ConvertFail::kNone);
+  EXPECT_EQ(wire_payload, want) << "the ROS call packs wide on a 32-bit-double MCU";
+  // The MCU answers ok: the narrow answer unpacks back into the client.
+  sensor_msgs::srv::SetCameraInfo_Response answer;
+  answer.success = true;
+  answer.status_message = "ok";
+  std::vector<std::uint8_t> packed_answer;
+  const ConvertResult packed_response = converter.pack_from_struct(
+      "sensor_msgs/srv/SetCameraInfo_Response", true, &answer, packed_answer);
+  ASSERT_EQ(packed_response.fail, ConvertFail::kNone);
+  std::vector<std::uint8_t> frame{kHelperSvcResponse, 0x00u, req, 0x00u};
+  frame.insert(frame.end(), packed_answer.begin(), packed_answer.end());
+  fixture.deliver_frame(kServicesTopic, 0u, frame);
+  rclcpp::spin_some(fixture.node());
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+  const auto response = future.get();
+  EXPECT_TRUE(response->success);
+  EXPECT_EQ(response->status_message, "ok");
+}
+
+// covers: SES-19, SES-34, SVR-8
+TEST_F(RouterNode, RehandshakeAnswersTheInflightRosCall)
+{
+    RouterFixture fixture("svc_rehs", remapped(), RouterParams{});
+    fixture.handshake_with_services();
+    auto client = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+    ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+    auto future =
+      client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+    // Spin until the packed empty request reaches the wire.
+    const auto start = std::chrono::steady_clock::now();
+    bool found = false;
+    while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+      fixture.advance(20u);
+      rclcpp::spin_some(fixture.node());
+      for (const auto & unit : fixture.drain()) {
+        const auto decoded = fixture.checked_decode(unit);
+        if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+          decoded[2] == kHelperSvcRequest)
+        {
+          found = true;
+        }
+      }
+      if (found) {
+        break;
+      }
+    }
+    ASSERT_TRUE(found) << "the REQUEST never reached the wire";
+    // A second call queues behind the in-flight one: the link carries one
+    // frame at a time ([SVR-4], [SVR-10]).
+    auto queued =
+      client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+    for (int i = 0; i < 5; ++i) {
+      fixture.advance(20u);
+      rclcpp::spin_some(fixture.node());
+    }
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      EXPECT_FALSE(decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcRequest)
+        << "the queued call stays queued while one is in flight";
+    }
+    // No ROS server on trigger: the MCU call waits like the timeout test.
+    fixture.deliver_frame(kServicesTopic, 0u, {kHelperSvcRequest, 0x00u, 0x07u, 0x01u});
+    fixture.advance(100u);
+    rclcpp::spin_some(fixture.node());
+    // A HELLO while connected re-handshakes before anyone answers: every
+    // dropped waiter must be retired, never left hanging.
+    fixture.handshake_with_services();
+    // The answers need spins to reach the client futures: the rebuilt
+    // service churns discovery between the send and the take.
+    const auto answered_at = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - answered_at < std::chrono::seconds(10)) {
+      rclcpp::spin_some(fixture.node());
+      if (future.wait_for(std::chrono::seconds(0)) == std::future_status::ready &&
+        queued.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+      {
+        break;
+      }
+    }
+    ASSERT_EQ(future.wait_for(std::chrono::seconds(0)), std::future_status::ready)
+      << "the re-handshake orphaned the ROS call";
+    ASSERT_EQ(queued.wait_for(std::chrono::seconds(0)), std::future_status::ready)
+      << "the re-handshake orphaned the queued call";
+    EXPECT_FALSE(future.get()->success) << "the dropped call reports failure";
+    EXPECT_FALSE(queued.get()->success) << "the dropped queued call reports failure";
+    // Past the MCU call timeout the retired req answers nothing late.
+    for (int i = 0; i < 12; ++i) {
+      fixture.advance(500u);
+      rclcpp::spin_some(fixture.node());
+      fixture.deliver_frame(kAckTopic, static_cast<std::uint8_t>(i), {kServicesTopic, 0x00u});
+    }
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      EXPECT_FALSE(decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcResponse && decoded[4] == 0x07u)
+        << "no late answer for the retired MCU call";
+    }
+}
+
 // covers: SES-34, SVR-4, SVR-5
 TEST_F(RouterNode, ForwardsTheMcuCallAndAnswersIt)
 {
@@ -1506,6 +1660,88 @@ TEST_F(RouterNode, ForwardsTheMcuCallAndAnswersIt)
   }
   EXPECT_TRUE(called) << "the ROS server never saw the call";
   EXPECT_TRUE(answered) << "the RESPONSE never reached the wire";
+}
+
+// covers: SVR-5, SVR-6, ENC-12
+TEST_F(RouterNode, UnpacksTheMcuCallNarrowOn32BitDoubleMcus)
+{
+  RouterFixture fixture("svc_narrow_mcu", remapped(), RouterParams{});
+  std::array<double, 9> seen_k{};
+  bool seen = false;
+  auto server = fixture.node()->create_service<sensor_msgs::srv::SetCameraInfo>("camcall",
+      [&](const std::shared_ptr<sensor_msgs::srv::SetCameraInfo::Request> request,
+      std::shared_ptr<sensor_msgs::srv::SetCameraInfo::Response> response) {
+        seen_k = request->camera_info.k;
+        seen = true;
+        response->success = true;
+        response->status_message = "ok";
+    });
+  // Bit 4 says the MCU double is 32 bits, so every float64 travels narrow.
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0x5Cu));
+  fixture.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  fixture.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> hash =
+    installed_service_hash("sensor_msgs/srv/SetCameraInfo");
+  fixture.deliver_frame(kServicesTopic, 0u,
+    helper_service_declare(0u, 0x01u, hash.data(), "sensor_msgs/srv/SetCameraInfo", "camcall"));
+  fixture.deliver_frame(kServicesTopic, 1u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x01u, 0x01u});
+  for (int i = 0; i < 50; ++i) {
+    rclcpp::spin_some(fixture.node());
+  }
+  // The MCU calls with a narrow-packed request: the K array as binary32.
+  sensor_msgs::srv::SetCameraInfo_Request mcu_request;
+  for (std::size_t i = 0; i < mcu_request.camera_info.k.size(); ++i) {
+    mcu_request.camera_info.k[i] = static_cast<double>(i) + 1.0;
+  }
+  Converter converter;
+  std::vector<std::uint8_t> packed_request;
+  const ConvertResult packed_call = converter.pack_from_struct(
+      "sensor_msgs/srv/SetCameraInfo_Request", true, &mcu_request, packed_request);
+  ASSERT_EQ(packed_call.fail, ConvertFail::kNone);
+  std::vector<std::uint8_t> call{kHelperSvcRequest, 0x00u, 0x07u, 0x00u};
+  call.insert(call.end(), packed_request.begin(), packed_request.end());
+  fixture.deliver_frame(kServicesTopic, 0u, call);
+  // The ROS answer packs narrow too: the same bytes the reference
+  // converter produces.
+  sensor_msgs::srv::SetCameraInfo_Response ros_answer;
+  ros_answer.success = true;
+  ros_answer.status_message = "ok";
+  std::vector<std::uint8_t> want_answer;
+  const ConvertResult packed_response = converter.pack_from_struct(
+      "sensor_msgs/srv/SetCameraInfo_Response", true, &ros_answer, want_answer);
+  ASSERT_EQ(packed_response.fail, ConvertFail::kNone);
+  const auto start = std::chrono::steady_clock::now();
+  std::vector<std::uint8_t> wire_answer;
+  bool answered = false;
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    if (!seen) {
+      continue;
+    }
+    for (const auto & unit : fixture.drain()) {
+      const auto decoded = fixture.checked_decode(unit);
+      if (decoded.size() >= 7u && decoded[0] == kServicesTopic &&
+        decoded[2] == kHelperSvcResponse && decoded[4] == 0x07u && decoded[5] == 0x00u)
+      {
+        wire_answer =
+          std::vector<std::uint8_t>(decoded.begin() + 6u, decoded.end() - 2u);
+        answered = true;
+      }
+    }
+    if (answered) {
+      break;
+    }
+  }
+  EXPECT_TRUE(seen) << "the ROS server never saw the call";
+  for (std::size_t i = 0; i < seen_k.size(); ++i) {
+    EXPECT_DOUBLE_EQ(seen_k[i], static_cast<double>(i) + 1.0);
+  }
+  ASSERT_TRUE(answered) << "the RESPONSE never reached the wire";
+  EXPECT_EQ(wire_answer, want_answer) << "the ROS answer packs wide on a 32-bit-double MCU";
 }
 
 // covers: SES-34, SVR-8

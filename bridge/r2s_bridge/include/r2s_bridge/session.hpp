@@ -565,21 +565,21 @@ public:
 
   /// Whether the MCU's `double` is 32 bits, so float64 travels narrow.
   /**
-   * The HELLO features byte carries it ([CTL-2] bit 4). Actions pack and
-   * unpack against it where topics use their narrow flag.
+   * The HELLO features byte carries it ([CTL-2] bit 4). Services and actions
+   * pack and unpack against it where topics use their narrow flag.
    *
    * \return True when the handshake announced 32-bit doubles.
    */
   bool narrow_float64() const;
 
   /// The H8 time sync values.
-  /**
-   * The fitted ROS time at MCU tick zero, the fitted drift, the latest
-   * round trip. Zero while unavailable.
-   *
-   * \return The fitted offset in nanoseconds.
-   */
-  std::int64_t time_offset_ns() const;
+/**
+ * The fitted ROS time at MCU tick zero, the fitted drift, the latest
+ * round trip. Zero while unavailable.
+ *
+ * \return The fitted offset in nanoseconds.
+ */
+std::int64_t time_offset_ns() const;
 
   /// The fitted drift of the H8 time sync values.
   /**

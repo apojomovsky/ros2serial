@@ -81,10 +81,12 @@ from pathlib import Path
 
 root, stage = (Path(sys.argv[1]), Path(sys.argv[2]))
 shutil.copytree(
-    root / "gen", stage / "gen", ignore=shutil.ignore_patterns("__pycache__", "*.egg-info", "build", "dist")
+    root / "gen", stage / "gen", ignore=shutil.ignore_patterns("__pycache__", "*.egg-info", "build", "dist", "firmware_stage")
 )
 if (root / "cpp").is_dir():
     shutil.copytree(root / "cpp", stage / "cpp", ignore=shutil.ignore_patterns("__pycache__"))
+for directory in ("core/include", "core/src", "ports/arduino", "examples"):
+    shutil.copytree(root / directory, stage / directory, ignore=shutil.ignore_patterns("__pycache__"))
 EOF
 (cd "$stage/gen" && python3 setup.py -q sdist --dist-dir "$out" bdist_wheel --dist-dir "$out")
 rm -rf "$out/ros2serial"

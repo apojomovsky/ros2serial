@@ -294,7 +294,7 @@ done
 # their topics while they run, so the staged bundle above serves them all
 # with no new stage. Each firmware links the runtime topic table, which a
 # static sketch would not.
-for sketch in arduino_hello arduino_blink arduino_button arduino_servo arduino_range; do
+for sketch in arduino_hello arduino_blink arduino_button arduino_button_led arduino_servo arduino_range; do
   for board in uno mega; do
     out="$build/$sketch/$board"
     arduino-cli compile --fqbn "arduino:avr:$board" \
@@ -470,8 +470,8 @@ done
 # without LTO under stack/. Same sources and defines, only the optimizer
 # differs, and the deeper non-LTO paths overestimate rather than hide.
 if [ -n "${R2S_STACK_BUILD:-}" ]; then
-  for sketch in arduino_minimal arduino_action arduino_service arduino_hello arduino_blink arduino_button arduino_servo \
-    arduino_range arduino_xmacro arduino_static arduino_xmacro_c; do
+  for sketch in arduino_minimal arduino_action arduino_service arduino_hello arduino_blink arduino_button \
+    arduino_button_led arduino_servo arduino_range arduino_xmacro arduino_static arduino_xmacro_c; do
     # The runtime sketches share the minimal stage; the static C++ and C
     # sketches keep their own.
     case "$sketch" in
@@ -513,6 +513,7 @@ fi
 # The example timing tests drive each loop on the host against a scripted
 # tick: resync for the examples, catch-up for the slice. No DDS is involved.
 bash "$root/examples/tests/run.sh" || status=1
+python3 -m pytest "$root/examples/tests/test_button_led.py" -q || status=1
 
 # Hello, blink and the action example run on an emulated Uno: the three
 # sketches need no peripheral, so CI proves the link beyond the compile.

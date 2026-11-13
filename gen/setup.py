@@ -34,6 +34,25 @@ if CPP_TREE.is_dir():
     shutil.rmtree(CPP_STAGE, ignore_errors=True)
     shutil.copytree(CPP_TREE, CPP_STAGE)
 
+FIRMWARE_STAGE = HERE / 'firmware_stage'
+if (HERE.parent / 'core').is_dir():
+    shutil.rmtree(FIRMWARE_STAGE, ignore_errors=True)
+    for directory in ('core/include', 'core/src', 'ports/arduino'):
+        shutil.copytree(
+            HERE.parent / directory,
+            FIRMWARE_STAGE / directory,
+            ignore=shutil.ignore_patterns('tests', '__pycache__'),
+        )
+    for sketch in (HERE.parent / 'examples').glob('arduino_*/*.ino'):
+        name = sketch.parent.name.removeprefix('arduino_')
+        target = FIRMWARE_STAGE / 'examples' / name
+        target.mkdir(parents=True, exist_ok=True)
+        for source in sketch.parent.iterdir():
+            if source.suffix in ('.ino', '.c', '.h'):
+                shutil.copy2(
+                    source, target / (name + '.ino' if source.suffix == '.ino' else source.name)
+                )
+
 packages = find_packages(include=['r2s_gen', 'r2s_gen.*'])
 package_dir = {}
 package_data = {
@@ -48,6 +67,18 @@ if CPP_STAGE.is_dir():
     packages.append('r2s_gen.cpp')
     package_dir['r2s_gen.cpp'] = 'cpp_stage'
     package_data['r2s_gen.cpp'] = ['include/**/*.h', 'include/**/*.hpp', 'src/*.cpp']
+if FIRMWARE_STAGE.is_dir():
+    packages.append('r2s_gen.firmware')
+    package_dir['r2s_gen.firmware'] = 'firmware_stage'
+    package_data['r2s_gen.firmware'] = [
+        'core/include/r2s/*.h',
+        'core/src/*.c',
+        'ports/arduino/*.h',
+        'ports/arduino/*.cpp',
+        'examples/*/*.ino',
+        'examples/*/*.h',
+        'examples/*/*.c',
+    ]
 
 setup(
     name='r2s_gen',
@@ -63,5 +94,7 @@ setup(
         ('share/r2s_gen', ['package.xml']),
     ],
     zip_safe=False,
-    entry_points={'console_scripts': ['r2s-gen = r2s_gen.cli:main']},
+    entry_points={
+        'console_scripts': ['r2s-gen = r2s_gen.cli:main', 'r2s-arduino = r2s_gen.arduino:main']
+    },
 )

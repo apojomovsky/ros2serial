@@ -131,7 +131,12 @@ def record_peak(label, peak):
 
 
 def harness_argv(board, flavor='slice', baud=None):
-    """The r2s_simavr command for one firmware, always painting the stack."""
+    """The r2s_simavr command for one firmware, paced and painting the stack.
+
+    Pacing pins simulated time to the wall clock, so the bridge's
+    wall-paced heartbeats arrive in time for the MCU's simulated link
+    timeout instead of several times too far apart.
+    """
     return [
         str(harness_binary()),
         '--mcu',
@@ -140,6 +145,7 @@ def harness_argv(board, flavor='slice', baud=None):
         str(firmware_image(board, flavor, baud)),
         *RUN_MS,
         '--stack-paint',
+        '--pace',
     ]
 
 

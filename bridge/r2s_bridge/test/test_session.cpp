@@ -959,6 +959,36 @@ TEST(SessionConnected, ResetsOnAHelloWithNoToken)
     EXPECT_EQ(fixture.drain_units().size(), 1u) << "the TOPIC_REQ of the new table";
 }
 
+TEST(SessionConnected, HelloWhileConnectedLogsTheReset)
+{
+    std::vector<std::string> logged;
+    SessionEvents events;
+    events.log = [&logged](SessionLog, const std::string & text) {logged.push_back(text);};
+    Fixture fixture([](const TopicInfo &) {return std::uint8_t{0};}, SessionConfig(), events);
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    logged.clear();
+    fixture.deliver_frame(kControl, 0u, hello_payload(1u, 0u));
+    ASSERT_EQ(logged.size(), 1u) << "a HELLO while connected logs its own re-handshake";
+    EXPECT_NE(logged[0].find("HELLO while connected"), std::string::npos) << logged[0];
+}
+
+TEST(SessionHandshake, HelloWhileHandshakingLogsTheRestart)
+{
+    std::vector<std::string> logged;
+    SessionEvents events;
+    events.log = [&logged](SessionLog, const std::string & text) {logged.push_back(text);};
+    Fixture fixture([](const TopicInfo &) {return std::uint8_t{0};}, SessionConfig(), events);
+    fixture.advance_to(100);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 1u));
+    ASSERT_EQ(fixture.session().state(), SessionState::kHandshaking);
+    logged.clear();
+    fixture.deliver_frame(kControl, 0u, hello_payload(5u, 1u));
+    ASSERT_EQ(logged.size(), 1u) << "a HELLO that restarts the walk logs its own restart";
+    EXPECT_NE(logged[0].find("HELLO while handshaking"), std::string::npos) << logged[0];
+}
+
 TEST(SessionConnected, RecordsTheMcuCountersFromAHeartbeat)
 {
     Fixture fixture;
@@ -2869,6 +2899,44 @@ TEST(ReliableWalk, AcceptsAFeaturesByteWithServicesAndActions)
     ASSERT_FALSE(units.empty());
     EXPECT_EQ(units[0][2], kParamReq) << "the parameter walk starts: the HELLO was accepted";
     EXPECT_EQ(fixture.session().state(), SessionState::kHandshaking);
+}
+
+// covers: CTL-2
+TEST(ReliableWalk, ReportsNarrowFloat64FromTheFeaturesByte)
+{
+    // Time sync stays off: features announce time, and the first PING
+    // would follow READY in the same poll.
+    SessionConfig config;
+    config.time_sync_enabled = false;
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config};
+    EXPECT_FALSE(fixture.session().narrow_float64());
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x10u, 1000u));
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+    const auto units = drain_decoded(fixture);
+    ASSERT_EQ(units.size(), 3u);
+    EXPECT_EQ(units[2][2], 0x06u) << "READY goes out with no parameter walk";
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+    EXPECT_TRUE(fixture.session().narrow_float64());
+}
+
+// covers: CTL-2
+TEST(ReliableWalk, ClearsNarrowFloat64OnRehandshake)
+{
+    // Time sync stays off: features announce time, and the first PING
+    // would follow READY in the same poll.
+    SessionConfig config;
+    config.time_sync_enabled = false;
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config};
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x10u, 1000u));
+    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+    drain_decoded(fixture);
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    ASSERT_TRUE(fixture.session().narrow_float64());
+    // A new HELLO without bit 4 re-handshakes and clears the flag.
+    fixture.deliver_frame(kControl, 0u, hello_payload(1u, 0u, 4u, 0x00u, 1000u));
+    drain_decoded(fixture);
+    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
+    EXPECT_FALSE(fixture.session().narrow_float64());
 }
 
 // covers: CTL-2

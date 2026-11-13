@@ -979,6 +979,10 @@ struct Session::Impl
         // ([SES-19], [SES-21]).
     if (state == SessionState::kConnected) {
       ++resets;
+      log(SessionLog::kWarning,
+        "HELLO while connected: the MCU reset, the handshake starts over");
+    } else if (state == SessionState::kHandshaking) {
+      log(SessionLog::kWarning, "HELLO while handshaking: the handshake starts over");
     }
     state = SessionState::kHandshaking;
     start_topic_walk();
@@ -2226,9 +2230,9 @@ struct Session::Impl
     // Whether the MCU announced time support ([CTL-2] bit 0). Without it the
     // host sends no PING: the firmware could never answer one.
   bool time_supported_ = false;
-    // Whether the MCU's `double` is 32 bits ([CTL-2] bit 4). Actions ride
-    // it where topics ride their narrow flag: the action walk announces no
-    // flags of its own.
+    // Whether the MCU's `double` is 32 bits ([CTL-2] bit 4). Services and
+    // actions ride it where topics ride their narrow flag: neither walk
+    // announces flags of its own.
   bool narrow_float64_ = false;
   bool ping_outstanding = false;
   std::uint8_t ping_id = 0;

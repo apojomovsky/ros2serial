@@ -834,6 +834,27 @@ struct Router::Impl
 
   void sync_services()
   {
+    // Every handshake rebuilds the routes: a call sent under the old
+    // numbering can never be answered, so each waiting ROS caller learns
+    // the drop instead of hanging ([SES-34], [SVR-8]). MCU calls retire
+    // the same way: the MCU dropped its side ([REL-5]), so the ROS
+    // futures go.
+    for (auto & entry : service_routes_) {
+      ServiceRoute & route = *entry.second;
+      for (const RosCall & queued : route.ros_queue) {
+        emit(SessionLog::kWarning, "service '" + route.info.service_name +
+          "': the re-handshake drops a ROS call");
+        answer_ros_call(route, queued.header, route.types.make_response());
+      }
+      for (const auto & inflight : route.ros_inflight) {
+        emit(SessionLog::kWarning, "service '" + route.info.service_name +
+          "': the re-handshake drops a ROS call");
+        answer_ros_call(route, inflight.second.header, route.types.make_response());
+      }
+      for (const auto & mcu : route.mcu_inflight) {
+        route.client->remove_pending_request(mcu.second.future_seq);
+      }
+    }
     service_routes_.clear();
     service_repairs_.clear();
     for (const ServiceInfo & info : session_.services()) {
@@ -1722,8 +1743,8 @@ struct Router::Impl
     ServiceRoute & route = *found->second;
     RosCall call;
     call.header = std::move(header);
-    const ConvertResult result = converter_.pack_from_struct(route.types.request_type_name(), false,
-        request.get(), call.packed);
+    const ConvertResult result = converter_.pack_from_struct(
+        route.types.request_type_name(), session_.narrow_float64(), request.get(), call.packed);
     if (result.fail != ConvertFail::kNone) {
       emit(SessionLog::kWarning, "service '" + route.info.service_name +
         "': dropped ROS request (" + fail_name(result.fail) + " at '" +
@@ -1762,8 +1783,9 @@ struct Router::Impl
     }
     // GCOVR_EXCL_STOP
     ServiceTypes::Struct request = route.types.make_request();
-    const ConvertResult result = converter_.unpack_to_struct(route.types.request_type_name(), false,
-        payload.data(), payload.size(), request.storage.data());
+    const ConvertResult result = converter_.unpack_to_struct(
+        route.types.request_type_name(), session_.narrow_float64(), payload.data(), payload.size(),
+        request.storage.data());
     if (result.fail != ConvertFail::kNone) {
       emit(SessionLog::kWarning, "service '" + route.info.service_name +
         "': dropped MCU call (" + fail_name(result.fail) + " at '" +
@@ -1806,8 +1828,8 @@ struct Router::Impl
       if (status == kSvcStatusOk) {
         ServiceTypes::Struct response = route.types.make_response();
         const ConvertResult result = converter_.unpack_to_struct(
-            route.types.response_type_name(), false, payload.data(), payload.size(),
-            response.storage.data());
+            route.types.response_type_name(), session_.narrow_float64(), payload.data(),
+            payload.size(), response.storage.data());
         if (result.fail != ConvertFail::kNone) {
           emit(SessionLog::kWarning, "service '" + route.info.service_name +
             "': dropped MCU answer (" + fail_name(result.fail) + " at '" +
@@ -1911,7 +1933,8 @@ struct Router::Impl
       RosCall call;
       call.header = header.request_id;
       const ConvertResult result = converter_.pack_from_struct(
-          route.types.request_type_name(), false, route.take_storage.storage.data(), call.packed);
+          route.types.request_type_name(), session_.narrow_float64(),
+          route.take_storage.storage.data(), call.packed);
       if (result.fail != ConvertFail::kNone) {
         emit(SessionLog::kWarning, "service '" + route.info.service_name +
           "': dropped ROS request (" + fail_name(result.fail) + " at '" +
@@ -1964,7 +1987,8 @@ struct Router::Impl
         }
         std::vector<std::uint8_t> packed;
         const ConvertResult result = converter_.pack_from_struct(
-            route.types.response_type_name(), false, call.future.get().get(), packed);
+            route.types.response_type_name(), session_.narrow_float64(), call.future.get().get(),
+            packed);
         const std::uint8_t mcu_req = call.mcu_req;
         if (result.fail != ConvertFail::kNone) {
           emit(SessionLog::kWarning, "service '" + route.info.service_name +
