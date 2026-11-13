@@ -60,6 +60,7 @@ package_data = {
         'snapshots/README.md',
         'snapshots/*/*/msg/*.msg',
         'snapshots/*/*/srv/*.srv',
+        'snapshots/*/*/action/*.action',
         'schema/*.json',
     ]
 }
