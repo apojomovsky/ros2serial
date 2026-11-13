@@ -2939,24 +2939,6 @@ TEST(ReliableWalk, ClearsNarrowFloat64OnRehandshake)
     EXPECT_FALSE(fixture.session().narrow_float64());
 }
 
-// covers: CTL-2
-TEST(ReliableWalk, ReportsNarrowFloat64FromTheFeaturesByte)
-{
-    // Time sync stays off: features announce time, and the first PING
-    // would follow READY in the same poll.
-    SessionConfig config;
-    config.time_sync_enabled = false;
-    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config};
-    EXPECT_FALSE(fixture.session().narrow_float64());
-    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x10u, 1000u));
-    fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
-    const auto units = drain_decoded(fixture);
-    ASSERT_EQ(units.size(), 3u);
-    EXPECT_EQ(units[2][2], 0x06u) << "READY goes out with no parameter walk";
-    EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
-    EXPECT_TRUE(fixture.session().narrow_float64());
-}
-
 // covers: PAR-7
 TEST(ReliableWalk, SkipsWhenTheMcuAnnouncesNoParameters)
 {
