@@ -34,6 +34,10 @@ rm -rf "$stage" "$build/obj-sketch" "$build/obj-cmake"
 mkdir -p "$stage/src/r2s" "$build/obj-sketch" "$build/obj-cmake" || exit 1
 PYTHONPATH="$root/gen" python3 -m r2s_gen.cli bundle --distro jazzy --out "$stage" || exit 1
 cp core/include/r2s/*.h "$stage/src/r2s/" || exit 1
+# The action registry joins the staged library: the slice serves spin, so it
+# needs the layer beside the core. Without the actions flag the source stays
+# an empty translation unit, so the timing binaries link it unchanged.
+cp "$root/cpp/include/r2s/action.hpp" "$stage/src/r2s/" || exit 1
 sketch_defs=$(PYTHONPATH="$root/gen" python3 - "$stage/src/r2s_bundled.h" <<'EOF'
 import sys
 
@@ -50,13 +54,20 @@ EOF
 ) || exit 1
 
 status=0
+# The slice serves the spin action through the static registry, so the core
+# and the registry build with the actions channel on the way run-avr.sh
+# builds them. The xmacro sketch object below keeps the bundle set alone.
+sketch_actions="-DR2S_WITH_ACTIONS"
 # The core compiles once per define set; the sketches share the bundle set.
 for source in "$root"/core/src/*.c "$stage/src/r2s_bundled.c"; do
   case "$source" in *test_reset.c) continue ;; esac
   # shellcheck disable=SC2086 # defs holds several -D options.
-  $cc $c_flags -I"$stage/src" $sketch_defs -c "$source" \
+  $cc $c_flags -I"$stage/src" $sketch_defs $sketch_actions -c "$source" \
     -o "$build/obj-sketch/$(basename "$source" .c).o" || status=1
 done
+# shellcheck disable=SC2086 # defs holds several -D options.
+$cxx $cxx_flags -I"$stage/src" -I"$root/ports/arduino/tests/stubs" $sketch_defs $sketch_actions \
+  -c "$root/cpp/src/action.cpp" -o "$build/obj-sketch/action.o" || status=1
 # shellcheck disable=SC2086 # defs holds several -D options.
 $cxx $cxx_flags -I"$stage/src" -I"$root/ports/arduino/tests/stubs" -I"$root/ports/arduino" $sketch_defs \
   -c "$root/ports/arduino/r2s_arduino_port.cpp" -o "$build/obj-sketch/port.o" || status=1
@@ -70,7 +81,7 @@ $cxx $cxx_flags -include Arduino.h -I"$stage/src" -I"$root/ports/arduino/tests/s
   -o "$build/obj-sketch/xmacro.o" || status=1
 # shellcheck disable=SC2086 # defs holds several -D options.
 $cxx $cxx_flags -include Arduino.h -I"$stage/src" -I"$root/ports/arduino/tests/stubs" \
-  -I"$root/ports/arduino" -I"$root/core/include" $sketch_defs \
+  -I"$root/ports/arduino" -I"$root/core/include" $sketch_defs $sketch_actions \
   -c -x c++ "$root/tests/e2e/avr_slice/avr_slice.ino" \
   -o "$build/obj-sketch/slice.o" || status=1
 

@@ -388,8 +388,8 @@ def test_an_unknown_root_key_is_an_error(tmp_path):
 
     assert str(caught.value) == (
         f"{path}: unknown key 'nodes'; "
-        'remove it (expected one of: bounds, distro, features, handshake, limits, node, services, '
-        'tier, topics)'
+        'remove it (expected one of: actions, bounds, distro, features, handshake, limits, node, '
+        'services, tier, topics)'
     )
 
 
@@ -778,6 +778,15 @@ def test_a_nonstring_bounds_key_is_an_error(tmp_path):
     assert str(caught.value) == f'{path}: bounds: key 1 must be a string; quote the key'
 
 
+def test_a_nonmapping_action_entry_is_an_error(tmp_path):
+    path = write(tmp_path / 'r2s.yaml', 'node: base_controller\ntopics: []\nactions:\n  - spin\n')
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == f'{path}: actions[0]: expected a mapping object; fix the value'
+
+
 def test_a_non_utf8_file_is_an_error(tmp_path):
     path = tmp_path / 'r2s.yaml'
     path.write_bytes('node: base_controller # caf\xe9\ntopics: []\n'.encode('latin-1'))
@@ -963,3 +972,130 @@ def test_a_non_mapping_service_entry_reaches_the_model_check(tmp_path):
         config.load(path)
 
     assert 'services[0]' in str(caught.value)
+
+
+def test_actions_default_to_empty(tmp_path):
+    loaded = load_text(tmp_path, VALID)
+
+    assert loaded.actions == ()
+
+
+def test_valid_actions_load_without_roles(tmp_path):
+    loaded = load_text(
+        tmp_path,
+        'node: base_controller\ntopics:\n'
+        '  - name: battery\n    type: std_msgs/msg/Float32\n    direction: pub\n'
+        'actions:\n'
+        '  - name: spin\n    type: tf2_msgs/action/LookupTransform\n',
+    )
+
+    assert [(action.name, action.type_name) for action in loaded.actions] == [
+        ('spin', 'tf2_msgs/action/LookupTransform')
+    ]
+
+
+def test_nonlist_actions_is_an_error(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml', 'node: base_controller\ntopics: []\nactions:\n  name: spin\n'
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert (
+        str(caught.value) == f'{path}: actions: expected a list; write one entry per action, '
+        'starting each with - name: <action>'
+    )
+
+
+def test_duplicate_action_names_are_an_error(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml',
+        'node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n'
+        '    direction: pub\nactions:\n  - name: spin\n    type: tf2_msgs/action/LookupTransform\n'
+        '  - name: spin\n    type: tf2_msgs/action/LookupTransform\n',
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: actions[1].name: duplicate action name 'spin'; give each action its own name"
+    )
+
+
+def test_an_action_missing_type_is_an_error(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml',
+        'node: base_controller\ntopics: []\nactions:\n  - name: spin\n',
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert (
+        str(caught.value) == f"{path}: actions[0]: missing required key 'type'; "
+        'add type: <package/action/Type>'
+    )
+
+
+def test_an_action_with_a_bad_type_is_an_error(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml',
+        'node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n'
+        '    direction: pub\nactions:\n  - name: spin\n    type: std_srvs/srv/Trigger\n',
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: actions[0].type: 'std_srvs/srv/Trigger' is not an action type; "
+        'write package/action/Type, such as tf2_msgs/action/LookupTransform'
+    )
+
+
+def test_an_absolute_action_name_is_an_error(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml',
+        'node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n'
+        '    direction: pub\nactions:\n  - name: /spin\n'
+        '    type: tf2_msgs/action/LookupTransform\n',
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: actions[0].name: '/spin' is not a relative action name; "
+        'drop the leading slash, such as spin'
+    )
+
+
+def test_an_action_name_with_a_space_is_an_error(tmp_path):
+    path = write(
+        tmp_path / 'r2s.yaml',
+        'node: base_controller\ntopics:\n  - name: battery\n    type: std_msgs/msg/Float32\n'
+        '    direction: pub\nactions:\n  - name: sp in\n'
+        '    type: tf2_msgs/action/LookupTransform\n',
+    )
+
+    with pytest.raises(MessageError) as caught:
+        config.load(path)
+
+    assert str(caught.value) == (
+        f"{path}: actions[0].name: 'sp in' is not a valid action name; "
+        'use letters, digits, underscores and slashes, starting with a letter or underscore'
+    )
+
+
+def test_an_action_field_bound_loads(tmp_path):
+    loaded = load_text(
+        tmp_path,
+        'node: base_controller\ntopics:\n'
+        '  - name: battery\n    type: std_msgs/msg/Float32\n    direction: pub\nactions:\n'
+        '  - name: spin\n    type: tf2_msgs/action/LookupTransform\n'
+        'bounds:\n  tf2_msgs/action/LookupTransform_Goal.target_frame: 16\n',
+    )
+
+    assert loaded.bounds == {'tf2_msgs/action/LookupTransform_Goal.target_frame': 16}

@@ -25,6 +25,7 @@
     [((uint32_t)(offsetof(type, \
     end) + sizeof(((type *) 0)->end)) <= (uint32_t)(sizeof(type))) ? 1 : -1]
 
+R2S_SIZE_CHECK(builtin_interfaces__msg__Duration);
 R2S_SIZE_CHECK(builtin_interfaces__msg__Time);
 R2S_SIZE_CHECK(geometry_msgs__msg__Quaternion);
 R2S_SIZE_CHECK(geometry_msgs__msg__Transform);
@@ -40,6 +41,10 @@ R2S_SIZE_CHECK(std_msgs__msg__Header);
 R2S_SIZE_CHECK(std_msgs__msg__String);
 R2S_SIZE_CHECK(std_srvs__srv__Trigger_Request);
 R2S_SIZE_CHECK(std_srvs__srv__Trigger_Response);
+R2S_SIZE_CHECK(tf2_msgs__action__LookupTransform_Feedback);
+R2S_SIZE_CHECK(tf2_msgs__action__LookupTransform_Goal);
+R2S_SIZE_CHECK(tf2_msgs__action__LookupTransform_Result);
+R2S_SIZE_CHECK(tf2_msgs__msg__TF2Error);
 R2S_SIZE_CHECK(tf2_msgs__msg__TFMessage);
 
 const uint8_t R2S_FLASH r2s_bundled_records_builtin_interfaces_Time[] = {
@@ -1085,6 +1090,906 @@ const r2s_codec_table_t r2s_bundled_table_std_srvs_Trigger_Response = {
   2u,
 };
 
+const uint8_t R2S_FLASH r2s_bundled_records_tf2_msgs_LookupTransform_Feedback[] = {
+  R2S_U16_LO(sizeof(builtin_interfaces__msg__Time)),
+  R2S_U16_HI(sizeof(builtin_interfaces__msg__Time)),
+  0x00,
+  0x00,
+  0x02, /* builtin_interfaces/msg/Time */
+  R2S_U16_LO(sizeof(builtin_interfaces__msg__Duration)),
+  R2S_U16_HI(sizeof(builtin_interfaces__msg__Duration)),
+  0x02,
+  0x00,
+  0x02, /* builtin_interfaces/msg/Duration */
+  R2S_U16_LO(sizeof(tf2_msgs__action__LookupTransform_Goal)),
+  R2S_U16_HI(sizeof(tf2_msgs__action__LookupTransform_Goal)),
+  0x04,
+  0x00,
+  0x07, /* tf2_msgs/action/LookupTransform_Goal */
+  R2S_U16_LO(sizeof(std_msgs__msg__Header)),
+  R2S_U16_HI(sizeof(std_msgs__msg__Header)),
+  0x0b,
+  0x00,
+  0x02, /* std_msgs/msg/Header */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__Vector3)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__Vector3)),
+  0x0d,
+  0x00,
+  0x03, /* geometry_msgs/msg/Vector3 */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__Quaternion)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__Quaternion)),
+  0x10,
+  0x00,
+  0x04, /* geometry_msgs/msg/Quaternion */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__Transform)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__Transform)),
+  0x14,
+  0x00,
+  0x02, /* geometry_msgs/msg/Transform */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__TransformStamped)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__TransformStamped)),
+  0x16,
+  0x00,
+  0x03, /* geometry_msgs/msg/TransformStamped */
+  R2S_U16_LO(sizeof(tf2_msgs__msg__TF2Error)),
+  R2S_U16_HI(sizeof(tf2_msgs__msg__TF2Error)),
+  0x19,
+  0x00,
+  0x02, /* tf2_msgs/msg/TF2Error */
+  R2S_U16_LO(sizeof(tf2_msgs__action__LookupTransform_Result)),
+  R2S_U16_HI(sizeof(tf2_msgs__action__LookupTransform_Result)),
+  0x1b,
+  0x00,
+  0x02, /* tf2_msgs/action/LookupTransform_Result */
+  R2S_U16_LO(sizeof(tf2_msgs__action__LookupTransform_Feedback)),
+  R2S_U16_HI(sizeof(tf2_msgs__action__LookupTransform_Feedback)),
+  0x1d,
+  0x00,
+  0x00, /* tf2_msgs/action/LookupTransform_Feedback */
+};
+
+const uint8_t R2S_FLASH r2s_bundled_entries_tf2_msgs_LookupTransform_Feedback[] = {
+  0x06,
+  0x00,
+  R2S_U16_LO(offsetof(builtin_interfaces__msg__Time, sec)),
+  R2S_U16_HI(offsetof(builtin_interfaces__msg__Time, sec)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* builtin_interfaces/msg/Time.sec */
+  0x05,
+  0x00,
+  R2S_U16_LO(offsetof(builtin_interfaces__msg__Time, nanosec)),
+  R2S_U16_HI(offsetof(builtin_interfaces__msg__Time, nanosec)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* builtin_interfaces/msg/Time.nanosec */
+  0x06,
+  0x00,
+  R2S_U16_LO(offsetof(builtin_interfaces__msg__Duration, sec)),
+  R2S_U16_HI(offsetof(builtin_interfaces__msg__Duration, sec)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* builtin_interfaces/msg/Duration.sec */
+  0x05,
+  0x00,
+  R2S_U16_LO(offsetof(builtin_interfaces__msg__Duration, nanosec)),
+  R2S_U16_HI(offsetof(builtin_interfaces__msg__Duration, nanosec)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* builtin_interfaces/msg/Duration.nanosec */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, target_frame)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, target_frame)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.target_frame */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, source_frame)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, source_frame)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.source_frame */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, source_time)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, source_time)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.source_time */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, timeout)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, timeout)),
+  0x00,
+  0x00,
+  0x01,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.timeout */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, target_time)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, target_time)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.target_time */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, fixed_frame)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, fixed_frame)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.fixed_frame */
+  0x00,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, advanced)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, advanced)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.advanced */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(std_msgs__msg__Header, stamp)),
+  R2S_U16_HI(offsetof(std_msgs__msg__Header, stamp)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* std_msgs/msg/Header.stamp */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(std_msgs__msg__Header, frame_id)),
+  R2S_U16_HI(offsetof(std_msgs__msg__Header, frame_id)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* std_msgs/msg/Header.frame_id */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, x)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, x)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.x */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, y)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, y)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.y */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, z)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, z)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.z */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Quaternion, x)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Quaternion, x)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Quaternion.x */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Quaternion, y)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Quaternion, y)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Quaternion.y */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Quaternion, z)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Quaternion, z)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Quaternion.z */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Quaternion, w)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Quaternion, w)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Quaternion.w */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Transform, translation)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Transform, translation)),
+  0x00,
+  0x00,
+  0x04,
+  0x00, /* geometry_msgs/msg/Transform.translation */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Transform, rotation)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Transform, rotation)),
+  0x00,
+  0x00,
+  0x05,
+  0x00, /* geometry_msgs/msg/Transform.rotation */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__TransformStamped, header)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__TransformStamped, header)),
+  0x00,
+  0x00,
+  0x03,
+  0x00, /* geometry_msgs/msg/TransformStamped.header */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__TransformStamped, child_frame_id)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__TransformStamped, child_frame_id)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* geometry_msgs/msg/TransformStamped.child_frame_id */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__TransformStamped, transform)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__TransformStamped, transform)),
+  0x00,
+  0x00,
+  0x06,
+  0x00, /* geometry_msgs/msg/TransformStamped.transform */
+  0x01,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__msg__TF2Error, error)),
+  R2S_U16_HI(offsetof(tf2_msgs__msg__TF2Error, error)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* tf2_msgs/msg/TF2Error.error */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__msg__TF2Error, error_string)),
+  R2S_U16_HI(offsetof(tf2_msgs__msg__TF2Error, error_string)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* tf2_msgs/msg/TF2Error.error_string */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Result, transform)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Result, transform)),
+  0x00,
+  0x00,
+  0x07,
+  0x00, /* tf2_msgs/action/LookupTransform_Result.transform */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Result, error)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Result, error)),
+  0x00,
+  0x00,
+  0x08,
+  0x00, /* tf2_msgs/action/LookupTransform_Result.error */
+};
+
+const r2s_codec_table_t r2s_bundled_table_tf2_msgs_LookupTransform_Feedback = {
+  r2s_bundled_records_tf2_msgs_LookupTransform_Feedback,
+  11u,
+  r2s_bundled_entries_tf2_msgs_LookupTransform_Feedback,
+  29u,
+};
+
+const uint8_t R2S_FLASH r2s_bundled_records_tf2_msgs_LookupTransform_Goal[] = {
+  R2S_U16_LO(sizeof(builtin_interfaces__msg__Time)),
+  R2S_U16_HI(sizeof(builtin_interfaces__msg__Time)),
+  0x00,
+  0x00,
+  0x02, /* builtin_interfaces/msg/Time */
+  R2S_U16_LO(sizeof(builtin_interfaces__msg__Duration)),
+  R2S_U16_HI(sizeof(builtin_interfaces__msg__Duration)),
+  0x02,
+  0x00,
+  0x02, /* builtin_interfaces/msg/Duration */
+  R2S_U16_LO(sizeof(tf2_msgs__action__LookupTransform_Goal)),
+  R2S_U16_HI(sizeof(tf2_msgs__action__LookupTransform_Goal)),
+  0x04,
+  0x00,
+  0x07, /* tf2_msgs/action/LookupTransform_Goal */
+  R2S_U16_LO(sizeof(std_msgs__msg__Header)),
+  R2S_U16_HI(sizeof(std_msgs__msg__Header)),
+  0x0b,
+  0x00,
+  0x02, /* std_msgs/msg/Header */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__Vector3)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__Vector3)),
+  0x0d,
+  0x00,
+  0x03, /* geometry_msgs/msg/Vector3 */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__Quaternion)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__Quaternion)),
+  0x10,
+  0x00,
+  0x04, /* geometry_msgs/msg/Quaternion */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__Transform)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__Transform)),
+  0x14,
+  0x00,
+  0x02, /* geometry_msgs/msg/Transform */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__TransformStamped)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__TransformStamped)),
+  0x16,
+  0x00,
+  0x03, /* geometry_msgs/msg/TransformStamped */
+  R2S_U16_LO(sizeof(tf2_msgs__msg__TF2Error)),
+  R2S_U16_HI(sizeof(tf2_msgs__msg__TF2Error)),
+  0x19,
+  0x00,
+  0x02, /* tf2_msgs/msg/TF2Error */
+  R2S_U16_LO(sizeof(tf2_msgs__action__LookupTransform_Result)),
+  R2S_U16_HI(sizeof(tf2_msgs__action__LookupTransform_Result)),
+  0x1b,
+  0x00,
+  0x02, /* tf2_msgs/action/LookupTransform_Result */
+  R2S_U16_LO(sizeof(tf2_msgs__action__LookupTransform_Feedback)),
+  R2S_U16_HI(sizeof(tf2_msgs__action__LookupTransform_Feedback)),
+  0x1d,
+  0x00,
+  0x00, /* tf2_msgs/action/LookupTransform_Feedback */
+};
+
+const uint8_t R2S_FLASH r2s_bundled_entries_tf2_msgs_LookupTransform_Goal[] = {
+  0x06,
+  0x00,
+  R2S_U16_LO(offsetof(builtin_interfaces__msg__Time, sec)),
+  R2S_U16_HI(offsetof(builtin_interfaces__msg__Time, sec)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* builtin_interfaces/msg/Time.sec */
+  0x05,
+  0x00,
+  R2S_U16_LO(offsetof(builtin_interfaces__msg__Time, nanosec)),
+  R2S_U16_HI(offsetof(builtin_interfaces__msg__Time, nanosec)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* builtin_interfaces/msg/Time.nanosec */
+  0x06,
+  0x00,
+  R2S_U16_LO(offsetof(builtin_interfaces__msg__Duration, sec)),
+  R2S_U16_HI(offsetof(builtin_interfaces__msg__Duration, sec)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* builtin_interfaces/msg/Duration.sec */
+  0x05,
+  0x00,
+  R2S_U16_LO(offsetof(builtin_interfaces__msg__Duration, nanosec)),
+  R2S_U16_HI(offsetof(builtin_interfaces__msg__Duration, nanosec)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* builtin_interfaces/msg/Duration.nanosec */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, target_frame)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, target_frame)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.target_frame */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, source_frame)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, source_frame)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.source_frame */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, source_time)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, source_time)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.source_time */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, timeout)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, timeout)),
+  0x00,
+  0x00,
+  0x01,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.timeout */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, target_time)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, target_time)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.target_time */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, fixed_frame)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, fixed_frame)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.fixed_frame */
+  0x00,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, advanced)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, advanced)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.advanced */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(std_msgs__msg__Header, stamp)),
+  R2S_U16_HI(offsetof(std_msgs__msg__Header, stamp)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* std_msgs/msg/Header.stamp */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(std_msgs__msg__Header, frame_id)),
+  R2S_U16_HI(offsetof(std_msgs__msg__Header, frame_id)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* std_msgs/msg/Header.frame_id */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, x)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, x)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.x */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, y)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, y)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.y */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, z)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, z)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.z */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Quaternion, x)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Quaternion, x)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Quaternion.x */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Quaternion, y)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Quaternion, y)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Quaternion.y */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Quaternion, z)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Quaternion, z)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Quaternion.z */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Quaternion, w)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Quaternion, w)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Quaternion.w */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Transform, translation)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Transform, translation)),
+  0x00,
+  0x00,
+  0x04,
+  0x00, /* geometry_msgs/msg/Transform.translation */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Transform, rotation)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Transform, rotation)),
+  0x00,
+  0x00,
+  0x05,
+  0x00, /* geometry_msgs/msg/Transform.rotation */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__TransformStamped, header)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__TransformStamped, header)),
+  0x00,
+  0x00,
+  0x03,
+  0x00, /* geometry_msgs/msg/TransformStamped.header */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__TransformStamped, child_frame_id)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__TransformStamped, child_frame_id)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* geometry_msgs/msg/TransformStamped.child_frame_id */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__TransformStamped, transform)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__TransformStamped, transform)),
+  0x00,
+  0x00,
+  0x06,
+  0x00, /* geometry_msgs/msg/TransformStamped.transform */
+  0x01,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__msg__TF2Error, error)),
+  R2S_U16_HI(offsetof(tf2_msgs__msg__TF2Error, error)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* tf2_msgs/msg/TF2Error.error */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__msg__TF2Error, error_string)),
+  R2S_U16_HI(offsetof(tf2_msgs__msg__TF2Error, error_string)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* tf2_msgs/msg/TF2Error.error_string */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Result, transform)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Result, transform)),
+  0x00,
+  0x00,
+  0x07,
+  0x00, /* tf2_msgs/action/LookupTransform_Result.transform */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Result, error)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Result, error)),
+  0x00,
+  0x00,
+  0x08,
+  0x00, /* tf2_msgs/action/LookupTransform_Result.error */
+};
+
+const r2s_codec_table_t r2s_bundled_table_tf2_msgs_LookupTransform_Goal = {
+  r2s_bundled_records_tf2_msgs_LookupTransform_Goal,
+  11u,
+  r2s_bundled_entries_tf2_msgs_LookupTransform_Goal,
+  29u,
+};
+
+const uint8_t R2S_FLASH r2s_bundled_records_tf2_msgs_LookupTransform_Result[] = {
+  R2S_U16_LO(sizeof(builtin_interfaces__msg__Time)),
+  R2S_U16_HI(sizeof(builtin_interfaces__msg__Time)),
+  0x00,
+  0x00,
+  0x02, /* builtin_interfaces/msg/Time */
+  R2S_U16_LO(sizeof(builtin_interfaces__msg__Duration)),
+  R2S_U16_HI(sizeof(builtin_interfaces__msg__Duration)),
+  0x02,
+  0x00,
+  0x02, /* builtin_interfaces/msg/Duration */
+  R2S_U16_LO(sizeof(tf2_msgs__action__LookupTransform_Goal)),
+  R2S_U16_HI(sizeof(tf2_msgs__action__LookupTransform_Goal)),
+  0x04,
+  0x00,
+  0x07, /* tf2_msgs/action/LookupTransform_Goal */
+  R2S_U16_LO(sizeof(std_msgs__msg__Header)),
+  R2S_U16_HI(sizeof(std_msgs__msg__Header)),
+  0x0b,
+  0x00,
+  0x02, /* std_msgs/msg/Header */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__Vector3)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__Vector3)),
+  0x0d,
+  0x00,
+  0x03, /* geometry_msgs/msg/Vector3 */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__Quaternion)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__Quaternion)),
+  0x10,
+  0x00,
+  0x04, /* geometry_msgs/msg/Quaternion */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__Transform)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__Transform)),
+  0x14,
+  0x00,
+  0x02, /* geometry_msgs/msg/Transform */
+  R2S_U16_LO(sizeof(geometry_msgs__msg__TransformStamped)),
+  R2S_U16_HI(sizeof(geometry_msgs__msg__TransformStamped)),
+  0x16,
+  0x00,
+  0x03, /* geometry_msgs/msg/TransformStamped */
+  R2S_U16_LO(sizeof(tf2_msgs__msg__TF2Error)),
+  R2S_U16_HI(sizeof(tf2_msgs__msg__TF2Error)),
+  0x19,
+  0x00,
+  0x02, /* tf2_msgs/msg/TF2Error */
+  R2S_U16_LO(sizeof(tf2_msgs__action__LookupTransform_Result)),
+  R2S_U16_HI(sizeof(tf2_msgs__action__LookupTransform_Result)),
+  0x1b,
+  0x00,
+  0x02, /* tf2_msgs/action/LookupTransform_Result */
+  R2S_U16_LO(sizeof(tf2_msgs__action__LookupTransform_Feedback)),
+  R2S_U16_HI(sizeof(tf2_msgs__action__LookupTransform_Feedback)),
+  0x1d,
+  0x00,
+  0x00, /* tf2_msgs/action/LookupTransform_Feedback */
+};
+
+const uint8_t R2S_FLASH r2s_bundled_entries_tf2_msgs_LookupTransform_Result[] = {
+  0x06,
+  0x00,
+  R2S_U16_LO(offsetof(builtin_interfaces__msg__Time, sec)),
+  R2S_U16_HI(offsetof(builtin_interfaces__msg__Time, sec)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* builtin_interfaces/msg/Time.sec */
+  0x05,
+  0x00,
+  R2S_U16_LO(offsetof(builtin_interfaces__msg__Time, nanosec)),
+  R2S_U16_HI(offsetof(builtin_interfaces__msg__Time, nanosec)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* builtin_interfaces/msg/Time.nanosec */
+  0x06,
+  0x00,
+  R2S_U16_LO(offsetof(builtin_interfaces__msg__Duration, sec)),
+  R2S_U16_HI(offsetof(builtin_interfaces__msg__Duration, sec)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* builtin_interfaces/msg/Duration.sec */
+  0x05,
+  0x00,
+  R2S_U16_LO(offsetof(builtin_interfaces__msg__Duration, nanosec)),
+  R2S_U16_HI(offsetof(builtin_interfaces__msg__Duration, nanosec)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* builtin_interfaces/msg/Duration.nanosec */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, target_frame)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, target_frame)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.target_frame */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, source_frame)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, source_frame)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.source_frame */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, source_time)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, source_time)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.source_time */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, timeout)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, timeout)),
+  0x00,
+  0x00,
+  0x01,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.timeout */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, target_time)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, target_time)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.target_time */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, fixed_frame)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, fixed_frame)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.fixed_frame */
+  0x00,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Goal, advanced)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Goal, advanced)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* tf2_msgs/action/LookupTransform_Goal.advanced */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(std_msgs__msg__Header, stamp)),
+  R2S_U16_HI(offsetof(std_msgs__msg__Header, stamp)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* std_msgs/msg/Header.stamp */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(std_msgs__msg__Header, frame_id)),
+  R2S_U16_HI(offsetof(std_msgs__msg__Header, frame_id)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* std_msgs/msg/Header.frame_id */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, x)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, x)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.x */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, y)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, y)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.y */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Vector3, z)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Vector3, z)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Vector3.z */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Quaternion, x)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Quaternion, x)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Quaternion.x */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Quaternion, y)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Quaternion, y)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Quaternion.y */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Quaternion, z)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Quaternion, z)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Quaternion.z */
+  0x0a,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Quaternion, w)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Quaternion, w)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* geometry_msgs/msg/Quaternion.w */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Transform, translation)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Transform, translation)),
+  0x00,
+  0x00,
+  0x04,
+  0x00, /* geometry_msgs/msg/Transform.translation */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__Transform, rotation)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__Transform, rotation)),
+  0x00,
+  0x00,
+  0x05,
+  0x00, /* geometry_msgs/msg/Transform.rotation */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__TransformStamped, header)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__TransformStamped, header)),
+  0x00,
+  0x00,
+  0x03,
+  0x00, /* geometry_msgs/msg/TransformStamped.header */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__TransformStamped, child_frame_id)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__TransformStamped, child_frame_id)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* geometry_msgs/msg/TransformStamped.child_frame_id */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(geometry_msgs__msg__TransformStamped, transform)),
+  R2S_U16_HI(offsetof(geometry_msgs__msg__TransformStamped, transform)),
+  0x00,
+  0x00,
+  0x06,
+  0x00, /* geometry_msgs/msg/TransformStamped.transform */
+  0x01,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__msg__TF2Error, error)),
+  R2S_U16_HI(offsetof(tf2_msgs__msg__TF2Error, error)),
+  0x00,
+  0x00,
+  0x00,
+  0x00, /* tf2_msgs/msg/TF2Error.error */
+  0x0b,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__msg__TF2Error, error_string)),
+  R2S_U16_HI(offsetof(tf2_msgs__msg__TF2Error, error_string)),
+  0x00,
+  0x00,
+  0x10,
+  0x00, /* tf2_msgs/msg/TF2Error.error_string */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Result, transform)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Result, transform)),
+  0x00,
+  0x00,
+  0x07,
+  0x00, /* tf2_msgs/action/LookupTransform_Result.transform */
+  0x0c,
+  0x00,
+  R2S_U16_LO(offsetof(tf2_msgs__action__LookupTransform_Result, error)),
+  R2S_U16_HI(offsetof(tf2_msgs__action__LookupTransform_Result, error)),
+  0x00,
+  0x00,
+  0x08,
+  0x00, /* tf2_msgs/action/LookupTransform_Result.error */
+};
+
+const r2s_codec_table_t r2s_bundled_table_tf2_msgs_LookupTransform_Result = {
+  r2s_bundled_records_tf2_msgs_LookupTransform_Result,
+  11u,
+  r2s_bundled_entries_tf2_msgs_LookupTransform_Result,
+  29u,
+};
+
 const uint8_t R2S_FLASH r2s_bundled_records_tf2_msgs_TFMessage[] = {
   R2S_U16_LO(sizeof(builtin_interfaces__msg__Time)),
   R2S_U16_HI(sizeof(builtin_interfaces__msg__Time)),
@@ -1312,4 +2217,17 @@ R2S_FIELD_CHECK(std_msgs__msg__Float32, data, data);
 R2S_FIELD_CHECK(std_msgs__msg__String, data, data);
 R2S_FIELD_CHECK(std_srvs__srv__Trigger_Response, success, success);
 R2S_FIELD_CHECK(std_srvs__srv__Trigger_Response, message, message);
+R2S_FIELD_CHECK(builtin_interfaces__msg__Duration, sec, sec);
+R2S_FIELD_CHECK(builtin_interfaces__msg__Duration, nanosec, nanosec);
+R2S_FIELD_CHECK(tf2_msgs__action__LookupTransform_Goal, target_frame, target_frame);
+R2S_FIELD_CHECK(tf2_msgs__action__LookupTransform_Goal, source_frame, source_frame);
+R2S_FIELD_CHECK(tf2_msgs__action__LookupTransform_Goal, source_time, source_time);
+R2S_FIELD_CHECK(tf2_msgs__action__LookupTransform_Goal, timeout, timeout);
+R2S_FIELD_CHECK(tf2_msgs__action__LookupTransform_Goal, target_time, target_time);
+R2S_FIELD_CHECK(tf2_msgs__action__LookupTransform_Goal, fixed_frame, fixed_frame);
+R2S_FIELD_CHECK(tf2_msgs__action__LookupTransform_Goal, advanced, advanced);
+R2S_FIELD_CHECK(tf2_msgs__msg__TF2Error, error, error);
+R2S_FIELD_CHECK(tf2_msgs__msg__TF2Error, error_string, error_string);
+R2S_FIELD_CHECK(tf2_msgs__action__LookupTransform_Result, transform, transform);
+R2S_FIELD_CHECK(tf2_msgs__action__LookupTransform_Result, error, error);
 R2S_FIELD_CHECK(tf2_msgs__msg__TFMessage, transforms, transforms.size);

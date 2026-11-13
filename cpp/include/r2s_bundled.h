@@ -4,7 +4,7 @@
 
 /* The bundle's content hash, kept in this one place so adding a type
  * or bound does not rewrite every generated banner. */
-#define R2S_BUNDLE_HASH "aaa7b84a1de54c8c"
+#define R2S_BUNDLE_HASH "30ea22e1cb5fb57e"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -35,6 +35,12 @@ typedef struct
       (alignment))) \
       ? 1 \
       : -1]
+
+typedef struct builtin_interfaces__msg__Duration
+{
+  int32_t sec;
+  uint32_t nanosec;
+} builtin_interfaces__msg__Duration;
 
 typedef struct builtin_interfaces__msg__Time
 {
@@ -160,6 +166,34 @@ typedef struct std_srvs__srv__Trigger_Response
   char message[17];
 } std_srvs__srv__Trigger_Response;
 
+typedef struct tf2_msgs__action__LookupTransform_Feedback
+{
+  uint8_t structure_needs_at_least_one_member;
+} tf2_msgs__action__LookupTransform_Feedback;
+
+typedef struct tf2_msgs__action__LookupTransform_Goal
+{
+  char target_frame[17];
+  char source_frame[17];
+  builtin_interfaces__msg__Time source_time;
+  builtin_interfaces__msg__Duration timeout;
+  builtin_interfaces__msg__Time target_time;
+  char fixed_frame[17];
+  uint8_t advanced;
+} tf2_msgs__action__LookupTransform_Goal;
+
+typedef struct tf2_msgs__msg__TF2Error
+{
+  uint8_t error;
+  char error_string[17];
+} tf2_msgs__msg__TF2Error;
+
+typedef struct tf2_msgs__action__LookupTransform_Result
+{
+  geometry_msgs__msg__TransformStamped transform;
+  tf2_msgs__msg__TF2Error error;
+} tf2_msgs__action__LookupTransform_Result;
+
 typedef struct tf2_msgs__msg__TFMessage
 {
   struct
@@ -284,6 +318,30 @@ R2S_COUNT_CHECK(tf2_msgs__msg__TFMessage, transforms, 1, 1);
 #define R2S_BUNDLED_TABLE_std_srvs_Trigger_Response r2s_bundled_table_std_srvs_Trigger_Response
 #define R2S_BUNDLED_HASH_std_srvs_Trigger_Response \
   0x2du, 0x94u, 0x6cu, 0x21u, 0xe2u, 0xfcu, 0x3fu, 0x1eu
+
+/* Bundle index, table and hash of tf2_msgs/action/LookupTransform_Feedback: the sketch header maps each
+ * row to these facts through its package scope maps, so an unknown type fails naming the row. */
+#define R2S_BUNDLED_INDEX_tf2_msgs_LookupTransform_Feedback 10u
+#define R2S_BUNDLED_TABLE_tf2_msgs_LookupTransform_Feedback \
+  r2s_bundled_table_tf2_msgs_LookupTransform_Feedback
+#define R2S_BUNDLED_HASH_tf2_msgs_LookupTransform_Feedback \
+  0x2du, 0xa0u, 0xb0u, 0x2fu, 0x99u, 0x0fu, 0x04u, 0x40u
+
+/* Bundle index, table and hash of tf2_msgs/action/LookupTransform_Goal: the sketch header maps each
+ * row to these facts through its package scope maps, so an unknown type fails naming the row. */
+#define R2S_BUNDLED_INDEX_tf2_msgs_LookupTransform_Goal 2u
+#define R2S_BUNDLED_TABLE_tf2_msgs_LookupTransform_Goal \
+  r2s_bundled_table_tf2_msgs_LookupTransform_Goal
+#define R2S_BUNDLED_HASH_tf2_msgs_LookupTransform_Goal \
+  0x81u, 0x5eu, 0xfcu, 0x29u, 0x4au, 0xd1u, 0x7cu, 0x81u
+
+/* Bundle index, table and hash of tf2_msgs/action/LookupTransform_Result: the sketch header maps each
+ * row to these facts through its package scope maps, so an unknown type fails naming the row. */
+#define R2S_BUNDLED_INDEX_tf2_msgs_LookupTransform_Result 9u
+#define R2S_BUNDLED_TABLE_tf2_msgs_LookupTransform_Result \
+  r2s_bundled_table_tf2_msgs_LookupTransform_Result
+#define R2S_BUNDLED_HASH_tf2_msgs_LookupTransform_Result \
+  0x06u, 0x1du, 0x44u, 0x23u, 0xafu, 0x53u, 0x52u, 0xffu
 
 /* Bundle index, table and hash of tf2_msgs/msg/TFMessage: the sketch header maps each
  * row to these facts through its package scope maps, so an unknown type fails naming the row. */

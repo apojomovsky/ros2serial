@@ -101,4 +101,7 @@ For compatibility logging, time, and existing ROS 1 sketches, see the
 | `std_msgs/msg/String` |
 | `std_srvs/srv/Trigger_Request` |
 | `std_srvs/srv/Trigger_Response` |
+| `tf2_msgs/action/LookupTransform_Feedback` |
+| `tf2_msgs/action/LookupTransform_Goal` |
+| `tf2_msgs/action/LookupTransform_Result` |
 | `tf2_msgs/msg/TFMessage` |

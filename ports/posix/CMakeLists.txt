@@ -50,7 +50,7 @@ if(R2S_TOPIC_MAX_COUNT_LINE)
   list(APPEND R2S_GENERATED_DEFS R2S_TOPIC_MAX_COUNT=${CMAKE_MATCH_1})
 endif()
 target_compile_definitions(r2s_posix_firmware PRIVATE
-    R2S_WITH_CODEC R2S_WITH_TIME R2S_WITH_LOG R2S_WITH_PARAMS R2S_WITH_SERVICES ${R2S_GENERATED_DEFS})
+    R2S_WITH_CODEC R2S_WITH_TIME R2S_WITH_LOG R2S_WITH_PARAMS R2S_WITH_SERVICES R2S_WITH_ACTIONS ${R2S_GENERATED_DEFS})
 target_compile_options(r2s_posix_firmware PRIVATE
     -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow
     -Wstrict-prototypes -Wmissing-prototypes -Wundef)

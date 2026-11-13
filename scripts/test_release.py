@@ -38,6 +38,7 @@ STAMPED = [
     'examples/cmake_minimal/lib/r2s_generated.h',
     'ports/posix/src/r2s_generated.c',
     'ports/posix/src/r2s_generated.h',
+    'cpp/include/builtin_interfaces/msg/duration.hpp',
     'cpp/include/builtin_interfaces/msg/time.hpp',
     'cpp/include/geometry_msgs/msg/quaternion.hpp',
     'cpp/include/geometry_msgs/msg/transform.hpp',
@@ -54,6 +55,8 @@ STAMPED = [
     'cpp/include/std_msgs/msg/float32.hpp',
     'cpp/include/std_msgs/msg/header.hpp',
     'cpp/include/std_msgs/msg/string.hpp',
+    'cpp/include/tf2_msgs/action/lookup_transform.hpp',
+    'cpp/include/tf2_msgs/msg/tf2_error.hpp',
     'cpp/include/tf2_msgs/msg/tf_message.hpp',
 ]
 

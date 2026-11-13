@@ -565,8 +565,8 @@ public:
 
   /// Whether the MCU's `double` is 32 bits, so float64 travels narrow.
   /**
-   * The HELLO features byte carries it ([CTL-2] bit 4). Services pack and
-   * unpack against it where topics use their narrow flag.
+   * The HELLO features byte carries it ([CTL-2] bit 4). Services and actions
+   * pack and unpack against it where topics use their narrow flag.
    *
    * \return True when the handshake announced 32-bit doubles.
    */

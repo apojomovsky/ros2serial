@@ -11,6 +11,7 @@ pair byte for byte.
 import os
 from pathlib import Path
 
+from r2s_gen import actions
 from r2s_gen import bounds
 from r2s_gen import config
 from r2s_gen import msgs
@@ -27,7 +28,11 @@ def test_the_checked_in_sources_match_the_emitter():
         Path(entry) for entry in os.environ.get('AMENT_PREFIX_PATH', '').split(os.pathsep) if entry
     ]
     repository = msgs.MessageRepository(ament_prefix_path=prefixes, distro=loaded.distro)
-    roots = [topic.type_name for topic in loaded.topics] + services.roots(loaded)
+    roots = (
+        [topic.type_name for topic in loaded.topics]
+        + services.roots(loaded)
+        + actions.roots(loaded)
+    )
     resolved = bounds.resolve(repository, roots, bounds=dict(loaded.bounds))
     header, source = topics.generate(loaded, resolved, repository)
 

@@ -241,6 +241,25 @@ def snapshot_fields(type_name):
         ).read_text()
         request_text, _, response_text = text.partition('---')
         lines = (request_text if rest.endswith('_Request') else response_text).splitlines()
+    elif '/action/' in type_name:
+        package, rest = type_name.split('/action/')
+        if rest.endswith('_Goal'):
+            base, section = rest[: -len('_Goal')], 0
+        elif rest.endswith('_Result'):
+            base, section = rest[: -len('_Result')], 1
+        else:
+            base, section = rest[: -len('_Feedback')], 2
+        text = (
+            ROOT
+            / 'gen'
+            / 'r2s_gen'
+            / 'snapshots'
+            / 'jazzy'
+            / package
+            / 'action'
+            / f'{base}.action'
+        ).read_text()
+        lines = text.split('---')[section].splitlines()
     else:
         package, name = type_name.replace('/msg/', ' ').split()
         text = (
@@ -314,6 +333,10 @@ def test_mavlink_bounds_match_the_bundle():
         **{
             'std_msgs/msg/String.data': default_string,
             'std_srvs/srv/Trigger_Response.message': default_string,
+            'tf2_msgs/action/LookupTransform_Goal.target_frame': default_string,
+            'tf2_msgs/action/LookupTransform_Goal.source_frame': default_string,
+            'tf2_msgs/action/LookupTransform_Goal.fixed_frame': default_string,
+            'tf2_msgs/msg/TF2Error.error_string': default_string,
         },
     )
 

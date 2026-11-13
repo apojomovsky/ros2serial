@@ -928,16 +928,22 @@ def generate(
     source: str = 'r2s.yaml',
 ) -> tuple[str, str]:
     """Generate the firmware's header and source pair for `config`, descriptors first."""
+    from r2s_gen import actions
     from r2s_gen import services
 
     roots = [canonical_type_name(topic.type_name) for topic in config.topics]
     roots.extend(services.roots(config))
+    roots.extend(actions.roots(config))
     table = descriptors.build(resolved, roots)
     topic_table = build(config, resolved, repository, table, source)
     service_h, service_c = '', ''
     if config.services:
         service_table = services.build(config, resolved, repository, table, source)
         service_h, service_c = services.emit_h(service_table), services.emit_c(service_table)
+    action_h, action_c = '', ''
+    if config.actions:
+        action_table = actions.build(config, resolved, repository, table, source)
+        action_h, action_c = actions.emit_h(action_table), actions.emit_c(action_table)
     digest = config_hash(config)
     base = _stamped(emit.emit_types(resolved, max_nest=table.max_nest), source, digest)
     closing = '#endif\n'
@@ -951,11 +957,15 @@ def generate(
     middle = emit_h(topic_table)
     if service_h:
         middle += '\n' + service_h
+    if action_h:
+        middle += '\n' + action_h
     body = base[: -len(closing)] + middle + '\n' + close + '\n' + closing
     header = body.replace(anchor, guard_open, 1)
     body_c = descriptors.emit_c(table) + emit_c(topic_table)
     if service_c:
         body_c += '\n' + service_c
+    if action_c:
+        body_c += '\n' + action_c
     return header, _stamped(
         body_c,
         source,

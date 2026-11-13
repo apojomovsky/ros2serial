@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 
 import pytest
+from r2s_gen import actions
 from r2s_gen import bounds
 from r2s_gen import config
 from r2s_gen import msgs
@@ -308,7 +309,7 @@ def test_hello_announces_firmware(tmp_path):
     # covers: CTL-10
     assert hello['max_frame'] <= 65277
     # covers: CTL-2
-    assert hello['features'] & 0x80 == 0, 'no actions announced'
+    assert hello['features'] & 0x80 != 0, 'the firmware announces actions'
     assert hello['features'] & 0x40 != 0, 'the firmware announces services'
     assert hello['count'] == 6
     assert hello['node'] == 'r2s_posix'
@@ -666,7 +667,11 @@ def build_firmware_without_cmd_vel(tmp_path):
     env_paths = os.environ.get('AMENT_PREFIX_PATH', '').split(os.pathsep)
     prefixes = [Path(entry) for entry in env_paths if entry]
     repository = msgs.MessageRepository(ament_prefix_path=prefixes, distro=narrowed.distro)
-    roots = [topic.type_name for topic in narrowed.topics] + services.roots(narrowed)
+    roots = (
+        [topic.type_name for topic in narrowed.topics]
+        + services.roots(narrowed)
+        + actions.roots(narrowed)
+    )
     resolved = bounds.resolve(repository, roots, bounds=dict(narrowed.bounds))
     header, source = topics.generate(narrowed, resolved, repository)
     gen_dir = tmp_path / 'narrowed'
@@ -712,6 +717,7 @@ def build_firmware_without_cmd_vel(tmp_path):
         '-DR2S_WITH_TIME',
         '-DR2S_WITH_PARAMS',
         '-DR2S_WITH_SERVICES',
+        '-DR2S_WITH_ACTIONS',
         *(['-include', str(gen_dir / 'twist_shim.h')] if needs_shim else []),
         *[str(p) for p in sources],
         '-o',

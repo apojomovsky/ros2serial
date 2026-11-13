@@ -48,7 +48,25 @@ BUNDLED_TYPES = (
     'std_msgs/msg/String',
     'std_srvs/srv/Trigger_Request',
     'std_srvs/srv/Trigger_Response',
+    'tf2_msgs/action/LookupTransform_Feedback',
+    'tf2_msgs/action/LookupTransform_Goal',
+    'tf2_msgs/action/LookupTransform_Result',
     'tf2_msgs/msg/TFMessage',
+)
+
+# The actions the library ships headers and tables for, one action header at
+# the rclcpp path beside its goal, result and feedback structs. The action
+# parts above carry the structs; the header below names the action.
+BUNDLED_ACTIONS = ('tf2_msgs/action/LookupTransform',)
+
+ACTION_PARTS = ('_Goal', '_Result', '_Feedback')
+
+# Message headers the action closures need beyond the bundled types: the
+# action header includes them, so the bundle ships them too. The bundle test
+# pins this set against the computed closure.
+ACTION_NESTED_HEADERS = (
+    'builtin_interfaces/msg/Duration',
+    'tf2_msgs/msg/TF2Error',
 )
 
 BUNDLE_BOUNDS = {
@@ -78,7 +96,22 @@ _FILES = (
 # The C++ message headers the library ships: one per bundled type, at the
 # rclcpp include path. The C++ runtime layer's own files are not here: they
 # live in the repository's cpp/ tree and the build stages them.
-_CPP_HEADERS = tuple(f'src/{cpp.message_path(name)}' for name in BUNDLED_TYPES)
+_CPP_HEADERS = tuple(
+    f'src/{cpp.message_path(name)}' for name in BUNDLED_TYPES if '/action/' not in name
+)
+
+
+def _action_parts(action: str) -> tuple[str, ...]:
+    """Return the goal, result and feedback types of one bundled action."""
+    return tuple(f'{action}{part}' for part in ACTION_PARTS)
+
+
+# The C++ action headers the library ships: one per bundled action, at the
+# rclcpp path beside its part structs. The parts share no message header of
+# their own; the action header carries all three.
+_ACTION_HEADERS = tuple(f'src/{cpp.message_path(action)}' for action in BUNDLED_ACTIONS)
+
+_NESTED_HEADERS = tuple(f'src/{cpp.message_path(name)}' for name in ACTION_NESTED_HEADERS)
 
 
 def _service_roots() -> tuple[str, ...]:
@@ -95,7 +128,7 @@ _SERVICE_HEADERS = tuple(f'src/{cpp.service_path(service)}' for service in _serv
 
 def files_for() -> tuple[str, ...]:
     """Return the exact relative paths `bundle` writes, in build order."""
-    return _FILES + _CPP_HEADERS + _SERVICE_HEADERS
+    return _FILES + _CPP_HEADERS + _NESTED_HEADERS + _SERVICE_HEADERS + _ACTION_HEADERS
 
 
 def _cname(type_name: str) -> str:
@@ -104,7 +137,9 @@ def _cname(type_name: str) -> str:
 
     `std_msgs/msg/Float32` to `std_msgs_Float32`.
     """
-    if '/srv/' in type_name:
+    if '/action/' in type_name:
+        package, _, name = type_name.partition('/action/')
+    elif '/srv/' in type_name:
         package, _, name = type_name.partition('/srv/')
     else:
         package, _, name = type_name.partition('/msg/')
@@ -117,6 +152,9 @@ def _kind(type_name: str) -> tuple[str, str, str]:
 
     `std_srvs/srv/Trigger_Request` to `('std_srvs', 'srv', 'Trigger_Request')`.
     """
+    if '/action/' in type_name:
+        package, _, name = type_name.partition('/action/')
+        return package, 'action', name
     if '/srv/' in type_name:
         package, _, name = type_name.partition('/srv/')
         return package, 'srv', name
@@ -153,7 +191,18 @@ def bundle(distro: str = 'jazzy') -> dict[str, str]:
         bounds=dict(BUNDLE_BOUNDS),
         default_string_bound=DEFAULT_STRING_BOUND,
     )
-    tables = {name: descriptors.build(resolved, [name]) for name in BUNDLED_TYPES}
+    # One table per action, shared by its goal, feedback and result: the
+    # action header numbers the parts in one joint walk, so each part's
+    # table holds the whole closure and every part keeps the header's index.
+    action_tables: dict[str, descriptors.DescriptorTable] = {}
+    for action in BUNDLED_ACTIONS:
+        table = descriptors.build(resolved, list(_action_parts(action)))
+        for part in _action_parts(action):
+            action_tables[part] = table
+    tables = {
+        name: action_tables[name] if name in action_tables else descriptors.build(resolved, [name])
+        for name in BUNDLED_TYPES
+    }
     digest = _digest(distro)
     max_nest = max(table.max_nest for table in tables.values())
     files = {
@@ -164,12 +213,22 @@ def bundle(distro: str = 'jazzy') -> dict[str, str]:
         'src/r2s_bundled.c': _bundled_c(resolved, tables, distro),
     }
     for name in BUNDLED_TYPES:
+        if '/action/' in name:
+            continue
+        files[f'src/{cpp.message_path(name)}'] = cpp.emit_message_hpp(
+            resolved, name, repository=repository, distro=distro
+        )
+    for name in ACTION_NESTED_HEADERS:
         files[f'src/{cpp.message_path(name)}'] = cpp.emit_message_hpp(
             resolved, name, repository=repository, distro=distro
         )
     for service in _service_roots():
         files[f'src/{cpp.service_path(service)}'] = cpp.emit_service_hpp(
             resolved, service, repository=repository, distro=distro
+        )
+    for action in BUNDLED_ACTIONS:
+        files[f'src/{cpp.message_path(action)}'] = cpp.emit_action_hpp(
+            resolved, action, repository, distro=distro
         )
     return files
 
@@ -741,6 +800,7 @@ def _sketch_h(
         ' * needs only this header, and after the bundled limits above so the',
         " * limits stay the bundle's on every toolchain. */",
         '#ifdef __cplusplus',
+        '#include <builtin_interfaces/msg/duration.hpp>',
         '#include <builtin_interfaces/msg/time.hpp>',
         '#include <geometry_msgs/msg/quaternion.hpp>',
         '#include <geometry_msgs/msg/twist.hpp>',
@@ -750,6 +810,8 @@ def _sketch_h(
         '#include <std_msgs/msg/float32.hpp>',
         '#include <std_msgs/msg/header.hpp>',
         '#include <std_msgs/msg/string.hpp>',
+        '#include <tf2_msgs/action/lookup_transform.hpp>',
+        '#include <tf2_msgs/msg/tf2_error.hpp>',
         '#endif',
         '',
         '/* A C++ sketch without a topic list uses the runtime API: it declares',

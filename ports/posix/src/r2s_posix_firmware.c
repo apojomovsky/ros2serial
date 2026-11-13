@@ -15,9 +15,11 @@
 #include <unistd.h>
 
 #include "r2s/r2s.h"
+#include "r2s/r2s_codec.h"
 #include "r2s/r2s_framer.h"
 #include "r2s/r2s_port.h"
 #include "r2s/r2s_services.h"
+#include "r2s/r2s_actions.h"
 #include "r2s/r2s_session.h"
 #include "r2s_generated.h"
 
@@ -580,6 +582,135 @@ static void service_reset_link(void)
   s_marker_pending = 0xFFFFFFFFu;
 }
 
+/* The spin goal the firmware runs: one accepted goal at a time, a paced
+ * empty feedback, then the fixed transform result. The e2e action scenario
+ * cancels, drops and resets inside the feedback window below, so the run
+ * stays slow enough to observe and fast enough to finish. The window is
+ * generous because simulated time can outrun the wall clock: the avr slice
+ * shares this pacing, and its test must still land its kill mid-goal. */
+#define ACTION_FEEDBACK_PERIOD_MS 200u
+#define ACTION_FEEDBACK_COUNT 10u
+
+/* s_goal_active tells a live goal from none: the wire seq wraps through
+ * 0xFF on a long connection, so the seq itself cannot be the sentinel. */
+static uint8_t s_goal_active = 0u;
+static uint8_t s_goal_index = 0xFFu;
+static uint8_t s_goal_seq = 0xFFu;
+static uint8_t s_feedbacks = 0u;
+static uint8_t s_canceling = 0u;
+static uint8_t s_answer_pending = 0u;
+static uint8_t s_cancel_answer_pending = 0u;
+static uint32_t s_last_feedback = 0u;
+
+void r2s_action_on_goal(uint8_t index, uint8_t goal_seq, const uint8_t *payload, uint16_t len)
+{
+  (void)payload;
+  (void)len;
+  s_goal_active = 1u;
+  s_goal_index = index;
+  s_goal_seq = goal_seq;
+  s_feedbacks = 0u;
+  s_canceling = 0u;
+  s_last_feedback = r2s_port_tick();
+  if (r2s_actions_answer_goal(index, goal_seq, R2S_ACT_ACCEPTED) == R2S_ERR_TX_BUSY) {
+    s_answer_pending = 1u;
+  }
+}
+
+void r2s_action_on_cancel(uint8_t index, uint8_t goal_seq)
+{
+  (void)index;
+  (void)goal_seq;
+  s_canceling = 1u;
+  if (r2s_actions_answer_cancel(index, goal_seq, R2S_ACT_CANCEL_ACCEPTED) == R2S_ERR_TX_BUSY) {
+    s_cancel_answer_pending = 1u;
+  }
+}
+
+/* The fixed transform the result carries: frame ids the goal would have
+ * resolved, an identity rotation with a unit translation, no error. */
+static void fill_result(tf2_msgs__action__LookupTransform_Result *result)
+{
+  memset(result, 0, sizeof *result);
+  memcpy(result->transform.header.frame_id, "odom", 5u);
+  memcpy(result->transform.child_frame_id, "base", 5u);
+  result->transform.transform.translation.x = 1.0;
+  result->transform.transform.translation.y = 2.0;
+  result->transform.transform.translation.z = 3.0;
+  result->transform.transform.rotation.w = 1.0;
+}
+
+static r2s_status_t send_spin_result(uint8_t outcome)
+{
+  tf2_msgs__action__LookupTransform_Result result;
+  uint8_t payload[160];
+  r2s_codec_out_t out = {payload, (uint16_t)sizeof payload, 0u, 0u};
+  uint8_t field = 0xFFu;
+
+  fill_result(&result);
+  if (r2s_codec_encode(&r2s_generated_table, R2S_ACTION_SPIN_RESULT_TYPE, &result, 0u, &out,
+                       &field) != R2S_OK)
+  {
+    return R2S_ERR_BOUNDS;
+  }
+  return r2s_actions_result(s_goal_index, s_goal_seq, outcome, payload, out.len);
+}
+
+static void action_reset_link(void)
+{
+  s_goal_active = 0u;
+  s_goal_index = 0xFFu;
+  s_goal_seq = 0xFFu;
+  s_feedbacks = 0u;
+  s_canceling = 0u;
+  s_answer_pending = 0u;
+  s_cancel_answer_pending = 0u;
+  s_last_feedback = 0u;
+}
+
+static void action_tick(uint32_t now)
+{
+  if (s_goal_active == 0u) {
+    return;
+  }
+    /* A busy answer retries on a later tick; the goal it answers stays put. */
+  if (s_answer_pending != 0u) {
+    if (r2s_actions_answer_goal(s_goal_index, s_goal_seq, R2S_ACT_ACCEPTED) ==
+      R2S_ERR_TX_BUSY)
+    {
+      return;
+    }
+    s_answer_pending = 0u;
+  }
+  if (s_cancel_answer_pending != 0u) {
+    if (r2s_actions_answer_cancel(s_goal_index, s_goal_seq, R2S_ACT_CANCEL_ACCEPTED) ==
+      R2S_ERR_TX_BUSY)
+    {
+      return;
+    }
+    s_cancel_answer_pending = 0u;
+  }
+  if (s_canceling != 0u) {
+    if (send_spin_result(R2S_ACT_CANCELED) != R2S_ERR_TX_BUSY) {
+      action_reset_link();
+    }
+    return;
+  }
+  if ((uint32_t)(now - s_last_feedback) < ACTION_FEEDBACK_PERIOD_MS) {
+    return;
+  }
+  s_last_feedback = now;
+  if (s_feedbacks < ACTION_FEEDBACK_COUNT) {
+    if (r2s_actions_feedback(s_goal_index, s_goal_seq, NULL, 0u) == R2S_OK) {
+      s_feedbacks++;
+    }
+    return;
+  }
+  if (send_spin_result(R2S_ACT_SUCCEEDED) != R2S_ERR_TX_BUSY) {
+    action_reset_link();
+  }
+}
+
 /* One log_text line: the value as 8 hex digits. Fixed width fits the
  * handwritten String bound of 8 characters for every id. */
 static r2s_status_t publish_log_text(uint32_t value)
@@ -676,6 +807,11 @@ int main(int argc, char **argv)
     fprintf(stderr, "r2s_posix: cannot configure services\n");
     return 2;
   }
+    /* The action table the bridge walks after the services. */
+  if (r2s_actions_configure(r2s_actions, R2S_ACTION_COUNT) != R2S_OK) {
+    fprintf(stderr, "r2s_posix: cannot configure actions\n");
+    return 2;
+  }
   r2s_init();
   fprintf(stderr, "r2s_posix: ready node=%s topics=%u rate=%u\n", opts.node, count, opts.rate);
   interval = (uint32_t)(1000u / opts.rate);
@@ -692,6 +828,7 @@ int main(int argc, char **argv)
       last_pub = now;
       last_time = now;
       service_reset_link();
+      action_reset_link();
       if (cap_armed != 0u) {
         cap_armed = 0u;
         r2s_posix_set_tx_cap(0xFFFFu);
@@ -708,6 +845,7 @@ int main(int argc, char **argv)
         /* Applied SETs print here, so the suite reads the live values. */
     r2s_posix_params_report();
     service_tick();
+    action_tick(now);
     if (opts.log_lines != 0u && (uint32_t)(now - last_log) >= LOG_PERIOD_MS) {
       emit_log_lines();
       last_log = now;

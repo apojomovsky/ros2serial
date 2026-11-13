@@ -34,12 +34,18 @@ _REQUIRED_FIX = {
     'direction': 'add direction: pub or direction: sub',
     'services': 'add services: with one entry per service',
     'role': 'add role: server or role: client',
+    'actions': 'add actions: with one entry per action',
 }
 
 _SERVICE_REQUIRED_FIX = {
     'name': 'add name: <service>',
     'type': 'add type: <package/srv/Type>',
     'role': 'add role: server or role: client',
+}
+
+_ACTION_REQUIRED_FIX = {
+    'name': 'add name: <action>',
+    'type': 'add type: <package/action/Type>',
 }
 
 _TYPE_PROBLEM_FIX = {
@@ -49,6 +55,10 @@ _TYPE_PROBLEM_FIX = {
     'services': (
         'expected a list',
         'write one entry per service, starting each with - name: <service>',
+    ),
+    'actions': (
+        'expected a list',
+        'write one entry per action, starting each with - name: <action>',
     ),
     'name': ('expected a string', 'write the topic name, such as name: battery'),
     'type': ('expected a string', 'write package/msg/Type, such as std_msgs/msg/Float32'),
@@ -94,12 +104,21 @@ class Service:
 
 
 @dataclass(frozen=True)
+class Action:
+    """One configured action: the MCU serves it under this name."""
+
+    name: str
+    type_name: str
+
+
+@dataclass(frozen=True)
 class Config:
     """One validated r2s.yaml: the node, its topics, and its limits."""
 
     node: str
     topics: tuple[Topic, ...] = ()
     services: tuple[Service, ...] = ()
+    actions: tuple[Action, ...] = ()
     distro: str = 'jazzy'
     handshake: str = 'full'
     tier: str = 'M'
@@ -131,6 +150,11 @@ def _string_keys(path: str | Path, data: dict) -> None:
         for index, entry in enumerate(services):
             if isinstance(entry, dict):
                 _string_keys_at(f'{path}: services[{index}]', entry)
+    actions = data.get('actions')
+    if isinstance(actions, list):
+        for index, entry in enumerate(actions):
+            if isinstance(entry, dict):
+                _string_keys_at(f'{path}: actions[{index}]', entry)
     for section in ('bounds', 'limits'):
         mapping = data.get(section)
         if isinstance(mapping, dict):
@@ -253,6 +277,8 @@ def _describe(path: str, data: dict, error: Any) -> MessageError:
         fix = _REQUIRED_FIX[missing]
         if parts and parts[0] == 'services':
             fix = _SERVICE_REQUIRED_FIX.get(missing, fix)
+        if parts and parts[0] == 'actions':
+            fix = _ACTION_REQUIRED_FIX.get(missing, fix)
         return MessageError(where, f"missing required key '{missing}'", fix)
     if error.validator == 'additionalProperties':
         return _describe_unknown(where, error)
@@ -355,8 +381,12 @@ def _describe_pattern(path: str, error: Any) -> MessageError:
             'use letters, digits and underscores, starting with a letter',
         )
     if key == 'name':
-        kind = 'service' if parts and parts[0] == 'services' else 'topic'
-        example = 'reset' if kind == 'service' else 'battery'
+        if parts and parts[0] == 'services':
+            kind, example = 'service', 'reset'
+        elif parts and parts[0] == 'actions':
+            kind, example = 'action', 'spin'
+        else:
+            kind, example = 'topic', 'battery'
         if isinstance(value, str) and value.startswith('/'):
             return MessageError(
                 path,
@@ -373,6 +403,12 @@ def _describe_pattern(path: str, error: Any) -> MessageError:
             path,
             f"'{value}' is not a service type",
             'write package/srv/Type, such as std_srvs/srv/Trigger',
+        )
+    if key == 'type' and parts and parts[0] == 'actions':
+        return MessageError(
+            path,
+            f"'{value}' is not an action type",
+            'write package/action/Type, such as tf2_msgs/action/LookupTransform',
         )
     return MessageError(
         path,
@@ -428,6 +464,22 @@ def _model(path: str | Path, data: dict) -> Config:
                 role=entry['role'],
             )
         )
+    actions = []
+    seen_actions = set()
+    for index, entry in enumerate(data.get('actions', [])):
+        if entry['name'] in seen_actions:
+            raise MessageError(
+                f'{path}: actions[{index}].name',
+                f"duplicate action name '{entry['name']}'",
+                'give each action its own name',
+            )
+        seen_actions.add(entry['name'])
+        actions.append(
+            Action(
+                name=entry['name'],
+                type_name=entry['type'],
+            )
+        )
     bounds = {
         key: value
         for key, value in data.get('bounds', {}).items()
@@ -439,6 +491,7 @@ def _model(path: str | Path, data: dict) -> Config:
         node=data['node'],
         topics=tuple(topics),
         services=tuple(services),
+        actions=tuple(actions),
         distro=data.get('distro', 'jazzy'),
         handshake=data.get('handshake', 'full'),
         tier=data.get('tier', 'M'),

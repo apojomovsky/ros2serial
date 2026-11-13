@@ -7,7 +7,9 @@
 # its 8-byte capacity; the JointState bounds match the bundle's, so every
 # firmware shape drops the same oversized subscription (scenario 11). The
 # services serve reset and call trigger (scenario 14); the response message
-# bound keeps the Trigger answer inside the frame.
+# bound keeps the Trigger answer inside the frame. The spin action serves
+# tf2_msgs/action/LookupTransform (scenario 15); the goal frame ids and the
+# result strings stay inside the frame.
 node: r2s_posix
 services:
   - name: reset
@@ -16,6 +18,9 @@ services:
   - name: trigger
     type: std_srvs/srv/Trigger
     role: client
+actions:
+  - name: spin
+    type: tf2_msgs/action/LookupTransform
 topics:
   - name: battery
     type: std_msgs/msg/Float32
@@ -43,3 +48,8 @@ bounds:
   sensor_msgs/msg/JointState.position: 6
   sensor_msgs/msg/JointState.velocity: 6
   sensor_msgs/msg/JointState.effort: 6
+  tf2_msgs/action/LookupTransform_Goal.target_frame: 16
+  tf2_msgs/action/LookupTransform_Goal.source_frame: 16
+  tf2_msgs/action/LookupTransform_Goal.fixed_frame: 16
+  geometry_msgs/msg/TransformStamped.child_frame_id: 16
+  tf2_msgs/msg/TF2Error.error_string: 16

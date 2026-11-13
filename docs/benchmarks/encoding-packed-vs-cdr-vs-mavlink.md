@@ -58,6 +58,10 @@ Method:
 | `geometry_msgs/msg/TransformStamped` | narrow | 49 | 92 | 76 | 80 |
 | `tf2_msgs/msg/TFMessage` | wide | 78 | 100 | 104 | 105 |
 | `tf2_msgs/msg/TFMessage` | narrow | 50 | 100 | 76 | 80 |
+| `tf2_msgs/action/LookupTransform_Goal` | wide | 36 | 58 | 81 | 81 |
+| `tf2_msgs/action/LookupTransform_Result` | wide | 76 | 101 | 121 | 121 |
+| `tf2_msgs/action/LookupTransform_Result` | narrow | 48 | 101 | 93 | 96 |
+| `tf2_msgs/action/LookupTransform_Feedback` | wide | 0 | 4 | 8 | 12 |
 | `std_srvs/srv/Trigger_Request` | wide | 0 | 4 | 8 | 12 |
 | `std_srvs/srv/Trigger_Response` | wide | 4 | 15 | 25 | 29 |
 

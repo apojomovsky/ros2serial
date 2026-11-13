@@ -2840,6 +2840,64 @@ TEST_F(RouterNode, AcceptsAGoalAndStreamsFeedbackAndResult)
   EXPECT_TRUE(status_shows(4)) << "the status array never showed the goal succeeded";
 }
 
+// A handshake announcing one LookupTransform action on a 32-bit-double
+// MCU: the features byte carries bit 4, so every float64 travels narrow.
+void handshake_with_narrow_actions(RouterFixture & fixture)
+{
+  fixture.deliver_frame(kHelperControl, 0u, helper_hello(0x4444u, 1u, 512u, 0xDCu));
+  fixture.deliver_frame(kHelperControl, 1u,
+    helper_topic(0u, kBattery, 0x00u, installed_hash("std_msgs/msg/Float32").data(),
+      "std_msgs/msg/Float32", "battery"));
+  fixture.deliver_frame(kParamsTopic, 0u, std::vector<std::uint8_t>{0x04u, 0x00u, 0x00u, 0x01u});
+  fixture.deliver_frame(kServicesTopic, 0u,
+    std::vector<std::uint8_t>{kHelperSvcStatus, 0x00u, 0x00u, 0x01u});
+  const std::array<std::uint8_t, 8> hash =
+    installed_action_hash("tf2_msgs/action/LookupTransform");
+  fixture.deliver_frame(kHelperActions, 0u,
+    helper_action_declare(0u, hash.data(), "tf2_msgs/action/LookupTransform", "spin"));
+  fixture.deliver_frame(kHelperActions, 1u,
+    std::vector<std::uint8_t>{kHelperActStatus, 0x00u, 0x01u, 0x01u});
+}
+
+// covers: SES-35, ACT-6, ENC-12
+TEST_F(RouterNode, UnpacksANarrowActionResult)
+{
+  RouterFixture fixture("act_narrow", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_narrow_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, 0x00u, 0x00u});
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+  ASSERT_NE(goal_handle.get(), nullptr);
+
+  // The result carries 32-bit doubles, as the narrow MCU packs them.
+  tf2_msgs::action::LookupTransform_Result result;
+  result.transform.transform.translation.x = 1.0;
+  result.transform.transform.translation.y = 2.0;
+  Converter converter;
+  std::vector<std::uint8_t> packed;
+  const ConvertResult packed_result = converter.pack_from_struct(
+    "tf2_msgs/action/LookupTransform_Result", true, &result, packed);
+  ASSERT_EQ(packed_result.fail, ConvertFail::kNone);
+  auto result_future = client->async_get_result(goal_handle.get());
+  std::vector<std::uint8_t> frame{kHelperActResult, 0x01u, 0x00u, 0x04u};
+  frame.insert(frame.end(), packed.begin(), packed.end());
+  fixture.deliver_frame(kHelperActions, 4u, frame);
+  ASSERT_TRUE(spin_until_ready(fixture, result_future));
+  const auto wrapped = result_future.get();
+  EXPECT_EQ(wrapped.code, rclcpp_action::ResultCode::SUCCEEDED);
+  EXPECT_DOUBLE_EQ(wrapped.result->transform.transform.translation.x, 1.0);
+  EXPECT_DOUBLE_EQ(wrapped.result->transform.transform.translation.y, 2.0);
+}
+
 // covers: SES-35, ACT-4
 TEST_F(RouterNode, RejectsAGoalTheMcuRefuses)
 {

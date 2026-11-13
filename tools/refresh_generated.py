@@ -19,6 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'gen'))
 
+from r2s_gen import actions  # noqa: E402
 from r2s_gen import bounds  # noqa: E402
 from r2s_gen import bundle  # noqa: E402
 from r2s_gen import config  # noqa: E402
@@ -89,7 +90,11 @@ def _resolve(loaded: config.Config) -> tuple[msgs.MessageRepository, dict[str, R
         Path(entry) for entry in os.environ.get('AMENT_PREFIX_PATH', '').split(os.pathsep) if entry
     ]
     repository = msgs.MessageRepository(ament_prefix_path=prefixes, distro=loaded.distro)
-    roots = [topic.type_name for topic in loaded.topics] + services.roots(loaded)
+    roots = (
+        [topic.type_name for topic in loaded.topics]
+        + services.roots(loaded)
+        + actions.roots(loaded)
+    )
     return repository, bounds.resolve(repository, roots, bounds=dict(loaded.bounds))
 
 
