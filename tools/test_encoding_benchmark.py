@@ -333,6 +333,10 @@ def test_mavlink_bounds_match_the_bundle():
         **{
             'std_msgs/msg/String.data': default_string,
             'std_srvs/srv/Trigger_Response.message': default_string,
+            'tf2_msgs/action/LookupTransform_Goal.target_frame': default_string,
+            'tf2_msgs/action/LookupTransform_Goal.source_frame': default_string,
+            'tf2_msgs/action/LookupTransform_Goal.fixed_frame': default_string,
+            'tf2_msgs/msg/TF2Error.error_string': default_string,
         },
     )
 

@@ -142,6 +142,10 @@ MAVLINK_BOUNDS = {
     'sensor_msgs/msg/JointState.velocity': 6,
     'sensor_msgs/msg/JointState.effort': 6,
     'tf2_msgs/msg/TFMessage.transforms': 1,
+    'tf2_msgs/action/LookupTransform_Goal.target_frame': 16,
+    'tf2_msgs/action/LookupTransform_Goal.source_frame': 16,
+    'tf2_msgs/action/LookupTransform_Goal.fixed_frame': 16,
+    'tf2_msgs/msg/TF2Error.error_string': 16,
     'std_srvs/srv/Trigger_Response.message': 16,
 }
 
