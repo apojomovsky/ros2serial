@@ -6,7 +6,7 @@
  * sketch declares its topics in an R2S_TOPICS list, so no r2s.yaml and no
  * generator step are involved; battery publishes at the 50 Hz scenario 2
  * measures, and every cmd_vel frame echoes back for scenario 3. The spin
- * action serves scenario 15 through an R2S_ACTIONS row the same way. */
+ * action serves scenario 16 through an R2S_ACTIONS row the same way. */
 
 #define R2S_NODE_NAME "r2s_slice"
 #define R2S_TOPICS(X) \
