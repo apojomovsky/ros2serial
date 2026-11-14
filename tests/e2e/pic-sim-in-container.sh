@@ -87,13 +87,113 @@ defines=(-DR2S_WITH_CODEC -DR2S_MAX_NEST="${R2S_MAX_NEST_DEF:?}"
   -DR2S_MAX_FRAME="${R2S_MAX_FRAME_DEF:?}" -DR2S_WITH_LOG -DR2S_WITH_TIME)
 
 hex=$work/pic18f4550.hex
-if ! "$epic_cc" --target p18f4550 "${flags[@]}" "${defines[@]}" \
-  "${sources[@]}" -o "$hex" >"$work/build.log" 2>&1; then
-  echo "pic-sim: epic-cc failed" >&2
-  cat "$work/build.log" >&2
+baseline=$root/ci/pic-sim-baseline.txt
+[ -f "$baseline" ] || {
+  echo "pic-sim: no baseline at $baseline" >&2
+  exit 1
+}
+
+# The message without its volatile parts, the same normalization the P14
+# canary uses: locations stripped, wording kept exact.
+normalize_sig() {
+  printf '%s\n' "$1" |
+    sed -E -e 's/\x1b\[[0-9;]*[A-Za-z]//g' \
+      -e 's/[A-Za-z0-9_.\/+~-]+\.(c|h|cpp|hpp|cc|cxx):[0-9]+(:[0-9]+)?//g' \
+      -e 's/(at |in )?lines? [0-9]+(-[0-9]+)?//g' \
+      -e 's/(at |in )?col(umn)?s? [0-9]+//g' \
+      -e 's/"[0-9]+"/""/g' \
+      -e 's/\(([0-9]+),/(,/g' -e 's/, ([0-9]+)\)/, )/g' \
+      -e 's/::[0-9]+//g' \
+      -e 's/\[\]//g' -e 's/\(\)//g' \
+      -e 's/[[:space:]][[:space:]]*/ /g' -e 's/^ //;s/ $//'
+}
+
+norm_baseline=$work/baseline.normalized
+: >"$norm_baseline" || exit 1
+while IFS= read -r line; do
+  line=${line%$'\r'}
+  case "$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" in
+  ''|'#'*) continue ;;
+  esac
+  IFS='|' read -r b_label b_sig b_extra <<<"$line"
+  b_label=$(printf '%s' "$b_label" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  b_sig=$(printf '%s' "$b_sig" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  b_extra=$(printf '%s' "${b_extra:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  if [ -z "$b_label" ] || [ -z "$b_sig" ] || [ -n "$b_extra" ]; then
+    echo "pic-sim: bad baseline line (want 'label | signature'): $line" >&2
+    exit 1
+  fi
+  printf '%s | %s\n' "$b_label" "$(normalize_sig "$b_sig")" >>"$norm_baseline" || exit 1
+done <"$baseline"
+
+status=0
+known=$work/known_gaps.log
+observed=$work/observed_gaps.log
+new=$work/new_gaps.log
+: >"$known" && : >"$observed" && : >"$new" || exit 1
+
+# One compile. An internal compiler error the baseline records is the known
+# toolchain gap: it warns and the run goes on to the simulator. One it never
+# recorded is a new break and fails. Any other failure is ours and fails.
+# A gap that stops reproducing fails below, so the file shrinks instead of
+# hiding the fix.
+compile() {
+  local out
+  if out=$("$epic_cc" --target p18f4550 "${flags[@]}" "${defines[@]}" \
+    "${sources[@]}" -o "$hex" 2>&1); then
+    printf '%s\n' "$out" | tee "$work/build.log"
+    return 0
+  fi
+  printf '%s\n' "$out" | tee "$work/build.log"
+  case "$out" in
+  *"internal compiler error"*)
+    local detail key
+    detail=$(printf '%s\n' "$out" | grep "internal compiler error" | head -n 1)
+    detail=${detail#*internal compiler error: }
+    key="pic18f4550 firmware | $(normalize_sig "$detail")"
+    if grep -qxF -- "$key" "$norm_baseline"; then
+      echo "::warning::pic-sim: known epic-cc gap: $detail"
+      printf '%s\n' "$key" >>"$observed" || exit 1
+      return 0
+    fi
+    echo "pic-sim: new epic-cc failure: $detail" >&2
+    echo "pic-sim: append '$key' to ci/pic-sim-baseline.txt and check it in" >&2
+    printf '%s\n' "$key" >>"$new" || exit 1
+    return 1
+    ;;
+  *)
+    echo "pic-sim: the compile failed" >&2
+    return 1
+    ;;
+  esac
+}
+compile || status=1
+grep -E 'flash:|RAM:' "$work/build.log" 2>/dev/null | sed 's/^/pic-sim: /' || true
+while IFS= read -r gap; do
+  [ -n "$gap" ] && echo "::warning::pic-sim: known gap: $gap (advisory)"
+done <"$observed"
+[ -s "$new" ] && cat "$new" >&2
+
+# A baseline entry that stops reproducing is a closed gap: it fails and asks
+# for the file to shrink, so the improvement never hides silently.
+while IFS= read -r want; do
+  [ -n "$want" ] || continue
+  if ! grep -qxF -- "$want" "$observed"; then
+    echo "pic-sim: baseline entry stops reproducing, remove it: $want" >&2
+    status=1
+  fi
+done <"$norm_baseline"
+
+if [ "$status" -ne 0 ]; then
   exit 1
 fi
-grep -E 'flash:|RAM:' "$work/build.log" | sed 's/^/pic-sim: /'
+# Only a real hex can be simulated. A known gap leaves none, so the run
+# reports the gap and stops green here rather than failing on a missing
+# file, and the nightly keeps showing the epic-cc state.
+if [ ! -f "$hex" ]; then
+  echo "pic-sim: skipped the simulator run: the compile is a known epic-cc gap"
+  exit 0
+fi
 
 # The SCL script the simulator runs: one process opens the frame list and
 # hands each line to the receive register, which is how MPLAB SIM feeds a

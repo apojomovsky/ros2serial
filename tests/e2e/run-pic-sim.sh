@@ -97,7 +97,9 @@ fi
 set +u
 # The build directory mounts at /build, which is already the run's own
 # directory, so the container is told where it is instead of composing it.
-exec docker run --rm \
+# Same uid as the caller, so the cache and the build tree stay host-owned:
+# the dev image does this for the same reason.
+exec docker run --rm --user "$(id -u):$(id -g)" \
   -v "$root:/src" -v "$build:/build" -w /src \
   -e R2S_PIC_SIM_BUILD=/build \
   -e R2S_MAX_FRAME_DEF="$frame" -e R2S_MAX_NEST_DEF="$nest" \

@@ -1,0 +1,18 @@
+# Known epic-cc gaps for the PIC18F4550 sim run (issue #623).
+#
+# One line per gap: <label> | <normalized compiler message>. A gap recorded
+# here warns and leaves the run green, so the harness keeps running on every
+# nightly; a gap it has never recorded fails, and an entry that stops
+# reproducing also fails, asking to be deleted. The signature has its file
+# and line numbers stripped before comparing, so a diagnostic that only
+# moved still matches.
+#
+# To update: run make pic-sim, copy the reported "new gap" line in, and
+# check it in with whatever explains it.
+#
+# epic-cc#: iselcore adds two GEP offsets over the same base with
+# checked_add and panics when the sum overflows. It needs a whole-program
+# link to reproduce: the same core links when the port's read does not store
+# through its buffer, and a three-file subset (framer, rcobs, crc) is
+# enough to show it.
+pic18f4550 firmware | iselcore: gep offset overflow in r2s_spin_some

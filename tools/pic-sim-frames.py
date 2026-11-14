@@ -11,10 +11,10 @@ C core and the bridge are checked against.
 
 Writes into the output directory:
 
-- ``rx.txt`` the host frames, one wire frame per line, in the transcript's
-  order, which is what the stimulus script feeds the UART.
-- ``want_mcu.txt`` every MCU frame, one wire frame per line, in order, which
-  is what the firmware must send back.
+- ``rx.txt`` the host frames, one wire frame per line as decimal bytes, in
+  the transcript's order, which is what the stimulus script feeds the UART.
+- ``want_mcu.txt`` every MCU frame, one wire frame per line as hex, in
+  order, which is what the firmware must send back.
 
 Exits 1 with a message naming the step when a frame will not encode.
 """
@@ -29,11 +29,27 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'gen'))
 
-from r2s_gen.reference import rcobs
-from r2s_gen.reference.errors import Rejected
+from r2s_gen.reference import rcobs  # noqa: E402
+from r2s_gen.reference.errors import Rejected  # noqa: E402
 
 
 def wire(frame: bytes) -> str:
+    """Encode one decoded frame as the decimal byte list MPLAB SIM reads.
+
+    The simulator's ``packetin`` parses the rest of the line as decimal
+    integers, so this prints one number per byte rather than hex.
+
+    Args:
+        frame: the decoded frame, topic id through CRC.
+
+    Returns:
+        The space-separated decimal values of the rCOBS encoding plus its
+        delimiter.
+    """
+    return ' '.join(str(byte) for byte in rcobs.encode(frame) + b'\x00')
+
+
+def wire_hex(frame: bytes) -> str:
     """Encode one decoded frame as the hex of its wire form.
 
     Args:
@@ -68,7 +84,10 @@ def main(argv: list[str]) -> int:
                 file=sys.stderr,
             )
             return 1
-        (host if step['from'] == 'host' else mcu).append(encoded)
+        if step['from'] == 'host':
+            host.append(encoded)
+        else:
+            mcu.append(wire_hex(raw))
 
     if not host or not mcu:
         print(
