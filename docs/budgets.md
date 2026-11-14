@@ -76,6 +76,7 @@ base in the job summary.
 | arduino_xmacro_c/uno/arduino_xmacro_c.ino.elf | 11366 | 12000 | 1101 | 1250 | 13 | 32 |
 | ch32v_minimal/ch32v/ch32v_minimal.elf | 9664 | 11500 | 344 | 400 | n/a | n/a |
 | cmake_minimal/hello_cmake | 10496 | 11200 | 374 | 400 | 184 | 224 |
+| custom_interfaces/custom_firmware.elf | 16800 | 20200 | 848 | 1020 | 291 | 350 |
 | rp2040/firmware.elf | 7599 | 9200 | 340 | 410 | n/a | n/a |
 | stm32/firmware.elf | 7207 | 8700 | 340 | 410 | n/a | n/a |
 

@@ -175,25 +175,33 @@ class TestScenariosStopInTest(unittest.TestCase):
         # launch_testing never calls tearDownModule, so a scenario that
         # stops its harness only there leaks it and records no peak.
         missing = []
-        names = [f'test_scenario_{scenario}_avr.py' for scenario in (1, 2, 3, 4, 12)]
+        names = [f'test_scenario_{scenario}_avr.py' for scenario in (1, 2, 3, 4, 12, 17)]
         names.append('test_baud_matrix_avr.py')
         for name in names:
             path = os.path.join(os.path.dirname(__file__), name)
             with open(path, encoding='utf-8') as handle:
                 tree = ast.parse(handle.read())
+            # A file whose tests share one harness stops it in the last of
+            # them, so every test function is searched, not just the first.
+            tests = [
+                item
+                for item in ast.walk(tree)
+                if isinstance(item, ast.FunctionDef) and item.name.startswith('test_')
+            ]
             stopped = any(
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Attribute)
                 and node.func.attr == 'stop'
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == '_SPAWNED'
-                for node in ast.walk(
-                    next(
-                        item
-                        for item in ast.walk(tree)
-                        if isinstance(item, ast.FunctionDef) and item.name.startswith('test_')
+                and (
+                    (isinstance(node.func.value, ast.Name) and node.func.value.id == '_SPAWNED')
+                    or (
+                        isinstance(node.func.value, ast.Subscript)
+                        and isinstance(node.func.value.value, ast.Name)
+                        and node.func.value.value.id == '_SPAWNED'
                     )
                 )
+                for test in tests
+                for node in ast.walk(test)
             )
             if not stopped:
                 missing.append(path)
