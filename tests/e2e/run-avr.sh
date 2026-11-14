@@ -205,8 +205,8 @@ for board in uno mega; do
     --toolchain "$custom_src/custom_firmware/avr-toolchain.cmake" \
     -DR2S_MCU="$mcu" -DR2S_GENERATED_DIR="$custom_out/gen" || exit 1
   cmake --build "$custom_out/build" || exit 1
-  avr-size "$custom_out/build/custom_firmware" || exit 1
-  cp "$custom_out/build/custom_firmware" "$build/fw/custom-$mcu.elf" || exit 1
+  avr-size "$custom_out/build/custom_firmware.elf" || exit 1
+  cp "$custom_out/build/custom_firmware.elf" "$build/fw/custom-$mcu.elf" || exit 1
 done
 export R2S_E2E_AVR_FW=$build/fw
 [ "$build_only" = 1 ] && exit 0

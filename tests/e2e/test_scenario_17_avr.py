@@ -31,6 +31,7 @@ from e2e_support import bridge as bridge_support
 from e2e_support import checks
 from e2e_support import teardown
 from rclpy.action import ActionClient
+from rclpy.qos import qos_profile_sensor_data
 
 ANNOUNCED = ['/reading']
 # The bridge reports announced names without the graph's leading slash.
@@ -111,23 +112,25 @@ class TestScenario17(unittest.TestCase):
         """The firmware publishes the interface package's message at 10 Hz."""
         node = rclpy.create_node('e2e_s17_msg')
         try:
+            # The MCU's topics are best effort, so the probe asks for the
+            # same: a reliable subscription would never receive one.
             received = []
-            node.create_subscription(SensorReading, '/reading', received.append, 10)
+            node.create_subscription(
+                SensorReading, '/reading', received.append, qos_profile_sensor_data
+            )
             self._handshake(node)
             deadline = time.monotonic() + MESSAGE_BUDGET
             while len(received) < 3:
                 rclpy.spin_once(node, timeout_sec=0.2)
                 self.assertLess(time.monotonic(), deadline, 'the custom message never arrived')
             # The firmware counts its publishes in status and derives
-            # temperature from it, so both fields prove a decoded payload
-            # rather than a zeroed frame.
-            first = received[0]
-            self.assertEqual(first.status, 0)
-            self.assertAlmostEqual(first.temperature, 0.0, places=3)
-            self.assertEqual(received[-1].status, len(received) - 1)
-            self.assertAlmostEqual(
-                received[-1].temperature, float(received[-1].status) / 10.0, places=3
-            )
+            # temperature from it, so the two fields together prove a decoded
+            # payload rather than a zeroed frame. The subscription starts
+            # mid-stream, so the first status is whatever the counter reached.
+            for reading in received:
+                self.assertAlmostEqual(reading.temperature, float(reading.status) / 10.0, places=3)
+            statuses = [reading.status for reading in received]
+            self.assertEqual(statuses, sorted(statuses), 'the counter went backwards')
         finally:
             node.destroy_node()
 
