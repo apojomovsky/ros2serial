@@ -3,7 +3,7 @@
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
 # The avr end-to-end suite: scenarios 1 to 4 against the slice sketch,
-# scenario 12 against the flood sketch, scenario 15 against the service
+# scenario 12 against the flood sketch, scenario 14 against the service
 # example and scenario 16 against the action slice, on an emulated Uno and
 # Mega, plus the baud matrix (the scenario
 # 2 flow gates per baud per board) under the first RMW only. It stages the
@@ -171,7 +171,7 @@ for board in uno mega; do
   avr-size "$out/avr_flood.ino.elf" || exit 1
   mv "$out/avr_flood.ino.elf" "$build/fw/flood-$mcu.elf" || exit 1
 done
-# Scenario 15 drives the service example itself, with the same channel
+# Scenario 14 drives the service example itself, with the same channel
 # flags scripts/build-examples.sh compiles it with. It runs the default
 # baud only: the baud matrix walks the slice flow, not the example.
 svex="$extras -DR2S_WITH_SERVICES -DR2S_MAX_FRAME=64"
@@ -362,7 +362,7 @@ for rmw in $rmws; do
   fi
   for board in $boards; do
     export R2S_E2E_BOARD=$board
-    for scenario in 1 2 3 4 12 15 16 17; do
+    for scenario in 1 2 3 4 12 14 16 17; do
       # Same R2S_E2E_SKIP contract as run.sh, matched on the avr file name.
       case " ${R2S_E2E_SKIP:-} " in
         *" test_scenario_${scenario}_avr "*) echo "skip test_scenario_${scenario}_avr (R2S_E2E_SKIP)" ;;

@@ -603,7 +603,7 @@ tasks:
       - cpp/**
       - bridge/**
       - ports/arduino/**
-      # Scenario 15 compiles the service example it drives, so the
+      # Scenario 14 compiles the service example it drives, so the
       # e2e-avr leg watches that sketch beside its own firmware.
       - examples/arduino_service/**
       # The shared leg files. The posix runner, the posix scenarios and the
