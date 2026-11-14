@@ -35,13 +35,12 @@ def _tree(tmp_path: Path, files: dict[str, str]) -> Path:
 def _check(repo: Path, monkeypatch, check) -> list[str]:
     """Run one check against the throwaway tree."""
     monkeypatch.setattr(docs_drift, 'ROOT', repo)
-    monkeypatch.setattr(docs_drift, 'USER_DOCS', tuple(_docs(repo)))
     return check()
 
 
 def _docs(repo: Path) -> list[str]:
     """The user documents the throwaway tree actually holds."""
-    return [path for path in docs_drift.USER_DOCS if (repo / path).is_file()]
+    return [path for path in docs_drift.user_docs() if (repo / path).is_file()]
 
 
 _TWINLESS = ('plan', 'bridge-images', 'e2e-isolation', 'nightly')
@@ -97,7 +96,6 @@ def _with(name: str, text: str) -> dict[str, str]:
 def test_a_consistent_tree_passes(tmp_path, monkeypatch):
     repo = _tree(tmp_path, BASE)
     monkeypatch.setattr(docs_drift, 'ROOT', repo)
-    monkeypatch.setattr(docs_drift, 'USER_DOCS', tuple(_docs(repo)))
     found = docs_drift.problems()
     assert found == [], found
 
@@ -213,6 +211,56 @@ def test_an_example_the_readme_never_names_is_named(tmp_path, monkeypatch):
     repo = _tree(tmp_path, files)
     found = _check(repo, monkeypatch, docs_drift.check_examples)
     assert found == ['examples/README.md: the arduino_ghost example is not listed']
+
+
+def test_a_directory_the_diagram_invents_is_named(tmp_path, monkeypatch):
+    text = BASE['docs/00-design.md'].replace('├── docs/', '├── ghostdir/\n├── docs/')
+    repo = _tree(tmp_path, _with('docs/00-design.md', text))
+    found = _check(repo, monkeypatch, docs_drift.check_layout_diagram)
+    assert (
+        'docs/00-design.md: the layout diagram names the ghostdir/ directory, which the tree lacks'
+        in found
+    )
+
+
+def test_a_macro_mentioned_only_in_prose_fails(tmp_path, monkeypatch):
+    """A changelog sentence naming a macro must not stand in for a definition."""
+    files = _with('README.md', 'Built with `R2S_WITH_GHOST`.\n')
+    files['CHANGELOG.md'] = 'Mentions `R2S_WITH_GHOST` in passing.\n'
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_macros)
+    assert found == ['README.md: `R2S_WITH_GHOST` is in no source file']
+
+
+def test_a_new_page_under_docs_is_read(tmp_path, monkeypatch):
+    files = _with('docs/06-new-doc.md', 'Run `make not-a-target`.\n')
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_make_targets)
+    assert found == ['docs/06-new-doc.md: `make not-a-target` matches no Makefile target']
+
+
+def test_a_twinless_job_row_without_its_reason_fails(tmp_path, monkeypatch):
+    """The row alone is no excuse: the reason lives in the prose."""
+    text = BASE['CONTRIBUTING.md'].replace('`e2e-isolation`', 'e2e-isolation')
+    repo = _tree(tmp_path, _with('CONTRIBUTING.md', text))
+    found = _check(repo, monkeypatch, docs_drift.check_contributing_jobs)
+    assert any(
+        '`e2e-isolation` twinless exemption lost its reason' in problem for problem in found
+    )
+
+
+def test_an_example_named_nowhere_is_named(tmp_path, monkeypatch):
+    text = BASE['examples/README.md'].replace('| `hello` |\n', '')
+    repo = _tree(tmp_path, _with('examples/README.md', text))
+    found = _check(repo, monkeypatch, docs_drift.check_examples)
+    assert found == ['examples/README.md: the arduino_hello example is not listed']
+
+
+def test_a_phantom_job_the_design_table_names_is_named(tmp_path, monkeypatch):
+    text = BASE['docs/00-design.md'].replace('| Push | `lint`', '| Push | `ghost`, `lint`')
+    repo = _tree(tmp_path, _with('docs/00-design.md', text))
+    found = _check(repo, monkeypatch, docs_drift.check_design_jobs)
+    assert 'docs/00-design.md: the CI table names `ghost`, which is no ci.yml job' in found
 
 
 def test_the_real_tree_is_green():

@@ -20,30 +20,32 @@ ROOT = Path(__file__).resolve().parent.parent
 CI = Path('.github') / 'workflows' / 'ci.yml'
 SCHEMA = Path('gen') / 'r2s_gen' / 'schema' / 'r2s.schema.json'
 
-USER_DOCS = (
-    'README.md',
-    'CONTRIBUTING.md',
-    'AGENTS.md',
-    'examples/README.md',
-    'docs/00-design.md',
-    'docs/01-testing.md',
-    'docs/02-architecture.md',
-    'docs/03-port-rosserial-sketch.md',
-    'docs/04-porting.md',
-    'docs/benchmarks/ci-per-job-install-cost.md',
-    'docs/benchmarks/encoding-packed-vs-cdr-vs-mavlink.md',
-    'docs/benchmarks/framing-crc.md',
-    'docs/budgets.md',
-    'docs/custom-interfaces.md',
-    'docs/firmware.md',
-    'docs/installation.md',
-    'docs/research/R15-codebase-organization.md',
-    'docs/robot-integration.md',
-    'docs/robustness.md',
-    'docs/services-and-parameters.md',
-    'docs/troubleshooting.md',
-    'docs/without-hardware.md',
+# The file types that can define a macro, a target or a key. A prose page
+# that merely mentions a token never proves the token exists.
+CODE_SUFFIXES = (
+    '.c',
+    '.h',
+    '.cpp',
+    '.hpp',
+    '.py',
+    '.sh',
+    '.yml',
+    '.yaml',
+    '.txt',
+    '.cmake',
 )
+
+USER_DOCS_HEAD = ('README.md', 'CONTRIBUTING.md', 'AGENTS.md', 'examples/README.md')
+
+
+def user_docs() -> tuple[str, ...]:
+    """Every prose page the gate reads: the named roots plus every page under docs/."""
+    pages = [path for path in USER_DOCS_HEAD if (ROOT / path).is_file()]
+    pages += sorted(
+        str(path.relative_to(ROOT)) for path in (ROOT / 'docs').rglob('*.md') if path.is_file()
+    )
+    return tuple(pages)
+
 
 # Tokens that look like a macro or a target but stand for a family or a
 # placeholder, so no single definition can exist.
@@ -66,6 +68,14 @@ TWINLESS_JOBS = {
     'nightly': 'runs the shared nightly jobs on their own schedule',
 }
 SAVE_SUFFIX = '-save'
+# A job name: lowercase words joined by dashes, no path, image or label shape.
+JOB_NAME = re.compile(r'^[a-z][a-z0-9]*(-[a-z0-9]+)*$')
+# Tokens shaped like a job name that the CI cell legitimately backs.
+CELL_NOT_A_JOB = {
+    'continue-on-error': 'the job option the advisory ament-lint job sets',
+    'fuzz-long': 'the pull request label that opts into the long fuzzing',
+    'master': 'the branch the checksum cache saves under',
+}
 
 
 def _read(rel: str) -> str:
@@ -88,7 +98,7 @@ def make_targets() -> set[str]:
 def documented_make_targets() -> dict[str, list[str]]:
     """Every `make <target>` each user document names, by document."""
     found: dict[str, list[str]] = {}
-    for rel in USER_DOCS:
+    for rel in user_docs():
         text = _read(rel)
         fences = '\n'.join(re.findall(r'```[a-z]*\n(.*?)```', text, re.DOTALL))
         spans = '\n'.join(re.findall(r'`([^`\n]+)`', text))
@@ -135,12 +145,15 @@ def check_contributing_jobs() -> list[str]:
     for cell in sorted(named):
         if cell not in jobs:
             problems.append(f'CONTRIBUTING.md: `{cell}` is no ci.yml job')
+    # The reasons live in the prose below the table, so the search skips the
+    # table itself: a job row is not an excuse for having no local target.
+    prose = '\n'.join(line for line in text.splitlines() if not line.startswith('|'))
     for job, reason in sorted(TWINLESS_JOBS.items()):
         if job not in jobs:
             problems.append(
                 f'CONTRIBUTING.md: `{job}` is described but ci.yml defines no such job'
             )
-        if job not in text:
+        if f'`{job}`' not in prose:
             problems.append(
                 f'CONTRIBUTING.md: `{job}` twinless exemption lost its reason: {reason}'
             )
@@ -160,14 +173,21 @@ def design_ci_jobs_cell() -> str:
 
 
 def check_design_jobs() -> list[str]:
-    """A ci.yml job the design's CI table does not name."""
+    """A ci.yml job the design's CI table does not name, or a row naming a phantom job."""
     cell = design_ci_jobs_cell()
     named = set(re.findall(r'`([^`]+)`', cell))
-    return [
-        f'docs/00-design.md: the CI table misses the {job} job'
-        for job in ci_jobs()
-        if job not in named
+    jobs = ci_jobs()
+    problems = [
+        f'docs/00-design.md: the CI table misses the {job} job' for job in jobs if job not in named
     ]
+    # The cell also backs paths, images and labels, so only a token shaped like
+    # a job name (lowercase, dashes, no separator) can claim to be one.
+    problems += [
+        f'docs/00-design.md: the CI table names `{name}`, which is no ci.yml job'
+        for name in sorted(named - set(jobs))
+        if JOB_NAME.match(name) and name not in CELL_NOT_A_JOB
+    ]
+    return problems
 
 
 def documented_scenarios() -> dict[str, str]:
@@ -249,18 +269,30 @@ def check_layout_diagram() -> list[str]:
     """A tracked top-level directory the layout diagram does not name."""
     diagram = '\n'.join(layout_paths())
     skip = {'build', 'install', 'log', 'scratch', '__pycache__'}
-    return [
+    tracked = directory_names()
+    problems = [
         f'docs/00-design.md: the layout diagram omits the {name}/ directory'
-        for name in sorted(directory_names())
+        for name in sorted(tracked)
         if name not in skip and f'{name}/' not in diagram
     ]
+    # Two-way, at the top level only: a nested name repeats a tracked
+    # directory's last segment, so depth matters. Column zero is the root.
+    drawn = set(
+        re.findall(r'^[\u251c\u2514]\u2500\u2500 ([A-Za-z_.][\w.-]*)/', diagram, re.MULTILINE)
+    )
+    problems += [
+        f'docs/00-design.md: the layout diagram names the {name}/ directory, which the tree lacks'
+        for name in sorted(drawn - tracked)
+        if name not in skip
+    ]
+    return problems
 
 
 def code_text() -> str:
     """Every tracked file that can define a macro, concatenated."""
     text = []
     for path in _git_files():
-        if path in USER_DOCS or path.startswith(('spec/vectors/', 'gen/tests/golden/')):
+        if not path.endswith(CODE_SUFFIXES) or path.startswith('gen/tests/golden/'):
             continue
         try:
             text.append((ROOT / path).read_text(encoding='utf-8'))
@@ -272,7 +304,7 @@ def code_text() -> str:
 def documented_macros() -> dict[str, list[str]]:
     """Every R2S_ token each user document names."""
     found: dict[str, list[str]] = {}
-    for rel in USER_DOCS:
+    for rel in user_docs():
         tokens = re.findall(r'R2S_[A-Z0-9_]+', _read(rel))
         if tokens:
             found[rel] = tokens
@@ -348,14 +380,30 @@ def example_directories() -> set[str]:
     }
 
 
+def _example_like(names: set[str]) -> set[str]:
+    """The backticked names shaped like a sketch: the table's rows and the prose's sketch names."""
+    return {name for name in names if name.startswith(('arduino_', 'cmake_', 'pio_', 'ch32v_'))}
+
+
 def check_examples() -> list[str]:
-    """An example directory examples/README.md never names."""
+    """An example directory the README table never names, or a row no directory backs."""
     text = _read('examples/README.md')
-    problems = []
-    for name in sorted(example_directories()):
-        short = name.removeprefix('arduino_')
-        if name not in text and f'`{short}`' not in text:
-            problems.append(f'examples/README.md: the {name} example is not listed')
+    # Backticked names, matched whole: this page lists one row for several
+    # sketches and names the non-Arduino ones in prose.
+    listed = set(re.findall(r'`([^`\n]+)`', text))
+    short_names = {name.removeprefix('arduino_'): name for name in example_directories()}
+    problems = [
+        f'examples/README.md: the {name} example is not listed'
+        for short, name in sorted(short_names.items())
+        if short not in listed and name not in listed
+    ]
+    names = set(short_names) | set(short_names.values())
+    # Only a listed row claims to be a sketch; prose and paths name other things.
+    problems += [
+        f'examples/README.md: `{cell}` is no example directory'
+        for cell in sorted(listed & set(_example_like(listed)))
+        if cell not in names
+    ]
     return problems
 
 
