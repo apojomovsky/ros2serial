@@ -213,6 +213,19 @@ def test_an_example_the_readme_never_names_is_named(tmp_path, monkeypatch):
     assert found == ['examples/README.md: the arduino_ghost example is not listed']
 
 
+def test_a_missing_root_entry_is_not_satisfied_by_a_nested_path(tmp_path, monkeypatch):
+    """`tools/vectors_check.py` on another row is not the `tools/` entry."""
+    text = BASE['docs/00-design.md'].replace(
+        '├── gen/', '│   └── schema  x (tools/vectors_check.py)\n├── gen/'
+    )
+    text = ''.join(
+        line for line in text.splitlines(keepends=True) if not line.startswith('├── tests/')
+    )
+    repo = _tree(tmp_path, _with('docs/00-design.md', text))
+    found = _check(repo, monkeypatch, docs_drift.check_layout_diagram)
+    assert 'docs/00-design.md: the layout diagram omits the tests/ directory' in found
+
+
 def test_a_directory_the_diagram_invents_is_named(tmp_path, monkeypatch):
     # The entry that got through carried no trailing slash, so the fixture
     # carries none either.

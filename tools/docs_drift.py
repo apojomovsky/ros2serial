@@ -272,18 +272,19 @@ def check_layout_diagram() -> list[str]:
     diagram = '\n'.join(layout_paths())
     skip = {'build', 'install', 'log', 'scratch', '__pycache__'}
     directories, tracked = root_entries()
-    problems = [
-        f'docs/00-design.md: the layout diagram omits the {name}/ directory'
-        for name in sorted(directories)
-        if name not in skip and f'{name}/' not in diagram
-    ]
-    # Two-way, at the top level only: a nested name repeats a tracked
-    # directory's last segment, so depth matters. Column zero is the root,
-    # and the trailing slash is optional: the invented entry this check
-    # exists for carried none.
+    # Column zero is the root of the tree: a nested mention of the name, or a
+    # path inside it like `tools/vectors_check.py`, is not the entry.
     drawn = set(
         re.findall(r'^[\u251c\u2514]\u2500\u2500 ([A-Za-z_.][\w.-]*)', diagram, re.MULTILINE)
     )
+    problems = [
+        f'docs/00-design.md: the layout diagram omits the {name}/ directory'
+        for name in sorted(directories)
+        if name not in skip and name not in drawn
+    ]
+    # Two-way: a name the diagram puts at the root that the tree lacks is the
+    # same defect, and the trailing slash is optional because the invented
+    # entry this check exists for carried none.
     problems += [
         f'docs/00-design.md: the layout diagram names the {name}/ directory, which the tree lacks'
         for name in sorted(drawn - tracked)
