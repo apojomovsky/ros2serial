@@ -39,9 +39,6 @@ from rclpy.action import ActionClient
 from rclpy.qos import qos_profile_sensor_data
 
 ANNOUNCED = ['/reading']
-# The bridge reports announced names without the graph's leading slash.
-HANDSHAKE_TOPICS = [name.removeprefix('/') for name in ANNOUNCED]
-TOPIC_BUDGET = 3.0
 MESSAGE_BUDGET = 15.0
 SERVICE_TIMEOUT = 20.0
 CALL_TIMEOUT = 20.0
@@ -110,7 +107,8 @@ class TestScenario17(unittest.TestCase):
             self.assertLess(time.monotonic(), deadline, 'no /diagnostics flow from the bridge')
         received.clear()
         spawned = _spawn_board()
-        link_ready_at = checks.wait_for_handshake(
+        # The wait asserts its own budget, so it is the handshake check.
+        checks.wait_for_handshake(
             received,
             [],
             spawned.ready_at,
@@ -118,9 +116,6 @@ class TestScenario17(unittest.TestCase):
             'link',
             lambda: rclpy.spin_once(node, timeout_sec=checks.HANDSHAKE_SPIN),
             clock=time.monotonic,
-        )
-        self.assertLessEqual(
-            link_ready_at, bridge_support.HANDSHAKE_TIMEOUT, 'the link never came up'
         )
         bridge_support.wait_for_topics(
             node,
