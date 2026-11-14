@@ -1,5 +1,77 @@
 # Changelog
 
+## 0.4.0 (2026-11-14)
+
+### Features
+
+- **ci:** Stop cancelling master runs and make master CI diff-selected (#537)
+- **docs:** Publish the docs site and finalize the port guide (#539)
+- **ci:** Wire the PIC canary job with epic-cc (advisory) (#551)
+- **bridge:** Doxygen-form doc comments on the bridge public API (#553)
+- **core:** Add an MCU action server with a ROS 2-consistent API (#555)
+- **bridge:** Serve and proxy services over the reliable channel (#559)
+- **ci:** Publish the size and performance budgets and gate on them (#570)
+- **cpp:** Ros services and getParam over X5 and X6 (#569)
+- **ports:** PlatformIO layout with install-and-build gate (#575)
+- **ports:** Build STM32F103 and RP2040 firmware and record budgets (#574)
+- **ci:** Gate nightly mutation run and publish fuzz coverage (#573)
+- **ci:** Cap concurrent suites with a host-wide gate (#585)
+- **ports:** Bring up the CH32V003 tier M proof port (#579)
+- **ci:** Measure the bridge mutation score in the nightly run (#589)
+- **ci:** Judge the lines a pull request changes, not the package average (#591)
+- **ci:** Check line length and cheap format rules on pushed lines (#595)
+- **ci:** Fail the PIC canary on unrecorded epic-cc gaps (#596)
+- **ci:** Bounded retries around apt installs (#598)
+- **bridge:** Action server for MCU actions (#584)
+- **ports:** Porting guide and ports/template skeleton for new boards (#605)
+- **ports:** Fail ports without a build script, host test or source (#610)
+- **examples:** Arduino service sketch and exercised service and action examples (#611)
+- **docs:** ROS-native onboarding, the guide set and an Arduino CLI helper (#615)
+- **e2e:** Serve the spin action on posix and avr with scenario coverage (#620)
+
+### Fixes
+
+- **e2e:** Anchor the scenario 6 replug and keep the isolation pair logs (#538)
+- **ports:** Fail the flood run fast on mid-run disconnect (#541)
+- **ci:** Single-quote the site tools so the LINT scope passes (#547)
+- **rosdoc2:** Doxyfile, rosdoc2 pages and quality declaration with an advisory build (#554)
+- **cpp:** Doxygen-form doc comments on the C++ layer and port headers (#558)
+- **gen:** Clear flake8 builtin shadows and D401 residue (#565)
+- **gen:** Settle the ruff/ament lint divergence (I100, E203) (#572)
+- **ci:** Coverage gate crashes on the floor-only path with an unbound $4 (#608)
+- **ports:** Accumulate ch32v tick across the SysTick wrap (#609)
+- **bridge:** Answer in-flight service calls on re-handshake (#616)
+- **bridge:** Pack service payloads narrow on 32-bit-double MCUs (#618)
+- **e2e:** Pace the avr harness and log re-handshake causes (#619)
+- **docs:** Match every document to the code before 0.4.0 (#624)
+
+### Refactoring
+
+- **tree:** Reformat the C core, ports and the Python generator to the ROS 2 style (#540)
+
+### Documentation
+
+- **research:** Add R4 generic service and client API inventory (#536)
+- Licence and copyright headers on every source file, with a gate (#548)
+- **core:** Doxygen-form doc comments in core/include (#546)
+- **gen:** Bring r2s_gen docstrings to PEP 257 and Sphinx fields (#550)
+- Replace the full MIT blocks with the agreed SPDX two-line header, applied by a tool (#552)
+- **bridge:** Drop the unresolvable Doxygen link requests (#557)
+- **research:** Add R15 codebase organization review (#568)
+- **ci:** Measure what the per-job package installs cost (#602)
+
+### Tests
+
+- **ci:** Pin the Arduino zip as the PlatformIO release artifact (#588)
+
+### CI
+
+- **release:** Author the release commit as the token owner (#534)
+- **scripts:** Widen the SPDX header gate to the whole tree (#563)
+- **nightly:** Raise e2e-isolation timeout to 60 minutes and log section times (#581)
+- Keep the pre-push ritual to the fast gates (#580)
+- Move e2e-isolation out of the nightly workflow (#587)
+- **pic-canary:** Pin epic-cc 0.8.0, build PIC16F1938 compact (#622)
 ## 0.3.0 (2026-11-08)
 
 ### Breaking
