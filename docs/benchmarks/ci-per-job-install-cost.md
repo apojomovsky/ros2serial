@@ -1,6 +1,6 @@
 # Per-job package install cost (CI)
 
-Question: before baking job dependencies into derived images (issue 598),
+Question: before baking job dependencies into derived images (issue 600),
 measure what the runtime installs actually cost: wall time per job, share
 of the job, and how often apt fails there. All figures are observed step
 durations from the GitHub API, not estimates. Each run below is named by
@@ -49,12 +49,12 @@ by digest.
 
 ## rosdoc2: install against a 57s job
 
-Container: `ros:jazzy` image. Step `Install doc tools`
-(`.github/workflows/rosdoc2.yml`):
+Container: the digest-pinned jazzy image from `ci/versions.env`. Step
+`Install doc tools` (`.github/workflows/rosdoc2.yml`):
 
 ```console
-apt-get update
-apt-get install -y --no-install-recommends doxygen python3-pip
+bash scripts/apt-install.sh update
+bash scripts/apt-install.sh install -y --no-install-recommends doxygen python3-pip
 pip install --break-system-packages "rosdoc2==$(grep ^ROSDOC2_VERSION= ci/versions.env | cut -d= -f2)"
 ```
 
@@ -77,8 +77,8 @@ when the mirror itself is down.
 Container: per-distro ROS images. Unnamed apt step (`.github/workflows/ci.yml`):
 
 ```console
-apt-get update
-apt-get install -y --no-install-recommends "ros-${DISTRO}-rmw-cyclonedds-cpp" "ros-${DISTRO}-rmw-zenoh-cpp"
+bash scripts/apt-install.sh update
+bash scripts/apt-install.sh install -y --no-install-recommends "ros-${DISTRO}-rmw-cyclonedds-cpp" "ros-${DISTRO}-rmw-zenoh-cpp"
 ```
 
 | run | leg | install step | test step | leg total | install share |
@@ -101,7 +101,7 @@ Container: per-distro ROS images. Step `Install dependencies through
 rosdep` (`.github/workflows/farm.yml`):
 
 ```console
-apt-get update
+bash scripts/apt-install.sh update
 rosdep update
 rosdep install --from-paths gen bridge --ignore-src -r -y --rosdistro "$ROS_DISTRO"
 ```

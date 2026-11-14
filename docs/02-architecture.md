@@ -31,7 +31,7 @@ and forwards subscriptions back. `r2s-gen` runs at build time only: it
 turns the topic list into C sources the firmware compiles, so no Python
 ships on either side of the wire. The wire format is defined in
 [spec/protocol.md](../spec/protocol.md). Parameters and services use the reliable
-channel; MCU action support exists while host integration remains in progress.
+channel; the bridge presents MCU actions as ROS 2 action servers.
 For user setup, start with the [README](../README.md); this page describes
 implementation boundaries. See [Part I, Architecture](00-design.md#architecture)
 and [Part I, Declaring topics](00-design.md#declaring-topics).
@@ -172,8 +172,8 @@ code the MCU states are the `ANNOUNCING` and `CONNECTED` values in
 `core/src/session.c` (`BOOT` is the init path that sends the first
 HELLO), and the host states are the `SessionState` values in
 `bridge/r2s_bridge/include/r2s_bridge/session.hpp`. The reliable
-channel rides these two machines without claiming a transition here.
-The host action integration remains tracked in #319 and #320.
+channel and the bridge action server ride these two machines without
+claiming a transition here.
 
 ```mermaid
 stateDiagram-v2

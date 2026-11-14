@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematyp="http://www.w3.org/2001/XMLSchema"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>r2s_bridge_tests</name>
   <version>0.3.0</version>
@@ -9,10 +9,12 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <test_depend>ament_index_python</test_depend>
   <test_depend>launch_ros</test_depend>
   <test_depend>launch_testing</test_depend>
   <test_depend>launch_testing_ament_cmake</test_depend>
   <test_depend>r2s_bridge</test_depend>
+  <test_depend>python3-yaml</test_depend>
   <test_depend>rclpy</test_depend>
   <test_depend>rcl_interfaces</test_depend>
   <test_depend>std_msgs</test_depend>

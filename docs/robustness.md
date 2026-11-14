@@ -2,9 +2,10 @@
 
 How the nightly mutation and fuzz runs turn into published, gated numbers.
 The size and stack side lives on the [budgets](budgets.md) page; this page
-covers the test-quality side. Everything here runs nightly only: no pull
-request check and no release gate runs it, so the numbers never block a
-change, only a regression on the schedule.
+covers the test-quality side. The mutation score and the seed-corpus
+coverage report run nightly only: no pull request check and no release gate
+runs them, so those numbers never block a change. The seed replay itself
+runs on every pull request.
 
 ## Mutation scores
 
@@ -42,7 +43,7 @@ the current scores against the floors above.
 
 A surviving mutant is either a missing test or a mutant no test could
 kill. The maintainers record the second kind in
-`mutation/equivalent.yaml`, one mutant per line with the reason it is
+`mutation/equivalent.yaml`, one entry per mutant with the reason it is
 equivalent. Anything missing from that file lands in the report's triage
 list. An entry that names no surviving mutant is reported as stale, so
 the list cannot rot silently.
@@ -97,8 +98,9 @@ R2S_FUZZ_SECONDS=0 R2S_FUZZ_COVERAGE=1 R2S_FUZZ_ARTIFACTS_DIR=fuzz-artifacts bas
 
 The coverage summary prints per target, and the full report lands in
 `fuzz-artifacts/coverage/fuzz-coverage.md`. The bridge harness configures
-and runs on its own in either image, which is how its binaries are
-checked outside the nightly (the mutation image adds the Mull flags):
+and runs on its own in the mutation image, which carries gtest and yaml-cpp,
+which is how its binaries are checked outside the nightly (the image adds
+the Mull flags):
 
 ```sh
 cmake -S mutation/bridge -B /tmp/bridge-harness -G Ninja

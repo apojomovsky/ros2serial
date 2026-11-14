@@ -36,7 +36,7 @@ ros2serial stays serial-only: the design targets serial-attached, memory-constra
 
 ## Hardware tiers
 
-*Status (0.1.0): built: tier M on Uno and Mega in simavr; planned: 32-bit ports in Phase 3, PIC in Phase 5.*
+*Status (0.3.0): built: tier M on Uno and Mega in simavr, the CH32V003, STM32F103 and RP2040 ports with budgets; planned: PIC in Phase 5.*
 
 Tiers are defined by resources, not ISA bitness: a 32-bit core is not automatically big.
 
@@ -46,7 +46,7 @@ Tiers are defined by resources, not ISA bitness: a 32-bit core is not automatica
 | M | Arduino Uno (ATmega328P) + Mega (ATmega2560), the validation platforms; CH32V00x (Phase 3); PIC18F2455/4550 (Phase 5) | 2 KB on Uno and PIC18F4550, 8 KB on Mega | Everything in P0 and P1 |
 | L | STM32 (one small + one mid, Phase 3), RP2040, ESP32 (build-only via the Arduino layout) | 32 KB or more | Everything; full-width `float64` by default |
 
-Features are selected at compile time (`R2S_WITH_TIME`, `R2S_WITH_LOG`, `R2S_WITH_PARAMS`, `R2S_WITH_RELIABLE`, `R2S_WITH_RUNTIME_TOPICS`), so a tier S build carries only publish and subscribe.
+Features are selected at compile time (`R2S_WITH_TIME`, `R2S_WITH_LOG`, `R2S_WITH_PARAMS`, `R2S_WITH_SERVICES`, `R2S_WITH_ACTIONS`, `R2S_WITH_CODEC`, `R2S_WITH_RX_RING`), so a tier S build carries only publish and subscribe.
 
 Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 
@@ -57,7 +57,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 
 ## Scope: parity with rosserial
 
-*Status (0.2.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++, the reliable channel, rosserial-compatible runtime registration with the porting guide, parameters in #155, and services in #156; specified: services and actions in #316; planned: #318 to #320 (#317 generator support lands with X10a).*
+*Status (0.2.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++, the reliable channel, rosserial-compatible runtime registration with the porting guide, parameters in #155, and services in #156; specified: services and actions in #316. Status (0.4.0): built: the generator action support in X10a (#317), the MCU action server in X10b (#318), and the bridge action server in X10c (#319) with end-to-end scenarios in X10d (#320).*
 
 | Feature | Priority | Notes |
 | --- | --- | --- |
@@ -105,7 +105,7 @@ The PIC16 constraints are real but should only cost something where PIC actually
 | --- | --- | --- |
 | What | Framing, CRC, session, time, log, codec interpreter, C API, static topic table | C++ API, runtime registration with ROS 2 names, rosserial-compatible runtime registration |
 | Language | C99 | The epic-cc C++ subset (see User API) |
-| Rules | No function pointers, no recursion, no malloc, no VLAs, no 64-bit C types, no float arithmetic, bounded loops and nesting, buffers that fit one RAM bank on PIC | Templates, namespaces, classes; stored callbacks allowed on gcc-class targets only; no exceptions, RTTI, heap, multiple inheritance or virtuals |
+| Rules | No function pointers, no recursion, no malloc, no VLAs, no 64-bit arithmetic, no float arithmetic, bounded loops and nesting, buffers that fit one RAM bank on PIC | Templates, namespaces, classes; stored callbacks allowed on gcc-class targets only; no exceptions, RTTI, heap, multiple inheritance or virtuals |
 | Compiled by | Every target | AVR, 32-bit gcc targets; static C++ path also on epic-cc |
 
 Why these core rules: on small 8-bit parts an indirect call is lowered to a compare-and-call chain (epic-cc does this on every PIC core, about 10 words per call site per candidate), the hardware call stack is a few levels deep, recursion is a compile error, and floating point is a large software library. None of the rules costs anything measurable on AVR or 32-bit parts.
@@ -228,9 +228,9 @@ Lengths are varints (LEB128): 1 byte for values under 128, which covers almost a
 
 **`float64` and narrow topics.** On a toolchain whose `double` is 32 bits (avr-gcc by default, epic-cc, XC8 in common configurations), sending binary64 carries no extra precision, so every topic is narrow on such a build: all `float64` fields travel as binary32 and the bridge widens them. The build detects this from `<float.h>` (`DBL_MANT_DIG == FLT_MANT_DIG`) and forces the narrow flag in the topic table; no binary64 conversion code exists on these targets. On toolchains with a 64-bit `double` (tier L), the wire carries binary64 by default and a topic can opt into narrow (`narrow_float64: true`) to save bandwidth.
 
-**Floats are bytes in the core.** The core and the codec copy float bytes and never do float arithmetic, so no software float library is pulled in. The only exception is the narrowing cast on tier L opt-in topics, where the hardware or library cost is irrelevant. The build asserts at compile time that `float` is IEEE binary32 (4 bytes, 24-bit mantissa).
+**Floats are bytes in the core.** The core and the codec copy float bytes and never do float arithmetic, so no software float library is pulled in. The only exception is the narrowing cast on tier L opt-in topics, where the hardware or library cost is irrelevant. IEEE binary32 is assumed for `float` (4 bytes, 24-bit mantissa); no build asserts it.
 
-**No 64-bit integers in the core.** The core and the codec never use 64-bit C types, because 8-bit toolchains handle them badly (slow, large, or incompletely supported). On toolchains without a usable 64-bit integer, `int64` and `uint64` fields are generated as an 8-byte little-endian array with helper functions.
+**64-bit integers as bytes, never as arithmetic.** The codec copies `int64` and `uint64` fields as 8 bytes, and the parameter layer moves their bit patterns through `uint64_t` only, so no 64-bit arithmetic reaches the code. 8-bit toolchains handle 64-bit arithmetic badly, and none of it is needed.
 
 **Bound violations** are never silently truncated. When publishing, the serializer returns an error. On reception, the decoder drops the frame and reports the topic and the field to the host, which logs a warning naming both. The host has no bounds, so only the MCU checks them; both sides drop a payload that is truncated or has bytes left over.
 
@@ -260,7 +260,7 @@ frame = rCOBS( topic_id[1] | seq[1] | payload[N] | crc16[2] ) + 0x00
 
 - Header: protocol version, handshake mode, maximum frame size, RX capacity, tick rate, feature bits, node name, and a session token the host assigns (0 before the first READY).
 - Topic entry, full mode: ID, direction (pub or sub), type name (for example `geometry_msgs/msg/Twist`), the first 8 bytes of the REP-2011 RIHS01 type hash, profile flags (narrow), topic name, and a QoS hint (best effort or reliable, keep-latest).
-- Topic entry, compact mode (tier S): ID, direction, type hash, a hash of the topic name, and flags. The generator writes a matching YAML next to the firmware, and the bridge loads it (`node_map:=...`) to recover names and types. The names still come from the firmware's config; they just do not occupy its flash.
+- Topic entry, compact mode (tier S): ID, direction, type hash, a hash of the topic name, and flags. Neither the generator's node map nor the bridge's loader exists yet, so compact mode is specified but refused on both sides. The names still come from the firmware's config; they just do not occupy its flash once it lands.
 
 The bridge loads the type support for each type name and compares the hash with the one from the installed package. If they differ, it refuses that topic with a clear error, without dropping the session.
 
@@ -297,13 +297,13 @@ rCOBS decoding runs backwards in place in the frame buffer once the delimiter ar
 | Port | RX path | TX path |
 | --- | --- | --- |
 | Arduino (any core) | `r2s_port_read` reads `Serial` | `Serial.write`, which blocks, so `0xFFFF` |
-| AVR bare metal | `R2S_WITH_RX_RING`: `ISR(USART_RX_vect) { r2s_rx_push(UDR0); }` | Blocking write |
+| AVR bare metal (planned) | `R2S_WITH_RX_RING` fed from `ISR(USART_RX_vect)` | Blocking write |
 | PIC with epic-hal (Phase 5) | `epic_serial_read` | `epic_serial_write`, ring free space |
 | STM32, RP2040 | DMA in circular mode plus an idle-line interrupt | DMA or ring |
 
 ## Time
 
-*Status (0.2.0): built: PONG with delimiter tick, CORRECTION and `r2s_now()` with the host estimator; measured: the accuracy figure in #348 (scenario 8).*
+*Status (0.2.0): built: PONG with delimiter tick, CORRECTION and `r2s_now()` with the host estimator; measured: the accuracy figure in the scenario 8 end-to-end test.*
 
 **What rosserial did.** Right after connecting, and then every few seconds, the MCU asked the host for the current time. When the reply came, the MCU stored an offset from its own `millis()`, correcting for the round trip. From then on `nh.now()` was that offset plus `millis()`, with millisecond resolution. That is how sketches stamped their messages.
 
@@ -474,7 +474,7 @@ void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node
 
 The figures come from the linked firmware, not from a note: `scripts/build-examples.sh` prints the topic table's size, the per-topic cost, the publisher and subscriber records and the sketch's own objects for every board it builds, and `make test EXAMPLES=1` runs it.
 
-The core calls one C hook for the dispatch, which the C++ layer implements with a stored callback, so the core itself stays free of function pointers. Each subscriber holds its own message storage, as in rosserial. `nh.loginfo()` accepts both RAM strings and Arduino `F()` strings. `R2S_WITH_RUNTIME_TOPICS` is on by default for gcc toolchains and off for epic-cc and XC8; using the runtime API there is a compile error that points to the static form. It can be re-enabled on PIC18 by anyone who accepts the cost.
+The core calls one C hook for the dispatch, which the C++ layer implements with a stored callback, so the core itself stays free of function pointers. Each subscriber holds its own message storage, as in rosserial. `nh.loginfo()` accepts both RAM strings and Arduino `F()` strings. The runtime API stores its callbacks in the C++ layer, so no switch selects it and the core still holds no function pointer.
 
 **Evidence for the split** (probe on Oct 20, 2026, epic-cc master `0a8828e` with a clang 18 front end, compile only, not simulated): a two-subscriber dispatch compiled to the same flash size in plain C and in C++ with template-instantiated direct calls (599 words on PIC18F4550, 594 on PIC16F1938). The same dispatch with stored callbacks cost 72 more words on PIC18F4550 and 159 more on PIC16F1938, growing with every subscriber. Non-virtual C++, including global constructors, already compiled for the PIC16F1938.
 
@@ -486,13 +486,22 @@ ROS 2-style aliases (`std_msgs::msg::Float32`) are always provided; rosserial-st
 
 The service and action APIs mirror `rclcpp` and `rclcpp_action`: the MCU runs a minimal action server and the bridge is the ROS 2 action server on its behalf. The wire is `spec/protocol.md` sections 7.8 and 7.9; the board side is:
 
-<!-- snippet: skip until #156: the board service API lands in X6 -->
 ```cpp
-r2s::Service<std_srvs::srv::Trigger> reset(node, "reset",
-    [](const std_srvs::srv::Trigger::Request &, std_srvs::srv::Trigger::Response &res) {
-        res.success = true;
-    });
-r2s::Client<std_srvs::srv::Trigger> trigger(node, "trigger");
+#define R2S_WITH_SERVICES 1
+
+#include <r2s/service.hpp>
+#include <std_srvs/srv/trigger.hpp>
+
+r2s::Node node("service_demo");
+
+static void on_reset(const std_srvs::srv::Trigger::Request &,
+                     std_srvs::srv::Trigger::Response & res)
+{
+    res.success = 1u;
+}
+
+r2s::Service<std_srvs::srv::Trigger> reset_srv(node, "reset", on_reset);
+r2s::Client<std_srvs::srv::Trigger> trigger_cli(node, "trigger");
 ```
 
 The action server is live: the sketch names its action struct, with the
@@ -591,21 +600,21 @@ The generator targets a ROS distro explicitly (`distro:` in the config, default 
 
 ## Host bridge
 
-*Status (0.2.0): built: full-mode handshake, generic pub/sub, packed-to-CDR conversion, Uno boot handling, log forwarding, time-sync estimation, the reliable channel, rate limiting, launch namespace and remapping arguments, parameters in #155, services in #156.*
+*Status (0.2.0): built: full-mode handshake, generic pub/sub, packed-to-CDR conversion, Uno boot handling, log forwarding, time-sync estimation, the reliable channel, rate limiting, launch namespace and remapping arguments, parameters in #155, services in #156. Status (0.4.0): built: the bridge action server in X10c (#319).*
 
 - C++ (rclcpp), packaged as a component so several bridges (one per serial port) can share a process. The framing gives each link its own framer instance, so one process serves up to 16 live links (#122).
 - Generic publishers and subscriptions, plus introspection-based conversion from packed to CDR.
 - Serial I/O behind a small interface; termios first (research ticket R8).
 - Board quirks handled explicitly: opening a Uno's port toggles DTR and resets the board, and the bootloader runs for up to about 2 s. The bridge waits for the MCU's unsolicited `HELLO` (up to `boot_wait_ms`) before sending `HELLO_REQ`, so it does not talk to the bootloader. `hupcl:=false` avoids the reset where the adapter allows it.
 - MCU log frames are forwarded to the bridge's logger under a child name (`<node>.mcu`), so they appear in `/rosout`.
-- Compact mode: loads the node map generated with the firmware.
+- Compact mode: refused for now. The node map is neither generated nor loaded, and a compact HELLO is rejected with that reason.
 - P1 parameters: the MCU declares name, type and default in the handshake. The bridge declares them as ROS parameters on its own node, so `ros2 param set` works, and pushes changes to the MCU over the reliable channel.
 - P1 services: generic client and service APIs differ by distro (research ticket R4). If they are missing on a supported distro, fall back to introspection-based typed services there.
 - P1 actions: generic action server and client APIs differ by distro (research ticket R14). If they are missing on a supported distro, fall back to assembling from generic services and topics or the rcl action API there.
 
 ## Portability notes (AVR now, PIC last)
 
-*Status (0.1.0): built: AVR Uno and Mega; planned: 32-bit ports in Phase 3, PIC on epic-hal in Phase 5.*
+*Status (0.3.0): built: AVR Uno and Mega, CH32V003, STM32F103 and RP2040; planned: PIC on epic-hal in Phase 5.*
 
 Validation is Arduino Uno + Mega (AVR) with open-source tools for the first phases. PIC work comes in the last phase, built with epic-cc on epic-hal, but the PIC16 constraints shape the portable core now (see "Two zones").
 
@@ -617,7 +626,7 @@ Constraints that shape the core. Most of them also make it leaner on AVR.
 | Indirect calls lowered to compare-and-call chains on small 8-bit compilers | No function pointers in the core; static dispatch through a generated `switch` |
 | No recursion on small-part compilers | Codec interpreter is iterative with an explicit nesting stack of generated depth |
 | `double` is 32 bits on default AVR, epic-cc and common PIC toolchains | Narrow forced by the build |
-| 64-bit C types slow or incomplete on 8-bit targets | No 64-bit C types in the core or the codec |
+| 64-bit arithmetic slow or incomplete on 8-bit targets | 64-bit fields move as bytes; no 64-bit arithmetic in the core |
 | Float is a large software library on 8-bit targets | No float arithmetic in the core |
 | No varargs / no stdio on small-part toolchains | Per-type logging API |
 | Constant data lives in flash, and on AVR `const` alone does not keep it there | `R2S_FLASH` and `R2S_FLASH_READ_BYTE()` port macros; separate flash-string entry points |
@@ -634,7 +643,7 @@ What "professional" means in concrete terms:
 - **Specification:** a protocol document versioned independently of the code, with byte-level test vectors for every frame type.
 - **Conformance suite:** the same vectors run against the C core (host build, simavr for 328P/2560), the Python reference and the bridge; PIC joins in Phase 5.
 - **Fuzzing:** the rCOBS decoder, the CRC, the framer, the session and the codec interpreter (with every descriptor) are fuzzed with libFuzzer on a host build. No input may crash, hang or write out of bounds.
-- **C hygiene:** `-std=c99 -pedantic -Wall -Wextra -Werror`, cppcheck and clang-tidy in CI, no undefined behavior (UBSan on host builds). The code follows a MISRA-inspired subset; certification is not a goal.
+- **C hygiene:** `-std=c99 -pedantic -Wall -Wextra -Werror`, cppcheck in CI, no undefined behavior (UBSan on host builds). The code follows a MISRA-inspired subset; certification is not a goal.
 - **Determinism:** no malloc, no recursion, no function pointers in the core, bounded loops and nesting. Flash, RAM and worst-case stack usage per configuration and per toolchain are reported in CI and tracked over time.
 - **C++:** both registration paths compiled in CI with avr-g++ under the subset rules; the static path also with epic-cc from Phase 2 (advisory).
 - **Versioning:** semver for the libraries and a protocol version checked in the handshake.
@@ -657,7 +666,7 @@ The tier M budget is 2 KB of RAM (ATmega328P; Mega gives headroom at 8 KB).
 
 ## Plan
 
-*Status (0.1.0): built: Phase 1 vertical slice on AVR; planned: Phases 2 to 5.*
+*Status (0.3.0): built: Phases 1 and 2 and the Phase 3 channels and ports; planned: Phase 4 release work and Phase 5 PIC.*
 
 Each phase ends in a decision gate and a publishable artifact.
 
@@ -758,19 +767,32 @@ ros2serial/
 ├── Dockerfile                base/dev/ci(=dev)/release stages; versions pinned via ci/versions.env
 ├── .githooks/                pre-commit, commit-msg, pre-push (installed by make setup-hooks)
 ├── scripts/                  ci-test.sh, pre-pr-check.sh, prose_check.py, lint-python.sh, helpers + test_*.py
+├── taskfiles                  Taskfile.yml (the stale-task graph), pyproject.toml (ruff), conftest.py, cliff.toml (git-cliff)
+├── docs/                     user documentation (published as the docs site)
+├── CHANGELOG.md              generated by cut-release.yml from the Conventional Commits
+├── CONTRIBUTING.md           the contributor path; AGENTS.md holds the normative rules
+├── QUALITY_DECLARATION.md    REP-2004 self-assessment
+├── VERSION                   the one semver for the repository
+├── README.md                 the walkthrough
 ├── LICENSE                   MIT
+├── ci/                        pinned versions (versions.env), the PIC canary baseline
+├── docker/                   image layers: bigendian, mutation
+├── mutation/                 nightly mutation inputs: the ROS-free bridge harness, equivalent.yaml
 ├── spec/
 │   ├── protocol.md           the normative protocol specification (grows from Part I + this Part II)
+│   ├── schema/               vector file schemas, checked by tools/vectors_check.py
 │   └── vectors/              conformance vectors (YAML), the single source of truth for every codec test
 │       ├── crc/  rcobs/  varint/  frames/  messages/  session/  time/
 ├── core/                     C99 MCU core (no ROS, no hardware)
-│   ├── include/r2s/          public headers: r2s.h, r2s_config.h, r2s_port.h, r2s_arch.h, r2s_codec.h, r2s_varint.h and r2s_tx.h; r2s_crc.h, r2s_rcobs.h and r2s_framer.h, shared with the bridge
-│   ├── src/                  crc.c, rcobs.c, varint.c, framer.c, tx.c, session.c, time.c, log.c, ring.c, codec.c, topics.c
+│   ├── include/r2s/          public headers: r2s.h, r2s_session.h, r2s_topics.h, r2s_port.h, r2s_arch.h, r2s_codec.h, r2s_error.h, r2s_varint.h, r2s_tx.h and the channel headers r2s_time.h, r2s_params.h, r2s_services.h, r2s_actions.h, r2s_rx.h; r2s_crc.h, r2s_rcobs.h and r2s_framer.h, shared with the bridge
+│   ├── host/                 host-only test shims beside the MCU-pure core
+│   ├── src/                  crc.c, rcobs.c, varint.c, framer.c, tx.c, session.c, time.c, log.c, rx.c, codec.c, topics.c, actions.c, services.c, params.c, error.c
 │   ├── tests/                Unity unit tests, vector runner, CMakeLists.txt
 │   └── fuzz/                 libFuzzer targets and seed corpora
 ├── cpp/                      C++ layer: runtime API (r2s/runtime.hpp) with the per-message headers, the static API (ros2serial.hpp) and the rosserial-compatible API (ros.h)
 ├── gen/                      r2s-gen: Python package (pip) and ament_python package (ROS)
-│   ├── r2s_gen/              cli.py, config.py, msgs.py, hashing.py, descriptors.py, reference/ (Python reference codec), snapshots/, templates/
+│   ├── r2s_gen/              cli.py, config.py, msgs.py, bounds.py, emit.py, descriptors.py, topics.py, services.py, actions.py, cpp.py, static_api.py, layouts.py, bundle.py, arduino.py, vectors.py, typehash.py, version.py, reference/ (Python reference codec), schema/, snapshots/
+│   ├── r2s_rosidl/           the colcon plugin wrapping the generator for firmware packages
 │   └── tests/                pytest: unit, golden-file, property-based
 ├── bridge/
 │   ├── r2s_bridge/           C++ rclcpp component + executable, launch/, config/
@@ -778,21 +800,21 @@ ros2serial/
 ├── ports/
 │   ├── posix/                host "virtual MCU" over a pty: used by integration tests and fuzzing
 │   ├── arduino/              Arduino library glue (Serial, micros)
-│   ├── avr/                  bare-metal AVR glue (USART ISR, timer tick)
-│   ├── ch32v/                Phase 3
-│   ├── stm32/                Phase 3: one small STM32; ESP32 build-only via the Arduino layout
-│   ├── rp2040/                Phase 3: RP2040
-│   ├── common/               Phase 3: firmware shared by the stm32 and rp2040 ports
+│   ├── avr/                  planned bare-metal AVR glue (placeholder)
+│   ├── ch32v/                CH32V003 glue, host-tested, budgeted
+│   ├── stm32/                STM32F103 glue
+│   ├── rp2040/               RP2040 glue
+│   ├── common/               firmware shared by the stm32 and rp2040 ports
 │   ├── template/             the skeleton a new port copies (see docs/04-porting.md)
-│   └── epic-hal/             Phase 5: epic-hal serial and tick glue for PIC
+│   └── epic-hal/             Phase 5: epic-hal serial and tick glue for PIC (placeholder)
 ├── examples/                 one directory per example, each built in CI
 ├── tests/
 │   ├── e2e/                  shared end-to-end scenarios, run against posix and simavr (MPLAB SIM in Phase 5)
-│   └── harness/              simavr UART-to-pty harness, fault-injecting pty proxy
-├── tools/                    size_report.py, stack_report.py, budgets_table.py, budgets.yaml, vectors_check.py, zone_check.py
+│   └── harness/              simavr UART-to-pty harness (the fault-injecting pty proxy lives in tests/e2e/e2e_support/)
+├── tools/                    budget, vector, spec, coverage, snippet, site and fuzz tooling (size_report, budgets_table, vectors_check, spec_coverage, zone_check, taskfile_coverage), each with its test_*.py beside it, plus vendor/ and mermaid-check/
 ├── scratch/                  gitignored per-ticket experiments; nothing ships
-├── docs/                     user documentation (published as the docs site)
-└── .github/workflows/
+├── benchmark/                AVR harness code behind docs/benchmarks/ (never shipped)
+└── .github/                  workflows/ (ci, nightly, release) and actions/dev-image/
 ```
 
 **Code reuse between MCU and host.** The bridge links `core/src/crc.c`, `framer.c` and `rcobs.c` compiled for the host, the three sources named in `bridge/r2s_bridge/CMakeLists.txt`. Framing, rCOBS and CRC therefore have a single implementation. Lengths stay on each side: the MCU codec and the bridge converter each decode varints. The host session logic is separate C++.
@@ -804,13 +826,13 @@ ros2serial/
 | Area | Convention |
 | --- | --- |
 | C (core) | C99, `-std=c99 -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow`, `uncrustify` (ament style, config in repo), `stdint.h` types only, no `int`/`long` in interfaces, no 64-bit types, no function pointers, no recursion, no malloc, no VLAs, no float arithmetic, no `printf` |
-| C++ (MCU layer) | C++11, the epic-cc subset (see Part I), `-fno-exceptions -fno-rtti`, no virtuals, stored callbacks only under `R2S_WITH_RUNTIME_TOPICS` |
+| C++ (MCU layer) | C++11, the epic-cc subset (see Part I), `-fno-exceptions -fno-rtti`, no virtuals, stored callbacks live in this layer only, never in `core/` |
 | Zone boundary | `tools/zone_check.py` fails CI if anything under `core/` includes from `cpp/`, uses a function pointer type, or calls a float operation (checked on the object files) |
 | C++ (bridge) | C++17 (Jazzy's baseline), `ament_lint_auto` (cpplint, uncrustify, cppcheck), ROS 2 style |
-| Python | 3.10 or newer, `ruff` (lint + format), `mypy --strict` on `r2s_gen`, `pytest`, `hypothesis` |
+| Python | 3.10 or newer, `ruff` (lint + format), `pytest`, `hypothesis` |
 | Commits | Conventional Commits (`feat(core): ...`, `fix(bridge): ...`, `test(gen): ...`); changelog with git-cliff; details in `AGENTS.md` |
 | Branches and PRs | `master` is the default branch; one ticket per PR in a `.worktrees/` worktree, never on `master`; branches named `<type>/<issue>-<slug>`; each PR is squashed into one commit on `master`, and the PR title is that commit's subject; no PR is stacked on another; CI must be green; the PR body carries `Closes #N` and a `## Review` section (see `docs/01-testing.md`) |
-| Versions | One semver for the whole repository (`VERSION`, bumped only by `cut-release.yml`) plus the protocol version (`R2S_PROTOCOL_VERSION`, starts at 1) |
+| Versions | One semver for the whole repository (`VERSION`, bumped only by `cut-release.yml`) plus the protocol version (`R2S_PROTOCOL_VERSION`, currently 4) |
 | Licenses | MIT for everything |
 | Docs | Every public function has a doc comment; every PR that changes behavior updates `spec/protocol.md` or `docs/` in the same PR |
 
@@ -1076,7 +1098,7 @@ void r2s_on_<name>(const <Type> *msg);               /* subscribed topics: proto
 | `bool` | `uint8_t` (0 or 1; any other value on the wire is a decode error) |
 | `byte`, `char`, `uint8` | `uint8_t` |
 | `int8` to `int32`, `uint16` to `uint32` | `int8_t` to `uint32_t` |
-| `int64`, `uint64` | `int64_t`, `uint64_t`; with `R2S_NO_INT64`, `r2s_i64_t`/`r2s_u64_t` (8-byte arrays plus helpers) |
+| `int64`, `uint64` | `int64_t`, `uint64_t`, copied as 8 bytes |
 | `float32` | `float` |
 | `float64` | `double` (32 bits on default avr-gcc, epic-cc and common PIC toolchains, where the topic is narrow) |
 | `string<=N` | `char name[N + 1]`, NUL-terminated |
@@ -1089,11 +1111,14 @@ void r2s_on_<name>(const <Type> *msg);               /* subscribed topics: proto
 ### Command line
 
 ```
-r2s-gen generate --config r2s.yaml --out <dir> [--msg-path <dir>]... [--layout cmake|arduino|platformio|epic-hal] [--cpp]
+r2s-gen generate --config r2s.yaml --out <dir> [--msg-path <dir>]... [--layout cmake|arduino|platformio] [--cpp]
 r2s-gen bundle   --distro <name> --out <dir>                    # the Arduino library with bundled types
 r2s-gen check    --config r2s.yaml [--msg-path <dir>]...       # validate only, exit code 0 or 1
 r2s-gen vectors  --type <pkg/msg/Type> --message <yaml> [--msg-path <dir>]... [--distro <name>] [--narrow]
 r2s-gen version
+
+r2s-arduino library --out <dir> [--distro <name>]
+r2s-arduino compile --library <dir> --fqbn <fqbn> --out <dir> <sketch>
 ```
 
 ### Message sources
@@ -1106,17 +1131,22 @@ The generator searches `--msg-path` directories first, then `share/*/msg` under 
 
 | Key | Type | Required | Default |
 | --- | --- | --- | --- |
-| `node` | string, valid ROS node name | yes | |
+| `node` | string matching `[A-Za-z][A-Za-z0-9_]*` | yes | |
 | `distro` | `jazzy`, `lyrical`, `rolling` | no | `jazzy` |
 | `handshake` | `full` or `compact` | no | `full` |
-| `tier` | `S`, `M` or `L` (selects defaults and budget checks) | no | `M` |
+| `tier` | `S`, `M` or `L` (recorded in the config hash; no behaviour yet) | no | `M` |
 | `features` | list of `time`, `log`, `params`, `reliable`, `rx_ring` | no | `[time, log]` |
 | `topics[].name` | relative ROS topic name | yes | |
 | `topics[].type` | `pkg/msg/Type` | yes | |
 | `topics[].direction` | `pub` or `sub` | yes | |
 | `topics[].qos` | `best_effort`, `keep_latest`, `reliable` | no | `best_effort` |
 | `topics[].narrow_float64` | bool; only meaningful on 64-bit-`double` builds, forced on otherwise | no | `false` |
-| `bounds` | map of `pkg/msg/Type.field` to an int, or `[count, string_bound]` | no | |
+| `services[].name` | relative ROS service name | yes | |
+| `services[].type` | `pkg/srv/Type` | yes | |
+| `services[].role` | `server` or `client` | yes | |
+| `actions[].name` | relative ROS action name | yes | |
+| `actions[].type` | `pkg/action/Type` | yes | |
+| `bounds` | map of `pkg/msg|srv|action/Type.field` to an int, or `[count, string_bound]` | no | |
 | `bounds.default_string_bound` | int | no | none (unbounded fields are errors) |
 | `limits.max_frame` | int, overrides the computed value | no | computed |
 
@@ -1124,10 +1154,9 @@ Generator errors are precise and actionable: file, key or field path, what is wr
 
 ### Outputs
 
-- `r2s_generated.h` and `r2s_generated.c`: types, descriptors, topic table, publish functions, dispatch, `R2S_MAX_FRAME`, `R2S_MAX_NEST`, feature macros, the protocol version.
-- `r2s_generated.hpp` with `--cpp`.
-- `r2s_node_map.yaml` in compact mode.
-- A `layout`-specific wrapper: `library.properties` (Arduino), `library.json` (PlatformIO), a module entry (epic-hal, Phase 5), `CMakeLists.txt` (cmake).
+- `r2s_generated.h` and `r2s_generated.c`: types, descriptors, topic table, publish functions, dispatch, `R2S_MAX_FRAME`, `R2S_MAX_NEST` and `R2S_TOPIC_COUNT`. No feature macro and no protocol version is emitted.
+- A `layout`-specific wrapper (`library.properties`, `library.json` or `CMakeLists.txt`); the Arduino and PlatformIO layouts place the generated pair under `src/`, the cmake layout at the output root.
+- Neither `--cpp` nor the compact-mode `r2s_node_map.yaml` is emitted yet: both fail with the fix to apply, and `handshake: full` is the working mode.
 - Every output file starts with a header naming the generator version and config hash. Output is deterministic: same inputs, byte-identical files.
 
 ### Type hash
@@ -1195,7 +1224,7 @@ Scenario numbers in the tickets below refer to the key end-to-end scenarios in `
 
 | Workflow | Trigger | Jobs |
 | --- | --- | --- |
-| `ci.yml` | Push, PR and manual | `plan` (restores each task's checksums from the latest `master` run and reports the stale scopes each section job gates on; master pushes run the same selection as a pull request on the same diff, only manual runs force every section); `lint` (clang-format, clang-tidy, cppcheck, ruff, mypy, ament_lint, vectors_check, zone_check, actionlint); `ament-lint` (advisory `ament_lint_common` on the ROS packages, `continue-on-error` until the cleanup tickets land); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component, fails on a drop); `fuzz-smoke`; `gen` (Python 3.10 to 3.14); `docs` (every code snippet in `README.md` and `docs/` extracted and compiled); `readme` (every Getting started command runs on simavr); `cpp`; `bridge` (colcon build and test in `ros:jazzy`, `ros:lyrical` and `ros:rolling`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `esp32` (example sketches for the ESP32 Dev Module at the pinned core); `pic-canary` (advisory, from Phase 2); `platformio` (the generated PlatformIO layout staged with the core and the port glue, built for Uno and Mega); `stm32` (STM32F103 firmware at the pinned Arm toolchain); `rp2040` (RP2040 firmware at the pinned Arm toolchain and SDK); `budgets` (size table in the job summary with base deltas, fails on breach; generated `docs/budgets.md`, fails when stale); `e2e-isolation` (two e2e sections side by side, gated on `NIGHTLY`); `nightly` (calls `nightly-jobs.yml` on a pull request carrying the `fuzz-long` label; the long fuzzing runs on pull requests only with that label) |
+| `ci.yml` | Push, PR and manual | `plan` (restores each task's checksums from the latest `master` run and reports the stale scopes each section job gates on; master pushes run the same selection as a pull request on the same diff, only manual runs force every section); `lint` (check_layout, ruff, check_headers, uncrustify, cppcheck, actionlint, vectors_check, spec_coverage, zone_check, taskfile_coverage, rosdep_audit); `ament-lint` (advisory `ament_lint_common` on the ROS packages, `continue-on-error` until the cleanup tickets land); `scripts` (pytest over `scripts/` and `tools/`); `mermaid` (every mermaid block parsed with mermaid's own parser); `core` (gcc, clang, -m32; unit, vectors, sanitizers, coverage); `coverage` (head-vs-base per component: every changed line covered or excluded, and each package above its floors); `fuzz-smoke`; `gen` (the Python version pinned in `ci/versions.env`); `docs` (every code snippet in `README.md` and `docs/` extracted and compiled); `readme` (every Getting started command runs on simavr); `cpp`; `bridge-images` (CI setup: resolves the per-distro bridge images from `ci/versions.env`); `bridge` (colcon build and test in `ros:jazzy`, `ros:lyrical` and `ros:rolling`); `e2e-posix` (matrix: distro × `rmw_fastrtps_cpp`, `rmw_cyclonedds_cpp`, `rmw_zenoh_cpp`, with the Zenoh router started first); `e2e-avr`; `build-matrix`; `esp32` (example sketches for the ESP32 Dev Module at the pinned core); `pic-canary` (advisory, from Phase 2); `platformio` (the generated PlatformIO layout staged with the core and the port glue, built for Uno and Mega); `stm32` (STM32F103 firmware at the pinned Arm toolchain); `rp2040` (RP2040 firmware at the pinned Arm toolchain and SDK); `budgets` (size table in the job summary with base deltas, fails on breach; generated `docs/budgets.md`, fails when stale); `e2e-isolation` (two e2e sections side by side, gated on `NIGHTLY`); `nightly` (calls `nightly-jobs.yml` on schedule, on manual and master runs, and on a pull request carrying the `fuzz-long` label; the long fuzzing runs on pull requests only with that label); `scripts-save`, `bridge-save` and `e2e-posix-save` (master only: persist each matrix section's checksum once every leg passed) |
 | `nightly.yml` | Schedule | Calls `nightly-jobs.yml`; files or comments on one `needs-triage` issue when the scheduled run fails |
 | `nightly-jobs.yml` | Reusable | `fuzz-long` (30 min per target); `soak` (two hours per backend); `mutation` (mutation testing with a triage report); `big-endian` (core suite under qemu) |
 | `release.yml` | Tag | Runs `nightly-jobs.yml` on a tag first, then the release with the Arduino library zip and the Python sdist and wheel attached: a full release marked Latest, or a pre-release when the tag carries a SemVer pre-release suffix; publishes nowhere else |
@@ -1203,9 +1232,9 @@ Scenario numbers in the tickets below refer to the key end-to-end scenarios in `
 
 Rules:
 - Every job runs in a pinned container image or pinned action versions. Toolchain versions (avr-gcc, arduino-cli core, ROS images, epic-cc bundle) are pinned in one file, `ci/versions.env`. A required check's image is pinned by digest as well as tag: the bridge job's per-distro images (`ROS_<distro>_IMAGE`) carry both, so an upstream rebuild cannot change that job's toolchain without a commit here.
-- The ROS jobs use the official `ros:<distro>` images or `ros-tooling/setup-ros` plus `ros-tooling/action-ros-ci`.
-- PR comments from fork PRs are posted by a separate `workflow_run` job, since a fork PR's token cannot write comments.
-- The self-hosted hardware runner only runs `workflow_dispatch` jobs started by maintainers. It never runs code from pull requests.
+- The ROS jobs run in the official `ros:<distro>` images resolved from `ci/versions.env`, and the farm check resolves dependencies through rosdep.
+- The `workflow_run` workflow (`ci-infra-retry.yml`) reruns a failed `master` run once when every failed job died of an infrastructure error.
+- Every job runs on GitHub-hosted `ubuntu-24.04` runners; hardware validation stays a manual checklist tracked in #95.
 - Pull request runs supersede each other; `master` runs never cancel, so every merged commit keeps its own conclusion.
 - Required checks on `master`: everything in `ci.yml` except advisory jobs and jobs whose prerequisites haven't landed yet; each such job is marked `continue-on-error` with a link to its ticket until it lands.
 
@@ -1229,6 +1258,7 @@ Each one ends as an issue comment whose first line starts with `Findings` and, w
 | R11 | CH32V00x: which part is the tier M proof (RAM and flash of the V002, V003, V006) and its toolchain | Part choice with datasheet links | CH32V003 class, 2 KB RAM |
 | R12 | Static C++ API on epic-cc for PIC14E and PIC18: verify the compile-time results in simulation, global constructors included | Simulated fixtures and an epic-cc ticket for any gap | Advisory compile-only canary |
 | R13 | Mutation testing tools for C, C++ and Python (Mull, mutmut, alternatives): accuracy, speed, CI fit | Recommendation with a trial run on the core and the generator | Mull and mutmut |
+| R15 | Codebase organization: review the tree and recommend (or reject) a reorganization | Findings in `docs/research/R15-codebase-organization.md` | Current layout, plus the diagram sync |
 
 ## Epics and seed tickets
 

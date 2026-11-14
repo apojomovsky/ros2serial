@@ -110,7 +110,8 @@ ros2 topic echo /diagnostics diagnostic_msgs/msg/DiagnosticArray --once
 ```
 
 Diagnostics report link state, topic acceptance, drops, and time synchronization.
-MCU logs appear under the bridge's `.mcu` logger and in `/rosout`. Enable bridge
+MCU logs appear under the bridge's `.mcu` logger and in `/rosout` once the firmware
+is built with `R2S_WITH_LOG`. Enable bridge
 logging with `log_level:=debug` when diagnosing connection problems.
 Topics are best effort over serial even when a host DDS endpoint requests
 reliability; do not infer end-to-end delivery guarantees from DDS QoS alone.

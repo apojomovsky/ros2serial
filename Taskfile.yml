@@ -302,10 +302,20 @@ tasks:
       - scripts/with-build-lock.sh
       - scripts/e2e-lease.sh
       - tools/snippets_check.py
+      - tools/docs_drift.py
       - tools/site_build.py
       - tools/site_links.py
       - README.md
+      - CONTRIBUTING.md
+      - AGENTS.md
       - docs/**
+      # The drift gate names the make targets, CI jobs, examples and
+      # scenario files the prose quotes, so their definitions are inputs.
+      - Makefile
+      - .github/**
+      - examples/**
+      - tests/e2e/test_scenario_*.py
+      - tests/e2e/run-avr.sh
       # Snippets compile against the core and the C++ layer, and the
       # reference runs the generator package.
       - core/**

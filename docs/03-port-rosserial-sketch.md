@@ -15,7 +15,7 @@ plus the `tf` broadcaster from
 [#447](https://github.com/apojomovsky/ros2serial/issues/447)
 (see [Services](#services) and [Parameters](#parameters)).
 Actions have no rosserial original, so the native server stands alone;
-see [Not yet](#not-yet).
+see [Actions](#actions).
 
 What does not change: the wiring, the bridge launch, and the ROS 2
 side. The sketch still opens the serial port at 115200 baud, the
@@ -468,10 +468,13 @@ false. The timeout is accepted and ignored, since nothing crosses the
 wire. Anything else, an array or another width, fails to compile
 naming the rule.
 
-## Not yet
+## Actions
 
 rosserial never had actions, so there is nothing to port: the native
 `r2s::action::Server` serves goals straight from the sketch, as
 `examples/arduino_action` shows with one Fibonacci-like goal. The bridge
 presents that goal as a ROS 2 action server
-([#584](https://github.com/apojomovsky/ros2serial/pull/584)).
+([#584](https://github.com/apojomovsky/ros2serial/pull/584)). The sketch
+stands in Float32 payloads under a placeholder type, so drive a ROS 2 client
+against firmware announcing an installed action type instead; see
+[Services and parameters](services-and-parameters.md).

@@ -12,6 +12,7 @@
   <depend>action_msgs</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
+  <depend>rcpputils</depend>
   <depend>rcl_action</depend>
   <depend>diagnostic_msgs</depend>
   <depend>rmw</depend>

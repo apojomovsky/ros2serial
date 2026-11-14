@@ -2,10 +2,10 @@
 
 P10 benchmark for the Phase 2 encoding decision. The shipped packed
 encoding and the wire stay as they are; this write-up records the numbers
-and recommends keeping the per-topic narrow default. The `needs-decision`
-label stays on #144 for the maintainer's call.
+#433 recorded the decision to keep the per-topic narrow default, so
+nothing on the wire or in the code changes.
 
-Scope: the sixteen bundled types, on representative payloads taken from the
+Scope: the nineteen bundled types, on representative payloads taken from the
 spec vectors (wide profile plus its narrow pair where narrowing changes
 anything). Byte counts are deterministic. Timing comes from simavr cycles,
 never wall clock.
@@ -29,8 +29,9 @@ Method:
   field and bound choices.
 - Cycle counts come from `benchmark/encoding/fw_bench.c` on an Uno
   (ATmega328p at 16 MHz, avr-gcc 7.3.0, `-Os`), timed with Timer1 at one
-  tick per cycle and read out over UART under simavr. The Mega shares the
-  core and the clock, so its cycles match; its firmware build is tested.
+  tick per cycle and read out over UART under simavr. The Mega firmware
+  builds in CI; its cycles are not measured, since it shares the core and
+  the clock with the Uno.
   The test pins each payload length and a 400 cycles per byte tripwire.
 
 ## Size comparison
@@ -121,7 +122,7 @@ the wire or in code. Per-field narrowing would add per-field flags to the
 descriptors, the configuration surface and the bridge conversion to save
 40 bytes on one message type in its mixed case, while per-topic narrow
 already captures the full saving everywhere. The mixed-precision figures
-above stay on record for the maintainer's decision under `needs-decision`.
+above stay on record for the decision #433 recorded.
 
 ## Reproduce
 
