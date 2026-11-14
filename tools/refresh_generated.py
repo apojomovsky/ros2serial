@@ -173,6 +173,90 @@ def _load_text(text: str) -> config.Config:
         return config.load(path)
 
 
+ACTION_EMIT_TEXT = """\
+node: base_controller
+topics:
+  - name: battery
+    type: std_msgs/msg/Float32
+    direction: pub
+actions:
+  - name: spin
+    type: tf2_msgs/action/LookupTransform
+bounds:
+  std_msgs/msg/String.data: 8
+  tf2_msgs/action/LookupTransform_Goal.target_frame: 16
+  tf2_msgs/action/LookupTransform_Goal.source_frame: 16
+  tf2_msgs/action/LookupTransform_Goal.fixed_frame: 16
+  tf2_msgs/msg/TF2Error.error_string: 16
+  std_msgs/msg/Header.frame_id: 16
+  geometry_msgs/msg/TransformStamped.child_frame_id: 16
+"""
+
+
+def _refresh_action_emit() -> None:
+    loaded = _load_text(ACTION_EMIT_TEXT)
+    repository = msgs.MessageRepository(distro=loaded.distro)
+    resolved = bounds.resolve(
+        repository,
+        [topic.type_name for topic in loaded.topics] + actions.roots(loaded),
+        bounds=dict(loaded.bounds),
+    )
+    table = actions.build(loaded, resolved, repository)
+    target = GOLDEN / 'actions_emit'
+    target.mkdir(parents=True, exist_ok=True)
+    (target / 'actions.h').write_text(actions.emit_h(table), encoding='utf-8')
+    (target / 'actions.c').write_text(actions.emit_c(table), encoding='utf-8')
+
+
+SERVICE_EMIT_TEXT = """\
+node: base_controller
+topics:
+  - name: battery
+    type: std_msgs/msg/Float32
+    direction: pub
+services:
+  - name: reset
+    type: demo_srvs/srv/Spin
+    role: server
+  - name: trigger
+    type: demo_srvs/srv/Spin
+    role: client
+bounds:
+  std_msgs/msg/String.data: 8
+  demo_srvs/srv/Spin_Response.sequence: 4
+"""
+SPIN_SERVICE = 'int32 order\n---\nint32[] sequence\n'
+TIME_MESSAGE = 'int32 sec\nuint32 nanosec\n'
+
+
+def _write_type(root: Path, type_name: str, text: str) -> None:
+    package, kind, name = type_name.split('/')
+    path = root / package / kind / f'{name}.{kind}'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding='utf-8')
+
+
+def _refresh_service_emit() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_type(root, 'demo_srvs/srv/Spin', SPIN_SERVICE)
+        _write_type(root, 'builtin_interfaces/msg/Time', TIME_MESSAGE)
+        config_path = root / 'r2s.yaml'
+        config_path.write_text(SERVICE_EMIT_TEXT, encoding='utf-8')
+        loaded = config.load(config_path)
+        repository = msgs.MessageRepository(msg_paths=[root], distro=loaded.distro)
+        resolved = bounds.resolve(
+            repository,
+            [topic.type_name for topic in loaded.topics] + services.roots(loaded),
+            bounds=dict(loaded.bounds),
+        )
+        table = services.build(loaded, resolved, repository)
+    target = GOLDEN / 'services'
+    target.mkdir(parents=True, exist_ok=True)
+    (target / 'services.h').write_text(services.emit_h(table), encoding='utf-8')
+    (target / 'services.c').write_text(services.emit_c(table), encoding='utf-8')
+
+
 def _refresh_topics() -> None:
     loaded = _load_text(TOPICS_TEXT)
     repository, resolved = _resolve(loaded)
@@ -232,7 +316,9 @@ def _refresh_posix() -> None:
 def main() -> int:
     _refresh_types()
     _refresh_actions()
+    _refresh_action_emit()
     _refresh_descriptors()
+    _refresh_service_emit()
     _refresh_topics()
     _refresh_bundle()
     _refresh_layouts()

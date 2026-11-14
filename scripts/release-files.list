@@ -15,6 +15,10 @@ gen/tests/golden/bundle/ros2serial.h
 gen/tests/golden/bundle/ros2serial.hpp
 gen/tests/golden/actions/lookup_transform.hpp
 gen/tests/golden/actions/spin.hpp
+gen/tests/golden/actions_emit/actions.c
+gen/tests/golden/actions_emit/actions.h
+gen/tests/golden/services/services.c
+gen/tests/golden/services/services.h
 gen/tests/golden/descriptors/float32_twist.c
 gen/tests/golden/layouts/library.properties
 gen/tests/golden/layouts/library.json
