@@ -139,6 +139,16 @@ def test_the_extracted_driver_and_helpers_are_made_executable():
 
 def run_script(env_extra, tmp_path):
     env = {k: v for k, v in os.environ.items() if k != 'PIC'}
+    # The stubbed failures need a baseline that records them, and the
+    # checked-in file holds only what the pinned epic-cc still fails on.
+    fixture = tmp_path / 'fixture-baseline.txt'
+    fixture.write_text(
+        ''.join(
+            f'{target} | {label} | {NORM_SIGS[target]}\n' for target in TARGETS for label in LABELS
+        ),
+        encoding='utf-8',
+    )
+    env['R2S_PIC_CANARY_BASELINE'] = str(fixture)
     env.update(env_extra)
     return subprocess.run(
         ['bash', str(SCRIPT)], cwd=ROOT, capture_output=True, text=True, env=env, timeout=300
