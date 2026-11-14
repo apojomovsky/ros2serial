@@ -71,6 +71,40 @@ def test_mcu_frames_stay_hex(tmp_path: Path) -> None:
     assert (tmp_path / 'out' / 'want_mcu.txt').read_text().strip() == wire_of(HELLO)
 
 
+def test_a_gap_becomes_a_plain_wait_literal(tmp_path: Path) -> None:
+    """The simulator's SCL rejects time arithmetic, so each gap is a literal."""
+    result = run(
+        tmp_path,
+        [
+            {'from': 'host', 'frame': HELLO_REQ, 'at_ms': 300},
+            {'from': 'host', 'frame': '04 00 d8 97', 'at_ms': 350},
+            {'from': 'mcu', 'frame': HELLO, 'at_ms': 0},
+        ],
+    )
+    assert result.returncode == 0, result.stderr
+    script = (tmp_path / 'out' / 'stimulus.scl').read_text()
+    assert 'wait for 300 ms;' in script
+    assert 'wait for 50 ms;' in script
+    # No arithmetic sneaks in: every wait is a bare literal.
+    waits = [line.strip() for line in script.splitlines() if 'wait for' in line]
+    assert waits == ['wait for 300 ms;', 'wait for 50 ms;']
+
+
+def test_each_frame_is_handed_over_once(tmp_path: Path) -> None:
+    result = run(
+        tmp_path,
+        [
+            {'from': 'host', 'frame': HELLO_REQ, 'at_ms': 0},
+            {'from': 'host', 'frame': '04 00 d8 97', 'at_ms': 10},
+            {'from': 'mcu', 'frame': HELLO, 'at_ms': 0},
+        ],
+    )
+    assert result.returncode == 0, result.stderr
+    script = (tmp_path / 'out' / 'stimulus.scl').read_text()
+    assert script.count('packetin(') == 2
+    assert script.count('readline(') == 2
+
+
 def test_frames_keep_the_transcript_order(tmp_path: Path) -> None:
     second = '04 00 d8 97'
     result = run(

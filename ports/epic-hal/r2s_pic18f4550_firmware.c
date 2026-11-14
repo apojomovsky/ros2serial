@@ -23,6 +23,13 @@
  * the HELLO announces. */
 #define R2S_SIM_NODE_NAME "demo"
 
+/* The transcript answers READY at 350 ms and closes on the second host
+ * heartbeat at 1350 ms, so the first publish waits past that: the capture
+ * is compared frame by frame to the vector, and a user frame inside the
+ * window would offset every reply after it. */
+#define R2S_SIM_FIRST_PUBLISH_MS 1500u
+#define R2S_SIM_PUBLISH_PERIOD_MS 100u
+
 static uint32_t s_cmd_vel_count;
 
 /* Handles cmd_vel; dispatch calls it from r2s_spin_some(). */
@@ -35,6 +42,7 @@ void r2s_on_cmd_vel(const geometry_msgs__msg__Twist *msg)
 int main(void)
 {
   std_msgs__msg__Float32 battery;
+  uint32_t last_pub;
 
   r2s_pic18f4550_init(R2S_PIC18F4550_CLK_HZ, 115200u);
   if (r2s_session_configure(R2S_SIM_NODE_NAME, r2s_topics, R2S_TOPIC_COUNT) != R2S_OK) {
@@ -42,10 +50,26 @@ int main(void)
   }
   r2s_init();
   battery.data = 1.5f;
+  last_pub = r2s_port_tick();
   for (;; ) {
+    uint32_t now;
+
     r2s_spin_some();
-    if (r2s_connected() != 0u) {
-      (void)r2s_publish_battery(&battery);
+    now = r2s_port_tick();
+    /* One publish per period once the transcript's window has closed, so
+     * the run shows a user frame going out without disturbing the
+     * handshake the vector pins. */
+    if (r2s_connected() == 0u || now < R2S_SIM_FIRST_PUBLISH_MS) {
+      last_pub = now;
+      continue;
+    }
+    if ((uint32_t)(now - last_pub) >= R2S_SIM_PUBLISH_PERIOD_MS) {
+      if (r2s_publish_battery(&battery) == R2S_OK) {
+        last_pub += R2S_SIM_PUBLISH_PERIOD_MS;
+        if ((uint32_t)(now - last_pub) >= R2S_SIM_PUBLISH_PERIOD_MS) {
+          last_pub = now;
+        }
+      }
     }
   }
 }

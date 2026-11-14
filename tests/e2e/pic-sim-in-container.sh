@@ -81,10 +81,13 @@ flags=(-I "$root/core/include" -I "$work/gen" -I "$root/ports/epic-hal")
 for resdir in "$(dirname "$epic_cc")"/clang/lib/clang/*/include; do
   [ -d "$resdir" ] && flags+=(-I "$resdir")
 done
-# The full tier M feature set, the same the P14 canary compiles for this
-# part, plus the limits the generated header names.
+# The feature set the frozen transcript was recorded with, so the HELLO
+# compares field for field: the replay build in core/tests/CMakeLists.txt
+# turns logging and time off and fixes the tick at 1 MHz, and the vector's
+# HELLO carries features 0x00 and tick_hz 1000000. The limits come from the
+# generated header, which ports/epic-hal/r2s.yaml pins to the vector's 512.
 defines=(-DR2S_WITH_CODEC -DR2S_MAX_NEST="${R2S_MAX_NEST_DEF:?}"
-  -DR2S_MAX_FRAME="${R2S_MAX_FRAME_DEF:?}" -DR2S_WITH_LOG -DR2S_WITH_TIME)
+  -DR2S_MAX_FRAME="${R2S_MAX_FRAME_DEF:?}" -DR2S_TICK_HZ=1000000)
 
 hex=$work/pic18f4550.hex
 baseline=$root/ci/pic-sim-baseline.txt
@@ -127,10 +130,9 @@ while IFS= read -r line; do
 done <"$baseline"
 
 status=0
-known=$work/known_gaps.log
 observed=$work/observed_gaps.log
 new=$work/new_gaps.log
-: >"$known" && : >"$observed" && : >"$new" || exit 1
+: >"$observed" && : >"$new" || exit 1
 
 # One compile. An internal compiler error the baseline records is the known
 # toolchain gap: it warns and the run goes on to the simulator. One it never
@@ -195,30 +197,16 @@ if [ ! -f "$hex" ]; then
   exit 0
 fi
 
-# The SCL script the simulator runs: one process opens the frame list and
-# hands each line to the receive register, which is how MPLAB SIM feeds a
-# UART under a script. packetin reads hex, so every byte arrives as the
-# transcript wrote it, a frame's 0x00 delimiter included.
-cat >"$work/stimulus.scl" <<'SCL'
-testbench for "PIC18F4550" is
-begin
-  process is
-    file InFile : text;
-    variable Status : file_open_status;
-    variable InLine : line;
-  begin
-    file_open(Status, InFile, "rx.txt", read_mode);
-    if Status != open_ok then
-      report "cannot open rx.txt" severity failure;
-    end if;
-    while endfile(InFile) == false loop
-      readline(InFile, InLine);
-      packetin(InLine, RCREG, true);
-    end loop;
-    wait;
-  end process;
-end testbench;
-SCL
+# The SCL script and the frame list come from tools/pic-sim-frames.py,
+# which ran in the dev image before this one: it computes each gap and
+# writes a plain `wait for N ms;`, because the simulator's SCL subset
+# rejects time arithmetic. The frames are decimal because packetin parses
+# the rest of the line as decimals, so every byte arrives as written, a
+# 0x00 delimiter included.
+[ -s "$work/stimulus.scl" ] || {
+  echo "pic-sim: no stimulus script at $work/stimulus.scl" >&2
+  exit 1
+}
 
 capture=$work/uart.bin
 rm -f "$capture"

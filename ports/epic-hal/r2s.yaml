@@ -3,8 +3,11 @@
 
 # PIC18F4550 sim firmware: the topic table spec/vectors/session/
 # pub_sub_handshake.yaml froze, so the HELLO and TOPIC replies compare to
-# that vector field for field.
+# that vector field for field. max_frame is pinned to the vector's 512, so
+# the announced limit and the RX capacity derived from it match.
 node: demo
+limits:
+  max_frame: 512
 topics:
   - name: battery
     type: std_msgs/msg/Float32

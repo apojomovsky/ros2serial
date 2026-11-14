@@ -11,8 +11,10 @@ C core and the bridge are checked against.
 
 Writes into the output directory:
 
-- ``rx.txt`` the host frames, one wire frame per line as decimal bytes, in
-  the transcript's order, which is what the stimulus script feeds the UART.
+- ``rx.txt`` the host frames, one per line: the time the transcript sends
+  it, then its wire bytes as decimals. The stimulus script waits for that
+  time before handing the bytes over, so the MCU's own timers see the same
+  spacing the transcript recorded.
 - ``want_mcu.txt`` every MCU frame, one wire frame per line as hex, in
   order, which is what the firmware must send back.
 
@@ -30,7 +32,6 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'gen'))
 
 from r2s_gen.reference import rcobs  # noqa: E402
-from r2s_gen.reference.errors import Rejected  # noqa: E402
 
 
 def wire(frame: bytes) -> str:
@@ -72,20 +73,13 @@ def main(argv: list[str]) -> int:
         print(f'pic-sim-frames: cannot read {vector}: {exc}', file=sys.stderr)
         return 1
 
-    host: list[str] = []
+    host: list[tuple[int, str]] = []
     mcu: list[str] = []
-    for index, step in enumerate(steps):
+    for step in steps:
         raw = bytes.fromhex(step['frame'].replace(' ', ''))
-        try:
-            encoded = wire(raw)
-        except Rejected as exc:
-            print(
-                f'pic-sim-frames: step {index} ({step["from"]}) will not encode: {exc}',
-                file=sys.stderr,
-            )
-            return 1
+        encoded = wire(raw)
         if step['from'] == 'host':
-            host.append(encoded)
+            host.append((step['at_ms'], encoded))
         else:
             mcu.append(wire_hex(raw))
 
@@ -96,7 +90,32 @@ def main(argv: list[str]) -> int:
         )
         return 1
     out.mkdir(parents=True, exist_ok=True)
-    (out / 'rx.txt').write_text('\n'.join(host) + '\n')
+    # The stimulus script is emitted straight-line: one `wait for N ms;` per
+    # gap, then the frame. The simulator's SCL subset rejects time
+    # arithmetic, so the gaps are computed here and written as literals.
+    script = [
+        'testbench for "PIC18F4550" is',
+        'begin',
+        '  process is',
+        '    file InFile : text;',
+        '    variable Status : file_open_status;',
+        '    variable InLine : line;',
+        '  begin',
+        '    file_open(Status, InFile, "rx.txt", read_mode);',
+        '    if Status != open_ok then',
+        '      report "cannot open rx.txt" severity failure;',
+        '    end if;',
+    ]
+    elapsed = 0
+    for at_ms, _ in host:
+        gap = at_ms - elapsed
+        if gap > 0:
+            script.append(f'    wait for {gap} ms;')
+        elapsed = at_ms
+        script.extend(['    readline(InFile, InLine);', '    packetin(InLine, RCREG, true);'])
+    script += ['    wait;', '  end process;', 'end testbench;']
+    (out / 'stimulus.scl').write_text('\n'.join(script) + '\n')
+    (out / 'rx.txt').write_text('\n'.join(text for _, text in host) + '\n')
     (out / 'want_mcu.txt').write_text('\n'.join(mcu) + '\n')
     print(f'pic-sim-frames: {len(host)} host frames in, {len(mcu)} MCU frames expected')
     return 0
