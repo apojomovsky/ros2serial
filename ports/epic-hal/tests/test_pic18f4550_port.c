@@ -196,9 +196,10 @@ static int check_tick_keeps_counting_past_a_second(void)
 
   r2s_pic18f4550_test_regs_reset();
   r2s_pic18f4550_init(20000000u, 115200u);
-  /* Each pass of the Timer1 range is 65536 counts, which is many ticks at
-   * the simulator's rate and few at the default; either way the count must
-   * climb past what one 16-bit wrap could hold instead of following it. */
+  /* Sixty passes of the Timer1 range is far more counts than a 16-bit
+   * count holds, so a tick that lost them would read low. Both compiled
+   * rates clear this bound by a wide margin, and a port that discarded a
+   * delta above 0x8000 as a glitch would fail it. */
   R2S_PIC18F4550_TEST_regs.TMR1 = 0u;
   (void)r2s_port_tick();
   for (i = 0u; i < 60u; i++) {
@@ -207,7 +208,7 @@ static int check_tick_keeps_counting_past_a_second(void)
     R2S_PIC18F4550_TEST_regs.TMR1 = 0u;
     (void)r2s_port_tick();
   }
-  CHECK(r2s_port_tick() >= 60u);
+  CHECK(r2s_port_tick() > 700u);
   return 0;
 }
 

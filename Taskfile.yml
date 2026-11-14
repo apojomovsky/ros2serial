@@ -126,10 +126,12 @@ tasks:
       - core/**
       # Vectors replay through the conformance runners.
       - spec/**
-      # The scope runs the posix, arduino, ch32v and template port tests.
+      # The scope runs the posix, arduino, ch32v, epic-hal and template
+      # port tests.
       - ports/posix/**
       - ports/arduino/**
       - ports/ch32v/**
+      - ports/epic-hal/**
       - ports/template/**
     cmds:
       - CORE=1 bash scripts/ci-test.sh
