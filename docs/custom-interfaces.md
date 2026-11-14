@@ -203,13 +203,13 @@ configuration does not fit; the sample above uses 64 bytes for one of each kind.
 
 ### AVR and the generated service table
 
-On AVR the generated service table is copied into RAM before
-`r2s_services_configure()` sees it. The table lives in flash, and the core reads
-it as ordinary memory, so it must be staged through `R2S_FLASH_READ_BYTE` first.
-`examples/custom_interfaces/custom_firmware/main.c` keeps that copy in
-`copy_services_to_ram()`. Topics and actions do not need this: the core reads
-their tables through the flash reader already. The copy disappears once the
-core learns the placement (#632).
+The generated service table carries `R2S_FLASH`, and `r2s_services_configure()`
+reads every entry through `R2S_FLASH_READ_BYTE`, so it binds as emitted on AVR
+and `examples/custom_interfaces/custom_firmware/main.c` passes it straight to
+the bind. A table the firmware writes at run time lives in RAM and binds through
+`r2s_services_configure_ram()`, the way the C++ registry does. That pair mirrors
+topics and actions: `r2s_services_get()` returns an entry only for a RAM table,
+and `r2s_services_copy()` reads a flash one out.
 
 ## Which Arduino route custom types take
 
