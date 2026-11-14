@@ -1250,7 +1250,7 @@ Each one ends as an issue comment whose first line starts with `Findings` and, w
 | R4 | Generic service and client APIs per supported distro | API inventory with versions | Generic where present, introspection-based typed services elsewhere |
 | R14 | Generic action server and client APIs per supported distro | API inventory with versions | Generic where present, assembled from generic services and topics or the rcl action API elsewhere |
 | R5 | simavr: UART-to-pty bridging for ATmega328P/2560, tick source, EEPROM, stack painting, run in CI | `tests/harness/simavr/` running echo firmware (Uno + Mega) in CI | None needed: blocks only the e2e-avr job |
-| R6 | PIC end-to-end under MPLAB SIM through epic-hal's mdb gate: UART input and output, tick, EEPROM (Phase 5) | Working echo test in CI | Build-only PIC canary |
+| R6 | PIC end-to-end under MPLAB SIM: UART input and output, tick (Phase 5) | `make pic-sim` feeds a frozen vector's frames at their recorded times and compares every reply; blocked until epic-cc compiles a port that reads through its buffer | Build-only PIC canary |
 | R7 | CRC choice: Hamming distance of CRC-16/MCRF4XX and alternatives at our frame sizes (Koopman tables), cost on AVR | Table and recommendation | CRC-16/MCRF4XX, bitwise |
 | R8 | Serial I/O in the bridge: `transport_drivers` vs asio vs termios; low-latency control on Linux; latency and DTR behavior of the 16U2, CH340 and FTDI adapters | Recommendation with latency measurements | termios behind an interface |
 | R9 | XC8 builds for PIC (license terms, toolchain image), as a secondary compiler (Phase 5) | Working job or a written reason why not | epic-cc only |
@@ -1415,7 +1415,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | ID | Ticket | Deps | Acceptance |
 | --- | --- | --- | --- |
 | Y1 | epic-hal port glue: serial, tick | P14 | Builds with epic-cc for PIC16F1938 and PIC18F4550 |
-| Y2 | PIC end-to-end backend under MPLAB SIM | R6, Y1 | Scenarios 1 to 4 on the PIC backend |
+| Y2 | PIC end-to-end backend under MPLAB SIM | R6, Y1 | The handshake vector replayed on the PIC backend; the harness is built and the epic-cc gap in `ci/pic-sim-baseline.txt` is the only thing between it and a green run |
 | Y3 | Compact handshake (MCU, generator node map, bridge loader) | P16 | Scenarios 1 to 4 in compact mode |
 | Y4 | Tier S budget proof on PIC16F1938 | Y1, Y3 | Fits tier S budgets |
 | Y5 | Tier M on PIC18F2455/4550: C API and static C++ | Y1, R12 | Scenarios 1 to 4 |

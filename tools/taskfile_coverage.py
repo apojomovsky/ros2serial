@@ -34,10 +34,9 @@ UNLISTED = {
     '.github/actions/dev-image/action.yml': (
         'image build plumbing, content is Dockerfile plus versions.env'
     ),
-    # Ports no suite section builds yet. Wiring one into a section lists it
-    # in that section's task.
+    # A port no suite section builds yet. Wiring one into a section lists
+    # it in that section's task.
     'ports/avr': 'no suite section builds this port yet',
-    'ports/epic-hal': 'no suite section builds this port yet',
     # Read by the standing lint gate, which always runs, so no task lists them.
     'tools/vendor/ament_code_style.cfg': 'read by the standing lint gate, which always runs',
     'LICENSE': 'content pinned by the standing lint gate, which always runs',
@@ -61,6 +60,10 @@ PLANLESS = {
     # Nightly-only: the plan carries no big-endian output, so nothing
     # selects it on a pull request; the nightly workflow runs it by name.
     'bigendian': 'nightly-only big-endian job, selected by name and by the schedule',
+    # Nightly-only and host-only: it needs the MPLAB SIM image and a Docker
+    # daemon, so the plan carries no output for it; the nightly workflow
+    # runs it by name, as it runs the big-endian job.
+    'pic-sim': 'nightly-only MPLAB SIM job, selected by name and by the schedule',
 }
 
 

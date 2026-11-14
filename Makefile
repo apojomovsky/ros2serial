@@ -38,7 +38,8 @@ $(if $(_SCOPE_ERROR),$(error $(_SCOPE_ERROR)))
 
 .PHONY: help bootstrap doctor check test test-core test-gen test-bridge test-cpp test-scripts \
 	test-all e2e-posix e2e-avr pytest ctest fmt shell image exec ci-local compile fuzz size-report \
-	vectors regen rosdoc2 docs-gen lint check-warnings setup-hooks pre-pr-check guard-main-clone cache-dir
+	vectors regen rosdoc2 docs-gen lint check-warnings setup-hooks pre-pr-check guard-main-clone \
+	cache-dir pic-sim
 
 ##@Everyday
 
@@ -140,6 +141,9 @@ lint-docs: guard-main-clone cache-dir ## Check mermaid blocks in the docs with m
 
 bigendian: guard-main-clone cache-dir ## Cross-build the core for s390x and run the suite under qemu (host-only, needs docker)
 	@bash scripts/run-bigendian.sh
+
+pic-sim: guard-main-clone cache-dir ## Run the PIC18F4550 firmware in MPLAB SIM (host-only, needs docker)
+	@bash tests/e2e/run-pic-sim.sh
 
 check-warnings: guard-main-clone cache-dir ## Fail on any compiler warning (hard gate): core builds with -Werror, cppcheck
 	@$(call in_image,bash scripts/check-warnings.sh)

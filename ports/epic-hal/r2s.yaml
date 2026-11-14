@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+# PIC18F4550 sim firmware: the topic table spec/vectors/session/
+# pub_sub_handshake.yaml froze, so the HELLO and TOPIC replies compare to
+# that vector field for field. max_frame is pinned to the vector's 512, so
+# the announced limit and the RX capacity derived from it match, and cmd_vel
+# carries narrow_float64 so its announcement sets the narrow bit the vector
+# froze (0x03), which a wide-double build would otherwise leave clear.
+node: demo
+limits:
+  max_frame: 512
+topics:
+  - name: battery
+    type: std_msgs/msg/Float32
+    direction: pub
+  - name: cmd_vel
+    type: geometry_msgs/msg/Twist
+    direction: sub
+    narrow_float64: true

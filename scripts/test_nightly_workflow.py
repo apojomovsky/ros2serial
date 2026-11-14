@@ -53,12 +53,13 @@ def test_the_scheduled_nightly_keeps_the_long_fuzzing():
             assert (job.get('with') or {}).get('fuzz', True) is True
 
 
-def test_the_reusable_workflow_holds_fuzzing_soak_mutation_and_big_endian():
+def test_the_reusable_workflow_holds_fuzzing_soak_mutation_big_endian_and_pic_sim():
     assert set(workflow(JOBS)['jobs']) == {
         'fuzz-long',
         'soak',
         'mutation',
         'big-endian',
+        'pic-sim',
     }
 
 

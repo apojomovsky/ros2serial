@@ -5,8 +5,8 @@ test. The core never touches hardware: it reaches the device only
 through `core/include/r2s/r2s_port.h`, resolved at link time, so a port
 compiles its glue against the headers and links it with the core. The
 worked examples are `ports/posix/`, `ports/arduino/`, `ports/ch32v/`,
-`ports/stm32/`, and `ports/rp2040/`; the starting point for a new one is
-`ports/template/`, which this guide copies.
+`ports/stm32/`, `ports/rp2040/` and `ports/epic-hal/`; the starting point
+for a new one is `ports/template/`, which this guide copies.
 
 ## The contract
 
