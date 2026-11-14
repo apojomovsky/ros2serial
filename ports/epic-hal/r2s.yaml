@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+# PIC18F4550 sim firmware: the topic table spec/vectors/session/
+# pub_sub_handshake.yaml froze, so the HELLO and TOPIC replies compare to
+# that vector field for field.
+node: demo
+topics:
+  - name: battery
+    type: std_msgs/msg/Float32
+    direction: pub
+  - name: cmd_vel
+    type: geometry_msgs/msg/Twist
+    direction: sub
