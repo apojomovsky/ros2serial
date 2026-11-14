@@ -214,13 +214,37 @@ def test_an_example_the_readme_never_names_is_named(tmp_path, monkeypatch):
 
 
 def test_a_directory_the_diagram_invents_is_named(tmp_path, monkeypatch):
-    text = BASE['docs/00-design.md'].replace('├── docs/', '├── ghostdir/\n├── docs/')
+    # The entry that got through carried no trailing slash, so the fixture
+    # carries none either.
+    text = BASE['docs/00-design.md'].replace('├── docs/', '├── ghostdir  invented\n├── docs/')
     repo = _tree(tmp_path, _with('docs/00-design.md', text))
     found = _check(repo, monkeypatch, docs_drift.check_layout_diagram)
     assert (
         'docs/00-design.md: the layout diagram names the ghostdir/ directory, which the tree lacks'
         in found
     )
+
+
+def test_a_diagram_entry_that_is_a_tracked_file_is_not_a_directory(tmp_path, monkeypatch):
+    text = BASE['docs/00-design.md'].replace(
+        '├── docs/', '├── README.md  the walkthrough\n├── docs/'
+    )
+    files = _with('docs/00-design.md', text)
+    files['README.md'] = '# x\n'
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_layout_diagram) == []
+
+
+def test_a_macro_the_spec_defines_counts_as_defined(tmp_path, monkeypatch):
+    """DSC-24 defines a macro the C sources never mention."""
+    spec = '| Kinds 7 and 8 occupy 8 bytes with and without `R2S_NO_INT64` |\n'
+    repo = _tree(tmp_path, _with('spec/protocol.md', spec))
+    monkeypatch.setattr(docs_drift, 'ROOT', repo)
+    monkeypatch.setattr(docs_drift, 'user_docs', lambda: ('README.md',))
+    (repo / 'README.md').write_text('Built with `R2S_NO_INT64`.\n', encoding='utf-8')
+    subprocess.run(['git', 'add', '-A'], cwd=repo, check=True)
+    subprocess.run(['git', 'commit', '-q', '-m', 'x'], cwd=repo, check=True)
+    assert docs_drift.check_macros() == []
 
 
 def test_a_macro_mentioned_only_in_prose_fails(tmp_path, monkeypatch):

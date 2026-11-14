@@ -255,30 +255,34 @@ def layout_paths() -> list[str]:
     ]
 
 
-def directory_names() -> set[str]:
-    """Every tracked directory's top-level name."""
-    names = set()
+def root_entries() -> tuple[set[str], set[str]]:
+    """The tree's top-level directories and every tracked top-level name."""
+    directories: set[str] = set()
+    names: set[str] = set()
     for path in _git_files():
         parts = Path(path).parts
+        names.add(parts[0])
         if len(parts) > 1:
-            names.add(parts[0])
-    return names
+            directories.add(parts[0])
+    return directories, names
 
 
 def check_layout_diagram() -> list[str]:
     """A tracked top-level directory the layout diagram does not name."""
     diagram = '\n'.join(layout_paths())
     skip = {'build', 'install', 'log', 'scratch', '__pycache__'}
-    tracked = directory_names()
+    directories, tracked = root_entries()
     problems = [
         f'docs/00-design.md: the layout diagram omits the {name}/ directory'
-        for name in sorted(tracked)
+        for name in sorted(directories)
         if name not in skip and f'{name}/' not in diagram
     ]
     # Two-way, at the top level only: a nested name repeats a tracked
-    # directory's last segment, so depth matters. Column zero is the root.
+    # directory's last segment, so depth matters. Column zero is the root,
+    # and the trailing slash is optional: the invented entry this check
+    # exists for carried none.
     drawn = set(
-        re.findall(r'^[\u251c\u2514]\u2500\u2500 ([A-Za-z_.][\w.-]*)/', diagram, re.MULTILINE)
+        re.findall(r'^[\u251c\u2514]\u2500\u2500 ([A-Za-z_.][\w.-]*)', diagram, re.MULTILINE)
     )
     problems += [
         f'docs/00-design.md: the layout diagram names the {name}/ directory, which the tree lacks'
@@ -292,7 +296,9 @@ def code_text() -> str:
     """Every tracked file that can define a macro, concatenated."""
     text = []
     for path in _git_files():
-        if not path.endswith(CODE_SUFFIXES) or path.startswith('gen/tests/golden/'):
+        if path.startswith('gen/tests/golden/') or path.startswith('spec/vectors/'):
+            continue
+        if not (path.endswith(CODE_SUFFIXES) or path == 'spec/protocol.md'):
             continue
         try:
             text.append((ROOT / path).read_text(encoding='utf-8'))
