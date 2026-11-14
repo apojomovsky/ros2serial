@@ -181,8 +181,18 @@ class TestScenariosStopInTest(unittest.TestCase):
             path = os.path.join(os.path.dirname(__file__), name)
             with open(path, encoding='utf-8') as handle:
                 tree = ast.parse(handle.read())
-            # A file whose tests share one harness stops it in the last of
-            # them, so every test function is searched, not just the first.
+            # The stop must live where tearDownModule cannot supply it. A
+            # test that spawns once stops its harness in the test body; a
+            # file whose tests respawn the board registers the stop as a
+            # cleanup, so unittest's order never leaves the last spawn
+            # running. Stopping only in the module teardown leaks, because
+            # launch_testing never calls it.
+            teardown = [
+                item
+                for item in ast.walk(tree)
+                if isinstance(item, ast.FunctionDef) and item.name == 'tearDownModule'
+            ]
+            in_teardown = {id(node) for item in teardown for node in ast.walk(item)}
             tests = [
                 item
                 for item in ast.walk(tree)
@@ -192,16 +202,21 @@ class TestScenariosStopInTest(unittest.TestCase):
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Attribute)
                 and node.func.attr == 'stop'
-                and (
-                    (isinstance(node.func.value, ast.Name) and node.func.value.id == '_SPAWNED')
-                    or (
-                        isinstance(node.func.value, ast.Subscript)
-                        and isinstance(node.func.value.value, ast.Name)
-                        and node.func.value.value.id == '_SPAWNED'
-                    )
-                )
                 for test in tests
                 for node in ast.walk(test)
+            ) or any(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == 'addCleanup'
+                and id(node) not in in_teardown
+                and any(
+                    isinstance(inner, ast.Call)
+                    and isinstance(inner.func, ast.Attribute)
+                    and inner.func.attr == 'stop'
+                    for argument in node.args
+                    for inner in ast.walk(argument)
+                )
+                for node in ast.walk(tree)
             )
             if not stopped:
                 missing.append(path)

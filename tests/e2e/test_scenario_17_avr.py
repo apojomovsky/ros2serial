@@ -130,6 +130,10 @@ class TestScenario17(unittest.TestCase):
             'announced topics',
             lambda: rclpy.spin_once(node, bridge_support.DISCOVERY_SPIN),
         )
+        # The test that spawned this board stops it, whatever order unittest
+        # runs the tests in: launch_testing never calls tearDownModule, and
+        # the stop summary is what records the painted stack peak.
+        self.addCleanup(lambda: self.assertEqual(spawned.stop(), 0, 'the harness stopped dirty'))
         return spawned
 
     def test_the_custom_message_arrives(self):
@@ -229,6 +233,3 @@ class TestScenario17(unittest.TestCase):
                 node.destroy_client(client)
         finally:
             node.destroy_node()
-        # launch_testing never calls tearDownModule, so the harness stops here:
-        # its stop summary is what records the painted stack peak.
-        self.assertEqual(_SPAWNED[-1].stop(), 0, 'the harness stopped dirty')
