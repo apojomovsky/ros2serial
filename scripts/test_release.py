@@ -23,6 +23,9 @@ STAMPED = [
     'gen/tests/golden/actions_emit/actions.h',
     'gen/tests/golden/services/services.c',
     'gen/tests/golden/services/services.h',
+    'gen/tests/golden/custom_firmware/CMakeLists.txt',
+    'gen/tests/golden/custom_firmware/r2s_generated.c',
+    'gen/tests/golden/custom_firmware/r2s_generated.h',
     'gen/tests/golden/descriptors/float32_twist.c',
     'gen/tests/golden/layouts/library.properties',
     'gen/tests/golden/layouts/library.json',
@@ -111,6 +114,18 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
         target = repo / config
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(ROOT / config, target)
+    # The custom-interface example resolves its types from the package beside
+    # it, so the release fixture carries the example's sources too.
+    shutil.copytree(
+        ROOT / 'examples' / 'custom_interfaces',
+        repo / 'examples' / 'custom_interfaces',
+        ignore=shutil.ignore_patterns('custom_firmware'),
+    )
+    (repo / 'examples' / 'custom_interfaces' / 'custom_firmware').mkdir()
+    shutil.copy(
+        ROOT / 'examples' / 'custom_interfaces' / 'custom_firmware' / 'r2s.yaml',
+        repo / 'examples' / 'custom_interfaces' / 'custom_firmware' / 'r2s.yaml',
+    )
     shutil.copy(ROOT / 'Makefile', repo / 'Makefile')
     (repo / 'scripts').mkdir()
     shutil.copy(ROOT / 'scripts' / 'release-files.list', repo / 'scripts' / 'release-files.list')
@@ -419,6 +434,7 @@ def test_a_simulated_cut_leaves_the_versioned_tests_green(tmp_path):
         'gen/r2s_rosidl/package.xml',
         'bridge/r2s_bridge/package.xml',
         'bridge/r2s_bridge_tests/package.xml',
+        'examples/custom_interfaces/package.xml',
         *STAMPED,
     ):
         assert rel in committed, rel

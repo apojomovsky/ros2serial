@@ -4,7 +4,7 @@
      Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors -->
 <package format="3">
   <name>custom_interfaces</name>
-  <version>0.1.0</version>
+  <version>0.4.0</version>
   <description>Example interface package: one message, one service and one action for the custom-type walkthrough.</description>
   <maintainer email="apojomovsky@gmail.com">Alexis Pojomovsky</maintainer>
   <license>MIT</license>
