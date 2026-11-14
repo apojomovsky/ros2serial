@@ -305,6 +305,34 @@ def _refresh_example(name: str, layout: str) -> None:
         (EXAMPLES / name / 'lib' / rel).write_text(text, encoding='utf-8')
 
 
+def _refresh_custom_example() -> None:
+    """The custom-interface example's pair, pinned under the goldens.
+
+    The example's types come from the package beside it, so the repository
+    resolves them from `examples/` before the snapshots.
+    """
+    config_path = EXAMPLES / 'custom_interfaces' / 'custom_firmware' / 'r2s.yaml'
+    loaded = config.load(config_path)
+    prefixes = [
+        Path(entry) for entry in os.environ.get('AMENT_PREFIX_PATH', '').split(os.pathsep) if entry
+    ]
+    repository = msgs.MessageRepository(
+        msg_paths=[EXAMPLES], ament_prefix_path=prefixes, distro=loaded.distro
+    )
+    roots = (
+        [topic.type_name for topic in loaded.topics]
+        + services.roots(loaded)
+        + actions.roots(loaded)
+    )
+    resolved = bounds.resolve(repository, roots, bounds=dict(loaded.bounds))
+    target = GOLDEN / 'custom_firmware'
+    target.mkdir(parents=True, exist_ok=True)
+    for rel, text in layouts.generate(
+        loaded, resolved, repository, 'cmake', source=config_path.name
+    ).items():
+        (target / rel).write_text(text, encoding='utf-8')
+
+
 def _refresh_posix() -> None:
     loaded = config.load(POSIX / 'r2s.yaml')
     repository, resolved = _resolve(loaded)
@@ -323,6 +351,7 @@ def main() -> int:
     _refresh_bundle()
     _refresh_layouts()
     _refresh_example('cmake_minimal', 'cmake')
+    _refresh_custom_example()
     _refresh_posix()
     return 0
 

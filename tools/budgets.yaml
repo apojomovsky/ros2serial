@@ -57,6 +57,10 @@ firmware:
     flash: 11200
     ram: 400
     stack: 224
+  custom_interfaces/custom_firmware.elf:
+    flash: 20200
+    ram: 1020
+    stack: 350
   ch32v_minimal/ch32v/ch32v_minimal.elf:
     flash: 11500
     ram: 400

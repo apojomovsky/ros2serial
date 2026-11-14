@@ -8,6 +8,7 @@ gen/package.xml
 gen/r2s_rosidl/package.xml
 bridge/r2s_bridge/package.xml
 bridge/r2s_bridge_tests/package.xml
+examples/custom_interfaces/package.xml
 gen/tests/golden/bundle/library.properties
 gen/tests/golden/bundle/r2s_bundled.c
 gen/tests/golden/bundle/r2s_bundled.h
@@ -20,6 +21,9 @@ gen/tests/golden/actions_emit/actions.h
 gen/tests/golden/services/services.c
 gen/tests/golden/services/services.h
 gen/tests/golden/descriptors/float32_twist.c
+gen/tests/golden/custom_firmware/CMakeLists.txt
+gen/tests/golden/custom_firmware/r2s_generated.c
+gen/tests/golden/custom_firmware/r2s_generated.h
 gen/tests/golden/layouts/library.properties
 gen/tests/golden/layouts/library.json
 gen/tests/golden/topics/posix.c

@@ -118,6 +118,112 @@ The Arduino compile helper is for bundled runtime sketches, not this generated
 static API. `--layout arduino` and `--layout platformio` emit alternative wrappers;
 they also require the core and port to be staged by the firmware build.
 
+## Services and actions
+
+`r2s.yaml` takes a `services:` list and an `actions:` list beside `topics:`. A
+service names its role, because the MCU can serve it, call it, or both:
+
+```yaml
+node: sensor_board
+services:
+  - name: calibrate
+    type: my_robot_interfaces/srv/Calibrate
+    role: server
+  - name: snapshot
+    type: my_robot_interfaces/srv/Snapshot
+    role: client
+actions:
+  - name: run
+    type: my_robot_interfaces/action/Run
+```
+
+The generator loads the `.srv` and `.action` definitions from the same search
+path as messages, so the interface package that built them on the host is the
+one your `--msg-path` reaches. The generated header carries one fixed-storage
+struct per request, response, goal, feedback and result, plus an ID and a
+descriptor index per entry:
+
+```text
+#define R2S_SERVICE_CALIBRATE_REQUEST_TYPE 1u
+#define R2S_SERVICE_CALIBRATE_RESPONSE_TYPE 2u
+#define R2S_ACTION_RUN_GOAL_TYPE 3u
+#define R2S_ACTION_RUN_RESULT_TYPE 5u
+```
+
+Firmware answers a served request by taking it, decoding it, and sending the
+response back under the `req_id` the take reported:
+
+<!-- snippet: skip until #630: the example package's generated header is not a staged fixture -->
+```c
+#include <stdint.h>
+
+#include "r2s/r2s.h"
+#include "r2s/r2s_codec.h"
+#include "r2s/r2s_services.h"
+#include "r2s_generated.h"
+
+void serve_calibrate(void)
+{
+    uint8_t index;
+    uint8_t req_id;
+    uint8_t payload[R2S_MAX_FRAME];
+    uint16_t len = 0u;
+    custom_interfaces__srv__Calibrate_Request request;
+    custom_interfaces__srv__Calibrate_Response response;
+    uint8_t field = 0xFFu;
+    r2s_codec_out_t out = {payload, (uint16_t)sizeof payload, 0u, 0u};
+
+    if (r2s_service_take_request(&index, &req_id, payload, (uint16_t)sizeof payload,
+                                 &len) != R2S_OK) {
+        return;
+    }
+    if (index != R2S_SERVICE_CALIBRATE_ID ||
+        r2s_codec_decode(&r2s_generated_table, R2S_SERVICE_CALIBRATE_REQUEST_TYPE, payload,
+                         len, 0u, &request, &field) != R2S_OK) {
+        return;
+    }
+    response.accepted = 1u;
+    /* fill response.note inside its bound */
+    if (r2s_codec_encode(&r2s_generated_table, R2S_SERVICE_CALIBRATE_RESPONSE_TYPE,
+                         &response, 0u, &out, &field) == R2S_OK) {
+        (void)r2s_service_send_response(req_id, R2S_SVC_OK, payload, out.len);
+    }
+}
+```
+
+Actions are served through two hooks the core calls, `r2s_action_on_goal()` and
+`r2s_action_on_cancel()`, and reported through `r2s_actions_feedback()` and
+`r2s_actions_result()`. `examples/custom_interfaces/custom_firmware` implements
+all three channels against one interface package and is the shortest complete
+example, and `tests/e2e/test_scenario_17_avr.py` runs it against the bridge.
+
+A service or action announce carries its type name, so its frame is longer than
+a topic payload. Raise `limits.max_frame` when generation reports that the
+configuration does not fit; the sample above uses 64 bytes for one of each kind.
+
+### AVR and the generated service table
+
+On AVR the generated service table is copied into RAM before
+`r2s_services_configure()` sees it. The table lives in flash, and the core reads
+it as ordinary memory, so it must be staged through `R2S_FLASH_READ_BYTE` first.
+`examples/custom_interfaces/custom_firmware/main.c` keeps that copy in
+`copy_services_to_ram()`. Topics and actions do not need this: the core reads
+their tables through the flash reader already. The copy disappears once the
+core learns the placement (#632).
+
+## Which Arduino route custom types take
+
+Custom types do not go through the Arduino sketches or the bundled runtime
+layer. The bundled library ships the descriptors, message headers and topic
+tables for its own types, and `r2s-arduino compile` stages exactly that bundle.
+A custom type needs its own descriptors, which only `r2s-gen` emits, so the
+generated static C API is the route: emit the pair with
+`--layout arduino` or `--layout cmake`, stage the core and your port glue
+beside it, and compile your sketch against that tree instead of the bundled
+library. `--layout arduino` writes `library.properties` plus the pair under
+`src/`, which is a valid Arduino library directory, so a sketch can be built
+against it with the Arduino CLI and the same flags the bundle's build passes.
+
 ## Bounds and unsupported input
 
 For unbounded strings and sequences, choose storage bounds explicitly:

@@ -23,6 +23,9 @@ GEN_MANIFEST = Path('gen') / 'package.xml'
 ROSIDL_MANIFEST = Path('gen') / 'r2s_rosidl' / 'package.xml'
 BRIDGE_MANIFEST = Path('bridge') / 'r2s_bridge' / 'package.xml'
 BRIDGE_TESTS_MANIFEST = Path('bridge') / 'r2s_bridge_tests' / 'package.xml'
+# The example interface package is a ROS package in the tree, so the cut
+# carries its version too.
+EXAMPLE_MANIFEST = Path('examples') / 'custom_interfaces' / 'package.xml'
 
 SEMVER = re.compile(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z')
 PACKAGE_VERSION_LINE = re.compile(r"^__version__ = '.*'$", re.MULTILINE)
@@ -75,6 +78,12 @@ def set_version(root: Path, version: str) -> None:
     bridge_tests = _updated_text(
         root / BRIDGE_TESTS_MANIFEST, ROS_MANIFEST_TAG, f'<version>{version}</version>'
     )
+    example_manifest = root / EXAMPLE_MANIFEST
+    example = (
+        _updated_text(example_manifest, ROS_MANIFEST_TAG, f'<version>{version}</version>')
+        if example_manifest.is_file()
+        else None
+    )
     _write_all(
         {
             root / VERSION_FILE: version + '\n',
@@ -83,6 +92,7 @@ def set_version(root: Path, version: str) -> None:
             root / ROSIDL_MANIFEST: rosidl,
             root / BRIDGE_MANIFEST: bridge,
             root / BRIDGE_TESTS_MANIFEST: bridge_tests,
+            **({root / EXAMPLE_MANIFEST: example} if example is not None else {}),
         }
     )
 
