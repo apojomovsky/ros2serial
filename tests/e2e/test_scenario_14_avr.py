@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""Scenario 15: a ROS service call reaches the example service sketch and back, both ways.
+"""Scenario 14: a ROS service call reaches the example service sketch and back, both ways.
 
 The arduino_service sketch serves reset and calls trigger (both std_srvs
 Trigger). The ROS client calls /reset and reads the MCU's answer, proving
@@ -40,7 +40,7 @@ _PARAMS = None
 
 def _prepare():
     global _SCRATCH, _SPAWNED, _PARAMS
-    _SCRATCH = tempfile.TemporaryDirectory(prefix='r2s-e2e-avr-15-')
+    _SCRATCH = tempfile.TemporaryDirectory(prefix='r2s-e2e-avr-14-')
     _SPAWNED = avr_support.spawn(os.environ.get('R2S_E2E_BOARD', 'uno'), flavor='service')
     _PARAMS = bridge_support.example_params_file()
 
@@ -58,7 +58,7 @@ def tearDownModule():
         _SCRATCH.cleanup()
 
 
-class TestScenario15(unittest.TestCase):
+class TestScenario14(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         rclpy.init()
@@ -68,7 +68,7 @@ class TestScenario15(unittest.TestCase):
         teardown.shutdown()
 
     def test_service_calls_round_trip_both_directions(self):
-        node = rclpy.create_node('e2e_s15_probe')
+        node = rclpy.create_node('e2e_s14_probe')
         try:
             bridge_support.wait_for_bridge(node)
             # The server exists before the handshake finishes, so the
