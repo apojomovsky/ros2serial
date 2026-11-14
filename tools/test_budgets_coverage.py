@@ -56,7 +56,7 @@ PORT_FIRMWARE = ('stm32/firmware.elf', 'rp2040/firmware.elf')
 
 def expected_firmware() -> list:
     """Every ELF path the example builds produce, keyed like the budgets."""
-    names = ['cmake_minimal/hello_cmake']
+    names = ['cmake_minimal/hello_cmake', 'custom_interfaces/custom_firmware.elf']
     names.extend(CH32V_FIRMWARE)
     for sketch in AVR_SKETCHES:
         for board in ('uno', 'mega'):
