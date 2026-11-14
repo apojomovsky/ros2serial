@@ -60,8 +60,8 @@ base in the job summary.
 | arduino_range/esp32/arduino_range.ino.elf | 275324 | 330400 | 75569 | 90700 | n/a | n/a |
 | arduino_range/mega/arduino_range.ino.elf | 8774 | 10400 | 1073 | 1290 | 230 | 264 |
 | arduino_range/uno/arduino_range.ino.elf | 8438 | 9950 | 1073 | 1290 | 221 | 256 |
-| arduino_service/mega/arduino_service.ino.elf | 14014 | 16500 | 1247 | 1500 | 178 | 210 |
-| arduino_service/uno/arduino_service.ino.elf | 13678 | 16000 | 1247 | 1500 | 170 | 200 |
+| arduino_service/mega/arduino_service.ino.elf | 14142 | 16500 | 1248 | 1500 | 178 | 210 |
+| arduino_service/uno/arduino_service.ino.elf | 13806 | 16000 | 1248 | 1500 | 170 | 200 |
 | arduino_servo/esp32/arduino_servo.ino.elf | 286079 | 343300 | 77757 | 93400 | n/a | n/a |
 | arduino_servo/mega/arduino_servo.ino.elf | 9612 | 11400 | 1085 | 1320 | 16 | 32 |
 | arduino_servo/uno/arduino_servo.ino.elf | 9134 | 10900 | 1085 | 1320 | 13 | 32 |
@@ -76,7 +76,7 @@ base in the job summary.
 | arduino_xmacro_c/uno/arduino_xmacro_c.ino.elf | 11366 | 12000 | 1101 | 1250 | 13 | 32 |
 | ch32v_minimal/ch32v/ch32v_minimal.elf | 9664 | 11500 | 344 | 400 | n/a | n/a |
 | cmake_minimal/hello_cmake | 10496 | 11200 | 374 | 400 | 184 | 224 |
-| custom_interfaces/custom_firmware.elf | 16800 | 20200 | 848 | 1020 | 291 | 350 |
+| custom_interfaces/custom_firmware.elf | 16958 | 20200 | 836 | 1020 | 291 | 350 |
 | rp2040/firmware.elf | 7599 | 9200 | 340 | 410 | n/a | n/a |
 | stm32/firmware.elf | 7207 | 8700 | 340 | 410 | n/a | n/a |
 

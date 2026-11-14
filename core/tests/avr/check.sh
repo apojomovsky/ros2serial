@@ -7,7 +7,10 @@
 # lines and fails when the SRAM use differs; avr-strings proves the lines
 # survived, so an optimizing build cannot pass by dropping them. A third build
 # without R2S_WITH_LOG proves the logging calls compile out for tiers without
-# logging. Builds go under R2S_BUILD_DIR, so the tree stays clean.
+# logging. A fourth firmware binds an R2S_FLASH service table under simavr, so
+# the placement the generator emits stays covered on the target where a plain
+# read fetches the wrong address space. Builds go under R2S_BUILD_DIR, so the
+# tree stays clean.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$root" || exit 2
@@ -51,4 +54,17 @@ for line in "battery low log line" "adc counts=" "link lost log line"; do
   avr-strings "$build/logs.elf" | grep -F "$line" > /dev/null \
     || { echo "avr-flash: log line missing from flash: $line"; exit 1; }
 done
-echo "avr-flash ok: SRAM unchanged at ${base_ram} bytes, log lines in flash"
+
+# The service table the generator emits in flash: the bind, the role and the
+# string walk, then the DECLARE a QUERY answers, all on the target where a
+# plain read would fetch the wrong address space. simavr ends the run when the
+# firmware sleeps after printing its verdict.
+avr-gcc "${common[@]}" -DF_CPU=16000000UL -DR2S_WITH_SERVICES -o "$build/services.elf" "${sources[@]}" \
+  "$root/core/tests/avr/flash_services.c" \
+  || { echo "avr-flash: service firmware did not build"; exit 1; }
+services_log="$build/services.log"
+timeout 30 simavr -m atmega328p -f 16000000 "$build/services.elf" >"$services_log" 2>&1 \
+  || { echo "avr-flash: the service firmware did not run"; exit 1; }
+grep -Fq "r2s-flash-services: PASS" "$services_log" \
+  || { echo "avr-flash: the flash service table did not bind:"; cat "$services_log"; exit 1; }
+echo "avr-flash ok: SRAM unchanged at ${base_ram} bytes, log lines in flash, flash services bound"

@@ -145,8 +145,10 @@ def emit_h(table: ServiceTable) -> str:
         lines.extend(
             [
                 '',
-                '/* The announced services and the service verdicts (SVR-7); a board',
-                ' * that renames services at launch copies this table. */',
+                '/* The announced services and the service verdicts (SVR-7); the core',
+                ' * reads this table through the flash reader. A board that renames',
+                ' * services at launch copies it into RAM and binds it with',
+                ' * r2s_services_configure_ram(). */',
                 'extern const r2s_service_t R2S_FLASH r2s_services[R2S_SERVICE_COUNT];',
                 '',
             ]

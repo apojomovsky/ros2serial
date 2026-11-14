@@ -94,24 +94,6 @@ uint32_t r2s_port_tick(void)
   return now;
 }
 
-/* The generated service table sits in flash, and the core reads it as RAM,
- * so it is copied through the flash reader first (#632). Delete the copy
- * once the core learns the placement. */
-static r2s_service_t s_services[R2S_SERVICE_COUNT];
-
-static void copy_services_to_ram(void)
-{
-  uint8_t index;
-  uint16_t byte;
-
-  for (index = 0u; index < R2S_SERVICE_COUNT; index++) {
-    for (byte = 0u; byte < (uint16_t)sizeof(r2s_service_t); byte++) {
-      ((uint8_t *)&s_services[index])[byte] =
-        R2S_FLASH_READ_BYTE((const uint8_t *)&r2s_services[index] + byte);
-    }
-  }
-}
-
 /* Serves calibrate: decode the request, answer with a note and an
  * acceptance that follows the target bits it decoded, so the caller reads a
  * value this firmware computed from the request. */
@@ -302,11 +284,10 @@ void loop_once(void)
 int main(void)
 {
   hardware_init();
-  copy_services_to_ram();
   if (r2s_session_configure("custom_board", r2s_topics, R2S_TOPIC_COUNT) != R2S_OK) {
     return 1;
   }
-  if (r2s_services_configure(s_services, R2S_SERVICE_COUNT) != R2S_OK) {
+  if (r2s_services_configure(r2s_services, R2S_SERVICE_COUNT) != R2S_OK) {
     return 1;
   }
   if (r2s_actions_configure(r2s_actions, R2S_ACTION_COUNT) != R2S_OK) {

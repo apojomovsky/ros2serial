@@ -77,7 +77,7 @@ uint8_t register_server(
   entry.service_name = service_name;
   entry.role = R2S_SVC_SERVER;
   r2s_service_table[reg.count] = entry;
-  if (r2s_services_configure(r2s_service_table, (uint8_t)(reg.count + 1u)) != R2S_OK) {
+  if (r2s_services_configure_ram(r2s_service_table, (uint8_t)(reg.count + 1u)) != R2S_OK) {
     reg.error = 1u;
     return 0xFFu;
   }
@@ -108,7 +108,7 @@ uint8_t register_client(
   entry.service_name = service_name;
   entry.role = R2S_SVC_CLIENT;
   r2s_service_table[reg.count] = entry;
-  if (r2s_services_configure(r2s_service_table, (uint8_t)(reg.count + 1u)) != R2S_OK) {
+  if (r2s_services_configure_ram(r2s_service_table, (uint8_t)(reg.count + 1u)) != R2S_OK) {
     reg.error = 1u;
     return 0xFFu;
   }

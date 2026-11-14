@@ -31,6 +31,7 @@ static struct
 {
   const r2s_service_t *table;
   uint8_t count;
+  uint8_t table_in_flash;
   uint8_t verdict[R2S_SERVICE_MAX_COUNT];
     /* The MCU-to-host stream of channel 7 (REL-2, REL-3, SVR-4): one frame
      * outstanding with its timer and retries, one rel_seq stream. A second
@@ -73,6 +74,37 @@ static uint8_t varint_len(uint16_t value)
   return r2s_varint_encode(value, out);
 }
 
+/* One entry in RAM. A flash table goes byte by byte through
+ * R2S_FLASH_READ_BYTE; a RAM table is a plain copy. The name strings stay in
+ * RAM either way, so the copied pointers read as plain memory. */
+static void table_copy(
+  const r2s_service_t *table, uint8_t index, r2s_service_t *out,
+  uint8_t from_flash)
+{
+  if (from_flash != 0u) {
+    const uint8_t *src = (const uint8_t *)&table[index];
+    uint8_t *dst = (uint8_t *)out;
+    size_t i;
+
+    for (i = 0u; i < sizeof(r2s_service_t); i++) {
+      dst[i] = R2S_FLASH_READ_BYTE(src + i);
+    }
+  } else {
+    *out = table[index];
+  }
+}
+
+/* One entry's role, from flash or RAM like the copy above. The call path and
+ * the session read only this byte on every REQUEST, where copying the whole
+ * entry would waste the stack of a part this table is meant for. */
+static uint8_t table_role(const r2s_service_t *table, uint8_t index, uint8_t from_flash)
+{
+  if (from_flash != 0u) {
+    return R2S_FLASH_READ_BYTE(&table[index].role);
+  }
+  return table[index].role;
+}
+
 /* The DECLARE payload length for one entry: opcode, index, role, the hash,
  * the length varint and bytes of each name. */
 static uint32_t declare_len(const r2s_service_t *service)
@@ -109,26 +141,47 @@ static r2s_status_t check_entry(const r2s_service_t *service)
   return R2S_OK;
 }
 
-r2s_status_t r2s_services_configure(const r2s_service_t *table, uint8_t count)
+static r2s_status_t bind(const r2s_service_t *table, uint8_t count, uint8_t from_flash)
 {
   uint8_t i;
 
-  if (count > 0u && table == NULL) {
-    return R2S_ERR_BOUNDS;
-  }
-  if (count > R2S_SERVICE_MAX_COUNT) {
+  if ((table == NULL && count != 0u) || count > R2S_SERVICE_MAX_COUNT) {
     return R2S_ERR_BOUNDS;
   }
   for (i = 0u; i < count; i++) {
-    if (check_entry(&table[i]) != R2S_OK) {
+    r2s_service_t entry;
+
+    table_copy(table, i, &entry, from_flash);
+    if (check_entry(&entry) != R2S_OK) {
       return R2S_ERR_BOUNDS;
     }
   }
   services.table = table;
   services.count = count;
+  services.table_in_flash = from_flash;
   for (i = 0u; i < count; i++) {
     services.verdict[i] = 0xFFu;
   }
+  return R2S_OK;
+}
+
+r2s_status_t r2s_services_configure(const r2s_service_t *services_table, uint8_t count)
+{
+  return bind(services_table, count, 1u);
+}
+
+r2s_status_t r2s_services_configure_ram(const r2s_service_t *services_table, uint8_t count)
+{
+  return bind(services_table, count, 0u);
+}
+
+/* The entry at index copied into out, read through the bound table's readers. */
+static r2s_status_t entry_copy(uint8_t index, r2s_service_t *out)
+{
+  if (out == NULL || index >= services.count) {
+    return R2S_ERR_BOUNDS;
+  }
+  table_copy(services.table, index, out, services.table_in_flash);
   return R2S_OK;
 }
 
@@ -145,6 +198,19 @@ const r2s_service_t * r2s_services_get(uint8_t index)
   return &services.table[index];
 }
 
+r2s_status_t r2s_services_copy(uint8_t index, r2s_service_t *out)
+{
+  return entry_copy(index, out);
+}
+
+uint8_t r2s_services_role(uint8_t index)
+{
+  if (index >= services.count) {
+    return 0xFFu;
+  }
+  return table_role(services.table, index, services.table_in_flash);
+}
+
 uint8_t r2s_services_status(uint8_t index)
 {
   if (index >= services.count) {
@@ -155,10 +221,12 @@ uint8_t r2s_services_status(uint8_t index)
 
 uint16_t r2s_services_declare_len(uint8_t index)
 {
-  if (index >= services.count) {
+  r2s_service_t entry;
+
+  if (entry_copy(index, &entry) != R2S_OK) {
     return 0u;
   }
-  return (uint16_t)declare_len(&services.table[index]);
+  return (uint16_t)declare_len(&entry);
 }
 
 void r2s_services_note_status(uint8_t index, uint8_t status)
@@ -240,24 +308,29 @@ static r2s_status_t queue_reliable(
  * the frame. */
 static void send_declare(uint8_t index)
 {
-  const r2s_service_t *service = &services.table[index];
-  size_t type_len = strlen(service->type_name);
-  size_t name_len = strlen(service->service_name);
+  r2s_service_t entry;
+  size_t type_len;
+  size_t name_len;
   uint8_t head[12];
   uint8_t varint[R2S_VARINT_MAX_BYTES];
   uint8_t n;
   uint16_t i;
+  uint16_t len;
 
-    /* The caller answers a QUERY for an announced index, so the entry exists
+    /* The caller answers a QUERY for an announced index, so the copy holds
      * and its DECLARE does not fit in zero bytes. */
-  if (r2s_tx_begin(7u, services.tx_seq, (uint16_t)declare_len(service)) != R2S_OK) {
+  (void)entry_copy(index, &entry);
+  type_len = strlen(entry.type_name);
+  name_len = strlen(entry.service_name);
+  len = (uint16_t)declare_len(&entry);
+  if (r2s_tx_begin(7u, services.tx_seq, len) != R2S_OK) {
     return;
   }
   head[0] = R2S_SVC_OP_DECLARE;
   head[1] = index;
-  head[2] = service->role;
+  head[2] = entry.role;
   for (i = 0u; i < 8u; i++) {
-    head[3u + i] = service->type_hash[i];
+    head[3u + i] = entry.type_hash[i];
   }
   for (i = 0u; i < 11u; i++) {
     (void)r2s_tx_byte(head[i]);
@@ -267,14 +340,14 @@ static void send_declare(uint8_t index)
     (void)r2s_tx_byte(varint[i]);
   }
   for (i = 0u; i < (uint16_t)type_len; i++) {
-    (void)r2s_tx_byte((uint8_t)service->type_name[i]);
+    (void)r2s_tx_byte((uint8_t)entry.type_name[i]);
   }
   n = r2s_varint_encode((uint16_t)name_len, varint);
   for (i = 0u; i < n; i++) {
     (void)r2s_tx_byte(varint[i]);
   }
   for (i = 0u; i < (uint16_t)name_len; i++) {
-    (void)r2s_tx_byte((uint8_t)service->service_name[i]);
+    (void)r2s_tx_byte((uint8_t)entry.service_name[i]);
   }
     /* The begin reserved the frame and the loop feeds exactly its length,
      * while port errors never surface, so the end below cannot fail. */
@@ -311,7 +384,8 @@ r2s_status_t r2s_service_call(uint8_t index, const uint8_t *payload, uint16_t le
     r2s_error_note(R2S_ERROR_NOT_CONNECTED, 7u, 0xFFu, 1u);
     return R2S_ERR_NOT_CONNECTED;
   }
-  if (req_id == NULL || index >= services.count || services.table[index].role != R2S_SVC_CLIENT ||
+  if (req_id == NULL || index >= services.count ||
+    r2s_services_role(index) != R2S_SVC_CLIENT ||
     (payload == NULL && len > 0u) || len > SVC_MAX_CALL_PAYLOAD)
   {
     return R2S_ERR_BOUNDS;
@@ -517,6 +591,7 @@ void r2s_services_test_reset(void)
 #ifdef R2S_WITH_SERVICES
   services.table = NULL;
   services.count = 0u;
+  services.table_in_flash = 0u;
   services.tx_seq = 0u;
   services.rel_next = 0u;
   services.rx_expected = 0u;
