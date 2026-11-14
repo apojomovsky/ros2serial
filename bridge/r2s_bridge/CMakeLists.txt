@@ -278,5 +278,5 @@ if(BUILD_TESTING)
 endif()
 
 ament_export_targets(export_r2s_bridge HAS_LIBRARY_TARGET)
-ament_export_dependencies(rclcpp rclcpp_components diagnostic_msgs)
+ament_export_dependencies(rclcpp rclcpp_components rcpputils diagnostic_msgs)
 ament_package()

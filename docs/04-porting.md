@@ -134,10 +134,9 @@ registers and runs `tests/test_myboard_port.c`. Extend that test for
 each behavior the new init adds: the divisor for the new clock, the pin
 mapping, the tick rate.
 
-A layout gate that fails `ports/` directories missing a build script,
-host test or implementation is proposed in
-[#606](https://github.com/apojomovsky/ros2serial/issues/606); until it
-lands, the checklist below is the review. `ports/common/` is shared
+A layout gate fails `ports/` directories missing a build script,
+host test or implementation: `scripts/check_layout.py` enforces all three,
+and `scripts/test_check_layout.py` pins the rule. `ports/common/` is shared
 sources, not a port, and a directory holding only a `.gitkeep` is a
 placeholder, not a port yet.
 

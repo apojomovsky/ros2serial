@@ -8,8 +8,8 @@ ros2 run r2s_gen r2s-arduino library --out firmware/ros2serial
 ```
 
 The installed examples use short Arduino sketch names such as `button_led`;
-the repository names them `arduino_button_led`. Each sketch directory contains
-an `.ino` of the same name. Copy a sketch out of the library before adapting it.
+the repository names them `arduino_button_led`. Each installed Arduino sketch directory
+contains an `.ino` of the same name. Copy a sketch out of the library before adapting it.
 
 | Sketch | MCU publishes | MCU subscribes | Purpose |
 | --- | --- | --- | --- |
@@ -20,9 +20,9 @@ an `.ino` of the same name. Copy a sketch out of the library before adapting it.
 | `servo` | | `servo` (Float32) | Command an actuator |
 | `range` | `range` (Range) | | Fill a sensor message; reading is a placeholder |
 | `minimal` | `battery` (Float32) | `cmd_vel` (Twist) | Typical robot interface |
-| `service` | | `reset` (Trigger) | Serve a service; the MCU also calls `trigger` |
+| `service` | | serves `reset`, calls `trigger` (Trigger) | Serve a service; the MCU also calls `trigger` |
 | `static`, `xmacro`, `xmacro_c` | See sketch | See sketch | Static topic declarations |
-| `action` | Action feedback/result | Action goals | MCU API; the bridge serves it to ROS 2 |
+| `action` | Action feedback/result | Action goals | MCU action API over placeholder types; no ROS client drives it |
 
 Compile topic examples with the library's required settings, then upload and
 launch the bridge as shown in the README:

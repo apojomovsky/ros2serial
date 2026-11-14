@@ -16,7 +16,8 @@ r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
 void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node.spin_some(); }
 ```
 
-Task-shaped sketches with the same API live beside it: `arduino_hello` (`chatter` publisher), `arduino_blink` (`led` subscription driving the LED), `arduino_button` (debounced `button` publisher), `arduino_servo` (`servo` subscription setting the angle), `arduino_range` (`range` publisher), and `arduino_action` (action server running one goal). Each header names the host commands to try it, and each builds for Uno and Mega in CI.
+Task-shaped sketches with the same API live beside it: `arduino_hello` (`chatter` publisher), `arduino_blink` (`led` subscription driving the LED), `arduino_button` (debounced `button` publisher), `arduino_servo` (`servo` subscription setting the angle), `arduino_range` (`range` publisher), and `arduino_action` (action server running one goal). Most headers name the host command to try the sketch with, and each builds for Uno
+and Mega in CI.
 
 You need `arduino-cli` with the AVR core and `avr-gcc`, plus libsimavr for the emulated run. One helper stages the Arduino library (the generator bundle, the core, the port glue and the runtime layer) and compiles the sketch, installing the AVR core when it is missing:
 
@@ -97,6 +98,7 @@ bash ports/posix/run.sh --build-only
 Tie two virtual serial ports together and start the firmware on one end. It announces a `battery` publisher and a `cmd_vel` subscription:
 
 ```sh
+mkdir -p build/posix
 python3 ports/posix/pty_pair.py > build/posix/ports.env &
 sleep 1
 set -a; source build/posix/ports.env; set +a
@@ -128,7 +130,7 @@ ros2 topic echo /battery std_msgs/msg/Float32 --once
 ```
 
 ```text
-data: 27.0
+data: <counter>
 ```
 
 Any number proves the path: the virtual MCU publishes its message counter as the reading.

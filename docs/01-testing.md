@@ -91,7 +91,7 @@ These rules shape how the code is written. They are part of the code review, not
 - **Algorithms are pure functions.** CRC, rCOBS, varint, the codec interpreter and the time arithmetic take inputs and return outputs, with no hidden state. They are tested directly from vectors and properties.
 - **The session is a state machine with explicit events.** Frame received, tick advanced and publish requested are the only inputs; frames sent, state changes and counters are the only outputs. This is what makes model-based testing (section 5.4) possible.
 - **Every error path is reachable from a test.** Each `R2S_ERR_*` code and each counter has a way to be triggered through the fake port. Code that cannot be reached that way is dead code and is removed.
-- **Compile-time features are tested as builds.** Each `R2S_WITH_*` switch changes what is compiled, so the core unit suite runs on several configurations: minimal (tier S), default (tier M) and full (tier L).
+- **Compile-time features are tested as builds.** Each `R2S_WITH_*` switch changes what is compiled, so the core unit suite also builds configurations without logging or time, services-only, a two-level-deeper nesting table and the smallest receive ring.
 - **The host build is the same code.** The arch macros (`R2S_FLASH`, `R2S_FLASH_READ_BYTE`) have host definitions, and nothing else changes. What only the target can show (flash placement, timing, stack) is tested in simavr.
 - **A host shared library for model-based tests.** `libr2s_host` is the core plus the fake port, built with `R2S_TESTING` and exposing the fake port's controls, so Python tests can drive the real C code through `ctypes`.
 
@@ -137,7 +137,7 @@ From the bottom of the pyramid up. Most tests live at the first three levels; th
 | **Component** | One subsystem through its public API | Fake port, fake transport, manual clock | Core session handshake and reset rules; bridge session with a fake transport; generator end to end on example configs | Same |
 | **Contract** | Every implementation against the shared vectors | None | C core, Python reference and bridge framing and conversion on `spec/vectors/` | Generated runners per language |
 | **Integration** | Real components together, simulated MCU | The posix virtual MCU over a pty | Bridge plus posix MCU: handshake, pub, sub, log, time, remapping, reconnect | launch_testing |
-| **System** | Real firmware, simulated or real hardware | simavr; real boards | The key scenarios (section 9) on simavr; the hardware checklist on a Uno and a Mega | simavr harness, HIL runner |
+| **System** | Real firmware, simulated hardware | simavr | The key scenarios (section 10) on simavr | simavr harness |
 
 Alongside the levels, these test kinds apply where they fit:
 
@@ -146,10 +146,10 @@ Alongside the levels, these test kinds apply where they fit:
 | Property-based | Codec, rCOBS, varint, CRC, time math, generator | Find inputs nobody thought of; check invariants |
 | Model-based | Core session against a Python model of the state machine | Check long random event sequences, including timeouts and resets |
 | Differential | C core vs Python reference vs bridge, on random messages | Catch disagreement between implementations |
-| Fuzzing | Every byte parser: rCOBS decoder, framer, codec, session input, bridge framer | No crash, hang or out-of-bounds access on any input |
-| Fault injection | Bridge and MCU through a corrupting pty proxy | Recovery and counters under corruption, loss, duplication, resets |
+| Fuzzing | Every byte parser: rCOBS decoder, framer, codec, session input | No crash, hang or out-of-bounds access on any input |
+| Fault injection | Bridge and MCU through a corrupting pty proxy | Recovery and counters under corruption, loss and duplication |
 | Golden | Generator outputs, error messages | Make every output change visible in review |
-| Static analysis | All C, C++, Python | cppcheck, clang-tidy, gcc `-fanalyzer`, mypy, ruff; MISRA subset checks (advisory) |
+| Static analysis | All C, C++, Python | cppcheck, ruff, uncrustify, actionlint; the zone check on the core |
 | Sanitizers | Host builds of core and bridge | ASan and UBSan on every PR |
 | Budget and performance | Firmware builds, simavr | Flash, RAM, stack, cycles per byte, latency at given rates |
 | Soak | Integration and system levels | Hours of traffic without leaks, counter drift or lost sync |
@@ -165,7 +165,7 @@ Alongside the levels, these test kinds apply where they fit:
 - **Failure messages explain themselves:** expected and actual bytes in hex, the vector name, the spec ID.
 - **No sleeps.** Time advances through the fake clock or the manual clock. At the integration and system levels, waits poll a condition with a timeout; they never sleep a fixed duration.
 - **Independence.** Every test resets state (`r2s_test_reset()`, fresh fixtures) and passes in any order and alone. Test suites run in random order on every PR.
-- **Test code is code.** Same formatting, linting and review standards; shared helpers live in `tests/support/` directories, never copied.
+- **Test code is code.** Same formatting, linting and review standards; shared helpers live beside the tests they serve (`core/tests/support/`, `tests/e2e/e2e_support/`, `bridge/r2s_bridge/test/support/`), never copied.
 
 ### 5.2 Randomness
 
@@ -179,7 +179,7 @@ Alongside the levels, these test kinds apply where they fit:
 
 ### 5.4 Model-based testing of the session
 
-A Python model of the MCU session (states, timers, counters) lives next to the reference codec. A hypothesis state machine generates random event sequences (frames from the host, valid and corrupted, tick advances, publishes, resets) and applies each to the model and to the real C core through `libr2s_host`. After every step, the frames sent, the state and the counters must match. The same approach covers the bridge's session with a model of the host state machine.
+A Python model of the MCU session (states, timers, counters) lives next to the reference codec. A hypothesis state machine generates random event sequences (frames from the host, valid and corrupted, tick advances, publishes, resets) and applies each to the model and to the real C core through `libr2s_host`. After every step, the frames sent, the state and the counters must match. The bridge's session is checked against the same transcripts by scripted gtest, not by a model.
 
 ### 5.5 Vectors
 
@@ -216,9 +216,9 @@ cases:
 A reject case gives only the encoding and the ID of the rule that rejects it, which must be one of the file's `covers`. Each reject vector breaks exactly one rule, so every correct decoder names the same one.
 
 ```yaml
-# spec/vectors/frames/float32_topic16.yaml
-name: float32_topic16
-covers: [FRM-1, FRM-2, CHK-3]
+# spec/vectors/frames/float32_full.yaml
+name: float32_full
+covers: [ENC-3, FRM-4]
 topic_id: 16
 seq: 0
 payload: "00 00 c0 3f"
@@ -228,18 +228,19 @@ wire: "10 02 01 01 c0 3f 1e 49 05 00"
 
 ```yaml
 # spec/vectors/varint/basic.yaml
-covers: [VAR-1]
+covers: [VAR-1, VAR-2, VAR-4]
 cases:
-  - {value: 0,   encoded: "00"}
-  - {value: 127, encoded: "7f"}
-  - {value: 128, encoded: "80 01"}
-  - {value: 300, encoded: "ac 02"}
+  - {value: 0,     encoded: "00"}
+  - {value: 127,   encoded: "7f"}
+  - {value: 128,   encoded: "80 01"}
+  - {value: 300,   encoded: "ac 02"}
+  - {value: 65535, encoded: "ff ff 03"}
 ```
 
 - The first message vectors (Float32, Twist) are computed by hand and reviewed. The Python reference must reproduce them before it generates any further vector.
 - A message vector writes a float value as a YAML number, or as `{bits: "<hex>"}`, the IEEE 754 bit pattern most significant bit first: 8 hex digits in a `float32` field, 16 in a `float64` one. Bits are the only way to write a NaN payload. A number in a `float32` field must be exactly representable in binary32, and one in a `float64` field is the binary64 value its decimal rounds to. YAML 1.1 reads a number without a decimal point or a signed exponent, such as `1e300`, as a string, so a number here carries both (`1.0e+300`). A narrow vector states binary64 values and its payload holds the binary32 that [ENC-11] makes; it never carries a NaN, because the rule says only that a NaN stays a NaN and IEEE 754 leaves its payload to the implementation, so a test asserts the predicate instead.
 - Session vectors (handshake transcripts as ordered lists of host and MCU frames) and time vectors (tick, correction and expected `r2s_now()` results, including wraparound and maximum drift) are produced by the reference, reviewed by hand once, then frozen.
-- Changing a frozen vector is a breaking wire change: it needs the `!` marker and a protocol version decision.
+- Changing a frozen vector is a breaking wire change: it needs a protocol version decision recorded in the ticket.
 - `tools/vectors_check.py` validates every file against its schema.
 
 ### 5.6 The core's host test harness
@@ -278,7 +279,7 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 | `scripts/`, `tools/` | 80% | | |
 
 - **Spec coverage is 100%:** every spec ID has at least one test (`tools/spec_coverage.py`).
-- **Error-path coverage is 100%:** every `R2S_ERR_*` code and every counter is triggered by at least one test.
+- **Error-path coverage is 100%:** every `R2S_ERROR_*` report code, every `R2S_ERR_*` status and every counter is triggered by at least one test.
 - **Mutation testing** runs nightly with Mull (the core and the ROS-free bridge harness in `mutation/bridge`) and mutmut (the generator); research ticket R13 confirms the tools. A measured score below its floor in `tools/robustness.yaml` fails the nightly once the triage report is written; areas the run does not measure yet read no data and never fail. Surviving mutants are triaged: either a test is added, or the mutant is recorded as equivalent with a one-line reason.
 - Lines excluded from coverage carry an exclusion comment with a reason, and the exclusions are counted in the report. A changed line that is excluded without a reason fails the gate, naming the file and line.
 - A changed line in a generated file, or in a file the package does not measure, is ignored and reported as ignored, never silently dropped.
@@ -291,12 +292,12 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 | Moment | What runs | Time budget |
 | --- | --- | --- |
 | While editing | `make test CORE=1` (or the component being changed) | Seconds |
-| `pre-commit` hook | Format, warnings, unit tests of the touched component | Under 30 s |
+| `pre-commit` hook | Format, whitespace, and a `-Werror` core build of the touched files | Under 30 s |
 | `pre-push` hook | Only the stale fast gates (`lint`, `commits`, `core`, `gen`, `cpp`, `docs`: the `local` task); a fresh tree is a fast no-op | Cheap, minutes |
 | Takeoff (`make pre-pr-check TEST=1`) | The same fast gates as the hook; scopes named on the command line and `R2S_FULL=1` still run locally | Cheap, minutes |
 | Every PR | Unit, component, contract, integration on posix, simavr scenarios, fuzz smoke (60 s per target), sanitizers, coverage, spec coverage, budgets, build matrix, golden, docs snippets | Under 15 min wall clock, in parallel jobs |
 | Nightly | Long fuzzing (30 min per target), seed-corpus coverage report, gated mutation testing, extended property and model-based runs, long fault injection, soak (2 h), big-endian, Rolling, e2e isolation pairs | Hours |
-| Release | Everything above; on a tag the nightly jobs run first and gate the publish, then the hardware checklist on a Uno and a Mega, the full distro and RMW matrix, frozen-vector check | |
+| Release | On a tag the nightly caller gates the publish, then `scripts/build-release-artifacts.sh` builds the Arduino zip and the Python sdist and wheel | |
 
 When the PR suite exceeds its budget, the slowest tests are made faster or moved down a level; the budget is not raised without the maintainer's approval.
 
@@ -333,12 +334,12 @@ The SCRIPTS scope runs in CI as one job per shard over the collected node ids, s
 | Core contract | Every vector in `spec/vectors/` through the C code | Unity runner generated from YAML | Every PR |
 | Core sanitizers | Unit tests under ASan and UBSan | clang | Every PR |
 | Core model-based | Session against the Python model through `libr2s_host` | hypothesis + ctypes | Every PR (bounded), longer nightly |
-| Coverage and spec coverage | Line, branch, spec IDs, error paths | gcovr, llvm-cov, `tools/spec_coverage.py` | Every PR |
+| Coverage and spec coverage | Line, branch, spec IDs, error paths | gcovr, coverage.py, `tools/spec_coverage.py` | Every PR |
 | Mutation testing | Core, C++ layer, generator, bridge logic | Mull, mutmut (R13) | Nightly |
 | Zone check | Core free of function pointers, float operations and C++ includes | `tools/zone_check.py` on object files | Every PR |
 | Big-endian | Core unit tests on a big-endian target | qemu-user (for example s390x) | Nightly |
 | Fuzzing | rCOBS decoder, framer, codec with every descriptor, session input, bridge framer | libFuzzer; corpora in `core/fuzz/corpus/` | 60 s per target on PRs, 30 min nightly or on PRs labelled `fuzz-long` |
-| Generator unit and golden | Config validation, bounds, naming and collisions, error messages; generated files for example configs | pytest; `--update-golden` for intentional changes | Every PR |
+| Generator unit and golden | Config validation, bounds, naming and collisions, error messages; generated files for example configs | pytest; `make regen` for intentional changes | Every PR |
 | Generator property and differential | Random message definitions and values: generate C, compile on host, round-trip, compare with the reference | hypothesis + host gcc | Every PR (bounded), more nightly |
 | Generator hashes | RIHS01 equals the installed type support's hash for bundled types, per distro | pytest in the ROS containers | Every PR |
 | C++ layer | Static and runtime APIs: registration, dispatch, construction order, registration-after-spin error | Host builds + avr-g++ compile tests | Every PR |
@@ -348,10 +349,10 @@ The SCRIPTS scope runs in CI as one job per shard over the collected node ids, s
 | System, AVR | The same scenarios against firmware in simavr (ATmega328P, ATmega2560), UART on a pty | simavr harness, `tests/harness/simavr/` | Every PR |
 | System, PIC | The same scenarios under MPLAB SIM | epic-hal mdb gate | Phase 5 |
 | Soak | Two hours of traffic on posix and simavr | launch_testing | Nightly |
-| Build matrix and docs | Examples for Uno and Mega (both registration paths), PlatformIO, bare AVR; every code snippet in `README.md` and `docs/` extracted and compiled | arduino/compile-sketches, `pio ci`, make | Every PR |
+| Build matrix and docs | Examples for Uno and Mega (both registration paths), PlatformIO, bare AVR; every code snippet in `README.md` and `docs/` extracted and compiled | `arduino-cli`, `pio ci`, make | Every PR |
 | PIC canary | Core and static C++ compile with epic-cc for PIC16F1938 (compact build) and PIC18F4550 (full feature set) | epic-cc release bundle | Every PR from Phase 2, advisory until Phase 5 |
 | Budgets and performance | Flash, RAM and worst-case stack per example and tier; cycles per byte for framing and codec in simavr | avr-size, `tools/stack_report.py`, simavr cycle counts | Every PR |
-| Hardware in the loop | Real Uno and Mega | Self-hosted runner, `workflow_dispatch` by maintainers only | Phase 1 onwards; PIC boards in Phase 5 |
+| Hardware in the loop | Real Uno and Mega | Maintainer-run checklist, tracked in #95 | Not built yet |
 
 Docs snippets follow `tools/snippets_check.py --help`. A fence tagged `c`,
 `cpp` or `python` is code and must compile. A fence tagged `sh`, `console`,
@@ -391,7 +392,7 @@ In `tests/e2e/`, each a launch_testing test parameterized by MCU backend (posix,
 2. MCU publishes Float32 at 50 Hz for 10 s; the host receives at least 99% with correct values.
 3. Host publishes Twist; the MCU echoes it on a test topic; values match after the narrow round trip. The handshake reads from bridge state within 3 s and the echo topics wait on the graph within a further generous timeout, so discovery never spends the echo budget.
 4. Launch remapping and namespace apply to the MCU's topics.
-5. A type hash mismatch rejects only that topic, with an error naming the type.
+5. A type hash mismatch rejects only that topic, with an error naming the type. The bridge component tests cover this one; no end-to-end scenario runs it.
 6. Unplug (close the pty) and replug: CONNECTED again within `boot_wait_ms` + 3 s without restarting the bridge.
 7. MCU reset: detected within 500 ms (HELLO in reply to a heartbeat), re-handshake follows; publishers are kept when the table is unchanged.
 8. Time sync: with a simulated MCU clock off by 5000 ppm, stamps stay within R2S_SYNC_BOUND_NS nanoseconds of host time after the initial burst. The bound defaults to 5000000 for the shared host; the nightly lone suite runs scenario 8 alone against the strict 1000000 instead. The concurrent isolation pairs skip this scenario through R2S_E2E_SKIP; the standalone legs keep judging it.
@@ -400,7 +401,9 @@ In `tests/e2e/`, each a launch_testing test parameterized by MCU backend (posix,
 11. A subscribed message that exceeds a bound is dropped, and the bridge logs the topic and the field path.
 12. Link saturation: the MCU publishes more than the link carries; publishes return `R2S_ERR_TX_BUSY`, no frame is corrupted, and the counters report it.
 13. Parameters: the bridge declares the MCU's parameters as its own ROS parameters after the handshake; a ROS parameter set reaches the MCU over the reliable channel, and a re-handshake re-pushes the current values.
-14. Services: a ROS call to the MCU's service returns the MCU's answer, and the MCU's call to a ROS service returns its answer. Only the C and ros compat firmwares serve services, so the runtime and static C++ legs skip this scenario.
+14. Services: a ROS call to the MCU's service returns the MCU's answer, and the MCU's call to a ROS service returns its answer. On posix only the C and ros compat firmwares serve services, so the runtime and static C++ legs skip the scenario; on avr the service example firmware runs it under the file name for 15.
+15. Actions on posix: a ROS action goal reaches the MCU's spin action and comes back, both ends. A second goal while one runs is rejected, a cancel ends canceled, and a disconnect and an MCU reset mid-goal each abort the goal. Only the C firmware serves actions, so every other leg skips this scenario.
+16. Actions on avr: the same goal round trip on the emulated slice, with feedback and the result, a rejected second goal, a cancel, and abort on disconnect and reset.
 
 These scenarios prove the system's user-visible goals. Edge cases of the parts they exercise are tested at the lower levels, not here.
 

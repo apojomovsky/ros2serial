@@ -52,8 +52,8 @@ ros2 run r2s_gen r2s-arduino compile \
   --out firmware/build path/to/my_sketch
 ```
 
-Use Arduino CLI to upload as shown in the README. The helper passes the library's
-buffer and feature definitions to every compilation unit. Defining those values
+Use Arduino CLI to upload as shown in the README. The helper passes the codec flag
+and the bundle's frame, nesting and topic limits to every compilation unit. Defining those values
 only at the top of the sketch does not configure Arduino's separately compiled
 library sources. This helper handles bundled-type topic sketches; generated
 custom interfaces use the [custom interface workflow](custom-interfaces.md).
@@ -73,12 +73,14 @@ bounds or add a message type. Large messages and high publish rates can exhaust
 RAM or serial bandwidth even when the sketch compiles.
 
 AVR `double` is 32 bits: `float64` fields are sent with that precision and widened
-on the host. The time channel can synchronize timestamps with the host. `node.now()` is
-milliseconds since boot, not a ROS `Time` object. Use the time API for stamped messages
-as described in the [design's user API](00-design.md#user-api).
+on the host. The time channel synchronizes timestamps with the host once the firmware
+is built with `R2S_WITH_TIME`, which the bundled helper leaves out. `node.now()` is
+milliseconds since boot, not a ROS `Time` object. The [design's Time
+section](00-design.md#time) describes the protocol.
 
 Do not print debugging text to the serial stream used by ros2serial. Use its
-logging API (forwarded through the bridge to `/rosout`) or a separate debug port.
+logging API, which the bridge forwards to `/rosout` once the firmware defines
+`R2S_WITH_LOG`, or a separate debug port.
 For compatibility logging, time, and existing ROS 1 sketches, see the
 [migration guide](03-port-rosserial-sketch.md).
 

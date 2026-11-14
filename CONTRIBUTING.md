@@ -70,24 +70,10 @@ Next, run the gates and the scopes your diff needs:
 make check
 ```
 
-On a tree with no changes this takes a few seconds and ends with
-(local):
-
-```text
-== layout: ok
-== python-lint: ok
-== c-format: ok
-== cppcheck: ok
-== workflow-lint: ok
-== vectors: ok
-...
-== commits: ok
-== prose: ok
-all sections passed
-```
-
-Each `== name` line is one gate. A failing gate prints its section
-without the `ok`. When your diff touches code, `check` also runs each
+On a tree whose task checksums all match, this takes a few seconds and runs
+no section, so no gate line appears. A section that does run prints its
+`== name: ok` line, and the run ends with `all sections passed` once at least
+one section passed. A failing gate prints its section without the `ok`. When your diff touches code, `check` also runs each
 touched scope, so it takes longer.
 
 Then run one real test scope, the C core:
@@ -130,10 +116,11 @@ ticket gets one branch and one pull request.
    fix, and it proves the fix works after.
 2. **Make the fix.** Keep it to the one issue. Small diffs get
    reviewed faster.
-3. **Run `make check`.** It runs the gates and every scope your diff
-   touches. CI runs the same script, so a scope that is green here
-   stays green there. A diff that maps to the full suite still runs
-   only the fast gates locally, leaving the rest to CI.
+3. **Run `make check`.** It runs the gates and every stale task, so a diff
+   that touches an end-to-end or nightly section runs it here too. CI runs
+   the same script, so a scope that is green here stays green there. The
+   pre-push hook and the takeoff set `R2S_LOCAL=1`, which leaves those slow
+   sections to CI.
 4. **Commit with a Conventional Commit subject.** One line, at most
    three lines total, for example `fix(core): ...`. The scope names the
    area. No trailers and no em-dashes. The style matters because the
@@ -146,11 +133,13 @@ ticket gets one branch and one pull request.
 ## When CI is red
 
 Each CI job in `.github/workflows/ci.yml` maps to one local target.
-Run that target inside the image and you see the same failure CI saw:
+Run that target inside the image and you see the same failure CI saw, except
+for `mermaid`: `make lint-docs` runs on the host, because it drives the pinned
+Node image through Docker:
 
 | CI job | Local reproduction |
 | --- | --- |
-| `plan` | No local run. `make check` prints the scopes CI would run for the diff |
+| `plan` | No local run. `make check` runs the same checksum selection and names the tasks it ran |
 | `lint` | `make test LINT=1` |
 | `scripts` | `make test-scripts`, or one shard with `make test SCRIPTS=1 SCRIPTS_SHARD=N` |
 | `core` | `make test-core` |
@@ -164,11 +153,24 @@ Run that target inside the image and you see the same failure CI saw:
 | `e2e-posix` | `make e2e-posix` |
 | `fuzz-smoke` | `make test FUZZ=1` |
 | `build-matrix` | `make test EXAMPLES=1` |
+| `esp32` | `make test ESP32=1` |
+| `stm32` | `make test STM32=1` |
+| `rp2040` | `make test RP2040=1` |
+| `pic-canary` | `make test PIC=1` |
+| `platformio` | `make test PLATFORMIO=1` |
+| `e2e-isolation` | `make test NIGHTLY=1` |
+| `ament-lint` | `make test AMENT_LINT=1` |
+| `mermaid` | `make lint-docs` |
 | `budgets` | `make test BUDGETS=1` |
 
-Two jobs have no local twin. `bridge-images` is CI setup: it only reads
+Four jobs have no local twin. `bridge-images` is CI setup: it only reads
 `ci/versions.env` to pick the bridge images. `plan` only reports which
-tasks are stale; `make check` shows you its answer.
+tasks are stale; `make check` selects the same scope. `e2e-isolation` runs
+the nightly isolation pairs, which need a quiet host. `nightly` runs the
+shared nightly jobs on a manual run, when the plan cannot check its tasks,
+and on a pull request labelled `fuzz-long`; the schedule starts the same
+jobs from `nightly.yml`. The `-save` jobs only persist checksums after a
+green run.
 
 Read the failure in the job log: open the failed job in the Actions tab,
 or run `gh run view <run-id> --log-failed`. Fix the cause, not the

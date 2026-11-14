@@ -2,13 +2,13 @@
 
 Version 0.5 (draft) · protocol version 4
 
-This document is normative. Every normative statement is a list item starting with an ID in brackets, such as `[FRM-1]`. Conformance vectors (`spec/vectors/`) and tests name the IDs they cover, so every rule here is checked by at least one test (`docs/01-testing.md`, section 3). IDs are never reused: a removed rule keeps its list item, with its text replaced by "Retired.", so the numbering has no gaps.
+This document is normative. Every normative statement is a list item starting with an ID in brackets, such as `[FRM-1]`. Conformance vectors (`spec/vectors/`) and tests name the IDs they cover, and `tools/spec_coverage.py` fails on a rule no test claims, except one listed in `tools/spec_pending.txt` with the ticket that will cover it (`docs/01-testing.md`, section 3). IDs are never reused: a removed rule keeps its list item, with its text replaced by "Retired.", so the numbering has no gaps.
 
 A section whose heading ends in `(local)` specifies bytes that never appear on the wire, so tests, not conformance vectors, cover its rules.
 
 The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119. Prose outside the ID items, tables included, is informative.
 
-This version covers the frame, the frame check, rCOBS, varints, the message encoding, the codec descriptors, the system channels, the handshake, the session state machines, the error counters, time synchronization, parameters, the reliable channel, services and actions.
+This version covers the conventions, the frame, the frame check, rCOBS, varints, the message encoding, the codec descriptors, the system channels, the handshake, the session state machines, host traffic shaping, the error counters, time synchronization, parameters, the reliable channel, services and actions.
 
 ## 1. Conventions
 

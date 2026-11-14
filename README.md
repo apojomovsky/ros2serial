@@ -72,8 +72,9 @@ arduino-cli upload --port /dev/ttyACM0 --fqbn arduino:avr:uno \
 ```
 
 The library command includes the core, Arduino port, message headers, and
-examples. The compile command supplies the required buffer and feature settings
-to both the sketch and the library. For a Mega, replace the FQBN in both commands
+examples. The compile command supplies the bundle's codec flag and its frame, nesting
+and topic limits to both the sketch and the library; it enables no optional
+channel. For a Mega, replace the FQBN in both commands
 with `arduino:avr:mega`.
 
 ### 3. Start the bridge
@@ -138,8 +139,8 @@ support remains development work. Measurements are in
 Topics use best-effort serial delivery: this is not full DDS QoS on the MCU.
 Parameters and services use a separate reliable channel. Actions are served on
 the MCU through `r2s_actions.h`, and the bridge presents them as a ROS 2 action
-server; a ROS-driven example is still being finished
-([#320](https://github.com/apojomovsky/ros2serial/issues/320)). WiFi and other
+server, proven end to end on posix and avr (see
+[Services and parameters](docs/services-and-parameters.md)). WiFi and other
 network transports are outside the project's scope.
 
 Coming from **rosserial**, you get the same basic sketch-to-ROS workflow in ROS 2,
@@ -156,4 +157,5 @@ The [design](docs/00-design.md) explains the implementation and
 [protocol specification](spec/protocol.md) defines the wire format.
 
 MIT licensed; see [LICENSE](LICENSE). Bundled message definitions retain their
-Apache 2.0 attribution.
+upstream attribution: Apache 2.0 for `common_interfaces` and `rcl_interfaces`,
+BSD 3-Clause for the `tf2_msgs` types.
