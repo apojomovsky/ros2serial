@@ -809,12 +809,11 @@ static void on_services(const uint8_t *payload, uint16_t len, uint32_t now)
   switch (payload[0]) {
     case R2S_SVC_OP_REQUEST: {
         /* The frame carries rel_seq, req_id and the service index in that
-         * order (SVR-1). */
-        const r2s_service_t *service = r2s_services_get(payload[3]);
-
-        /* The host calls a service the MCU announced as one it calls
-         * itself: refused without an ack, like an undecodable SET. */
-        if (service == NULL || service->role != R2S_SVC_SERVER) {
+         * order (SVR-1). The host calls a service the MCU announced as one
+         * it calls itself, and an index past the table reads as no role:
+         * both are refused without an ack, like an undecodable SET. The
+         * accessor reads the bound table's home, so a flash table works. */
+        if (r2s_services_role(payload[3]) != R2S_SVC_SERVER) {
           refuse();
           return;
         }

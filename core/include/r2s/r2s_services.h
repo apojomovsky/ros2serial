@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 /* services: the MCU side of the services channel (spec/protocol.md, section
- * 7.8). The table lives in RAM with the firmware's live values; the session
- * calls in for channel 7 frames. Compiled only with R2S_WITH_SERVICES. */
+ * 7.8). The table lives wherever the caller keeps it, flash or RAM, and the
+ * binding names which; the session calls in for channel 7 frames. Compiled
+ * only with R2S_WITH_SERVICES. */
 #ifndef R2S_SERVICES_H
 #define R2S_SERVICES_H
 
@@ -88,19 +89,36 @@ typedef struct
 } r2s_service_t;
 
 #ifdef R2S_WITH_SERVICES
-/// Hands the session its service table: each entry names a served or called
-/// service with a known role and names that fit the DECLARE frame.
+/// Binds the table the walk answers from.
 /**
- * The table stays where the caller keeps it; the session reads it on every
- * walk. Returns R2S_OK, or R2S_ERR_BOUNDS when the table is missing, a role
- * is unknown, a name is missing or unfit, or a DECLARE frame would not fit,
- * leaving the old table unchanged.
+ * The table outlives the call: the static path passes its constant table
+ * in flash. The bind is the single gate: it refuses a missing table, a
+ * count above R2S_SERVICE_MAX_COUNT, a missing name, a name beyond the
+ * varint range, an unknown role, or an entry that does not fit the
+ * DECLARE frame, leaving the previous binding unchanged. Every entry is
+ * read through R2S_FLASH_READ_BYTE, so a table the generator places with
+ * R2S_FLASH binds on AVR. A table the firmware wrote at run time binds
+ * through r2s_services_configure_ram() instead: flash and RAM addresses
+ * overlap on AVR, so the readers cannot tell them apart and the caller
+ * names the table's home.
  *
  * \param[in] services the table to install.
  * \param[in] count how many entries services holds.
  * \return R2S_OK on success, R2S_ERR_BOUNDS on a bad table.
+ * \pre The caller keeps services alive past the call.
  */
 r2s_status_t r2s_services_configure(const r2s_service_t *services, uint8_t count);
+
+/// Binds a RAM table, as the runtime registration path fills one.
+/**
+ * The same gate as r2s_services_configure(), with plain reads.
+ *
+ * \param[in] services the table to install.
+ * \param[in] count how many entries services holds.
+ * \return R2S_OK on success, R2S_ERR_BOUNDS on a bad table.
+ * \pre The caller keeps services alive past the call.
+ */
+r2s_status_t r2s_services_configure_ram(const r2s_service_t *services, uint8_t count);
 
 /// How many services the table holds, 0 before any configuration.
 /**
@@ -110,10 +128,33 @@ uint8_t r2s_services_count(void);
 
 /// The table entry at index, or NULL past the count.
 /**
+ * Only dereference it for a table bound through r2s_services_configure_ram():
+ * a flash entry's bytes live in the flash address space on AVR. Copy a flash
+ * entry out with r2s_services_copy() first.
+ *
  * \param[in] index the entry to read.
  * \return The entry, or NULL past the count.
  */
 const r2s_service_t * r2s_services_get(uint8_t index);
+
+/// A RAM copy of the entry at index, read through the bound table's readers.
+/**
+ * \param[in] index the entry to copy.
+ * \param[out] out where the copy goes.
+ * \return R2S_OK, or R2S_ERR_BOUNDS past the count or for a NULL out.
+ */
+r2s_status_t r2s_services_copy(uint8_t index, r2s_service_t *out);
+
+/// The role byte of the entry at index, from flash or RAM, or 0xFF past the
+/// count [SVR-2].
+/**
+ * One byte's read, so the dispatch and the session check a role without
+ * copying a whole entry.
+ *
+ * \param[in] index the entry to read.
+ * \return R2S_SVC_SERVER, R2S_SVC_CLIENT, or 0xFF past the count.
+ */
+uint8_t r2s_services_role(uint8_t index);
 
 /// The host's walk verdict for the entry at index, or 0xFF when the host
 /// answered nothing yet or the index is past the count.
