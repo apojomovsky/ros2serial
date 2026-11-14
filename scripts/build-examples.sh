@@ -168,6 +168,24 @@ if [ "$status" -eq 0 ]; then
   avr-size "$build/cmake_minimal/hello_cmake" || status=1
 fi
 
+# The custom-interface example: r2s-gen emits its pair from the example
+# interface package beside it, so the walkthrough's custom message, service
+# and action compile against the generated static API on the board toolchain.
+# The generated pair is emitted into the build tree, never checked in, and
+# the firmware target sits outside any `build/` directory so the budget
+# scanners find it.
+custom_gen="$build/custom_interfaces-gen"
+PYTHONPATH="$root/gen" python3 -m r2s_gen.cli generate \
+  --config "$root/examples/custom_interfaces/custom_firmware/r2s.yaml" \
+  --msg-path "$root/examples" --out "$custom_gen" --layout cmake || status=1
+cmake -S examples/custom_interfaces/custom_firmware -B "$build/custom_interfaces" \
+  --toolchain "$root/examples/custom_interfaces/custom_firmware/avr-toolchain.cmake" \
+  -DR2S_GENERATED_DIR="$custom_gen" -DCMAKE_C_FLAGS="-fstack-usage" || status=1
+cmake --build "$build/custom_interfaces" || status=1
+if [ "$status" -eq 0 ]; then
+  avr-size "$build/custom_interfaces/custom_firmware.elf" || status=1
+fi
+
 # The runtime sketch builds against the bundled library: r2s-gen emits the
 # library at build time, the core and the C++ runtime layer join it here,
 # and no r2s.yaml is involved. The sketch registers its topics while it

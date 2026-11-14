@@ -186,6 +186,28 @@ for board in uno mega; do
   avr-size "$out/arduino_service.ino.elf" || exit 1
   mv "$out/arduino_service.ino.elf" "$build/fw/service-$mcu.elf" || exit 1
 done
+# Scenario 17 drives the custom-type example: the generated static API built
+# by CMake from the example interface package beside it, so the types on the
+# wire are the package's own. The package is a ROS package, so its colcon
+# build waits for the ROS environment below; the firmware builds here with
+# the rest.
+custom_src="$root/examples/custom_interfaces"
+for board in uno mega; do
+  mcu=atmega328p
+  [ "$board" = mega ] && mcu=atmega2560
+  custom_out="$build/custom-$board"
+  rm -rf "$custom_out"
+  mkdir -p "$custom_out" || exit 1
+  PYTHONPATH="$root/gen" python3 -m r2s_gen.cli generate \
+    --config "$custom_src/custom_firmware/r2s.yaml" --msg-path "$root/examples" \
+    --out "$custom_out/gen" --layout cmake || exit 1
+  cmake -S "$custom_src/custom_firmware" -B "$custom_out/build" \
+    --toolchain "$custom_src/custom_firmware/avr-toolchain.cmake" \
+    -DR2S_MCU="$mcu" -DR2S_GENERATED_DIR="$custom_out/gen" || exit 1
+  cmake --build "$custom_out/build" || exit 1
+  avr-size "$custom_out/build/custom_firmware.elf" || exit 1
+  cp "$custom_out/build/custom_firmware.elf" "$build/fw/custom-$mcu.elf" || exit 1
+done
 export R2S_E2E_AVR_FW=$build/fw
 [ "$build_only" = 1 ] && exit 0
 
@@ -281,6 +303,20 @@ set +u
 source "$build/bridge/install/setup.bash"
 set -u
 
+# Scenario 17 imports the example interface package's message, service and
+# action classes, so the package builds here and joins the environment the
+# scenarios run in.
+custom_install="$build/custom_interfaces-install"
+colcon --log-base "$build/custom_interfaces-log" build \
+  --base-paths "$root/examples/custom_interfaces" \
+  --build-base "$build/custom_interfaces-build" \
+  --install-base "$custom_install" \
+  --event-handlers console_direct+ || exit 1
+# shellcheck source=/dev/null
+set +u
+source "$custom_install/setup.bash"
+set -u
+
 # The scenario files import the framework as a package; direct launch_test
 # runs need the same directory on the import path.
 export PYTHONPATH=$root/tests/e2e${PYTHONPATH:+:$PYTHONPATH}
@@ -326,7 +362,7 @@ for rmw in $rmws; do
   fi
   for board in $boards; do
     export R2S_E2E_BOARD=$board
-    for scenario in 1 2 3 4 12 14 16; do
+    for scenario in 1 2 3 4 12 14 16 17; do
       # Same R2S_E2E_SKIP contract as run.sh, matched on the avr file name.
       case " ${R2S_E2E_SKIP:-} " in
         *" test_scenario_${scenario}_avr "*) echo "skip test_scenario_${scenario}_avr (R2S_E2E_SKIP)" ;;

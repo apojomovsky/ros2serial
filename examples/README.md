@@ -46,3 +46,9 @@ For other build systems, `cmake_minimal` demonstrates generated C firmware on
 AVR, `pio_hello` uses PlatformIO, and `ch32v_minimal` demonstrates the CH32V port.
 See [Custom interfaces](../docs/custom-interfaces.md) for generation and
 [Without hardware](../docs/without-hardware.md) for host simulation.
+
+`custom_interfaces` is the custom-type walkthrough: a ROS interface package
+with one message, one service and one action, and a firmware that uses all
+three through the generated static API. It builds with CMake for the
+ATmega328P, and an end-to-end scenario runs it against the bridge. Start there
+when your robot needs its own types instead of the bundled ones.

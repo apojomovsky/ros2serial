@@ -52,6 +52,7 @@ class TestHarnessArgv(unittest.TestCase):
             'slice-atmega328p.elf',
             'flood-atmega2560.elf',
             'slice-atmega328p-500000.elf',
+            'custom-atmega328p.elf',
         ):
             open(os.path.join(fw, image), 'w').close()
         patcher = mock.patch.dict(os.environ, {'R2S_SIMAVR_BIN': harness, 'R2S_E2E_AVR_FW': fw})
@@ -73,6 +74,15 @@ class TestHarnessArgv(unittest.TestCase):
         argv = avr.harness_argv('mega', flavor='flood')
         self.assertIn('atmega2560', argv)
         self.assertTrue(any(str(part).endswith('flood-atmega2560.elf') for part in argv))
+
+    def test_custom_flavor_names_the_custom_firmware(self):
+        argv = avr.harness_argv('uno', flavor='custom')
+        self.assertIn('atmega328p', argv)
+        self.assertTrue(any(str(part).endswith('custom-atmega328p.elf') for part in argv))
+
+    def test_custom_flavor_takes_no_baud(self):
+        with self.assertRaises(AssertionError):
+            avr.harness_argv('uno', flavor='custom', baud='500000')
 
     def test_baud_names_the_matrix_firmware(self):
         argv = avr.harness_argv('uno', baud='500000')
@@ -165,25 +175,48 @@ class TestScenariosStopInTest(unittest.TestCase):
         # launch_testing never calls tearDownModule, so a scenario that
         # stops its harness only there leaks it and records no peak.
         missing = []
-        names = [f'test_scenario_{scenario}_avr.py' for scenario in (1, 2, 3, 4, 12)]
+        names = [f'test_scenario_{scenario}_avr.py' for scenario in (1, 2, 3, 4, 12, 17)]
         names.append('test_baud_matrix_avr.py')
         for name in names:
             path = os.path.join(os.path.dirname(__file__), name)
             with open(path, encoding='utf-8') as handle:
                 tree = ast.parse(handle.read())
+            # The stop must live where tearDownModule cannot supply it. A
+            # test that spawns once stops its harness in the test body; a
+            # file whose tests respawn the board registers the stop as a
+            # cleanup, so unittest's order never leaves the last spawn
+            # running. Stopping only in the module teardown leaks, because
+            # launch_testing never calls it.
+            teardown = [
+                item
+                for item in ast.walk(tree)
+                if isinstance(item, ast.FunctionDef) and item.name == 'tearDownModule'
+            ]
+            in_teardown = {id(node) for item in teardown for node in ast.walk(item)}
+            tests = [
+                item
+                for item in ast.walk(tree)
+                if isinstance(item, ast.FunctionDef) and item.name.startswith('test_')
+            ]
             stopped = any(
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Attribute)
                 and node.func.attr == 'stop'
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == '_SPAWNED'
-                for node in ast.walk(
-                    next(
-                        item
-                        for item in ast.walk(tree)
-                        if isinstance(item, ast.FunctionDef) and item.name.startswith('test_')
-                    )
+                for test in tests
+                for node in ast.walk(test)
+            ) or any(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == 'addCleanup'
+                and id(node) not in in_teardown
+                and any(
+                    isinstance(inner, ast.Call)
+                    and isinstance(inner.func, ast.Attribute)
+                    and inner.func.attr == 'stop'
+                    for argument in node.args
+                    for inner in ast.walk(argument)
                 )
+                for node in ast.walk(tree)
             )
             if not stopped:
                 missing.append(path)

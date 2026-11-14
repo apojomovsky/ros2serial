@@ -1,0 +1,6 @@
+float32 order
+---
+float32 value
+string note
+---
+float32 progress
