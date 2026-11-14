@@ -65,20 +65,24 @@ def test_every_generated_banner_carries_the_repository_version():
     """A checked-in generated file states the version that wrote it.
 
     `make regen` rewrites these, and the cut runs it, so a version bump that
-    misses one is caught here on a normal PR instead of at release time.
+    misses one is caught here on a normal PR instead of at release time. A
+    file can carry several banners (the posix sources embed the topic,
+    service and action sections), so every one of them is checked.
     """
     stamped = []
     for root in GENERATED_ROOTS:
         for path in sorted((ROOT / root).rglob('*')):
             if not path.is_file():
                 continue
-            found = BANNER.search(path.read_text(encoding='utf-8', errors='replace'))
-            if found:
-                stamped.append((path, found.group(1)))
+            text = path.read_text(encoding='utf-8', errors='replace')
+            stamped.extend(
+                (path, text.count('\n', 0, found.start()) + 1, found.group(1))
+                for found in BANNER.finditer(text)
+            )
     assert stamped, 'no generated file states the generator version'
     stale = [
-        f'{path.relative_to(ROOT)}: {version}'
-        for path, version in stamped
+        f'{path.relative_to(ROOT)}:{line}: {version}'
+        for path, line, version in stamped
         if version != __version__
     ]
     assert not stale, 'run make regen after the version bump: ' + ', '.join(stale)
