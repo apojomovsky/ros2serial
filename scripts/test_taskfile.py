@@ -422,7 +422,7 @@ def test_lint_and_commits_list_no_sources():
 def test_every_conditional_task_lists_the_image_and_machinery():
     """The image definition and the suite machinery feed every section."""
     for name, task in tasks().items():
-        if name in ('default', 'local', 'lint', 'commits', 'mermaid', 'bigendian'):
+        if name in ('default', 'local', 'lint', 'commits', 'mermaid', 'bigendian', 'pic-sim'):
             continue
         for path in (
             'Taskfile.yml',

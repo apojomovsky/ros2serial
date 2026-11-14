@@ -126,10 +126,12 @@ tasks:
       - core/**
       # Vectors replay through the conformance runners.
       - spec/**
-      # The scope runs the posix, arduino, ch32v and template port tests.
+      # The scope runs the posix, arduino, ch32v, epic-hal and template
+      # port tests.
       - ports/posix/**
       - ports/arduino/**
       - ports/ch32v/**
+      - ports/epic-hal/**
       - ports/template/**
     cmds:
       - CORE=1 bash scripts/ci-test.sh
@@ -472,6 +474,25 @@ tasks:
       - gen/tests/golden/bundle/r2s_bundled.c
     cmds:
       - PIC=1 bash scripts/ci-test.sh
+
+  pic-sim:
+    desc: Builds the PIC18F4550 firmware and runs it in MPLAB SIM.
+    # Host-only, like bigendian: it needs the sim image and a Docker daemon.
+    sources:
+      - Taskfile.yml
+      - ci/versions.env
+      - ci/pic-sim-baseline.txt
+      - ports/epic-hal/**
+      - core/**
+      - gen/**
+      - exclude: gen/tests/**
+      - tools/pic-sim-frames.py
+      - tests/e2e/run-pic-sim.sh
+      - tests/e2e/pic-sim-in-container.sh
+      - spec/vectors/session/pub_sub_handshake.yaml
+      - scripts/with-build-lock.sh
+    cmds:
+      - bash tests/e2e/run-pic-sim.sh
 
   stm32:
     desc: Builds the STM32F103 minimal firmware with arm-none-eabi-gcc.

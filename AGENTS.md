@@ -62,6 +62,7 @@ repository development and CI, not installation into a robot workspace.
 | `fmt` / `lint` / `check-warnings` | Formatting, linters (advisory), warnings (hard gate) |
 | `lint-docs` | Check mermaid blocks in the docs with mermaid's own parser (needs host docker) |
 | `bigendian` | Cross-build the core for s390x and run the suite under qemu (host-only, needs docker) |
+| `pic-sim` | Run the PIC18F4550 firmware in MPLAB SIM, comparing every reply to a frozen vector (host-only, needs docker) |
 | `setup-hooks` / `pre-pr-check` | Install hooks / run the takeoff ritual |
 | `help` | List all targets |
 

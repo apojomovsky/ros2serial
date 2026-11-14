@@ -29,6 +29,10 @@ on:
         description: Run the core and the reference codec on a big-endian target under qemu
         type: boolean
         default: true
+      pic_sim:
+        description: Run the PIC18F4550 firmware in MPLAB SIM
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -138,6 +142,35 @@ jobs:
           if [ -f mutation-report/report.md ]; then
             cat mutation-report/report.md >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  # The PIC18F4550 firmware in MPLAB SIM: the port, the core and the
+  # generated pair built with the pinned epic-cc, then the frozen handshake
+  # vector's host frames scripted into the simulated UART and every reply
+  # compared to the vector. Its own image, because MPLAB SIM is proprietary
+  # and the dev image must not carry it; the image is pulled by digest, and
+  # the compiler bundle downloads into a cache the step keeps. Nightly only:
+  # it needs a Docker daemon the dev image has not, and a pull request runs
+  # in the dev image.
+  pic-sim:
+    if: ${{ inputs.pic_sim }}
+    runs-on: ubuntu-24.04
+    # The image pull, the epic-cc download and a simulator run of seconds.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4.2.2
+      # The generator half runs in the dev image, which the host target
+      # reaches through `make exec`, so the image is built here first.
+      - uses: ./.github/actions/dev-image
+      - name: Install Task
+        run: sudo python3 scripts/install-task.py
+      - uses: actions/cache@v4.2.2
+        with:
+          path: ~/.cache/ros2serial
+          key: pic-sim-${{ hashFiles('ci/versions.env') }}
+          restore-keys: |
+            pic-sim-
+      - run: make pic-sim
+      # No checksum save: schedule-only, nothing plans it on pull requests.
 
   # The core unit and vector tests cross-built for s390x and run under
   # qemu-user, plus the generator reference suite and the vector check, in

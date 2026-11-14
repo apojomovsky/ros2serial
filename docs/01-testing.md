@@ -347,7 +347,7 @@ The SCRIPTS scope runs in CI as one job per shard over the collected node ids, s
 | Integration, posix | Bridge plus the posix virtual MCU over a pty: the key scenarios, on both registration paths | launch_testing | Every PR, RMW matrix |
 | Fault injection | A pty proxy that flips bits, drops, duplicates and inserts bytes, truncates frames and resets the MCU mid-session | launch_testing + `tests/harness/` | Every PR (short), nightly (long) |
 | System, AVR | The same scenarios against firmware in simavr (ATmega328P, ATmega2560), UART on a pty | simavr harness, `tests/harness/simavr/` | Every PR |
-| System, PIC | The same scenarios under MPLAB SIM | epic-hal mdb gate | Phase 5 |
+| System, PIC | The handshake vector's frames scripted into the simulated UART at the transcript's times, every reply compared to the vector. epic-cc 0.8.0 cannot yet compile a firmware whose port stores through the read buffer, so `ci/pic-sim-baseline.txt` records that gap: the run warns and skips the simulator until a compiler release closes it, and fails on any other compiler failure or on a gap that stops reproducing | `make pic-sim`, MPLAB SIM in its own image | Nightly |
 | Soak | Two hours of traffic on posix and simavr | launch_testing | Nightly |
 | Build matrix and docs | Examples for Uno and Mega (both registration paths), PlatformIO, bare AVR; every code snippet in `README.md` and `docs/` extracted and compiled | `arduino-cli`, `pio ci`, make | Every PR |
 | PIC canary | Core and static C++ compile with epic-cc for PIC16F1938 (compact build) and PIC18F4550 (full feature set) | epic-cc release bundle | Every PR from Phase 2, advisory until Phase 5 |
