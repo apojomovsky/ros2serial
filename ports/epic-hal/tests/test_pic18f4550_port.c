@@ -39,14 +39,14 @@ static int check_spbrg_refuses_impossible(void)
   return 0;
 }
 
-static int check_cycles_per_ms_scales_by_the_prescaler(void)
+static int check_cycles_per_tick_follows_the_tick_rate(void)
 {
-  /* The timer counts Fosc/4 through a 1:8 prescaler, so 20 MHz leaves
-   * 625 counts per millisecond. */
-  CHECK(r2s_pic18f4550_cycles_per_ms(20000000u) == 625u);
-  CHECK(r2s_pic18f4550_cycles_per_ms(48000000u) == 1500u);
+  /* The timer counts Fosc/4 at 1:1, so 20 MHz leaves 5000 counts per
+   * tick at the default 1 kHz, and 5 at 1 MHz. */
+  CHECK(r2s_pic18f4550_cycles_per_tick(20000000u) == 5000u);
+  CHECK(r2s_pic18f4550_cycles_per_tick(48000000u) == 12000u);
   /* A zero clock would divide by zero, so the helper reports 0 instead. */
-  CHECK(r2s_pic18f4550_cycles_per_ms(0u) == 0u);
+  CHECK(r2s_pic18f4550_cycles_per_tick(0u) == 0u);
   return 0;
 }
 
@@ -67,7 +67,7 @@ static int check_init_enables_both_directions(void)
    * assumes, and it starts from zero so the tick begins at 0. */
   CHECK((R2S_PIC18F4550_TEST_regs.T1CON & R2S_PIC18F4550_T1CON_TMR1ON) != 0u);
   CHECK((R2S_PIC18F4550_TEST_regs.T1CON & R2S_PIC18F4550_T1CON_T1RUN_MASK) ==
-    R2S_PIC18F4550_T1CON_T1_1_8);
+    R2S_PIC18F4550_T1CON_T1_1_1);
   CHECK(R2S_PIC18F4550_TEST_regs.TMR1 == 0u);
   return 0;
 }
@@ -157,10 +157,11 @@ static int check_tick_converts_the_count(void)
 {
   r2s_pic18f4550_test_regs_reset();
   r2s_pic18f4550_init(20000000u, 115200u);
-  /* 625 counts is one millisecond at 20 MHz through the 1:8 prescaler. */
-  R2S_PIC18F4550_TEST_regs.TMR1 = 625u;
+  /* 5000 counts is one tick at 20 MHz, which is a millisecond at the
+   * default R2S_TICK_HZ. */
+  R2S_PIC18F4550_TEST_regs.TMR1 = 5000u;
   CHECK(r2s_port_tick() == 1u);
-  R2S_PIC18F4550_TEST_regs.TMR1 = 1875u;
+  R2S_PIC18F4550_TEST_regs.TMR1 = 15000u;
   CHECK(r2s_port_tick() == 3u);
   return 0;
 }
@@ -170,12 +171,18 @@ static int check_tick_accumulates_the_hardware_wrap(void)
   r2s_pic18f4550_test_regs_reset();
   r2s_pic18f4550_init(20000000u, 115200u);
   /* Timer1 is 16 bits, so it wraps every 65536 counts. The tick must keep
-   * counting past the wrap instead of falling back to zero. */
+   * counting past the wrap instead of falling back to zero: 65000 counts
+   * is 13 whole ticks at 5000 each. */
   R2S_PIC18F4550_TEST_regs.TMR1 = 65000u;
-  CHECK(r2s_port_tick() == 104u);
-  /* 1000 counts past the wrap is 65536 + 1000 total, which is 106 ms. */
+  CHECK(r2s_port_tick() == 13u);
+  /* 1000 counts past the wrap is 66536 total, which is 13 ticks and 1536
+   * counts, so the tick holds at 13 and the leftover carries. */
   R2S_PIC18F4550_TEST_regs.TMR1 = 1000u;
-  CHECK(r2s_port_tick() == 106u);
+  CHECK(r2s_port_tick() == 13u);
+  /* 8000 counts more crosses the 5000 the leftover still needed, so the
+   * fourteenth tick lands here and the rest carries again. */
+  R2S_PIC18F4550_TEST_regs.TMR1 = 9000u;
+  CHECK(r2s_port_tick() == 14u);
   return 0;
 }
 
@@ -185,8 +192,9 @@ static int check_tick_keeps_counting_past_a_second(void)
 
   r2s_pic18f4550_test_regs_reset();
   r2s_pic18f4550_init(20000000u, 115200u);
-  /* Sixty wraps of Timer1 is more than a second of counts, so the tick
-   * must climb past 1000 instead of wrapping with the hardware. */
+  /* Sixty wraps of Timer1 is 60000 counts each, which is more ticks than
+   * a 16-bit count could hold, so the tick must climb instead of wrapping
+   * with the hardware. */
   R2S_PIC18F4550_TEST_regs.TMR1 = 0u;
   (void)r2s_port_tick();
   for (i = 0u; i < 60u; i++) {
@@ -195,7 +203,7 @@ static int check_tick_keeps_counting_past_a_second(void)
     R2S_PIC18F4550_TEST_regs.TMR1 = 0u;
     (void)r2s_port_tick();
   }
-  CHECK(r2s_port_tick() > 1000u);
+  CHECK(r2s_port_tick() > 700u);
   return 0;
 }
 
@@ -205,7 +213,7 @@ int main(void)
 
   rc |= check_spbrg_truncates();
   rc |= check_spbrg_refuses_impossible();
-  rc |= check_cycles_per_ms_scales_by_the_prescaler();
+  rc |= check_cycles_per_tick_follows_the_tick_rate();
   rc |= check_init_enables_both_directions();
   rc |= check_read_takes_waiting_bytes();
   rc |= check_read_respects_max();

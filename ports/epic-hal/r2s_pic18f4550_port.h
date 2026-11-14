@@ -13,7 +13,7 @@
 /**
  * Programs SPBRG from clk_hz, starts the EUSART at 8-N-1 with the
  * transmitter and receiver on, takes RC6 and RC7 for the UART, and starts
- * Timer1 at 1:8 from zero so the tick begins at 0.
+ * Timer1 at 1:1 from zero so the tick begins at 0.
  *
  * \param[in] clk_hz the instruction clock's source, in Hz.
  * \param[in] baud the UART baud rate, for example 115200.
@@ -34,15 +34,17 @@ void r2s_pic18f4550_init(uint32_t clk_hz, uint32_t baud);
  */
 uint8_t r2s_pic18f4550_spbrg(uint32_t clk_hz, uint32_t baud);
 
-/// Counts Timer1 ticks in one millisecond.
+/// Counts Timer1 ticks in one tick of the core's clock.
 /**
- * Timer1 counts the instruction clock (clk_hz / 4) through the 1:8
- * prescaler the init programs, so one millisecond is clk_hz / 32000
- * counts.
+ * Timer1 counts the instruction clock (clk_hz / 4) at 1:1, so one tick of
+ * R2S_TICK_HZ is clk_hz / (4 * R2S_TICK_HZ) counts. The result is what
+ * the port accumulates, so the tick the core reads advances at the rate
+ * the HELLO announces rather than at a rate of the port's own choosing.
  *
  * \param[in] clk_hz the oscillator frequency, in Hz.
- * \return The counts per millisecond, or 0 when clk_hz is 0.
+ * \return The counts per tick, or 0 when clk_hz is 0 or one tick is
+ *   shorter than a single count.
  */
-uint16_t r2s_pic18f4550_cycles_per_ms(uint32_t clk_hz);
+uint16_t r2s_pic18f4550_cycles_per_tick(uint32_t clk_hz);
 
 #endif /* R2S_PIC18F4550_PORT_H */

@@ -27,10 +27,11 @@
 #define R2S_PIC18F4550_TRISC_TX (1u << 6u)
 
 /* T1CON: TMR1ON (bit 0) runs the timer, T1RUN (bits 3:2) pick the
- * prescaler, 00 = 1:1, 01 = 1:2, 10 = 1:4, 11 = 1:8. */
+ * prescaler, 00 = 1:1, 01 = 1:2, 10 = 1:4, 11 = 1:8. The port runs at
+ * 1:1 so a microsecond tick stays resolvable at 20 MHz. */
 #define R2S_PIC18F4550_T1CON_TMR1ON (1u << 0u)
 #define R2S_PIC18F4550_T1CON_T1RUN_MASK (3u << 2u)
-#define R2S_PIC18F4550_T1CON_T1_1_8 (3u << 2u)
+#define R2S_PIC18F4550_T1CON_T1_1_1 (0u << 2u)
 
 #ifdef R2S_PIC18F4550_HOST_TEST
 

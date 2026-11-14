@@ -29,6 +29,7 @@
  * window would offset every reply after it. */
 #define R2S_SIM_FIRST_PUBLISH_MS 1500u
 #define R2S_SIM_PUBLISH_PERIOD_MS 100u
+#define R2S_SIM_MS_TO_TICKS(ms) ((uint32_t)(ms) * (uint32_t)R2S_TICK_HZ / 1000u)
 
 static uint32_t s_cmd_vel_count;
 
@@ -59,14 +60,14 @@ int main(void)
     /* One publish per period once the transcript's window has closed, so
      * the run shows a user frame going out without disturbing the
      * handshake the vector pins. */
-    if (r2s_connected() == 0u || now < R2S_SIM_FIRST_PUBLISH_MS) {
+    if (r2s_connected() == 0u || (uint32_t)(now) < R2S_SIM_MS_TO_TICKS(R2S_SIM_FIRST_PUBLISH_MS)) {
       last_pub = now;
       continue;
     }
-    if ((uint32_t)(now - last_pub) >= R2S_SIM_PUBLISH_PERIOD_MS) {
+    if ((uint32_t)(now - last_pub) >= R2S_SIM_MS_TO_TICKS(R2S_SIM_PUBLISH_PERIOD_MS)) {
       if (r2s_publish_battery(&battery) == R2S_OK) {
-        last_pub += R2S_SIM_PUBLISH_PERIOD_MS;
-        if ((uint32_t)(now - last_pub) >= R2S_SIM_PUBLISH_PERIOD_MS) {
+        last_pub += R2S_SIM_MS_TO_TICKS(R2S_SIM_PUBLISH_PERIOD_MS);
+        if ((uint32_t)(now - last_pub) >= R2S_SIM_MS_TO_TICKS(R2S_SIM_PUBLISH_PERIOD_MS)) {
           last_pub = now;
         }
       }

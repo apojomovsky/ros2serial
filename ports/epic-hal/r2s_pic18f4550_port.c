@@ -7,13 +7,16 @@
 #include <stdint.h>
 
 #include "r2s/r2s_port.h"
+#include "r2s/r2s_session.h"
 
 #include "r2s_pic18f4550_port.h"
 #include "r2s_pic18f4550_regs.h"
 
-/* The instructions one Timer1 count spans: the instruction clock is
- * clk_hz / 4 and the prescaler divides by 8 more. */
-#define R2S_PIC18F4550_COUNTS_PER_MS_DIVISOR 32000u
+/* The instruction clock is clk_hz / 4, and Timer1 runs at 1:1, so one
+ * tick of the core's R2S_TICK_HZ is that many counts. At 20 MHz a
+ * millisecond is 5000 counts and a microsecond is 5, both inside the
+ * 16-bit timer; the 1:8 prescaler would round a microsecond to zero. */
+#define R2S_PIC18F4550_INSTRUCTION_DIVISOR 4u
 
 /* The 8-bit SPBRG with BRGH high and BRG16 low divides the clock by 16. */
 #define R2S_PIC18F4550_SPBRG_DIVISOR 16u
@@ -41,15 +44,15 @@ void r2s_pic18f4550_test_rx_queue(const uint8_t *bytes, uint16_t count)
 #endif
 
 /* The tick the core reads, kept here because Timer1 is 16 bits: the
- * hardware wraps every 65536 counts, and a millisecond count would start
- * over with it. elapsed holds the counts since the last whole
- * millisecond, so a wrap costs nothing. */
+ * hardware wraps every 65536 counts, and a tick count would start over
+ * with it. elapsed holds the counts since the last whole tick, so a wrap
+ * costs nothing. */
 static struct
 {
-  uint32_t ms;
+  uint32_t count;
   uint16_t last;
   uint32_t elapsed;
-  uint16_t per_ms;
+  uint16_t per_tick;
 } tick;
 
 uint8_t r2s_pic18f4550_spbrg(uint32_t clk_hz, uint32_t baud)
@@ -68,14 +71,14 @@ uint8_t r2s_pic18f4550_spbrg(uint32_t clk_hz, uint32_t baud)
   return (uint8_t)(divisor - 1u);
 }
 
-uint16_t r2s_pic18f4550_cycles_per_ms(uint32_t clk_hz)
+uint16_t r2s_pic18f4550_cycles_per_tick(uint32_t clk_hz)
 {
   uint32_t counts;
 
   if (clk_hz == 0u) {
     return 0u;
   }
-  counts = clk_hz / R2S_PIC18F4550_COUNTS_PER_MS_DIVISOR;
+  counts = clk_hz / (R2S_PIC18F4550_INSTRUCTION_DIVISOR * R2S_TICK_HZ);
   if (counts == 0u) {
     return 1u;
   }
@@ -99,15 +102,15 @@ void r2s_pic18f4550_init(uint32_t clk_hz, uint32_t baud)
   r2s_pic18f4550_rcsta_write((uint8_t)(R2S_PIC18F4550_RCSTA_SPEN |
     R2S_PIC18F4550_RCSTA_CREN));
 
-  /* Timer1 from zero through the 1:8 prescaler, which is the count the
-   * conversion divides by. */
+  /* Timer1 from zero at 1:1, which is the rate the tick conversion
+   * divides by. */
   r2s_pic18f4550_tmr1_write(0u);
   r2s_pic18f4550_t1con_write((uint8_t)(R2S_PIC18F4550_T1CON_TMR1ON |
-    R2S_PIC18F4550_T1CON_T1_1_8));
-  tick.ms = 0u;
+    R2S_PIC18F4550_T1CON_T1_1_1));
+  tick.count = 0u;
   tick.last = 0u;
   tick.elapsed = 0u;
-  tick.per_ms = r2s_pic18f4550_cycles_per_ms(clk_hz);
+  tick.per_tick = r2s_pic18f4550_cycles_per_tick(clk_hz);
 }
 
 uint16_t r2s_port_read(uint8_t *buf, uint16_t max)
@@ -163,13 +166,13 @@ uint32_t r2s_port_tick(void)
   uint16_t delta = (uint16_t)(now - tick.last);
 
   tick.last = now;
-  if (tick.per_ms == 0u) {
-    return tick.ms;
+  if (tick.per_tick == 0u) {
+    return tick.count;
   }
   tick.elapsed += delta;
-  while (tick.elapsed >= tick.per_ms) {
-    tick.elapsed -= tick.per_ms;
-    tick.ms++;
+  while (tick.elapsed >= tick.per_tick) {
+    tick.elapsed -= tick.per_tick;
+    tick.count++;
   }
-  return tick.ms;
+  return tick.count;
 }
