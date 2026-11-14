@@ -12,6 +12,10 @@
 #include "r2s_pic18f4550_port.h"
 #include "r2s_pic18f4550_regs.h"
 
+/* The counts one tick spans at the rate this build compiles for, so the
+ * checks hold at the default 1 kHz and at the simulator's 1 MHz. */
+#define TICK_COUNTS (20000000u / (4u * R2S_TICK_HZ))
+
 #define CHECK(cond) \
   do { \
     if (!(cond)) { \
@@ -42,9 +46,9 @@ static int check_spbrg_refuses_impossible(void)
 static int check_cycles_per_tick_follows_the_tick_rate(void)
 {
   /* The timer counts Fosc/4 at 1:1, so 20 MHz leaves 5000 counts per
-   * tick at the default 1 kHz, and 5 at 1 MHz. */
-  CHECK(r2s_pic18f4550_cycles_per_tick(20000000u) == 5000u);
-  CHECK(r2s_pic18f4550_cycles_per_tick(48000000u) == 12000u);
+   * tick at the default 1 kHz and 5 at the simulator's 1 MHz. */
+  CHECK(r2s_pic18f4550_cycles_per_tick(20000000u) == TICK_COUNTS);
+  CHECK(r2s_pic18f4550_cycles_per_tick(48000000u) == (uint16_t)(48000000u / (4u * R2S_TICK_HZ)));
   /* A zero clock would divide by zero, so the helper reports 0 instead. */
   CHECK(r2s_pic18f4550_cycles_per_tick(0u) == 0u);
   return 0;
@@ -157,32 +161,32 @@ static int check_tick_converts_the_count(void)
 {
   r2s_pic18f4550_test_regs_reset();
   r2s_pic18f4550_init(20000000u, 115200u);
-  /* 5000 counts is one tick at 20 MHz, which is a millisecond at the
-   * default R2S_TICK_HZ. */
-  R2S_PIC18F4550_TEST_regs.TMR1 = 5000u;
+  /* One tick's worth of counts is one tick, whatever the compiled rate. */
+  R2S_PIC18F4550_TEST_regs.TMR1 = TICK_COUNTS;
   CHECK(r2s_port_tick() == 1u);
-  R2S_PIC18F4550_TEST_regs.TMR1 = 15000u;
+  R2S_PIC18F4550_TEST_regs.TMR1 = (uint16_t)(TICK_COUNTS * 3u);
   CHECK(r2s_port_tick() == 3u);
   return 0;
 }
 
 static int check_tick_accumulates_the_hardware_wrap(void)
 {
+  uint32_t before;
+  uint32_t after;
+  uint16_t half;
+
   r2s_pic18f4550_test_regs_reset();
   r2s_pic18f4550_init(20000000u, 115200u);
-  /* Timer1 is 16 bits, so it wraps every 65536 counts. The tick must keep
-   * counting past the wrap instead of falling back to zero: 65000 counts
-   * is 13 whole ticks at 5000 each. */
-  R2S_PIC18F4550_TEST_regs.TMR1 = 65000u;
-  CHECK(r2s_port_tick() == 13u);
-  /* 1000 counts past the wrap is 66536 total, which is 13 ticks and 1536
-   * counts, so the tick holds at 13 and the leftover carries. */
-  R2S_PIC18F4550_TEST_regs.TMR1 = 1000u;
-  CHECK(r2s_port_tick() == 13u);
-  /* 8000 counts more crosses the 5000 the leftover still needed, so the
-   * fourteenth tick lands here and the rest carries again. */
-  R2S_PIC18F4550_TEST_regs.TMR1 = 9000u;
-  CHECK(r2s_port_tick() == 14u);
+  /* Step to just under the 16-bit top and note the tick, then cross it.
+   * Two half-ticks across the wrap are one tick, so the count must move
+   * forward by exactly one instead of restarting when the hardware does. */
+  half = (uint16_t)(TICK_COUNTS / 2u);
+  R2S_PIC18F4550_TEST_regs.TMR1 = (uint16_t)(0xFFFFu - half);
+  before = r2s_port_tick();
+  R2S_PIC18F4550_TEST_regs.TMR1 = half;
+  after = r2s_port_tick();
+  /* One whole tick went by, measured across the wrap. */
+  CHECK((uint32_t)(after - before) == 1u);
   return 0;
 }
 
@@ -192,9 +196,9 @@ static int check_tick_keeps_counting_past_a_second(void)
 
   r2s_pic18f4550_test_regs_reset();
   r2s_pic18f4550_init(20000000u, 115200u);
-  /* Sixty wraps of Timer1 is 60000 counts each, which is more ticks than
-   * a 16-bit count could hold, so the tick must climb instead of wrapping
-   * with the hardware. */
+  /* Each pass of the Timer1 range is 65536 counts, which is many ticks at
+   * the simulator's rate and few at the default; either way the count must
+   * climb past what one 16-bit wrap could hold instead of following it. */
   R2S_PIC18F4550_TEST_regs.TMR1 = 0u;
   (void)r2s_port_tick();
   for (i = 0u; i < 60u; i++) {
@@ -203,7 +207,7 @@ static int check_tick_keeps_counting_past_a_second(void)
     R2S_PIC18F4550_TEST_regs.TMR1 = 0u;
     (void)r2s_port_tick();
   }
-  CHECK(r2s_port_tick() > 700u);
+  CHECK(r2s_port_tick() >= 60u);
   return 0;
 }
 

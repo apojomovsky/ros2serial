@@ -23,13 +23,20 @@ if [ "${1:-}" = --build-only ]; then build_only=1; shift; fi
 [ "$#" -eq 0 ] || { echo "usage: ports/epic-hal/run.sh [--build-only]" >&2; exit 2; }
 
 cc=${CC:-gcc}
-"$cc" -std=c99 -Werror -Wall -Wextra -Wconversion -Wshadow \
-  -Wstrict-prototypes -Wmissing-prototypes -Wundef \
-  -DR2S_PIC18F4550_HOST_TEST \
-  -I"$root/ports/epic-hal" \
-  -I"$root/core/include" \
-  "$root/ports/epic-hal/r2s_pic18f4550_port.c" \
-  "$root/ports/epic-hal/tests/test_pic18f4550_port.c" \
-  -o "$build/test_pic18f4550_port" || exit 1
+# The suite builds the glue at the default tick rate, and the simulator
+# compiles it at 1 MHz to match its vector, so both are built and run here:
+# a rate the tests never compile is a rate nothing checks.
+for rate in 1000 1000000; do
+  "$cc" -std=c99 -Werror -Wall -Wextra -Wconversion -Wshadow \
+    -Wstrict-prototypes -Wmissing-prototypes -Wundef \
+    -DR2S_PIC18F4550_HOST_TEST -DR2S_TICK_HZ="$rate" \
+    -I"$root/ports/epic-hal" \
+    -I"$root/core/include" \
+    "$root/ports/epic-hal/r2s_pic18f4550_port.c" \
+    "$root/ports/epic-hal/tests/test_pic18f4550_port.c" \
+    -o "$build/test_pic18f4550_port_$rate" || exit 1
+done
 [ "$build_only" = 1 ] && exit 0
-"$build/test_pic18f4550_port" || exit 1
+for rate in 1000 1000000; do
+  "$build/test_pic18f4550_port_$rate" || exit 1
+done

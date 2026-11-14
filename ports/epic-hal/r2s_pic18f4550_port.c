@@ -78,7 +78,11 @@ uint16_t r2s_pic18f4550_cycles_per_tick(uint32_t clk_hz)
   if (clk_hz == 0u) {
     return 0u;
   }
-  counts = clk_hz / (R2S_PIC18F4550_INSTRUCTION_DIVISOR * R2S_TICK_HZ);
+  /* The divisor is widened before the multiply: on a 16-bit int target
+   * (this part) the product would otherwise wrap for a tick rate between
+   * 16384 and 65535, which the core accepts. */
+  counts = clk_hz / ((uint32_t)R2S_PIC18F4550_INSTRUCTION_DIVISOR *
+    (uint32_t)R2S_TICK_HZ);
   if (counts == 0u) {
     return 1u;
   }
