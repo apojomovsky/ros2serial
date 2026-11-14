@@ -149,11 +149,58 @@ void test_services_configure_refuses_a_table_it_cannot_announce(void)
   huge_type[sizeof huge_type - 1u] = '\0';
   huge_type_table[0].type_name = huge_type;
   TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_services_configure(huge_type_table, 1));
+    /* The RAM twin runs the same gate. */
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_services_configure_ram(NULL, 1));
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_services_configure_ram(bad_role, 1));
   TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_services_configure(NULL, 0));
   TEST_ASSERT_EQUAL_UINT8(0, r2s_services_count());
   TEST_ASSERT_NULL(r2s_services_get(0));
   TEST_ASSERT_EQUAL_UINT8(0xFFu, r2s_services_status(0));
   TEST_ASSERT_EQUAL_UINT16(0, r2s_services_declare_len(0));
+  TEST_ASSERT_EQUAL_UINT8(0xFFu, r2s_services_role(0));
+}
+
+/* covers: SVR-1, SVR-2, SVR-7 */
+void test_services_ram_table_binds_and_answers_the_walk(void)
+{
+  const uint8_t req[] = {0x01u, 0x00u};
+    /* The DECLARE of entry 0, as the flash-bound table announces it. */
+  const uint8_t declare[] = {0x02u, 0x00u, 0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u,
+    0x08u, 0x14u, 's', 't', 'd', '_', 's', 'r', 'v', 's',
+    '/', 's', 'r', 'v', '/', 'T', 'r', 'i', 'g', 'g',
+    'e', 'r', 0x05u, 'r', 'e', 's', 'e', 't'};
+
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", one_topic, 1));
+    /* The runtime path fills its table at run time, so it binds through the
+     * RAM twin: plain reads, no flash reader. */
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_services_configure_ram(table, 2));
+  TEST_ASSERT_EQUAL_UINT8(2, r2s_services_count());
+  TEST_ASSERT_EQUAL_UINT8(R2S_SVC_SERVER, r2s_services_role(0));
+  TEST_ASSERT_EQUAL_UINT8(R2S_SVC_CLIENT, r2s_services_role(1));
+  TEST_ASSERT_EQUAL_UINT8(0xFFu, r2s_services_role(2));
+  TEST_ASSERT_EQUAL_UINT16(38, r2s_services_declare_len(0));
+  r2s_init();
+  feed_host(7, 0, req, sizeof req);
+  TEST_ASSERT_EQUAL_UINT16(2, fake_port_tx_frame_count());
+  assert_tx(1, 7, 0, declare, sizeof declare);
+}
+
+/* covers: SVR-1, SVR-3 */
+void test_services_copy_reads_one_entry_and_bounds_the_index(void)
+{
+  r2s_service_t out;
+
+  configure();
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_services_copy(1u, &out));
+  TEST_ASSERT_EQUAL_STRING("std_srvs/srv/Trigger", out.type_name);
+  TEST_ASSERT_EQUAL_STRING("trigger", out.service_name);
+  TEST_ASSERT_EQUAL_UINT8(R2S_SVC_CLIENT, out.role);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(table[1].type_hash, out.type_hash, 8u);
+    /* Past the count and a NULL out change nothing and copy nothing. */
+  memset(&out, 0, sizeof out);
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_services_copy(2u, &out));
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_services_copy(0u, NULL));
+  TEST_ASSERT_NULL(out.type_name);
 }
 
 /* covers: SVR-1, SVR-2, SVR-3, SVR-7 */
@@ -286,6 +333,29 @@ void test_services_request_for_a_client_role_is_refused(void)
     &len));
 }
 
+/* covers: SVR-1, SVR-4 */
+void test_services_ram_table_refuses_a_request_for_a_client_role(void)
+{
+    /* The same frame over a RAM table: the session reads the role through
+     * the bound table's reader, so the home of the table changes nothing. */
+  const uint8_t request[] = {0x04u, 0x00u, 0x03u, 0x01u};
+  uint8_t index = 0xFFu;
+  uint8_t req_id = 0xFFu;
+  uint8_t payload[8];
+  uint16_t len = 0xFFFFu;
+
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", one_topic, 1));
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_services_configure_ram(table, 2));
+  r2s_init();
+  connect();
+  fake_port_tx_clear();
+  feed_host(7, 0, request, sizeof request);
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+  TEST_ASSERT_EQUAL_UINT8(R2S_SVC_EMPTY,
+                            r2s_service_take_request(&index, &req_id, payload, sizeof payload,
+    &len));
+}
+
 /* covers: SVR-4, SVR-5, SVR-6, REL-2 */
 void test_services_client_call_round_trip(void)
 {
@@ -322,6 +392,27 @@ void test_services_client_call_round_trip(void)
   TEST_ASSERT_EQUAL_UINT8(R2S_SVC_EMPTY,
                             r2s_service_take_response(&req_id, &status, payload, sizeof payload,
     &len));
+}
+
+/* covers: SVR-4, SVR-5, SVR-6, SVR-10 */
+void test_services_ram_table_call_reads_the_client_role(void)
+{
+    /* REQUEST rel 0, req 0, index 1, empty Trigger request. */
+  const uint8_t want[] = {0x04u, 0x00u, 0x00u, 0x01u};
+  uint8_t req_id = 0xFFu;
+
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_session_configure("node", one_topic, 1));
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_services_configure_ram(table, 2));
+  r2s_init();
+  connect();
+  fake_port_tx_clear();
+    /* A served entry refuses the call; the called one goes out. */
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_service_call(0, NULL, 0, &req_id));
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_service_call(1, NULL, 0, &req_id));
+  TEST_ASSERT_EQUAL_UINT8(0, req_id);
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+  assert_tx(0, 7, 0, want, sizeof want);
 }
 
 /* covers: SVR-5 */
