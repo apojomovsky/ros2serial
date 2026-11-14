@@ -139,6 +139,16 @@ def test_the_extracted_driver_and_helpers_are_made_executable():
 
 def run_script(env_extra, tmp_path):
     env = {k: v for k, v in os.environ.items() if k != 'PIC'}
+    # The stubbed failures need a baseline that records them, and the
+    # checked-in file holds only what the pinned epic-cc still fails on.
+    fixture = tmp_path / 'fixture-baseline.txt'
+    fixture.write_text(
+        ''.join(
+            f'{target} | {label} | {NORM_SIGS[target]}\n' for target in TARGETS for label in LABELS
+        ),
+        encoding='utf-8',
+    )
+    env['R2S_PIC_CANARY_BASELINE'] = str(fixture)
     env.update(env_extra)
     return subprocess.run(
         ['bash', str(SCRIPT)], cwd=ROOT, capture_output=True, text=True, env=env, timeout=300
@@ -237,12 +247,14 @@ def test_the_baseline_lists_each_known_gap(tmp_path):
         for line in BASELINE.read_text(encoding='utf-8').splitlines()
         if line.strip() and not line.strip().startswith('#')
     ]
-    assert len(entries) == len(TARGETS) * len(LABELS), entries
-    for target in TARGETS:
-        for label in LABELS:
-            match = [line for line in entries if line.startswith(f'{target} | {label} | ')]
-            assert len(match) == 1, f'no baseline line for {target} ({label}): {entries}'
-            assert match[0] == f'{target} | {label} | {NORM_SIGS[target]}', match
+    # epic-cc 0.8.0 builds the PIC18F4550 in full; the compact PIC16F1938
+    # build is the one open gap, once per label.
+    gap = (
+        'const-window repair hit a backward .org to 0x2000 from 0x200A: '
+        'pads only move forward, so this layout is unrepairable'
+    )
+    expected = sorted(f'p16f1938 | {label} | {gap}' for label in LABELS)
+    assert sorted(entries) == expected, entries
 
 
 def test_a_new_error_signature_fails_and_names_target_label_signature(tmp_path):

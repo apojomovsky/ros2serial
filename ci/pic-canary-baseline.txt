@@ -10,7 +10,5 @@
 # baseline entry that stops reproducing, so a closed gap asks to shrink
 # the file instead of hiding the improvement. Extra context, such as the
 # upstream issue number, goes in a # comment: entries keep three fields.
-p16f1938 | core C sources | isel: plain ptr arg with multiple terms not yet supported: [(, ""), (, "")]
-p16f1938 | static C++ sketch | isel: plain ptr arg with multiple terms not yet supported: [(, ""), (, "")]
-p18f4550 | core C sources | legalize: intrinsic llvm.memset.p0.i16 must carry a dst
-p18f4550 | static C++ sketch | legalize: intrinsic llvm.memset.p0.i16 must carry a dst
+p16f1938 | core C sources | const-window repair hit a backward .org to 0x2000 from 0x200A: pads only move forward, so this layout is unrepairable
+p16f1938 | static C++ sketch | const-window repair hit a backward .org to 0x2000 from 0x200A: pads only move forward, so this layout is unrepairable
