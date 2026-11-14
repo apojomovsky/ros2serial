@@ -63,7 +63,7 @@ def firmware_image(board, flavor='slice', baud=None):
     """The board's ELF of one flavor, built by tests/e2e/run-avr.sh.
 
     The slice carries scenarios 1 to 4; the flood feeds scenario 12; the
-    service example feeds scenario 15. A baud names one matrix image; the
+    service example feeds scenario 14. A baud names one matrix image; the
     default baud keeps the legacy file name. Only the slice runs the baud
     matrix, so the service flavor takes no baud.
     """
