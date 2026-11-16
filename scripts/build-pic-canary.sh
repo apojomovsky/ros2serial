@@ -90,10 +90,13 @@ for resdir in "$cache/$archive/clang/lib/clang/"*/include; do
   [ -d "$resdir" ] && flags+=(-I "$resdir")
 done
 # The frame limit is a build input no build may leave out (#640), so each tier
-# names its own. Tier S compiles at 128, the value the two gaps its baseline
-# records were reproduced at: the 325 the bundled tables declare moves the
-# receive buffer past 256 bytes, where epic-cc 0.8.0 fails on an FSR offset
-# before it reaches them. Tier M keeps the bundle's value.
+# names its own. Tier S keeps 128, the limit it compiled at before the frame
+# limit became required, so its two baselined gaps keep reproducing: the 325
+# the bundled tables declare moves the receive buffer past 256 bytes, where
+# epic-cc 0.8.0 fails on an FSR offset before it reaches them. The value stays
+# coherent because the bundled header defers to a limit the build passes: both
+# the sketch unit and the core units then announce 128. Tier M keeps the
+# bundle's own value.
 tier_s_frame=(-DR2S_MAX_FRAME=128)
 tier_m_frame=(-DR2S_MAX_FRAME=325)
 
