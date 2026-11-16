@@ -140,7 +140,6 @@ def staged(tmp_path, files):
 def test_the_types_file_set_is_pinned():
     files = types.emit(plan(SERVICE_AND_ACTION), 'arduino')
 
-    assert sorted(files) == sorted(types.files_for(plan(SERVICE_AND_ACTION), 'arduino'))
     assert sorted(files) == sorted(
         (
             'library.properties',
@@ -337,6 +336,182 @@ def test_a_cxx_row_that_does_not_fit_fails_the_build_naming_its_object(tmp_path)
     assert fits.returncode == 0, fits.stderr
     assert small.returncode != 0
     assert 'reading_pub' in small.stderr
+
+
+def test_the_row_check_counts_the_payload_and_the_announce_exactly(tmp_path):
+    """Each term is a literal, so the check fires at the exact byte and not one later."""
+    root = tmp_path / 'messages'
+    write_message(root, 'demo_msgs/msg/Big', 'uint8[30] cells\n')
+    library = staged(
+        tmp_path,
+        types.emit(plan((types.Entry('demo_msgs/msg/Big'),), msg_paths=(root,)), 'arduino'),
+    )
+    sketch = tmp_path / 'row.c'
+    name = 'demo_msgs/msg/Big'
+    topic = 'reading'
+    # 12 fixed bytes, then each name with its one-byte length varint, then the
+    # frame overhead: the announce term the row check measures.
+    announce = 12 + 1 + len(name) + 1 + len(topic) + 4
+    assert announce == 42
+    sketch.write_text(
+        '#define R2S_NODE_NAME "t"\n'
+        '#define R2S_TOPICS(X) \\\n'
+        f'    X(Publisher, demo_msgs__msg__Big, reading_pub, "{topic}")\n'
+        '#include <ros2serial.h>\n',
+        encoding='utf-8',
+    )
+
+    # The announce is 42 and the payload plus overhead is 34, so the announce
+    # is the binding term, and one byte less must fail.
+    exact = compile_c(library, sketch, ('-DR2S_MAX_FRAME=42',))
+    short = compile_c(library, sketch, ('-DR2S_MAX_FRAME=41',))
+
+    assert exact.returncode == 0, exact.stderr
+    assert short.returncode != 0
+    assert 'reading_pub' in short.stderr
+
+
+def test_a_frame_past_the_protocol_limit_is_refused(tmp_path, capsys):
+    root = tmp_path / 'messages'
+    # 65300 bytes plus the frame overhead passes 65277, the protocol cap (FRM-9).
+    write_message(root, 'demo_msgs/msg/Huge', 'uint8[65300] pixels\n')
+
+    code = cli.main(
+        ['types', 'demo_msgs/msg/Huge', '--msg-path', str(root), '--out', str(tmp_path / 'out')]
+    )
+
+    err = capsys.readouterr().err
+    assert code == 1
+    assert 'past the protocol limit' in err
+    assert '65277' in err
+
+
+def test_an_action_and_its_bare_parts_never_share_a_library_name():
+    """The action header carries an entity the parts do not, so the name must differ."""
+    action = plan(SERVICE_AND_ACTION)
+    parts = plan(
+        (
+            types.Entry('custom_interfaces/msg/SensorReading'),
+            types.Entry('custom_interfaces/srv/Calibrate', {'Response.note': 16}),
+            types.Entry('custom_interfaces/action/Run_Goal'),
+            types.Entry('custom_interfaces/action/Run_Result', {'note': 16}),
+            types.Entry('custom_interfaces/action/Run_Feedback'),
+        )
+    )
+
+    assert action.types == parts.types
+    assert action.digest != parts.digest
+    assert action.name != parts.name
+
+
+def test_a_part_named_alone_is_refused_naming_its_sibling(tmp_path, capsys):
+    code = cli.main(
+        [
+            'types',
+            'custom_interfaces/srv/Calibrate_Request',
+            '--msg-path',
+            str(EXAMPLES),
+            '--out',
+            str(tmp_path / 'out'),
+        ]
+    )
+
+    err = capsys.readouterr().err
+    assert code == 1
+    assert 'Calibrate_Response' in err
+    assert 'name custom_interfaces/srv/Calibrate instead' in err
+
+
+def test_a_bound_the_file_sets_on_an_already_bounded_field_names_the_msg(tmp_path, capsys):
+    root = note_package(tmp_path)
+    listing = tmp_path / 'r2s-types.yaml'
+    listing.write_text(
+        'types:\n  - demo_msgs/msg/Fixed\nbounds:\n  demo_msgs/msg/Fixed.ids: 4\n',
+        encoding='utf-8',
+    )
+
+    code = cli.main(
+        [
+            'types',
+            '--types-file',
+            str(listing),
+            '--msg-path',
+            str(root),
+            '--out',
+            str(tmp_path / 'out'),
+        ]
+    )
+
+    err = capsys.readouterr().err
+    assert code == 1
+    assert 'demo_msgs/msg/Fixed.ids' in err
+    assert str(root / 'demo_msgs/msg/Fixed.msg') in err
+
+
+def test_a_contradictory_bound_is_refused_in_both_sources(tmp_path, capsys):
+    root = note_package(tmp_path)
+    listing = tmp_path / 'r2s-types.yaml'
+    listing.write_text(
+        'types:\n  - type: demo_msgs/msg/Note\n    bounds:\n      text: 8\n',
+        encoding='utf-8',
+    )
+
+    assert (
+        cli.main(
+            [
+                'types',
+                'demo_msgs/msg/Note',
+                '--msg-path',
+                str(root),
+                '--out',
+                str(tmp_path / 'a'),
+                '--bound',
+                'demo_msgs/msg/Note.text=8',
+                '--bound',
+                'demo_msgs/msg/Note.text=16',
+            ]
+        )
+        == 1
+    )
+    assert "'demo_msgs/msg/Note.text' is already bounded to 8" in capsys.readouterr().err
+    assert (
+        cli.main(
+            [
+                'types',
+                '--types-file',
+                str(listing),
+                '--msg-path',
+                str(root),
+                '--out',
+                str(tmp_path / 'b'),
+                '--bound',
+                'demo_msgs/msg/Note.text=16',
+            ]
+        )
+        == 1
+    )
+    assert 'is set to 8 and to 16' in capsys.readouterr().err
+
+
+def test_an_empty_list_and_an_unknown_distro_are_refused(tmp_path, capsys):
+    assert cli.main(['types', '--out', str(tmp_path / 'a')]) == 1
+    assert 'no types' in capsys.readouterr().err
+    assert (
+        cli.main(
+            [
+                'types',
+                'custom_interfaces/msg/SensorReading',
+                '--msg-path',
+                str(EXAMPLES),
+                '--distro',
+                'humble',
+                '--out',
+                str(tmp_path / 'b'),
+            ]
+        )
+        == 1
+    )
+    assert "unknown distro 'humble'" in capsys.readouterr().err
 
 
 def test_the_runtime_route_fails_the_build_naming_the_type(tmp_path):

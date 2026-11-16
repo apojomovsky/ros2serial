@@ -83,8 +83,9 @@ def plan(
     actions: list[str] = []
     for entry in entries:
         canonical = msgs.canonical_type_name(entry.type_name)
-        # A name that already spells a part is a message of its own: a
-        # service or action expands to its parts, a part is carried as one.
+        # A service or an action names the whole of itself and expands to its
+        # parts; a name that spells one part alone is a definition that has to
+        # arrive with its siblings, which _whole refuses otherwise.
         if '/srv/' in canonical and not canonical.endswith(SERVICE_PARTS):
             roots.extend(f'{canonical}{part}' for part in SERVICE_PARTS)
         elif '/action/' in canonical and not canonical.endswith(ACTION_PARTS):
@@ -92,13 +93,17 @@ def plan(
             roots.extend(f'{canonical}{part}' for part in ACTION_PARTS)
         else:
             roots.append(canonical)
+    _whole(entries)
     repository = layouts.repository(list(msg_paths), distro)
     carried = _carried_fields(roots, repository)
     configured = _merge(source, entries, flagged or {}, carried)
     _check_carried(source, configured, carried)
     resolved = bounds_module.resolve(repository, roots, bounds=configured)
     types = tuple(sorted(roots))
-    digest = _digest(types, configured, distro)
+    # The digest covers everything the emission keys on, so two libraries with
+    # different content can never share a name: the parts, the action headers
+    # that carry them, and the bounds.
+    digest = _digest(types, actions, configured, distro)
     return Library(
         types=types,
         bounds=configured,
@@ -402,11 +407,44 @@ def _check_carried(
             )
 
 
-def _digest(types: Iterable[str], bounds: Mapping[str, object], distro: str) -> str:
-    """16 hex characters over the resolved types, their bounds and the distro."""
+def _digest(
+    types: Iterable[str], actions: Iterable[str], bounds: Mapping[str, object], distro: str
+) -> str:
+    """16 hex characters over the resolved types, their actions, their bounds and the distro."""
     lines = [distro, *sorted(types)]
+    # The action headers ship an entity the parts do not name on their own, and
+    # the part indices differ between the two spellings, so the actions join
+    # the digest: an action and its bare parts must not share a name.
+    lines += [f'action {name}' for name in sorted(actions)]
     lines += [f'{key} {bounds[key]}' for key in sorted(bounds)]
     return hashlib.sha256('\n'.join(lines).encode('utf-8')).hexdigest()[:16]
+
+
+def _whole(entries: Iterable[Entry]) -> None:
+    """Refuse a part named alone: its siblings are what its definition needs."""
+    named = {msgs.canonical_type_name(entry.type_name) for entry in entries}
+    for name in sorted(named):
+        for suffix, parts in (('/srv/', SERVICE_PARTS), ('/action/', ACTION_PARTS)):
+            if suffix not in name:
+                continue
+            base, part = _split_part(name, parts)
+            if part is None:
+                continue
+            missing = [f'{base}{other}' for other in parts if f'{base}{other}' not in named]
+            if missing:
+                raise MessageError(
+                    name,
+                    f'the part arrives without {missing[0]}',
+                    f'name {base} instead, which carries all its parts',
+                )
+
+
+def _split_part(name: str, parts: Iterable[str]) -> tuple[str, str | None]:
+    """Split a part name into its definition and the part, or the name and nothing."""
+    for part in parts:
+        if name.endswith(part):
+            return name[: -len(part)], part
+    return name, None
 
 
 def _nested(types: Iterable[str], resolved: Mapping[str, object]) -> tuple[str, ...]:
@@ -547,6 +585,21 @@ def parse_bound(flag: str) -> tuple[str, object]:
     return key, parsed
 
 
+def _flagged(flags: Iterable[str]) -> dict[str, object]:
+    """Read every `--bound` value, refusing one field set two different ways."""
+    flagged: dict[str, object] = {}
+    for flag in flags:
+        key, value = parse_bound(flag)
+        if key in flagged and flagged[key] != value:
+            raise MessageError(
+                f'--bound {flag}',
+                f"'{key}' is already bounded to {flagged[key]}",
+                'keep one value',
+            )
+        flagged[key] = value
+    return flagged
+
+
 def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
     """Add the `types` subcommand to the command line."""
     parser = subparsers.add_parser(
@@ -594,7 +647,7 @@ def run(args: argparse.Namespace) -> int:
     try:
         entries = list(read_list(args.types_file)) if args.types_file else []
         entries += [Entry(name) for name in args.types]
-        flagged = dict(parse_bound(flag) for flag in args.bound)
+        flagged = _flagged(args.bound)
         library = plan(
             entries,
             distro=_distro(args.distro, args.types_file),

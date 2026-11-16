@@ -364,7 +364,15 @@ def _max_frame(library: Library) -> int:
     allowance = topics._string_wire('x' * NAME_ALLOWANCE)
     announced = 12 + largest_type + allowance
     hello = 17 + allowance
-    return max(payload, announced, hello) + topics.FRAME_OVERHEAD
+    need = max(payload, announced, hello) + topics.FRAME_OVERHEAD
+    if need > topics.FRAME_LIMIT:
+        raise MessageError(
+            f'{library.digest}: the type list',
+            f'the library needs a frame limit of {need}, past the protocol limit '
+            f'of {topics.FRAME_LIMIT}',
+            'shrink a bound or split the types',
+        )
+    return need
 
 
 def _hash_bytes(repository: msgs.MessageRepository, type_name: str) -> str:
@@ -624,9 +632,13 @@ def _frame_checks(library: Library, payload: str, type_len: str) -> list[str]:
     return [
         '/* The frame check: a row whose payload or announce does not fit the',
         " * build's frame limit fails here naming its object, instead of a",
-        ' * frame the firmware drops. */',
+        ' * frame the firmware drops. The announce is 12 fixed bytes, then the',
+        ' * two names with their length varints (FRM-2). */',
         '#define R2S_FRAME_OVERHEAD 4u',
-        f'#define R2S_ROW_NEED(CTYPE, TOPIC) (12u + {type_len}(CTYPE) + (sizeof(TOPIC) - 1u))',
+        '#define R2S_VARINT_LEN(n) ((n) < 128u ? 1u : ((n) < 16384u ? 2u : 3u))',
+        '#define R2S_ROW_NEED(CTYPE, TOPIC) \\',
+        f'  (12u + R2S_VARINT_LEN({type_len}(CTYPE)) + {type_len}(CTYPE) \\',
+        '   + R2S_VARINT_LEN(sizeof(TOPIC) - 1u) + (sizeof(TOPIC) - 1u))',
         '#define R2S_ROW_FITS(ONAME, CTYPE, TOPIC) \\',
         '  typedef char r2s_frame_too_small_for_ ## ONAME[ \\',
         f'    ({payload}(CTYPE) + R2S_FRAME_OVERHEAD <= R2S_MAX_FRAME \\',
@@ -642,7 +654,8 @@ def _frame_checks(library: Library, payload: str, type_len: str) -> list[str]:
         '/* The hello frame announces the node name, so a build too small for it',
         ' * fails here instead of at connect time. */',
         'typedef char r2s_frame_too_small_for_the_node_name[ \\',
-        '  (17u + (sizeof(R2S_NODE_NAME) - 1u) + R2S_FRAME_OVERHEAD <= R2S_MAX_FRAME) ? 1 : -1];',
+        '  (17u + R2S_VARINT_LEN(sizeof(R2S_NODE_NAME) - 1u) \\',
+        '   + (sizeof(R2S_NODE_NAME) - 1u) + R2S_FRAME_OVERHEAD <= R2S_MAX_FRAME) ? 1 : -1];',
         '',
     ]
 
@@ -651,25 +664,33 @@ def _runtime_check(library: Library) -> list[str]:
     """
     Emit the frame check the runtime route compiles.
 
-    That route compiles no X-macro rows, so the row check above never runs
-    there. It names its types in `Publisher<T>` and `Subscription<T>`
-    instead, and a `constexpr` over the library's payloads is what a build
-    can check without the generator; the limit itself stays a build flag,
-    since the core's translation units never see this header.
+    That route compiles no X-macro rows, so the row check never runs there.
+    It names its types in `Publisher<T>` and `Subscription<T>` instead, and a
+    `constexpr` over the library is what a build can check without the
+    generator. The limit itself stays a build flag, since the core's
+    translation units never see this header. The two maxima are independent:
+    the largest payload and the longest type name need not belong to the same
+    type, and a topic name arrives at run time, so the check bounds it by the
+    frame it must fit.
     """
     sizes = payload_sizes(library)
     largest = max(sizes.items(), key=lambda item: (item[1], item[0]))
+    longest = max(sizes, key=len)
     return [
         '',
         '/* The runtime route compiles no X-macro rows, so no row check runs',
-        ' * here. The largest payload a carried type produces, and its announce',
-        ' * with a topic name, must still fit the limit the build compiled at. */',
+        ' * here. The largest payload a carried type produces, and the longest',
+        ' * announce, must still fit the limit the build compiled at. */',
         'namespace r2s',
         '{',
         'namespace detail',
         '{',
         f'constexpr uint16_t frame_largest_payload = {largest[1]}u;',
-        f'constexpr uint16_t frame_largest_type_name = {len(largest[0])}u;',
+        f'constexpr uint16_t frame_longest_type_name = {len(longest)}u;',
+        'constexpr uint16_t frame_varint_len(uint16_t n)',
+        '{',
+        '  return n < 128u ? 1u : (n < 16384u ? 2u : 3u);',
+        '}',
         'template<uint16_t FrameLimit>',
         'struct frame_fits',
         '{',
@@ -677,8 +698,9 @@ def _runtime_check(library: Library) -> list[str]:
         '    FrameLimit >= frame_largest_payload + 4u,',
         f'    "R2S_MAX_FRAME is below the {largest[1]} bytes {largest[0]} encodes");',
         '  static_assert(',
-        '    FrameLimit >= 12u + frame_largest_type_name + 4u,',
-        f'    "R2S_MAX_FRAME is below the frame announcing {largest[0]}");',
+        '    FrameLimit >= 12u + frame_varint_len(frame_longest_type_name)',
+        '      + frame_longest_type_name + 4u,',
+        f'    "R2S_MAX_FRAME is below the frame announcing {longest}");',
         '  typedef char ok;',
         '};',
         '} // namespace detail',
