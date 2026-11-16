@@ -234,17 +234,22 @@ against it with the Arduino CLI and the same flags the bundle's build passes.
 
 ## Bounds and unsupported input
 
-For unbounded strings and sequences, choose storage bounds explicitly:
+A variable-length field gets its bound from its `.msg` definition or from `bounds`
+in `r2s.yaml`, and from nothing else. With neither, generation fails naming the field:
 
 ```yaml
 bounds:
-  default_string_bound: 16
   std_msgs/msg/Header.frame_id: 24
   sensor_msgs/msg/JointState.name: [4, 12]
   sensor_msgs/msg/JointState.position: 4
   sensor_msgs/msg/JointState.velocity: 4
   sensor_msgs/msg/JointState.effort: 4
 ```
+
+Bound the field in the `.msg` when you can edit it (`string<=12 text`); `bounds`
+is for definitions you cannot change. An entry on a field the `.msg` already
+bounds is an error, in either direction, because a smaller MCU buffer cannot hold
+what the host may legally send.
 
 These bounds apply to the MCU storage; they do not alter the ROS interface.
 Unsupported fields fail generation. Compact handshake and `--cpp` output are

@@ -69,7 +69,6 @@ _TYPE_PROBLEM_FIX = {
         'write narrow_float64: true to send float64 fields as binary32',
     ),
     'bounds': ('expected a mapping', 'write bounds: with one package/msg/Type.field per line'),
-    'default_string_bound': ('expected an integer', 'give a whole number of characters'),
     'limits': ('expected a mapping', 'write limits: with max_frame: <bytes>'),
     'max_frame': ('expected an integer', 'give a whole number of bytes'),
 }
@@ -124,7 +123,6 @@ class Config:
     tier: str = 'M'
     features: tuple[str, ...] = ('time', 'log')
     bounds: dict[str, Any] = field(default_factory=dict)
-    default_string_bound: int | None = None
     max_frame: int | None = None
 
 
@@ -270,7 +268,7 @@ def _describe(path: str, data: dict, error: Any) -> MessageError:
     parts = list(error.absolute_path)
     location = _location(parts)
     where = path if not location else f'{path}: {location}'
-    if len(parts) == 2 and parts[0] == 'bounds' and parts[1] != 'default_string_bound':
+    if len(parts) == 2 and parts[0] == 'bounds':
         return _describe_bound(where, data['bounds'][parts[1]])
     if error.validator == 'required':
         missing = sorted(key for key in error.validator_value if key not in error.instance)[0]
@@ -419,8 +417,6 @@ def _describe_pattern(path: str, error: Any) -> MessageError:
 
 def _describe_minimum(path: str, error: Any) -> MessageError:
     key = error.absolute_path[-1] if error.absolute_path else ''
-    if key == 'default_string_bound':
-        return MessageError(path, f'must be at least {error.validator_value}', 'raise it')
     if key == 'max_frame':
         return MessageError(path, f'must be at least {error.validator_value}', 'raise it')
     return MessageError(path, f'the bound must be at least {error.validator_value}', 'raise it')
@@ -480,11 +476,7 @@ def _model(path: str | Path, data: dict) -> Config:
                 type_name=entry['type'],
             )
         )
-    bounds = {
-        key: value
-        for key, value in data.get('bounds', {}).items()
-        if key != 'default_string_bound'
-    }
+    bounds = dict(data.get('bounds', {}))
     check_non_empty([topic.name for topic in topics], str(path))
     check_collisions([topic.name for topic in topics], str(path))
     return Config(
@@ -497,6 +489,5 @@ def _model(path: str | Path, data: dict) -> Config:
         tier=data.get('tier', 'M'),
         features=tuple(data.get('features', ['time', 'log'])),
         bounds=bounds,
-        default_string_bound=data.get('bounds', {}).get('default_string_bound'),
         max_frame=data.get('limits', {}).get('max_frame'),
     )

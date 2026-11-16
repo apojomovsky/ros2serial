@@ -4,7 +4,7 @@
 
 /* The bundle's content hash, kept in this one place so adding a type
  * or bound does not rewrite every generated banner. */
-#define R2S_BUNDLE_HASH "30ea22e1cb5fb57e"
+#define R2S_BUNDLE_HASH "f7114fae7fd39c46"
 
 #include <stddef.h>
 #include <stdint.h>

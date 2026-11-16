@@ -5,9 +5,11 @@
 Bounds resolution: every variable-length field gains a capacity or an error.
 
 Resolution walks the message graph from the generated topic types. A field takes
-its bound from the config by `package/msg/Type.field`, a scalar string falls back
-to `default_string_bound`, and anything left unbounded is an error that names the
-field. Wide characters have no wire form here, so they are rejected the same way.
+its bound from its `.msg` definition or from the config by `package/msg/Type.field`,
+and anything left unbounded is an error that names the field. A configured bound
+on a field the `.msg` already bounds is an error too, because a smaller MCU buffer
+cannot hold a message the host may legally send. Wide characters have no wire form
+here, so they are rejected the same way.
 """
 
 from __future__ import annotations
@@ -68,7 +70,6 @@ def resolve(
     repository: MessageRepository,
     type_names: list[str] | tuple[str, ...],
     bounds: Mapping[str, object] | None = None,
-    default_string_bound: int | None = None,
 ) -> dict[str, ResolvedMessage]:
     """
     Collect the reachable messages from `type_names`, keyed by canonical name.
@@ -76,13 +77,10 @@ def resolve(
     :param repository: the messages to resolve from.
     :param type_names: the entry-point types to walk from.
     :param bounds: per-field capacities from the config, if any.
-    :param default_string_bound: the fallback for scalar strings, if any.
     :return: each reachable message with every field bounded.
     :raises MessageError: if a field stays unbounded or breaks a rule above.
     """
     configured = dict(bounds or {})
-    if default_string_bound is not None:
-        _whole(default_string_bound, 'bounds.default_string_bound', 0, 'string')
     resolved: dict[str, ResolvedMessage] = {}
 
     def visit(type_name: str, stack: tuple[str, ...]) -> None:
@@ -152,17 +150,13 @@ def resolve(
             raise MessageError(
                 where, 'unbounded sequence', f"set bounds['{where}'] to its element count"
             )
-        if string_unbounded:
-            if string_bound is None:
-                string_bound = default_string_bound
-            if string_bound is None:
-                fix = (
-                    f"set bounds['{where}'] to [count, string_bound] or "
-                    'bounds.default_string_bound'
-                    if field.is_array
-                    else f"set bounds['{where}'] or bounds.default_string_bound"
-                )
-                raise MessageError(where, 'unbounded string', fix)
+        if string_unbounded and string_bound is None:
+            fix = (
+                f"set bounds['{where}'] to [count, string_bound]"
+                if field.is_array
+                else f"set bounds['{where}']"
+            )
+            raise MessageError(where, 'unbounded string', fix)
         if field.type_name not in PRIMITIVES:
             visit(field.type_name, stack)
         return ResolvedField(

@@ -177,7 +177,6 @@ topics:
     direction: sub
     qos: keep_latest
 bounds:
-  default_string_bound: 16   # optional; without it, unbounded fields are a generator error
   std_msgs/msg/Header.frame_id: 24
   sensor_msgs/msg/JointState.name: [4, 12]   # up to 4 names, 12 chars each
   sensor_msgs/msg/JointState.position: 4
@@ -1147,8 +1146,9 @@ The generator searches `--msg-path` directories first, then `share/*/msg` under 
 | `actions[].name` | relative ROS action name | yes | |
 | `actions[].type` | `pkg/action/Type` | yes | |
 | `bounds` | map of `pkg/{msg,srv,action}/Type.field` to an int, or `[count, string_bound]` | no | |
-| `bounds.default_string_bound` | int | no | none (unbounded fields are errors) |
 | `limits.max_frame` | int, overrides the computed value | no | computed |
+
+A variable-length field takes its bound from exactly one place: its `.msg` definition (`string<=12`, `T[<=N]`) or an entry in `bounds`. With neither, generation fails and names the field. There is no fallback and no default, so every storage capacity in a firmware is either the definition's or a value somebody wrote down. An entry on a field the `.msg` already bounds is an error in both directions: a tighter one under-holds a message the host may legally send, and a looser one accepts a message ROS considers malformed. The bundled library is no exception: it names every field it needs in `BUNDLE_BOUNDS`, which is why its limits are somebody's choice rather than the definitions'.
 
 Generator errors are precise and actionable: file, key or field path, what is wrong, and how to fix it. Each error message has a golden test.
 
