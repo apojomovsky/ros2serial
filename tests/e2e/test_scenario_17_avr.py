@@ -9,8 +9,8 @@ emits its C sources from the example's `r2s.yaml` against the interface
 package beside it, so the types on the wire are the package's own
 definitions, not bundled ones. The scenario publishes and reads the custom
 message, calls the custom service, and sends a goal to the custom action and
-cancels another, proving both directions and the cancel answer for every one
-of the three kinds.
+cancels it, proving both directions and the cancel answer for every one of the
+three kinds.
 
 The bridge opens a stable symlink, and every test respawns the board on it,
 the way scenario 16 does: stopping a harness drops the bridge to
@@ -251,9 +251,10 @@ class TestScenario17(unittest.TestCase):
                     self.assertLess(time.monotonic(), deadline, 'the goal never answered')
                 handle = send_future.result()
                 self.assertTrue(handle.accepted, 'the firmware refused the goal')
-                # The run holds its goal through two feedbacks only, so the
-                # cancel goes out on accept: waiting to observe a feedback at
-                # the bridge leaves the goal close to its own result.
+                # The run holds its goal through ten feedbacks at 200 ms, so
+                # the cancel goes out on accept: a client that waits to
+                # observe a feedback before sending it risks the goal's own
+                # result at the bridge first.
                 cancel_future = handle.cancel_goal_async()
                 deadline = time.monotonic() + CANCEL_TIMEOUT
                 while not cancel_future.done():
