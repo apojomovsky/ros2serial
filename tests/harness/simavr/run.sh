@@ -32,17 +32,24 @@ for mcu in atmega328p atmega2560; do
   # The announce firmware links the core, so the topic table announces
   # through the same sources the host tests cover. Built twice from one
   # source: the flash image binds its PROGMEM table, the RAM image the same
-  # table from RAM through the runtime entry points.
+  # table from RAM through the runtime entry points. The frame limit is a
+  # build input no build may leave out (#640); these images exchange short
+  # announce frames, so they take the 84-byte frame the harness's
+  # transcripts were recorded at.
   mapfile -t core_sources < <(ls "$root"/core/src/*.c | grep -v test_reset.c)
-  avr-gcc -mmcu="$mcu" -DF_CPU=16000000UL -Os -Wall -Wextra -Werror -I "$root/core/include" \
+  harness_frames=(-DR2S_MAX_FRAME=84)
+  avr-gcc -mmcu="$mcu" -DF_CPU=16000000UL -Os -Wall -Wextra -Werror \
+    "${harness_frames[@]}" -I "$root/core/include" \
     -o "$build/announce-$mcu.elf" tests/harness/simavr/announce_firmware.c "${core_sources[@]}" || status=1
   avr-gcc -mmcu="$mcu" -DF_CPU=16000000UL -Os -Wall -Wextra -Werror -DR2S_ANNOUNCE_RAM_TABLE \
-    -I "$root/core/include" -o "$build/announce-ram-$mcu.elf" tests/harness/simavr/announce_firmware.c \
+    "${harness_frames[@]}" -I "$root/core/include" \
+    -o "$build/announce-ram-$mcu.elf" tests/harness/simavr/announce_firmware.c \
     "${core_sources[@]}" || status=1
   # The rebind firmware links the same core, with the codec on so a host
   # frame on the trigger subscription reaches the dispatch that rebinds.
   avr-gcc -mmcu="$mcu" -DF_CPU=16000000UL -Os -Wall -Wextra -Werror -DR2S_WITH_CODEC \
-    -I "$root/core/include" -o "$build/rebind-$mcu.elf" tests/harness/simavr/rebind_firmware.c \
+    "${harness_frames[@]}" -I "$root/core/include" \
+    -o "$build/rebind-$mcu.elf" tests/harness/simavr/rebind_firmware.c \
     "${core_sources[@]}" || status=1
 done
 # The runtime firmware uses the C++ runtime API, so it needs the bundle's

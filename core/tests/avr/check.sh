@@ -24,8 +24,12 @@ fi
 mkdir -p "$build" || exit 1
 
 mapfile -t sources < <(ls "$root"/core/src/*.c | grep -v test_reset.c)
+# The frame limit is a build input no build may leave out (#640). This check
+# compares two builds of itself, so it pins the value the measured SRAM
+# baselines were taken at.
 common=(-mmcu=atmega328p -std=c99 -Os -Wall -Wextra -Werror -Wconversion -Wshadow
-  -Wstrict-prototypes -Wmissing-prototypes -Wundef -I "$root/core/include")
+  -Wstrict-prototypes -Wmissing-prototypes -Wundef -I "$root/core/include"
+  -DR2S_MAX_FRAME=128)
 firmware="$root/core/tests/avr/flash_log.c"
 
 sram() {

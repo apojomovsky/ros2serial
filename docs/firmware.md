@@ -58,6 +58,30 @@ only at the top of the sketch does not configure Arduino's separately compiled
 library sources. This helper handles bundled-type topic sketches; generated
 custom interfaces use the [custom interface workflow](custom-interfaces.md).
 
+### The frame limit is a build input
+
+`R2S_MAX_FRAME` sizes the receive buffer in the core's own source files, which
+never see a `#define` in your sketch, and the core announces that same number in
+its handshake. The core has no default: a build that leaves the value out fails
+with `R2S_MAX_FRAME is not set: pass -DR2S_MAX_FRAME=<n> to every translation
+unit`, rather than compiling one limit and announcing another. The value must
+reach every translation unit of the core, the port and your sketch, so it is a
+compiler flag, never a line in the sketch.
+
+Where each route sets it:
+
+| Route | Where the value goes | What happens when it is missing |
+| --- | --- | --- |
+| `ros2-arduino compile` (`r2s-arduino`) | Reads it from the staged library's `r2s_bundled.h` and passes `-DR2S_MAX_FRAME=<n>` to every unit | Nothing to configure: the helper always passes it |
+| Arduino CLI by hand | `--build-property "compiler.c.extra_flags=-DR2S_MAX_FRAME=<n>"`, and the same for `compiler.cpp.extra_flags` | The core's translation units fail with the message above |
+| Arduino IDE | A `platform.local.txt` beside the AVR core's `platform.txt`, with `compiler.c.extra_flags=-DR2S_MAX_FRAME=<n>` and the `compiler.cpp.extra_flags` line | The same failure, in the IDE's error pane |
+| CMake (`--layout cmake`) | The generated `CMakeLists.txt` reads the value from `r2s_generated.h` and passes it as a target definition | `r2s_generated.h` without the line fails the configure step |
+| PlatformIO (`--layout platformio`) | The generated `library.json` carries it in `build.flags` | The manifest without the flag fails the build as above |
+| Bare metal, any other build | Your own compile line: `-DR2S_MAX_FRAME=<n>` | The core's translation units fail with the message above |
+
+`docs/services-and-parameters.md` shows the Arduino CLI flag strings for the
+service and action examples, which lower the limit to fit a smaller part.
+
 ## Message storage and limits
 
 Include the generated embedded header, such as `<sensor_msgs/msg/range.hpp>`.

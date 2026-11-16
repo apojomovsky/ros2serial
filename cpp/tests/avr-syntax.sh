@@ -19,7 +19,8 @@ if ! command -v avr-g++ >/dev/null 2>&1; then
 fi
 
 flags=(-mmcu=atmega328p -std=gnu++11 -Os -Wall -Wextra -Werror -Wconversion -Wshadow
-  -fno-exceptions -fno-rtti -I "$root/core/include" -I "$root/cpp/include")
+  -fno-exceptions -fno-rtti -I "$root/core/include" -I "$root/cpp/include"
+  -DR2S_MAX_FRAME=325)
 
 # The bundle's C header, where the message headers look for it. The tree
 # carries the frozen copy the generator emits; the golden file stands in

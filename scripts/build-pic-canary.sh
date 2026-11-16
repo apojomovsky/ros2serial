@@ -82,6 +82,12 @@ sources+=("$root/gen/tests/golden/bundle/r2s_bundled.c")
 # The static firmware config the C++ tests build, so the canary differs
 # from a proven build only in the toolchain and the target.
 flags=(-I "$root/core/include" -I "$root/cpp/include")
+# The frame limit is a build input no build may leave out (#640), tier S
+# included, so it rides the shared flags: the per-target defines below choose
+# the feature set alone. The bundled tables the canary links declare 325, and
+# the static sketch sends at most a Float32, so the announced limit equals the
+# one the buffers hold.
+flags+=(-DR2S_MAX_FRAME=325)
 # epic-cc drives its clang with -nostdinc, which also drops the compiler's
 # own resource headers, so float.h is missing from the search path. The
 # bundle ships them beside the driver, so they rejoin here; a preinstalled

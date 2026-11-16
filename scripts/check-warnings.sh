@@ -11,11 +11,14 @@ status=0
 bash "$root/scripts/core-test.sh" --build-only gcc clang || status=1
 
 # Scripts/fuzz.sh builds the targets with sanitizers; this gate keeps them
-# compiling under the core's own flags without a full libFuzzer build.
+# compiling under the core's own flags without a full libFuzzer build. The
+# frame limit is a build input no build may leave out (#640), so it carries
+# the value scripts/fuzz.sh compiles at.
 for source in "$root"/core/fuzz/*.c; do
   [ -e "$source" ] || continue
   clang -std=c99 -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow \
     -Wstrict-prototypes -Wmissing-prototypes -Wundef \
+    -DR2S_MAX_FRAME=512 \
     -I "$root/core/include" -fsyntax-only "$source" || status=1
 done
 
