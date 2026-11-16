@@ -271,6 +271,7 @@ ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \
 
 A sketch then names the type like any bundled one:
 
+<!-- snippet: skip until #647: names the reader's own package, which no staged fixture carries -->
 ```cpp
 #define R2S_NODE_NAME "sensor_board"
 #define R2S_TOPICS(X) \
