@@ -308,8 +308,12 @@ makes the bridge reject every topic at handshake rather than failing to compile.
 The sketch header checks every row against the build's `R2S_MAX_FRAME` and
 fails the build naming the object that does not fit, in both the C and the C++
 spelling; the runtime route gets the same check as a `constexpr` over the
-library. The frame limit itself stays a build flag, since it sizes the core's
-own buffers: pass it to every translation unit, as the core's header requires.
+library. Each check counts the payload and the announce it makes, name length
+varints included, so a limit one byte too small fails at that row rather than at
+connect time. The frame limit itself stays a build flag, since it sizes the
+core's own buffers: pass it to every translation unit, as the core's header
+requires. A type list whose payloads need more than the protocol's 65277-byte
+frame is refused when the library is generated.
 
 Keep `r2s.yaml` when the firmware needs what a type list cannot state:
 `limits.max_frame`, `features`, `tier`, and the generated service and action
