@@ -1060,6 +1060,74 @@ def test_a_subscribe_only_list_compiles_cleanly(tmp_path):
     assert compile_strict_cxx(root, body).returncode == 0
 
 
+CH32V_CFLAGS = (
+    '-std=c99',
+    '-pedantic',
+    '-Wall',
+    '-Wextra',
+    '-Werror',
+    '-Wconversion',
+    '-Wshadow',
+    '-Wstrict-prototypes',
+    '-Wmissing-prototypes',
+    '-Wundef',
+)
+
+
+def compile_ch32v_c(root, source):
+    """Compile a C sketch on the host with the flag set ports/ch32v/build.sh uses."""
+    return subprocess.run(
+        [
+            'cc',
+            *CH32V_CFLAGS,
+            '-I',
+            str(root),
+            '-I',
+            str(root / 'src'),
+            '-I',
+            str(CORE_INCLUDE),
+            '-fsyntax-only',
+            str(source),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_the_c_expansion_compiles_under_the_ch32v_flags(tmp_path):
+    root = sketch_dir(tmp_path, files())
+    body = C_SKETCH_TOPICS + '#include "ros2serial.h"\n'
+    body += (
+        'void on_cmd_vel(const geometry_msgs__msg__Twist *msg)\n{\n    (void)msg;\n}\n'
+        'void on_joints(const sensor_msgs__msg__JointState *msg)\n{\n    (void)msg;\n}\n'
+    )
+    (root / 'case.c').write_text(body, encoding='utf-8')
+
+    compiled = compile_ch32v_c(root, root / 'case.c')
+
+    assert compiled.returncode == 0, compiled.stderr
+
+
+def test_a_scalar_only_bundle_compiles_under_the_ch32v_flags(tmp_path, monkeypatch):
+    """A type set without sequences gets `NULL` from the sketch header itself."""
+    monkeypatch.setattr(
+        bundle, 'BUNDLED_TYPES', ('std_msgs/msg/Float32', 'geometry_msgs/msg/Twist')
+    )
+    monkeypatch.setattr(bundle, 'BUNDLED_ACTIONS', ())
+    monkeypatch.setattr(bundle, 'ACTION_NESTED_HEADERS', ())
+    root = sketch_dir(tmp_path, bundle.bundle())
+    body = (
+        '#define R2S_TOPICS(X) \\\n'
+        '    X(Publisher, std_msgs__msg__Float32, battery_pub, "battery")\n'
+        '#include "ros2serial.h"\n'
+    )
+    (root / 'case.c').write_text(body, encoding='utf-8')
+
+    compiled = compile_ch32v_c(root, root / 'case.c')
+
+    assert compiled.returncode == 0, compiled.stderr
+
+
 def compile_strict_cxx(root, body):
     """Write a list that compiles warning-free: what a `-Werror` sketch build needs."""
     (root / 'case.cpp').write_text(body, encoding='utf-8')
