@@ -88,7 +88,6 @@ def test_a_slash_and_an_underscore_name_collide():
         tier='M',
         features=('time', 'log'),
         bounds={},
-        default_string_bound=None,
         max_frame=None,
     )
 
@@ -129,7 +128,6 @@ def test_names_differing_only_by_case_collide():
         tier='M',
         features=('time', 'log'),
         bounds={},
-        default_string_bound=None,
         max_frame=None,
     )
 
@@ -152,7 +150,6 @@ def test_taken_c_names_are_an_error(name):
         tier='M',
         features=('time', 'log'),
         bounds={},
-        default_string_bound=None,
         max_frame=None,
     )
 
@@ -230,7 +227,6 @@ def test_direction_and_qos_set_the_flags():
         tier='M',
         features=('time', 'log'),
         bounds={},
-        default_string_bound=None,
         max_frame=None,
     )
     repository = msgs.MessageRepository()
@@ -294,7 +290,6 @@ def test_more_than_240_topics_is_an_error():
         tier='M',
         features=('time', 'log'),
         bounds={},
-        default_string_bound=None,
         max_frame=None,
     )
 
@@ -459,7 +454,6 @@ def test_a_topic_table_above_16_raises_the_topic_limit():
         tier='M',
         features=('time', 'log'),
         bounds={},
-        default_string_bound=None,
         max_frame=None,
     )
     repository = msgs.MessageRepository()
@@ -580,7 +574,6 @@ def test_long_topic_names_emit_uncrustify_clean_code(tmp_path):
         tier='M',
         features=('time', 'log'),
         bounds={},
-        default_string_bound=None,
         max_frame=None,
     )
     repository = msgs.MessageRepository()
@@ -612,7 +605,6 @@ def test_long_topic_names_emit_uncrustify_clean_code(tmp_path):
             tier='M',
             features=('time', 'log'),
             bounds={},
-            default_string_bound=None,
             max_frame=None,
         )
         repository = msgs.MessageRepository()

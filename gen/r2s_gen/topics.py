@@ -902,7 +902,7 @@ def config_hash(loaded: Config) -> str:
         for topic in loaded.topics
     ]
     lines += [f'{key} {loaded.bounds[key]}' for key in sorted(loaded.bounds)]
-    lines += [str(loaded.default_string_bound), str(loaded.max_frame)]
+    lines.append(str(loaded.max_frame))
     return hashlib.sha256('\n'.join(lines).encode('utf-8')).hexdigest()[:16]
 
 

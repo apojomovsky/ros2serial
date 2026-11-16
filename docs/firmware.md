@@ -91,8 +91,11 @@ carry storage plus a length field. Inspect the generated header before assigning
 these fields. Out-of-bounds payloads fail rather than silently truncating.
 
 The default bundle supports common scalar, geometry, sensor and TF types.
-It bounds strings to 16 characters by default, `JointState` to six joints and
-`TFMessage` to one transform. Use [generation](custom-interfaces.md) to change
+Its limits are chosen, not inherited from the definitions: strings are 16
+characters, `JointState` holds six joints and `TFMessage` one transform, and
+`BUNDLE_BOUNDS` is the one place each is written down. No field falls back to a
+default, so a bound the library did not name would fail generation instead of
+producing storage nobody chose. Use [generation](custom-interfaces.md) to change
 bounds or add a message type. Large messages and high publish rates can exhaust
 RAM or serial bandwidth even when the sketch compiles.
 

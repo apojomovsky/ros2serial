@@ -60,15 +60,11 @@ def repository_for(tmp_path: Path, definitions: dict[str, str]) -> msgs.MessageR
 def emit_type(
     type_name: str,
     bound_map: dict | None = None,
-    default_string_bound: int | None = None,
     repository: msgs.MessageRepository | None = None,
 ) -> str:
     """Emit the generated header for one root type."""
     resolved = bounds.resolve(
-        repository or msgs.MessageRepository(),
-        [type_name],
-        bounds=bound_map or {},
-        default_string_bound=default_string_bound,
+        repository or msgs.MessageRepository(), [type_name], bounds=bound_map or {}
     )
     return emit.emit_types(resolved)
 
@@ -136,8 +132,7 @@ def test_the_primitive_types_map_to_their_c_types(tmp_path, declaration, expecte
 def test_a_scalar_string_is_a_nul_terminated_char_array(tmp_path):
     text = emit_type(
         'test_msgs/msg/Label',
-        default_string_bound=8,
-        repository=repository_for(tmp_path, {'test_msgs/msg/Label': 'string name'}),
+        repository=repository_for(tmp_path, {'test_msgs/msg/Label': 'string<=8 name'}),
     )
 
     assert 'char name[9];' in text
@@ -178,8 +173,7 @@ def test_a_bounded_sequence_is_a_struct_with_its_count(tmp_path, declaration, ex
 def test_a_bounded_sequence_of_strings_holds_a_char_array_per_element(tmp_path):
     text = emit_type(
         'test_msgs/msg/Names',
-        default_string_bound=5,
-        repository=repository_for(tmp_path, {'test_msgs/msg/Names': 'string[<=3] names'}),
+        repository=repository_for(tmp_path, {'test_msgs/msg/Names': 'string<=5[<=3] names'}),
     )
 
     assert 'char data[3][6];' in text
@@ -188,8 +182,7 @@ def test_a_bounded_sequence_of_strings_holds_a_char_array_per_element(tmp_path):
 def test_a_fixed_array_of_strings_holds_a_char_array_per_element(tmp_path):
     text = emit_type(
         'test_msgs/msg/Names',
-        default_string_bound=5,
-        repository=repository_for(tmp_path, {'test_msgs/msg/Names': 'string[3] names'}),
+        repository=repository_for(tmp_path, {'test_msgs/msg/Names': 'string<=5[3] names'}),
     )
 
     assert 'char names[3][6];' in text
@@ -256,8 +249,7 @@ def test_a_narrow_bounded_sequence_aligns_its_count_to_one_byte(tmp_path):
 def test_a_wide_bounded_sequence_of_strings_has_no_padding_member(tmp_path):
     text = emit_type(
         'test_msgs/msg/Names',
-        default_string_bound=4,
-        repository=repository_for(tmp_path, {'test_msgs/msg/Names': 'string[<=301] names'}),
+        repository=repository_for(tmp_path, {'test_msgs/msg/Names': 'string<=4[<=301] names'}),
     )
 
     assert '    char data[301][5];\n    uint16_t size;' in text

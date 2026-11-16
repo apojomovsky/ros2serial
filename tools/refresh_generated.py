@@ -108,7 +108,7 @@ ACTION_BOUNDS = {
     'tf2_msgs/action/LookupTransform_Goal.target_frame': 16,
     'tf2_msgs/action/LookupTransform_Goal.source_frame': 16,
     'tf2_msgs/action/LookupTransform_Goal.fixed_frame': 16,
-    'tf2_msgs/action/LookupTransform_Result.error.error_string': 16,
+    'tf2_msgs/msg/TF2Error.error_string': 16,
     'std_msgs/msg/Header.frame_id': 16,
     'geometry_msgs/msg/TransformStamped.child_frame_id': 16,
 }
@@ -121,9 +121,7 @@ ACTION_ROOTS = [
 
 def _refresh_actions() -> None:
     repository = msgs.MessageRepository()
-    resolved = bounds.resolve(
-        repository, ACTION_ROOTS, bounds=ACTION_BOUNDS, default_string_bound=16
-    )
+    resolved = bounds.resolve(repository, ACTION_ROOTS, bounds=ACTION_BOUNDS)
     actions = GOLDEN / 'actions'
     actions.mkdir(parents=True, exist_ok=True)
     (actions / 'lookup_transform.hpp').write_text(

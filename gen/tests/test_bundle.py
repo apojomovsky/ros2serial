@@ -120,6 +120,61 @@ def test_every_bundled_type_resolves_from_the_snapshot():
         assert repository.load(type_name).type_name == type_name
 
 
+# Every variable-length field the bundled types reach, with the entry that
+# bounds it: the bundle ships no fallback, so this list is the whole supply.
+BUNDLED_UNBOUNDED_FIELDS = {
+    'geometry_msgs/msg/TransformStamped.child_frame_id': 16,
+    'sensor_msgs/msg/JointState.name': [6, 16],
+    'sensor_msgs/msg/JointState.position': 6,
+    'sensor_msgs/msg/JointState.velocity': 6,
+    'sensor_msgs/msg/JointState.effort': 6,
+    'std_msgs/msg/Header.frame_id': 16,
+    'std_msgs/msg/String.data': 16,
+    'std_srvs/srv/Trigger_Response.message': 16,
+    'tf2_msgs/action/LookupTransform_Goal.fixed_frame': 16,
+    'tf2_msgs/action/LookupTransform_Goal.source_frame': 16,
+    'tf2_msgs/action/LookupTransform_Goal.target_frame': 16,
+    'tf2_msgs/msg/TF2Error.error_string': 16,
+    'tf2_msgs/msg/TFMessage.transforms': 1,
+}
+
+
+def test_the_bundle_bounds_name_every_field_it_needs_and_nothing_more():
+    assert bundle.BUNDLE_BOUNDS == BUNDLED_UNBOUNDED_FIELDS
+
+
+def test_the_bundle_resolves_without_a_fallback_string_bound():
+    repository = msgs.MessageRepository(distro='jazzy')
+    roots = [*bundle.BUNDLED_TYPES, *bundle.ACTION_NESTED_HEADERS]
+
+    resolved = bounds.resolve(repository, roots, bounds=dict(bundle.BUNDLE_BOUNDS))
+
+    assert resolved['std_msgs/msg/String'].field('data').string_bound == 16
+
+
+@pytest.mark.parametrize(
+    ('type_name', 'field'),
+    [
+        ('std_msgs/msg/String', 'data'),
+        ('std_srvs/srv/Trigger_Response', 'message'),
+        ('tf2_msgs/action/LookupTransform_Goal', 'target_frame'),
+        ('tf2_msgs/msg/TF2Error', 'error_string'),
+    ],
+)
+def test_a_bundled_field_without_its_entry_is_refused_naming_it(type_name, field):
+    without = {
+        key: value for key, value in bundle.BUNDLE_BOUNDS.items() if key != f'{type_name}.{field}'
+    }
+    repository = msgs.MessageRepository(distro='jazzy')
+
+    with pytest.raises(bundle.MessageError) as caught:
+        bounds.resolve(repository, [type_name], bounds=without)
+
+    assert str(caught.value) == (
+        f"{type_name}.{field}: unbounded string; set bounds['{type_name}.{field}']"
+    )
+
+
 def test_an_unknown_distro_names_the_supported_ones():
     with pytest.raises(bundle.MessageError) as caught:
         files('humble')
@@ -1274,7 +1329,6 @@ def test_the_action_header_tables_match_the_bundle_tables():
         repository,
         list(ACTION_PARTS),
         bounds=dict(bundle.BUNDLE_BOUNDS),
-        default_string_bound=bundle.DEFAULT_STRING_BOUND,
     )
     table = descriptors.build(resolved, list(ACTION_PARTS))
 

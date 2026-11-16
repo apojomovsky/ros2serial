@@ -44,24 +44,19 @@ FIELD_KINDS = [
     ('uint64 value', '  uint64_t value;'),
     ('float32 value', '  float value;'),
     ('float64 value', '  double value;'),
-    ('string value', '  char value[17];'),
+    ('string<=16 value', '  char value[17];'),
     ('float64[4] values', '  double values[4];'),
-    ('string[3] values', '  char values[3][17];'),
+    ('string<=16[3] values', '  char values[3][17];'),
 ]
 
 
-def emit_for(tmp_path, definitions, type_name, bound_map=None, default_string_bound=16):
+def emit_for(tmp_path, definitions, type_name, bound_map=None):
     """Emit the C++ header of one type, from a throwaway message package."""
     root = tmp_path / 'messages'
     for name, text in definitions.items():
         write_message(root, name, text)
     repository = msgs.MessageRepository(msg_paths=[root])
-    resolved = bounds.resolve(
-        repository,
-        [type_name],
-        bounds=bound_map or {},
-        default_string_bound=default_string_bound,
-    )
+    resolved = bounds.resolve(repository, [type_name], bounds=bound_map or {})
     return cpp.emit_message_hpp(resolved, type_name, repository=repository)
 
 
@@ -72,7 +67,6 @@ def bundled_resolved(distro='jazzy'):
         repository,
         list(bundle.BUNDLED_TYPES),
         bounds=dict(bundle.BUNDLE_BOUNDS),
-        default_string_bound=bundle.DEFAULT_STRING_BOUND,
     )
     return resolved, repository
 
@@ -130,7 +124,7 @@ def test_a_bounded_sequence_of_strings_maps_to_a_char_array_per_element(tmp_path
         tmp_path,
         {'pkg/msg/One': 'string[] names\n'},
         'pkg/msg/One',
-        bound_map={'pkg/msg/One.names': 4},
+        bound_map={'pkg/msg/One.names': [4, 16]},
     )
 
     assert '    char data[4][17];' in header

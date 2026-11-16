@@ -140,7 +140,7 @@ r2s::Subscription<geometry_msgs::msg::Twist> cmd_vel_sub(node, "cmd_vel", on_cmd
 
 The topics live in a RAM table the runtime layer fills, and registration closes at the first spin: a later registration is an error the node reports, never a silent re-handshake. The core calls one C hook for the dispatch, which the C++ layer implements with a stored callback, so the core itself keeps no function pointer (see User API).
 
-**2. An X-macro list in the sketch** (Arduino, no Python involved). The Arduino library ships descriptors for a bundle of common types (`std_msgs`, `geometry_msgs`, `sensor_msgs`) with documented default bounds:
+**2. An X-macro list in the sketch** (Arduino, no Python involved). The Arduino library ships descriptors for a bundle of common types (`std_msgs`, `geometry_msgs`, `sensor_msgs`), each variable-length field bounded by a chosen capacity in `BUNDLE_BOUNDS`:
 
 ```cpp
 #define R2S_NODE_NAME "base_controller"
@@ -177,7 +177,6 @@ topics:
     direction: sub
     qos: keep_latest
 bounds:
-  default_string_bound: 16   # optional; without it, unbounded fields are a generator error
   std_msgs/msg/Header.frame_id: 24
   sensor_msgs/msg/JointState.name: [4, 12]   # up to 4 names, 12 chars each
   sensor_msgs/msg/JointState.position: 4
@@ -589,7 +588,7 @@ and `SetRemap` around the inclusion stay the equivalent scoping route.
 
 *Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling, plus the rosidl plugin wrapper (`gen/r2s_rosidl`) and `.action` support with Goal, Result and Feedback hashes in #317.*
 
-`r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required). It parses the `.msg` grammar itself, since `rosidl_parser` ships only with a ROS installation and the bundled snapshots make the ROS-free path complete. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources, the optional C++ headers, and the compact-mode node map. It also builds the bundled Arduino library (common types with default bounds) that the X-macro path uses. Outputs are laid out to be usable as:
+`r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required). It parses the `.msg` grammar itself, since `rosidl_parser` ships only with a ROS installation and the bundled snapshots make the ROS-free path complete. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources, the optional C++ headers, and the compact-mode node map. It also builds the bundled Arduino library (common types with the chosen bounds in `BUNDLE_BOUNDS`) that the X-macro path uses. Outputs are laid out to be usable as:
 
 - an Arduino library (Library Manager), the default path;
 - a PlatformIO library;
@@ -1148,8 +1147,9 @@ The generator searches `--msg-path` directories first, then `share/*/msg` under 
 | `actions[].name` | relative ROS action name | yes | |
 | `actions[].type` | `pkg/action/Type` | yes | |
 | `bounds` | map of `pkg/{msg,srv,action}/Type.field` to an int, or `[count, string_bound]` | no | |
-| `bounds.default_string_bound` | int | no | none (unbounded fields are errors) |
 | `limits.max_frame` | int, overrides the computed value | no | computed |
+
+A variable-length field takes its bound from exactly one place: its `.msg` definition (`string<=12`, `T[<=N]`) or an entry in `bounds`. With neither, generation fails and names the field. There is no fallback and no default, so every storage capacity in a firmware is either the definition's or a value somebody wrote down. An entry on a field the `.msg` already bounds is an error in both directions: a tighter one under-holds a message the host may legally send, and a looser one accepts a message ROS considers malformed. The bundled library is no exception: it names every field it needs in `BUNDLE_BOUNDS`, which is why its limits are somebody's choice rather than the definitions'.
 
 Generator errors are precise and actionable: file, key or field path, what is wrong, and how to fix it. Each error message has a golden test.
 

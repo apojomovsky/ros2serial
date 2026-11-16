@@ -70,30 +70,16 @@ def test_a_bounded_array_is_a_sequence():
     assert joint_state.field('position').is_sequence is True
 
 
-def test_the_default_string_bound_resolves_a_scalar_string():
-    resolved = bounds.resolve(repository(), ['std_msgs/msg/Header'], default_string_bound=16)
+def test_a_bound_in_the_definition_resolves_without_a_configured_entry(tmp_path):
+    root = tmp_path / 'messages'
+    write_message(root, 'demo_msgs/msg/Label', 'string<=12 name\n')
 
-    assert resolved['std_msgs/msg/Header'].field('frame_id').string_bound == 16
+    resolved = bounds.resolve(msgs.MessageRepository(msg_paths=[root]), ['demo_msgs/msg/Label'])
 
-
-def test_a_sequence_bound_of_an_int_takes_the_string_bound_from_the_default():
-    configured = {
-        key: value
-        for key, value in JOINT_STATE_BOUNDS.items()
-        if key != 'sensor_msgs/msg/JointState.name'
-    }
-    configured['sensor_msgs/msg/JointState.name'] = 4
-
-    resolved = bounds.resolve(
-        repository(), ['sensor_msgs/msg/JointState'], bounds=configured, default_string_bound=12
-    )
-
-    name = resolved['sensor_msgs/msg/JointState'].field('name')
-    assert name.array_bound == 4
-    assert name.string_bound == 12
+    assert resolved['demo_msgs/msg/Label'].field('name').string_bound == 12
 
 
-def test_the_default_string_bound_does_not_resolve_a_sequence_count():
+def test_nothing_but_a_configured_entry_bounds_a_sequence_count():
     configured = {
         key: value
         for key, value in JOINT_STATE_BOUNDS.items()
@@ -101,12 +87,7 @@ def test_the_default_string_bound_does_not_resolve_a_sequence_count():
     }
 
     with pytest.raises(msgs.MessageError) as caught:
-        bounds.resolve(
-            repository(),
-            ['sensor_msgs/msg/JointState'],
-            bounds=configured,
-            default_string_bound=12,
-        )
+        bounds.resolve(repository(), ['sensor_msgs/msg/JointState'], bounds=configured)
 
     assert str(caught.value) == (
         'sensor_msgs/msg/JointState.name: unbounded sequence; '
@@ -127,8 +108,7 @@ def test_an_unbounded_element_string_in_a_sequence_is_an_error_naming_the_field(
 
     assert str(caught.value) == (
         'sensor_msgs/msg/JointState.name: unbounded string; '
-        "set bounds['sensor_msgs/msg/JointState.name'] to [count, string_bound] or "
-        'bounds.default_string_bound'
+        "set bounds['sensor_msgs/msg/JointState.name'] to [count, string_bound]"
     )
 
 
@@ -138,7 +118,7 @@ def test_an_unbounded_string_is_an_error_naming_the_field():
 
     assert str(caught.value) == (
         'std_msgs/msg/Header.frame_id: unbounded string; '
-        "set bounds['std_msgs/msg/Header.frame_id'] or bounds.default_string_bound"
+        "set bounds['std_msgs/msg/Header.frame_id']"
     )
 
 

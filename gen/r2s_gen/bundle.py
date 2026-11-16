@@ -4,8 +4,8 @@
 """
 The `bundle` subcommand: the Arduino library with bundled common types.
 
-The library carries the descriptors for the sixteen bundled types with the
-documented default bounds, plus the `ros2serial.h` header that expands a
+The library carries the descriptors for the bundled types with the bounds
+`BUNDLE_BOUNDS` names, plus the `ros2serial.h` header that expands a
 sketch's `R2S_TOPICS` X-macro list into the topic table, the typed publish
 functions and dispatch. The descriptors compile once in the library, so a
 sketch links only the tables its topics name. A row names a C++ type, so the
@@ -69,16 +69,25 @@ ACTION_NESTED_HEADERS = (
     'tf2_msgs/msg/TF2Error',
 )
 
+# Every variable-length field the bundled types reach, with the capacity the
+# library ships. Nothing here is a fallback: a field this mapping does not name
+# fails generation, so a bundled type's limit is always somebody's explicit
+# choice and not a value inherited from a definition.
 BUNDLE_BOUNDS = {
-    'std_msgs/msg/Header.frame_id': 16,
     'geometry_msgs/msg/TransformStamped.child_frame_id': 16,
     'sensor_msgs/msg/JointState.name': [6, 16],
     'sensor_msgs/msg/JointState.position': 6,
     'sensor_msgs/msg/JointState.velocity': 6,
     'sensor_msgs/msg/JointState.effort': 6,
+    'std_msgs/msg/Header.frame_id': 16,
+    'std_msgs/msg/String.data': 16,
+    'std_srvs/srv/Trigger_Response.message': 16,
+    'tf2_msgs/action/LookupTransform_Goal.fixed_frame': 16,
+    'tf2_msgs/action/LookupTransform_Goal.source_frame': 16,
+    'tf2_msgs/action/LookupTransform_Goal.target_frame': 16,
+    'tf2_msgs/msg/TF2Error.error_string': 16,
     'tf2_msgs/msg/TFMessage.transforms': 1,
 }
-DEFAULT_STRING_BOUND = 16
 DISTROS = ('jazzy', 'lyrical', 'rolling')
 
 # Node and topic names the bundle frame covers; longer names fail configure
@@ -166,7 +175,6 @@ def _digest(distro: str) -> str:
     """16 hex characters over the distro, the bundled types and their bounds."""
     lines = [distro, *BUNDLED_TYPES]
     lines += [f'{key} {BUNDLE_BOUNDS[key]}' for key in sorted(BUNDLE_BOUNDS)]
-    lines.append(str(DEFAULT_STRING_BOUND))
     return hashlib.sha256('\n'.join(lines).encode('utf-8')).hexdigest()[:16]
 
 
@@ -189,7 +197,6 @@ def bundle(distro: str = 'jazzy') -> dict[str, str]:
         repository,
         list(BUNDLED_TYPES),
         bounds=dict(BUNDLE_BOUNDS),
-        default_string_bound=DEFAULT_STRING_BOUND,
     )
     # One table per action, shared by its goal, feedback and result: the
     # action header numbers the parts in one joint walk, so each part's
