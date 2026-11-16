@@ -4,8 +4,8 @@
 """
 The `bundle` subcommand: the Arduino library with bundled common types.
 
-The library carries the descriptors for the sixteen bundled types with the
-documented default bounds, plus the `ros2serial.h` header that expands a
+The library carries the descriptors for the bundled types with the bounds
+`BUNDLE_BOUNDS` names, plus the `ros2serial.h` header that expands a
 sketch's `R2S_TOPICS` X-macro list into the topic table, the typed publish
 functions and dispatch. The descriptors compile once in the library, so a
 sketch links only the tables its topics name. A row names a C++ type, so the
@@ -72,7 +72,7 @@ ACTION_NESTED_HEADERS = (
 # Every variable-length field the bundled types reach, with the capacity the
 # library ships. Nothing here is a fallback: a field this mapping does not name
 # fails generation, so a bundled type's limit is always somebody's explicit
-# choice and `r2s-gen limits` can name where each one came from.
+# choice and not a value inherited from a definition.
 BUNDLE_BOUNDS = {
     'geometry_msgs/msg/TransformStamped.child_frame_id': 16,
     'sensor_msgs/msg/JointState.name': [6, 16],
