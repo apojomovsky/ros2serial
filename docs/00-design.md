@@ -160,7 +160,15 @@ A C sketch spells the same rows with the generated C struct name instead of the 
 #include <ros2serial.h>
 ```
 
-The header expands either spelling into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator. The header counts the rows itself, so an empty list fails the build with the generator's message instead of emitting an empty table.
+The header expands either spelling into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator, or emitting a library for that type with the bound you choose (route 4). The header counts the rows itself, so an empty list fails the build with the generator's message instead of emitting an empty table.
+
+**4. A type library for the user's own types** (same routes, no `r2s.yaml`). `r2s-gen types` emits the same shape of library as route 2 from an explicit type list, so a custom type reaches the X-macro list and the runtime objects unchanged. The list is a command line or a file, and every variable-length field takes its bound from the `.msg` or from the list:
+
+```
+r2s-gen types robot_interfaces/msg/Battery --msg-path src --out firmware/lib   --bound robot_interfaces/msg/Battery.cells=8
+```
+
+A service or an action is named as itself and expands to the parts its definition splits into, and the bound names the part: `--bound robot_interfaces/action/Run_Result.note=24`. `--write-config` writes the equivalent file, so a one-off command becomes a reviewable one. The library's name carries the digest of its type list and bounds, so two libraries never share a name and Arduino cannot pick one over the other. Each carried type ships a payload constant, and the sketch header checks every row against the build's `R2S_MAX_FRAME`, failing the build with the offending object's name; the runtime route gets the same check as a `constexpr` over the library. `r2s.yaml` stays the input where a firmware needs what a type list cannot say: `limits.max_frame`, `features`, `tier` and the service and action indices the static C hook API switches on.
 **3. `r2s.yaml` and the generator** (custom messages, bare metal, CMake, PlatformIO, PIC):
 
 ```yaml
@@ -1113,6 +1121,9 @@ void r2s_on_<name>(const <Type> *msg);               /* subscribed topics: proto
 ```
 r2s-gen generate --config r2s.yaml --out <dir> [--msg-path <dir>]... [--layout cmake|arduino|platformio] [--cpp]
 r2s-gen bundle   --distro <name> --out <dir>                    # the Arduino library with bundled types
+r2s-gen types    <pkg/msg/Type>... | --types-file <yaml> --out <dir> [--msg-path <dir>]...
+                 [--bound <pkg/msg/Type.field>=<n>]... [--layout arduino|platformio|cmake]
+                 [--write-config <yaml>] [--distro <name>]     # a library for the user's own types
 r2s-gen check    --config r2s.yaml [--msg-path <dir>]...       # validate only, exit code 0 or 1
 r2s-gen vectors  --type <pkg/msg/Type> --message <yaml> [--msg-path <dir>]... [--distro <name>] [--narrow]
 r2s-gen version
