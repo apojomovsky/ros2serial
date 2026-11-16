@@ -23,6 +23,10 @@ from test_echo import Harness
 
 NODE_NAME = 'announce'
 PROTOCOL_VERSION = 4
+# The frame limit the harness firmware compiles at (run.sh, -DR2S_MAX_FRAME).
+# The handshake carries it (FRM-9) and the receive capacity follows it (CTL-7),
+# so this pins that the image announces the limit it was built with.
+MAX_FRAME = 84
 TOPICS = (
     (16, 0x00, bytes(range(0x00, 0x08)), 'std_msgs/msg/Float32', 'battery'),
     (17, 0x01, bytes(range(0x10, 0x18)), 'geometry_msgs/msg/Twist', 'cmd_vel'),
@@ -81,6 +85,9 @@ def solicit_hello(port, seq):
     assert payload[1] == PROTOCOL_VERSION
     assert payload[2] == 0x00  # full handshake mode
     assert int.from_bytes(payload[3:7], 'little') == 0, 'no token before the first READY'
+    assert int.from_bytes(payload[7:9], 'little') == MAX_FRAME, 'announces the compiled limit'
+    # COB-8: the receiver buffers the encoded bound of that same limit.
+    assert int.from_bytes(payload[9:11], 'little') == MAX_FRAME + MAX_FRAME // 254 + 1
     assert payload[16] == len(TOPICS)
     name, _ = read_string(payload, 17)
     assert name == NODE_NAME

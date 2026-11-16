@@ -43,9 +43,10 @@ mkdir -p "$out" || exit 1
 
 command -v nm >/dev/null 2>&1 || { echo "$self: nm not found" >&2; exit 1; }
 cc=${CC:-gcc}
-# The core compiles with a pinned frame limit, because every build sets one
-# (#640), so the port meets the contract as a firmware would see it; test_reset
-# stays out of a non-test build.
+# The core never defaults the frame limit (#640), and this template carries no
+# generated configuration to read one from, so it pins the value every port
+# copy starts with. A real port takes its own from r2s_generated.h, as
+# ports/stm32/build.sh and ports/rp2040/build.sh do.
 limit="-DR2S_MAX_FRAME=128"
 "$cc" -std=c99 -Werror -Wall -Wextra -Wconversion -Wshadow \
   -Wstrict-prototypes -Wmissing-prototypes -Wundef \
