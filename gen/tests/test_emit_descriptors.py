@@ -929,6 +929,9 @@ def test_core_codec_round_trips_generated_tables(narrow, tmp_path):
     binary = tmp_path / 'roundtrip'
     # The G8 (#75) firmware compiles the core with the generated header visible; -include
     # proves the header alone configures the interpreter, with no -D.
+    # The frame limit is the one exception: the core never defaults it (#640),
+    # so it arrives as a define, at the value the core's own host tests build
+    # with. The driver frames nothing, so the limit sizes only the framer.
 
     compiled = subprocess.run(
         [
@@ -944,6 +947,7 @@ def test_core_codec_round_trips_generated_tables(narrow, tmp_path):
             str(tmp_path / 'r2s_generated.h'),
             f'-DDRV_TYPES={len(table.records)}u',
             f'-DDRV_FIELDS={len(table.entries)}u',
+            '-DR2S_MAX_FRAME=512',
             str(driver),
             str(tmp_path / 'r2s_descriptors.c'),
             str(core / 'codec.c'),

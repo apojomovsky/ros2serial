@@ -46,6 +46,9 @@ FLAGS = [
     '-DR2S_WITH_RX_RING',
     '-DR2S_WITH_LOG',
     '-DR2S_WITH_TIME',
+    # The core has no default frame limit (#640): a build that compiles it
+    # names the value, and the zone rules do not depend on which one.
+    '-DR2S_MAX_FRAME=128',
 ]
 HEADER_FLAGS = ['-fkeep-inline-functions', '-fkeep-static-functions']
 INSTRUCTION = re.compile(r'^\s+[0-9a-f]+:\t(?:[0-9a-f]{2} )+\s*\t(\S+)', re.MULTILINE)

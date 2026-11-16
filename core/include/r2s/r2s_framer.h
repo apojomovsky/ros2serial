@@ -16,12 +16,15 @@ extern "C" {
 
 /// The largest decoded frame the receiver accepts, from topic_id to crc16 (FRM-9).
 /**
- * The generated configuration sets it; a build without one gets a frame that
- * fits a 2 KB part. The protocol limit keeps the encoded frame and its
- * delimiter inside 65535 bytes.
+ * Every build sets it: the generated header carries the value and the build
+ * passes it to the core's own translation units, which never include that
+ * header. A default here would size the buffers at one limit while the
+ * handshake announces another, so a build without it fails instead. The
+ * protocol limit keeps the encoded frame and its delimiter inside 65535
+ * bytes.
  */
 #ifndef R2S_MAX_FRAME
-#define R2S_MAX_FRAME 128
+#error "R2S_MAX_FRAME is not set: pass -DR2S_MAX_FRAME=<n> to every translation unit"
 #endif
 
 #if R2S_MAX_FRAME < 4

@@ -43,11 +43,14 @@ mkdir -p "$out" || exit 1
 
 command -v nm >/dev/null 2>&1 || { echo "$self: nm not found" >&2; exit 1; }
 cc=${CC:-gcc}
-# The core compiles with its defaults, so the port meets the contract as
-# the firmware would see it; test_reset stays out of a non-test build.
+# The core never defaults the frame limit (#640), and this template carries no
+# generated configuration to read one from, so it pins the value every port
+# copy starts with. A real port takes its own from r2s_generated.h, as
+# ports/stm32/build.sh and ports/rp2040/build.sh do.
+limit="-DR2S_MAX_FRAME=128"
 "$cc" -std=c99 -Werror -Wall -Wextra -Wconversion -Wshadow \
   -Wstrict-prototypes -Wmissing-prototypes -Wundef \
-  -I"$root/core/include" -I"$port_dir" \
+  "$limit" -I"$root/core/include" -I"$port_dir" \
   -c "$port_dir/r2s_${port}_port.c" \
   -o "$out/r2s_${port}_port.o" || exit 1
 status=0
@@ -59,7 +62,7 @@ for src in "$root"/core/src/*.c; do
   # shellcheck disable=SC2086 # no extra flags to split here.
   "$cc" -std=c99 -Werror -Wall -Wextra -Wconversion -Wshadow \
     -Wstrict-prototypes -Wmissing-prototypes -Wundef \
-    -I"$root/core/include" \
+    "$limit" -I"$root/core/include" \
     -c "$src" -o "$out/$name.o" || status=1
 done
 [ "$status" -eq 0 ] || { echo "$self: compilation failed" >&2; exit 1; }

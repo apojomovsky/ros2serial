@@ -308,6 +308,29 @@ def _stage_fixtures(root: Path, workdir: Path) -> None:
             shutil.copyfile(fixture, workdir / name)
 
 
+LIMIT = re.compile(r'^\s*#\s*define\s+R2S_MAX_FRAME\s+([0-9]+)u?\s*$', re.MULTILINE)
+
+
+def _frame_limit(workdir: Path, headers: set[str]) -> str | None:
+    """The frame limit a build of this snippet passes as -D.
+
+    ``R2S_MAX_FRAME`` is a build input the core never defaults (#640), so the
+    snippet compiles the way a firmware does: the value comes from the staged
+    generated header the snippet includes, or from the bundle's when it names
+    none. None means no fixture carried a limit, and the snippet is compiled
+    without one to fail on its own terms.
+    """
+    order = sorted(headers) or ['r2s_bundled.h']
+    for name in [*order, 'r2s_bundled.h', 'r2s_generated.h', 'ros2serial.h']:
+        fixture = workdir / name
+        if not fixture.is_file():
+            continue
+        match = LIMIT.search(fixture.read_text(encoding='utf-8', errors='replace'))
+        if match is not None:
+            return match.group(1)
+    return None
+
+
 def _compile_c(snippet: Snippet, root: Path, workdir: Path) -> str | None:
     compiler = shutil.which('gcc' if snippet.language == 'c' else 'g++')
     if compiler is None:
@@ -320,6 +343,9 @@ def _compile_c(snippet: Snippet, root: Path, workdir: Path) -> str | None:
     src = workdir / f'snippet{EXTENSION[snippet.language]}'
     src.write_text(snippet.code)
     cmd = [compiler, f'-std={standard}', *warnings, '-fsyntax-only', str(src)]
+    limit = _frame_limit(workdir, _staged_headers(snippet.code))
+    if limit is not None:
+        cmd.append(f'-DR2S_MAX_FRAME={limit}')
     # The staged generated-header fixtures live in the workdir, so a snippet
     # including r2s_generated.h, r2s_bundled.h or ros2serial.h finds them
     # there. The core's

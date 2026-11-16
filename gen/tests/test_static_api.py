@@ -321,6 +321,11 @@ def compile_variant(tmp_path, bundle_root, decls, name, extra_sources):
                 str(CORE_INCLUDE),
                 '-I',
                 str(CPP_INCLUDE),
+                # The staged limits reach every unit as defines, as a build
+                # passes them: the core's own files never see the bundled
+                # header, and it never defaults the frame limit (#640).
+                f'-DR2S_MAX_FRAME={frame}',
+                f'-DR2S_MAX_NEST={nest}',
                 *extra,
                 '-c',
                 str(source),

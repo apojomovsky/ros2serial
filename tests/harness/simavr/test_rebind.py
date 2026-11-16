@@ -18,6 +18,7 @@ covers: SES-1, SES-2, CTL-4, CTL-12, CTL-15, CTL-16
 import pytest
 import serial
 from r2s_gen.reference import frames
+from test_announce import MAX_FRAME
 from test_announce import drain
 from test_announce import read_string
 from test_announce import read_unit
@@ -47,6 +48,7 @@ def solicit_hello(port, seq, want_count, want_token):
     assert payload[1] == PROTOCOL_VERSION
     assert payload[2] == 0x00  # full handshake mode
     assert int.from_bytes(payload[3:7], 'little') == want_token
+    assert int.from_bytes(payload[7:9], 'little') == MAX_FRAME, 'announces the compiled limit'
     assert payload[16] == want_count
     name, _ = read_string(payload, 17)
     assert name == NODE_NAME

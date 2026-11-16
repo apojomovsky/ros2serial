@@ -842,8 +842,16 @@ def test_the_defines_make_the_nested_twist_encode_succeed(tmp_path):
 
 def test_the_encode_fails_without_the_defines(tmp_path):
     _, files = generated('cmake', tmp_path)
+    # The frame limit is a build input no build may omit (#640), so it rides
+    # along alone: the nesting and codec defines stay out, and their absence
+    # is what this test pins as the reason the nested encode fails.
+    limit = [
+        define
+        for define in layouts.build_defines(files['r2s_generated.h'])
+        if define.startswith('R2S_MAX_FRAME')
+    ]
 
-    completed = run_encode(tmp_path, files['r2s_generated.h'], files['r2s_generated.c'], [])
+    completed = run_encode(tmp_path, files['r2s_generated.h'], files['r2s_generated.c'], limit)
 
     assert completed.returncode != 0
     assert 'rc=-2' in completed.stdout

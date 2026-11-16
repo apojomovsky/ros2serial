@@ -89,7 +89,16 @@ flags=(-I "$root/core/include" -I "$root/cpp/include")
 for resdir in "$cache/$archive/clang/lib/clang/"*/include; do
   [ -d "$resdir" ] && flags+=(-I "$resdir")
 done
-defines=(-DR2S_WITH_CODEC -DR2S_MAX_NEST=4 -DR2S_WITH_LOG -DR2S_WITH_TIME)
+# The frame limit is a build input no build may leave out (#640), so each tier
+# names its own. Tier S keeps 128, the limit it compiled at before the frame
+# limit became required, so its two baselined gaps keep reproducing: the 325
+# the bundled tables declare moves the receive buffer past 256 bytes, where
+# epic-cc 0.8.0 fails on an FSR offset before it reaches them. The value stays
+# coherent because the bundled header defers to a limit the build passes: both
+# the sketch unit and the core units then announce 128. Tier M keeps the
+# bundle's own value.
+tier_s_frame=(-DR2S_MAX_FRAME=128)
+tier_m_frame=(-DR2S_MAX_FRAME=325)
 
 # The port stubs answer from constants: the canary links, never runs.
 cat >"$build/canary_port.c" <<'EOF'
@@ -258,8 +267,8 @@ for target in p16f1938 p18f4550; do
   # time, which is what the design budgets for that part. The full
   # feature set does not fit its 16K-word flash. Tier M gets the lot.
   case "$target" in
-  p16f1938) defines=() ;;
-  *) defines=(-DR2S_WITH_CODEC -DR2S_MAX_NEST=4 -DR2S_WITH_LOG -DR2S_WITH_TIME) ;;
+  p16f1938) defines=("${tier_s_frame[@]}") ;;
+  *) defines=("${tier_m_frame[@]}" -DR2S_WITH_CODEC -DR2S_MAX_NEST=4 -DR2S_WITH_LOG -DR2S_WITH_TIME) ;;
   esac
   compile_one "$target" "core C sources" \
     "${sources[@]}" "$build/canary_port.c" "$build/canary_c.c" \
