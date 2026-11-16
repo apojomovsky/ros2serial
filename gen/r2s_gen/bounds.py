@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 from r2s_gen.msgs import PRIMITIVES
 from r2s_gen.msgs import WIDE_TYPES
@@ -90,12 +91,14 @@ def resolve(
             raise MessageError(type_name, 'recursive message type', 'break the cycle')
         message = repository.load(type_name)
         fields = tuple(
-            resolve_field(field, message.type_name, stack + (type_name,))
+            resolve_field(field, message.type_name, message.path, stack + (type_name,))
             for field in message.fields
         )
         resolved[type_name] = ResolvedMessage(message.type_name, fields)
 
-    def resolve_field(field: Field, owner: str, stack: tuple[str, ...]) -> ResolvedField:
+    def resolve_field(
+        field: Field, owner: str, path: Path, stack: tuple[str, ...]
+    ) -> ResolvedField:
         where = f'{owner}.{field.name}'
         if field.type_name in WIDE_TYPES:
             fix = (
@@ -129,10 +132,14 @@ def resolve(
                     array_bound = count
                 elif array_bound != count:
                     raise MessageError(
-                        where, 'the sequence length is already bounded', 'remove the count'
+                        where,
+                        f'the sequence length is already bounded in {path}',
+                        'remove the count',
                     )
                 if not string_unbounded:
-                    raise MessageError(where, 'the field is already bounded', 'remove the bound')
+                    raise MessageError(
+                        where, f'the field is already bounded in {path}', 'remove the bound'
+                    )
                 string_bound = element
             elif sequence_unbounded:
                 array_bound = _whole(configured_bound, where, 1, 'sequence')
@@ -141,7 +148,7 @@ def resolve(
             else:
                 variable = field.is_array or field.type_name == 'string'
                 problem = (
-                    'the field is already bounded'
+                    f'the field is already bounded in {path}'
                     if variable
                     else 'the field has no variable length'
                 )

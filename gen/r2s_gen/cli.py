@@ -14,6 +14,7 @@ import sys
 from r2s_gen import bundle
 from r2s_gen import config
 from r2s_gen import layouts
+from r2s_gen import types
 from r2s_gen import vectors
 from r2s_gen.version import PROTOCOL_VERSION
 from r2s_gen.version import __version__
@@ -39,6 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     config.add_parser(subparsers)
     layouts.add_parser(subparsers)
     bundle.add_parser(subparsers)
+    types.add_parser(subparsers)
     vectors.add_parser(subparsers)
     return parser
 

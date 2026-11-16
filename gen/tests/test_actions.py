@@ -205,6 +205,13 @@ def test_action_name_helpers():
         cpp.action_name('std_msgs/msg/Float32')
 
 
+def bundle_banner():
+    """The banner the bundled library stamps on its headers."""
+    from r2s_gen import bundle
+
+    return bundle.banner(bundle.bundled_library('jazzy'))
+
+
 def test_emit_action_hpp_rejects_an_unresolved_part(tmp_path):
     root = tmp_path / 'messages'
     write_action(root, 'demo_msgs/action/Spin', 'int32 order\n---\nint32 b\n---\nint32 c\n')
@@ -212,7 +219,7 @@ def test_emit_action_hpp_rejects_an_unresolved_part(tmp_path):
     resolved = bounds.resolve(repository, ['demo_msgs/action/Spin_Goal'], bounds={})
 
     with pytest.raises(ValueError, match='Spin_Result is not resolved'):
-        cpp.emit_action_hpp(resolved, 'demo_msgs/action/Spin', repository)
+        cpp.emit_action_hpp(resolved, 'demo_msgs/action/Spin', repository, bundle_banner())
 
 
 def test_a_user_action_hashes_deterministically(tmp_path):
@@ -305,7 +312,9 @@ def test_a_bundled_action_emits_its_cpp_header_at_the_rclcpp_path():
         cpp.cpp_type('tf2_msgs/action/LookupTransform_Goal')
         == 'tf2_msgs::action::LookupTransform_Goal'
     )
-    header = cpp.emit_action_hpp(resolved, 'tf2_msgs/action/LookupTransform', repository)
+    header = cpp.emit_action_hpp(
+        resolved, 'tf2_msgs/action/LookupTransform', repository, bundle_banner()
+    )
     assert 'struct LookupTransform_Goal\n{' in header
     assert 'struct LookupTransform_Result\n{' in header
     assert 'struct LookupTransform_Feedback\n{' in header
@@ -332,7 +341,7 @@ def test_a_user_action_emits_its_cpp_header(tmp_path):
             'demo_msgs/action/Spin_Feedback.partial_sequence': 4,
         },
     )
-    header = cpp.emit_action_hpp(resolved, 'demo_msgs/action/Spin', repository)
+    header = cpp.emit_action_hpp(resolved, 'demo_msgs/action/Spin', repository, bundle_banner())
 
     assert cpp.message_path('demo_msgs/action/Spin_Goal') == 'demo_msgs/action/spin.hpp'
     assert 'struct Spin_Goal\n{' in header
@@ -345,9 +354,9 @@ GOLDEN = Path(__file__).parent / 'golden' / 'actions'
 def test_the_bundled_action_header_matches_its_golden():
     repository, resolved = _lookup_resolved()
 
-    assert cpp.emit_action_hpp(resolved, 'tf2_msgs/action/LookupTransform', repository) == (
-        GOLDEN / 'lookup_transform.hpp'
-    ).read_text(encoding='utf-8')
+    assert cpp.emit_action_hpp(
+        resolved, 'tf2_msgs/action/LookupTransform', repository, bundle_banner()
+    ) == (GOLDEN / 'lookup_transform.hpp').read_text(encoding='utf-8')
 
 
 def test_the_user_action_header_matches_its_golden(tmp_path):
@@ -372,7 +381,7 @@ def test_the_user_action_header_matches_its_golden(tmp_path):
         },
     )
 
-    assert cpp.emit_action_hpp(resolved, 'demo_msgs/action/Spin', repository) == (
+    assert cpp.emit_action_hpp(resolved, 'demo_msgs/action/Spin', repository, bundle_banner()) == (
         GOLDEN / 'spin.hpp'
     ).read_text(encoding='utf-8')
 
@@ -428,7 +437,8 @@ def test_a_user_action_header_compiles_as_cxx(tmp_path):
     )
     (tmp_path / 'r2s_bundled.h').write_text(emit.emit_types(resolved), encoding='utf-8')
     (tmp_path / 'spin.hpp').write_text(
-        cpp.emit_action_hpp(resolved, 'demo_msgs/action/Spin', repository), encoding='utf-8'
+        cpp.emit_action_hpp(resolved, 'demo_msgs/action/Spin', repository, bundle_banner()),
+        encoding='utf-8',
     )
     source = tmp_path / 'check.cpp'
     source.write_text('#include "spin.hpp"\n', encoding='utf-8')

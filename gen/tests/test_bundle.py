@@ -97,7 +97,7 @@ def test_every_file_carries_the_version_and_distro_but_no_digest():
 
 
 def test_the_digest_lives_only_in_the_bundled_header():
-    digest = bundle._digest('jazzy')
+    digest = bundle._bundled_digest('jazzy')
     for name, text in files().items():
         if name == 'src/r2s_bundled.h':
             assert f'#define R2S_BUNDLE_HASH "{digest}"' in text, name
@@ -1222,7 +1222,18 @@ def test_a_bundled_type_without_entries_keeps_its_table_defined(tmp_path, monkey
     resolved = bounds.resolve(repository, ['test_msgs/msg/Empty'])
     table = descriptors.build(resolved, ['test_msgs/msg/Empty'])
     monkeypatch.setattr(bundle, 'BUNDLED_TYPES', ('test_msgs/msg/Empty',))
-    text = bundle._bundled_c(resolved, {'test_msgs/msg/Empty': table}, 'jazzy')
+    library = bundle.Library(
+        types=('test_msgs/msg/Empty',),
+        bounds={},
+        distro='jazzy',
+        resolved=resolved,
+        repository=repository,
+        origin='bundle',
+        name='ros2serial',
+        digest=bundle._bundled_digest('jazzy'),
+        sentence='ros2serial firmware library with bundled common types',
+    )
+    text = bundle._bundled_c(library, {'test_msgs/msg/Empty': table})
 
     assert (
         'const uint8_t R2S_FLASH r2s_bundled_entries_test_msgs_Empty[1] = {0x00};'
