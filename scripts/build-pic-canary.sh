@@ -82,12 +82,6 @@ sources+=("$root/gen/tests/golden/bundle/r2s_bundled.c")
 # The static firmware config the C++ tests build, so the canary differs
 # from a proven build only in the toolchain and the target.
 flags=(-I "$root/core/include" -I "$root/cpp/include")
-# The frame limit is a build input no build may leave out (#640), tier S
-# included, so it rides the shared flags: the per-target defines below choose
-# the feature set alone. The bundled tables the canary links declare 325, and
-# the static sketch sends at most a Float32, so the announced limit equals the
-# one the buffers hold.
-flags+=(-DR2S_MAX_FRAME=325)
 # epic-cc drives its clang with -nostdinc, which also drops the compiler's
 # own resource headers, so float.h is missing from the search path. The
 # bundle ships them beside the driver, so they rejoin here; a preinstalled
@@ -95,7 +89,13 @@ flags+=(-DR2S_MAX_FRAME=325)
 for resdir in "$cache/$archive/clang/lib/clang/"*/include; do
   [ -d "$resdir" ] && flags+=(-I "$resdir")
 done
-defines=(-DR2S_WITH_CODEC -DR2S_MAX_NEST=4 -DR2S_WITH_LOG -DR2S_WITH_TIME)
+# The frame limit is a build input no build may leave out (#640), so each tier
+# names its own. Tier S compiles at 128, the value the two gaps its baseline
+# records were reproduced at: the 325 the bundled tables declare moves the
+# receive buffer past 256 bytes, where epic-cc 0.8.0 fails on an FSR offset
+# before it reaches them. Tier M keeps the bundle's value.
+tier_s_frame=(-DR2S_MAX_FRAME=128)
+tier_m_frame=(-DR2S_MAX_FRAME=325)
 
 # The port stubs answer from constants: the canary links, never runs.
 cat >"$build/canary_port.c" <<'EOF'
@@ -264,8 +264,8 @@ for target in p16f1938 p18f4550; do
   # time, which is what the design budgets for that part. The full
   # feature set does not fit its 16K-word flash. Tier M gets the lot.
   case "$target" in
-  p16f1938) defines=() ;;
-  *) defines=(-DR2S_WITH_CODEC -DR2S_MAX_NEST=4 -DR2S_WITH_LOG -DR2S_WITH_TIME) ;;
+  p16f1938) defines=("${tier_s_frame[@]}") ;;
+  *) defines=("${tier_m_frame[@]}" -DR2S_WITH_CODEC -DR2S_MAX_NEST=4 -DR2S_WITH_LOG -DR2S_WITH_TIME) ;;
   esac
   compile_one "$target" "core C sources" \
     "${sources[@]}" "$build/canary_port.c" "$build/canary_c.c" \
