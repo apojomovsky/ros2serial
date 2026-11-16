@@ -8,15 +8,16 @@ The firmware is `examples/custom_interfaces/custom_firmware`: `r2s-gen`
 emits its C sources from the example's `r2s.yaml` against the interface
 package beside it, so the types on the wire are the package's own
 definitions, not bundled ones. The scenario publishes and reads the custom
-message, calls the custom service, and sends a goal to the custom action,
-proving both directions for every one of the three kinds.
+message, calls the custom service, and sends a goal to the custom action and
+cancels it, proving both directions and the cancel answer for every one of the
+three kinds.
 
 The bridge opens a stable symlink, and every test respawns the board on it,
 the way scenario 16 does: stopping a harness drops the bridge to
 DISCONNECTED, and the fresh harness re-handshakes on the same path.
 """
 
-# covers: SVR-4, SVR-5, SVR-6, SVR-7, ACT-2, ACT-3, ACT-4, ACT-8
+# covers: SVR-4, SVR-5, SVR-6, SVR-7, ACT-2, ACT-3, ACT-4, ACT-5, ACT-6, ACT-8
 
 import os
 import tempfile
@@ -44,6 +45,7 @@ SERVICE_TIMEOUT = 20.0
 CALL_TIMEOUT = 20.0
 ACTION_TIMEOUT = 30.0
 GOAL_TIMEOUT = 15.0
+CANCEL_TIMEOUT = 15.0
 FEEDBACK_TIMEOUT = 20.0
 RESULT_TIMEOUT = 25.0
 
@@ -224,6 +226,50 @@ class TestScenario17(unittest.TestCase):
                 self.assertEqual(result.status, GoalStatus.STATUS_SUCCEEDED)
                 self.assertAlmostEqual(result.result.value, 4.0, places=3)
                 self.assertEqual(result.result.note, 'done')
+            finally:
+                node.destroy_client(client)
+        finally:
+            node.destroy_node()
+
+    def test_the_custom_action_answers_a_cancel(self):
+        """A ROS cancel reaches the firmware's action and ends the goal canceled."""
+        node = rclpy.create_node('e2e_s17_cancel')
+        try:
+            self._handshake(node)
+            client = ActionClient(node, Run, '/run')
+            try:
+                self.assertTrue(
+                    client.wait_for_server(timeout_sec=ACTION_TIMEOUT),
+                    'the run action server never appeared',
+                )
+                goal = Run.Goal()
+                goal.order = 2.0
+                send_future = client.send_goal_async(goal)
+                deadline = time.monotonic() + GOAL_TIMEOUT
+                while not send_future.done():
+                    rclpy.spin_once(node, timeout_sec=0.2)
+                    self.assertLess(time.monotonic(), deadline, 'the goal never answered')
+                handle = send_future.result()
+                self.assertTrue(handle.accepted, 'the firmware refused the goal')
+                # The run holds its goal through ten feedbacks at 200 ms, so
+                # the cancel goes out on accept: a client that waits to
+                # observe a feedback before sending it risks the goal's own
+                # result at the bridge first.
+                cancel_future = handle.cancel_goal_async()
+                deadline = time.monotonic() + CANCEL_TIMEOUT
+                while not cancel_future.done():
+                    rclpy.spin_once(node, timeout_sec=0.2)
+                    self.assertLess(time.monotonic(), deadline, 'the cancel never answered')
+                self.assertTrue(
+                    cancel_future.result().goals_canceling, 'the firmware refused the cancel'
+                )
+                result_future = handle.get_result_async()
+                deadline = time.monotonic() + RESULT_TIMEOUT
+                while not result_future.done():
+                    rclpy.spin_once(node, timeout_sec=0.2)
+                    self.assertLess(time.monotonic(), deadline, 'the goal never finished')
+                result = result_future.result()
+                self.assertEqual(result.status, GoalStatus.STATUS_CANCELED)
             finally:
                 node.destroy_client(client)
         finally:

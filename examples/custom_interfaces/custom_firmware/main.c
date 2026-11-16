@@ -149,11 +149,13 @@ static uint8_t s_goal_active;
 static uint8_t s_goal_seq;
 static float s_order;
 static uint8_t s_feedbacks;
+static uint8_t s_canceling;
 static uint32_t s_last_feedback;
 
 /* Feedbacks before the result: a client that waits for one always sees it,
- * and the count keeps the two paced exchanges apart. */
-#define FEEDBACK_COUNT 2u
+ * and the count keeps the two paced exchanges apart. The window also holds
+ * the goal open long enough for a cancel to reach it. */
+#define FEEDBACK_COUNT 10u
 
 void r2s_action_on_goal(uint8_t index, uint8_t goal_seq, const uint8_t *payload, uint16_t len)
 {
@@ -176,14 +178,18 @@ void r2s_action_on_goal(uint8_t index, uint8_t goal_seq, const uint8_t *payload,
   s_goal_seq = goal_seq;
   s_goal_active = 1u;
   s_feedbacks = 0u;
+  s_canceling = 0u;
   s_last_feedback = r2s_port_tick();
   (void)r2s_actions_answer_goal(index, goal_seq, R2S_ACT_ACCEPTED);
 }
 
+/* Accepting the cancel moves the core's goal to CANCELING and the tick
+ * below ends it canceled. The core only dispatches a CANCEL it holds with a
+ * response slot free, so the answer cannot be refused here. */
 void r2s_action_on_cancel(uint8_t index, uint8_t goal_seq)
 {
-  (void)index;
-  (void)goal_seq;
+  s_canceling = 1u;
+  (void)r2s_actions_answer_cancel(index, goal_seq, R2S_ACT_CANCEL_ACCEPTED);
 }
 
 static void send_feedback(void)
@@ -203,7 +209,7 @@ static void send_feedback(void)
   }
 }
 
-static void send_result(void)
+static void send_result(uint8_t outcome)
 {
   custom_interfaces__action__Run_Result result;
   uint8_t payload[R2S_MAX_FRAME];
@@ -219,18 +225,22 @@ static void send_result(void)
   {
     return;
   }
-  if (r2s_actions_result(R2S_ACTION_RUN_ID, s_goal_seq, R2S_ACT_SUCCEEDED, payload,
-    out.len) == R2S_OK)
-  {
+  if (r2s_actions_result(R2S_ACTION_RUN_ID, s_goal_seq, outcome, payload, out.len) == R2S_OK) {
     s_goal_active = 0u;
+    s_canceling = 0u;
   }
 }
 
 /* One feedback per period, then the result, so a client always observes
- * feedback before the goal ends. */
+ * feedback before the goal ends. A cancel ends the goal at the next step
+ * instead of waiting out the feedbacks. */
 static void run_action(uint32_t now)
 {
   if (s_goal_active == 0u) {
+    return;
+  }
+  if (s_canceling != 0u) {
+    send_result(R2S_ACT_CANCELED);
     return;
   }
   if ((uint32_t)(now - s_last_feedback) < FEEDBACK_PERIOD_MS) {
@@ -242,7 +252,7 @@ static void run_action(uint32_t now)
     s_feedbacks++;
     return;
   }
-  send_result();
+  send_result(R2S_ACT_SUCCEEDED);
 }
 
 static uint32_t s_last_pub;
