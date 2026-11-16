@@ -627,6 +627,9 @@ tasks:
       # Scenario 14 compiles the service example it drives, so the
       # e2e-avr leg watches that sketch beside its own firmware.
       - examples/arduino_service/**
+      # Scenario 17 builds the custom-type example from its r2s.yaml and
+      # the interface package beside it, so both join the same watch.
+      - examples/custom_interfaces/**
       # The shared leg files. The posix runner, the posix scenarios and the
       # posix firmware helper stay with the posix leg; the isolation pairs
       # run in the e2e-isolation job and the soak checks in the nightly

@@ -197,6 +197,14 @@ Actions are served through two hooks the core calls, `r2s_action_on_goal()` and
 all three channels against one interface package and is the shortest complete
 example, and `tests/e2e/test_scenario_17_avr.py` runs it against the bridge.
 
+The cancel hook is not optional: it is what answers the host. It calls
+`r2s_actions_answer_cancel()` with `R2S_ACT_CANCEL_ACCEPTED`, which moves the
+core's goal state to CANCELING, and the loop then ends the goal with a
+`R2S_ACT_CANCELED` result through `r2s_actions_result()`, the way
+`examples/custom_interfaces/custom_firmware/main.c` does. A hook left empty
+leaves the host's cancel unanswered: the bridge reports the timeout to the ROS
+client and the goal keeps running.
+
 A service or action announce carries its type name, so its frame is longer than
 a topic payload. Raise `limits.max_frame` when generation reports that the
 configuration does not fit; the sample above uses 64 bytes for one of each kind.
