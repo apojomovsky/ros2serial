@@ -260,7 +260,7 @@ def _lookup_bounds() -> dict:
         'tf2_msgs/action/LookupTransform_Goal.target_frame': 16,
         'tf2_msgs/action/LookupTransform_Goal.source_frame': 16,
         'tf2_msgs/action/LookupTransform_Goal.fixed_frame': 16,
-        'tf2_msgs/action/LookupTransform_Result.error.error_string': 16,
+        'tf2_msgs/msg/TF2Error.error_string': 16,
         'std_msgs/msg/Header.frame_id': 16,
         'geometry_msgs/msg/TransformStamped.child_frame_id': 16,
     }
@@ -273,7 +273,7 @@ def _lookup_resolved():
         'tf2_msgs/action/LookupTransform_Result',
         'tf2_msgs/action/LookupTransform_Feedback',
     ]
-    resolved = bounds.resolve(repository, roots, bounds=_lookup_bounds(), default_string_bound=16)
+    resolved = bounds.resolve(repository, roots, bounds=_lookup_bounds())
     return repository, resolved
 
 

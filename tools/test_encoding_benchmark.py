@@ -311,7 +311,7 @@ def test_layouts_match_the_snapshots():
 def bundle_bounds():
     import ast
 
-    wanted = {'BUNDLED_TYPES', 'BUNDLE_BOUNDS', 'DEFAULT_STRING_BOUND'}
+    wanted = {'BUNDLED_TYPES', 'BUNDLE_BOUNDS'}
     tree = ast.parse((ROOT / 'gen' / 'r2s_gen' / 'bundle.py').read_text())
     values = {}
     for node in ast.walk(tree):
@@ -322,23 +322,13 @@ def bundle_bounds():
             and node.targets[0].id in wanted
         ):
             values[node.targets[0].id] = ast.literal_eval(node.value)
-    return values['BUNDLED_TYPES'], values['BUNDLE_BOUNDS'], values['DEFAULT_STRING_BOUND']
+    return values['BUNDLED_TYPES'], values['BUNDLE_BOUNDS']
 
 
 def test_mavlink_bounds_match_the_bundle():
-    bundled, bounds, default_string = bundle_bounds()
+    bundled, bounds = bundle_bounds()
     assert sorted(sizes.REPRESENTATIVE) == sorted(bundled)
-    assert sizes.MAVLINK_BOUNDS == dict(
-        bounds,
-        **{
-            'std_msgs/msg/String.data': default_string,
-            'std_srvs/srv/Trigger_Response.message': default_string,
-            'tf2_msgs/action/LookupTransform_Goal.target_frame': default_string,
-            'tf2_msgs/action/LookupTransform_Goal.source_frame': default_string,
-            'tf2_msgs/action/LookupTransform_Goal.fixed_frame': default_string,
-            'tf2_msgs/msg/TF2Error.error_string': default_string,
-        },
-    )
+    assert sizes.MAVLINK_BOUNDS == bounds
 
 
 def test_writeup_table_matches_the_model():

@@ -44,7 +44,6 @@ def test_a_valid_config_loads_with_the_defaults_filled(tmp_path):
     assert loaded.topics[0].qos == 'best_effort'
     assert loaded.topics[0].narrow_float64 is False
     assert loaded.bounds == {}
-    assert loaded.default_string_bound is None
     assert loaded.max_frame is None
 
 
@@ -64,7 +63,6 @@ topics:
     qos: keep_latest
     narrow_float64: true
 bounds:
-  default_string_bound: 16
   std_msgs/msg/Header.frame_id: 24
   sensor_msgs/msg/JointState.name: [4, 12]
 limits:
@@ -82,7 +80,6 @@ limits:
         'std_msgs/msg/Header.frame_id': 24,
         'sensor_msgs/msg/JointState.name': [4, 12],
     }
-    assert loaded.default_string_bound == 16
     assert loaded.max_frame == 256
 
 
@@ -482,32 +479,20 @@ def test_a_negative_bound_is_an_error(tmp_path):
     )
 
 
-def test_a_string_default_string_bound_is_an_error(tmp_path):
+def test_a_default_string_bound_is_refused_as_an_unknown_field_path(tmp_path):
     path = write(
         tmp_path / 'r2s.yaml',
-        'node: base_controller\ntopics: []\nbounds:\n  default_string_bound: many\n',
+        'node: base_controller\ntopics:\n'
+        '  - name: battery\n    type: std_msgs/msg/Float32\n    direction: pub\n'
+        'bounds:\n  default_string_bound: 16\n',
     )
 
     with pytest.raises(MessageError) as caught:
         config.load(path)
 
-    assert (
-        str(caught.value) == f'{path}: bounds.default_string_bound: expected an integer; '
-        'give a whole number of characters'
-    )
-
-
-def test_a_negative_default_string_bound_is_an_error(tmp_path):
-    path = write(
-        tmp_path / 'r2s.yaml',
-        'node: base_controller\ntopics: []\nbounds:\n  default_string_bound: -1\n',
-    )
-
-    with pytest.raises(MessageError) as caught:
-        config.load(path)
-
-    assert (
-        str(caught.value) == f'{path}: bounds.default_string_bound: must be at least 0; raise it'
+    assert str(caught.value) == (
+        f"{path}: bounds: 'default_string_bound' is not a field path; "
+        'write package/msg/Type.field, such as std_msgs/msg/Header.frame_id'
     )
 
 
