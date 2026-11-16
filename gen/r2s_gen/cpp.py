@@ -68,11 +68,10 @@ def message_path(type_name: str) -> str:
             action_name(type_name).split('/')[-1] if type_name != action_name(type_name) else name
         )
         return f'{package}/action/{_snake(base)}.hpp'
-    if kind == 'srv':
-        # Service parts read `Trigger_Request`, not `trigger__request`: the
-        # separator the suffix brings stays single.
-        return f'{package}/{kind}/{_snake(name).replace("__", "_")}.hpp'
-    return f'{package}/{kind}/{_snake(name)}.hpp'
+    # A part reads `Trigger_Request`, not `trigger__request`: the separator a
+    # part suffix and an underscore in a name each bring stays single, as
+    # rclcpp spells the file.
+    return f'{package}/{kind}/{_snake(name).replace("__", "_")}.hpp'
 
 
 def suffix(type_name: str) -> str:

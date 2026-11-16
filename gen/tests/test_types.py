@@ -530,6 +530,50 @@ def test_the_runtime_route_fails_the_build_naming_the_type(tmp_path):
     assert 'custom_interfaces/msg/SensorReading' in small.stderr
 
 
+def test_the_runtime_check_measures_the_longest_name_not_the_largest_payload(tmp_path):
+    """A long-named small type and a short-named large one: each term needs its own maximum."""
+    root = tmp_path / 'messages'
+    long_name = 'demo_msgs/msg/' + 'Wide' * 16
+    write_message(root, 'demo_msgs/msg/Big', 'uint8[40] cells\n')
+    write_message(root, long_name, 'uint8 one\n')
+    library = staged(
+        tmp_path,
+        types.emit(
+            plan(
+                (types.Entry('demo_msgs/msg/Big'), types.Entry(long_name)),
+                msg_paths=(root,),
+            ),
+            'arduino',
+        ),
+    )
+    sketch = tmp_path / 'runtime.cpp'
+    sketch.write_text('#include <ros2serial.h>\n', encoding='utf-8')
+    # The payload term needs 40 plus the overhead; the announce of the long
+    # name needs 12 + its varint byte + the name + the overhead, which is more.
+    payload = 40 + 4
+    assert 12 + 1 + len(long_name) + 4 > payload
+    announce = 12 + 1 + len(long_name) + 4
+
+    exact = compile_cxx(library, sketch, (f'-DR2S_MAX_FRAME={announce}',))
+    short = compile_cxx(library, sketch, (f'-DR2S_MAX_FRAME={payload}',))
+
+    assert exact.returncode == 0, exact.stderr
+    assert short.returncode != 0
+    assert long_name in short.stderr
+
+
+def test_a_message_named_like_a_service_part_is_a_message(tmp_path):
+    """A `_Request`-named message has no service header, so the library ships only its own."""
+    root = tmp_path / 'messages'
+    write_message(root, 'demo_msgs/msg/Setting_Request', 'uint8 value\n')
+    library = plan((types.Entry('demo_msgs/msg/Setting_Request'),), msg_paths=(root,))
+
+    assert library.services == ()
+    files = types.emit(library, 'arduino')
+    assert sorted(files) == sorted(types.files_for(library, 'arduino'))
+    assert 'src/demo_msgs/msg/setting_request.hpp' in files
+
+
 def test_an_unknown_bound_field_names_it(tmp_path, capsys):
     root = note_package(tmp_path)
 

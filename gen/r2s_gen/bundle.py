@@ -141,9 +141,20 @@ class Library:
 
     @property
     def services(self) -> tuple[str, ...]:
-        """The services the carried request types belong to, in build order."""
+        """
+        The services the carried request types belong to, in build order.
+
+        Only a `/srv/` name counts: a message whose name merely ends in
+        `_Request` is a message, and there is no service header to emit for it.
+        """
         return tuple(
-            sorted({name[: -len('_Request')] for name in self.types if name.endswith('_Request')})
+            sorted(
+                {
+                    name[: -len('_Request')]
+                    for name in self.types
+                    if '/srv/' in name and name.endswith('_Request')
+                }
+            )
         )
 
     def headers(self) -> tuple[str, ...]:
