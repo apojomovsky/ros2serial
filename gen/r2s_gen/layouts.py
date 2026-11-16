@@ -285,23 +285,59 @@ def run(args: argparse.Namespace) -> int:
     return 0
 
 
-def _repository(args: argparse.Namespace, distro: str) -> msgs.MessageRepository:
+def repository(msg_paths: list[str], distro: str) -> msgs.MessageRepository:
     """Build the repository from the message paths, the sourced prefixes and the distro."""
     prefixes = [
         Path(entry) for entry in os.environ.get('AMENT_PREFIX_PATH', '').split(os.pathsep) if entry
     ]
-    sourced = os.environ.get('ROS_DISTRO') or None
+    sourced = sourced_distro()
     if not prefixes:
         sourced = None
-    repository = msgs.MessageRepository(
-        msg_paths=args.msg_path,
+    found = msgs.MessageRepository(
+        msg_paths=msg_paths,
         ament_prefix_path=prefixes,
         distro=distro,
         sourced_distro=sourced,
     )
-    for warning in repository.warnings:
+    for warning in found.warnings:
         print(f'r2s-gen: warning: {warning}', file=sys.stderr)
-    return repository
+    return found
+
+
+def sourced_distro() -> str | None:
+    """Return the ROS distro the environment sources, if any."""
+    return os.environ.get('ROS_DISTRO') or None
+
+
+def limit_defines(header: str, name: str, options: list[str] | None = None) -> list[str]:
+    """
+    Emit the CMake lines that pass a generated header's limits to a build.
+
+    The core's translation units never include the header, so a build reads
+    the limits out of it as defines instead.
+    """
+    lines = [
+        f'file(STRINGS {header} R2S_MAX_FRAME_LINE REGEX "^#define R2S_MAX_FRAME[ \\t]+[0-9]+u$")',
+        f'file(STRINGS {header} R2S_MAX_NEST_LINE REGEX "^#define R2S_MAX_NEST[ \\t]+[0-9]+u$")',
+        'if(NOT R2S_MAX_FRAME_LINE OR NOT R2S_MAX_NEST_LINE)',
+        f'  message(FATAL_ERROR "{header} names no frame or nesting limit")',
+        'endif()',
+        'string(REGEX MATCH "^#define R2S_MAX_FRAME[ \\t]+([0-9]+)u$" _ignored '
+        '"${R2S_MAX_FRAME_LINE}")',
+        'set(R2S_GENERATED_DEFS R2S_WITH_CODEC R2S_MAX_FRAME=${CMAKE_MATCH_1})',
+        'string(REGEX MATCH "^#define R2S_MAX_NEST[ \\t]+([0-9]+)u$" _ignored '
+        '"${R2S_MAX_NEST_LINE}")',
+        'list(APPEND R2S_GENERATED_DEFS R2S_MAX_NEST=${CMAKE_MATCH_1})',
+        f'target_compile_definitions({name} PUBLIC ${{R2S_GENERATED_DEFS}})',
+    ]
+    if options:
+        lines += [f'target_compile_options({name} PRIVATE', *options, ')']
+    return lines
+
+
+def _repository(args: argparse.Namespace, distro: str) -> msgs.MessageRepository:
+    """Build the repository from the parsed arguments."""
+    return repository(args.msg_path, distro)
 
 
 def _write(out: str, files: dict[str, str]) -> None:
