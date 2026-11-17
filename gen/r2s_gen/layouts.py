@@ -309,7 +309,7 @@ def sourced_distro() -> str | None:
     return os.environ.get('ROS_DISTRO') or None
 
 
-def limit_defines(header: str, name: str, options: list[str] | None = None) -> list[str]:
+def limit_defines(header: str, name: str, options: list[str]) -> list[str]:
     """
     Emit the CMake lines that pass a generated header's limits to a build.
 
@@ -330,8 +330,7 @@ def limit_defines(header: str, name: str, options: list[str] | None = None) -> l
         'list(APPEND R2S_GENERATED_DEFS R2S_MAX_NEST=${CMAKE_MATCH_1})',
         f'target_compile_definitions({name} PUBLIC ${{R2S_GENERATED_DEFS}})',
     ]
-    if options:
-        lines += [f'target_compile_options({name} PRIVATE', *options, ')']
+    lines += [f'target_compile_options({name} PRIVATE', *options, ')']
     return lines
 
 

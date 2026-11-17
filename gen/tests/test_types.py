@@ -11,6 +11,7 @@ storage, and the frame checks that stop a build naming the row, in C, in C++
 and on the runtime route.
 """
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -20,6 +21,7 @@ from r2s_gen import cli
 from r2s_gen import types
 from r2s_gen.version import __version__
 from support import write_message
+from support import write_service
 
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLES = ROOT / 'examples'
@@ -269,6 +271,10 @@ def test_the_written_config_re_reads_to_the_same_resolved_storage(tmp_path):
                 'custom_interfaces/msg/SensorReading',
                 'custom_interfaces/srv/Calibrate',
                 'custom_interfaces/action/Run',
+                # The distro comes from the flag, so a sourced ROS_DISTRO in CI
+                # cannot make the command and the re-read disagree.
+                '--distro',
+                'jazzy',
                 '--write-config',
                 str(config),
             ]
@@ -560,6 +566,375 @@ def test_the_runtime_check_measures_the_longest_name_not_the_largest_payload(tmp
     assert exact.returncode == 0, exact.stderr
     assert short.returncode != 0
     assert long_name in short.stderr
+
+
+def test_the_written_config_pins_the_distro_it_resolved(tmp_path, monkeypatch):
+    """A sourced ROS_DISTRO must not make the file and its re-read disagree."""
+    monkeypatch.setenv('ROS_DISTRO', 'rolling')
+    config = tmp_path / 'r2s-types.yaml'
+    out = tmp_path / 'out'
+
+    assert (
+        cli.main(
+            [
+                'types',
+                'custom_interfaces/msg/SensorReading',
+                '--msg-path',
+                str(EXAMPLES),
+                '--out',
+                str(out),
+                '--write-config',
+                str(config),
+            ]
+        )
+        == 0
+    )
+
+    text = config.read_text(encoding='utf-8')
+    assert 'distro: rolling' in text
+    reread = plan(types.read_list(config), source=str(config), distro='rolling')
+    assert types.emit(reread, 'arduino') == written(out)
+
+
+@pytest.mark.parametrize(
+    ('text', 'expected'),
+    [
+        ('bounds:\n  text: 4\n', "missing required key 'types'"),
+        ('types: 3\n', "'types' must be a list"),
+        ('types: []\ncolour: red\n', 'unknown key'),
+        ('types:\n  - 3\n', 'expected a type or a mapping'),
+        ('types:\n  - type: demo_msgs/msg/Note\n    note: 2\n', "unknown key 'note'"),
+        ('types:\n  - bounds: {text: 4}\n', "missing required key 'type'"),
+        ('types:\n  - demo_msgs/msg/Note\nbounds: 3\n', "'bounds' must be a mapping"),
+        ('types:\n  - demo_msgs/msg/Note\nbounds:\n  "": 3\n', 'is not a field path'),
+        ('types: [\n  - a\n', 'not valid YAML'),
+        ('- a\n', 'the type list must be a mapping'),
+    ],
+)
+def test_a_bad_type_list_is_refused_with_its_key(tmp_path, text, expected):
+    listing = tmp_path / 'r2s-types.yaml'
+    listing.write_text(text, encoding='utf-8')
+
+    with pytest.raises(types.MessageError) as caught:
+        types.read_list(listing)
+
+    assert expected in str(caught.value)
+
+
+def test_an_unreadable_type_list_names_the_path(tmp_path):
+    missing = tmp_path / 'nope.yaml'
+
+    with pytest.raises(types.MessageError) as caught:
+        types.read_list(missing)
+
+    assert str(missing) in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    ('flag', 'expected'),
+    [
+        ('no-separator', 'expected TYPE.FIELD=N'),
+        ('demo_msgs/msg/Note.text=', 'expected TYPE.FIELD=N'),
+        ('demo_msgs/msg/Note.text=many', "'many' is not a bound"),
+        ('demo_msgs/msg/Note.text=[4]', 'is not a bound'),
+    ],
+)
+def test_a_bad_bound_flag_is_refused(flag, expected):
+    with pytest.raises(types.MessageError) as caught:
+        types.parse_bound(flag)
+
+    assert expected in str(caught.value)
+
+
+def test_a_pair_bound_flag_reads_its_count_and_string():
+    assert types.parse_bound('demo_msgs/msg/Note.names=[4, 16]') == (
+        'demo_msgs/msg/Note.names',
+        [4, 16],
+    )
+
+
+def test_a_part_key_that_names_no_part_is_refused(tmp_path):
+    root = tmp_path / 'messages'
+    write_service(root, 'demo_srvs/srv/Spin', 'int32 order\n---\nint32 done\n')
+
+    with pytest.raises(types.MessageError) as caught:
+        plan((types.Entry('demo_srvs/srv/Spin', {'missing.field': 4}),), msg_paths=(root,))
+
+    assert 'names no part' in str(caught.value)
+    assert 'request, response' in str(caught.value)
+
+
+def test_a_part_key_that_two_parts_share_is_refused(tmp_path):
+    root = tmp_path / 'messages'
+    write_service(root, 'demo_srvs/srv/Spin', 'int32 value\n---\nint32 value\n')
+
+    with pytest.raises(types.MessageError) as caught:
+        plan((types.Entry('demo_srvs/srv/Spin', {'value': 4}),), msg_paths=(root,))
+
+    assert 'is in more than one part' in str(caught.value)
+
+
+def test_the_flag_only_and_the_file_only_distro_rules(tmp_path, monkeypatch):
+    monkeypatch.delenv('ROS_DISTRO', raising=False)
+    listing = tmp_path / 'r2s-types.yaml'
+    listing.write_text('types: []\ndistro: lyrical\n', encoding='utf-8')
+
+    assert types._distro('rolling', None) == 'rolling'
+    assert types._distro(None, str(listing)) == 'lyrical'
+    assert types._distro(None, None) == 'jazzy'
+    monkeypatch.setenv('ROS_DISTRO', 'rolling')
+    assert types._distro(None, None) == 'rolling'
+
+
+def test_a_platformio_library_writes_its_flags_from_the_header(tmp_path):
+    out = tmp_path / 'out'
+
+    assert (
+        cli.main(
+            [
+                'types',
+                'custom_interfaces/msg/SensorReading',
+                '--msg-path',
+                str(EXAMPLES),
+                '--layout',
+                'platformio',
+                '--out',
+                str(out),
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out / 'library.json').read_text(encoding='utf-8'))
+    assert '-DR2S_MAX_FRAME=' in ' '.join(manifest['build']['flags'])
+    assert manifest['headers'] == 'ros2serial.h'
+
+
+def test_a_cmake_library_reads_its_limits_from_the_header(tmp_path):
+    out = tmp_path / 'out'
+
+    assert (
+        cli.main(
+            [
+                'types',
+                'custom_interfaces/msg/SensorReading',
+                '--msg-path',
+                str(EXAMPLES),
+                '--layout',
+                'cmake',
+                '--out',
+                str(out),
+            ]
+        )
+        == 0
+    )
+
+    text = (out / 'CMakeLists.txt').read_text(encoding='utf-8')
+    assert 'file(STRINGS src/r2s_bundled.h R2S_MAX_FRAME_LINE' in text
+    assert 'target_compile_definitions(' in text
+
+
+def test_the_written_config_omits_a_bounds_block_when_there_is_none(tmp_path):
+    config = tmp_path / 'r2s-types.yaml'
+
+    assert (
+        cli.main(
+            [
+                'types',
+                'custom_interfaces/msg/SensorReading',
+                '--msg-path',
+                str(EXAMPLES),
+                '--out',
+                str(tmp_path / 'out'),
+                '--write-config',
+                str(config),
+            ]
+        )
+        == 0
+    )
+
+    text = config.read_text(encoding='utf-8')
+    assert '  - custom_interfaces/msg/SensorReading' in text
+    assert 'bounds:' not in text
+
+
+def test_a_list_bound_on_an_unbounded_string_sequence_bounds_both(tmp_path):
+    """The `[count, string]` form fills in both lengths when the .msg has neither."""
+    root = tmp_path / 'messages'
+    write_message(root, 'demo_msgs/msg/Names', 'string[] names\n')
+
+    library = plan((types.Entry('demo_msgs/msg/Names', {'names': [4, 16]}),), msg_paths=(root,))
+
+    names = library.resolved['demo_msgs/msg/Names'].field('names')
+    assert names.array_bound == 4
+    assert names.string_bound == 16
+
+
+def test_a_list_bound_contradicting_the_sequence_names_the_msg(tmp_path):
+    root = tmp_path / 'messages'
+    write_message(root, 'demo_msgs/msg/Names', 'string[<=2] names\n')
+
+    with pytest.raises(types.MessageError) as caught:
+        plan((types.Entry('demo_msgs/msg/Names', {'names': [4, 16]}),), msg_paths=(root,))
+
+    assert 'the sequence length is already bounded in' in str(caught.value)
+    assert 'Names.msg' in str(caught.value)
+
+
+def test_a_bound_on_a_bare_string_names_the_msg(tmp_path):
+    root = tmp_path / 'messages'
+    write_message(root, 'demo_msgs/msg/Text', 'string<=8 text\n')
+
+    with pytest.raises(types.MessageError) as caught:
+        plan((types.Entry('demo_msgs/msg/Text', {'text': 8}),), msg_paths=(root,))
+
+    assert 'the field is already bounded in' in str(caught.value)
+    assert 'Text.msg' in str(caught.value)
+
+
+def test_a_nested_type_is_read_once_for_its_fields(tmp_path):
+    """A type reached twice from the closure is read once, which the bound check relies on."""
+    root = tmp_path / 'messages'
+    write_message(root, 'demo_msgs/msg/Inner', 'string text\n')
+    write_message(root, 'demo_msgs/msg/Outer', 'Inner first\ndemo_msgs/msg/Inner second\n')
+
+    library = plan(
+        (types.Entry('demo_msgs/msg/Outer', {'demo_msgs/msg/Inner.text': 8}),),
+        msg_paths=(root,),
+    )
+
+    assert library.resolved['demo_msgs/msg/Inner'].field('text').string_bound == 8
+
+
+def test_the_written_config_lists_a_service_and_a_plain_type(tmp_path):
+    config = tmp_path / 'r2s-types.yaml'
+
+    assert (
+        cli.main(
+            [
+                'types',
+                '--msg-path',
+                str(EXAMPLES),
+                '--out',
+                str(tmp_path / 'out'),
+                '--bound',
+                'custom_interfaces/srv/Calibrate_Response.note=24',
+                'custom_interfaces/srv/Calibrate',
+                'custom_interfaces/msg/SensorReading',
+                '--write-config',
+                str(config),
+            ]
+        )
+        == 0
+    )
+
+    text = config.read_text(encoding='utf-8')
+    assert '  - custom_interfaces/srv/Calibrate\n' in text
+    assert '  - custom_interfaces/msg/SensorReading\n' in text
+    assert '  custom_interfaces/srv/Calibrate_Response.note: 24' in text
+
+
+def test_a_type_list_that_is_not_utf8_is_refused(tmp_path):
+    listing = tmp_path / 'r2s-types.yaml'
+    listing.write_bytes(b'types:\n  - \xff\xfe\n')
+
+    with pytest.raises(types.MessageError) as caught:
+        types.read_list(listing)
+
+    assert 'save the file as UTF-8' in str(caught.value)
+
+
+def test_the_sourced_distro_is_reported_when_it_disagrees(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv('ROS_DISTRO', 'rolling')
+    monkeypatch.setenv('AMENT_PREFIX_PATH', '/opt/ros/rolling')
+
+    assert (
+        cli.main(
+            [
+                'types',
+                'custom_interfaces/msg/SensorReading',
+                '--msg-path',
+                str(EXAMPLES),
+                '--distro',
+                'jazzy',
+                '--out',
+                str(tmp_path / 'out'),
+            ]
+        )
+        == 0
+    )
+
+    assert "the sourced ROS distro is 'rolling'" in capsys.readouterr().err
+
+
+def test_a_list_bound_that_leaves_a_bounded_string_alone_is_refused(tmp_path):
+    """A `[count, string]` on a sequence whose element is bounded by the .msg."""
+    root = tmp_path / 'messages'
+    write_message(root, 'demo_msgs/msg/Names', 'string<=8[] names\n')
+
+    with pytest.raises(types.MessageError) as caught:
+        plan((types.Entry('demo_msgs/msg/Names', {'names': [2, 16]}),), msg_paths=(root,))
+
+    assert 'the field is already bounded in' in str(caught.value)
+
+
+def test_a_missing_pyyaml_is_reported_as_a_message(monkeypatch):
+    import builtins
+
+    real = builtins.__import__
+
+    def refuse(name, *args, **kwargs):
+        if name == 'yaml':
+            raise ImportError(name)
+        return real(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, '__import__', refuse)
+
+    with pytest.raises(types.MessageError) as caught:
+        types._parse('r2s-types.yaml', 'types: []')
+
+    assert 'pip install pyyaml' in str(caught.value)
+
+
+def test_a_config_that_cannot_be_written_names_the_path(tmp_path):
+    blocked = tmp_path / 'file'
+    blocked.write_text('x', encoding='utf-8')
+
+    with pytest.raises(OSError) as caught:
+        types.write_config(blocked / 'r2s-types.yaml', plan(SERVICE_AND_ACTION))
+
+    assert 'cannot write' in str(caught.value)
+
+
+def test_the_written_config_puts_a_message_bound_beside_its_type(tmp_path):
+    """A plain type's bound is written in its own entry, and the file re-reads."""
+    root = note_package(tmp_path)
+    config = tmp_path / 'r2s-types.yaml'
+
+    assert (
+        cli.main(
+            [
+                'types',
+                'demo_msgs/msg/Note',
+                '--msg-path',
+                str(root),
+                '--out',
+                str(tmp_path / 'out'),
+                '--bound',
+                'demo_msgs/msg/Note.text=24',
+                '--write-config',
+                str(config),
+            ]
+        )
+        == 0
+    )
+
+    text = config.read_text(encoding='utf-8')
+    assert '  - type: demo_msgs/msg/Note\n    bounds:\n      text: 24\n' in text
+    assert 'bounds:\n  demo_msgs' not in text
+    assert plan(types.read_list(config), msg_paths=(root,)).bounds == {
+        'demo_msgs/msg/Note.text': 24
+    }
 
 
 def test_a_message_named_like_a_service_part_is_a_message(tmp_path):
