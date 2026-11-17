@@ -232,6 +232,42 @@ def test_the_sketch_header_keeps_the_x_macro_expansion_for_a_topic_list():
     )
 
 
+def sketch_include_block(header):
+    """The `#ifdef __cplusplus` block of the sketch header, as the rows see it."""
+    start = header.index('#ifdef __cplusplus\n')
+    return header[start : header.index('#endif\n', start)]
+
+
+def test_the_sketch_header_includes_a_header_for_every_type_the_library_carries():
+    """A row can only name a type the header brought in, so the block covers the list."""
+    library = bundle.bundled_library('jazzy')
+    block = sketch_include_block(files()['src/ros2serial.h'])
+
+    for type_name in (*library.types, *library.nested, *library.actions):
+        assert f'#include <{cpp.message_path(type_name)}>' in block, type_name
+
+
+@pytest.mark.parametrize(
+    'type_name',
+    [
+        'sensor_msgs/msg/Range',
+        'std_msgs/msg/Bool',
+        'std_srvs/srv/Trigger_Request',
+        'std_srvs/srv/Trigger_Response',
+        'tf2_msgs/msg/TFMessage',
+        'tf2_msgs/action/LookupTransform_Goal',
+    ],
+)
+def test_a_row_naming_a_bundled_type_outside_the_literal_block_compiles(tmp_path, type_name):
+    """A hand-written block left these carried types unnamed, so their rows could not compile."""
+    root = sketch_dir(tmp_path, files())
+    body = case_with_rows(f'X(Publisher, {cpp.cpp_type(type_name)}, row_pub, "row")')
+
+    compiled = compile_case_cxx(root, body)
+
+    assert compiled.returncode == 0, compiled.stderr
+
+
 def test_the_bundle_ships_the_cpp_message_headers():
     files = bundle.bundle('jazzy')
 
