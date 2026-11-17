@@ -561,16 +561,13 @@ def _payload_constants(library: Library) -> list[str]:
 
 def _message_includes(library: Library) -> list[str]:
     """
-    Emit the C++ message includes the rows need.
+    Emit the include block: one C++ include per header the library ships.
 
-    A row names whatever type the library carries, so the block covers every
-    carried header: the types, the closure headers beside them and the action
-    headers, which carry the action entities. A hand-written list would let a
-    carried type go unnamed, and its row would not compile.
+    `Library.headers()` is the file set, so the block cannot drift from what
+    ships. A hand-written list left a carried type unnamed and its row would
+    not compile; a sketch needs only this header for any message it declares.
     """
-    paths = sorted(
-        {cpp.message_path(name) for name in (*library.types, *library.nested, *library.actions)}
-    )
+    paths = sorted(path.removeprefix('src/') for path in library.headers())
     return [f'#include <{path}>' for path in paths]
 
 
@@ -1106,9 +1103,9 @@ def _sketch_h(
         '#include "r2s/r2s_topics.h"',
         '#include "r2s/r2s_tx.h"',
         '',
-        '/* Every message type the library carries, so a row can name any of',
-        ' * them and a sketch needs only this header. They come after the',
-        " * limits above, so the limits stay the bundle's on every toolchain. */",
+        '/* Every header the library ships, so a topic row names its message',
+        ' * with no include of its own. They come after the limits above, so',
+        " * the limits stay the bundle's on every toolchain. */",
         '#ifdef __cplusplus',
         *_message_includes(library),
         '#endif',

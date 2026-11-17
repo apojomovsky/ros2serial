@@ -300,8 +300,8 @@ A type list file replaces the command line when the list should be reviewed:
 
 The library's name carries the digest of its types and bounds, so two libraries
 with different lists never collide and Arduino cannot pick the wrong one. The
-sketch header includes a header for every type the library carries, so a row
-names any of them with no include of its own. The distro comes from `--distro`,
+sketch header includes every header the library ships, so a topic row names its
+message type with no include of its own. The distro comes from `--distro`,
 then `ROS_DISTRO`, then the default, and the warning about a sourced distro
 that disagrees still applies. Regenerate the library after a `.msg` change: the
 type hashes travel with it, and a stale copy makes the bridge reject every topic

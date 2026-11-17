@@ -126,7 +126,7 @@ def compile_cxx(root: Path, source: Path, defines=()):
     )
 
 
-def compile_avr_cxx(root: Path, source: Path):
+def compile_avr_cxx(root: Path, source: Path, defines=()):
     """Compile a sketch for the Uno and the Mega, the two boards the library targets."""
     # The AVR legs run only where the toolchain is installed: a host without
     # the dev image still proves the emission, and the image carries avr-g++.
@@ -147,6 +147,7 @@ def compile_avr_cxx(root: Path, source: Path):
                     str(root / 'src'),
                     '-I',
                     str(CORE_INCLUDE),
+                    *defines,
                     str(source),
                 ],
                 capture_output=True,
@@ -392,6 +393,51 @@ def test_a_custom_row_compiles_for_the_uno_and_the_mega(tmp_path):
     )
 
     results = compile_avr_cxx(library, sketch)
+
+    assert [result.returncode for result in results] == [0, 0], [r.stderr for r in results]
+
+
+def test_the_sketch_header_includes_every_header_the_type_library_ships():
+    """A service's own header ships too, so a sketch reaches the runtime entity by this header."""
+    library = plan(SERVICE_AND_ACTION)
+    header = types.emit(library, 'arduino')['src/ros2serial.h']
+    start = header.index('#ifdef __cplusplus\n')
+    block = header[start : header.index('#endif\n', start)]
+
+    for path in library.headers():
+        assert f'#include <{path.removeprefix("src/")}>' in block, path
+
+
+def test_the_runtime_service_entity_comes_from_the_sketch_header(tmp_path):
+    """A service's own header carries the srv struct, so the sketch header must include it."""
+    library = staged(
+        tmp_path,
+        types.emit(
+            plan(
+                (
+                    types.Entry(
+                        'custom_interfaces/srv/Calibrate',
+                        {'custom_interfaces/srv/Calibrate_Response.note': 16},
+                    ),
+                )
+            ),
+            'arduino',
+        ),
+    )
+    sketch = tmp_path / 'service.cpp'
+    sketch.write_text(
+        '#include <ros2serial.h>\n'
+        '#include <r2s/service.hpp>\n'
+        'r2s::Node node("types_check");\n'
+        'static void on_calibrate(const custom_interfaces::srv::Calibrate::Request &req,\n'
+        '                         custom_interfaces::srv::Calibrate::Response &res)\n'
+        '{\n    (void)req;\n    res.accepted = 1u;\n}\n'
+        'r2s::Service<custom_interfaces::srv::Calibrate> calibrate(node, "calibrate",\n'
+        '                                                          on_calibrate);\n',
+        encoding='utf-8',
+    )
+
+    results = compile_avr_cxx(library, sketch, ('-DR2S_WITH_SERVICES',))
 
     assert [result.returncode for result in results] == [0, 0], [r.stderr for r in results]
 

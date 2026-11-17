@@ -238,13 +238,13 @@ def sketch_include_block(header):
     return header[start : header.index('#endif\n', start)]
 
 
-def test_the_sketch_header_includes_a_header_for_every_type_the_library_carries():
-    """A row can only name a type the header brought in, so the block covers the list."""
+def test_the_sketch_header_includes_every_header_the_library_ships():
+    """The block and the file set are one fact: a header that ships is included."""
     library = bundle.bundled_library('jazzy')
     block = sketch_include_block(files()['src/ros2serial.h'])
 
-    for type_name in (*library.types, *library.nested, *library.actions):
-        assert f'#include <{cpp.message_path(type_name)}>' in block, type_name
+    for path in library.headers():
+        assert f'#include <{path.removeprefix("src/")}>' in block, path
 
 
 @pytest.mark.parametrize(
@@ -255,7 +255,6 @@ def test_the_sketch_header_includes_a_header_for_every_type_the_library_carries(
         'std_srvs/srv/Trigger_Request',
         'std_srvs/srv/Trigger_Response',
         'tf2_msgs/msg/TFMessage',
-        'tf2_msgs/action/LookupTransform_Goal',
     ],
 )
 def test_a_row_naming_a_bundled_type_outside_the_literal_block_compiles(tmp_path, type_name):

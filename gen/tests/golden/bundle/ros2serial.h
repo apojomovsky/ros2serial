@@ -19,9 +19,9 @@
 #include "r2s/r2s_topics.h"
 #include "r2s/r2s_tx.h"
 
-/* Every message type the library carries, so a row can name any of
- * them and a sketch needs only this header. They come after the
- * limits above, so the limits stay the bundle's on every toolchain. */
+/* Every header the library ships, so a topic row names its message
+ * with no include of its own. They come after the limits above, so
+ * the limits stay the bundle's on every toolchain. */
 #ifdef __cplusplus
 #include <builtin_interfaces/msg/duration.hpp>
 #include <builtin_interfaces/msg/time.hpp>
@@ -37,6 +37,7 @@
 #include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/header.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_srvs/srv/trigger.hpp>
 #include <std_srvs/srv/trigger_request.hpp>
 #include <std_srvs/srv/trigger_response.hpp>
 #include <tf2_msgs/action/lookup_transform.hpp>
