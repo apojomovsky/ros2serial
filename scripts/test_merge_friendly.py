@@ -148,7 +148,7 @@ def test_no_generated_banner_carries_the_bundle_hash():
 
 
 def test_the_bundle_hash_lives_in_the_bundled_header_only():
-    digest = bundle._digest('jazzy')
+    digest = bundle._bundled_digest('jazzy')
     golden = ROOT / 'gen/tests/golden/bundle/r2s_bundled.h'
     assert f'#define R2S_BUNDLE_HASH "{digest}"' in golden.read_text(encoding='utf-8')
     holders = [

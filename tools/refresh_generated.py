@@ -125,7 +125,12 @@ def _refresh_actions() -> None:
     actions = GOLDEN / 'actions'
     actions.mkdir(parents=True, exist_ok=True)
     (actions / 'lookup_transform.hpp').write_text(
-        cpp.emit_action_hpp(resolved, 'tf2_msgs/action/LookupTransform', repository),
+        cpp.emit_action_hpp(
+            resolved,
+            'tf2_msgs/action/LookupTransform',
+            repository,
+            bundle.banner(bundle.bundled_library()),
+        ),
         encoding='utf-8',
     )
     with tempfile.TemporaryDirectory() as tmp:
@@ -150,7 +155,12 @@ def _refresh_actions() -> None:
             },
         )
         (actions / 'spin.hpp').write_text(
-            cpp.emit_action_hpp(user_resolved, 'demo_msgs/action/Spin', user_repo),
+            cpp.emit_action_hpp(
+                user_resolved,
+                'demo_msgs/action/Spin',
+                user_repo,
+                bundle.banner(bundle.bundled_library()),
+            ),
             encoding='utf-8',
         )
 
