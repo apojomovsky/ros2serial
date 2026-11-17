@@ -141,10 +141,10 @@ def test_a_bound_on_an_already_bounded_field_is_an_error():
             bounds={**HEADER_BOUNDS, 'sensor_msgs/msg/Imu.orientation_covariance': 9},
         )
 
-    assert str(caught.value) == (
-        'sensor_msgs/msg/Imu.orientation_covariance: the field is already bounded; '
-        'remove the bound'
+    assert str(caught.value).startswith(
+        'sensor_msgs/msg/Imu.orientation_covariance: the field is already bounded in '
     )
+    assert str(caught.value).endswith('Imu.msg; remove the bound')
 
 
 def test_a_list_bound_on_a_sequence_that_is_not_of_strings_is_an_error():
@@ -186,9 +186,10 @@ def test_a_list_bound_whose_count_differs_from_a_declared_bound_is_an_error(tmp_
             bounds={'demo_msgs/msg/Sample.names': [3, 12]},
         )
 
-    assert str(caught.value) == (
-        'demo_msgs/msg/Sample.names: the sequence length is already bounded; remove the count'
+    assert str(caught.value).startswith(
+        'demo_msgs/msg/Sample.names: the sequence length is already bounded in '
     )
+    assert str(caught.value).endswith('Sample.msg; remove the count')
 
 
 @pytest.mark.parametrize(

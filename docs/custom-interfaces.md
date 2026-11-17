@@ -256,3 +256,65 @@ Unsupported fields fail generation. Compact handshake and `--cpp` output are
 not implemented: use the default full handshake and generated C API.
 See the [generator specification](00-design.md#code-generator-specification)
 for the schema and [troubleshooting](troubleshooting.md) for hash mismatches.
+
+## Emit a type library for the X-macro and runtime routes
+
+`r2s-gen types` emits an Arduino-style library for your own interface types, so
+a custom type reaches the X-macro list and the runtime objects with the same
+rows a bundled type uses. There is no `r2s.yaml` and no topic list: the input is
+the types themselves.
+
+```sh
+ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \
+  --msg-path ~/ros2_ws/src --layout arduino --out firmware/lib
+```
+
+A sketch then names the type like any bundled one:
+
+<!-- snippet: skip until #647: names the reader's own package, which no staged fixture carries -->
+```cpp
+#define R2S_NODE_NAME "sensor_board"
+#define R2S_TOPICS(X) \
+  X(Publisher, my_robot_interfaces::msg::SensorReading, reading_pub, "reading")
+#include <ros2serial.h>
+```
+
+Every variable-length field takes its bound from the `.msg` (`string<=12`,
+`T[<=N]`) or from the command line, and a field with neither fails the command
+naming the field:
+
+```sh
+ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \
+  --msg-path ~/ros2_ws/src --out firmware/lib \
+  --bound my_robot_interfaces/msg/SensorReading.text=24
+```
+
+`--bound` is repeatable and refuses a field the `.msg` already bounds, because a
+smaller MCU buffer cannot hold a message the host may legally send; the message
+names the field and the file that bounds it. A service or an action is named as
+itself and expands to the parts its definition splits into, with the bound
+naming the part, as `--bound my_robot_interfaces/action/Run_Result.note=24`.
+A type list file replaces the command line when the list should be reviewed:
+`--types-file r2s-types.yaml`, with one type per line and the same bounds.
+`--write-config r2s-types.yaml` writes that file from a command you already ran.
+
+The library's name carries the digest of its types and bounds, so two libraries
+with different lists never collide and Arduino cannot pick the wrong one. The
+distro comes from `--distro`, then `ROS_DISTRO`, then the default, and the
+warning about a sourced distro that disagrees still applies. Regenerate the
+library after a `.msg` change: the type hashes travel with it, and a stale copy
+makes the bridge reject every topic at handshake rather than failing to compile.
+
+The sketch header checks every row against the build's `R2S_MAX_FRAME` and
+fails the build naming the object that does not fit, in both the C and the C++
+spelling; the runtime route gets the same check as a `constexpr` over the
+library. Each check counts the payload and the announce it makes, name length
+varints included, so a limit one byte too small fails at that row rather than at
+connect time. The frame limit itself stays a build flag, since it sizes the
+core's own buffers: pass it to every translation unit, as the core's header
+requires. A type list whose payloads need more than the protocol's 65277-byte
+frame is refused when the library is generated.
+
+Keep `r2s.yaml` when the firmware needs what a type list cannot state:
+`limits.max_frame`, `features`, `tier`, and the generated service and action
+indices that the static C hook API switches on.
