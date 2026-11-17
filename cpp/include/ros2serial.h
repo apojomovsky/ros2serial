@@ -19,22 +19,29 @@
 #include "r2s/r2s_topics.h"
 #include "r2s/r2s_tx.h"
 
-/* The bundled message types the rows name: included here so a sketch
- * needs only this header, and after the bundled limits above so the
- * limits stay the bundle's on every toolchain. */
+/* Every message type the library carries, so a row can name any of
+ * them and a sketch needs only this header. They come after the
+ * limits above, so the limits stay the bundle's on every toolchain. */
 #ifdef __cplusplus
 #include <builtin_interfaces/msg/duration.hpp>
 #include <builtin_interfaces/msg/time.hpp>
 #include <geometry_msgs/msg/quaternion.hpp>
+#include <geometry_msgs/msg/transform.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/vector3.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <sensor_msgs/msg/range.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/header.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_srvs/srv/trigger_request.hpp>
+#include <std_srvs/srv/trigger_response.hpp>
 #include <tf2_msgs/action/lookup_transform.hpp>
 #include <tf2_msgs/msg/tf2_error.hpp>
+#include <tf2_msgs/msg/tf_message.hpp>
 #endif
 
 /* A C++ sketch without a topic list uses the runtime API: it declares
