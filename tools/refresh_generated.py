@@ -27,6 +27,7 @@ from r2s_gen import cpp  # noqa: E402
 from r2s_gen import descriptors  # noqa: E402
 from r2s_gen import emit  # noqa: E402
 from r2s_gen import layouts  # noqa: E402
+from r2s_gen import limits  # noqa: E402
 from r2s_gen import msgs  # noqa: E402
 from r2s_gen import services  # noqa: E402
 from r2s_gen import topics  # noqa: E402
@@ -349,6 +350,13 @@ def _refresh_posix() -> None:
     (POSIX / 'src' / 'r2s_generated.c').write_text(source, encoding='utf-8')
 
 
+def _refresh_limits() -> None:
+    target = GOLDEN / 'limits'
+    target.mkdir(parents=True, exist_ok=True)
+    for distro in bundle.DISTROS:
+        (target / f'{distro}.txt').write_text(limits.table(distro), encoding='utf-8')
+
+
 def main() -> int:
     _refresh_types()
     _refresh_actions()
@@ -357,6 +365,7 @@ def main() -> int:
     _refresh_service_emit()
     _refresh_topics()
     _refresh_bundle()
+    _refresh_limits()
     _refresh_layouts()
     _refresh_example('cmake_minimal', 'cmake')
     _refresh_custom_example()
