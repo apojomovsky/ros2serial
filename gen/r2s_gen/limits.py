@@ -39,7 +39,7 @@ class Row:
 
 def rows(library: Library, source_map: str) -> tuple[Row, ...]:
     """
-    Collect one row per bounded field, sorted by type and field name.
+    Collect one row per bounded field, ordered by type and then by definition.
 
     :param library: the resolved library to read.
     :param source_map: the name a capacity from `library.bounds` is reported by.
