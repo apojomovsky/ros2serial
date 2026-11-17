@@ -123,14 +123,22 @@ def run_runner(bindir, report_dir, calls_file):
     )
 
 
-def reports_in(calls_file, report_dir):
-    """The report paths the stubs would have written, as paths."""
-    written = []
-    for line in calls_file.read_text().splitlines():
-        if line.startswith(('mull-runner', 'mull-reporter')):
-            written.append(line)
-    assert written, calls_file.read_text()
-    return written
+def report_dirs(calls_file):
+    """Every Mull call's report directory and bare report name."""
+    lines = [
+        line
+        for line in calls_file.read_text().splitlines()
+        if line.startswith(('mull-runner', 'mull-reporter'))
+    ]
+    assert lines, calls_file.read_text()
+    dirs = []
+    for line in lines:
+        fields = line.split()
+        assert '--report-dir' in fields, line
+        dirs.append(fields[fields.index('--report-dir') + 1])
+        name = fields[fields.index('--report-name') + 1]
+        assert '/' not in name, line
+    return dirs
 
 
 def test_every_report_lands_in_the_report_directory(tmp_path):
@@ -140,9 +148,13 @@ def test_every_report_lands_in_the_report_directory(tmp_path):
     write_stubs(bindir)
     report_dir = tmp_path / 'report'
     calls = tmp_path / 'calls'
+    stray = ROOT / 'mutation' / 'bridge' / 'mull-bridge.sqlite'
+    existed = stray.exists()
     result = run_runner(bindir, report_dir, calls)
     assert 'report directory is not usable' not in result.stderr, result.stderr
-    assert reports_in(calls, report_dir)
+    assert stray.exists() == existed, f'the run wrote {stray}'
+    dirs = report_dirs(calls)
+    assert set(dirs) == {str(report_dir)}, dirs
     landed = sorted(path.name for path in report_dir.glob('*.sqlite')) + sorted(
         path.name for path in report_dir.glob('mull*.json')
     )
@@ -150,7 +162,6 @@ def test_every_report_lands_in_the_report_directory(tmp_path):
     assert 'mull-bridge.sqlite' in landed, landed
     assert 'mull.json' in landed, landed
     assert 'mull-bridge.json' in landed, landed
-    assert not (ROOT / 'mutation' / 'bridge' / 'mull-bridge.sqlite').exists()
 
 
 def test_the_run_reaches_the_generator_stage_that_stops_the_stub(tmp_path):
