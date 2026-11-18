@@ -53,7 +53,7 @@ def render_block() -> str:
         names = listed[0] if len(listed) == 1 else f'{", ".join(listed[:-1])} and {listed[-1]}'
         parts += [f'{names}:', '', '```text', body.rstrip('\n'), '```', '']
     parts.append(END)
-    return '\n'.join(parts) + '\n'
+    return '\n'.join(parts)
 
 
 def check(text: str) -> list[str]:
@@ -65,7 +65,7 @@ def check(text: str) -> list[str]:
     if end < start:
         return [f'{PAGE}: no {END} marker after {BEGIN}; add the block make bounds-table writes']
     found = text[start : end + len(END)]
-    if found == render_block().rstrip('\n'):
+    if found == render_block():
         return []
     return [
         f'{PAGE}: the limits table differs from `r2s-gen limits`;'
@@ -79,7 +79,10 @@ def with_block(text: str, block: str) -> str:
     end = text.find(END)
     if start < 0 or end < start:
         raise ValueError(f'{PAGE} carries no marked block to replace')
-    return text[:start] + block + text[end + len(END) :]
+    rest = text[end + len(END) :]
+    # The block carries no trailing newline of its own, so the page's one
+    # separator survives a refresh instead of growing by a line each run.
+    return text[:start] + block + rest
 
 
 def main(argv: list[str] | None = None) -> int:

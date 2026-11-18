@@ -20,6 +20,7 @@ from dataclasses import field
 from pathlib import Path
 from typing import Any
 
+from r2s_gen import docs
 from r2s_gen.bounds import BoundsError
 from r2s_gen.msgs import MessageError
 from r2s_gen.topics import check_collisions
@@ -184,7 +185,7 @@ def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParse
         help='search DIR for message packages; repeatable',
     )
     parser.set_defaults(run=run)
-    return parser
+    return docs.note(parser)
 
 
 def run(args: argparse.Namespace) -> int:

@@ -25,7 +25,7 @@ def test_the_block_is_the_command_output_between_its_markers():
     block = bounds_table.render_block()
 
     assert block.startswith(bounds_table.BEGIN + '\n')
-    assert block.endswith(bounds_table.END + '\n')
+    assert block.endswith(bounds_table.END)
     assert limits.table('jazzy').split('\n', 1)[1] in block
 
 
@@ -66,3 +66,21 @@ def test_the_real_page_matches_the_command():
     text = (ROOT / bounds_table.PAGE).read_text(encoding='utf-8')
 
     assert bounds_table.check(text) == []
+
+
+def test_writing_twice_leaves_the_page_byte_identical():
+    """A refresh after a refresh is a no-op, so make bounds-table never adds a blank line."""
+    once = bounds_table.with_block(page(bounds_table.render_block()), bounds_table.render_block())
+    twice = bounds_table.with_block(once, bounds_table.render_block())
+
+    assert twice == once
+
+
+def test_the_page_quotes_the_message_the_resolver_prints():
+    """The example block a reader copies must be the text the code currently emits."""
+    text = (ROOT / bounds_table.PAGE).read_text(encoding='utf-8')
+    from r2s_gen.docs import BOUNDS_URL
+
+    for line in text.splitlines():
+        if line.startswith('r2s-gen: error: ') and 'unbounded' in line:
+            assert line.endswith(f'see {BOUNDS_URL}'), line

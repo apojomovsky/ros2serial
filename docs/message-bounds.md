@@ -36,8 +36,8 @@ Generation fails and names the field, rather than picking a capacity nobody
 chose:
 
 ```text
-r2s-gen: error: std_msgs/msg/Header.frame_id: unbounded string; set bounds['std_msgs/msg/Header.frame_id']
-r2s-gen: error: sensor_msgs/msg/JointState.name: unbounded sequence; set bounds['sensor_msgs/msg/JointState.name'] to its element count
+r2s-gen: error: std_msgs/msg/Header.frame_id: unbounded string; set bounds['std_msgs/msg/Header.frame_id']; see https://apojomovsky.github.io/ros2serial/message-bounds.html
+r2s-gen: error: sensor_msgs/msg/JointState.name: unbounded sequence; set bounds['sensor_msgs/msg/JointState.name'] to its element count; see https://apojomovsky.github.io/ros2serial/message-bounds.html
 ```
 
 There is no fallback and no default. `wstring` and `wchar` have no wire form

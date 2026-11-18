@@ -370,6 +370,8 @@ def test_a_published_pointer_to_a_page_the_site_lacks_is_named(tmp_path, monkeyp
 def test_a_published_pointer_to_a_page_the_site_carries_passes(tmp_path, monkeypatch):
     files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
     files['tools/site_build.py'] = (
+        'from collections import namedtuple\n'
+        "Page = namedtuple('Page', 'source output title blurb')\n"
         "PAGES = (Page('docs/message-bounds.md', 'message-bounds.html', 'Bounds', 'x'),)\n"
     )
     files['gen/r2s_gen/docs.py'] = (
@@ -389,3 +391,48 @@ def test_the_real_tree_is_green():
         check=False,
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_a_page_under_a_subdirectory_links_the_section_by_a_relative_path(tmp_path, monkeypatch):
+    """docs/research/x.md reaches the page as ../message-bounds.md, not as a sibling."""
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/research/x.md'] = 'Bound with `string<=12`; [here](../message-bounds.md).\n'
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_bounds_links) == []
+
+
+def test_a_nested_page_whose_link_does_not_reach_the_section_is_named(tmp_path, monkeypatch):
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/research/x.md'] = 'Bound with `string<=12`; [here](message-bounds.md).\n'
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_bounds_links)
+    assert found == [
+        'docs/research/x.md: mentions bounds but does not link docs/message-bounds.md'
+    ]
+
+
+def test_a_dead_anchor_from_a_nested_page_is_named(tmp_path, monkeypatch):
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/research/x.md'] = 'Bound with `string<=12`; [here](../message-bounds.md#gone).\n'
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_bounds_links)
+    assert found == [
+        'docs/research/x.md: link to ../message-bounds.md#gone matches no heading'
+        ' on the bounds page'
+    ]
+
+
+def test_a_bound_in_ordinary_prose_counts_as_mentioning_bounds(tmp_path, monkeypatch):
+    """The gate cannot be satisfied by avoiding the token set: plain prose counts."""
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/x.md'] = 'Publishing past the bound fails instead of sending.\n'
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_bounds_links)
+    assert found == ['docs/x.md: mentions bounds but does not link docs/message-bounds.md']
+
+
+def test_a_timing_bound_is_not_a_message_bound(tmp_path, monkeypatch):
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/x.md'] = 'The sync scenario judges stamps within a timing bound.\n'
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_bounds_links) == []

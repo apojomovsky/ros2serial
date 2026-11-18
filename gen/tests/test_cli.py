@@ -38,6 +38,6 @@ def test_every_bound_taking_command_points_at_the_bounds_section():
         action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
     )
 
-    for name in ('generate', 'types', 'limits'):
+    for name in ('check', 'generate', 'limits', 'types'):
         help_text = subparsers.choices[name].format_help()
         assert BOUNDS_URL in help_text, f'{name} help does not name the bounds section'

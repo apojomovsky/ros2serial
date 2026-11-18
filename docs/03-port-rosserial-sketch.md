@@ -185,7 +185,9 @@ void fill_greeting(std_msgs::String &msg, const char *text)
 
 Longer text truncates at 16 characters and stays terminated. Sending
 a string without a terminator inside the buffer fails the publish
-with the bounds error instead of emitting bad bytes.
+with the bounds error instead of emitting bad bytes
+([message bounds](message-bounds.md) says where the 16 comes from and how to
+change it).
 
 Bounded arrays carry their length beside the storage, so set the size
 next to the elements. `JointState` holds 6 names and 6 entries per
