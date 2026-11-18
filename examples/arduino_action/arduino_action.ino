@@ -2,75 +2,49 @@
 // Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
 /* Arduino action example: the action server API on Uno and Mega, running
- * one Fibonacci-like goal. The goal, result and feedback ride on the
- * bundled Float32 descriptors, so the example needs no r2s.yaml and no
- * generated output; the library ships the runtime layer and the bundled
- * message types. The sketch builds with R2S_WITH_ACTIONS, which the
- * bundled flags leave out. RAM cost: 1319 bytes on Uno (measured by
- * scripts/build-examples.sh). */
+ * one goal. The action is the bundled LookupTransform action, so the goal,
+ * result and feedback and the announced type come from the generated
+ * header and the sketch names none of them. The sketch builds with
+ * R2S_WITH_ACTIONS, which the bundled flags leave out. RAM cost: measured
+ * by scripts/build-examples.sh. */
 
 #include <ros2serial.h>
 
+#include <string.h>
+
 #include <r2s/action.hpp>
-#include <std_msgs/msg/float32.hpp>
-
-/* The Fibonacci-like action: the order to compute, the partial sequence
- * and the full one, all as Float32 payloads for the example. */
-struct Spin {
-    using Goal = std_msgs::msg::Float32;
-    using Result = std_msgs::msg::Float32;
-    using Feedback = std_msgs::msg::Float32;
-};
-
-namespace r2s
-{
-namespace action
-{
-template <> struct traits<Spin> {
-    static const char *action_name()
-    {
-        return "spin";
-    }
-    static const char *type_name()
-    {
-        return "test_msgs/action/Fibonacci";
-    }
-    static const uint8_t *type_hash()
-    {
-        static const uint8_t hash[8] = {0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u, 0x18u};
-        return hash;
-    }
-};
-} // namespace action
-} // namespace r2s
+#include <tf2_msgs/action/lookup_transform.hpp>
 
 /* The running goal, held between the accepted callback and the terminal
- * call, and the feedback sent so far. */
-static r2s::action::ServerGoalHandle<Spin> *s_goal = nullptr;
-static uint8_t s_progress = 0u;
+ * call, and the feedbacks sent so far. */
+static r2s::action::ServerGoalHandle<tf2_msgs::action::LookupTransform> *s_goal = nullptr;
+static uint8_t s_feedbacks = 0u;
 
-r2s::action::GoalResponse on_spin_goal(const std_msgs::msg::Float32 &goal)
+r2s::action::GoalResponse on_spin_goal(const tf2_msgs::action::LookupTransform::Goal &goal)
 {
-    if (goal.data > 10.0f) {
+    /* An empty target frame names no frame, so the example refuses it the
+     * way a real server refuses a goal it cannot serve. */
+    if (goal.target_frame[0] == '\0') {
         return r2s::action::GoalResponse::REJECT;
     }
     return r2s::action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
-r2s::action::CancelResponse on_spin_cancel(const std_msgs::msg::Float32 &goal)
+r2s::action::CancelResponse on_spin_cancel(const tf2_msgs::action::LookupTransform::Goal &goal)
 {
     (void)goal;
     return r2s::action::CancelResponse::ACCEPT;
 }
 
-void on_spin_accepted(r2s::action::ServerGoalHandle<Spin> &handle)
+void on_spin_accepted(r2s::action::ServerGoalHandle<tf2_msgs::action::LookupTransform> &handle)
 {
     s_goal = &handle;
-    s_progress = 0u;
+    s_feedbacks = 0u;
 }
 
 r2s::Node node("base_controller");
-r2s::action::Server<Spin> fib("spin", on_spin_goal, on_spin_cancel, on_spin_accepted);
+r2s::action::Server<tf2_msgs::action::LookupTransform> spin("spin", on_spin_goal,
+                                                            on_spin_cancel, on_spin_accepted);
 
 void setup() { node.begin(Serial, 115200); }
 void loop()
@@ -80,22 +54,30 @@ void loop()
         return;
     }
     if (s_goal->is_canceling()) {
-        std_msgs::msg::Float32 result;
+        tf2_msgs::action::LookupTransform::Result result;
 
-        result.data = 0.0f;
+        /* The wire form is the whole message, so every field starts known:
+         * an unset stamp would ride the frame as stack bytes. */
+        memset(&result, 0, sizeof result);
         (void)s_goal->canceled(result);
         s_goal = nullptr;
         return;
     }
     {
-        std_msgs::msg::Float32 feedback;
-        std_msgs::msg::Float32 result;
+        tf2_msgs::action::LookupTransform::Feedback feedback;
+        tf2_msgs::action::LookupTransform::Result result;
 
-        feedback.data = (float)s_progress;
+        feedback.structure_needs_at_least_one_member = 0u;
         (void)s_goal->publish_feedback(feedback);
-        s_progress++;
-        if (s_progress >= 3u) {
-            result.data = 1.0f;
+        s_feedbacks++;
+        if (s_feedbacks >= 3u) {
+            /* The result carries a fixed transform, so the example shows a
+             * payload a client reads rather than a zeroed one. */
+            memset(&result, 0, sizeof result);
+            result.transform.transform.translation.x = 1.0;
+            result.transform.transform.translation.y = 2.0;
+            result.transform.transform.translation.z = 3.0;
+            result.transform.transform.rotation.w = 1.0;
             (void)s_goal->succeed(result);
             s_goal = nullptr;
         }

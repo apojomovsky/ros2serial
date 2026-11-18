@@ -16,13 +16,13 @@ firmware:
     flash: 332500
     ram: 90900
   arduino_action/uno/arduino_action.ino.elf:
-    flash: 16000
-    ram: 1600
-    stack: 200
+    flash: 17500
+    ram: 1700
+    stack: 300
   arduino_action/mega/arduino_action.ino.elf:
-    flash: 16500
-    ram: 1600
-    stack: 210
+    flash: 18000
+    ram: 1700
+    stack: 310
   arduino_service/uno/arduino_service.ino.elf:
     flash: 16000
     ram: 1500
