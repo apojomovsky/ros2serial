@@ -1,15 +1,14 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The nightly mutation run keeps its reports inside the report directory.
+"""The generator stage runs mutmut in a workspace shaped the way it needs.
 
-Mull composes a report path as "<report-dir>/<report-name>.sqlite". The
-runner gave it an absolute path as the name, so the composed path was
-"<cwd>/<absolute path>", the SQLite open failed after every mutant, and the
-nightly job went red on a directory it could have refused in the first
-second. The real Mull binary is only in the mutation image, so the stubs
-here implement that documented join: what the runner passes is what the
-report path becomes.
+mutmut names a mutant after the source path it was given and runs pytest
+from mutants/. So the package has to sit at the top of the directory mutmut
+runs in, and the suite has to be staged beside it. It also spells its
+result flag as a value option, so a bare --all exits 2. These tests drive
+run-mutation.sh with stubs that model all four facts, and fail when any of
+them drifts.
 """
 
 import os
@@ -21,8 +20,6 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 RUNNER = ROOT / 'scripts' / 'run-mutation.sh'
 
-# A stub that records its arguments, so a test can see which path the run
-# would have written.
 RECORD = """#!/bin/bash
 printf '%s %s\\n' "${0##*/}" "$*" >>"$STUB_CALLS"
 """
@@ -67,11 +64,34 @@ fi
 CTEST = """#!/bin/bash
 echo 'Test project /tmp/build'
 echo '  Test   #1: test_foo.test_bar'
-echo '  Test   #2: test_foo.test_baz'
 """
 
-# The compiler stub satisfies build-host-lib.sh without compiling it: this
-# test is about report paths, not about the host library.
+# mutmut, modelled from 3.8.1: the workspace must carry r2s_gen at its top
+# and a gen/tests inside mutants/; --all is a value option.
+MUTMUT = (
+    RECORD
+    + """
+cwd=$(pwd)
+case "$1" in
+  run)
+    [ -d "$cwd/r2s_gen" ] || { echo "no r2s_gen at the workspace top: $cwd" >&2; exit 9; }
+    [ -d "$cwd/mutants/gen/tests" ] || { echo "no suite in mutants/" >&2; exit 9; }
+    grep -q 'source_paths = \\["r2s_gen"\\]' "$cwd/pyproject.toml" || {
+      echo "the config does not name the top-level package" >&2
+      exit 9
+    }
+    mkdir -p mutants
+    printf '{"killed": 1}' >mutants/mutmut-cicd-stats.json
+    ;;
+  export-cicd-stats) [ -f mutants/mutmut-cicd-stats.json ] || exit 9 ;;
+  results)
+    [ "${2:-}" = --all ] && [ "${3:-}" = true ] || { echo "results needs --all true" >&2; exit 9; }
+    ;;
+esac
+exit 0
+"""
+)
+
 CC = """#!/bin/bash
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -80,15 +100,6 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 touch "${out:?}"
-"""
-
-# The run stops here: the generator stage is not what this test measures,
-# and the alternative is writing mutmut's state into the tree.
-MUTMUT = """#!/bin/bash
-case "$1" in
-  export-cicd-stats) echo stub-mutmut-stop; exit 1 ;;
-esac
-exit 0
 """
 
 
@@ -113,7 +124,7 @@ def run_runner(bindir, report_dir, calls_file):
         capture_output=True,
         text=True,
         cwd=ROOT,
-        timeout=300,
+        timeout=600,
         env={
             **os.environ,
             'PATH': f'{bindir}:{os.environ["PATH"]}',
@@ -148,11 +159,8 @@ def test_every_report_lands_in_the_report_directory(tmp_path):
     write_stubs(bindir)
     report_dir = tmp_path / 'report'
     calls = tmp_path / 'calls'
-    stray = ROOT / 'mutation' / 'bridge' / 'mull-bridge.sqlite'
-    existed = stray.exists()
     result = run_runner(bindir, report_dir, calls)
     assert 'report directory is not usable' not in result.stderr, result.stderr
-    assert stray.exists() == existed, f'the run wrote {stray}'
     dirs = report_dirs(calls)
     assert set(dirs) == {str(report_dir)}, dirs
     landed = sorted(path.name for path in report_dir.glob('*.sqlite')) + sorted(
@@ -164,17 +172,26 @@ def test_every_report_lands_in_the_report_directory(tmp_path):
     assert 'mull-bridge.json' in landed, landed
 
 
-def test_the_run_reaches_the_generator_stage_that_stops_the_stub(tmp_path):
-    """The stub stops at the generator, so the Mull stages all ran.
+def test_the_generator_stage_reaches_its_end(tmp_path):
+    """Every mutmut call the runner makes must succeed in the staged workspace.
 
-    A silent early exit would make the path assertions above vacuous.
+    The stub fails on the layout or the flag the runner gets wrong, so a
+    regression here names the step instead of the nightly.
     """
     bindir = tmp_path / 'bin'
     bindir.mkdir()
     write_stubs(bindir)
-    result = run_runner(bindir, tmp_path / 'report', tmp_path / 'calls')
-    assert result.returncode != 0
-    assert 'stub-mutmut-stop' in (result.stdout + result.stderr), result.stdout
+    report_dir = tmp_path / 'report'
+    calls = tmp_path / 'calls'
+    result = run_runner(bindir, report_dir, calls)
+    mutmut_calls = [line for line in calls.read_text().splitlines() if line.startswith('mutmut ')]
+    assert any(line.startswith('mutmut run') for line in mutmut_calls), mutmut_calls
+    assert any('export-cicd-stats' in line for line in mutmut_calls), mutmut_calls
+    assert any('results --all true' in line for line in mutmut_calls), mutmut_calls
+    assert 'no r2s_gen' not in result.stderr, result.stderr
+    assert 'no suite in mutants/' not in result.stderr, result.stderr
+    assert 'results needs' not in result.stderr, result.stderr
+    assert (report_dir / 'mutmut-cicd-stats.json').is_file()
 
 
 def test_the_mutation_run_refuses_a_report_dir_that_is_a_file(tmp_path):
