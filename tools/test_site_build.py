@@ -141,6 +141,27 @@ def test_build_writes_pages_and_index(tmp_path):
     assert 'walkthrough.html' in index and 'a.html' in index
 
 
+def test_build_publishes_readme_artwork(tmp_path):
+    root = write_tree(
+        tmp_path,
+        {
+            'README.md': '# ros2serial\n\n![ros2serial](docs/artwork/ros2serial.png)\n',
+            'docs/artwork/ros2serial.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>',
+        },
+    )
+    image = b'\x89PNG\r\n\x1a\n'
+    (root / 'docs/artwork/ros2serial.png').write_bytes(image)
+    pages = (site_build.Page('README.md', 'walkthrough.html', 'Walkthrough', 'Start here.'),)
+    out = tmp_path / 'site'
+
+    assert site_build.build_site(root, out, pages) == []
+    assert 'src="docs/artwork/ros2serial.png"' in (out / 'walkthrough.html').read_text()
+    assert (out / 'docs/artwork/ros2serial.png').read_bytes() == image
+    assert (out / 'docs/artwork/ros2serial.svg').read_bytes() == (
+        root / 'docs/artwork/ros2serial.svg'
+    ).read_bytes()
+
+
 def test_build_missing_source_is_a_problem(tmp_path):
     root = write_tree(tmp_path, {'README.md': '# T\n'})
     pages = (
