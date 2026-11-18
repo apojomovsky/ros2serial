@@ -130,6 +130,10 @@ class TestLeastDelayedError(unittest.TestCase):
         with self.assertRaises(AssertionError):
             checks.least_delayed_error_ns([], [2_000_000], 10)
 
+    def test_no_round_trips_is_refused(self):
+        with self.assertRaises(AssertionError):
+            checks.least_delayed_error_ns(self.stamps_of(0), [], 10)
+
 
 class TestCollectUntil(unittest.TestCase):
     def test_pumps_until_count_reached(self):

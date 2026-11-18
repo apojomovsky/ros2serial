@@ -87,6 +87,7 @@ def least_delayed_error_ns(stamps, rtts, keep):
     A window with fewer than keep stamps keeps all of them.
     """
     assert stamps, 'no stamps to judge'
+    assert rtts, 'no round trips to place the stamps against'
     one_way_ns = min(rtts) // 2
     lags = [host_ns - stamp_ns for stamp_ns, host_ns in stamps]
     fastest = sorted(range(len(lags)), key=lags.__getitem__)[:keep]
