@@ -37,7 +37,6 @@ cpp/include/sensor_msgs/** linguist-generated merge=ours
 cpp/include/std_msgs/** linguist-generated merge=ours
 cpp/include/tf2_msgs/** linguist-generated merge=ours
 cpp/include/r2s_bundled.h linguist-generated merge=ours
-cpp/include/r2s_config.h linguist-generated merge=ours
 cpp/include/ros2serial.h linguist-generated merge=ours
 cpp/include/ros2serial.hpp linguist-generated merge=ours
 # One-item-per-line lists merge with union: two branches appending different

@@ -317,6 +317,17 @@ def test_the_tree_carries_the_static_header_the_bundle_ships():
     ]
 
 
+def test_the_tree_carries_no_limits_header_the_bundle_ships():
+    """The config belongs to the staged library alone.
+
+    cpp/include is an include root other builds put on their path with no
+    limits of their own, and the core picks a config file up under
+    __has_include, so a copy here would configure them behind their back: the
+    PIC tier S build loses its codec-free configuration that way.
+    """
+    assert not (CPP_INCLUDE / 'r2s_config.h').exists()
+
+
 def test_the_umbrella_header_compiles_on_the_host(tmp_path):
     source = tmp_path / 'check.cpp'
     source.write_text('#include <ros2serial.h>\nint main(void) { return 0; }\n', encoding='utf-8')
