@@ -24,6 +24,7 @@ from r2s_gen import cpp
 from r2s_gen import descriptors
 from r2s_gen import msgs
 from r2s_gen import typehash
+from r2s_gen.docs import BOUNDS_URL
 from r2s_gen.reference import messages
 from r2s_gen.version import __version__
 from support import write_message
@@ -172,7 +173,8 @@ def test_a_bundled_field_without_its_entry_is_refused_naming_it(type_name, field
         bounds.resolve(repository, [type_name], bounds=without)
 
     assert str(caught.value) == (
-        f"{type_name}.{field}: unbounded string; set bounds['{type_name}.{field}']"
+        f"{type_name}.{field}: unbounded string; set bounds['{type_name}.{field}'];"
+        f' see {BOUNDS_URL}'
     )
 
 

@@ -18,12 +18,32 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from r2s_gen.docs import BOUNDS_URL
 from r2s_gen.msgs import PRIMITIVES
 from r2s_gen.msgs import WIDE_TYPES
 from r2s_gen.msgs import Field
 from r2s_gen.msgs import MessageError
 from r2s_gen.msgs import MessageRepository
 from r2s_gen.msgs import canonical_type_name
+
+
+class BoundsError(MessageError):
+    """
+    A refused bound, pointing at the page that states the rule.
+
+    Every bound a reader cannot resolve lands here, so the message carries the
+    one page that says where a bound comes from and how to change it.
+    """
+
+    def __init__(self, where: str, problem: str, fix: str):
+        """
+        Record the refusal, with the section named after the fix.
+
+        :param where: the field, type or flag the bound belongs to.
+        :param problem: what is wrong.
+        :param fix: what to do about it.
+        """
+        super().__init__(where, problem, f'{fix}; see {BOUNDS_URL}')
 
 
 @dataclass(frozen=True)
@@ -61,9 +81,9 @@ class ResolvedMessage:
 
 def _whole(value: object, where: str, least: int, what: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
-        raise MessageError(where, f'the {what} bound must be an integer', 'give a whole number')
+        raise BoundsError(where, f'the {what} bound must be an integer', 'give a whole number')
     if value < least:
-        raise MessageError(where, f'the {what} bound must be at least {least}', 'raise it')
+        raise BoundsError(where, f'the {what} bound must be at least {least}', 'raise it')
     return value
 
 
@@ -104,7 +124,7 @@ def resolve(
             fix = (
                 'use a bounded string' if field.type_name == 'wstring' else 'use an 8-bit integer'
             )
-            raise MessageError(where, f'{field.type_name} is not supported', fix)
+            raise BoundsError(where, f'{field.type_name} is not supported', fix)
         sequence_unbounded = (
             field.is_array and field.array_length is None and field.array_bound is None
         )
@@ -115,13 +135,13 @@ def resolve(
         if configured_bound is not None:
             if isinstance(configured_bound, list):
                 if not (field.is_array and field.type_name == 'string'):
-                    raise MessageError(
+                    raise BoundsError(
                         where,
                         'a list bound is [count, string_bound], which needs a sequence of strings',
                         'use an integer bound instead',
                     )
                 if len(configured_bound) != 2:
-                    raise MessageError(
+                    raise BoundsError(
                         where,
                         'a list bound is [count, string_bound]',
                         'give the count and the string bound',
@@ -131,13 +151,13 @@ def resolve(
                 if sequence_unbounded:
                     array_bound = count
                 elif array_bound != count:
-                    raise MessageError(
+                    raise BoundsError(
                         where,
                         f'the sequence length is already bounded in {path}',
                         'remove the count',
                     )
                 if not string_unbounded:
-                    raise MessageError(
+                    raise BoundsError(
                         where, f'the field is already bounded in {path}', 'remove the bound'
                     )
                 string_bound = element
@@ -152,9 +172,9 @@ def resolve(
                     if variable
                     else 'the field has no variable length'
                 )
-                raise MessageError(where, problem, 'remove the bound')
+                raise BoundsError(where, problem, 'remove the bound')
         if sequence_unbounded and array_bound is None:
-            raise MessageError(
+            raise BoundsError(
                 where, 'unbounded sequence', f"set bounds['{where}'] to its element count"
             )
         if string_unbounded and string_bound is None:
@@ -163,7 +183,7 @@ def resolve(
                 if field.is_array
                 else f"set bounds['{where}']"
             )
-            raise MessageError(where, 'unbounded string', fix)
+            raise BoundsError(where, 'unbounded string', fix)
         if field.type_name not in PRIMITIVES:
             visit(field.type_name, stack)
         return ResolvedField(

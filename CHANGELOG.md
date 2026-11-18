@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.5.0 (unreleased)
+
+The release cut stamps the date and this section's final text: `cut-release.yml`
+regenerates the file from the commits with git-cliff, so what follows is the
+current grouping, not a frozen record.
+
+### Breaking
+
+- **core:** Require the frame limit instead of defaulting it (#650)
+- **gen:** One rule for bounds, no silent defaults (#652)
+
+### Features
+
+- **ports:** PIC18F4550 EUSART port and the MPLAB SIM harness (#633)
+- **examples:** Custom message, service and action from the interface package to firmware (#635)
+- **gen:** `r2s-gen types` emits a type library, with --bound and --write-config (#653)
+- **gen:** The sketch header derives its includes from the type list (#656)
+- **gen:** `r2s-gen limits` prints the built-in types' bounds (#657)
+- **gen:** The action header carries the entity and its traits (#665)
+- **examples:** A custom type through the X-macro route on AVR (#666)
+
+### Fixes
+
+- **core:** Bind the generated service table from flash (#638)
+- **examples:** Answer the cancel in the custom interface firmware (#649)
+- **gen:** Include stddef and declare the publish wrappers in the sketch header (#651)
+- **ci:** Write the nightly mutation reports inside their directory (#658)
+- **e2e:** Scenario 8 judges the ten least delayed stamps (#661)
+- **docs:** A message-bounds page whose table and links stay live (#663)
+
+### Tests
+
+- **e2e:** Renumber the avr services scenario to 14 so 15 means actions (#631)
+
+### CI
+
+- Log in to ghcr in the nightly pic-sim job (#662)
+
 ## 0.4.0 (2026-11-14)
 
 ### Features

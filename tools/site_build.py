@@ -41,6 +41,18 @@ PAGES = (
         'Add publishers and subscriptions to your sketch.',
     ),
     Page(
+        'docs/declaring-topics.md',
+        'declaring-topics.html',
+        'Declaring topics',
+        'Pick the runtime objects or the X-macro list.',
+    ),
+    Page(
+        'docs/c-and-bare-metal.md',
+        'c-and-bare-metal.html',
+        'C and bare metal',
+        'Build in C, or without the Arduino library.',
+    ),
+    Page(
         'docs/robot-integration.md',
         'robot-integration.html',
         'Robot integration',
@@ -51,6 +63,18 @@ PAGES = (
         'custom-interfaces.html',
         'Custom interfaces',
         'Generate firmware from your ROS messages.',
+    ),
+    Page(
+        'docs/type-library.md',
+        'type-library.html',
+        'The library route',
+        'Emit a type library, and know what it cannot carry.',
+    ),
+    Page(
+        'docs/message-bounds.md',
+        'message-bounds.html',
+        'Message bounds',
+        "Where a field's storage comes from, and how to change it.",
     ),
     Page(
         'docs/services-and-parameters.md',
@@ -69,6 +93,12 @@ PAGES = (
         'without-hardware.html',
         'Without hardware',
         'Virtual MCU and emulator workflows.',
+    ),
+    Page(
+        'docs/hardware-validation.md',
+        'hardware-validation.html',
+        'Real-board validation',
+        'What is proven where, and the board-run results.',
     ),
     Page('examples/README.md', 'examples.html', 'Examples', 'Find a sketch for your task.'),
     Page(
@@ -107,6 +137,42 @@ PAGES = (
         'robustness.html',
         'Mutation and fuzz numbers',
         'Nightly scores, floors and seed coverage.',
+    ),
+    Page(
+        'docs/01-testing.md',
+        'testing.html',
+        'Testing',
+        'What is tested where, and how the tests stay honest.',
+    ),
+    Page(
+        'docs/benchmarks/framing-crc.md',
+        'framing-crc.html',
+        'Framing and CRC benchmark',
+        'Why the frame check is bitwise CRC-16/MCRF4XX.',
+    ),
+    Page(
+        'docs/benchmarks/encoding-packed-vs-cdr-vs-mavlink.md',
+        'encoding-benchmark.html',
+        'Encoding benchmark',
+        'Packed, CDR and MAVLink, measured.',
+    ),
+    Page(
+        'docs/benchmarks/ci-per-job-install-cost.md',
+        'install-cost.html',
+        'Per-job install cost',
+        'What each CI job installs, and what it costs.',
+    ),
+    Page(
+        'docs/research/R4-generic-service-and-client-apis.md',
+        'research-r4.html',
+        'Research: generic services',
+        'Generic service and client APIs per distro.',
+    ),
+    Page(
+        'docs/research/R15-codebase-organization.md',
+        'research-r15.html',
+        'Research: codebase organization',
+        'The tree review behind the current layout.',
     ),
     Page('CONTRIBUTING.md', 'contributing.html', 'Contributing', 'Tickets, branches and review.'),
     Page(

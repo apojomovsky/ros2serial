@@ -6,6 +6,7 @@
 import pytest
 from r2s_gen import bounds
 from r2s_gen import msgs
+from r2s_gen.docs import BOUNDS_URL
 from support import write_message
 
 HEADER_BOUNDS = {'std_msgs/msg/Header.frame_id': 24}
@@ -91,7 +92,8 @@ def test_nothing_but_a_configured_entry_bounds_a_sequence_count():
 
     assert str(caught.value) == (
         'sensor_msgs/msg/JointState.name: unbounded sequence; '
-        "set bounds['sensor_msgs/msg/JointState.name'] to its element count"
+        "set bounds['sensor_msgs/msg/JointState.name'] to its element count; "
+        'see https://apojomovsky.github.io/ros2serial/message-bounds.html'
     )
 
 
@@ -108,7 +110,8 @@ def test_an_unbounded_element_string_in_a_sequence_is_an_error_naming_the_field(
 
     assert str(caught.value) == (
         'sensor_msgs/msg/JointState.name: unbounded string; '
-        "set bounds['sensor_msgs/msg/JointState.name'] to [count, string_bound]"
+        "set bounds['sensor_msgs/msg/JointState.name'] to [count, string_bound]; "
+        'see https://apojomovsky.github.io/ros2serial/message-bounds.html'
     )
 
 
@@ -118,7 +121,7 @@ def test_an_unbounded_string_is_an_error_naming_the_field():
 
     assert str(caught.value) == (
         'std_msgs/msg/Header.frame_id: unbounded string; '
-        "set bounds['std_msgs/msg/Header.frame_id']"
+        "set bounds['std_msgs/msg/Header.frame_id']; see https://apojomovsky.github.io/ros2serial/message-bounds.html"
     )
 
 
@@ -129,7 +132,8 @@ def test_a_bound_on_a_field_without_a_variable_length_is_an_error():
         )
 
     assert str(caught.value) == (
-        'geometry_msgs/msg/Vector3.x: the field has no variable length; remove the bound'
+        'geometry_msgs/msg/Vector3.x: the field has no variable length; '
+        'remove the bound; see https://apojomovsky.github.io/ros2serial/message-bounds.html'
     )
 
 
@@ -144,7 +148,7 @@ def test_a_bound_on_an_already_bounded_field_is_an_error():
     assert str(caught.value).startswith(
         'sensor_msgs/msg/Imu.orientation_covariance: the field is already bounded in '
     )
-    assert str(caught.value).endswith('Imu.msg; remove the bound')
+    assert str(caught.value).endswith(f'Imu.msg; remove the bound; see {BOUNDS_URL}')
 
 
 def test_a_list_bound_on_a_sequence_that_is_not_of_strings_is_an_error():
@@ -155,7 +159,8 @@ def test_a_list_bound_on_a_sequence_that_is_not_of_strings_is_an_error():
 
     assert str(caught.value) == (
         'sensor_msgs/msg/JointState.position: a list bound is [count, string_bound], '
-        'which needs a sequence of strings; use an integer bound instead'
+        'which needs a sequence of strings; use an integer bound instead; '
+        'see https://apojomovsky.github.io/ros2serial/message-bounds.html'
     )
 
 
@@ -189,7 +194,7 @@ def test_a_list_bound_whose_count_differs_from_a_declared_bound_is_an_error(tmp_
     assert str(caught.value).startswith(
         'demo_msgs/msg/Sample.names: the sequence length is already bounded in '
     )
-    assert str(caught.value).endswith('Sample.msg; remove the count')
+    assert str(caught.value).endswith(f'Sample.msg; remove the count; see {BOUNDS_URL}')
 
 
 @pytest.mark.parametrize(
@@ -197,11 +202,13 @@ def test_a_list_bound_whose_count_differs_from_a_declared_bound_is_an_error(tmp_
     [
         (
             'wstring text',
-            'demo_msgs/msg/Wide.text: wstring is not supported; use a bounded string',
+            'demo_msgs/msg/Wide.text: wstring is not supported; use a bounded string;'
+            ' see https://apojomovsky.github.io/ros2serial/message-bounds.html',
         ),
         (
             'wchar letter',
-            'demo_msgs/msg/Wide.letter: wchar is not supported; use an 8-bit integer',
+            'demo_msgs/msg/Wide.letter: wchar is not supported; use an 8-bit integer;'
+            ' see https://apojomovsky.github.io/ros2serial/message-bounds.html',
         ),
     ],
 )
@@ -223,9 +230,9 @@ def test_a_wide_field_in_a_nested_message_is_rejected_naming_the_field(tmp_path)
     with pytest.raises(msgs.MessageError) as caught:
         bounds.resolve(msgs.MessageRepository(msg_paths=[root]), ['demo_msgs/msg/Outer'])
 
-    assert (
-        str(caught.value)
-        == 'demo_msgs/msg/Wide.text: wstring is not supported; use a bounded string'
+    assert str(caught.value) == (
+        'demo_msgs/msg/Wide.text: wstring is not supported; use a bounded string;'
+        ' see https://apojomovsky.github.io/ros2serial/message-bounds.html'
     )
 
 
@@ -238,3 +245,70 @@ def test_a_recursive_message_is_an_error(tmp_path):
         bounds.resolve(msgs.MessageRepository(msg_paths=[root]), ['demo_msgs/msg/A'])
 
     assert str(caught.value) == 'demo_msgs/msg/A: recursive message type; break the cycle'
+
+
+def test_an_unbounded_string_error_points_at_the_bounds_section():
+    """The error is where a reader lands first, so it names the page that explains the rule."""
+    with pytest.raises(msgs.MessageError) as caught:
+        bounds.resolve(repository(), ['std_msgs/msg/Header'])
+
+    assert str(caught.value).endswith(f'see {BOUNDS_URL}')
+
+
+def test_the_conflict_error_points_at_the_bounds_section():
+    with pytest.raises(msgs.MessageError) as caught:
+        bounds.resolve(
+            repository(),
+            ['sensor_msgs/msg/Imu'],
+            bounds={**HEADER_BOUNDS, 'sensor_msgs/msg/Imu.orientation_covariance': 9},
+        )
+
+    assert str(caught.value).endswith(f'see {BOUNDS_URL}')
+
+
+def test_a_bad_bound_value_points_at_the_bounds_section():
+    with pytest.raises(msgs.MessageError) as caught:
+        bounds.resolve(
+            repository(), ['std_msgs/msg/Header'], bounds={'std_msgs/msg/Header.frame_id': 'x'}
+        )
+
+    assert str(caught.value).endswith(f'see {BOUNDS_URL}')
+
+
+def test_a_field_with_no_variable_length_points_at_the_bounds_section():
+    with pytest.raises(msgs.MessageError) as caught:
+        bounds.resolve(
+            repository(), ['geometry_msgs/msg/Vector3'], bounds={'geometry_msgs/msg/Vector3.x': 4}
+        )
+
+    assert str(caught.value).endswith(f'see {BOUNDS_URL}')
+
+
+def test_a_sequence_bound_below_one_is_refused_by_the_resolver():
+    """The config rejects this first, so the resolver's own guard needs its own case."""
+    with pytest.raises(msgs.MessageError) as caught:
+        bounds.resolve(
+            repository(),
+            ['sensor_msgs/msg/JointState'],
+            bounds={**JOINT_STATE_BOUNDS, 'sensor_msgs/msg/JointState.position': 0},
+        )
+
+    assert str(caught.value) == (
+        'sensor_msgs/msg/JointState.position: the sequence bound must be at least 1; '
+        f'raise it; see {BOUNDS_URL}'
+    )
+
+
+def test_a_string_pair_with_one_element_is_refused_by_the_resolver():
+    """A pair is [count, string_bound]; a one-element list is the shape error."""
+    with pytest.raises(msgs.MessageError) as caught:
+        bounds.resolve(
+            repository(),
+            ['sensor_msgs/msg/JointState'],
+            bounds={**JOINT_STATE_BOUNDS, 'sensor_msgs/msg/JointState.name': [4]},
+        )
+
+    assert str(caught.value) == (
+        'sensor_msgs/msg/JointState.name: a list bound is [count, string_bound]; '
+        f'give the count and the string bound; see {BOUNDS_URL}'
+    )

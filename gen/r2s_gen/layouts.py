@@ -25,6 +25,7 @@ from pathlib import Path
 from r2s_gen import actions
 from r2s_gen import bounds
 from r2s_gen import config
+from r2s_gen import docs
 from r2s_gen import msgs
 from r2s_gen import services
 from r2s_gen import topics
@@ -261,7 +262,7 @@ def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParse
         '--cpp', action='store_true', help='also emit the C++ header (not emitted yet)'
     )
     parser.set_defaults(run=run)
-    return parser
+    return docs.note(parser)
 
 
 def run(args: argparse.Namespace) -> int:

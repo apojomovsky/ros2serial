@@ -453,6 +453,7 @@ rmws=${R2S_RMWS:-rmw_fastrtps_cpp rmw_cyclonedds_cpp rmw_zenoh_cpp}
 
 status=0
 failures=""
+
 matrix_done=0
 for rmw in $rmws; do
   echo "== e2e-avr: $rmw"
@@ -544,6 +545,34 @@ for rmw in $rmws; do
   fi
   if [ -n "$router" ]; then kill "$router" 2>/dev/null || true; wait "$router" 2>/dev/null || true; fi
 done
+
+# The hardware check runs here beside the scenarios: its emulated case drives
+# the tool a person runs on a board, and the harness and the bridge install it
+# needs are built above. It stays out of the RMW and board loops, since it
+# launches its own bridge and firmware on one pty. The loop leaves the last
+# RMW exported and, for zenoh, a connect config pointing at the router it just
+# killed, so both are cleared first: the check's two nodes must discover each
+# other on the distro default.
+unset RMW_IMPLEMENTATION ZENOH_ROUTER_CONFIG_URI ZENOH_SESSION_CONFIG_URI
+case " ${R2S_E2E_SKIP:-} " in
+  *" test_hardware_check_avr "*)
+    echo "skip test_hardware_check_avr (R2S_E2E_SKIP)"
+    ;;
+  *)
+    check_log=$build/scenario-logs/test_hardware_check_avr.log
+    timeout 600 python3 -m pytest tests/e2e/test_hardware_check_avr.py -q 2>&1 | tee "$check_log"
+    code=${PIPESTATUS[0]}
+    if [ "$code" -ne 0 ]; then
+      status=1
+      line="e2e-failure: test_hardware_check_avr exit=$code"
+      [ "$code" -eq 124 ] && line="$line (timeout)"
+      echo "$line"
+      failures="$failures$line
+"
+    fi
+    ;;
+esac
+
 # A final list of every failure, so the report names each one whatever
 # the output length.
 if [ -n "$failures" ]; then

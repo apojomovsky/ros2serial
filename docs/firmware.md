@@ -7,6 +7,14 @@ file names equal, as Arduino CLI requires.
 
 ## Declare your interface
 
+This guide uses the runtime objects, which is the right starting point on any
+board. When the sketch runs short of RAM you can move the same declarations into
+an X-macro list without touching the rest of the sketch:
+[Choosing how to declare your topics](declaring-topics.md) compares the two and
+says what each costs. Firmware compiled as C, or built without the Arduino
+library, starts from [Building in C or without the Arduino
+library](c-and-bare-metal.md).
+
 The runtime API follows ROS 2 message naming. Declarations live at file scope:
 
 ```cpp
@@ -76,6 +84,7 @@ Where the value comes from on each route:
 | Route | Where the value comes from | Overriding it |
 | --- | --- | --- |
 | Arduino IDE (`Sketch > Include Library > Add .ZIP Library`) | The library's `src/r2s_config.h`: nothing to configure | A `platform.local.txt` beside the AVR core's `platform.txt` with `compiler.c.extra_flags=-DR2S_MAX_FRAME=<n>` and the `compiler.cpp.extra_flags` line |
+| A type library from `r2s-gen types` | The same `src/r2s_config.h`, which that library emits too | A flag on your own compile line |
 | `ros2-arduino compile` (`r2s-arduino`) | The same file, plus `-DR2S_MAX_FRAME=<n>` read from `r2s_bundled.h`, which it still passes explicitly | The flag the helper passes, which wins over the file |
 | Arduino CLI by hand against a staged library | The library's `src/r2s_config.h` | `--build-property "compiler.c.extra_flags=-DR2S_MAX_FRAME=<n>"`, and the same for `compiler.cpp.extra_flags` |
 | CMake (`--layout cmake`) | The generated `CMakeLists.txt` reads the value from `r2s_generated.h` and passes it as a target definition | The generator's `limits.max_frame` |
@@ -95,17 +104,11 @@ classes. Strings are bounded NUL-terminated arrays. Variable-length sequences
 carry storage plus a length field. Inspect the generated header before assigning
 these fields. Out-of-bounds payloads fail rather than silently truncating.
 
-The default bundle supports common scalar, geometry, sensor and TF types.
-Its limits are chosen, not inherited from the definitions: strings are 16
-characters, `JointState` holds six joints and `TFMessage` one transform, and
-`BUNDLE_BOUNDS` is the one place each is written down. No field falls back to a
-default, so a bound the library did not name would fail generation instead of
-producing storage nobody chose. Run `r2s-gen limits` to print every bounded
-field of the bundled types with its capacity and whether `BUNDLE_BOUNDS` or the
-definition supplied it, before relying on a capacity you did not pick. Use
-[generation](custom-interfaces.md) to change bounds or add a message type.
-Large messages and high publish rates can exhaust RAM or serial bandwidth even
-when the sketch compiles.
+The default bundle supports common scalar, geometry, sensor and TF types. Its
+limits are chosen, not inherited from the definitions, so check them before
+relying on a capacity you did not pick: [message bounds](message-bounds.md) has
+the table and the command that prints it. Large messages and high publish rates
+can exhaust RAM or serial bandwidth even when the sketch compiles.
 
 AVR `double` is 32 bits: `float64` fields are sent with that precision and widened
 on the host. The time channel synchronizes timestamps with the host once the firmware

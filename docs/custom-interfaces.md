@@ -4,6 +4,11 @@ Use the bundled types for the shortest Arduino path. Use `r2s-gen` when you need
 a custom `.msg`, different string/array bounds, or static C firmware.
 The same ROS interface must be available on the host and to the generator.
 
+Which of the two routes carries a custom type, and what each one needs, is on
+[The library route and its config boundary](type-library.md). How you declare
+the topics themselves is on [choosing how to declare your
+topics](declaring-topics.md).
+
 ## Define and build the ROS interface
 
 Create a normal ROS interface package, for example `my_robot_interfaces`, with
@@ -247,7 +252,8 @@ in both cases, which is a valid Arduino library directory, so a sketch builds
 against either with the Arduino CLI and the flags that library's header
 carries. Keep `r2s.yaml` when the firmware needs what a type list cannot
 state: `limits.max_frame`, `features`, `tier`, and the service and action
-indices the static C hook API switches on.
+indices the static C hook API switches on. [The library route and its config
+boundary](type-library.md) covers that boundary and the staleness rule.
 
 Both routes put the same bytes on the wire: the type's hash, its field layout
 and its bounds come from the interface package either way, so the bridge
@@ -269,7 +275,8 @@ Both firmware are budgeted beside the other examples in
 ## Bounds and unsupported input
 
 A variable-length field gets its bound from its `.msg` definition or from `bounds`
-in `r2s.yaml`, and from nothing else. With neither, generation fails naming the field:
+in `r2s.yaml`. Bound the field in the `.msg` when you can edit it (`string<=12
+text`); `bounds` is for definitions you cannot change:
 
 ```yaml
 bounds:
@@ -280,36 +287,15 @@ bounds:
   sensor_msgs/msg/JointState.effort: 4
 ```
 
-Bound the field in the `.msg` when you can edit it (`string<=12 text`); `bounds`
-is for definitions you cannot change. An entry on a field the `.msg` already
-bounds is an error, in either direction, because a smaller MCU buffer cannot hold
-what the host may legally send.
+Where each bound comes from, what happens with none, the conflict rule and the
+built-in types' limits are on [message bounds](message-bounds.md), with the
+table `r2s-gen limits` prints. Bounds apply to the MCU storage; they do not
+alter the ROS interface.
 
-These bounds apply to the MCU storage; they do not alter the ROS interface.
 Unsupported fields fail generation. Compact handshake and `--cpp` output are
 not implemented: use the default full handshake and generated C API.
 See the [generator specification](00-design.md#code-generator-specification)
 for the schema and [troubleshooting](troubleshooting.md) for hash mismatches.
-
-### The built-in types' limits
-
-The bundled library's capacities are somebody's choice and may not be what a
-built-in type's fields lead you to expect: a `std_msgs/msg/String` carries 16
-characters, and `TFMessage` holds one transform. Check them before relying on
-one:
-
-```sh
-ros2 run r2s_gen r2s-gen limits
-```
-
-Each row names the field, the storage it resolves to, and whether
-`BUNDLE_BOUNDS` or the `.msg` supplied the capacity, so a limit the library
-chose is told apart from one the definition states. A run prints one distro's
-table, so ask for another with `--distro lyrical` or `--distro rolling`. To give
-a built-in type a different limit, generate a library that carries it with your
-bound, through the
-[type library](#emit-a-type-library-for-the-x-macro-and-runtime-routes) route;
-the library's own name differs, so Arduino cannot pick the stock one.
 
 ## Emit a type library for the X-macro and runtime routes
 
@@ -325,8 +311,7 @@ ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \
 
 A sketch then names the type like any bundled one:
 
-<!-- snippet: skip until #648: names the reader's own package, which no staged fixture carries -->
-```cpp
+```text
 #define R2S_NODE_NAME "sensor_board"
 #define R2S_TOPICS(X) \
   X(Publisher, my_robot_interfaces::msg::SensorReading, reading_pub, "reading")
@@ -335,7 +320,8 @@ A sketch then names the type like any bundled one:
 
 Every variable-length field takes its bound from the `.msg` (`string<=12`,
 `T[<=N]`) or from the command line, and a field with neither fails the command
-naming the field:
+naming the field ([message bounds](message-bounds.md) states the rule and the
+conflict case):
 
 ```sh
 ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \
@@ -395,4 +381,6 @@ now.
 
 Keep `r2s.yaml` when the firmware needs what a type list cannot state:
 `limits.max_frame`, `features`, `tier`, and the generated service and action
-indices that the static C hook API switches on.
+indices that the static C hook API switches on. [The library route and its
+config boundary](type-library.md) says why each of those has no home in a type
+library, and what to do about a stale one.
