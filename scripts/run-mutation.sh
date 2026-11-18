@@ -15,7 +15,13 @@ set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root" || exit 2
 out=${R2S_MUTATION_OUT:-"$root/mutation-report"}
-mkdir -p "$out" || exit 2
+# The report directory is settled before any tool runs. Mull writes its
+# reports only after the last mutant, so an unusable directory used to
+# surface minutes later as an error naming a path nobody passed.
+if ! mkdir -p "$out" 2>/dev/null || [ ! -d "$out" ] || [ ! -w "$out" ]; then
+  echo "run-mutation.sh: report directory is not usable: $out" >&2
+  exit 2
+fi
 # Absolute from here on: the bridge Mull loop runs in mutation/bridge, so
 # every report, log and build path must survive that directory change.
 out=$(cd "$out" && pwd) || exit 2
@@ -53,11 +59,13 @@ binaries=$(ctest --test-dir "$build" -N 2>/dev/null | sed -n 's/^ *Test *#*[0-9]
 # Mull discovers its configuration as mull.yml in the working directory,
 # which is the repository root here (the vector checks name their files
 # relative to it), so the file lives at the root and not beside the image.
+# Mull joins --report-dir and --report-name itself, so the name stays bare:
+# an absolute name makes the joined path relative to the working directory.
 rm -f "$out/mull.sqlite"
 for binary in $binaries; do
   path=$(find "$build" -name "$binary" -type f -executable | head -1)
   [ -n "$path" ] || { echo "run-mutation.sh: binary not built: $binary" >&2; exit 1; }
-  mull-runner --allow-surviving --reporters SQLite --report-name "$out/mull" "$path" \
+  mull-runner --allow-surviving --reporters SQLite --report-dir "$out" --report-name mull "$path" \
     >"$out/mull-$binary.log" 2>&1 || { tail -20 "$out/mull-$binary.log"; exit 1; }
 done
 mull-reporter --allow-surviving --reporters Elements --report-dir "$out" --report-name mull "$out/mull.sqlite" \
@@ -114,18 +122,18 @@ cmake -S mutation/bridge -B "$bridge_build" -G Ninja -DCMAKE_C_COMPILER=clang-18
 cmake --build "$bridge_build" >"$out/bridge-build.log" 2>&1 || { tail -20 "$out/bridge-build.log"; exit 1; }
 bridge_binaries=$(ctest --test-dir "$bridge_build" -N 2>/dev/null | sed -n 's/^ *Test *#*[0-9][0-9]*: //p' | cut -d. -f1 | sort -u || true)
 [ -n "$bridge_binaries" ] || { echo "run-mutation.sh: no test binaries found in $bridge_build" >&2; exit 1; }
-rm -f mutation/bridge/mull-bridge.sqlite
+rm -f "$out/mull-bridge.sqlite"
 (
   cd mutation/bridge || exit 2
   for binary in $bridge_binaries; do
     path=$(find "$bridge_build" -name "$binary" -type f -executable | head -1)
     [ -n "$path" ] || { echo "run-mutation.sh: binary not built: $binary" >&2; exit 1; }
-    mull-runner --allow-surviving --reporters SQLite --report-name mull-bridge "$path" \
+    mull-runner --allow-surviving --reporters SQLite --report-dir "$out" --report-name mull-bridge "$path" \
       >"$out/mull-bridge-$binary.log" 2>&1 || { tail -20 "$out/mull-bridge-$binary.log"; exit 1; }
   done
-  mull-reporter --allow-surviving --reporters Elements --report-dir "$out" --report-name mull-bridge mull-bridge.sqlite \
+  mull-reporter --allow-surviving --reporters Elements --report-dir "$out" --report-name mull-bridge \
+    "$out/mull-bridge.sqlite" \
     >"$out/mull-bridge-reporter.log" 2>&1 || { tail -20 "$out/mull-bridge-reporter.log"; exit 1; }
-  rm -f mull-bridge.sqlite
 ) || exit 1
 python3 - "$out" <<'EOF'
 import glob

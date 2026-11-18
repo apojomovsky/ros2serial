@@ -39,6 +39,14 @@ Unmeasured areas never fail the gate. The report lands as the
 trend lives: past nightly runs keep their reports, and the summary shows
 the current scores against the floors above.
 
+`scripts/run-mutation.sh` settles its report directory before it starts:
+Mull writes its reports only after the last mutant, so a directory that
+cannot hold them is refused in the first second instead of failing the
+run minutes later. Every report path it passes to Mull names the
+directory and a bare report name apart, because Mull joins the two
+itself and an absolute name would land the report under the invocation's
+working directory.
+
 ## Equivalent mutants
 
 A surviving mutant is either a missing test or a mutant no test could
