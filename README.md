@@ -108,6 +108,46 @@ Send `{data: false}` to turn it off. Your ROS nodes can now use these topics
 like other publishers and subscriptions. The host needs no topic configuration:
 the firmware announces its names and types when it connects.
 
+### 5. Check the board with one command
+
+From the repository root, with the board plugged in, the dev image built
+(`make image`) and the port from `arduino-cli board list`:
+
+```sh
+make hardware-check PORT=/dev/ttyACM0 BOARD=uno
+```
+
+It flashes the `button_led` example, starts the bridge, samples `/button`
+for half a minute, reads the link counters, drives `/led` and asks you
+whether the LED lit. Nothing ROS or Arduino related is installed on your
+host: the command runs in the contributor image and passes the device in
+with its own group, so your user need not be in `dialout`. It ends with one
+block to paste into a report:
+
+```text
+== ros2serial hardware check
+board: uno
+port: /dev/ttyACM0
+firmware: arduino_button_led arduino:avr:uno
+flash: 11786 bytes
+ram: 1181 bytes
+handshake: 4.3 s
+button rate: 10.0 Hz from 297 messages
+longest gap: 120 ms
+crc errors: 0
+rx overflows: 0
+dropped frames: 0
+sequence gaps: 0
+dropped topic frames: 0
+led: lit
+verdict: PASS
+```
+
+`verdict: FAIL` prints a `failed:` line per reason: a rate outside 8 to
+12 Hz, a silence longer than 300 ms, a nonzero counter, or an LED you did not
+see light. The format and both verdicts are documented in
+[Without hardware](docs/without-hardware.md#checking-a-real-board).
+
 ## Make it part of your robot
 
 | I want to… | Read |
