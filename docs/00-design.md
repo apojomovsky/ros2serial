@@ -521,6 +521,7 @@ when it is constructed, so the sketch keeps it alive while the node spins.
 ```cpp
 #define R2S_WITH_ACTIONS
 #include <r2s/action.hpp>
+#include <r2s/runtime.hpp>
 #include <tf2_msgs/action/lookup_transform.hpp>
 
 r2s::Node node("action_demo");

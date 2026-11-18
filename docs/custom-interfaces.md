@@ -343,6 +343,7 @@ frame is refused when the library is generated.
 A service or an action arrives through the same library, so a runtime sketch
 names it like a message and writes no struct and no traits:
 
+<!-- snippet: skip until #645: names the reader's own package, which no staged fixture carries -->
 ```cpp
 #include <r2s/action.hpp>
 #include <r2s/service.hpp>
@@ -354,11 +355,12 @@ r2s::action::Server<my_robot_interfaces::action::Run> run("run", on_run_goal,
                                                           on_run_accepted);
 ```
 
-The action's own header carries the `Run` struct with its `Goal`, `Result` and
-`Feedback` aliases, and the `r2s::action::traits<Run>` specialization with the
-action's type name and hash, so the server reads them from the library. A
-hand-written struct and trait are what a sketch needed before the generator
-emitted them, and neither is needed now.
+Your own action header carries the same two things a bundled one does: the
+action struct with its `Goal`, `Result` and `Feedback` aliases, and the
+`r2s::action::traits` specialization with the action's type name and hash, so
+the server reads them from the library. A hand-written struct and trait are
+what a sketch needed before the generator emitted them, and neither is needed
+now.
 
 Keep `r2s.yaml` when the firmware needs what a type list cannot state:
 `limits.max_frame`, `features`, `tier`, and the generated service and action
