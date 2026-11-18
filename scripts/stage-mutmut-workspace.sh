@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+# Stages the workspace mutmut runs in. Two facts fix its shape. mutmut names
+# a mutant after the source path it was given, so the package has to sit at
+# the top of that directory for its keys to match the name the tests
+# import. And it runs pytest from mutants/, so the suite and every tree it
+# resolves through the root must be staged there.
+# Usage: stage-mutmut-workspace.sh <repository root> <workspace>
+set -uo pipefail
+src=$(cd "${1:?usage: stage-mutmut-workspace.sh <root> <workspace>}" && pwd) || exit 2
+dst=${2:?usage: stage-mutmut-workspace.sh <root> <workspace>}
+[ -d "$src/gen/tests" ] || {
+  echo "stage-mutmut-workspace.sh: no gen/tests under $src" >&2
+  exit 1
+}
+[ -d "$src/gen/r2s_gen" ] || {
+  echo "stage-mutmut-workspace.sh: no gen/r2s_gen under $src" >&2
+  exit 1
+}
+
+rm -rf "$dst" || exit 2
+mkdir -p "$dst" || exit 2
+tar -C "$src" -cf - \
+  --exclude=./.git --exclude=./mutants --exclude=./mutation-report \
+  --exclude=./gen/r2s_gen --exclude='__pycache__' \
+  . | tar -C "$dst" -xf - || exit 1
+# The package at the top, where its path names the module the tests import.
+cp -a "$src/gen/r2s_gen" "$dst/r2s_gen" || exit 1
+
+# The tree pytest runs in, with the package left out because mutmut copies
+# and mutates that one itself.
+tree="$dst/mutants"
+mkdir -p "$tree" || exit 2
+tar -C "$dst" -cf - --exclude=./mutants --exclude=./.git --exclude=./r2s_gen . \
+  | tar -C "$tree" -xf - || exit 1
+
+cat >"$dst/pyproject.toml" <<'TOML'
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+# The mutation run's own configuration. scripts/stage-mutmut-workspace.sh
+# writes it, because the paths differ from the repository's: the package sits
+# at the top here, and the tests that install it in a subprocess cannot import
+# mutmut's trampoline, so they cannot run under mutation at all.
+[tool.mutmut]
+source_paths = ["r2s_gen"]
+pytest_add_cli_args_test_selection = ["gen/tests"]
+pytest_add_cli_args = [
+  "--ignore", "gen/tests/test_packaging.py",
+  "--ignore", "gen/tests/test_rosidl_plugin.py",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+pythonpath = ["."]
+TOML
+echo "stage-mutmut-workspace.sh: staged $dst"

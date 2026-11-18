@@ -174,18 +174,26 @@ json.dump({"component": "bridge", "mutants": mutants}, open(os.path.join(out, "b
 print(f"mull-bridge: {len(mutants)} mutants from {candidates[0]}")
 EOF
 
-# The generator: mutmut runs the gen suite once per mutant from the
-# repository root, with the host library the model tests load. Only the
-# surviving and otherwise undecided mutants need locating: mutmut show
-# prints the diff, whose first hunk names the line.
+# The generator: mutmut runs the gen suite once per mutant, from a workspace
+# shaped the way its path-to-key mapping needs. Only the surviving and
+# otherwise undecided mutants need locating: mutmut show prints the diff,
+# whose first hunk names the line.
 host_dir="$out/host-lib"
 bash scripts/build-host-lib.sh "$host_dir" >"$out/host-build.log" 2>&1 || { tail -20 "$out/host-build.log"; exit 1; }
 export R2S_HOST_LIB_DIR="$host_dir"
-mutmut run >"$out/mutmut-run.log" 2>&1 || { tail -20 "$out/mutmut-run.log"; exit 1; }
-mutmut export-cicd-stats >"$out/mutmut-stats.log" 2>&1 || { tail -5 "$out/mutmut-stats.log"; exit 1; }
-cp mutants/mutmut-cicd-stats.json "$out/mutmut-cicd-stats.json"
-mutmut results --all >"$out/mutmut-results.log" 2>&1 || { tail -5 "$out/mutmut-results.log"; exit 1; }
-python3 - "$out" <<'EOF'
+work="$out/mutmut-workspace"
+bash scripts/stage-mutmut-workspace.sh "$root" "$work" >"$out/mutmut-stage.log" 2>&1 || {
+  cat "$out/mutmut-stage.log"
+  exit 1
+}
+(
+  cd "$work" || exit 2
+  mutmut run >"$out/mutmut-run.log" 2>&1 || { tail -20 "$out/mutmut-run.log"; exit 1; }
+  mutmut export-cicd-stats >"$out/mutmut-stats.log" 2>&1 || { tail -5 "$out/mutmut-stats.log"; exit 1; }
+  cp mutants/mutmut-cicd-stats.json "$out/mutmut-cicd-stats.json" || exit 1
+  # --all takes a value in mutmut 3.8.1, so a bare --all exits 2.
+  mutmut results --all true >"$out/mutmut-results.log" 2>&1 || { tail -5 "$out/mutmut-results.log"; exit 1; }
+  python3 - "$out" <<'EOF'
 import json
 import os
 import re
@@ -230,6 +238,7 @@ for path in walk_mutatable_files():
 json.dump({"component": "gen", "mutants": mutants}, open(os.path.join(out, "mutmut.json"), "w"), indent=2)
 print(f"mutmut: {len(mutants)} mutants")
 EOF
+) || exit 1
 
 python3 scripts/mutation_triage.py --mull "$out/mull.json" --mutmut "$out/mutmut.json" \
   --bridge "$out/bridge.json" \
