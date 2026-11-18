@@ -67,10 +67,13 @@ public:
   /// One answered PING: the host steady send and receive times.
   /**
    * The host ROS time at the receive, and the MCU tick the PONG carries.
-   * The midpoint of each pair halves the round trip onto the arrival
-   * (TIM-1), which assumes the delay splits evenly; the lowest round
-   * trip samples carry the least of that skew. The session feeds every
-   * field from its two clocks.
+   * The arrival lag is ros_recv minus the steady receive, and it is
+   * one-sided: the bridge notices the PONG only when its poll timer runs,
+   * so it can only fall late, never early. Subtracting it leaves the ROS
+   * time the wire delivered the PONG, which the round trip then halves
+   * onto the MCU (TIM-1); a midpoint taken on the raw receive would carry
+   * half of that poll delay into every correction. The session feeds
+   * every field from its two clocks.
    *
    * \param[in] send_ns the host steady time at the PING send.
    * \param[in] recv_ns the host steady time at the PONG receive.
@@ -142,7 +145,7 @@ private:
   std::uint32_t ns_per_tick_ = 0u;
   struct Sample
   {
-    std::int64_t ros_mid_ns = 0;
+    std::int64_t ros_send_ns = 0;  // ROS time of the PING send, dispatch-free.
     std::int64_t rtt_ns = 0;
     std::uint64_t tick = 0;
   };

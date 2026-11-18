@@ -545,6 +545,12 @@ struct Session::Impl
         }
         front_offset_ += wrote.bytes;
       }
+      if (front.topic_id == kTimeTopic && front.control && front.opcode == kPing) {
+            // The round trip starts when the last PING byte leaves, not when
+            // the frame was queued: the poll may write it a period later, and
+            // an arrival stamped from a queued send reads the trip long.
+        last_ping_send_ns_ = now_ns();
+      }
       pending_bytes_ -= front.bytes.size();
       queue_.pop_front();
       front_offset_ = 0;
@@ -768,10 +774,11 @@ struct Session::Impl
 
   void send_ping()
   {
-        // The send time stamps the sample; the frame carries the id the PONG
-        // answers with ([TIM-2]). One slot holds the PINGs ([SES-33]), so a
-        // wedged link keeps the newest id with the first seq.
-    last_ping_send_ns_ = now_ns();
+        // The frame carries the id the PONG answers with ([TIM-2]); the send
+        // time that starts the round trip is taken when flush() puts its last
+        // byte on the wire, since the queue can hold it a poll longer. One
+        // slot holds the PINGs ([SES-33]), so a wedged link keeps the newest
+        // id with the first seq.
     last_ping_id_ = ping_id;
     std::vector<std::uint8_t> ping;
     ping.reserve(2u);
