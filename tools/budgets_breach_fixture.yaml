@@ -44,6 +44,14 @@ firmware:
     flash: 1
     ram: 1
     stack: 1
+  arduino_xmacro_custom/uno/arduino_xmacro_custom.ino.elf:
+    flash: 1
+    ram: 1
+    stack: 1
+  arduino_xmacro_custom/mega/arduino_xmacro_custom.ino.elf:
+    flash: 1
+    ram: 1
+    stack: 1
   cmake_minimal/hello_cmake:
     flash: 1
     ram: 1

@@ -74,6 +74,8 @@ base in the job summary.
 | arduino_xmacro_c/esp32/arduino_xmacro_c.ino.elf | 276708 | 332100 | 75525 | 90700 | n/a | n/a |
 | arduino_xmacro_c/mega/arduino_xmacro_c.ino.elf | 11714 | 12500 | 1101 | 1250 | 16 | 32 |
 | arduino_xmacro_c/uno/arduino_xmacro_c.ino.elf | 11366 | 12000 | 1101 | 1250 | 13 | 32 |
+| arduino_xmacro_custom/mega/arduino_xmacro_custom.ino.elf | 8142 | 9800 | 532 | 650 | 150 | 180 |
+| arduino_xmacro_custom/uno/arduino_xmacro_custom.ino.elf | 7826 | 9400 | 532 | 650 | 141 | 170 |
 | ch32v_minimal/ch32v/ch32v_minimal.elf | 9664 | 11500 | 344 | 400 | n/a | n/a |
 | cmake_minimal/hello_cmake | 10496 | 11200 | 374 | 400 | 184 | 224 |
 | custom_interfaces/custom_firmware.elf | 17088 | 20200 | 837 | 1020 | 320 | 350 |
