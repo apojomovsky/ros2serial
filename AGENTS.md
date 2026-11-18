@@ -55,6 +55,7 @@ repository development and CI, not installation into a robot workspace.
 | `compile EXAMPLE=<name> BOARD=<uno\|mega\|...>` | Not built yet (pending G10 and V4): will build an example firmware and print flash, RAM and stack |
 | `fuzz TARGET=<name>` | Run one libFuzzer target for 60 s |
 | `size-report` | Regenerate the flash, RAM and stack report |
+| `capacity-report` | Regenerate `docs/capacity.md` and the measurements behind it |
 | `vectors` | Validate every vector file |
 | `regen` | Regenerate every version-stamped generated file (goldens, example and cpp libraries, posix sources) |
 | `rosdoc2` | Advisory API docs build: doxygen counts plus rosdoc2 per package |
