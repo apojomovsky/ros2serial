@@ -325,7 +325,9 @@ rCOBS decoding runs backwards in place in the frame buffer once the delimiter ar
 
 The drift term matters: the Uno's ATmega328P runs from a ceramic resonator that can be off by thousands of ppm, which is several milliseconds per second.
 
-The tick comes from the port: `micros()` on Arduino (1 MHz nominal, 4 µs resolution), a 1 ms tick from epic-hal on PIC, a hardware timer elsewhere. The tick rate is announced in the handshake. The bridge also sets the serial port to low latency where the OS supports it. Target accuracy: about 1 ms, bounded by the tick resolution. Phase 2 measured the real figure in #348 (scenario 8).
+The tick comes from the port: `micros()` on Arduino (1 MHz nominal, 4 µs resolution), a 1 ms tick from epic-hal on PIC, a hardware timer elsewhere. The tick rate is announced in the handshake. The bridge also sets the serial port to low latency where the OS supports it. Target accuracy: about 1 ms, bounded by the tick resolution. Phase 2 measured the real figure in #348 (scenario 8); #655 restated it with the statistic named.
+
+**What the measured figure means.** Scenario 8 judges the median error of the ten least delayed of about a hundred stamps in a ten second window, so the number describes the clock and not the probe that reads it. Host reads of a stamp are one-sided: a probe the scheduler starves reads the clock after the stamp arrived and reports it late, never early. An error computed against a minimum round trip is biased the same way, so the median over every stamp moved between 0.5 and 1.8 ms across twelve loaded runs on one host while the same link's clock error stayed in the hundreds of microseconds. Ranking by lag, rather than by error magnitude, is what keeps the judge honest: an error common to every stamp leaves the lag order alone, so a real clock error cannot hide by making some samples look lucky. On a quiet runner the ten least delayed stamps land within 359 µs across five runs. Adding a synthetic 2 ms error to every stamp of those same windows put all five over the 1 ms bound, so the judge still fails when the clock is genuinely wrong.
 
 ## User API
 
@@ -724,7 +726,7 @@ Each phase ends in a decision gate and a publishable artifact.
 | --- | --- |
 | Framing + CRC on AVR | < 1 KB flash, < 50 B RAM (excluding the RX frame buffer; no TX buffer) |
 | Recovery after corruption | Next frame after the next 0x00 |
-| Time sync accuracy | about 1 ms at 115200 baud, bounded by the tick resolution, with a 5000 ppm clock error |
+| Time sync accuracy | within 1 ms at 115200 baud, judged by the median of the ten least delayed stamps in a ten second window, with a 5000 ppm clock error |
 | Reset detection | Within one heartbeat period (500 ms by default) |
 
 ## Open decisions and risks

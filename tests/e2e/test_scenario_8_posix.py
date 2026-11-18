@@ -8,7 +8,9 @@ corrections anchor the MCU clock, and the time_now stamps stay within
 R2S_SYNC_BOUND_NS nanoseconds (default DEFAULT_BOUND_NS) of host time.
 A fast clock needs negative drift: its ticks outrun ROS time, so each
 nominal millisecond carries fewer ROS nanoseconds. The stamps are only
-judged once the fitted drift tracks the skew.
+judged once the fitted drift tracks the skew, and the judge reads the
+window's least delayed arrivals, so the probe's own scheduling delay
+does not decide the result.
 """
 
 import os
@@ -33,14 +35,14 @@ from rclpy.qos import ReliabilityPolicy
 
 SKEW_PPM = 5000
 
-# Host scheduling jitter moves the host-side arrival stamps a few
-# percent past the 1 ms target on shared runners, so the default judges
-# 5 ms and the nightly lone suite judges the strict 1 ms instead.
+# Shared-host legs run beside other suites, where the probe's own scheduling
+# delay still lands on the fastest arrivals; the nightly lone suite has the
+# runner to itself and judges the strict 1 ms target there.
 DEFAULT_BOUND_NS = 5_000_000
 
 
 def _sync_bound_ns():
-    """The median bound from R2S_SYNC_BOUND_NS, defaulting to 5 ms."""
+    """The judging bound from R2S_SYNC_BOUND_NS, defaulting to 5 ms."""
     raw = os.environ.get('R2S_SYNC_BOUND_NS', str(DEFAULT_BOUND_NS))
     try:
         return int(raw)
@@ -53,6 +55,13 @@ def _sync_bound_ns():
 BOUND_NS = _sync_bound_ns()
 COLLECT_S = 10.0
 MIN_STAMPS = 50
+# How many of the window's fastest arrivals judge the clock. A stamp the
+# probe reads late sits behind its true arrival, so only the least delayed
+# ones measure the clock instead of the host scheduler: ten of about a
+# hundred leaves a median that ignores the tail without discarding the
+# window, and a bound of 1 ms sits well above the few hundred microseconds
+# these carry even on a shared runner.
+JUDGE_STAMPS = 10
 SYNC_TIMEOUT = 30.0
 SETTLE_TIMEOUT = 120.0
 # A 5000 ppm fast clock reads (1 / 1.005 - 1) of that in ROS nanoseconds
@@ -212,9 +221,9 @@ class TestScenario8(unittest.TestCase):
             # the fastest round trip the bridge measured, halved: the
             # estimator fits the offset from the lowest round trips, so the
             # correction uses its statistic, and a scheduling spike delays
-            # a trip without moving the clock. The median judges the clock:
-            # a correction the MCU ignored leaves the stamps adrift by
-            # milliseconds within seconds, median included.
+            # a trip without moving the clock. The judge reads the fastest
+            # arrivals only: a probe that reads the clock late pushes its
+            # stamp down, so an all-stamp median measures host scheduling.
             stamps.clear()
             window_end = time.monotonic() + COLLECT_S
             while time.monotonic() < window_end:
@@ -227,12 +236,11 @@ class TestScenario8(unittest.TestCase):
                     rtts.append(int(rtt))
             self.assertGreaterEqual(len(stamps), MIN_STAMPS, 'too few time_now stamps arrived')
             self.assertGreaterEqual(len(rtts), 5, 'too few round trips came back')
-            one_way_ns = min(rtts) // 2
-            errors = sorted(abs(stamp_ns - (host_ns - one_way_ns)) for stamp_ns, host_ns in stamps)
+            judged_ns = checks.least_delayed_error_ns(stamps, rtts, JUDGE_STAMPS)
             self.assertLessEqual(
-                errors[len(errors) // 2],
+                abs(judged_ns),
                 BOUND_NS,
-                f'the median stamp left the {BOUND_NS} ns bound',
+                f'the least-delayed stamps left the {BOUND_NS} ns bound by {judged_ns} ns',
             )
         finally:
             node.destroy_node()
