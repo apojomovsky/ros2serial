@@ -247,12 +247,20 @@ indices the static C hook API switches on.
 
 Both routes put the same bytes on the wire: the type's hash, its field layout
 and its bounds come from the interface package either way, so the bridge
-accepts a topic from either and cannot tell them apart. Flash differs by the
-X-macro expansion itself, which defines the table, the publish wrapper and the
-dispatch in the sketch's own translation unit rather than in generated sources.
+accepts a topic from either and cannot tell them apart.
+
+Flash differs by the expansion itself, which defines the table, the publish
+wrapper and the dispatch in the sketch's own translation unit instead of in
+generated sources. Measured on one firmware body with one compiler and one flag
+set, the X-macro build costs 74 bytes of flash and 1 byte of bss more than the
+static one on an ATmega328P: 9856 text / 184 data / 157 bss against 9782 / 184
+/ 156. The route is not the cost; the frame limit is. The bundled library sizes
+its frame from a 31-character name allowance, the static route from the names
+its configuration carries, so matching the limits is what makes the two builds
+comparable.
+
 Both firmware are budgeted beside the other examples in
 [budgets](budgets.md).
-
 
 ## Bounds and unsupported input
 

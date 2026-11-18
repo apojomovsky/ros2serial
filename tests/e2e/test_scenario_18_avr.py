@@ -143,9 +143,14 @@ class TestScenario18(unittest.TestCase):
             # temperature from it, so the two fields together prove a decoded
             # payload rather than a zeroed frame. The subscription starts
             # mid-stream, so the first status is whatever the counter reached.
+            # A zeroed payload satisfies the sorted order on its own, so the
+            # counter must also move inside the window.
             for reading in received:
                 self.assertAlmostEqual(reading.temperature, float(reading.status) / 10.0, places=3)
             statuses = [reading.status for reading in received]
             self.assertEqual(statuses, sorted(statuses), 'the counter went backwards')
+            self.assertGreater(
+                statuses[-1], statuses[0], 'the counter never advanced: a zeroed payload'
+            )
         finally:
             node.destroy_node()

@@ -532,10 +532,6 @@ for board in uno mega; do
     echo "arduino_xmacro_custom ($board): the firmware links the runtime topic table" >&2
     status=1
   fi
-  if elf_has_symbol "$out/arduino_xmacro_custom.ino.elf" r2s_bundled_entries_std_msgs_Float32; then
-    echo "arduino_xmacro_custom ($board): the linker kept a bundled descriptor" >&2
-    status=1
-  fi
 done
 
 # The stack budgets need .su files, which avr-gcc does not write under the

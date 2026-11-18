@@ -268,9 +268,12 @@ int main(void)
     {C_TYPE} reading;
 
     CHECK(R2S_TOPIC_COUNT == 2u);
-    CHECK(r2s_topics[0].topic_id == 16u);
-    CHECK(r2s_topics[0].flags == (uint8_t)(0x00u | R2S_NARROW_FLAG));
-    CHECK(r2s_topics[1].flags == (uint8_t)(0x01u | R2S_NARROW_FLAG));
+    CHECK(r2s_topics[0].topic_id == R2S_ID(reading_pub));
+    /* [CTL-4] bit 0 is the direction and bit 1 the narrow flag. The host
+     * build is not narrow, since its double is 64 bits, so the byte carries
+     * the direction alone. */
+    CHECK(r2s_topics[0].flags == 0x00u);
+    CHECK(r2s_topics[1].flags == 0x01u);
     CHECK(strcmp(r2s_topics[0].type_name, "{TYPE_NAME}") == 0);
     CHECK(strcmp(r2s_topics[0].topic_name, "reading") == 0);
     CHECK(strcmp(r2s_topics[1].topic_name, "reading_in") == 0);
@@ -284,7 +287,8 @@ int main(void)
     CHECK(stub_tx_len == sizeof reading_payload);
     CHECK(memcmp(stub_tx_payload, reading_payload, sizeof reading_payload) == 0);
 
-    r2s_codec_dispatch(17u, 3u, reading_payload, (uint16_t)sizeof reading_payload);
+    r2s_codec_dispatch(R2S_ID(reading_sub), 3u, reading_payload,
+                       (uint16_t)sizeof reading_payload);
     CHECK(got_calls == 1u);
     CHECK(got_reading.temperature == 21.5f);
     CHECK(got_reading.status == 7u);
@@ -343,7 +347,8 @@ int main(void)
     CHECK(stub_tx_len == sizeof reading_payload);
     CHECK(memcmp(stub_tx_payload, reading_payload, sizeof reading_payload) == 0);
 
-    r2s_codec_dispatch(17u, 3u, reading_payload, (uint16_t)sizeof reading_payload);
+    r2s_codec_dispatch(R2S_ID(reading_sub), 3u, reading_payload,
+                       (uint16_t)sizeof reading_payload);
     CHECK(got_calls == 1u);
     CHECK(got_reading.temperature == 21.5f);
     CHECK(got_reading.status == 7u);
