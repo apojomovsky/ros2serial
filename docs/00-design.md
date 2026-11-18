@@ -226,7 +226,7 @@ A service or an action is named as itself and expands to the parts its definitio
 - More portable: the codec writes each field byte by byte in a fixed order, so it works the same on little- and big-endian MCUs, with or without alignment restrictions, and never `memcpy`s a whole struct.
 - The conversion costs almost nothing on the host. The bridge walks the message with `rosidl_typesupport_introspection`, fills a message in memory and serializes it with `rmw_serialize` before publishing through a generic publisher. The bridge needs introspection anyway to handle types it was not compiled against.
 
-The CDR comparison stays in the encoding benchmark (Phase 2) as a check on this decision, not as the deciding input.
+The CDR comparison stays in [the encoding benchmark](benchmarks/encoding-packed-vs-cdr-vs-mavlink.md) (Phase 2) as a check on this decision, not as the deciding input.
 
 **Encoding rules (draft for the spec)**
 
@@ -735,7 +735,7 @@ Each open decision has a default. Tickets use the default until the decision is 
 | --- | --- | --- |
 | Project name and C prefix | Repository `ros2serial`, C prefix `r2s_`, ROS packages `r2s_*`. The name was floated in 2018 for an unreleased rosserial rewrite (R2) | Maintainer, before Phase 4 |
 | Message type names in C headers (`__` is reserved in C++) | `std_msgs__msg__Float32` in C; C++ code uses namespace aliases | Maintainer, before the C++ API ticket |
-| CRC variant | CRC-16/MCRF4XX | Research ticket R7 |
+| CRC variant | CRC-16/MCRF4XX | Research ticket R7; the numbers are in [the framing benchmark](benchmarks/framing-crc.md) |
 | Type hash truncation on the wire | 8 bytes | Confirmed by spec ticket S2 |
 | Narrow per field or per topic (64-bit-`double` targets only) | Per topic | Maintainer, after the Phase 2 encoding benchmark |
 | Serial library for the bridge | Plain POSIX `termios` behind a small interface | Research ticket R8 |
@@ -1387,7 +1387,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | P6 | Budgets: `tools/size_report.py`, `tools/stack_report.py`, `tools/budgets_table.py`, `tools/budgets.yaml`, `docs/budgets.md` | V4 | Job fails on a deliberate breach in a test PR |
 | P7 | Stack painting in simavr during the e2e scenarios | V4, R5 | Measured worst case reported next to the static figure |
 | P8 | Big-endian qemu job | C1 | Nightly green |
-| P9 | Framing and CRC benchmark (AVR Uno/Mega): rCOBS, COBS, SLIP, rosserial style | V4, R7 | Write-up in `docs/benchmarks/` |
+| P9 | Framing and CRC benchmark (AVR Uno/Mega): rCOBS, COBS, SLIP, rosserial style | V4, R7 | Write-up in [the framing benchmark](benchmarks/framing-crc.md) |
 | P10 | Encoding benchmark (packed vs CDR vs MAVLink) | G7 | Write-up; decision on narrow per field |
 | P11 | rosserial-compatible runtime registration: RAM topic table backend, `ros::NodeHandle` and `NodeHandle_<...>` (size parameters accepted and ignored), `Publisher`, `Subscriber<T>` and `Subscriber<T, ObjT>` (member functions), `initNode()`, `advertise()`, `subscribe()`, `spinOnce()`, `connected()`, `now()`, `setSpinTimeout()`, `getHardware()`, `ros::Time` and `ros::Duration` arithmetic, `tf::TransformBroadcaster`, compatibility headers | V5, C13 | Every e2e scenario also passes on the runtime path; rosserial example sketches with fixed-size messages build unmodified apart from includes; arrays, strings and `Header` need the one-line edits the migration guide documents; services fail to compile with a clear message until X6 |
 | P12 | Link saturation and TX_BUSY | C6, V1 | Scenario 12 |
