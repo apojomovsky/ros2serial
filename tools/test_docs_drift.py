@@ -68,7 +68,8 @@ BASE = {
         '## CI on GitHub Actions\n\n| Workflow | Trigger | Jobs |\n| --- | --- | --- |\n'
         '| `ci.yml` | Push | ' + ', '.join(f'`{job}`' for job in _JOBS) + ' |\n\n'
         '### Config schema\n\n| Key | Type |\n| --- | --- |\n| `node` | string |\n\n'
-        '### Type hash\n'
+        '### Type hash\n\n'
+        'The strategy is [the testing document](01-testing.md).\n'
     ),
     'docs/01-testing.md': (
         '## 10. Key end-to-end scenarios\n\n1. A scenario.\n\n## 11. Tickets this adds\n'
@@ -81,6 +82,7 @@ BASE = {
         + 'No local twin: '
         + ', '.join(f'`{job}`' for job in _TWINLESS)
         + '; the `-save` jobs persist a checksum after a green matrix.\n'
+        + 'See [the design](docs/00-design.md) and [the examples](examples/README.md).\n'
     ),
     'examples/README.md': '| Sketch |\n| --- |\n| `hello` |\n',
     'examples/arduino_hello/arduino_hello.ino': 'void setup() {}\n',
@@ -483,3 +485,83 @@ def test_a_link_with_a_title_or_angle_brackets_still_reaches_the_section(
     files['docs/x.md'] = f'Bound with `string<=12`; see {link}.\n'
     repo = _tree(tmp_path, files)
     assert _check(repo, monkeypatch, docs_drift.check_bounds_links) == []
+
+
+DOCS_BASE = dict(BASE)
+
+
+def test_a_page_no_reader_page_reaches_is_named(tmp_path, monkeypatch):
+    files = dict(DOCS_BASE)
+    files['docs/orphan.md'] = 'A page nothing links.\n'
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_pages_reachable)
+    assert found == ['docs/orphan.md: no page a reader starts from reaches this one']
+
+
+def test_a_page_reached_through_another_page_passes(tmp_path, monkeypatch):
+    files = dict(DOCS_BASE)
+    files['docs/00-design.md'] = BASE['docs/00-design.md'] + ('\nSee [the orphan](orphan.md).\n')
+    files['docs/orphan.md'] = 'A page the design reaches.\n'
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_pages_reachable) == []
+
+
+def test_a_link_that_leaves_the_tree_is_not_an_edge(tmp_path, monkeypatch):
+    files = dict(DOCS_BASE)
+    files['docs/00-design.md'] = BASE['docs/00-design.md'] + (
+        '\nSee [upstream](https://example.com/x.md).\n'
+    )
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_pages_reachable) == []
+
+
+def test_a_subcommand_the_generator_lacks_is_named(tmp_path, monkeypatch):
+    files = dict(DOCS_BASE)
+    files['gen/r2s_gen/cli.py'] = (
+        'import argparse\n\n\ndef build():\n    parser = argparse.ArgumentParser()\n'
+        '    subparsers = parser.add_subparsers()\n'
+        "    subparsers.add_parser('version', help='x')\n"
+    )
+    files['README.md'] = (
+        '```sh\nros2 run r2s_gen r2s-gen version\nr2s-gen frobnicate --out x\n```\n'
+    )
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_generator_commands)
+    assert found == ['README.md: `r2s-gen frobnicate` is no generator subcommand']
+
+
+def test_a_documented_subcommand_the_parser_declares_passes(tmp_path, monkeypatch):
+    files = dict(DOCS_BASE)
+    files['gen/r2s_gen/cli.py'] = (
+        'import argparse\n\n\ndef build():\n    parser = argparse.ArgumentParser()\n'
+        '    subparsers = parser.add_subparsers()\n'
+        "    subparsers.add_parser('version', help='x')\n"
+    )
+    files['README.md'] = '```sh\nros2 run r2s_gen r2s-gen version\n```\n'
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_generator_commands) == []
+
+
+def test_a_ros2_run_pair_the_packages_lack_is_named(tmp_path, monkeypatch):
+    files = dict(DOCS_BASE)
+    files['gen/setup.py'] = (
+        'from setuptools import setup\n\nsetup(\n    entry_points={\n'
+        "        'console_scripts': ['r2s-gen = r2s_gen.cli:main'],\n    },\n)\n"
+    )
+    files['gen/package.xml'] = '<package><name>r2s_gen</name></package>\n'
+    files['README.md'] = '```sh\nros2 run r2s_gen r2s-ghost version\n```\n'
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_ros2_run)
+    assert found == ['README.md: `ros2 run r2s_gen r2s-ghost` names no installed executable']
+
+
+def test_a_ros2_run_pair_the_packages_install_passes(tmp_path, monkeypatch):
+    files = dict(DOCS_BASE)
+    files['gen/setup.py'] = (
+        'from setuptools import setup\n\nsetup(\n    entry_points={\n'
+        "        'console_scripts': ['r2s-gen = r2s_gen.cli:main'],\n    },\n)\n"
+    )
+    files['gen/package.xml'] = '<package><name>r2s_gen</name></package>\n'
+    files['README.md'] = '```sh\nros2 run r2s_gen r2s-gen version\n```\n'
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_ros2_run) == []

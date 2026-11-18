@@ -67,7 +67,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 | Logging to the host (`/rosout`) | P0 | Non-variadic, per-type API; flash strings |
 | Time synchronization (`now()` on the MCU) | P0 | Host-side estimation; see Time |
 | C++ API, runtime registration with ROS 2 names | P0 | Objects declared at file scope; gcc-class targets; see User API |
-| C++ API, static topics | P0 | Topics from the X-macro list or `r2s.yaml`; see User API |
+| C++ API, static topics | P0 | Topics from the X-macro list; `r2s.yaml` emits a C API only; see User API |
 | C++ API, rosserial-compatible runtime registration | P0 (Phase 2) | gcc-class targets; see User API |
 | Parameters | P1 | Declared by the MCU, exposed as ROS 2 parameters of the bridge node |
 | Services (server and client) | P1 | Need the reliable channel |
@@ -120,9 +120,18 @@ PIC-enabling rules that apply from day one, even though PIC work comes last:
 
 ## Declaring topics
 
-*Status (0.2.0): built: runtime registration, X-macro list, and `r2s.yaml` with the generator, plus rosserial-compatible runtime registration in Phase 2.*
+*Status (0.2.0): built: runtime registration, the X-macro list, and `r2s.yaml` with the generator, plus rosserial-compatible runtime registration in Phase 2.*
 
-There are three ways to declare topics. All three produce the same wire behavior and run the same conformance and end-to-end tests.
+This section is the contributor view: it says what each route costs inside the
+implementation. The reader-facing guide to the same choice is [Choosing how to
+declare your topics](declaring-topics.md), with [Building in C or without the
+Arduino library](c-and-bare-metal.md) for the C and generator sides.
+
+There are four ways to declare topics, and they fall into two groups: the three
+that run on the Arduino library (runtime objects, an X-macro list, and a type
+library that feeds either), and `r2s.yaml` with the generator. All of them
+produce the same wire behavior and run the same conformance and end-to-end
+tests.
 
 **1. Runtime registration, ROS 2 names** (every gcc-class target, which covers every Arduino board). The sketch declares its topics as objects, and the firmware registers them while it runs:
 
@@ -162,20 +171,15 @@ A C sketch spells the same rows with the generated C struct name instead of the 
 
 The header expands either spelling into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator, or emitting a library for that type with the bound you choose (route 4). The header counts the rows itself, so an empty list fails the build with the generator's message instead of emitting an empty table.
 
-**4. A type library for the user's own types** (same routes, no `r2s.yaml`). `r2s-gen types` emits the same shape of library as route 2 from an explicit type list, so a custom type reaches the X-macro list and the runtime objects unchanged. The list is a command line or a file, and every variable-length field takes its bound from the `.msg` or from the list:
+A service has no row form: it is a runtime object (`r2s::Service`, `r2s::Client`) or a generated table. An action has both, `r2s::action::Server` and a row under `R2S_ACTIONS(X)`. The reader-facing page for this route, including what a type library cannot carry, is [the library route and its config boundary](type-library.md).
 
-```
-r2s-gen types robot_interfaces/msg/Battery --msg-path src --out firmware/lib   --bound robot_interfaces/msg/Battery.cells=8
-```
-
-A service or an action is named as itself and expands to the parts its definition splits into, and the bound names the part: `--bound robot_interfaces/action/Run_Result.note=24`. `--write-config` writes the equivalent file, so a one-off command becomes a reviewable one. The library's name carries the digest of its type list and bounds, so two libraries never share a name and Arduino cannot pick one over the other. The sketch header includes every header the library ships, so a topic row names its message type with no include of its own. Each carried type ships a payload constant, and the sketch header checks every row against the build's `R2S_MAX_FRAME`, failing the build with the offending object's name; the runtime route gets the same check as a `constexpr` over the library. `r2s.yaml` stays the input where a firmware needs what a type list cannot say: `limits.max_frame`, `features`, `tier` and the service and action indices the static C hook API switches on.
 **3. `r2s.yaml` and the generator** (custom messages, bare metal, CMake, PlatformIO, PIC):
 
 ```yaml
 # r2s.yaml
 node: base_controller
 distro: jazzy
-handshake: full            # or: compact (tier S)
+handshake: full            # compact is specified, and the generator refuses it for now
 topics:
   - name: battery
     type: std_msgs/msg/Float32
@@ -204,6 +208,14 @@ User topic IDs run from 16 in configuration order. The flags carry direction, na
 
 Topic names still live in the firmware, and the launch file can still remap them (see User API).
 
+**4. A type library for the user's own types** (same routes, no `r2s.yaml`). `r2s-gen types` emits the same shape of library as route 2 from an explicit type list, so a custom type reaches the X-macro list and the runtime objects unchanged. The list is a command line or a file, and every variable-length field takes its bound from the `.msg` or from the list:
+
+```
+r2s-gen types robot_interfaces/msg/Battery --msg-path src --out firmware/lib   --bound robot_interfaces/msg/Battery.cells=8
+```
+
+A service or an action is named as itself and expands to the parts its definition splits into, and the bound names the part: `--bound robot_interfaces/action/Run_Result.note=24`. `--write-config` writes the equivalent file, so a one-off command becomes a reviewable one. The library's name carries the digest of its type list and bounds, so two libraries never share a name and Arduino cannot pick one over the other. The sketch header includes every header the library ships, so a topic row names its message type with no include of its own. Each carried type ships a payload constant, and the sketch header checks every row against the build's `R2S_MAX_FRAME`, failing the build with the offending object's name; the runtime route gets the same check as a `constexpr` over the library. `r2s.yaml` stays the input where a firmware needs what a type list cannot say: `limits.max_frame`, `features`, `tier` and the service and action indices the static C hook API switches on.
+
 ## Wire encoding: packed, converted on the host
 
 **What the choice is.** The wire encoding is the byte layout of a message on the serial line. DDS uses CDR. CDR aligns every field to its own size, inserting padding bytes, and prepends a 4-byte header. A packed layout writes fields one after the other with no padding. With CDR the bridge could forward bytes unchanged. With packed, the bridge converts.
@@ -214,7 +226,7 @@ Topic names still live in the firmware, and the launch file can still remap them
 - More portable: the codec writes each field byte by byte in a fixed order, so it works the same on little- and big-endian MCUs, with or without alignment restrictions, and never `memcpy`s a whole struct.
 - The conversion costs almost nothing on the host. The bridge walks the message with `rosidl_typesupport_introspection`, fills a message in memory and serializes it with `rmw_serialize` before publishing through a generic publisher. The bridge needs introspection anyway to handle types it was not compiled against.
 
-The CDR comparison stays in the encoding benchmark (Phase 2) as a check on this decision, not as the deciding input.
+The CDR comparison stays in [the encoding benchmark](benchmarks/encoding-packed-vs-cdr-vs-mavlink.md) (Phase 2) as a check on this decision, not as the deciding input.
 
 **Encoding rules (draft for the spec)**
 
@@ -401,7 +413,7 @@ void setup() { node.begin(Serial, 115200); }
 void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node.spin_some(); }
 ```
 
-**2. Static topics** (every C++ target, including PIC). The topic list comes from the X-macro list, and the dispatch `switch` is generated, so every handler call is direct:
+**2. Static topics** (every C++ target the compiler supports; on PIC it is a canary build, not validated hardware). The topic list comes from the X-macro list, and the dispatch `switch` is generated, so every handler call is direct:
 
 ```cpp
 #define R2S_TOPICS(X) \
@@ -434,6 +446,7 @@ void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node
 **3. rosserial-compatible runtime registration** (gcc-class targets, Phase 2). Existing rosserial sketches port by changing the include:
 
 ```cpp
+#include <ros2serial.h>
 #include <ros2serial/ros.h>
 #include <ros2serial/std_msgs/Float32.h>
 #include <ros2serial/geometry_msgs/Twist.h>
@@ -583,7 +596,7 @@ and `SetRemap` around the inclusion stay the equivalent scoping route.
 
 *Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling, plus the rosidl plugin wrapper (`gen/r2s_rosidl`) and `.action` support with Goal, Result and Feedback hashes in #317.*
 
-`r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required). It parses the `.msg` grammar itself, since `rosidl_parser` ships only with a ROS installation and the bundled snapshots make the ROS-free path complete. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources, the optional C++ headers, and the compact-mode node map. It also builds the bundled Arduino library (common types with the chosen bounds in `BUNDLE_BOUNDS`) that the X-macro path uses. Outputs are laid out to be usable as:
+`r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required). It parses the `.msg` grammar itself, since `rosidl_parser` ships only with a ROS installation and the bundled snapshots make the ROS-free path complete. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources; the C++ headers and the compact-mode node map are specified and not emitted yet, and the generator refuses both rather than writing something incomplete. It also builds the bundled Arduino library (common types with the chosen bounds in `BUNDLE_BOUNDS`) that the X-macro path uses. Outputs are laid out to be usable as:
 
 - an Arduino library (Library Manager), the default path;
 - a PlatformIO library;
@@ -722,7 +735,7 @@ Each open decision has a default. Tickets use the default until the decision is 
 | --- | --- | --- |
 | Project name and C prefix | Repository `ros2serial`, C prefix `r2s_`, ROS packages `r2s_*`. The name was floated in 2018 for an unreleased rosserial rewrite (R2) | Maintainer, before Phase 4 |
 | Message type names in C headers (`__` is reserved in C++) | `std_msgs__msg__Float32` in C; C++ code uses namespace aliases | Maintainer, before the C++ API ticket |
-| CRC variant | CRC-16/MCRF4XX | Research ticket R7 |
+| CRC variant | CRC-16/MCRF4XX | Research ticket R7; the numbers are in [the framing benchmark](benchmarks/framing-crc.md) |
 | Type hash truncation on the wire | 8 bytes | Confirmed by spec ticket S2 |
 | Narrow per field or per topic (64-bit-`double` targets only) | Per topic | Maintainer, after the Phase 2 encoding benchmark |
 | Serial library for the bridge | Plain POSIX `termios` behind a small interface | Research ticket R8 |
@@ -1209,7 +1222,7 @@ by `launch/r2s_bridge.launch.py` with `port`, `params_file`, `namespace` and `re
 
 ## Test strategy
 
-The full strategy is `docs/01-testing.md`, which is normative. In short:
+The full strategy is [the testing document](01-testing.md), which is normative. In short:
 
 - **Test-first, from the spec down.** Behavior that crosses the wire is fixed by a conformance vector before any code; the C core, the Python reference and the bridge all run the same vectors. Every normative statement in the spec carries an ID, and CI fails when an ID has no test.
 - **Designed for testability.** One static state struct per core module with a test-only reset, link-time seams (port functions, user handlers) with a scriptable fake port, time only through the port tick, pure functions for the algorithms, a thin rclcpp shell around plain C++ classes in the bridge, a functional pipeline in the generator.
@@ -1248,7 +1261,7 @@ Each one ends as an issue comment whose first line starts with `Findings` and, w
 | R1 | rosserial archaeology: features, RAM per pub/sub, time sync, reconnection, failure modes, the exact C++ API surface sketches use | Feature catalog with source links; updates to the parity table and the compatibility API | Parity table in Part I |
 | R2 | Prior art: rosserial-like projects for ROS 2, micro-ROS on small parts, zenoh-pico over serial, ROS 2 hosts for the original rosserial protocol | Annotated list and a go/no-go recommendation | Proceed |
 | R3 | Can `rosidl_parser` and the RIHS01 algorithm be used without a ROS install (pip), or must they be vendored | Working proof inside `gen/` with a hash test | Decided in #71: compute in `gen/r2s_gen/typehash.py` with the standard library only; no pip package, no vendored modules |
-| R4 | Generic service and client APIs per supported distro | API inventory with versions | Generic where present, introspection-based typed services elsewhere |
+| R4 | Generic service and client APIs per supported distro | [API inventory](research/R4-generic-service-and-client-apis.md) with versions | Generic where present, introspection-based typed services elsewhere |
 | R14 | Generic action server and client APIs per supported distro | API inventory with versions | Generic where present, assembled from generic services and topics or the rcl action API elsewhere |
 | R5 | simavr: UART-to-pty bridging for ATmega328P/2560, tick source, EEPROM, stack painting, run in CI | `tests/harness/simavr/` running echo firmware (Uno + Mega) in CI | None needed: blocks only the e2e-avr job |
 | R6 | PIC end-to-end under MPLAB SIM: UART input and output, tick (Phase 5) | `make pic-sim` feeds a frozen vector's frames at their recorded times and compares every reply; blocked until epic-cc compiles a port that reads through its buffer | Build-only PIC canary |
@@ -1259,7 +1272,7 @@ Each one ends as an issue comment whose first line starts with `Findings` and, w
 | R11 | CH32V00x: which part is the tier M proof (RAM and flash of the V002, V003, V006) and its toolchain | Part choice with datasheet links | CH32V003 class, 2 KB RAM |
 | R12 | Static C++ API on epic-cc for PIC14E and PIC18: verify the compile-time results in simulation, global constructors included | Simulated fixtures and an epic-cc ticket for any gap | Advisory compile-only canary |
 | R13 | Mutation testing tools for C, C++ and Python (Mull, mutmut, alternatives): accuracy, speed, CI fit | Recommendation with a trial run on the core and the generator | Mull and mutmut |
-| R15 | Codebase organization: review the tree and recommend (or reject) a reorganization | Findings in `docs/research/R15-codebase-organization.md` | Current layout, plus the diagram sync |
+| R15 | Codebase organization: review the tree and recommend (or reject) a reorganization | Findings in [the R15 research page](research/R15-codebase-organization.md) | Current layout, plus the diagram sync |
 
 ## Epics and seed tickets
 
@@ -1374,7 +1387,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | P6 | Budgets: `tools/size_report.py`, `tools/stack_report.py`, `tools/budgets_table.py`, `tools/budgets.yaml`, `docs/budgets.md` | V4 | Job fails on a deliberate breach in a test PR |
 | P7 | Stack painting in simavr during the e2e scenarios | V4, R5 | Measured worst case reported next to the static figure |
 | P8 | Big-endian qemu job | C1 | Nightly green |
-| P9 | Framing and CRC benchmark (AVR Uno/Mega): rCOBS, COBS, SLIP, rosserial style | V4, R7 | Write-up in `docs/benchmarks/` |
+| P9 | Framing and CRC benchmark (AVR Uno/Mega): rCOBS, COBS, SLIP, rosserial style | V4, R7 | Write-up in [the framing benchmark](benchmarks/framing-crc.md) |
 | P10 | Encoding benchmark (packed vs CDR vs MAVLink) | G7 | Write-up; decision on narrow per field |
 | P11 | rosserial-compatible runtime registration: RAM topic table backend, `ros::NodeHandle` and `NodeHandle_<...>` (size parameters accepted and ignored), `Publisher`, `Subscriber<T>` and `Subscriber<T, ObjT>` (member functions), `initNode()`, `advertise()`, `subscribe()`, `spinOnce()`, `connected()`, `now()`, `setSpinTimeout()`, `getHardware()`, `ros::Time` and `ros::Duration` arithmetic, `tf::TransformBroadcaster`, compatibility headers | V5, C13 | Every e2e scenario also passes on the runtime path; rosserial example sketches with fixed-size messages build unmodified apart from includes; arrays, strings and `Header` need the one-line edits the migration guide documents; services fail to compile with a clear message until X6 |
 | P12 | Link saturation and TX_BUSY | C6, V1 | Scenario 12 |
