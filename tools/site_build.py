@@ -53,6 +53,12 @@ PAGES = (
         'Generate firmware from your ROS messages.',
     ),
     Page(
+        'docs/message-bounds.md',
+        'message-bounds.html',
+        'Message bounds',
+        "Where a field's storage comes from, and how to change it.",
+    ),
+    Page(
         'docs/services-and-parameters.md',
         'services-and-parameters.html',
         'Services and parameters',

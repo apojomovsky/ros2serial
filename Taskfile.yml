@@ -305,6 +305,7 @@ tasks:
       - scripts/e2e-lease.sh
       - tools/snippets_check.py
       - tools/docs_drift.py
+      - tools/bounds_table.py
       - tools/site_build.py
       - tools/site_links.py
       - README.md
