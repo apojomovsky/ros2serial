@@ -1,6 +1,19 @@
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/artwork/ros2serial-white.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/artwork/ros2serial.png">
+  <img src="docs/artwork/ros2serial.png" alt="ros2serial logo" width="192" height="192">
+</picture>
+
 # ros2serial
 
-![ros2serial](docs/artwork/ros2serial.png)
+[![CI](https://github.com/apojomovsky/ros2serial/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/apojomovsky/ros2serial/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/apojomovsky/ros2serial?include_prereleases)](https://github.com/apojomovsky/ros2serial/releases)
+[![License: MIT](https://img.shields.io/github/license/apojomovsky/ros2serial)](LICENSE)
+[![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%7C%20Lyrical%20%7C%20Rolling-22314e?logo=ros)](docs/installation.md)
+
+</div>
 
 **Bring your microcontroller's sensors and actuators into ROS 2 over serial.**
 
@@ -8,8 +21,6 @@ Keep the hardware driver on your Arduino. Publish its readings as ROS messages,
 subscribe to commands from your robot, and let a regular ROS 2 bridge node handle
 the host side. The firmware needs no RTOS or network stack, and runs on small
 boards including the 8-bit Arduino Uno.
-
-[![CI](https://github.com/apojomovsky/ros2serial/actions/workflows/ci.yml/badge.svg)](https://github.com/apojomovsky/ros2serial/actions/workflows/ci.yml)
 
 ```mermaid
 flowchart LR
