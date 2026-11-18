@@ -53,6 +53,7 @@ class TestHarnessArgv(unittest.TestCase):
             'flood-atmega2560.elf',
             'slice-atmega328p-500000.elf',
             'custom-atmega328p.elf',
+            'custom_runtime-atmega328p.elf',
         ):
             open(os.path.join(fw, image), 'w').close()
         patcher = mock.patch.dict(os.environ, {'R2S_SIMAVR_BIN': harness, 'R2S_E2E_AVR_FW': fw})
@@ -79,6 +80,14 @@ class TestHarnessArgv(unittest.TestCase):
         argv = avr.harness_argv('uno', flavor='custom')
         self.assertIn('atmega328p', argv)
         self.assertTrue(any(str(part).endswith('custom-atmega328p.elf') for part in argv))
+
+    def test_custom_runtime_flavor_names_its_firmware(self):
+        argv = avr.harness_argv('uno', flavor='custom_runtime')
+        self.assertTrue(any(str(part).endswith('custom_runtime-atmega328p.elf') for part in argv))
+
+    def test_an_unknown_flavor_is_rejected(self):
+        with self.assertRaises(AssertionError):
+            avr.harness_argv('uno', flavor='nope')
 
     def test_custom_flavor_takes_no_baud(self):
         with self.assertRaises(AssertionError):
