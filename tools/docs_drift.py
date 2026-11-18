@@ -549,6 +549,146 @@ def check_docs_urls() -> list[str]:
     return problems
 
 
+# The pages a reader starts from: the front page, the contributor guide and the
+# rules, which link onward. A page none of them reaches is orphaned for a reader
+# who does not browse the site's navigation.
+ENTRY_PAGES = ('README.md', 'CONTRIBUTING.md', 'AGENTS.md')
+
+
+def page_graph() -> dict[str, set[str]]:
+    """Every prose page, with the in-tree pages it links."""
+    pages = user_docs()
+    known = set(pages)
+    graph: dict[str, set[str]] = {}
+    for rel in pages:
+        text = _read(rel)
+        targets = {
+            page
+            for page in (
+                _linked_page(rel, next(part for part in found.groups() if part))
+                for found in LINK.finditer(text)
+            )
+            if page in known and page != rel
+        }
+        graph[rel] = targets
+    return graph
+
+
+def check_pages_reachable() -> list[str]:
+    """A page no entry page reaches, so a reader following links never lands there."""
+    graph = page_graph()
+    reached = {page for page in ENTRY_PAGES if page in graph}
+    queue = list(reached)
+    while queue:
+        for target in graph[queue.pop()]:
+            if target not in reached:
+                reached.add(target)
+                queue.append(target)
+    return [
+        f'{page}: no page a reader starts from reaches this one'
+        for page in sorted(set(graph) - reached)
+    ]
+
+
+# The generator's subcommand name in a documented command, whatever wraps it:
+# prose writes `r2s-gen generate`, a terminal writes `ros2 run r2s_gen r2s-gen
+# generate`, and both name the same parser entry.
+GENERATOR_COMMAND = re.compile(r'\br2s-gen ([a-z][a-z0-9-]*)')
+ARDUINO_COMMAND = re.compile(r'\br2s-arduino ([a-z][a-z0-9-]*)')
+SUBCOMMAND = re.compile(r"add_parser\(\s*'([a-z][a-z0-9-]*)'")
+
+
+def generator_subcommands(script: str) -> set[str]:
+    """Every subcommand the named console script's parser declares."""
+    found = set()
+    for rel in _git_files():
+        if not rel.endswith('.py') or not rel.startswith('gen/'):
+            continue
+        text = _read(rel)
+        if script == 'r2s-arduino' and 'commands.add_parser(' not in text:
+            continue
+        if script == 'r2s-gen' and 'subparsers.add_parser(' not in text:
+            continue
+        found |= set(SUBCOMMAND.findall(text))
+    return found
+
+
+def documented_commands(pattern: re.Pattern) -> dict[str, list[str]]:
+    """Every subcommand each document names for one console script."""
+    found: dict[str, list[str]] = {}
+    for rel in user_docs():
+        names = pattern.findall(_read(rel))
+        if names:
+            found[rel] = names
+    return found
+
+
+def check_generator_commands() -> list[str]:
+    """A subcommand the documentation names and the generator's parser lacks."""
+    problems = []
+    for script, pattern in (
+        ('r2s-gen', GENERATOR_COMMAND),
+        ('r2s-arduino', ARDUINO_COMMAND),
+    ):
+        known = generator_subcommands(script)
+        for rel, names in documented_commands(pattern).items():
+            problems += [
+                f'{rel}: `{script} {name}` is no generator subcommand'
+                for name in sorted(set(names))
+                if name not in known
+            ]
+    return problems
+
+
+# A pair as a reader types it: the package, then the executable it installs.
+ROS2_RUN = re.compile(r'\bros2 run ([a-z][a-z0-9_]*) ([A-Za-z][A-Za-z0-9_-]*)')
+CONSOLE_SCRIPT = re.compile(r"'([A-Za-z][A-Za-z0-9_-]*) = ")
+
+
+def installed_executables() -> dict[str, set[str]]:
+    """Each ROS package's installed executables, from its manifest and its install rules."""
+    packages: dict[str, set[str]] = {}
+    for manifest in _git_files():
+        if not manifest.endswith('package.xml'):
+            continue
+        text = _read(manifest)
+        found = re.search(r'<name>([^<]+)</name>', text)
+        if not found:
+            continue
+        name = found.group(1)
+        root = Path(manifest).parent
+        names: set[str] = set()
+        setup = ROOT / root / 'setup.py'
+        if setup.is_file():
+            names |= set(CONSOLE_SCRIPT.findall(setup.read_text(encoding='utf-8')))
+        cmake = ROOT / root / 'CMakeLists.txt'
+        if cmake.is_file():
+            names |= set(
+                re.findall(
+                    r'install\(\s*TARGETS\s+([A-Za-z0-9_]+)[^)]*RUNTIME DESTINATION',
+                    cmake.read_text(encoding='utf-8'),
+                )
+            )
+        packages[name] = names
+    return packages
+
+
+def check_ros2_run() -> list[str]:
+    """A `ros2 run` pair whose package or executable the tree does not install."""
+    packages = installed_executables()
+    problems = []
+    for rel in user_docs():
+        text = _read(rel)
+        for package, executable in sorted(set(ROS2_RUN.findall(text))):
+            if package not in packages:
+                problems.append(f'{rel}: `ros2 run {package} {executable}` names no package')
+            elif executable not in packages[package]:
+                problems.append(
+                    f'{rel}: `ros2 run {package} {executable}` names no installed executable'
+                )
+    return problems
+
+
 CHECKS = (
     check_make_targets,
     check_contributing_jobs,
@@ -560,6 +700,9 @@ CHECKS = (
     check_examples,
     check_bounds_links,
     check_docs_urls,
+    check_pages_reachable,
+    check_generator_commands,
+    check_ros2_run,
 )
 
 
