@@ -12,6 +12,7 @@ cannot carry them.
 """
 
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -108,15 +109,28 @@ def test_the_stage_refuses_a_tree_without_the_suite(tmp_path):
     assert 'gen/tests' in result.stderr, result.stderr
 
 
-def test_the_stage_names_the_files_it_cannot_run_under_mutmut(tmp_path):
-    """The tests that install the package in a subprocess cannot see mutmut.
+def test_the_stage_skips_the_files_mutmut_cannot_run(tmp_path):
+    """The two files that install the package cannot import mutmut's trampoline.
 
-    mutmut rewrites the sources to import its trampoline, and a pip or colcon
-    subprocess has no mutmut on its path, so those tests fail by construction.
+    mutmut rewrites the sources to import it, and a pip or colcon subprocess
+    has no mutmut on its path. The check collects the staged suite the way
+    mutmut does, so the claim is observed rather than read off the config.
     """
     repo = make_repo(tmp_path)
     workspace = tmp_path / 'ws'
     assert stage(repo, workspace).returncode == 0
     config = (workspace / 'pyproject.toml').read_text()
-    assert 'test_packaging.py' in config
-    assert 'test_rosidl_plugin.py' in config
+    for name in ('test_packaging.py', 'test_rosidl_plugin.py'):
+        assert name in config
+    args = ['-p', 'no:randomly', '--collect-only', '-q']
+    for name in ('test_packaging.py', 'test_rosidl_plugin.py'):
+        args += ['--ignore', f'gen/tests/{name}']
+    collected = subprocess.run(
+        [sys.executable, '-m', 'pytest', '--rootdir=.', *args, 'gen/tests'],
+        capture_output=True,
+        text=True,
+        cwd=workspace / 'mutants',
+        timeout=120,
+    )
+    assert 'test_packaging' not in collected.stdout, collected.stdout
+    assert 'test_rosidl_plugin' not in collected.stdout, collected.stdout

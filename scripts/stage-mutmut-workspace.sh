@@ -22,9 +22,16 @@ dst=${2:?usage: stage-mutmut-workspace.sh <root> <workspace>}
 
 rm -rf "$dst" || exit 2
 mkdir -p "$dst" || exit 2
+# The workspace usually lives inside the repository, so it names itself in
+# the exclusion; a fixed name would miss a different report directory.
+dst_rel=$(cd "$src" && realpath --relative-to="$src" "$dst" 2>/dev/null || true)
+exclude_dst=
+case "$dst_rel" in
+  ./*) exclude_dst="--exclude=$dst_rel" ;;
+esac
 tar -C "$src" -cf - \
-  --exclude=./.git --exclude=./mutants --exclude=./mutation-report \
-  --exclude=./gen/r2s_gen --exclude='__pycache__' \
+  --exclude=./.git --exclude=./mutants --exclude=./gen/r2s_gen --exclude='__pycache__' \
+  ${exclude_dst:+"$exclude_dst"} \
   . | tar -C "$dst" -xf - || exit 1
 # The package at the top, where its path names the module the tests import.
 cp -a "$src/gen/r2s_gen" "$dst/r2s_gen" || exit 1
@@ -51,9 +58,5 @@ pytest_add_cli_args = [
   "--ignore", "gen/tests/test_packaging.py",
   "--ignore", "gen/tests/test_rosidl_plugin.py",
 ]
-
-[tool.pytest.ini_options]
-addopts = "-q"
-pythonpath = ["."]
 TOML
 echo "stage-mutmut-workspace.sh: staged $dst"

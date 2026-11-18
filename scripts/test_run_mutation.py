@@ -163,6 +163,10 @@ def test_every_report_lands_in_the_report_directory(tmp_path):
     assert 'report directory is not usable' not in result.stderr, result.stderr
     dirs = report_dirs(calls)
     assert set(dirs) == {str(report_dir)}, dirs
+    # The bridge loop once left its database beside its own mull.yml, outside
+    # the directory the job uploads; the run must not recreate it.
+    stray = ROOT / 'mutation' / 'bridge' / 'mull-bridge.sqlite'
+    existed = stray.exists()
     landed = sorted(path.name for path in report_dir.glob('*.sqlite')) + sorted(
         path.name for path in report_dir.glob('mull*.json')
     )
@@ -170,6 +174,7 @@ def test_every_report_lands_in_the_report_directory(tmp_path):
     assert 'mull-bridge.sqlite' in landed, landed
     assert 'mull.json' in landed, landed
     assert 'mull-bridge.json' in landed, landed
+    assert stray.exists() == existed, f'the run wrote {stray}'
 
 
 def test_the_generator_stage_reaches_its_end(tmp_path):

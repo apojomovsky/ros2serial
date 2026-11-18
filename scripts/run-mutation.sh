@@ -209,6 +209,11 @@ mutants = []
 for path in walk_mutatable_files():
     data = SourceFileMutationData(path=path)
     data.load()
+    # The run happens in the staged workspace, where the package sits at the
+    # top; every report and triage entry names the path in the checkout.
+    repo_path = str(path)
+    if repo_path.startswith("r2s_gen/"):
+        repo_path = f"gen/{repo_path}"
     for key, code in data.exit_code_by_key.items():
         status = status_by_exit_code[code]
         if status in ("killed", "skipped", "not checked"):
@@ -228,8 +233,8 @@ for path in walk_mutatable_files():
             sys.exit(f"run-mutation.sh: unknown mutmut status: {status} for {key}")
         mutants.append(
             {
-                "id": f"gen:{path}:{line}:{mutator}",
-                "file": str(path),
+                "id": f"gen:{repo_path}:{line}:{mutator}",
+                "file": repo_path,
                 "line": line,
                 "mutator": mutator,
                 "outcome": outcome,
