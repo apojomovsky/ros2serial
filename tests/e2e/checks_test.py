@@ -84,6 +84,57 @@ class TestTwistEchoNarrow(unittest.TestCase):
             checks.check_twist_echo(sent, corrupted, 'echo', rel_tol=1e-6, abs_tol=1e-9)
 
 
+class TestLeastDelayedError(unittest.TestCase):
+    """The stamp judge ranks by lag, the only key a clock error leaves alone."""
+
+    HOST = 100_000_000
+    ONE_WAY = 1_000_000
+    TRUE = HOST - ONE_WAY
+
+    def stamps_of(self, *errors):
+        """One stamp per error, all with the host read on time."""
+        return [(self.TRUE + error, self.HOST) for error in errors]
+
+    def test_a_stamp_on_time_reads_zero(self):
+        self.assertEqual(
+            checks.least_delayed_error_ns(self.stamps_of(0), [2 * self.ONE_WAY], 1), 0
+        )
+
+    def test_the_fastest_arrival_judges_the_clock(self):
+        # The window's only stamp that reads ahead also arrives fastest;
+        # ranking by error magnitude would pick a starved one and miss it.
+        stamps = [(self.TRUE + 3_000_000, self.HOST)] + self.stamps_of(*([-1_000_000] * 9))
+        self.assertEqual(checks.least_delayed_error_ns(stamps, [2 * self.ONE_WAY], 1), 3_000_000)
+
+    def test_an_error_common_to_every_stamp_is_caught(self):
+        self.assertEqual(
+            checks.least_delayed_error_ns(self.stamps_of(*([7_000_000] * 3)), [2_000_000], 3),
+            7_000_000,
+        )
+
+    def test_the_median_of_the_kept_stamps_is_judged(self):
+        self.assertEqual(
+            checks.least_delayed_error_ns(
+                self.stamps_of(4_000_000, 6_000_000, 8_000_000), [2 * self.ONE_WAY], 3
+            ),
+            6_000_000,
+        )
+
+    def test_a_short_window_keeps_every_stamp(self):
+        # Fewer stamps than keep: all of them judge, so the median of three
+        # is 2 ms even though the fastest arrival alone reads 6 ms.
+        stamps = self.stamps_of(0, 2_000_000, 6_000_000)
+        self.assertEqual(checks.least_delayed_error_ns(stamps, [2_000_000], 10), 2_000_000)
+
+    def test_no_stamps_is_refused(self):
+        with self.assertRaises(AssertionError):
+            checks.least_delayed_error_ns([], [2_000_000], 10)
+
+    def test_no_round_trips_is_refused(self):
+        with self.assertRaises(AssertionError):
+            checks.least_delayed_error_ns(self.stamps_of(0), [], 10)
+
+
 class TestCollectUntil(unittest.TestCase):
     def test_pumps_until_count_reached(self):
         seen = []

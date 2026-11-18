@@ -66,6 +66,35 @@ def check_twist_echo(sent, received, what, *, rel_tol=1e-9, abs_tol=0.0):
             ), f'{what}: angular.{axis} differs'
 
 
+def stamp_error_ns(stamp_ns, host_ns, one_way_ns):
+    """How far one MCU stamp sits from host time, in nanoseconds.
+
+    The link delay rides on every stamp, so the estimate subtracts half the
+    fastest round trip the bridge measured ([SES-24] fits the offset from
+    the lowest ones). Positive means the stamp reads ahead of host time.
+    """
+    return stamp_ns - (host_ns - one_way_ns)
+
+
+def least_delayed_error_ns(stamps, rtts, keep):
+    """The median error of the keep least-delayed stamps.
+
+    Rank by lag, never by error: delay only ever subtracts from the error,
+    so ranking by magnitude would re-select the samples where a late read
+    happened to cancel a clock error and could never see one. Every stamp
+    shifts with the clock, so the lag order stays put and the median of the
+    fastest arrivals judges the clock with the probe's own delay removed.
+    A window with fewer than keep stamps keeps all of them.
+    """
+    assert stamps, 'no stamps to judge'
+    assert rtts, 'no round trips to place the stamps against'
+    one_way_ns = min(rtts) // 2
+    lags = [host_ns - stamp_ns for stamp_ns, host_ns in stamps]
+    fastest = sorted(range(len(lags)), key=lags.__getitem__)[:keep]
+    errors = sorted(stamp_error_ns(stamps[i][0], stamps[i][1], one_way_ns) for i in fastest)
+    return errors[len(errors) // 2]
+
+
 def collect_until(values, count, deadline, what, spin):
     """Wait until values holds count entries, pumping the node to do it.
 
