@@ -237,4 +237,57 @@ struct msg_traits<demo_msgs::action::Spin_Feedback>
 
 } // namespace r2s
 
+namespace demo_msgs
+{
+namespace action
+{
+
+struct Spin
+{
+  using Goal = Spin_Goal;
+  using Result = Spin_Result;
+  using Feedback = Spin_Feedback;
+
+  static const char * type_name()
+  {
+    return "demo_msgs/action/Spin";
+  }
+
+  static const uint8_t * type_hash()
+  {
+    static const uint8_t hash[] = {0x5cu, 0x32u, 0xefu, 0xb3u, 0x24u, 0x00u, 0x1du, 0x20u};
+    return hash;
+  }
+};
+
+} // namespace action
+} // namespace demo_msgs
+
+namespace r2s
+{
+namespace action
+{
+
+/* The primary template the action layer declares; the action header
+ * specializes it, so a sketch names an action and never its parts. */
+template<typename T>
+struct traits;
+
+template<>
+struct traits<demo_msgs::action::Spin>
+{
+  static const char * type_name()
+  {
+    return demo_msgs::action::Spin::type_name();
+  }
+
+  static const uint8_t * type_hash()
+  {
+    return demo_msgs::action::Spin::type_hash();
+  }
+};
+
+} // namespace action
+} // namespace r2s
+
 #endif

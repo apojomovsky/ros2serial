@@ -296,8 +296,90 @@ def emit_action_hpp(
         lines.extend(_layout_checks(resolved[part]))
         lines.append('')
         lines.extend(_trait(resolved[part], suffix(part), table, repository))
+    lines.append('')
+    lines.extend(_action_entity(canonical, repository))
+    lines.append('')
+    lines.extend(_action_trait(canonical))
     lines.extend(['', '#endif', ''])
     return '\n'.join(lines)
+
+
+def _action_entity(action_type: str, repository: MessageRepository) -> list[str]:
+    """
+    Emit the action struct the server template reads.
+
+    The parts travel as nested aliases, so a sketch names one action and
+    never the three messages. The entity carries the wire name and the
+    hash, which are the action's own: no part's header holds either.
+    """
+    package, _, short = _split(action_type)
+    digest = typehash.action_hash(repository, action_type)
+    hash_text = ', '.join(f'0x{byte:02x}u' for byte in bytes.fromhex(digest[len('RIHS01_') :])[:8])
+    return [
+        f'namespace {package}',
+        '{',
+        'namespace action',
+        '{',
+        '',
+        f'struct {short}',
+        '{',
+        f'  using Goal = {short}_Goal;',
+        f'  using Result = {short}_Result;',
+        f'  using Feedback = {short}_Feedback;',
+        '',
+        '  static const char * type_name()',
+        '  {',
+        f'    return "{action_type}";',
+        '  }',
+        '',
+        '  static const uint8_t * type_hash()',
+        '  {',
+        f'    static const uint8_t hash[] = {{{hash_text}}};',
+        '    return hash;',
+        '  }',
+        '};',
+        '',
+        '} // namespace action',
+        f'}} // namespace {package}',
+    ]
+
+
+def _action_trait(action_type: str) -> list[str]:
+    """
+    Emit the trait `r2s::action::Server<T>` reads, spelled on the action.
+
+    The action name stays the sketch's: one type can be served under two
+    names, so the server takes it as a constructor argument.
+    """
+    package, _, short = _split(action_type)
+    return [
+        'namespace r2s',
+        '{',
+        'namespace action',
+        '{',
+        '',
+        '/* The primary template the action layer declares; the action header',
+        ' * specializes it, so a sketch names an action and never its parts. */',
+        'template<typename T>',
+        'struct traits;',
+        '',
+        'template<>',
+        f'struct traits<{package}::action::{short}>',
+        '{',
+        '  static const char * type_name()',
+        '  {',
+        f'    return {package}::action::{short}::type_name();',
+        '  }',
+        '',
+        '  static const uint8_t * type_hash()',
+        '  {',
+        f'    return {package}::action::{short}::type_hash();',
+        '  }',
+        '};',
+        '',
+        '} // namespace action',
+        '} // namespace r2s',
+    ]
 
 
 def _nested_types(resolved: Mapping[str, ResolvedMessage], message: ResolvedMessage) -> set[str]:
