@@ -67,23 +67,23 @@ The runtime route serving `std_srvs/srv/Trigger` at 64-byte frames, the cap the 
 
 | board | services | flash | RAM |
 | --- | --- | --- | --- |
-| uno | 0 | 6692 | 629 |
-| uno | 1 | 12286 | 803 |
-| uno | 2 | 12454 | 920 |
-| uno | 4 | 12472 | 1156 |
-| mega | 0 | 7030 | 629 |
-| mega | 1 | 12632 | 803 |
-| mega | 2 | 12804 | 920 |
-| mega | 4 | 12830 | 1156 |
+| Uno | 0 | 6692 | 629 |
+| Uno | 1 | 12286 | 803 |
+| Uno | 2 | 12454 | 920 |
+| Uno | 4 | 12472 | 1156 |
+| Mega | 0 | 7030 | 629 |
+| Mega | 1 | 12632 | 803 |
+| Mega | 2 | 12804 | 920 |
+| Mega | 4 | 12830 | 1156 |
 
-Uno: 117.7 bytes of RAM per service, and 7 fit the RAM left by the allowance.
-Mega: 117.7 bytes of RAM per service, and 59 fit the RAM left by the allowance.
+Uno: 117.7 bytes of RAM per service, and 7 fit the RAM left by the allowance (fitted, not built).
+Mega: 117.7 bytes of RAM per service, and 59 fit the RAM left by the allowance (fitted, not built).
 
 ### Runtime route against the X-macro route
 
 The same mixed list on both routes at equal frame limits. The runtime route costs this much more RAM:
 
-| board | frame | cost of the runtime route |
+| board | frame limit | cost of the runtime route |
 | --- | --- | --- |
 | uno | 128 | 54 to 518 bytes |
 | uno | 325 | 54 to 518 bytes |

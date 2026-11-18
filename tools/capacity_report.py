@@ -831,7 +831,9 @@ def _services_section(measurements: dict) -> str:
             (row for row in measurements['services'] if row['board'] == board),
             key=lambda row: row['count'],
         ):
-            lines.append(f'| {board} | {row["count"]} | {row["flash"]} | {row["ram"]} |')
+            lines.append(
+                f'| {board.capitalize()} | {row["count"]} | {row["flash"]} | {row["ram"]} |'
+            )
     lines.append('')
     for board in BOARDS:
         runs = [row for row in measurements['services'] if row['board'] == board]
@@ -840,9 +842,12 @@ def _services_section(measurements: dict) -> str:
         marginal, base = _marginal(runs, 'ram'), _base(runs)
         usable = measurements['boards'][board]['ram'] - ALLOWANCE[board]
         fits = capacity(marginal, base['ram'], usable) if marginal and base else 0
+        # The ladder stops at four, so a fitted count past that is arithmetic
+        # on a slope rather than a firmware: it is reported as a bound.
+        bound = '' if fits <= max(SERVICE_COUNTS) else ' (fitted, not built)'
         lines.append(
             f'{board.capitalize()}: {_fmt(marginal)} bytes of RAM per service,'
-            f' and {fits} fit the RAM left by the allowance.'
+            f' and {fits} fit the RAM left by the allowance{bound}.'
         )
     lines.append('')
     return '\n'.join(lines)
@@ -872,7 +877,7 @@ def _route_gap(measurements: dict) -> str:
         'The same mixed list on both routes at equal frame limits. The runtime'
         ' route costs this much more RAM:',
         '',
-        '| board | frame | cost of the runtime route |',
+        '| board | frame limit | cost of the runtime route |',
         '| --- | --- | --- |',
         *[f'| {board} | {frame} | {low} to {high} bytes |' for board, frame, low, high in pairs],
     ]
