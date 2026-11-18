@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 import docs_drift
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -434,5 +435,51 @@ def test_a_bound_in_ordinary_prose_counts_as_mentioning_bounds(tmp_path, monkeyp
 def test_a_timing_bound_is_not_a_message_bound(tmp_path, monkeypatch):
     files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
     files['docs/x.md'] = 'The sync scenario judges stamps within a timing bound.\n'
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_bounds_links) == []
+
+
+@pytest.mark.parametrize(
+    'sentence',
+    [
+        'The sequence bound of JointState.position is six; raise it in r2s.yaml.',
+        'Bounds come from the .msg definition or an r2s.yaml entry.',
+        'Bound each field in its .msg when you can.',
+        'Raise the upper bound on JointState.name so longer names fit.',
+    ],
+)
+def test_a_message_bound_in_any_spelling_counts(sentence):
+    """The gate reads the sentences a reader writes about storage, not a fixed list."""
+    assert docs_drift.states_a_bound(sentence)
+
+
+@pytest.mark.parametrize(
+    'sentence',
+    [
+        'No crash, hang or out-of-bounds access on any input.',
+        'The decoder does a bounds check before it copies.',
+        'The sync scenario judges stamps within a timing bound.',
+        'The stack budget holds; the analysis above proves the bound.',
+        'The loader rejects only what its padding-blind lower bound proves.',
+    ],
+)
+def test_a_limit_that_is_not_a_message_bound_does_not_count(sentence):
+    assert not docs_drift.states_a_bound(sentence)
+
+
+@pytest.mark.parametrize(
+    'link',
+    [
+        '[s](message-bounds.md "bounds")',
+        "[s](message-bounds.md 'bounds')",
+        '[s](<message-bounds.md>)',
+        '[s](message-bounds.md (bounds))',
+    ],
+)
+def test_a_link_with_a_title_or_angle_brackets_still_reaches_the_section(
+    tmp_path, monkeypatch, link
+):
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/x.md'] = f'Bound with `string<=12`; see {link}.\n'
     repo = _tree(tmp_path, files)
     assert _check(repo, monkeypatch, docs_drift.check_bounds_links) == []

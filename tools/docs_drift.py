@@ -421,16 +421,18 @@ BOUNDS_PAGE = 'docs/message-bounds.md'
 BOUND_TOKEN = re.compile(
     r'BUNDLE_BOUNDS|--bound|unbounded|string<=|T\[<=|\[<=|`bounds`|^bounds:'
     r'|\bbounds?\b(?! *violation)',
-    re.MULTILINE,
+    re.MULTILINE | re.IGNORECASE,
 )
 # A page whose only "bound" is one of these is not about message storage. Each
 # entry pairs the phrasing with what it means, so a new exemption is a decision.
 BOUND_ELSEWHERE = (
-    re.compile(r'\b(?:time|clock|timing|jitter|frame|latency|sequence|stack)s? bound\b', re.I),
+    re.compile(r'\b(?:time|clock|timing|jitter|frame|latency|stack)s? bound\b', re.I),
     re.compile(r'\bbound (?:the|a) (?:frame|tick|time|latency)\b', re.I),
-    re.compile(r'\b(?:upper|lower) bound\b', re.I),
+    re.compile(r'padding-blind lower bound\b', re.I),
     re.compile(r'proves the bound\b', re.I),
     re.compile(r'\bstack bound\b|\bbound-sized\b', re.I),
+    # Memory safety, not a field's storage: a decoder bounds-checks a buffer.
+    re.compile(r'out-of-bounds|\bbounds check\b', re.I),
     # A benchmark page measures sizes, so its "bounds" are the capacities the
     # tables are computed at rather than a reader's choice to change.
     re.compile(r"bundle's bounds|documented bounds|field and bound choices", re.I),
@@ -458,8 +460,14 @@ def states_a_bound(text: str) -> bool:
     return bool(BOUND_TOKEN.search(stripped))
 
 
-# A Markdown link or reference target, with an optional anchor.
-LINK = re.compile(r'\]\(\s*([^)\s]+)\s*\)|^ {0,3}\[[^]]+\]:\s*(\S+)', re.MULTILINE)
+# A Markdown link or reference target, with an optional anchor and title. The
+# destination is either angle-bracketed or a bare word, and a title after it is
+# prose, so neither form hides a correct link from the check.
+LINK = re.compile(
+    r'\]\(\s*(?:<([^>\s]+)>|([^)\s]+))(?:\s+(?:"[^"]*"|\'[^\']*\'|\([^)]*\)))?\s*\)'
+    r'|^ {0,3}\[[^]]+\]:\s*(?:<([^>\s]+)>|(\S+))',
+    re.MULTILINE,
+)
 
 
 def _linked_page(rel: str, target: str) -> str | None:
@@ -490,7 +498,9 @@ def check_bounds_links() -> list[str]:
         text = _read(rel)
         # The link is judged where it is written: a nested page reaches the
         # section as ../message-bounds.md, and only reaching the section counts.
-        targets = [found.group(1) or found.group(2) or '' for found in LINK.finditer(text)]
+        targets = [
+            next((part for part in found.groups() if part), '') for found in LINK.finditer(text)
+        ]
         links = [target for target in targets if _linked_page(rel, target) == BOUNDS_PAGE]
         if not links and states_a_bound(text):
             problems.append(f'{rel}: mentions bounds but does not link {BOUNDS_PAGE}')
