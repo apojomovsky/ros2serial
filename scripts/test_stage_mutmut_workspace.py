@@ -100,6 +100,32 @@ def test_the_workspace_leaves_git_and_the_old_tree_out(tmp_path):
     assert not (workspace / 'mutants' / 'stale').exists()
 
 
+def test_a_workspace_inside_the_tree_is_not_copied_into_itself(tmp_path):
+    """The nightly stages into its report directory, which sits in the tree.
+
+    A copy that steps into its own output fails with "file changed as we
+    read it" and never produces mutants/, which aborted the whole stage.
+    """
+    repo = make_repo(tmp_path)
+    report = repo / 'mutation-report'
+    (report / 'core-build').mkdir(parents=True)
+    for index in range(50):
+        (report / 'core-build' / f'file{index}.c').write_text('x' * 200)
+    workspace = report / 'mutmut-workspace'
+    result = subprocess.run(
+        ['bash', str(STAGE), str(repo), str(workspace)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    assert 'file changed as we read it' not in result.stderr, result.stderr
+    assert (workspace / 'mutants' / 'gen' / 'tests' / 'test_bounds.py').is_file()
+    # The report directory is this run's output, never an input.
+    assert not (workspace / 'mutation-report').exists()
+    assert not (workspace / 'mutants' / 'mutation-report').exists()
+
+
 def test_the_stage_refuses_a_tree_without_the_suite(tmp_path):
     """A wrong root must fail loudly instead of staging a tree pytest cannot use."""
     repo = make_repo(tmp_path)
