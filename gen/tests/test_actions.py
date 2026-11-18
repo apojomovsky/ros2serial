@@ -3,6 +3,7 @@
 
 """Action loading: .action files parse to Goal, Result and Feedback messages."""
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -473,3 +474,125 @@ def test_a_bundled_action_hash_matches_the_installed_action():
         typehash.action_hash(repository, 'tf2_msgs/action/LookupTransform')
         == 'RIHS01_0b8adf6bc0b5958879e3265b41a457e03558fe523890a81252c70eba97a82c5d'
     )
+
+
+def test_the_action_header_carries_the_action_entity_and_its_trait():
+    """A sketch names the action to the server, so the header must carry the entity."""
+    repository, resolved = _lookup_resolved()
+    header = cpp.emit_action_hpp(
+        resolved, 'tf2_msgs/action/LookupTransform', repository, bundle_banner()
+    )
+
+    assert 'struct LookupTransform\n{' in header
+    assert 'using Goal = LookupTransform_Goal;' in header
+    assert 'using Result = LookupTransform_Result;' in header
+    assert 'using Feedback = LookupTransform_Feedback;' in header
+    assert 'struct traits<tf2_msgs::action::LookupTransform>' in header
+    assert 'return "tf2_msgs/action/LookupTransform";' in header
+
+
+def test_the_action_trait_carries_the_real_hash():
+    """A placeholder hash makes the bridge reject the action, so the bytes are the hash's."""
+    repository, resolved = _lookup_resolved()
+    header = cpp.emit_action_hpp(
+        resolved, 'tf2_msgs/action/LookupTransform', repository, bundle_banner()
+    )
+    digest = typehash.action_hash(repository, 'tf2_msgs/action/LookupTransform')
+    expected = ', '.join(f'0x{byte:02x}u' for byte in bytes.fromhex(digest[len('RIHS01_') :])[:8])
+
+    assert expected in header
+    # The goal, result and feedback hashes differ from the action's, so the
+    # action hash appears only where the action's own trait carries it.
+    assert header.count('{' + expected + '}') == 1
+
+
+def test_the_action_header_names_the_entity_a_user_sketch_serves(tmp_path):
+    """The trait names what the server asks for and nothing a sketch must repeat."""
+    root = tmp_path / 'messages'
+    write_action(root, 'demo_msgs/action/Spin', 'int32 order\n---\nint32 value\n---\nint32 x\n')
+    repository = msgs.MessageRepository(msg_paths=[root])
+    roots = [
+        'demo_msgs/action/Spin_Goal',
+        'demo_msgs/action/Spin_Result',
+        'demo_msgs/action/Spin_Feedback',
+    ]
+    resolved = bounds.resolve(repository, roots, bounds={})
+    header = cpp.emit_action_hpp(resolved, 'demo_msgs/action/Spin', repository, bundle_banner())
+
+    assert 'struct Spin\n{' in header
+    assert 'struct traits<demo_msgs::action::Spin>' in header
+    digest = typehash.action_hash(repository, 'demo_msgs/action/Spin')
+    expected = ', '.join(f'0x{byte:02x}u' for byte in bytes.fromhex(digest[len('RIHS01_') :])[:8])
+    assert expected in header
+
+
+def test_a_user_sketch_serves_the_action_with_no_hand_written_traits(tmp_path):
+    """The acceptance: a generated action header alone is enough for the server."""
+    if shutil.which('g++') is None:
+        pytest.skip('g++ is not installed')
+    root = tmp_path / 'messages'
+    write_action(root, 'demo_msgs/action/Spin', 'int32 order\n---\nint32 value\n---\nint32 x\n')
+    repository = msgs.MessageRepository(msg_paths=[root])
+    roots = [
+        'demo_msgs/action/Spin_Goal',
+        'demo_msgs/action/Spin_Result',
+        'demo_msgs/action/Spin_Feedback',
+    ]
+    resolved = bounds.resolve(repository, roots, bounds={})
+    library = tmp_path / 'library'
+    for name, text in (
+        ('r2s_bundled.h', emit.emit_types(resolved)),
+        (
+            'demo_msgs/action/spin.hpp',
+            cpp.emit_action_hpp(resolved, 'demo_msgs/action/Spin', repository, bundle_banner()),
+        ),
+    ):
+        path = library / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+    sketch = tmp_path / 'sketch.cpp'
+    sketch.write_text(
+        '#include <r2s/action.hpp>\n'
+        '#include "demo_msgs/action/spin.hpp"\n'
+        'static r2s::action::GoalResponse on_goal(const demo_msgs::action::Spin::Goal &goal)\n'
+        '{\n    (void)goal;\n'
+        '    return r2s::action::GoalResponse::ACCEPT_AND_EXECUTE;\n}\n'
+        'static r2s::action::CancelResponse on_cancel(\n'
+        '    const demo_msgs::action::Spin::Goal &goal)\n'
+        '{\n    (void)goal;\n    return r2s::action::CancelResponse::ACCEPT;\n}\n'
+        'static void on_accepted(r2s::action::ServerGoalHandle<demo_msgs::action::Spin> &handle)\n'
+        '{\n    (void)handle;\n}\n'
+        'r2s::action::Server<demo_msgs::action::Spin> spin("spin", on_goal, on_cancel,\n'
+        '                                                 on_accepted);\n',
+        encoding='utf-8',
+    )
+
+    compiled = subprocess.run(
+        [
+            'g++',
+            '-std=c++11',
+            '-Wall',
+            '-Wextra',
+            '-Werror',
+            '-pedantic',
+            '-Wconversion',
+            '-Wundef',
+            '-fsyntax-only',
+            '-DR2S_WITH_ACTIONS',
+            '-DR2S_WITH_CODEC',
+            '-DR2S_MAX_FRAME=256',
+            '-I',
+            str(CORE_INCLUDE),
+            # The library first: its r2s_bundled.h carries the demo_msgs
+            # structs, while the bundled copy beside the runtime layer does not.
+            '-I',
+            str(library),
+            '-I',
+            str(ROOT / 'cpp' / 'include'),
+            str(sketch),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert compiled.returncode == 0, compiled.stderr
