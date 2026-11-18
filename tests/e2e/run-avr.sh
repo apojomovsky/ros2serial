@@ -208,6 +208,76 @@ for board in uno mega; do
   avr-size "$custom_out/build/custom_firmware.elf" || exit 1
   cp "$custom_out/build/custom_firmware.elf" "$build/fw/custom-$mcu.elf" || exit 1
 done
+# Scenario 18 drives the same interface package through the runtime route:
+# r2s-gen emits a type library carrying the three types, and the sketch
+# names them through r2s::Publisher, r2s::Service and r2s::action::Server.
+# The action entity and its traits come from that library, so the sketch
+# hand-writes neither. The counts and the frame are capped: the runtime
+# tables and the action, service and topic records are sized for the worst
+# case, and the Uno has to hold them beside the sketch's own buffers.
+runtime_custom_stage="$build/runtime_custom"
+rm -rf "$runtime_custom_stage"
+mkdir -p "$runtime_custom_stage/src/r2s" || exit 1
+PYTHONPATH="$root/gen" python3 -m r2s_gen.cli types \
+  custom_interfaces/msg/SensorReading custom_interfaces/srv/Calibrate \
+  custom_interfaces/action/Run \
+  --msg-path "$root/examples" \
+  --bound custom_interfaces/srv/Calibrate_Response.note=16 \
+  --bound custom_interfaces/action/Run_Result.note=16 \
+  --layout arduino --out "$runtime_custom_stage" || exit 1
+cp core/include/r2s/*.h "$runtime_custom_stage/src/r2s/" || exit 1
+cp core/src/*.c "$runtime_custom_stage/src/" || exit 1
+rm -f "$runtime_custom_stage/src/test_reset.c"
+cp ports/arduino/r2s_arduino_port.cpp ports/arduino/r2s_arduino_port.h \
+  "$runtime_custom_stage/src/" || exit 1
+cp cpp/include/r2s/runtime.hpp cpp/include/r2s/action.hpp cpp/include/r2s/service.hpp \
+  "$runtime_custom_stage/src/r2s/" || exit 1
+cp cpp/src/runtime.cpp cpp/src/action.cpp cpp/src/service.cpp \
+  "$runtime_custom_stage/src/" || exit 1
+# The library's own limits travel as -D flags, read the same way the slice's
+# are, since a library sets none of its own on this toolchain.
+rc_extras=$(PYTHONPATH="$root/gen" python3 - "$runtime_custom_stage/src/r2s_bundled.h" <<'EOF'
+import sys
+
+from r2s_gen import layouts
+from r2s_gen.msgs import MessageError
+
+try:
+    defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
+except (MessageError, OSError, UnicodeDecodeError) as error:
+    print(f"r2s-gen: error: {error}", file=sys.stderr)
+    raise SystemExit(1)
+print(" ".join("-D" + define for define in defines))
+EOF
+) || exit 1
+# The frame is the one limit this build overrides, so the library's own value
+# comes out of the flag list first: restating it would only redefine the
+# macro. A 64-byte frame is what the Uno holds, since three frame-sized
+# buffers live in the cores and this sketch carries the topic, service and
+# action registries at once; the one-per-kind counts below are the rest of
+# that budget.
+rc_limit_flags=""
+for flag in $rc_extras; do
+  case "$flag" in
+  -DR2S_MAX_FRAME=*) ;;
+  *) rc_limit_flags="$rc_limit_flags $flag" ;;
+  esac
+done
+rc_flags="$rc_limit_flags -DR2S_WITH_ACTIONS -DR2S_WITH_SERVICES -DR2S_MAX_FRAME=64"
+rc_flags="$rc_flags -DR2S_TOPIC_MAX_COUNT=1 -DR2S_SERVICE_MAX_COUNT=1 -DR2S_ACTION_MAX_COUNT=1"
+for board in uno mega; do
+  mcu=atmega328p
+  [ "$board" = mega ] && mcu=atmega2560
+  out="$build/fw/$board-runtime-custom"
+  rm -rf "$out"
+  arduino-cli compile --fqbn "arduino:avr:$board" \
+    --build-property "compiler.c.extra_flags=$rc_flags" \
+    --build-property "compiler.cpp.extra_flags=$rc_flags" \
+    --library "$runtime_custom_stage" --output-dir "$out" \
+    tests/e2e/avr_runtime_custom || exit 1
+  avr-size "$out/avr_runtime_custom.ino.elf" || exit 1
+  cp "$out/avr_runtime_custom.ino.elf" "$build/fw/custom_runtime-$mcu.elf" || exit 1
+done
 export R2S_E2E_AVR_FW=$build/fw
 [ "$build_only" = 1 ] && exit 0
 
@@ -362,7 +432,7 @@ for rmw in $rmws; do
   fi
   for board in $boards; do
     export R2S_E2E_BOARD=$board
-    for scenario in 1 2 3 4 12 14 16 17; do
+    for scenario in 1 2 3 4 12 14 16 17 18; do
       # Same R2S_E2E_SKIP contract as run.sh, matched on the avr file name.
       case " ${R2S_E2E_SKIP:-} " in
         *" test_scenario_${scenario}_avr "*) echo "skip test_scenario_${scenario}_avr (R2S_E2E_SKIP)" ;;

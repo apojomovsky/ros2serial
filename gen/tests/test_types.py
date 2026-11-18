@@ -1147,3 +1147,44 @@ def test_each_layout_writes_its_wrapper(kind, tmp_path):
     files = types.files_for(plan(SERVICE_AND_ACTION), kind)
 
     assert files[0] in ('library.properties', 'library.json', 'CMakeLists.txt')
+
+
+def test_the_runtime_action_entity_comes_from_the_type_library(tmp_path):
+    """A custom action served by r2s::action::Server needs no hand-written traits."""
+    library = staged(
+        tmp_path,
+        types.emit(
+            plan(
+                (
+                    types.Entry(
+                        'custom_interfaces/action/Run',
+                        {'custom_interfaces/action/Run_Result.note': 16},
+                    ),
+                )
+            ),
+            'arduino',
+        ),
+    )
+    sketch = tmp_path / 'action.cpp'
+    sketch.write_text(
+        '#include <ros2serial.h>\n'
+        '#include <r2s/action.hpp>\n'
+        '#include <custom_interfaces/action/run.hpp>\n'
+        'static r2s::action::GoalResponse on_goal(\n'
+        '    const custom_interfaces::action::Run::Goal &goal)\n'
+        '{\n    (void)goal;\n'
+        '    return r2s::action::GoalResponse::ACCEPT_AND_EXECUTE;\n}\n'
+        'static r2s::action::CancelResponse on_cancel(\n'
+        '    const custom_interfaces::action::Run::Goal &goal)\n'
+        '{\n    (void)goal;\n    return r2s::action::CancelResponse::ACCEPT;\n}\n'
+        'static void on_accepted(\n'
+        '    r2s::action::ServerGoalHandle<custom_interfaces::action::Run> &handle)\n'
+        '{\n    (void)handle;\n}\n'
+        'r2s::action::Server<custom_interfaces::action::Run> run("run", on_goal, on_cancel,\n'
+        '                                                       on_accepted);\n',
+        encoding='utf-8',
+    )
+
+    results = compile_avr_cxx(library, sketch, ('-DR2S_WITH_ACTIONS',))
+
+    assert [result.returncode for result in results] == [0, 0], [r.stderr for r in results]

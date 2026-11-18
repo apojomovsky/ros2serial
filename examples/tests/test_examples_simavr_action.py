@@ -4,14 +4,17 @@
 """The action example on an emulated Uno: the spin action over raw frames.
 
 The firmware announces no topics, declares the spin action on the walk,
-accepts one Float32 goal and runs it: three feedbacks carrying 0, 1 and
-2, then a succeed result carrying 1. The test drives the whole exchange
-from the host side of the pty, asserting the exact DECLARE, GOAL_RESP,
-FEEDBACK and RESULT bytes, so a regression in the MCU wiring fails here
-without any ROS installation. It proves the action wire path on the AVR;
-it does not prove a ROS 2 client can drive the sketch, whose Float32
-stand-in payloads no installed action type converts. That claim waits
-for the LookupTransform firmware in #320.
+accepts one LookupTransform goal and runs it: three empty feedbacks, then
+a succeed result carrying the fixed transform. The test drives the whole
+exchange from the host side of the pty, asserting the exact DECLARE,
+GOAL_RESP, FEEDBACK and RESULT bytes the generated action header leads
+the firmware to send, so a regression in the MCU wiring or in that
+header fails here without any ROS installation. It proves the action wire
+path on the AVR; the ROS 2 client side is scenario 16's.
+
+Every payload is computed by the reference codec from the interface the
+action's own generated header names, so the test pins the wire form and
+not a transcription of it.
 
 The handshake tolerates the session's own traffic the way the hello and
 blink tests do: HELLO repeats while unconnected (SES-5) and heartbeats
@@ -27,7 +30,10 @@ covers: ACT-2, ACT-3, ACT-4, ACT-6, ACT-7, ACT-8
 import time
 
 import serial
+from r2s_gen import msgs
+from r2s_gen import typehash
 from r2s_gen.reference import frames
+from r2s_gen.reference import messages
 from test_announce import read_string
 from test_echo import Harness
 
@@ -40,37 +46,76 @@ ERROR_TOPIC = 5
 HEARTBEAT_TOPIC = 4
 READ_TIMEOUT = 10.0
 
-# The walk the spin action announces: index 0, the sketch's placeholder
-# hash, the Fibonacci type name and the spin name.
-SPIN_DECLARE = (
-    bytes(
-        (
-            0x02,
-            0x00,
-            0x11,
-            0x12,
-            0x13,
-            0x14,
-            0x15,
-            0x16,
-            0x17,
-            0x18,
-            len('test_msgs/action/Fibonacci'),
-        )
+ACTION_TYPE = 'tf2_msgs/action/LookupTransform'
+REPOSITORY = msgs.MessageRepository()
+# An AVR build's double is 32 bits, so the action travels narrow (ENC-12);
+# the reference codec asks for the same width the firmware announces.
+
+
+def _declare() -> bytes:
+    """The DECLARE the sketch sends: its index, the action's hash and both names."""
+    digest = typehash.action_hash(REPOSITORY, ACTION_TYPE)
+    return (
+        bytes((0x02, 0x00))
+        + bytes.fromhex(digest[len('RIHS01_') :])[:8]
+        + bytes((len(ACTION_TYPE),))
+        + ACTION_TYPE.encode()
+        + bytes((len('spin'),))
+        + b'spin'
     )
-    + b'test_msgs/action/Fibonacci'
-    + bytes((len('spin'),))
-    + b'spin'
-)
-# A goal of 2.0 as the sketch's Float32 order.
-GOAL_PAYLOAD = bytes((0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40))
+
+
+def _goal() -> bytes:
+    """The goal the test sends: a target and a source frame, no advanced API."""
+    return messages.encode(
+        REPOSITORY,
+        f'{ACTION_TYPE}_Goal',
+        {
+            'target_frame': 'odom',
+            'source_frame': 'base',
+            'source_time': {'sec': 0, 'nanosec': 0},
+            'timeout': {'sec': 0, 'nanosec': 0},
+            'target_time': {'sec': 0, 'nanosec': 0},
+            'fixed_frame': '',
+            'advanced': False,
+        },
+        narrow=True,
+    )
+
+
+def _feedback() -> bytes:
+    """The empty feedback every step carries."""
+    return messages.encode(REPOSITORY, f'{ACTION_TYPE}_Feedback', {}, narrow=True)
+
+
+def _result() -> bytes:
+    """The result the sketch sends: the fixed transform, no error."""
+    return messages.encode(
+        REPOSITORY,
+        f'{ACTION_TYPE}_Result',
+        {
+            'transform': {
+                'header': {'stamp': {'sec': 0, 'nanosec': 0}, 'frame_id': ''},
+                'child_frame_id': '',
+                'transform': {
+                    'translation': {'x': 1.0, 'y': 2.0, 'z': 3.0},
+                    'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0},
+                },
+            },
+            'error': {'error': 0, 'error_string': ''},
+        },
+        narrow=True,
+    )
+
+
+SPIN_DECLARE = _declare()
+# The GOAL frame: opcode, rel_seq 0, goal_seq 0, action index 0, then the goal.
+GOAL_PAYLOAD = bytes((0x04, 0x00, 0x00, 0x00)) + _goal()
 GOAL_RESP_ACCEPTED = bytes((0x05, 0x00, 0x00, 0x00))
-RESULT_SUCCEEDED = bytes((0x09, 0x01, 0x00, 0x04, 0x00, 0x00, 0x80, 0x3F))
-FEEDBACKS = (
-    bytes((0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)),
-    bytes((0x08, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F)),
-    bytes((0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40)),
-)
+# The RESULT frame: opcode, its own rel_seq 1, goal_seq 0, succeeded (ACT-6).
+RESULT_SUCCEEDED = bytes((0x09, 0x01, 0x00, 0x04)) + _result()
+# A FEEDBACK carries no rel_seq: opcode, goal_seq 0, action index 0 (ACT-1).
+FEEDBACKS = tuple(bytes((0x08, 0x00, 0x00)) + _feedback() for _ in range(3))
 
 
 def next_unit(port, deadline):

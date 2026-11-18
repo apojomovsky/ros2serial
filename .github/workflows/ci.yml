@@ -666,6 +666,11 @@ jobs:
   # timeout-minutes; the called jobs carry theirs.
   nightly:
     needs: plan
+    # The called workflow's pic-sim job asks for packages: read, and a call
+    # granting less makes this whole workflow invalid before any job runs.
+    permissions:
+      contents: read
+      packages: read
     if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'fuzz-long'))
     uses: ./.github/workflows/nightly-jobs.yml
     with:

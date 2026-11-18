@@ -255,4 +255,57 @@ struct msg_traits<tf2_msgs::action::LookupTransform_Feedback>
 
 } // namespace r2s
 
+namespace tf2_msgs
+{
+namespace action
+{
+
+struct LookupTransform
+{
+  using Goal = LookupTransform_Goal;
+  using Result = LookupTransform_Result;
+  using Feedback = LookupTransform_Feedback;
+
+  static const char * type_name()
+  {
+    return "tf2_msgs/action/LookupTransform";
+  }
+
+  static const uint8_t * type_hash()
+  {
+    static const uint8_t hash[] = {0x0bu, 0x8au, 0xdfu, 0x6bu, 0xc0u, 0xb5u, 0x95u, 0x88u};
+    return hash;
+  }
+};
+
+} // namespace action
+} // namespace tf2_msgs
+
+namespace r2s
+{
+namespace action
+{
+
+/* The primary template the action layer declares; the action header
+ * specializes it, so a sketch names an action and never its parts. */
+template<typename T>
+struct traits;
+
+template<>
+struct traits<tf2_msgs::action::LookupTransform>
+{
+  static const char * type_name()
+  {
+    return tf2_msgs::action::LookupTransform::type_name();
+  }
+
+  static const uint8_t * type_hash()
+  {
+    return tf2_msgs::action::LookupTransform::type_hash();
+  }
+};
+
+} // namespace action
+} // namespace r2s
+
 #endif

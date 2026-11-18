@@ -16,7 +16,8 @@
     X(Publisher, std_msgs::msg::String, log_text_pub, "log_text")
 
 #define R2S_ACTIONS(X) \
-    X(Spin, spin_srv, "spin", on_spin_goal, on_spin_cancel, on_spin_accepted)
+    X(tf2_msgs::action::LookupTransform, spin_srv, "spin", on_spin_goal, on_spin_cancel, \
+      on_spin_accepted)
 
 #include <ros2serial.h>
 
@@ -25,43 +26,10 @@
 #include <r2s/action.hpp>
 #include <tf2_msgs/action/lookup_transform.hpp>
 
-/* The spin action: the LookupTransform goal, result and feedback the bundle
- * carries, announced under this name. */
-struct Spin {
-    using Goal = tf2_msgs::action::LookupTransform_Goal;
-    using Result = tf2_msgs::action::LookupTransform_Result;
-    using Feedback = tf2_msgs::action::LookupTransform_Feedback;
-};
-
-namespace r2s
-{
-namespace action
-{
-template <>
-struct traits<Spin> {
-    static const char *action_name()
-    {
-        return "spin";
-    }
-    static const char *type_name()
-    {
-        return "tf2_msgs/action/LookupTransform";
-    }
-    static const uint8_t *type_hash()
-    {
-        /* First 8 bytes of the action's RIHS01 hash, as the generator
-         * computes it (gen/tests/test_actions.py pins the full hash). */
-        static const uint8_t hash[8] = {0x0bu, 0x8au, 0xdfu, 0x6bu, 0xc0u, 0xb5u, 0x95u, 0x88u};
-        return hash;
-    }
-};
-} // namespace action
-} // namespace r2s
-
 /* The running goal, held between the accepted callback and the terminal
  * call, paced like the posix firmware so the scenario's cancel, drop and
  * reset land inside the feedback window. */
-static r2s::action::ServerGoalHandle<Spin> *s_goal = nullptr;
+static r2s::action::ServerGoalHandle<tf2_msgs::action::LookupTransform> *s_goal = nullptr;
 static uint8_t s_feedbacks = 0u;
 static uint32_t s_last_feedback = 0u;
 
@@ -72,19 +40,22 @@ static uint32_t s_last_feedback = 0u;
  * shorter run. */
 static const uint8_t kSpinFeedbacks = 50u;
 
-r2s::action::GoalResponse on_spin_goal(const Spin::Goal &goal)
+r2s::action::GoalResponse on_spin_goal(
+    const tf2_msgs::action::LookupTransform::Goal &goal)
 {
     (void)goal;
     return r2s::action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
-r2s::action::CancelResponse on_spin_cancel(const Spin::Goal &goal)
+r2s::action::CancelResponse on_spin_cancel(
+    const tf2_msgs::action::LookupTransform::Goal &goal)
 {
     (void)goal;
     return r2s::action::CancelResponse::ACCEPT;
 }
 
-void on_spin_accepted(r2s::action::ServerGoalHandle<Spin> &handle)
+void on_spin_accepted(
+    r2s::action::ServerGoalHandle<tf2_msgs::action::LookupTransform> &handle)
 {
     s_goal = &handle;
     s_feedbacks = 0u;
@@ -139,8 +110,8 @@ void setup(void)
  * every 200 ms, then the fixed transform result. A cancel ends canceled. */
 static void spin_some(uint32_t now)
 {
-    Spin::Feedback feedback;
-    Spin::Result result;
+    tf2_msgs::action::LookupTransform::Feedback feedback;
+    tf2_msgs::action::LookupTransform::Result result;
 
     if (s_goal == nullptr) {
         return;

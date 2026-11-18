@@ -12,12 +12,13 @@ firmware and the real bridge over a serial line.
   four announce the same topics, so the scenario files stay shared and read
   the firmware from `R2S_E2E_FW`. The suite runs it for `E2E=posix`;
   `R2S_RMWS` narrows the RMW loop for a quicker iteration.
-- `run-avr.sh` is the avr entry point: it builds the simavr harness and the
-  slice sketch for Uno and Mega, checks the helper assertions, then runs
-  scenarios 1 to 4 and 12 on both boards under each RMW, plus the baud matrix (the
-  scenario 2 flow gates per baud per board) under the first RMW only. The
-  suite runs it for `E2E=avr`; `R2S_RMWS`, `R2S_E2E_BOARDS` and
-  `R2S_E2E_BAUDS` narrow the loops.
+- `run-avr.sh` is the avr entry point: it builds the simavr harness, the
+  slice sketch and the example firmwares for Uno and Mega, checks the helper
+  assertions, then runs scenarios 1 to 4, 12, 14, 16, 17 and 18 on both
+  boards under each RMW, plus the baud matrix (the scenario 2 flow gates per
+  baud per board) under the first RMW only. The suite runs it for
+  `E2E=avr`; `R2S_RMWS`, `R2S_E2E_BOARDS` and `R2S_E2E_BAUDS` narrow the
+  loops.
 - `run-soak.sh` is the nightly soak entry point: it builds the same binaries
   and runs `test_soak_posix.py` then `test_soak_avr.py` on the Uno, one
   `R2S_SOAK_SECONDS` window per backend with a single RMW. Each leg asserts
@@ -44,6 +45,12 @@ firmware and the real bridge over a serial line.
 - `avr_slice/` is the slice sketch the avr backend runs: the four slice
   topics over the static X-macro API, publishing battery at 50 Hz and
   echoing cmd_vel to echo_vel.
+- `avr_runtime_custom/` is scenario 18's firmware: the example interface
+  package's message, service and action over `r2s::Publisher`,
+  `r2s::Service` and `r2s::action::Server`, linked against a type library
+  `r2s-gen types` emits. `run-avr.sh` stages that library, so the action
+  struct and its traits come from the generator and the sketch writes
+  neither.
 - `checks_test.py` unit-tests the shared checks with no ROS in the loop.
 
 A scenario file also runs on its own for iteration: source the ROS and
