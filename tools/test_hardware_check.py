@@ -141,6 +141,27 @@ def test_an_unlit_led_fails_the_run():
     ) == ['the LED did not light when /led went true']
 
 
+def test_a_link_that_never_connects_is_a_fail_verdict_not_a_stop():
+    observed = hardware_check.Observation([], 30.0, None, None, False)
+    reasons = hardware_check.link_failures(observed)
+    assert len(reasons) == 1
+    assert 'no connected link within 30 s' in reasons[0]
+
+
+def test_a_connected_link_gives_the_counters_no_reason_of_its_own():
+    observed = hardware_check.Observation([], 30.0, clean_values(), 4.2, True)
+    assert hardware_check.link_failures(observed) == []
+
+
+def test_the_rate_ignores_arrivals_past_the_window():
+    window = [index / 10.0 for index in range(21)]
+    # The LED phase appends more arrivals; the window's end is the tail edge.
+    sample = hardware_check.arrivals(window, window[-1] + 0.5)
+    assert sample.count == 21
+    assert sample.hz == pytest.approx(10.0)
+    assert sample.gap_ms == pytest.approx(500.0)
+
+
 def test_the_report_lists_every_field_once_and_ends_with_the_verdict():
     lines = hardware_check.format_report({'board': 'uno', 'port': '/dev/ttyACM0'}, []).splitlines()
     assert lines[0] == '== ros2serial hardware check'

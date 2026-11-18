@@ -432,7 +432,11 @@ done
 # The hardware check runs here beside the scenarios: its emulated case drives
 # the tool a person runs on a board, and the harness and the bridge install it
 # needs are built above. It stays out of the RMW and board loops, since it
-# launches its own bridge and firmware on one pty.
+# launches its own bridge and firmware on one pty. The loop leaves the last
+# RMW exported and, for zenoh, a connect config pointing at the router it just
+# killed, so both are cleared first: the check's two nodes must discover each
+# other on the distro default.
+unset RMW_IMPLEMENTATION ZENOH_ROUTER_CONFIG_URI ZENOH_SESSION_CONFIG_URI
 case " ${R2S_E2E_SKIP:-} " in
   *" test_hardware_check_avr "*)
     echo "skip test_hardware_check_avr (R2S_E2E_SKIP)"

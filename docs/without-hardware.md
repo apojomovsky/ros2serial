@@ -130,13 +130,18 @@ verdict: PASS
 ```
 
 `verdict: PASS` exits 0; a failed run exits 1 and prints one `failed:` line
-per reason above the verdict, for example:
+per reason above the verdict, including a link that never connected, for
+example:
 
 ```text
 failed: 450 ms with no /button message, over 300 ms
 failed: the LED did not light when /led went true
 verdict: FAIL
 ```
+
+`handshake: never` with one `failed:` line is what a board running another
+sketch, or a port a serial monitor still holds, reports: the firmware never
+announces itself, so no counter and no rate can be read.
 
 A run that cannot start at all exits 2 with what to do about it: no device at
 the port, a board name that is not `uno` or `mega`, or a missing dev image.

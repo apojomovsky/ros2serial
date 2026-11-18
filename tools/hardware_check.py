@@ -182,6 +182,16 @@ def failures(link, sample, rate_min, rate_max, gap_ms, led_lit):
     return reasons
 
 
+def link_failures(observed):
+    """The reasons the link itself gives, for a run that never connected."""
+    if observed.handshake_s is not None:
+        return []
+    return [
+        f'the bridge reported no connected link within {HANDSHAKE_BUDGET_S:.0f} s: check that '
+        'the sketch is the flashed one and no serial monitor holds the port'
+    ]
+
+
 def format_report(values, failed):
     """The paste-able report block: every field, each failure, then the verdict."""
     lines = ['== ros2serial hardware check']
@@ -312,13 +322,16 @@ def launch_bridge(port, install, log_path):
 
 
 def stop_bridge(proc):
-    """Terminate the launch and the node it started, killing what lingers."""
-    if proc.poll() is not None:
-        return
+    """Terminate the launch and the node it started, killing what lingers.
+
+    The group is signalled even when the launch already exited: its node runs
+    in the same session, and a node left holding the device fails the next run.
+    """
     try:
         os.killpg(proc.pid, signal.SIGTERM)
     except ProcessLookupError:
-        return
+        if proc.poll() is not None:
+            return
     try:
         proc.wait(timeout=10.0)
     except subprocess.TimeoutExpired:
@@ -377,9 +390,14 @@ def probe(port, seconds, launched_at):
         deadline = time.monotonic() + HANDSHAKE_BUDGET_S
         while state['connected_at'] is None:
             if time.monotonic() > deadline:
-                raise CheckError(
-                    f'the bridge reported no connected link within {HANDSHAKE_BUDGET_S:.0f} s; '
-                    'check the sketch is the flashed one and no serial monitor holds the port'
+                # A board holding the wrong sketch or a port held open by a
+                # serial monitor is a failed check, so the report still prints.
+                return Observation(
+                    (),
+                    time.monotonic(),
+                    state['values'],
+                    None,
+                    False,
                 )
             rclpy.spin_once(node, timeout_sec=0.2)
         handshake_s = state['connected_at'] - launched_at
@@ -389,6 +407,7 @@ def probe(port, seconds, launched_at):
         while time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.2)
         window_end = time.monotonic()
+        sampled = tuple(state['arrivals'])
 
         say('driving /led true')
         led.publish(Bool(data=True))
@@ -397,7 +416,7 @@ def probe(port, seconds, launched_at):
         say('driving /led false')
         led.publish(Bool(data=False))
         spin_for(node, 0.5)
-        return Observation(state['arrivals'], window_end, state['values'], handshake_s, lit)
+        return Observation(sampled, window_end, state['values'], handshake_s, lit)
     finally:
         node.destroy_node()
         try:
@@ -473,34 +492,45 @@ def main(argv=None):
         say(f'starting the bridge on {args.port} (log: {log_path})')
         bridge = launch_bridge(args.port, install, log_path)
         observed = probe(args.port, args.seconds, time.monotonic())
+        reasons = link_failures(observed)
         if observed.diagnostics is None:
-            raise CheckError('the bridge published no link diagnostics')
-        link = counters(observed.diagnostics)
-        values['handshake'] = f'{observed.handshake_s:.1f} s'
+            link = Counters()
+            if not reasons:
+                reasons = ['the bridge published no link diagnostics, so no counter was read']
+        else:
+            link = counters(observed.diagnostics)
         values['crc errors'] = link.crc_errors
         values['rx overflows'] = link.rx_overflows
         values['dropped frames'] = link.dropped_frames
         values['sequence gaps'] = link.seq_gaps
         values['dropped topic frames'] = link.topic_drops
         values['led'] = 'lit' if observed.led_lit else 'did not light'
-        try:
-            sample = arrivals(observed.arrivals, observed.window_end)
-        except CheckError as error:
-            sample = error
-        if isinstance(sample, CheckError):
+        if observed.handshake_s is None:
+            values['handshake'] = 'never'
             values['button rate'] = 'n/a'
             values['longest gap'] = 'n/a'
+            sample = None
         else:
-            values['button rate'] = f'{sample.hz:.1f} Hz from {sample.count} messages'
-            values['longest gap'] = f'{sample.gap_ms:.0f} ms'
-        reasons = failures(
-            link,
-            sample,
-            RATE_HZ - RATE_TOLERANCE_HZ,
-            RATE_HZ + RATE_TOLERANCE_HZ,
-            GAP_MS,
-            observed.led_lit,
-        )
+            values['handshake'] = f'{observed.handshake_s:.1f} s'
+            try:
+                sample = arrivals(observed.arrivals, observed.window_end)
+            except CheckError as error:
+                sample = error
+            if isinstance(sample, CheckError):
+                values['button rate'] = 'n/a'
+                values['longest gap'] = 'n/a'
+            else:
+                values['button rate'] = f'{sample.hz:.1f} Hz from {sample.count} messages'
+                values['longest gap'] = f'{sample.gap_ms:.0f} ms'
+        if sample is not None:
+            reasons += failures(
+                link,
+                sample,
+                RATE_HZ - RATE_TOLERANCE_HZ,
+                RATE_HZ + RATE_TOLERANCE_HZ,
+                GAP_MS,
+                observed.led_lit,
+            )
         print(format_report(values, reasons), end='')
         return 1 if reasons else 0
     except CheckError as error:
