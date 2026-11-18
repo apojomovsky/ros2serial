@@ -48,6 +48,7 @@ GENERATED_CASES = [
     'ports/posix/src/r2s_generated.c',
     'cpp/include/std_msgs/msg/float32.hpp',
     'cpp/include/r2s_bundled.h',
+    'cpp/include/r2s_config.h',
 ]
 
 HANDWRITTEN_CASES = [
@@ -76,6 +77,7 @@ GENERATED_DIRS = [
 
 GENERATED_FILES = [
     'cpp/include/r2s_bundled.h',
+    'cpp/include/r2s_config.h',
     'cpp/include/ros2serial.h',
     'cpp/include/ros2serial.hpp',
 ]

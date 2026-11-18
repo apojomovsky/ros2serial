@@ -10,6 +10,8 @@ import tarfile
 import zipfile
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / 'scripts' / 'build-release-artifacts.sh'
 
@@ -92,11 +94,14 @@ def test_the_arduino_zip_is_the_platformio_artifact(tmp_path):
     assert 'architectures=avr,esp32' in props
     files = [path for path in lib.rglob('*') if path.is_file()]
     assert files, 'the zip stages no files'
+    # An Arduino library keeps its sketches beside src/, which is what the
+    # IDE's File > Examples menu lists.
     assert not [
         path
         for path in files
-        if path.relative_to(lib).parts[0] != 'src' and path.name != 'library.properties'
-    ], 'every staged file but the manifest sits under src/'
+        if path.relative_to(lib).parts[0] not in ('src', 'examples')
+        and path.name != 'library.properties'
+    ], 'every staged file but the manifest sits under src/ or examples/'
     for name in (
         'src/ros2serial.h',
         'src/r2s_bundled.h',
@@ -113,6 +118,74 @@ def test_the_arduino_zip_is_the_platformio_artifact(tmp_path):
         matches = [define for define in defines if define.startswith(prefix)]
         assert len(matches) == 1, defines
         assert matches[0].removeprefix(prefix).isdigit(), defines
+
+
+SHIPPED_EXAMPLES = (
+    'hello',
+    'blink',
+    'button',
+    'button_led',
+    'minimal',
+    'range',
+    'servo',
+    'static',
+    'xmacro',
+    'xmacro_c',
+)
+
+
+def test_the_arduino_zip_ships_the_examples_a_first_run_opens(tmp_path):
+    """An Arduino library lists examples/ at the IDE's File > Examples menu."""
+    out, result = build(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    (zip_path,) = sorted(out.glob('ros2serial-arduino-*.zip'))
+    names = zipfile.ZipFile(zip_path).namelist()
+
+    for name in SHIPPED_EXAMPLES:
+        assert f'ros2serial/examples/{name}/{name}.ino' in names, name
+    # The channel examples need a feature flag and a frame limit, so the
+    # shipped library does not configure them and they stay out.
+    for name in ('action', 'service', 'xmacro_custom', 'pio_hello'):
+        assert not [entry for entry in names if f'/examples/{name}/' in entry], name
+    assert 'ros2serial/src/r2s_config.h' in names
+
+
+def _plain_compile(library, sketch, board, work):
+    return subprocess.run(
+        [
+            'arduino-cli',
+            'compile',
+            '--fqbn',
+            f'arduino:avr:{board}',
+            '--library',
+            str(library),
+            '--output-dir',
+            str(work / f'{sketch}-{board}'),
+            str(library / 'examples' / sketch),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+
+
+@pytest.mark.skipif(shutil.which('arduino-cli') is None, reason='arduino-cli is not installed')
+def test_the_shipped_examples_compile_with_no_build_properties(tmp_path):
+    """The IDE route: the library alone configures the build (#670)."""
+    out, result = build(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    (zip_path,) = sorted(out.glob('ros2serial-arduino-*.zip'))
+    staged = tmp_path / 'staged'
+    with zipfile.ZipFile(zip_path) as archive:
+        archive.extractall(staged)
+    library = staged / 'ros2serial'
+    work = tmp_path / 'work'
+    work.mkdir()
+
+    for sketch in ('hello', 'button_led'):
+        for board in ('uno', 'mega'):
+            compiled = _plain_compile(library, sketch, board, work)
+            assert compiled.returncode == 0, compiled.stdout + compiled.stderr
 
 
 def test_an_unknown_distro_fails_loudly(tmp_path):
