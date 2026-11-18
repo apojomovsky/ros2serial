@@ -133,6 +133,7 @@ the firmware announces its names and types when it connects.
 | Build in C, with CMake or PlatformIO, or on my own board | [C and bare metal](docs/c-and-bare-metal.md) |
 | Start the bridge with my robot; rename topics or connect several boards | [Robot integration](docs/robot-integration.md) |
 | Use my own `.msg` files and generate sources with colcon | [Custom interfaces](docs/custom-interfaces.md) |
+| Emit a library for my own types, without `r2s.yaml` | [The library route](docs/type-library.md) |
 | Set or change the storage bound of a message field | [Message bounds](docs/message-bounds.md) |
 | See the limits the bundled types ship with | [Message bounds](docs/message-bounds.md#the-built-in-types-limits) |
 | Use parameters, services, or understand action support | [Services and parameters](docs/services-and-parameters.md) |

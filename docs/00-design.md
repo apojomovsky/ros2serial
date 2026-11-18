@@ -171,7 +171,7 @@ A C sketch spells the same rows with the generated C struct name instead of the 
 
 The header expands either spelling into the topic table, the typed publish functions and the dispatch `switch` inside the sketch's translation unit. The library's own sources (core and bundled descriptors) compile separately and never need the list; the linker drops unused descriptors. Changing the bound of a bundled type means switching to the generator, or emitting a library for that type with the bound you choose (route 4). The header counts the rows itself, so an empty list fails the build with the generator's message instead of emitting an empty table.
 
-A service has no row form: it is a runtime object (`r2s::Service`, `r2s::Client`) or a generated table. An action has both, `r2s::action::Server` and a row under `R2S_ACTIONS(X)`.
+A service has no row form: it is a runtime object (`r2s::Service`, `r2s::Client`) or a generated table. An action has both, `r2s::action::Server` and a row under `R2S_ACTIONS(X)`. The reader-facing page for this route, including what a type library cannot carry, is [the library route and its config boundary](type-library.md).
 
 **3. `r2s.yaml` and the generator** (custom messages, bare metal, CMake, PlatformIO, PIC):
 

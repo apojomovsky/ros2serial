@@ -65,6 +65,12 @@ PAGES = (
         'Generate firmware from your ROS messages.',
     ),
     Page(
+        'docs/type-library.md',
+        'type-library.html',
+        'The library route',
+        'Emit a type library, and know what it cannot carry.',
+    ),
+    Page(
         'docs/message-bounds.md',
         'message-bounds.html',
         'Message bounds',
