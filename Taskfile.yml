@@ -383,6 +383,10 @@ tasks:
       - tools/stack_report.py
       - tools/budgets_table.py
       - docs/budgets.md
+      # The gate also refuses a stale capacity page, which the same job owns.
+      - tools/capacity_report.py
+      - tools/capacity_measurements.json
+      - docs/capacity.md
       # The gate rebuilds the example sketches, so it reads what they build.
       - examples/**
       - gen/**

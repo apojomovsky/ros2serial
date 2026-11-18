@@ -56,6 +56,7 @@ repository development and CI, not installation into a robot workspace.
 | `compile EXAMPLE=<name> BOARD=<uno\|mega\|...>` | Not built yet (pending G10 and V4): will build an example firmware and print flash, RAM and stack |
 | `fuzz TARGET=<name>` | Run one libFuzzer target for 60 s |
 | `size-report` | Regenerate the flash, RAM and stack report |
+| `capacity-report` | Regenerate `docs/capacity.md` and the measurements behind it |
 | `vectors` | Validate every vector file |
 | `regen` | Regenerate every version-stamped generated file (goldens, example and cpp libraries, posix sources) |
 | `bounds-table` | Refresh the limits table in [docs/message-bounds.md](docs/message-bounds.md) from `r2s-gen limits` |

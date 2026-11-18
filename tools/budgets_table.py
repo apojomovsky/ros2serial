@@ -79,6 +79,9 @@ Each budget is a promise that a feature earns its bytes on an Uno with
 * The stack budget holds because the core never recurses and never
   calls through a pointer, which the zone check enforces; the analysis
   above proves the bound instead of hoping the harness reached it.
+* What one more publisher, subscription or service costs, and how many
+  fit each board, is measured on its own page: see the
+  [capacity table](capacity.md).
 
 ## Performance
 

@@ -38,8 +38,7 @@ $(if $(_SCOPE_ERROR),$(error $(_SCOPE_ERROR)))
 
 .PHONY: help bootstrap doctor check test test-core test-gen test-bridge test-cpp test-scripts \
 	test-all e2e-posix e2e-avr pytest ctest fmt shell image exec ci-local compile fuzz size-report \
-	vectors regen bounds-table rosdoc2 docs-gen lint check-warnings setup-hooks pre-pr-check guard-main-clone \
-	cache-dir pic-sim hardware-check
+	capacity-report vectors regen bounds-table rosdoc2 docs-gen lint check-warnings setup-hooks pre-pr-check guard-main-clone cache-dir pic-sim hardware-check
 
 ##@Everyday
 
@@ -122,6 +121,10 @@ fuzz: guard-main-clone cache-dir ## Fuzz each target for 60 s (TARGET=name and R
 
 size-report: guard-main-clone cache-dir ## Regenerate the flash, RAM and stack report
 	@$(call in_image,bash scripts/budgets-check.sh --report)
+
+capacity-report: guard-main-clone cache-dir ## Regenerate docs/capacity.md and the measurements behind it
+	@$(call in_image,python3 tools/capacity_report.py measure --build-dir $(BUILD_DIR))
+	@echo "capacity-report: refreshed docs/capacity.md and tools/capacity_measurements.json"
 
 vectors: guard-main-clone cache-dir ## Validate every vector file and regenerate the fuzz seeds
 	@$(call in_image,python3 tools/vectors_check.py)
