@@ -10,6 +10,7 @@ issue when the scheduled run fails; release.yml calls it on a tag before
 anything is published. These tests pin that contract from the files.
 """
 
+from collections import defaultdict
 from pathlib import Path
 
 import yaml
@@ -495,3 +496,97 @@ def test_the_fuzz_long_job_uploads_coverage_and_regression_artifacts():
 def test_make_forwards_the_fuzz_coverage_and_artifacts_env():
     for var in ('R2S_FUZZ_COVERAGE', 'R2S_FUZZ_ARTIFACTS_DIR'):
         assert var in pass_vars(), f'make drops {var} before the container'
+
+
+# The reusable workflow's callers grant the ceiling, and a called job asking
+# for more makes the whole caller workflow invalid at startup, before any if
+# runs. So every call has to grant what the called jobs request, even the
+# ones the inputs turn off.
+PERMISSION_RANK = {'none': 0, 'read': 1, 'write': 2}
+
+
+def callers_of_reusable():
+    """Every job in the repository that calls nightly-jobs.yml."""
+    calls = []
+    for path in sorted((ROOT / '.github' / 'workflows').glob('*.yml')):
+        doc = workflow(path)
+        for name, job in (doc.get('jobs') or {}).items():
+            if 'nightly-jobs.yml' in str(job.get('uses', '')):
+                calls.append((path, doc, name, job))
+    return calls
+
+
+def ceiling(doc, job):
+    """The permissions a job grants its call: job level, else workflow level."""
+    return job.get('permissions') or doc.get('permissions') or {}
+
+
+def requests(doc, job):
+    """The permissions a called job asks for: job level, else workflow level."""
+    return job.get('permissions') or doc.get('permissions') or {}
+
+
+def test_every_caller_grants_what_the_called_jobs_request():
+    callee = workflow(JOBS)
+    asked = {name: requests(callee, job) for name, job in callee['jobs'].items()}
+    shortfalls = []
+    for path, doc, name, job in callers_of_reusable():
+        granted = ceiling(doc, job)
+        for called_name, wanted in asked.items():
+            for scope, level in wanted.items():
+                have = granted.get(scope, 'none')
+                if PERMISSION_RANK[have] < PERMISSION_RANK[level]:
+                    shortfalls.append(
+                        f'{path.name}.{name} grants {scope}: {have} to '
+                        f'{called_name}, which requests {level}'
+                    )
+    assert not shortfalls, 'a call grants less than the called job requests: ' + '; '.join(
+        shortfalls
+    )
+
+
+def pic_sim_steps():
+    return steps_of(workflow(JOBS), 'pic-sim')
+
+
+def test_the_pic_sim_job_reads_the_package_registry():
+    job = workflow(JOBS)['jobs']['pic-sim']
+    permissions = requests(workflow(JOBS), job)
+    assert permissions.get('contents') == 'read', permissions
+    assert permissions.get('packages') == 'read', permissions
+
+
+def login_index(steps):
+    return [
+        index
+        for index, step in enumerate(steps)
+        if 'docker login ghcr.io' in str(step.get('run', ''))
+    ]
+
+
+def test_the_pic_sim_job_logs_in_to_the_registry_before_the_run():
+    steps = pic_sim_steps()
+    logins = login_index(steps)
+    assert len(logins) == 1, f'pic-sim should log in once: {logins}'
+    runs = [str(step.get('run', '')) for step in steps]
+    simulator = [index for index, run in enumerate(runs) if 'make pic-sim' in run]
+    assert simulator, 'pic-sim does not run the simulator'
+    assert logins[0] < simulator[0], 'the login must precede make pic-sim'
+
+
+def test_the_login_uses_the_built_in_token_through_stdin():
+    login = str(pic_sim_steps()[login_index(pic_sim_steps())[0]]['run'])
+    assert 'github.token' in login or 'secrets.GITHUB_TOKEN' in login, login
+    assert '--password-stdin' in login, login
+    assert '-p ' not in login and '--password ' not in login, login
+    assert 'secrets.' not in login.replace('secrets.GITHUB_TOKEN', ''), login
+
+
+def test_no_other_job_logs_in_to_the_registry():
+    doc = workflow(JOBS)
+    logins = defaultdict(list)
+    for name, job in doc['jobs'].items():
+        for step in job.get('steps', []):
+            if 'docker login' in str(step.get('run', '')):
+                logins[name].append(step)
+    assert sorted(logins) == ['pic-sim'], f'only pic-sim logs in: {sorted(logins)}'
