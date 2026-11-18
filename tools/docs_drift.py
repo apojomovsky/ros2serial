@@ -414,6 +414,141 @@ def check_examples() -> list[str]:
     return problems
 
 
+BOUNDS_PAGE = 'docs/message-bounds.md'
+# The message-bound spellings, plus the bare words the prose uses when it means
+# a field's storage. A timing or frame-size "bound" is what the negative
+# contexts below exclude, so a page about a message field always trips one.
+BOUND_TOKEN = re.compile(
+    r'BUNDLE_BOUNDS|--bound|unbounded|string<=|T\[<=|\[<=|`bounds`|^bounds:'
+    r'|\bbounds?\b(?! *violation)',
+    re.MULTILINE | re.IGNORECASE,
+)
+# A page whose only "bound" is one of these is not about message storage. Each
+# entry pairs the phrasing with what it means, so a new exemption is a decision.
+BOUND_ELSEWHERE = (
+    re.compile(r'\b(?:time|clock|timing|jitter|frame|latency|stack)s? bound\b', re.I),
+    re.compile(r'\bbound (?:the|a) (?:frame|tick|time|latency)\b', re.I),
+    re.compile(r'padding-blind lower bound\b', re.I),
+    re.compile(r'proves the bound\b', re.I),
+    re.compile(r'\bstack bound\b|\bbound-sized\b', re.I),
+    # Memory safety, not a field's storage: a decoder bounds-checks a buffer.
+    re.compile(r'out-of-bounds|\bbounds check\b', re.I),
+    # A benchmark page measures sizes, so its "bounds" are the capacities the
+    # tables are computed at rather than a reader's choice to change.
+    re.compile(r"bundle's bounds|documented bounds|field and bound choices", re.I),
+)
+
+
+def bounds_heading_ids(text: str) -> set[str]:
+    """The anchors the bounds page's Markdown headings produce, GitHub style."""
+    ids = set()
+    for line in text.splitlines():
+        matched = re.match(r'^#{1,6}\s+(.*?)\s*$', line)
+        if not matched:
+            continue
+        heading = re.sub(r'<[^>]*>', '', matched.group(1)).lower()
+        heading = re.sub(r'[^a-z0-9 _-]', '', heading).strip()
+        ids.add(re.sub(r'\s+', '-', heading))
+    return ids
+
+
+def states_a_bound(text: str) -> bool:
+    """Whether a page states a message bound rather than a timing or size limit."""
+    stripped = text
+    for pattern in BOUND_ELSEWHERE:
+        stripped = pattern.sub(' ', stripped)
+    return bool(BOUND_TOKEN.search(stripped))
+
+
+# A Markdown link or reference target, with an optional anchor and title. The
+# destination is either angle-bracketed or a bare word, and a title after it is
+# prose, so neither form hides a correct link from the check.
+LINK = re.compile(
+    r'\]\(\s*(?:<([^>\s]+)>|([^)\s]+))(?:\s+(?:"[^"]*"|\'[^\']*\'|\([^)]*\)))?\s*\)'
+    r'|^ {0,3}\[[^]]+\]:\s*(?:<([^>\s]+)>|(\S+))',
+    re.MULTILINE,
+)
+
+
+def _linked_page(rel: str, target: str) -> str | None:
+    """The tree path a link on page `rel` reaches, or None when it leaves the tree."""
+    path = target.split('#', 1)[0]
+    if not path or ':' in path:
+        return None
+    parts = (Path(rel).parent / path).parts
+    joined: list[str] = []
+    for part in parts:
+        if part == '..':
+            if not joined:
+                return None
+            joined.pop()
+        elif part != '.':
+            joined.append(part)
+    return '/'.join(joined)
+
+
+def check_bounds_links() -> list[str]:
+    """A page stating a bound that does not link the section, or a dead link to it."""
+    page = ROOT / BOUNDS_PAGE
+    headings = bounds_heading_ids(page.read_text(encoding='utf-8')) if page.is_file() else set()
+    problems = []
+    for rel in user_docs():
+        if rel == BOUNDS_PAGE:
+            continue
+        text = _read(rel)
+        # The link is judged where it is written: a nested page reaches the
+        # section as ../message-bounds.md, and only reaching the section counts.
+        targets = [
+            next((part for part in found.groups() if part), '') for found in LINK.finditer(text)
+        ]
+        links = [target for target in targets if _linked_page(rel, target) == BOUNDS_PAGE]
+        if not links and states_a_bound(text):
+            problems.append(f'{rel}: mentions bounds but does not link {BOUNDS_PAGE}')
+        for target in links:
+            fragment = target.partition('#')[2]
+            if not page.is_file():
+                problems.append(f'{rel}: link to {target} names no page')
+                continue
+            if fragment and fragment not in headings:
+                problems.append(f'{rel}: link to {target} matches no heading on the bounds page')
+    return problems
+
+
+SITE = 'https://apojomovsky.github.io/ros2serial/'
+SITE_URL = re.compile(re.escape(SITE) + r"""([^\s'"`)]+)""")
+# The generator's sources are where a message names a reader-facing page.
+POINTER_SOURCES = ('gen/r2s_gen',)
+
+
+def published_pages() -> set[str]:
+    """The files the docs site publishes, read from the builder's page table."""
+    import importlib.util
+
+    # The builder is loaded from the tree under test, not from whatever
+    # site_build this interpreter already imported, so a fixture's page table
+    # is the one that judges its fixture's URLs.
+    path = ROOT / 'tools' / 'site_build.py'
+    if not path.is_file():
+        return set()
+    spec = importlib.util.spec_from_file_location('_site_build_under_test', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return {page.output for page in module.PAGES} | {'index.html'}
+
+
+def check_docs_urls() -> list[str]:
+    """A site URL the generator prints that names no page the site publishes."""
+    pages = published_pages()
+    problems = []
+    for directory in POINTER_SOURCES:
+        for path in sorted((ROOT / directory).rglob('*.py')):
+            rel = str(path.relative_to(ROOT))
+            for found in SITE_URL.finditer(path.read_text(encoding='utf-8')):
+                if found.group(1) not in pages:
+                    problems.append(f'{rel}: {found.group(1)} is no page the site publishes')
+    return problems
+
+
 CHECKS = (
     check_make_targets,
     check_contributing_jobs,
@@ -423,6 +558,8 @@ CHECKS = (
     check_macros,
     check_config_table,
     check_examples,
+    check_bounds_links,
+    check_docs_urls,
 )
 
 
