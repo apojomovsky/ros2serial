@@ -121,6 +121,18 @@ def test_saved_measurements_round_trip(tmp_path):
     assert json.loads(path.read_text(encoding='utf-8')) == measurements
 
 
+def test_digest_names_the_pins_and_the_sources_that_move_a_byte():
+    """A pin bump is a migration the budgets measure, so it must move the digest.
+
+    The rest of ci/ (the PIC gap lists) has no say in an AVR measurement, so
+    editing one must not demand a remeasure of 140 sketches.
+    """
+    digest = capacity_report.input_digest(ROOT)
+    assert digest == capacity_report.input_digest(ROOT)
+    assert 'ci/versions.env' in capacity_report.DIGEST_FILES
+    assert not any(root.startswith('ci') for root in capacity_report.DIGEST_ROOTS)
+
+
 def test_committed_measurements_are_written_one_run_per_line():
     """The generated file keeps its compact shape: a reformatted copy is drift."""
     assert MEASUREMENTS.read_text(encoding='utf-8') == capacity_report.dumps(_measurements())

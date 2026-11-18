@@ -58,7 +58,11 @@ STAGED_FILES = (
 )
 # What moves a measured byte: the core, the runtime layer, the port glue, the
 # generator that emits the bundle, and this tool's own sketch templates.
-DIGEST_ROOTS = ('core', 'cpp', 'ports/arduino', 'gen/r2s_gen', 'ci')
+DIGEST_ROOTS = ('core', 'cpp', 'ports/arduino', 'gen/r2s_gen')
+# The pins alone, not the whole of ci/: a pin sets the code the boards are
+# measured with, while the PIC gap lists in that directory have no say in an
+# AVR measurement.
+DIGEST_FILES = ('ci/versions.env',)
 
 RUNTIME_SKETCH = """#include <ros2serial.h>
 #include <std_msgs/msg/float32.hpp>
@@ -274,17 +278,22 @@ def input_digest(root: Path = ROOT) -> str:
     limit or flag must.
     """
     digest = hashlib.sha256()
+    paths = [root / name for name in DIGEST_FILES]
     for entry in DIGEST_ROOTS:
         base = root / entry
-        if not base.exists():
+        if base.exists():
+            paths.extend(
+                path
+                for path in sorted(base.rglob('*'))
+                if path.is_file() and '__pycache__' not in path.parts
+            )
+    for path in paths:
+        if not path.is_file():
             continue
-        for path in sorted(base.rglob('*')):
-            if not path.is_file() or '__pycache__' in path.parts:
-                continue
-            digest.update(str(path.relative_to(root)).encode())
-            digest.update(b'\0')
-            digest.update(path.read_bytes())
-            digest.update(b'\0')
+        digest.update(str(path.relative_to(root)).encode())
+        digest.update(b'\0')
+        digest.update(path.read_bytes())
+        digest.update(b'\0')
     recipe = repr(
         (
             BOARDS,
@@ -563,7 +572,9 @@ def _probe(
             break
         boards[board].update(sizes['limits'])
         last = {'count': count, 'flash': sizes['flash'], 'ram': sizes['ram']}
-    row = {'board': board, 'frame': label, 'route': route, 'links': 0, 'ceiling': False}
+    # A first rung that refuses is a ceiling too: the ladder stopped because
+    # the board said no, not because the probe ran out of steps.
+    row = {'board': board, 'frame': label, 'route': route, 'links': 0, 'ceiling': refused}
     if last:
         row.update(
             {
@@ -817,6 +828,11 @@ def _ceiling_section(measurements: dict) -> str:
         ' build result. A row whose count is a ceiling refused the next step of the'
         ' probe; a row that ran out of probe without a refusal is a lower bound,'
         ' marked `>=`, and says nothing about where the board actually stops.',
+        '',
+        'The X-macro route stops at 240 rows on any board because the bundled'
+        ' header asserts `R2S_SLOT_COUNT <= 240`, so its 240 is that compile-time'
+        ' bound and not the board running out of RAM. The runtime route carries no'
+        ' such bound and stops where the board does.',
         '',
         '| board | frame | route | topics that linked | flash | RAM |',
         '| --- | --- | --- | --- | --- | --- |',

@@ -340,6 +340,8 @@ The same mixed ladder on both routes at equal frame limits, so the gap between t
 
 Each row is a firmware that compiled and fit its board, so the count is a build result. A row whose count is a ceiling refused the next step of the probe; a row that ran out of probe without a refusal is a lower bound, marked `>=`, and says nothing about where the board actually stops.
 
+The X-macro route stops at 240 rows on any board because the bundled header asserts `R2S_SLOT_COUNT <= 240`, so its 240 is that compile-time bound and not the board running out of RAM. The runtime route carries no such bound and stops where the board does.
+
 | board | frame | route | topics that linked | flash | RAM |
 | --- | --- | --- | --- | --- | --- |
 | uno | 128 | runtime | 32 | 12962 | 1940 |
