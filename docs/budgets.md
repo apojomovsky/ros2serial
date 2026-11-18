@@ -41,8 +41,8 @@ base in the job summary.
 
 | firmware | flash | flash budget | RAM | RAM budget | stack | stack budget |
 | --- | --- | --- | --- | --- | --- | --- |
-| arduino_action/mega/arduino_action.ino.elf | 14014 | 16500 | 1319 | 1600 | 175 | 210 |
-| arduino_action/uno/arduino_action.ino.elf | 13664 | 16000 | 1319 | 1600 | 167 | 200 |
+| arduino_action/mega/arduino_action.ino.elf | 14900 | 18000 | 1508 | 1700 | 171 | 210 |
+| arduino_action/uno/arduino_action.ino.elf | 14550 | 17500 | 1508 | 1700 | 163 | 200 |
 | arduino_blink/esp32/arduino_blink.ino.elf | 277792 | 333400 | 75873 | 91100 | n/a | n/a |
 | arduino_blink/mega/arduino_blink.ino.elf | 9078 | 10800 | 1082 | 1300 | 16 | 32 |
 | arduino_blink/uno/arduino_blink.ino.elf | 8356 | 9900 | 1082 | 1300 | 13 | 32 |

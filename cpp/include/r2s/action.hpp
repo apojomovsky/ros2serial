@@ -55,9 +55,11 @@ namespace action
 template<typename T>
 /// What every action type must provide.
 /**
- * The goal, result and feedback message types the sketch's action struct
- * names. The generated action headers name them as nested types, so a
- * sketch names an action and never a part.
+ * The action's announced type name and the first eight bytes of its type
+ * hash. The generated action header specializes this on the action struct,
+ * which already names its goal, result and feedback as nested types, so a
+ * sketch names an action and never writes a trait of its own. The action's
+ * own name stays the sketch's: one type can be served under two names.
  *
  * \tparam T the action type being described.
  */

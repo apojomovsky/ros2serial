@@ -156,6 +156,9 @@ jobs:
     runs-on: ubuntu-24.04
     # The image pull, the epic-cc download and a simulator run of seconds.
     timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4.2.2
       # The generator half runs in the dev image, which the host target
@@ -169,6 +172,12 @@ jobs:
           key: pic-sim-${{ hashFiles('ci/versions.env') }}
           restore-keys: |
             pic-sim-
+      # The package is private, and the run pulls it by digest, so the
+      # daemon needs credentials: the job token carries packages: read once
+      # the package grants this repository access. The password goes in on
+      # stdin, so it never reaches the argument list or the log.
+      - name: Log in to ghcr.io
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       - run: make pic-sim
       # No checksum save: schedule-only, nothing plans it on pull requests.
 

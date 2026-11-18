@@ -472,9 +472,9 @@ naming the rule.
 
 rosserial never had actions, so there is nothing to port: the native
 `r2s::action::Server` serves goals straight from the sketch, as
-`examples/arduino_action` shows with one Fibonacci-like goal. The bridge
-presents that goal as a ROS 2 action server
-([#584](https://github.com/apojomovsky/ros2serial/pull/584)). The sketch
-stands in Float32 payloads under a placeholder type, so drive a ROS 2 client
-against firmware announcing an installed action type instead; see
+`examples/arduino_action` shows with the bundled LookupTransform action. The
+bridge presents that goal as a ROS 2 action server
+([#584](https://github.com/apojomovsky/ros2serial/pull/584)). The action
+struct and its `r2s::action::traits` come from the generated header, so a
+sketch names the action and nothing else; see
 [Services and parameters](services-and-parameters.md).
