@@ -103,6 +103,12 @@ PAGES = (
         'Measured flash, RAM and stack per example and board.',
     ),
     Page(
+        'docs/capacity.md',
+        'capacity.html',
+        'Topics and services that fit',
+        'Measured marginal cost per entity and how many fit each board.',
+    ),
+    Page(
         'docs/robustness.md',
         'robustness.html',
         'Mutation and fuzz numbers',
