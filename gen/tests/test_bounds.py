@@ -282,3 +282,33 @@ def test_a_field_with_no_variable_length_points_at_the_bounds_section():
         )
 
     assert str(caught.value).endswith(f'see {BOUNDS_URL}')
+
+
+def test_a_sequence_bound_below_one_is_refused_by_the_resolver():
+    """The config rejects this first, so the resolver's own guard needs its own case."""
+    with pytest.raises(msgs.MessageError) as caught:
+        bounds.resolve(
+            repository(),
+            ['sensor_msgs/msg/JointState'],
+            bounds={**JOINT_STATE_BOUNDS, 'sensor_msgs/msg/JointState.position': 0},
+        )
+
+    assert str(caught.value) == (
+        'sensor_msgs/msg/JointState.position: the sequence bound must be at least 1; '
+        f'raise it; see {BOUNDS_URL}'
+    )
+
+
+def test_a_string_pair_with_one_element_is_refused_by_the_resolver():
+    """A pair is [count, string_bound]; a one-element list is the shape error."""
+    with pytest.raises(msgs.MessageError) as caught:
+        bounds.resolve(
+            repository(),
+            ['sensor_msgs/msg/JointState'],
+            bounds={**JOINT_STATE_BOUNDS, 'sensor_msgs/msg/JointState.name': [4]},
+        )
+
+    assert str(caught.value) == (
+        'sensor_msgs/msg/JointState.name: a list bound is [count, string_bound]; '
+        f'give the count and the string bound; see {BOUNDS_URL}'
+    )
