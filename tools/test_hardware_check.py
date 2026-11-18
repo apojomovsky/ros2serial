@@ -100,7 +100,7 @@ def test_a_gap_over_the_limit_is_named():
         hardware_check.counters(clean_values()), sample, 8.0, 12.0, 300.0, True
     )
     assert len(reasons) == 1
-    assert '350 ms gap' in reasons[0]
+    assert '350 ms with no /button message' in reasons[0]
     assert 'over 300 ms' in reasons[0]
 
 
