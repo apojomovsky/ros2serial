@@ -11,6 +11,7 @@ anything else is a build problem, not a silent dead link.
 import argparse
 import html
 import re
+import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -187,6 +188,7 @@ HR = re.compile(r'^ *(?:\*{3,}|-{3,}|_{3,}) *$')
 TABLE_DELIM = re.compile(r'^\|? *:?-+:? *(\| *:?-+:? *)*\|? *$')
 LIST_ITEM = re.compile(r'^ {0,3}([*+-]|\d{1,9}[.)])\s+(.*)$')
 HTML_COMMENT = re.compile(r'^\s*<!--')
+HTML_MEDIA = re.compile(r'^\s*</?(?:div|picture|source|img)(?:\s[^>]*)?/?>\s*$')
 EXTERNAL = re.compile(r'^[a-zA-Z][a-zA-Z0-9+.-]*:')
 STRIP_CODE = re.compile(r'`([^`]*)`')
 
@@ -376,6 +378,11 @@ def _render_blocks(
                 i += 1
             blocks.append('\n'.join(comment))
             continue
+        if HTML_MEDIA.match(line):
+            flush_paragraph()
+            blocks.append(line.strip())
+            i += 1
+            continue
         if not line.strip():
             flush_paragraph()
             i += 1
@@ -485,6 +492,10 @@ STYLE = (
     'nav ul{list-style:none;padding:0;display:flex;flex-wrap:wrap;gap:0 1em}'
     'table{border-collapse:collapse}th,td{border:1px solid #999;padding:.2em .6em}'
     'pre{background:#f4f4f4;padding:.8em;overflow-x:auto}code{font-size:.95em}'
+    'img{max-width:100%;height:auto}'
+    '@media(prefers-color-scheme:dark){'
+    'body{background:#0d1117;color:#e6edf3}a{color:#58a6ff}'
+    'pre{background:#161b22}th,td{border-color:#30363d}}'
 )
 
 
@@ -500,7 +511,7 @@ def wrap(title: str, nav: str, body: str) -> str:
 
 
 def build_site(root: Path, outdir: Path, pages: tuple[Page, ...] = PAGES) -> list[str]:
-    """Render every page plus the landing index; problems, empty when green."""
+    """Publish the artwork and render every page; problems, empty when green."""
     problems: list[str] = []
     mapping = {page.source: page.output for page in pages}
     nav = (
@@ -511,6 +522,9 @@ def build_site(root: Path, outdir: Path, pages: tuple[Page, ...] = PAGES) -> lis
         + '</ul></nav>'
     )
     outdir.mkdir(parents=True, exist_ok=True)
+    artwork = root / 'docs' / 'artwork'
+    if artwork.is_dir():
+        shutil.copytree(artwork, outdir / 'docs' / 'artwork', dirs_exist_ok=True)
     for page in pages:
         source = root / page.source
         if not source.is_file():
