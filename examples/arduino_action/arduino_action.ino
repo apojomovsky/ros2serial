@@ -46,6 +46,12 @@ r2s::Node node("base_controller");
 r2s::action::Server<tf2_msgs::action::LookupTransform> spin("spin", on_spin_goal,
                                                             on_spin_cancel, on_spin_accepted);
 
+/* The feedback and result the goal answers with live here, not in loop()'s
+ * frame: the result is a whole TransformStamped, and the Uno's 2 KB of RAM
+ * leaves no room for it on the stack beside the codec's own frames. */
+static tf2_msgs::action::LookupTransform::Feedback s_feedback;
+static tf2_msgs::action::LookupTransform::Result s_result;
+
 void setup() { node.begin(Serial, 115200); }
 void loop()
 {
@@ -54,32 +60,26 @@ void loop()
         return;
     }
     if (s_goal->is_canceling()) {
-        tf2_msgs::action::LookupTransform::Result result;
-
         /* The wire form is the whole message, so every field starts known:
          * an unset stamp would ride the frame as stack bytes. */
-        memset(&result, 0, sizeof result);
-        (void)s_goal->canceled(result);
+        memset(&s_result, 0, sizeof s_result);
+        (void)s_goal->canceled(s_result);
         s_goal = nullptr;
         return;
     }
-    {
-        tf2_msgs::action::LookupTransform::Feedback feedback;
-        tf2_msgs::action::LookupTransform::Result result;
-
-        feedback.structure_needs_at_least_one_member = 0u;
-        (void)s_goal->publish_feedback(feedback);
-        s_feedbacks++;
-        if (s_feedbacks >= 3u) {
-            /* The result carries a fixed transform, so the example shows a
-             * payload a client reads rather than a zeroed one. */
-            memset(&result, 0, sizeof result);
-            result.transform.transform.translation.x = 1.0;
-            result.transform.transform.translation.y = 2.0;
-            result.transform.transform.translation.z = 3.0;
-            result.transform.transform.rotation.w = 1.0;
-            (void)s_goal->succeed(result);
-            s_goal = nullptr;
-        }
+    memset(&s_feedback, 0, sizeof s_feedback);
+    (void)s_goal->publish_feedback(s_feedback);
+    s_feedbacks++;
+    if (s_feedbacks < 3u) {
+        return;
     }
+    /* The result carries a fixed transform, so the example shows a payload a
+     * client reads rather than a zeroed one. */
+    memset(&s_result, 0, sizeof s_result);
+    s_result.transform.transform.translation.x = 1.0;
+    s_result.transform.transform.translation.y = 2.0;
+    s_result.transform.transform.translation.z = 3.0;
+    s_result.transform.transform.rotation.w = 1.0;
+    (void)s_goal->succeed(s_result);
+    s_goal = nullptr;
 }
