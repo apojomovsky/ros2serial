@@ -78,8 +78,8 @@ void loop()
 
 ### X-macro list
 
-This is `examples/arduino_static`. The two declaration lines become rows above
-the include. Everything below them is the same sketch:
+`examples/arduino_static`, the same sketch. The two declaration lines become
+rows above the include, and everything below them is unchanged:
 
 ```cpp
 #define R2S_TOPICS(X) \

@@ -110,8 +110,8 @@ ros2 run r2s_gen r2s-gen generate --config r2s.yaml --layout cmake --out generat
   bytes it took.
 - `r2s_port_write(buf, len)` hands bytes to the link.
 - `r2s_port_tx_free()` reports how many bytes the link accepts right now.
-- `r2s_port_tick()` returns a free-running millisecond tick that wraps at
-  2^32.
+- `r2s_port_tick()` returns a free-running tick at `R2S_TICK_HZ` (1000 per
+  second by default, so milliseconds) that wraps at 2^32.
 
 The [porting guide](04-porting.md) states the contract each one owes.
 

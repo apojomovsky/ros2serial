@@ -84,8 +84,11 @@ with `arduino:avr:mega`.
 
 If you prefer the IDE, download `ros2serial-arduino-<version>.zip` from the
 [releases page](https://github.com/apojomovsky/ros2serial/releases), then choose
-*Sketch > Include Library > Add .ZIP Library* and pick the file. The examples
-appear under *File > Examples > ros2serial*.
+*Sketch > Include Library > Add .ZIP Library* and pick the file. That archive
+carries the library alone, without the example sketches. To get those, generate
+a library with `r2s-arduino library` as in the step above: one with an
+`examples/` directory appears under *File > Examples > ros2serial* once it is in
+your sketchbook's libraries directory.
 
 The IDE needs one extra step for now: the core has no default frame limit, so an
 IDE build must be given one. The [firmware

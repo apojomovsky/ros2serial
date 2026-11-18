@@ -487,17 +487,6 @@ def test_a_link_with_a_title_or_angle_brackets_still_reaches_the_section(
     assert _check(repo, monkeypatch, docs_drift.check_bounds_links) == []
 
 
-def _link_targets(rel: str) -> set[str]:
-    """Every in-tree page one document links, resolved the way a reader's click lands."""
-    found = set()
-    for match in docs_drift.LINK.finditer((docs_drift.ROOT / rel).read_text(encoding='utf-8')):
-        target = next(part for part in match.groups() if part)
-        page = docs_drift._linked_page(rel, target)
-        if page:
-            found.add(page)
-    return found
-
-
 DOCS_BASE = dict(BASE)
 
 

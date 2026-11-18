@@ -13,7 +13,8 @@ anything yet; this page starts where that one ends.
 A library is the same shape as the bundled one, with your types in place of the
 bundled list:
 
-- `ros2serial.h`, the sketch header that expands `R2S_TOPICS` and `R2S_ACTIONS`.
+- `ros2serial.h`, the sketch header that expands the `R2S_TOPICS` list into the
+  table, the publish wrappers and the dispatch.
 - `r2s_bundled.h` and `r2s_bundled.c`, the descriptors, hashes and frame limit
   for the types it carries.
 - One message header per type, at the `<pkg>/msg/<type>.hpp` path, plus a
@@ -57,7 +58,9 @@ Two more limits of the route, stated so a switch is not a surprise:
 - A type library carries headers, not entity tables: the service header names the
   request and response pair and its hash, and the action header carries the
   action struct and its `traits`, but the tables that `r2s_services_configure()`
-  binds come from `r2s-gen generate`.
+  binds come from `r2s-gen generate`. Action rows are yours to write: the sketch
+  defines `R2S_ACTIONS(X)` and expands it once at file scope with
+  `R2S_ACTION_X_SERVER`, from `<r2s/action.hpp>`.
 - `--layout` picks the wrapper (`library.properties`, `library.json` or a
   `CMakeLists.txt`), not a language: the emitted C is the same in all three.
 
