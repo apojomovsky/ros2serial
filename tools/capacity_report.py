@@ -487,7 +487,6 @@ def measure(root: Path, work: Path) -> dict:
             services.append(
                 {
                     'board': board,
-                    'frame': str(SERVICE_FRAME),
                     'count': count,
                     'flash': sizes['flash'],
                     'ram': sizes['ram'],
@@ -505,6 +504,11 @@ def measure(root: Path, work: Path) -> dict:
 
 
 def _run_row(board: str, label: str, route: str, shape: str, count: int, sizes: dict) -> dict:
+    """One measured run, keyed by the fields the page reads.
+
+    The file keeps one compact object per line: the keys repeat on every row,
+    so indenting them would triple a generated file nobody edits by hand.
+    """
     return {
         'board': board,
         'frame': label,
@@ -791,9 +795,34 @@ def _ceiling_section(measurements: dict) -> str:
 
 
 def save(measurements: dict, path: Path) -> None:
-    """Write the measurements where the page and the check read them."""
+    """Write the measurements where the page and the check read them.
+
+    One run per line: the file is generated and never edited, so the line is
+    the unit a reader diffs when two measurements of one run disagree.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(measurements, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    path.write_text(dumps(measurements), encoding='utf-8')
+
+
+def dumps(measurements: dict) -> str:
+    """The measurements as JSON text, one run per line."""
+    lines = [
+        '{',
+        f'  "schema": {measurements["schema"]},',
+        f'  "inputs": "{measurements["inputs"]}",',
+        '  "frames": ' + json.dumps(measurements['frames'], sort_keys=True) + ',',
+        '  "boards": ' + json.dumps(measurements['boards'], sort_keys=True) + ',',
+    ]
+    for name in ('topics', 'services', 'ceiling'):
+        rows = measurements[name]
+        lines.append(f'  "{name}": [')
+        lines += [
+            '    ' + json.dumps(row, sort_keys=True) + (',' if index < len(rows) - 1 else '')
+            for index, row in enumerate(rows)
+        ]
+        lines.append('  ],' if name != 'ceiling' else '  ]')
+    lines.append('}')
+    return '\n'.join(lines) + '\n'
 
 
 def load(path: Path) -> dict:

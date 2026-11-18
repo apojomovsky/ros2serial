@@ -119,3 +119,8 @@ def test_saved_measurements_round_trip(tmp_path):
     path = tmp_path / 'm.json'
     capacity_report.save(measurements, path)
     assert json.loads(path.read_text(encoding='utf-8')) == measurements
+
+
+def test_committed_measurements_are_written_one_run_per_line():
+    """The generated file keeps its compact shape: a reformatted copy is drift."""
+    assert MEASUREMENTS.read_text(encoding='utf-8') == capacity_report.dumps(_measurements())
