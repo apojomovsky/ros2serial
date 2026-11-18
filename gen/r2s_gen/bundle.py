@@ -559,37 +559,15 @@ def _payload_constants(library: Library) -> list[str]:
     return lines
 
 
-# The bundled library ships this exact include block, which every shipped
-# header has carried; a library from a type list derives its own, since a row
-# naming a type the header does not include cannot compile.
-_BUNDLED_INCLUDES = (
-    'builtin_interfaces/msg/duration.hpp',
-    'builtin_interfaces/msg/time.hpp',
-    'geometry_msgs/msg/quaternion.hpp',
-    'geometry_msgs/msg/twist.hpp',
-    'geometry_msgs/msg/vector3.hpp',
-    'sensor_msgs/msg/imu.hpp',
-    'sensor_msgs/msg/joint_state.hpp',
-    'std_msgs/msg/float32.hpp',
-    'std_msgs/msg/header.hpp',
-    'std_msgs/msg/string.hpp',
-    'tf2_msgs/action/lookup_transform.hpp',
-    'tf2_msgs/msg/tf2_error.hpp',
-)
-
-
 def _message_includes(library: Library) -> list[str]:
-    """Emit the C++ message includes the rows need."""
-    paths = (
-        list(_BUNDLED_INCLUDES)
-        if library.kind == 'bundle'
-        else sorted(
-            {
-                cpp.message_path(name)
-                for name in (*library.types, *library.nested, *library.actions)
-            }
-        )
-    )
+    """
+    Emit the include block: one C++ include per header the library ships.
+
+    `Library.headers()` is the file set, so the block cannot drift from what
+    ships. A hand-written list left a carried type unnamed and its row would
+    not compile; a sketch needs only this header for any message it declares.
+    """
+    paths = sorted(path.removeprefix('src/') for path in library.headers())
     return [f'#include <{path}>' for path in paths]
 
 
@@ -1125,9 +1103,9 @@ def _sketch_h(
         '#include "r2s/r2s_topics.h"',
         '#include "r2s/r2s_tx.h"',
         '',
-        '/* The bundled message types the rows name: included here so a sketch',
-        ' * needs only this header, and after the bundled limits above so the',
-        " * limits stay the bundle's on every toolchain. */",
+        '/* Every header the library ships, so a topic row names its message',
+        ' * with no include of its own. They come after the limits above, so',
+        " * the limits stay the bundle's on every toolchain. */",
         '#ifdef __cplusplus',
         *_message_includes(library),
         '#endif',
