@@ -39,7 +39,7 @@ $(if $(_SCOPE_ERROR),$(error $(_SCOPE_ERROR)))
 .PHONY: help bootstrap doctor check test test-core test-gen test-bridge test-cpp test-scripts \
 	test-all e2e-posix e2e-avr pytest ctest fmt shell image exec ci-local compile fuzz size-report \
 	vectors regen bounds-table rosdoc2 docs-gen lint check-warnings setup-hooks pre-pr-check guard-main-clone \
-	cache-dir pic-sim
+	cache-dir pic-sim hardware-check
 
 ##@Everyday
 
@@ -110,6 +110,9 @@ exec: guard-main-clone cache-dir ## One-off command inside the image: make exec 
 
 ci-local: guard-main-clone cache-dir image ## The exact CI run, unscoped, in the ci image
 	@$(DOCKER_BASE) -e R2S_FULL=1 $(IMAGE) bash scripts/run-tasks.sh
+
+hardware-check: cache-dir ## Check a real Uno or Mega end to end: PORT=/dev/ttyACM0 BOARD=uno|mega
+	@bash scripts/hardware-check.sh '$(PORT)' '$(BOARD)'
 
 compile: ## Not built yet (pending G10 and V4): will build an example firmware
 	@$(call pending,compile,G10 and V4 in docs/00-design.md)

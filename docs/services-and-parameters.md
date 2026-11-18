@@ -5,6 +5,12 @@ build settings; their availability depends on the API and configuration you
 compile. The basic Arduino helper prepares the bundled publish/subscribe path.
 It does not automatically enable services, parameters, or actions.
 
+The sketch interface here is the native one: `r2s::Service`, `r2s::Client` and
+`r2s::action::Server` for C++, and the `r2s_services.h` and `r2s_actions.h`
+calls for C. The rosserial-compatible API covers topics only, and the
+[porting guide](03-port-rosserial-sketch.md) shows it. Which declaration style
+to start from is on [choosing how to declare your topics](declaring-topics.md).
+
 ## Parameters
 
 Firmware declares a parameter table before its first spin. With
@@ -35,9 +41,10 @@ firmware declaring it.
 ## Services
 
 Services support both directions: a ROS client calling an MCU server, and an MCU
-client calling a ROS server. The implemented sketch interface uses the rosserial
-compatibility API. See the complete
-[service declarations and callbacks](03-port-rosserial-sketch.md#services).
+client calling a ROS server. The native `r2s::Service` and `r2s::Client` classes
+are the sketch interface, and `examples/arduino_service` uses both. The
+rosserial-compatible `advertiseService` spelling is covered by the
+[porting guide](03-port-rosserial-sketch.md#services).
 
 Enable `R2S_WITH_SERVICES` in every firmware translation unit, as well as the
 sketch. For an MCU server declaring `reset` as `std_srvs/srv/Trigger`:

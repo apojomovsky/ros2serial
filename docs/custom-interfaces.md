@@ -4,6 +4,11 @@ Use the bundled types for the shortest Arduino path. Use `r2s-gen` when you need
 a custom `.msg`, different string/array bounds, or static C firmware.
 The same ROS interface must be available on the host and to the generator.
 
+Which of the two routes carries a custom type, and what each one needs, is on
+[The library route and its config boundary](type-library.md). How you declare
+the topics themselves is on [choosing how to declare your
+topics](declaring-topics.md).
+
 ## Define and build the ROS interface
 
 Create a normal ROS interface package, for example `my_robot_interfaces`, with
@@ -247,7 +252,8 @@ in both cases, which is a valid Arduino library directory, so a sketch builds
 against either with the Arduino CLI and the flags that library's header
 carries. Keep `r2s.yaml` when the firmware needs what a type list cannot
 state: `limits.max_frame`, `features`, `tier`, and the service and action
-indices the static C hook API switches on.
+indices the static C hook API switches on. [The library route and its config
+boundary](type-library.md) covers that boundary and the staleness rule.
 
 Both routes put the same bytes on the wire: the type's hash, its field layout
 and its bounds come from the interface package either way, so the bridge
@@ -305,8 +311,7 @@ ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \
 
 A sketch then names the type like any bundled one:
 
-<!-- snippet: skip until #648: names the reader's own package, which no staged fixture carries -->
-```cpp
+```text
 #define R2S_NODE_NAME "sensor_board"
 #define R2S_TOPICS(X) \
   X(Publisher, my_robot_interfaces::msg::SensorReading, reading_pub, "reading")
@@ -376,4 +381,6 @@ now.
 
 Keep `r2s.yaml` when the firmware needs what a type list cannot state:
 `limits.max_frame`, `features`, `tier`, and the generated service and action
-indices that the static C hook API switches on.
+indices that the static C hook API switches on. [The library route and its
+config boundary](type-library.md) says why each of those has no home in a type
+library, and what to do about a stale one.

@@ -30,10 +30,13 @@ flowchart LR
 ```
 
 **Under active development.** This guide follows `master`. Uno and Mega firmware
-is tested in simulation; real-board validation is still tracked in
-[#95](https://github.com/apojomovsky/ros2serial/issues/95).
-The current wire format is protocol v4. Use matching firmware and host packages
-from the same checkout.
+is tested in simulation on every pull request; ESP32 and the other ports are
+built in CI, which proves they compile, not that they run on hardware. Real
+board results are recorded on [Real-board
+validation](docs/hardware-validation.md) as the maintainer fills them in.
+The current wire format is protocol v4, and it is not frozen: it may change
+between releases. Use matching firmware and host packages from the same
+checkout.
 
 ## Connect your first board
 
@@ -90,6 +93,22 @@ and topic limits to both the sketch and the library; it enables no optional
 channel. For a Mega, replace the FQBN in both commands
 with `arduino:avr:mega`.
 
+#### Or use the Arduino IDE
+
+If you prefer the IDE, download `ros2serial-arduino-<version>.zip` from the
+[releases page](https://github.com/apojomovsky/ros2serial/releases), then choose
+*Sketch > Include Library > Add .ZIP Library* and pick the file. That archive
+carries the library alone, without the example sketches. To get those, generate
+a library with `r2s-arduino library` as in the step above: one with an
+`examples/` directory appears under *File > Examples > ros2serial* once it is in
+your sketchbook's libraries directory.
+
+The IDE needs one extra step for now: the core has no default frame limit, so an
+IDE build must be given one. The [firmware
+guide](docs/firmware.md#the-frame-limit-is-a-build-input) has the file to create
+and its two lines. Nothing else needs configuring, and the extra step goes away
+once the library carries its own limit.
+
 ### 3. Start the bridge
 
 In a terminal with the workspace sourced:
@@ -121,20 +140,65 @@ Send `{data: false}` to turn it off. Your ROS nodes can now use these topics
 like other publishers and subscriptions. The host needs no topic configuration:
 the firmware announces its names and types when it connects.
 
+### 5. Check the board with one command
+
+From the repository root, with the board plugged in, the dev image built
+(`make image`) and the port from `arduino-cli board list`:
+
+```sh
+make hardware-check PORT=/dev/ttyACM0 BOARD=uno
+```
+
+It flashes the `button_led` example, starts the bridge, samples `/button`
+for half a minute, reads the link counters, drives `/led` and asks you
+whether the LED lit. Nothing ROS or Arduino related is installed on your
+host: the command runs in the contributor image and passes the device in
+with its own group, so your user need not be in `dialout`. It ends with one
+block to paste into a report:
+
+```text
+== ros2serial hardware check
+board: uno
+port: /dev/ttyACM0
+firmware: arduino_button_led arduino:avr:uno
+flash: 11786 bytes
+ram: 1181 bytes
+handshake: 4.3 s
+button rate: 10.0 Hz from 297 messages
+longest gap: 120 ms
+crc errors: 0
+rx overflows: 0
+dropped frames: 0
+sequence gaps: 0
+dropped topic frames: 0
+led: lit
+verdict: PASS
+```
+
+`verdict: FAIL` prints a `failed:` line per reason: a rate outside 8 to
+12 Hz, a silence longer than 300 ms, a nonzero counter, or an LED you did not
+see light. The format and both verdicts are documented in
+[Without hardware](docs/without-hardware.md#checking-a-real-board).
+
 ## Make it part of your robot
 
 | I want to… | Read |
 | --- | --- |
 | Add publishing and subscriptions to my sketch | [Firmware guide](docs/firmware.md) |
+| Choose how to declare my topics | [Declaring topics](docs/declaring-topics.md) |
+| Build in C, with CMake or PlatformIO, or on my own board | [C and bare metal](docs/c-and-bare-metal.md) |
 | Start the bridge with my robot; rename topics or connect several boards | [Robot integration](docs/robot-integration.md) |
 | Use my own `.msg` files and generate sources with colcon | [Custom interfaces](docs/custom-interfaces.md) |
+| Emit a library for my own types, without `r2s.yaml` | [The library route](docs/type-library.md) |
 | Set or change the storage bound of a message field | [Message bounds](docs/message-bounds.md) |
+| See the limits the bundled types ship with | [Message bounds](docs/message-bounds.md#the-built-in-types-limits) |
 | Use parameters, services, or understand action support | [Services and parameters](docs/services-and-parameters.md) |
 | Find an example for a sensor or actuator | [Examples](examples/README.md) |
 | Port a ROS 1 rosserial sketch | [Migration guide](docs/03-port-rosserial-sketch.md) |
 | Run ros2serial on a board of my own | [Porting guide](docs/04-porting.md) |
 | Diagnose a board that does not connect | [Troubleshooting](docs/troubleshooting.md) |
 | Try the system without a board | [Without hardware](docs/without-hardware.md) |
+| See what was validated on real boards | [Real-board validation](docs/hardware-validation.md) |
 
 ## Where it fits
 
@@ -145,18 +209,26 @@ so the MCU can allocate its storage at compile time, and [message
 bounds](docs/message-bounds.md) says where each one comes from. On AVR, `float64`
 fields have the precision of the board's 32-bit `double`.
 
+A sketch declares its topics as C++ objects at run time, or as an X-macro list
+that keeps them in flash; [Declaring topics](docs/declaring-topics.md) explains
+which to pick and what each costs. Firmware that is compiled as C, or built
+without the Arduino library, has its own page: [C and bare
+metal](docs/c-and-bare-metal.md).
+
 The bridge targets ROS 2 Jazzy, Lyrical and Rolling. Uno and Mega have simulated
 end-to-end coverage. ESP32 examples and the CH32V003, STM32F103 and RP2040 ports
-have build coverage; that does not establish real-hardware validation. PIC
-support remains development work. Measurements are in
-[Size and stack budgets](docs/budgets.md).
+are built in CI; that does not establish real-hardware validation. PIC support
+remains development work. Measurements are in
+[Size and stack budgets](docs/budgets.md), and [Real-board
+validation](docs/hardware-validation.md) records what was checked on physical
+boards.
 
 Topics use best-effort serial delivery: this is not full DDS QoS on the MCU.
 Parameters and services use a separate reliable channel. Actions are served on
-the MCU through `r2s_actions.h`, and the bridge presents them as a ROS 2 action
-server, proven end to end on posix and avr (see
-[Services and parameters](docs/services-and-parameters.md)). WiFi and other
-network transports are outside the project's scope.
+the MCU through `r2s::action::Server` or the `R2S_ACTIONS` rows of the C API,
+and the bridge presents them as a ROS 2 action server, proven end to end on
+posix and avr (see [Services and parameters](docs/services-and-parameters.md)).
+WiFi and other network transports are outside the project's scope.
 
 Coming from **rosserial**, you get the same basic sketch-to-ROS workflow in ROS 2,
 with a compatibility API for existing sketches. **micro-ROS** provides a broader
