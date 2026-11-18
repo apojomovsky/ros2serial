@@ -242,6 +242,9 @@ def stub_toolbox(path: Path) -> Path:
         "        echo '00800540 00000092 b reset_srv'\n"
         "        echo '00800560 00000010 b trigger_cli'\n"
         '        ;;\n'
+        '    *arduino_xmacro_custom*)\n'
+        "        echo '00000068 t r2s_bundled_entries_custom_interfaces_SensorReading'\n"
+        '        ;;\n'
         'esac\n',
         encoding='utf-8',
     )
