@@ -58,17 +58,16 @@ frame limit to the bundle's own defines:
 
 ```sh
 arduino-cli compile --fqbn arduino:avr:uno \
-  --build-property "compiler.c.extra_flags=$extras -DR2S_WITH_SERVICES -DR2S_MAX_FRAME=64" \
-  --build-property "compiler.cpp.extra_flags=$extras -DR2S_WITH_SERVICES -DR2S_MAX_FRAME=64" \
+  --build-property "compiler.c.extra_flags=-DR2S_WITH_SERVICES -DR2S_MAX_FRAME=64" \
+  --build-property "compiler.cpp.extra_flags=-DR2S_WITH_SERVICES -DR2S_MAX_FRAME=64" \
   --library firmware/ros2serial --build-path firmware/build/service \
   --output-dir firmware/build/service examples/arduino_service
 ```
 
-`$extras` is the bundle's required defines (`R2S_WITH_CODEC` with its limits);
-`scripts/build-examples.sh` derives them from the staged `r2s_bundled.h` and is
-the reference for the exact set. The frame stays at 64 because the service
-channel keeps three frame-sized buffers: larger frames leave the Uno no room
-beside them.
+The staged library's `src/r2s_config.h` supplies the other limits, so only the
+channel flag and the smaller frame are passed here. The frame stays at 64
+because the service channel keeps three frame-sized buffers: larger frames
+leave the Uno no room beside them.
 
 ## Actions
 
@@ -83,8 +82,8 @@ Compile the action example with the actions flag and a frame of 128, as
 
 ```sh
 arduino-cli compile --fqbn arduino:avr:uno \
-  --build-property "compiler.c.extra_flags=$extras -DR2S_WITH_ACTIONS -DR2S_MAX_FRAME=128" \
-  --build-property "compiler.cpp.extra_flags=$extras -DR2S_WITH_ACTIONS -DR2S_MAX_FRAME=128" \
+  --build-property "compiler.c.extra_flags=-DR2S_WITH_ACTIONS -DR2S_MAX_FRAME=128" \
+  --build-property "compiler.cpp.extra_flags=-DR2S_WITH_ACTIONS -DR2S_MAX_FRAME=128" \
   --library firmware/ros2serial --build-path firmware/build/action \
   --output-dir firmware/build/action examples/arduino_action
 ```

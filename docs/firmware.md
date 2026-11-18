@@ -52,35 +52,40 @@ ros2 run r2s_gen r2s-arduino compile \
   --out firmware/build path/to/my_sketch
 ```
 
-Use Arduino CLI to upload as shown in the README. The helper passes the codec flag
-and the bundle's frame, nesting and topic limits to every compilation unit. Defining those values
+Use Arduino CLI to upload as shown in the README. The staged library carries
+its own `src/r2s_config.h`, so a plain `arduino-cli compile --library` needs no
+extra property; the helper passes the bundle's flags as well, which override
+the file with the values it read from `r2s_bundled.h`. Defining those values
 only at the top of the sketch does not configure Arduino's separately compiled
 library sources. This helper handles bundled-type topic sketches; generated
 custom interfaces use the [custom interface workflow](custom-interfaces.md).
 
 ### The frame limit is a build input
 
-`R2S_MAX_FRAME` sizes the receive buffer in the core's own source files, which
-never see a `#define` in your sketch, and the core announces that same number in
-its handshake. The core has no default: a build that leaves the value out fails
-with `R2S_MAX_FRAME is not set: pass -DR2S_MAX_FRAME=<n> to every translation
-unit`, rather than compiling one limit and announcing another. The value must
-reach every translation unit of the core, the port and your sketch, so it is a
-compiler flag, never a line in the sketch.
+`R2S_MAX_FRAME` sizes the receive buffer in the core's own source files and the
+core announces that same number in its handshake, so the buffers and the
+announced value must be one number. A staged library carries it in
+`src/r2s_config.h`, which the core's own sources include, so every route that
+compiles a library is configured by the library itself. A build that carries
+neither the file nor the flag still fails with `R2S_MAX_FRAME is not set: pass
+-DR2S_MAX_FRAME=<n> to every translation unit`, rather than compiling one limit
+and announcing another.
 
-Where each route sets it:
+Where the value comes from on each route:
 
-| Route | Where the value goes | What happens when it is missing |
+| Route | Where the value comes from | Overriding it |
 | --- | --- | --- |
-| `ros2-arduino compile` (`r2s-arduino`) | Reads it from the staged library's `r2s_bundled.h` and passes `-DR2S_MAX_FRAME=<n>` to every unit | Nothing to configure: the helper always passes it |
-| Arduino CLI by hand | `--build-property "compiler.c.extra_flags=-DR2S_MAX_FRAME=<n>"`, and the same for `compiler.cpp.extra_flags` | The core's translation units fail with the message above |
-| Arduino IDE | A `platform.local.txt` beside the AVR core's `platform.txt`, with `compiler.c.extra_flags=-DR2S_MAX_FRAME=<n>` and the `compiler.cpp.extra_flags` line | The same failure, in the IDE's error pane |
-| CMake (`--layout cmake`) | The generated `CMakeLists.txt` reads the value from `r2s_generated.h` and passes it as a target definition | `r2s_generated.h` without the line fails the configure step |
-| PlatformIO (`--layout platformio`) | The generated `library.json` carries it in `build.flags` | The manifest without the flag fails the build as above |
-| Bare metal, any other build | Your own compile line: `-DR2S_MAX_FRAME=<n>` | The core's translation units fail with the message above |
+| Arduino IDE (`Sketch > Include Library > Add .ZIP Library`) | The library's `src/r2s_config.h`: nothing to configure | A `platform.local.txt` beside the AVR core's `platform.txt` with `compiler.c.extra_flags=-DR2S_MAX_FRAME=<n>` and the `compiler.cpp.extra_flags` line |
+| `ros2-arduino compile` (`r2s-arduino`) | The same file, plus `-DR2S_MAX_FRAME=<n>` read from `r2s_bundled.h`, which it still passes explicitly | The flag the helper passes, which wins over the file |
+| Arduino CLI by hand against a staged library | The library's `src/r2s_config.h` | `--build-property "compiler.c.extra_flags=-DR2S_MAX_FRAME=<n>"`, and the same for `compiler.cpp.extra_flags` |
+| CMake (`--layout cmake`) | The generated `CMakeLists.txt` reads the value from `r2s_generated.h` and passes it as a target definition | The generator's `limits.max_frame` |
+| PlatformIO (`--layout platformio`) | The generated `library.json` carries it in `build.flags` | The generator's `limits.max_frame` |
+| Bare metal, any other build | Your own compile line | `-DR2S_MAX_FRAME=<n>` |
 
-`docs/services-and-parameters.md` shows the Arduino CLI flag strings for the
-service and action examples, which lower the limit to fit a smaller part.
+Whichever value reaches the build first wins: every limit in `r2s_config.h`
+keeps its `#ifndef`, so a flag an application passes overrides the shipped
+one. `docs/services-and-parameters.md` shows the flag strings for the service
+and action examples, which lower the limit to fit a smaller part.
 
 ## Message storage and limits
 

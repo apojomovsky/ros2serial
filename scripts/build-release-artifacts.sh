@@ -54,6 +54,28 @@ rm -f "$out/ros2serial/src/test_reset.c"
 cp "$root/cpp/include/r2s/runtime.hpp" "$out/ros2serial/src/r2s/"
 cp "$root/cpp/src/runtime.cpp" "$out/ros2serial/src/"
 cp "$root"/ports/arduino/r2s_arduino_port.cpp "$root"/ports/arduino/r2s_arduino_port.h "$out/ros2serial/src/"
+# The examples a first run opens from the IDE's File > Examples menu: the
+# ones the shipped library configures completely, so a reader compiles them
+# with no build properties (#670). The channel examples stay out, because
+# each needs a feature flag and a frame limit of its own.
+python3 - "$root" "$out" <<'EOF'
+import shutil
+import sys
+from pathlib import Path
+
+root, out = Path(sys.argv[1]), Path(sys.argv[2])
+for name in ("hello", "blink", "button", "button_led", "minimal", "range", "servo", "static",
+             "xmacro", "xmacro_c"):
+    source = root / "examples" / f"arduino_{name}"
+    target = out / "ros2serial" / "examples" / name
+    target.mkdir(parents=True, exist_ok=True)
+    for sketch in source.iterdir():
+        if sketch.suffix in (".ino", ".c", ".h"):
+            shutil.copy2(
+                sketch,
+                target / (f"{name}.ino" if sketch.suffix == ".ino" else sketch.name),
+            )
+EOF
 python3 - "$out" "$version" <<'EOF'
 import sys
 import zipfile

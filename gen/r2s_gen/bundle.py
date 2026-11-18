@@ -99,6 +99,7 @@ CORE_FILES = (
     'src/ros2serial.h',
     'src/ros2serial.hpp',
     'src/r2s_bundled.h',
+    'src/r2s_config.h',
     'src/r2s_bundled.c',
 )
 
@@ -277,6 +278,7 @@ def emit_library(library: Library) -> dict[str, str]:
         'src/ros2serial.h': _sketch_h(library, tables, max_nest),
         'src/ros2serial.hpp': static_api.emit(banner(library)),
         'src/r2s_bundled.h': _bundled_h(library, tables, max_nest),
+        'src/r2s_config.h': _config_h(library, max_nest),
         'src/r2s_bundled.c': _bundled_c(library, tables),
     }
     text = banner(library)
@@ -442,6 +444,51 @@ def _bundled_h(
     closing = '#endif'
     assert header.endswith(closing)
     return header[: -len(closing)] + '\n'.join(section) + '\n' + closing + '\n'
+
+
+def _config_h(library: Library, max_nest: int) -> str:
+    """
+    Emit the limits header the core includes from its own sources ([FRM-9]).
+
+    A staged library carries this file beside its sources, so the include root
+    the library's own translation units compile with reaches it and no
+    compiler flag is needed (#670). Each limit keeps its guard, so a value
+    passed on the command line wins and a build that ships neither still
+    fails at the limit it lacks. The values repeat what the generated headers
+    declare: one build, one number, whichever file the build reads.
+    """
+    lines = [
+        _banner('/*', library) + ' */',
+        '#ifndef R2S_CONFIG_H',
+        '#define R2S_CONFIG_H',
+        '',
+        '/* The library carries descriptor tables, so its build dispatches what it',
+        ' * receives (r2s_codec_dispatch): without this flag the core accepts a',
+        ' * subscribed frame and drops it, with no error and no handler run. An',
+        ' * application that links a generated dispatch of its own still gets it,',
+        ' * because the runtime hook is weak. */',
+        '#ifndef R2S_WITH_CODEC',
+        '#define R2S_WITH_CODEC 1',
+        '#endif /* R2S_WITH_CODEC */',
+        '',
+        '/* The frame limit: the largest payload any carried type encodes, in',
+        ' * either float64 width, plus headroom for the hello and announce frames',
+        ' * of node and topic names to 31 characters. A longer name fails configure',
+        ' * with the bounds error instead of announcing a frame the firmware drops. */',
+        '#ifndef R2S_MAX_FRAME',
+        f'#define R2S_MAX_FRAME {_max_frame(library)}u',
+        '#endif /* R2S_MAX_FRAME */',
+        '',
+        '/* The deepest nesting the tables use; the codec sizes its stack from',
+        ' * it, never recursing. */',
+        '#ifndef R2S_MAX_NEST',
+        f'#define R2S_MAX_NEST {max_nest}u',
+        '#endif /* R2S_MAX_NEST */',
+        '',
+        '#endif /* R2S_CONFIG_H */',
+        '',
+    ]
+    return '\n'.join(lines)
 
 
 def _bundled_c(

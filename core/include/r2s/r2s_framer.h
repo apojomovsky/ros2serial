@@ -10,6 +10,10 @@
 
 #include <stdint.h>
 
+/* The staged config reaches the limit below through this header, which also
+ * carries the placement macros the core reads. */
+#include "r2s/r2s_arch.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

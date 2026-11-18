@@ -11,6 +11,14 @@ The installed examples use short Arduino sketch names such as `button_led`;
 the repository names them `arduino_button_led`. Each installed Arduino sketch directory
 contains an `.ino` of the same name. Copy a sketch out of the library before adapting it.
 
+The release ZIP installs the same way through the IDE's
+`Sketch > Include Library > Add .ZIP Library`, and its sketches then appear
+under `File > Examples > ros2serial`. It ships the sketches the library
+configures completely, so they compile with no build properties; the action,
+service and custom-type sketches need a feature flag each and stay out of the
+ZIP. Nothing else needs configuring: the library carries its own
+`r2s_config.h` limits ([firmware](../docs/firmware.md)).
+
 | Sketch | MCU publishes | MCU subscribes | Purpose |
 | --- | --- | --- | --- |
 | `button_led` | `button` (Bool) | `led` (Bool) | Bidirectional first connection |

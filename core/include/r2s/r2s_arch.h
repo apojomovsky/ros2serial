@@ -12,6 +12,17 @@
 #include <avr/pgmspace.h>
 #endif
 
+/* A staged library emits r2s_config.h beside its sources, which the include
+ * root its own translation units compile with reaches, so those routes need
+ * no compiler flag (#670). Every limit keeps its guard, so a value the build
+ * passes still wins, and a build that carries neither still fails at the
+ * limit it lacks. */
+#if defined(__has_include)
+#if __has_include("r2s_config.h")
+#include "r2s_config.h"
+#endif
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
