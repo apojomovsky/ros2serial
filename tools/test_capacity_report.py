@@ -88,7 +88,46 @@ def test_page_quotes_the_method_and_the_allowance():
 def test_page_tables_every_measured_board():
     page = capacity_report.render_page(_measurements())
     for board in _measurements()['boards']:
-        assert f'| {board} |' in page
+        assert f'| {board.capitalize()} |' in page
+
+
+def test_the_headline_table_is_the_first_table():
+    """Numbers first: the reader sees the counts before any prose table."""
+    page = capacity_report.render_page(_measurements())
+    tables = [line for line in page.splitlines() if line.startswith('| board')]
+    assert tables, 'the page opens with no headline table'
+    assert 'publishers, X-macro' in tables[0]
+    assert 'subscriptions, runtime' in tables[0]
+
+
+def test_every_headline_count_is_a_built_firmware():
+    """A published count comes from the probe, never from the fitted formula."""
+    measurements = _measurements()
+    shapes = {row['shape'] for row in measurements['ceiling']}
+    assert shapes == {'publisher', 'subscription'}
+    for board in measurements['boards']:
+        for shape in ('publisher', 'subscription'):
+            for route in ('xmacro', 'runtime'):
+                row = capacity_report._count(
+                    measurements, board, capacity_report.DEFAULT_FRAME, route, shape
+                )
+                assert row is not None, f'{board} {route} {shape} has no built count'
+                assert row['links'] > 0
+                assert 'flash' in row and 'ram' in row
+
+
+def test_the_page_is_readable_before_the_details_heading():
+    """A reader skimming gets the counts and the caveat in a screen or two."""
+    page = capacity_report.render_page(_measurements())
+    head = page.split('## Details and method')[0]
+    assert len([line for line in head.splitlines() if line.strip()]) <= 22
+    assert 'make capacity-report' in head
+
+
+def test_the_page_keeps_the_raw_ladders_out_of_the_body():
+    page = capacity_report.render_page(_measurements())
+    assert 'Every ladder' not in page
+    assert 'topics that linked' not in page
 
 
 def test_page_render_is_deterministic():

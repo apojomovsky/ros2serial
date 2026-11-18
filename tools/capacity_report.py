@@ -40,7 +40,7 @@ SERVICE_FRAME = 64
 TOPIC_COUNTS = (1, 2, 4, 8, 16)
 SERVICE_COUNTS = (1, 2, 4)
 # The ceiling probe: a mixed list that grows until the board refuses it.
-PROBE_COUNTS = (16, 32, 48, 64, 96, 128, 160, 192, 224, 240, 248, 255)
+PROBE_COUNTS = (1, 2, 4, 8, 16, 32, 48, 64, 96, 128, 160, 192, 224, 240, 248, 255)
 # Bytes each board reserves for the application's own code, libraries and the
 # worst-case stack before the library's entities may claim the rest. The
 # stack figure follows the budgets page, whose worst case for a shipped
@@ -58,7 +58,7 @@ STAGED_FILES = (
 )
 # What moves a measured byte: the core, the runtime layer, the port glue, the
 # generator that emits the bundle, and this tool's own sketch templates.
-DIGEST_ROOTS = ('core', 'cpp', 'ports/arduino', 'gen/r2s_gen')
+DIGEST_ROOTS = ('core', 'cpp', 'ports/arduino')
 # The pins alone, not the whole of ci/: a pin sets the code the boards are
 # measured with, while the PIC gap lists in that directory have no say in an
 # AVR measurement.
@@ -135,6 +135,11 @@ class CapacityError(Exception):
 def shapes() -> tuple:
     """The ladders every route measures."""
     return ('publisher', 'subscription', 'mixed')
+
+
+def ceiling_shapes() -> tuple:
+    """The ladders the probe walks up: the two the page publishes, and the mix."""
+    return ('publisher', 'subscription')
 
 
 def split(shape: str, count: int) -> tuple:
@@ -273,11 +278,14 @@ def capacity(marginal: float, base: float, usable: float) -> int:
 def input_digest(root: Path = ROOT) -> str:
     """A digest of everything that moves a measured byte.
 
-    The tree's sources and this tool's build recipe, not its prose: editing a
-    heading must not demand a remeasure, while a changed count list, frame
-    limit or flag must.
+    The C core, the runtime layer, the port glue, the pinned toolchain and this
+    tool's own recipe. The generator enters as the library it emits rather than
+    as its sources, so a page or a docstring it gains does not demand a
+    remeasure while one byte of the bundle does.
     """
     digest = hashlib.sha256()
+    digest.update(bundle_digest(root).encode())
+    digest.update(b'\0')
     paths = [root / name for name in DIGEST_FILES]
     for entry in DIGEST_ROOTS:
         base = root / entry
@@ -313,6 +321,20 @@ def input_digest(root: Path = ROOT) -> str:
         )
     )
     digest.update(recipe.encode())
+    return digest.hexdigest()
+
+
+def bundle_digest(root: Path = ROOT) -> str:
+    """A digest of the Arduino library the generator emits, file for file."""
+    sys.path.insert(0, str(root / 'gen'))
+    from r2s_gen import bundle
+
+    digest = hashlib.sha256()
+    for name, text in sorted(bundle.bundle('jazzy').items()):
+        digest.update(name.encode())
+        digest.update(b'\0')
+        digest.update(text.encode())
+        digest.update(b'\0')
     return digest.hexdigest()
 
 
@@ -481,9 +503,13 @@ def measure(root: Path, work: Path) -> dict:
             if sizes is not None:
                 boards[board].update(sizes['limits'])
                 topics.append(_run_row(board, label, 'runtime', 'publisher', 0, sizes))
-            # The ceiling: a mixed list that grows until the board refuses it.
+            # The ceiling of each published ladder, found by building it up
+            # until the board refuses the next step.
             for route in ROUTES:
-                ceiling.append(_probe(root, work, library, board, label, frame, route, boards))
+                for shape in ceiling_shapes():
+                    ceiling.append(
+                        _probe(root, work, library, board, label, frame, route, shape, boards)
+                    )
         # Services run at their own cap, once per board: the channel's three
         # frame buffers make a bigger frame a crash rather than a tight fit.
         for count in (0, *SERVICE_COUNTS):
@@ -545,18 +571,20 @@ def _probe(
     label: str,
     frame: int,
     route: str,
+    shape: str,
     boards: dict,
 ) -> dict:
-    """The largest mixed list that still links, found by building every step.
+    """The largest ladder of one shape that still links, found by building it.
 
     The ladder stops at the first refusal, and also stops at the end of the
     probe: a step that linked at the last rung is a lower bound, never a
-    ceiling, and the page marks it as one.
+    ceiling, and the page marks it as one. A published count is therefore a
+    firmware that linked, not a fit extrapolated past the last measured build.
     """
     last = None
     refused = False
     for count in PROBE_COUNTS:
-        name = f'{board}_{label}_{route}_probe_{count}'
+        name = f'{board}_{label}_{route}_{shape}_probe_{count}'
         sizes = build(
             root,
             work,
@@ -564,7 +592,7 @@ def _probe(
             board,
             frame,
             name,
-            sketch(route, 'mixed', count),
+            sketch(route, shape, count),
             topics=count,
         )
         if sizes is None:
@@ -574,14 +602,20 @@ def _probe(
         last = {'count': count, 'flash': sizes['flash'], 'ram': sizes['ram']}
     # A first rung that refuses is a ceiling too: the ladder stopped because
     # the board said no, not because the probe ran out of steps.
-    row = {'board': board, 'frame': label, 'route': route, 'links': 0, 'ceiling': refused}
+    row = {
+        'board': board,
+        'frame': label,
+        'route': route,
+        'shape': shape,
+        'links': 0,
+        'ceiling': refused,
+    }
     if last:
         row.update(
             {
                 'links': last['count'],
                 'flash': last['flash'],
                 'ram': last['ram'],
-                'ceiling': refused,
             }
         )
     return row
@@ -623,123 +657,158 @@ NOTE = (
     ' tools/capacity_measurements.json. Refresh with make capacity-report. -->'
 )
 
-INTRO = """# How many topics and services fit
+TITLE = """# How many topics and services fit
 
-Measured firmware per board, frame limit and route, so the cost of one more
-publisher, subscription or service reads off a table instead of a guess. The
-[budgets page](budgets.md) measures the shipped examples; this page measures a
-ladder of synthetic ones, and every ceiling below is a firmware that linked.
+Every count below is a firmware that compiled and fit the board, measured by
+`make capacity-report`.
 """
 
-METHOD = """## Method
+DEFAULT_FRAME = '128'
 
-`make capacity-report` builds one synthetic sketch per row: N topics split
-evenly between publishers and subscriptions of `std_msgs/msg/Float32`, the
-first subscription carrying a `geometry_msgs/msg/Twist`, once for the runtime
-objects route and once for the X-macro route, on each board, at the same
-explicit `R2S_MAX_FRAME`. Flash is text plus data and static RAM is data plus
-bss, as `avr-size` prints them.
 
-The marginal cost of one entity is the least-squares slope of its ladder and
+def _fmt(value) -> str:
+    if value is None:
+        return 'n/a'
+    if isinstance(value, float):
+        return f'{value:.1f}'
+    return str(value)
+
+
+def _link(row: dict) -> str:
+    """A published count, marked when the probe stopped before the board did."""
+    if not row or not row.get('links'):
+        return '0'
+    mark = '' if row.get('ceiling') else '>='
+    return f'{mark}{row["links"]}'
+
+
+def _count(measurements: dict, board: str, label: str, route: str, shape: str):
+    for row in measurements['ceiling']:
+        if (
+            row['board'] == board
+            and row['frame'] == label
+            and row['route'] == route
+            and row['shape'] == shape
+        ):
+            return row
+    return None
+
+
+def _headline(measurements: dict) -> str:
+    """The one table the page opens with: how many fit, per board and route."""
+    lines = [
+        '| board | RAM | publishers, X-macro | publishers, runtime'
+        ' | subscriptions, X-macro | subscriptions, runtime |',
+        '| --- | --- | --- | --- | --- | --- |',
+    ]
+    boards = measurements['boards']
+    for board in BOARDS:
+        if board not in boards:
+            continue
+        cells = [board.capitalize(), str(boards[board]['ram'])]
+        for shape in ('publisher', 'subscription'):
+            for route in ('xmacro', 'runtime'):
+                cells.append(_link(_count(measurements, board, DEFAULT_FRAME, route, shape)))
+        lines.append('| ' + ' | '.join(cells) + ' |')
+    return '\n'.join(lines)
+
+
+def _assumptions(measurements: dict) -> str:
+    values = sorted({ALLOWANCE[board] for board in measurements['boards']})
+    amount = f'{values[0]} bytes' if len(values) == 1 else 'the allowance in each row'
+    return (
+        f'Each count is one publisher or subscription of `std_msgs/msg/Float32`'
+        f' in a sketch that does nothing else, at the'
+        f' {DEFAULT_FRAME}-byte frame limit, after reserving {amount} of RAM'
+        f' (`{ALLOWANCE_FIELD}`) for your code, your libraries and the stack.'
+        f' A count of `>=` means the probe stopped at its last step before the'
+        f' board did, so the real ceiling is higher. Only boards whose ceiling a'
+        f' build can reach are listed: a board whose RAM the probe cannot exhaust'
+        f' would carry a guess, not a measurement.'
+    )
+
+
+def _frame_section(measurements: dict) -> str:
+    """How the frame limit moves the count, in the rows where it moves it."""
+    frames = measurements['frames']
+    labels = list(frames)
+    if len(labels) < 2:
+        return ''
+    rows = []
+    for board in BOARDS:
+        for route in ('xmacro', 'runtime'):
+            cells = []
+            for shape in ('publisher', 'subscription'):
+                counts = [
+                    _link(_count(measurements, board, label, route, shape)) for label in labels
+                ]
+                cells.append(' / '.join(counts))
+            # A route whose count does not move with the frame says nothing here.
+            if all(cell.split(' / ')[0] == cell.split(' / ')[-1] for cell in cells):
+                continue
+            rows.append(f'| {board.capitalize()} | {route} | ' + ' | '.join(cells) + ' |')
+    if not rows:
+        return ''
+    header = ' / '.join(str(frames[label]) for label in labels)
+    return '\n'.join(
+        [
+            f'A bigger frame takes RAM from the buffers, which costs entities.'
+            f' Only these rows move; the columns read {header} bytes:',
+            '',
+            '| board | route | publishers | subscriptions |',
+            '| --- | --- | --- | --- |',
+            *rows,
+        ]
+    )
+
+
+def _details(measurements: dict) -> str:
+    """Below the fold: the method, the marginal cost per entity and the services."""
+    values = sorted({ALLOWANCE[board] for board in measurements['boards']})
+    allowance = (
+        f'{values[0]} bytes' if len(values) == 1 else f'the {ALLOWANCE_FIELD} each row states'
+    )
+    parts = [
+        """## Details and method
+
+The tool builds one synthetic sketch per step: N topics of
+`std_msgs/msg/Float32`, either all publishers, all subscriptions, or half of
+each with the first subscription carrying a `geometry_msgs/msg/Twist`. It does
+this once for the runtime objects route and once for the X-macro route, on each
+board, at the same explicit `R2S_MAX_FRAME`. Flash is text plus data and static
+RAM is data plus bss, as `avr-size` prints them.
+
+The marginal cost of an entity is the least-squares slope of its ladder, and
 the base cost is the measured build that registers nothing. A count fits when
 `base + count * marginal <= RAM - allowance`, where the allowance is the
-{allowance} reserved for the application's own code, libraries and stack.
-"""
-
-FITS = """## What fits
-
-The runtime route, from each ladder's fitted numbers. A count is whole entities
-that fit the RAM left after the allowance, so it is not a promise that a given
-application compiles: its own code, libraries and stack are what the allowance
-covers. The X-macro route costs less, and the section further down states the
-difference at equal frame limits.
-"""
-
-
-def render_page(measurements: dict) -> str:
-    """docs/capacity.md from the measurements, with the method and the formula."""
-    boards = measurements['boards']
-    values = sorted({ALLOWANCE[board] for board in boards})
-    allowance = (
-        f'{values[0]} bytes'
-        if len(values) == 1
-        else f'the {ALLOWANCE_FIELD} each board row states'
-    )
-    parts = [NOTE, '', INTRO, METHOD.format(allowance=allowance), FITS]
+ALLOWANCE reserved for the application. The headline counts are not that
+formula: they are the largest ladder that still linked, so a whole build backs
+each one. The raw ladders live in `tools/capacity_measurements.json`.
+""".replace('ALLOWANCE', allowance)
+    ]
     for board in BOARDS:
-        if board in boards:
-            parts.append(_board_section(measurements, board))
+        if board not in measurements['boards']:
+            continue
+        parts.append(_cost_section(measurements, board))
     parts.append(_services_section(measurements))
-    parts.append(_gap_section(measurements))
-    parts.append(_ceiling_section(measurements))
+    parts.append(_route_gap(measurements))
     return '\n'.join(part.strip('\n') + '\n' for part in parts if part)
 
 
-def _frame_label(label: str, frames: dict) -> str:
-    """What a frame column reads: the byte count, naming the bundle's own when it is that."""
-    return f'{frames[label]} bytes' + ('' if label.isdigit() else ' (the bundle limit)')
-
-
-def _board_section(measurements: dict, board: str) -> str:
-    limits = measurements['boards'][board]
-    usable = limits['ram'] - ALLOWANCE[board]
-    lines = [
-        f'### {board.capitalize()}',
-        '',
-        f'Flash {limits["flash"]} bytes, RAM {limits["ram"]} bytes. The'
-        f' {ALLOWANCE_FIELD} is {ALLOWANCE[board]} bytes, stack included, which'
-        f' leaves {usable} bytes for the library and its entities.',
-        '',
-    ]
+def _cost_section(measurements: dict, board: str) -> str:
+    """The fitted marginal cost per entity, per board and frame limit."""
+    lines = [f'### Marginal cost, {board.capitalize()}', '']
+    lines.append('| frame | route | entity | RAM per entity | flash per entity |')
+    lines.append('| --- | --- | --- | --- | --- |')
     for label in measurements['frames']:
-        lines += [
-            f'#### {_frame_label(label, measurements["frames"])}',
-            '',
-            '| entity | base RAM | marginal RAM | marginal flash | count that fits |',
-            '| --- | --- | --- | --- | --- |',
-        ]
-        base = _base(_ladder(measurements['topics'], board, label, 'runtime', 'publisher'))
-        for shape in ('publisher', 'subscription'):
-            runs = _ladder(measurements['topics'], board, label, 'runtime', shape)
-            ram, flash = _marginal(runs, 'ram'), _marginal(runs, 'flash')
-            fits = capacity(ram, base['ram'], usable) if ram and base else 0
-            lines.append(
-                f'| {shape} | {base["ram"] if base else "n/a"}'
-                f' | {_fmt(ram)} | {_fmt(flash)} | {fits} |'
-            )
-        lines.append('')
-        if base:
-            lines += [
-                f'The library alone costs {base["ram"]} bytes of RAM and'
-                f' {base["flash"]} bytes of flash at this limit.',
-                '',
-            ]
-    lines.append('#### Every ladder, for the record')
+        for route in ('xmacro', 'runtime'):
+            for shape in ('publisher', 'subscription'):
+                runs = _ladder(measurements['topics'], board, label, route, shape)
+                lines.append(
+                    f'| {measurements["frames"][label]} | {route} | {shape}'
+                    f' | {_fmt(_marginal(runs, "ram"))} | {_fmt(_marginal(runs, "flash"))} |'
+                )
     lines.append('')
-    lines.append('| frame | route | shape | topics | flash | RAM |')
-    lines.append('| --- | --- | --- | --- | --- | --- |')
-    for label in measurements['frames']:
-        for route in ROUTES:
-            for shape in shapes():
-                for row in _ladder(measurements['topics'], board, label, route, shape):
-                    lines.append(
-                        f'| {measurements["frames"][label]} | {route} | {shape}'
-                        f' | {row["count"]} | {row["flash"]} | {row["ram"]} |'
-                    )
-    lines.append('')
-    for label in measurements['frames']:
-        for route in ROUTES:
-            runs = _ladder(measurements['topics'], board, label, route, 'mixed')
-            if not runs:
-                continue
-            label_text = _frame_label(label, measurements['frames'])
-            lines.append(f'#### {route} route, mixed list, {label_text}')
-            lines.append('')
-            lines.append('| topics | flash | RAM |')
-            lines.append('| --- | --- | --- |')
-            for row in runs:
-                lines.append(f'| {row["count"]} | {row["flash"]} | {row["ram"]} |')
-            lines.append('')
     return '\n'.join(lines)
 
 
@@ -747,34 +816,16 @@ def _services_section(measurements: dict) -> str:
     if not measurements['services']:
         return ''
     lines = [
-        '## Services',
+        '### Services',
         '',
         'The runtime route serving `std_srvs/srv/Trigger` at 64-byte frames, the'
         " cap the service channel's three frame buffers allow on an Uno. The"
         ' service table grows with the ladder while the topic table stays at one'
-        ' slot, so the slope is the cost of the service alone, fitted over the'
-        ' ladder that registers one, two and four.',
+        ' slot, so the slope is the cost of the service alone.',
         '',
-        '| board | per service RAM | per service flash | base RAM | count that fits |',
-        '| --- | --- | --- | --- | --- |',
+        '| board | services | flash | RAM |',
+        '| --- | --- | --- | --- |',
     ]
-    for board in BOARDS:
-        runs = [row for row in measurements['services'] if row['board'] == board]
-        if not runs:
-            continue
-        marginal = _marginal(runs, 'ram')
-        base = _base(runs)
-        usable = measurements['boards'][board]['ram'] - ALLOWANCE[board]
-        fits = capacity(marginal, base['ram'], usable) if marginal and base else 0
-        lines.append(
-            f'| {board} | {_fmt(marginal)} | {_fmt(_marginal(runs, "flash"))}'
-            f' | {base["ram"] if base else "n/a"} | {fits} |'
-        )
-    lines.append('')
-    lines.append('The measured ladder, for the record:')
-    lines.append('')
-    lines.append('| board | services | flash | RAM |')
-    lines.append('| --- | --- | --- | --- |')
     for board in BOARDS:
         for row in sorted(
             (row for row in measurements['services'] if row['board'] == board),
@@ -782,71 +833,68 @@ def _services_section(measurements: dict) -> str:
         ):
             lines.append(f'| {board} | {row["count"]} | {row["flash"]} | {row["ram"]} |')
     lines.append('')
+    for board in BOARDS:
+        runs = [row for row in measurements['services'] if row['board'] == board]
+        if not runs:
+            continue
+        marginal, base = _marginal(runs, 'ram'), _base(runs)
+        usable = measurements['boards'][board]['ram'] - ALLOWANCE[board]
+        fits = capacity(marginal, base['ram'], usable) if marginal and base else 0
+        lines.append(
+            f'{board.capitalize()}: {_fmt(marginal)} bytes of RAM per service,'
+            f' and {fits} fit the RAM left by the allowance.'
+        )
+    lines.append('')
     return '\n'.join(lines)
 
 
-def _gap_section(measurements: dict) -> str:
-    lines = [
-        '## Runtime route against the X-macro route',
-        '',
-        'The same mixed ladder on both routes at equal frame limits, so the gap'
-        ' between the routes is a subtraction of measured firmware, not an'
-        ' estimate. A positive gap is what the runtime route costs more.',
-        '',
-        '| board | frame | topics | runtime RAM | X-macro RAM | gap | runtime flash |'
-        ' X-macro flash | gap |',
-        '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-    ]
-    frames = measurements['frames']
+def _route_gap(measurements: dict) -> str:
+    """What the runtime route costs more than the X-macro route, at equal limits."""
+    pairs = []
     for board in BOARDS:
-        for label in frames:
+        for label in measurements['frames']:
             runtime = {
                 row['count']: row
                 for row in _ladder(measurements['topics'], board, label, 'runtime', 'mixed')
             }
-            for row in _ladder(measurements['topics'], board, label, 'xmacro', 'mixed'):
-                other = runtime.get(row['count'])
-                if other is None:
-                    continue
-                lines.append(
-                    f'| {board} | {frames[label]} | {row["count"]}'
-                    f' | {other["ram"]} | {row["ram"]} | {other["ram"] - row["ram"]:+d}'
-                    f' | {other["flash"]} | {row["flash"]}'
-                    f' | {other["flash"] - row["flash"]:+d} |'
-                )
-    lines.append('')
-    return '\n'.join(lines)
-
-
-def _ceiling_section(measurements: dict) -> str:
-    if not measurements.get('ceiling'):
+            gaps = [
+                runtime[row['count']]['ram'] - row['ram']
+                for row in _ladder(measurements['topics'], board, label, 'xmacro', 'mixed')
+                if row['count'] in runtime
+            ]
+            if gaps:
+                pairs.append((board, measurements['frames'][label], min(gaps), max(gaps)))
+    if not pairs:
         return ''
     lines = [
-        '## The largest ladder that linked',
+        '### Runtime route against the X-macro route',
         '',
-        'Each row is a firmware that compiled and fit its board, so the count is a'
-        ' build result. A row whose count is a ceiling refused the next step of the'
-        ' probe; a row that ran out of probe without a refusal is a lower bound,'
-        ' marked `>=`, and says nothing about where the board actually stops.',
+        'The same mixed list on both routes at equal frame limits. The runtime'
+        ' route costs this much more RAM:',
         '',
-        'The X-macro route stops at 240 rows on any board because the bundled'
-        ' header asserts `R2S_SLOT_COUNT <= 240`, so its 240 is that compile-time'
-        ' bound and not the board running out of RAM. The runtime route carries no'
-        ' such bound and stops where the board does.',
-        '',
-        '| board | frame | route | topics that linked | flash | RAM |',
-        '| --- | --- | --- | --- | --- | --- |',
+        '| board | frame | cost of the runtime route |',
+        '| --- | --- | --- |',
+        *[f'| {board} | {frame} | {low} to {high} bytes |' for board, frame, low, high in pairs],
     ]
-    frames = measurements['frames']
-    for row in measurements['ceiling']:
-        mark = '' if row.get('ceiling') else '>= '
-        lines.append(
-            f'| {row["board"]} | {frames[row["frame"]]} | {row["route"]}'
-            f' | {mark}{row["links"]}'
-            f' | {row.get("flash", "n/a")} | {row.get("ram", "n/a")} |'
-        )
     lines.append('')
     return '\n'.join(lines)
+
+
+def render_page(measurements: dict) -> str:
+    """docs/capacity.md: the counts first, the method and the numbers below."""
+    parts = [
+        NOTE,
+        '',
+        TITLE,
+        _headline(measurements),
+        '',
+        _assumptions(measurements),
+        '',
+        _frame_section(measurements),
+        '',
+        _details(measurements),
+    ]
+    return '\n'.join(part.strip('\n') + '\n' for part in parts if part.strip())
 
 
 def save(measurements: dict, path: Path) -> None:

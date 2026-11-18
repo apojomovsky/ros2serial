@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "inputs": "508c346276f389c4f7947e6cc8f61564a95199b7252cf18373f304607b36d12c",
+  "inputs": "b5aac360b4d5444ea6a3792ca358dca69119555e989c2383bf6ca57c36694b80",
   "frames": {"128": 128, "bundle": 325},
   "boards": {"mega": {"flash": 253952, "ram": 8192}, "uno": {"flash": 32256, "ram": 2048}},
   "topics": [
@@ -140,13 +140,21 @@
     {"board": "mega", "count": 4, "flash": 12830, "ram": 1156}
   ],
   "ceiling": [
-    {"board": "uno", "ceiling": true, "flash": 12962, "frame": "128", "links": 32, "ram": 1940, "route": "runtime"},
-    {"board": "uno", "ceiling": true, "flash": 19172, "frame": "128", "links": 96, "ram": 1758, "route": "xmacro"},
-    {"board": "uno", "ceiling": true, "flash": 12336, "frame": "bundle", "links": 16, "ram": 1438, "route": "runtime"},
-    {"board": "uno", "ceiling": true, "flash": 19156, "frame": "bundle", "links": 96, "ram": 1956, "route": "xmacro"},
-    {"board": "mega", "ceiling": true, "flash": 19182, "frame": "128", "links": 160, "ram": 7572, "route": "runtime"},
-    {"board": "mega", "ceiling": true, "flash": 36254, "frame": "128", "links": 240, "ram": 3670, "route": "xmacro"},
-    {"board": "mega", "ceiling": true, "flash": 19190, "frame": "bundle", "links": 160, "ram": 7770, "route": "runtime"},
-    {"board": "mega", "ceiling": true, "flash": 36238, "frame": "bundle", "links": 240, "ram": 3868, "route": "xmacro"}
+    {"board": "uno", "ceiling": true, "flash": 9904, "frame": "128", "links": 32, "ram": 1538, "route": "runtime", "shape": "publisher"},
+    {"board": "uno", "ceiling": true, "flash": 8998, "frame": "128", "links": 32, "ram": 1922, "route": "runtime", "shape": "subscription"},
+    {"board": "uno", "ceiling": true, "flash": 13650, "frame": "128", "links": 96, "ram": 1704, "route": "xmacro", "shape": "publisher"},
+    {"board": "uno", "ceiling": true, "flash": 19714, "frame": "128", "links": 96, "ram": 1708, "route": "xmacro", "shape": "subscription"},
+    {"board": "uno", "ceiling": true, "flash": 9912, "frame": "bundle", "links": 32, "ram": 1736, "route": "runtime", "shape": "publisher"},
+    {"board": "uno", "ceiling": true, "flash": 8510, "frame": "bundle", "links": 16, "ram": 1400, "route": "runtime", "shape": "subscription"},
+    {"board": "uno", "ceiling": true, "flash": 13634, "frame": "bundle", "links": 96, "ram": 1902, "route": "xmacro", "shape": "publisher"},
+    {"board": "uno", "ceiling": true, "flash": 19698, "frame": "bundle", "links": 96, "ram": 1906, "route": "xmacro", "shape": "subscription"},
+    {"board": "mega", "ceiling": true, "flash": 21024, "frame": "128", "links": 224, "ram": 7998, "route": "runtime", "shape": "publisher"},
+    {"board": "mega", "ceiling": true, "flash": 14014, "frame": "128", "links": 160, "ram": 7742, "route": "runtime", "shape": "subscription"},
+    {"board": "mega", "ceiling": true, "flash": 23582, "frame": "128", "links": 240, "ram": 3716, "route": "xmacro", "shape": "publisher"},
+    {"board": "mega", "ceiling": true, "flash": 41518, "frame": "128", "links": 240, "ram": 3720, "route": "xmacro", "shape": "subscription"},
+    {"board": "mega", "ceiling": true, "flash": 19238, "frame": "bundle", "links": 192, "ram": 7108, "route": "runtime", "shape": "publisher"},
+    {"board": "mega", "ceiling": true, "flash": 14022, "frame": "bundle", "links": 160, "ram": 7940, "route": "runtime", "shape": "subscription"},
+    {"board": "mega", "ceiling": true, "flash": 23566, "frame": "bundle", "links": 240, "ram": 3914, "route": "xmacro", "shape": "publisher"},
+    {"board": "mega", "ceiling": true, "flash": 41502, "frame": "bundle", "links": 240, "ram": 3918, "route": "xmacro", "shape": "subscription"}
   ]
 }
