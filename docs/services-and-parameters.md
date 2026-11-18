@@ -89,8 +89,11 @@ arduino-cli compile --fqbn arduino:avr:uno \
   --output-dir firmware/build/action examples/arduino_action
 ```
 
-The `arduino_action` sketch announces a placeholder type name and hash over
-stand-in Float32 payloads, so it proves the MCU wiring over raw frames and no
-ROS client can drive it. A ROS goal needs firmware announcing an installed
-action type. The intended semantics and resource limits are specified in the
+The `arduino_action` sketch serves the bundled `tf2_msgs/action/LookupTransform`
+action: the goal, result and feedback structs, the announced type name and the
+hash all come from the generated action header, so the sketch writes none of
+them and a ROS client drives it. Serving your own action works the same way
+once `r2s-gen` has emitted a library carrying it (see
+[Custom interfaces](custom-interfaces.md)). The intended semantics and
+resource limits are specified in the
 [design](00-design.md#services-and-actions-p1).
