@@ -7,6 +7,14 @@ file names equal, as Arduino CLI requires.
 
 ## Declare your interface
 
+This guide uses the runtime objects, which is the right starting point on any
+board. When the sketch runs short of RAM you can move the same declarations into
+an X-macro list without touching the rest of the sketch:
+[Choosing how to declare your topics](declaring-topics.md) compares the two and
+says what each costs. Firmware compiled as C, or built without the Arduino
+library, starts from [Building in C or without the Arduino
+library](c-and-bare-metal.md).
+
 The runtime API follows ROS 2 message naming. Declarations live at file scope:
 
 ```cpp
@@ -72,7 +80,8 @@ Where each route sets it:
 
 | Route | Where the value goes | What happens when it is missing |
 | --- | --- | --- |
-| `ros2-arduino compile` (`r2s-arduino`) | Reads it from the staged library's `r2s_bundled.h` and passes `-DR2S_MAX_FRAME=<n>` to every unit | Nothing to configure: the helper always passes it |
+| `r2s-arduino compile` | Reads it from the staged library's `r2s_bundled.h` and passes `-DR2S_MAX_FRAME=<n>` to every unit | Nothing to configure: the helper always passes it |
+| A type library from `r2s-gen types` | The library's `r2s_bundled.h` declares it, but the core's sources still need `-DR2S_MAX_FRAME=<n>` from your build | The core's translation units fail with the message above |
 | Arduino CLI by hand | `--build-property "compiler.c.extra_flags=-DR2S_MAX_FRAME=<n>"`, and the same for `compiler.cpp.extra_flags` | The core's translation units fail with the message above |
 | Arduino IDE | A `platform.local.txt` beside the AVR core's `platform.txt`, with `compiler.c.extra_flags=-DR2S_MAX_FRAME=<n>` and the `compiler.cpp.extra_flags` line | The same failure, in the IDE's error pane |
 | CMake (`--layout cmake`) | The generated `CMakeLists.txt` reads the value from `r2s_generated.h` and passes it as a target definition | `r2s_generated.h` without the line fails the configure step |

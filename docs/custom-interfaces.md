@@ -4,6 +4,9 @@ Use the bundled types for the shortest Arduino path. Use `r2s-gen` when you need
 a custom `.msg`, different string/array bounds, or static C firmware.
 The same ROS interface must be available on the host and to the generator.
 
+Which route carries a custom type, and what each one needs, is on
+[choosing how to declare your topics](declaring-topics.md).
+
 ## Define and build the ROS interface
 
 Create a normal ROS interface package, for example `my_robot_interfaces`, with
@@ -305,8 +308,7 @@ ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \
 
 A sketch then names the type like any bundled one:
 
-<!-- snippet: skip until #648: names the reader's own package, which no staged fixture carries -->
-```cpp
+```text
 #define R2S_NODE_NAME "sensor_board"
 #define R2S_TOPICS(X) \
   X(Publisher, my_robot_interfaces::msg::SensorReading, reading_pub, "reading")

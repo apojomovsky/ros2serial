@@ -26,6 +26,10 @@ flowchart TB
 
 ### CI flow
 
+What each job's package installs cost per run is measured on the [per-job
+install cost](benchmarks/ci-per-job-install-cost.md) page; it is the record
+behind the decision to keep one image instead of derived ones.
+
 The `plan` job restores each Taskfile task's last successful inputs from the latest `master` run and reports every section whose inputs changed since; each section job gates on its scope. Pushes to `master` and manual runs select every scope and force the tasks, then save the checksums. The SCRIPTS scope runs as one job per shard; the `e2e-isolation` job runs the two e2e sections side by side when the plan selects `NIGHTLY`, and the `nightly` job calls the shared nightly jobs on pull requests carrying the `fuzz-long` label, so the long fuzzing runs on pull requests only with that label. A version tag runs the same nightly jobs with the long fuzzing off, and they gate the publish.
 
 ```mermaid
