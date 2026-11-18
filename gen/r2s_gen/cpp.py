@@ -255,7 +255,7 @@ def emit_action_hpp(
     repository: MessageRepository,
     banner: str,
 ) -> str:
-    """Emit one action header at the rclcpp path: its goal, result and feedback structs."""
+    """Emit one action header at the rclcpp path: the parts, the action entity and its trait."""
     canonical = action_name_text
     goal_name = f'{canonical}_Goal'
     result_name = f'{canonical}_Result'

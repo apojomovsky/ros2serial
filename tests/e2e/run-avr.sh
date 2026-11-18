@@ -250,10 +250,20 @@ except (MessageError, OSError, UnicodeDecodeError) as error:
 print(" ".join("-D" + define for define in defines))
 EOF
 ) || exit 1
-# The frame cap and the one-per-kind counts are what the Uno holds: three
-# frame-sized buffers live in the cores themselves, and the registries size
-# their tables for the worst case at build time.
-rc_flags="$rc_extras -DR2S_WITH_ACTIONS -DR2S_WITH_SERVICES -DR2S_MAX_FRAME=64"
+# The frame is the one limit this build overrides, so the library's own value
+# comes out of the flag list first: restating it would only redefine the
+# macro. A 64-byte frame is what the Uno holds, since three frame-sized
+# buffers live in the cores and this sketch carries the topic, service and
+# action registries at once; the one-per-kind counts below are the rest of
+# that budget.
+rc_limit_flags=""
+for flag in $rc_extras; do
+  case "$flag" in
+  -DR2S_MAX_FRAME=*) ;;
+  *) rc_limit_flags="$rc_limit_flags $flag" ;;
+  esac
+done
+rc_flags="$rc_limit_flags -DR2S_WITH_ACTIONS -DR2S_WITH_SERVICES -DR2S_MAX_FRAME=64"
 rc_flags="$rc_flags -DR2S_TOPIC_MAX_COUNT=1 -DR2S_SERVICE_MAX_COUNT=1 -DR2S_ACTION_MAX_COUNT=1"
 for board in uno mega; do
   mcu=atmega328p

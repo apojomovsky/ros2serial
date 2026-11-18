@@ -492,18 +492,17 @@ def test_the_action_header_carries_the_action_entity_and_its_trait():
 
 
 def test_the_action_trait_carries_the_real_hash():
-    """A placeholder hash makes the bridge reject the action, so the bytes are the hash's."""
+    """A placeholder hash makes the bridge reject the action, so the bytes are the action's."""
     repository, resolved = _lookup_resolved()
     header = cpp.emit_action_hpp(
         resolved, 'tf2_msgs/action/LookupTransform', repository, bundle_banner()
     )
-    digest = typehash.action_hash(repository, 'tf2_msgs/action/LookupTransform')
-    expected = ', '.join(f'0x{byte:02x}u' for byte in bytes.fromhex(digest[len('RIHS01_') :])[:8])
+    # The literal, not a recomputation: the action's hash is pinned against
+    # the installed type support, so an emitter that swapped in a part's hash
+    # or a placeholder fails here rather than agreeing with itself.
+    expected = '{0x0bu, 0x8au, 0xdfu, 0x6bu, 0xc0u, 0xb5u, 0x95u, 0x88u}'
 
-    assert expected in header
-    # The goal, result and feedback hashes differ from the action's, so the
-    # action hash appears only where the action's own trait carries it.
-    assert header.count('{' + expected + '}') == 1
+    assert header.count(expected) == 1
 
 
 def test_the_action_header_names_the_entity_a_user_sketch_serves(tmp_path):
