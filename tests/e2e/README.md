@@ -14,10 +14,12 @@ firmware and the real bridge over a serial line.
   `R2S_RMWS` narrows the RMW loop for a quicker iteration.
 - `run-avr.sh` is the avr entry point: it builds the simavr harness and the
   slice sketch for Uno and Mega, checks the helper assertions, then runs
-  scenarios 1 to 4 and 12 on both boards under each RMW, plus the baud matrix (the
-  scenario 2 flow gates per baud per board) under the first RMW only. The
-  suite runs it for `E2E=avr`; `R2S_RMWS`, `R2S_E2E_BOARDS` and
-  `R2S_E2E_BAUDS` narrow the loops.
+  scenarios 1 to 4 and 12 on both boards under each RMW, plus the baud matrix
+  (the scenario 2 flow gates per baud per board) under the first RMW only.
+  Scenarios 14 and 16 to 18 drive their own firmware images: the service
+  example, the action slice, the custom-interface firmware and the custom
+  X-macro sketch. The suite runs it for `E2E=avr`; `R2S_RMWS`,
+  `R2S_E2E_BOARDS` and `R2S_E2E_BAUDS` narrow the loops.
 - `run-soak.sh` is the nightly soak entry point: it builds the same binaries
   and runs `test_soak_posix.py` then `test_soak_avr.py` on the Uno, one
   `R2S_SOAK_SECONDS` window per backend with a single RMW. Each leg asserts

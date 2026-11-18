@@ -22,6 +22,7 @@ contains an `.ino` of the same name. Copy a sketch out of the library before ada
 | `minimal` | `battery` (Float32) | `cmd_vel` (Twist) | Typical robot interface |
 | `service` | | serves `reset`, calls `trigger` (Trigger) | Serve a service; the MCU also calls `trigger` |
 | `static`, `xmacro`, `xmacro_c` | See sketch | See sketch | Static topic declarations |
+| `xmacro_custom` | `reading` (custom message) | | A custom type from a library `r2s-gen types` emits |
 | `action` | Action feedback/result | Action goals | MCU action API over placeholder types; no ROS client drives it |
 
 Compile topic examples with the library's required settings, then upload and

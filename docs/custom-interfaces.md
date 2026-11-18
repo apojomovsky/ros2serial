@@ -219,18 +219,40 @@ the bind. A table the firmware writes at run time lives in RAM and binds through
 topics and actions: `r2s_services_get()` returns an entry only for a RAM table,
 and `r2s_services_copy()` reads a flash one out.
 
-## Which Arduino route custom types take
+## Which route custom types take
 
-Custom types do not go through the Arduino sketches or the bundled runtime
-layer. The bundled library ships the descriptors, message headers and topic
-tables for its own types, and `r2s-arduino compile` stages exactly that bundle.
-A custom type needs its own descriptors, which only `r2s-gen` emits, so the
-generated static C API is the route: emit the pair with
-`--layout arduino` or `--layout cmake`, stage the core and your port glue
-beside it, and compile your sketch against that tree instead of the bundled
-library. `--layout arduino` writes `library.properties` plus the pair under
-`src/`, which is a valid Arduino library directory, so a sketch can be built
-against it with the Arduino CLI and the same flags the bundle's build passes.
+A custom type needs descriptors, message headers and the type's hash, and only
+`r2s-gen` emits them. Two routes carry them, and they differ in what the
+firmware is built from rather than in what reaches the wire:
+
+- **A type library for the X-macro and runtime routes.** `r2s-gen types` emits
+  a library for just your types, so a sketch names one in an `R2S_TOPICS` row
+  the way it names a bundled type, and a C++ sketch can register it as a
+  runtime object instead. There is no `r2s.yaml` and no topic list.
+  `examples/arduino_xmacro_custom` is the smallest complete firmware, built
+  from the interface package beside it, and
+  `tests/e2e/test_scenario_18_avr.py` runs it against the bridge.
+- **The generated static API**, from `r2s.yaml` and `r2s-gen generate`: emit
+  the pair with `--layout arduino` or `--layout cmake`, stage the core and
+  your port glue beside it, and compile your sketch against that tree. It is
+  what a bare-metal target uses, and what carries a service or an action
+  through the generated indices.
+
+`--layout arduino` writes `library.properties` plus the sources under `src/`
+in both cases, which is a valid Arduino library directory, so a sketch builds
+against either with the Arduino CLI and the flags that library's header
+carries. Keep `r2s.yaml` when the firmware needs what a type list cannot
+state: `limits.max_frame`, `features`, `tier`, and the service and action
+indices the static C hook API switches on.
+
+Both routes put the same bytes on the wire: the type's hash, its field layout
+and its bounds come from the interface package either way, so the bridge
+accepts a topic from either and cannot tell them apart. Flash differs by the
+X-macro expansion itself, which defines the table, the publish wrapper and the
+dispatch in the sketch's own translation unit rather than in generated sources.
+Both firmware are budgeted beside the other examples in
+[budgets](budgets.md).
+
 
 ## Bounds and unsupported input
 
@@ -291,7 +313,7 @@ ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \
 
 A sketch then names the type like any bundled one:
 
-<!-- snippet: skip until #647: names the reader's own package, which no staged fixture carries -->
+<!-- snippet: skip until #648: names the reader's own package, which no staged fixture carries -->
 ```cpp
 #define R2S_NODE_NAME "sensor_board"
 #define R2S_TOPICS(X) \
