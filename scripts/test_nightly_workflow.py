@@ -517,13 +517,32 @@ def callers_of_reusable():
 
 
 def ceiling(doc, job):
-    """The permissions a job grants its call: job level, else workflow level."""
-    return job.get('permissions') or doc.get('permissions') or {}
+    """What a call grants: its own block, since GitHub reads an empty one as none.
+
+    A caller job that declares nothing would run under the repository default,
+    which this repository cannot read offline, so the call states its scopes.
+    """
+    if 'permissions' not in job:
+        return None
+    return job['permissions'] or {}
 
 
 def requests(doc, job):
     """The permissions a called job asks for: job level, else workflow level."""
-    return job.get('permissions') or doc.get('permissions') or {}
+    if 'permissions' in job:
+        return job['permissions'] or {}
+    return doc.get('permissions') or {}
+
+
+def test_every_call_declares_the_permissions_it_grants():
+    undeclared = [
+        f'{path.name}.{name}'
+        for path, doc, name, job in callers_of_reusable()
+        if ceiling(doc, job) is None
+    ]
+    assert not undeclared, 'these calls leave their scopes to the repo default: ' + ', '.join(
+        undeclared
+    )
 
 
 def test_every_caller_grants_what_the_called_jobs_request():
@@ -532,6 +551,8 @@ def test_every_caller_grants_what_the_called_jobs_request():
     shortfalls = []
     for path, doc, name, job in callers_of_reusable():
         granted = ceiling(doc, job)
+        if granted is None:
+            continue
         for called_name, wanted in asked.items():
             for scope, level in wanted.items():
                 have = granted.get(scope, 'none')
