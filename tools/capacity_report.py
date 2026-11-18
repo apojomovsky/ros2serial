@@ -40,7 +40,7 @@ SERVICE_FRAME = 64
 TOPIC_COUNTS = (1, 2, 4, 8, 16)
 SERVICE_COUNTS = (1, 2, 4)
 # The ceiling probe: a mixed list that grows until the board refuses it.
-PROBE_COUNTS = (16, 32, 48, 64, 96, 128, 160, 192, 224, 240)
+PROBE_COUNTS = (16, 32, 48, 64, 96, 128, 160, 192, 224, 240, 248, 255)
 # Bytes each board reserves for the application's own code, libraries and the
 # worst-case stack before the library's entities may claim the rest. The
 # stack figure follows the budgets page, whose worst case for a shipped
@@ -58,7 +58,7 @@ STAGED_FILES = (
 )
 # What moves a measured byte: the core, the runtime layer, the port glue, the
 # generator that emits the bundle, and this tool's own sketch templates.
-DIGEST_ROOTS = ('core', 'cpp', 'ports/arduino', 'gen/r2s_gen')
+DIGEST_ROOTS = ('core', 'cpp', 'ports/arduino', 'gen/r2s_gen', 'ci')
 
 RUNTIME_SKETCH = """#include <ros2serial.h>
 #include <std_msgs/msg/float32.hpp>
@@ -293,8 +293,10 @@ def input_digest(root: Path = ROOT) -> str:
             TOPIC_COUNTS,
             SERVICE_COUNTS,
             PROBE_COUNTS,
-            defines(FRAMES['128'], 1, False),
-            defines(FRAMES['bundle'], 16, True),
+            defines(FRAMES['128'], 1),
+            defines(FRAMES['bundle'], 16),
+            defines(SERVICE_FRAME, 1, 0),
+            defines(SERVICE_FRAME, 1, max(SERVICE_COUNTS)),
             # The templates themselves, through one sample sketch per shape
             # and route, so a changed body is a changed digest.
             [sketch(route, shape, 5) for route in ROUTES for shape in shapes()],
@@ -306,9 +308,14 @@ def input_digest(root: Path = ROOT) -> str:
 
 
 def stage(root: Path, out: Path) -> Path:
-    """Lay the bundled library plus the runtime layer into an Arduino library."""
-    if (out / 'src' / 'r2s_bundled.h').is_file():
-        return out
+    """Lay the bundled library plus the runtime layer into an Arduino library.
+
+    The stage is rebuilt on every run: a reused copy would compile the ladder
+    against sources the digest no longer names, which is the one way these
+    numbers could describe a tree that does not exist.
+    """
+    if out.exists():
+        shutil.rmtree(out)
     (out / 'src' / 'r2s').mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
     env['PYTHONPATH'] = str(root / 'gen')
@@ -337,12 +344,14 @@ def _run(command: list, cwd: Path, env: dict | None = None) -> str:
     return proc.stdout
 
 
-def defines(frame: int, topics: int, services: bool) -> str:
+def defines(frame: int, topics: int, services: int | None = None) -> str:
     """The compile flags one ladder step needs.
 
-    The topic table is sized to the count the step registers, as the runtime
-    route sizes it in a real firmware, so a measured entity pays for its own
-    slot. Both routes compile at the same explicit frame limit.
+    A topic ladder sizes the runtime topic table to the count the step
+    registers, so the step pays for its own slot. A service ladder turns the
+    channel on and keeps the topic table at one slot while the service table
+    grows, so its slope is the service's cost and not a topic table counted
+    twice. Both routes compile at the same explicit frame limit.
     """
     flags = [
         '-DR2S_WITH_CODEC',
@@ -350,8 +359,8 @@ def defines(frame: int, topics: int, services: bool) -> str:
         '-DR2S_MAX_NEST=4',
         f'-DR2S_TOPIC_MAX_COUNT={max(topics, 1)}',
     ]
-    if services:
-        flags += ['-DR2S_WITH_SERVICES', f'-DR2S_SERVICE_MAX_COUNT={max(topics, 1)}']
+    if services is not None:
+        flags += ['-DR2S_WITH_SERVICES', f'-DR2S_SERVICE_MAX_COUNT={max(services, 1)}']
     return ' '.join(flags)
 
 
@@ -363,7 +372,7 @@ def build(
     frame: int,
     name: str,
     text: str,
-    services: bool = False,
+    services: int | None = None,
     topics: int = 1,
 ) -> dict | None:
     """Compile one sketch and measure it; None when the board refuses it."""
@@ -478,8 +487,7 @@ def measure(root: Path, work: Path) -> dict:
                 SERVICE_FRAME,
                 name,
                 sketch('runtime', 'service', count),
-                services=True,
-                topics=count,
+                services=count,
             )
             if sizes is None:
                 continue
@@ -530,8 +538,14 @@ def _probe(
     route: str,
     boards: dict,
 ) -> dict:
-    """The largest mixed list that still links, found by building every step."""
+    """The largest mixed list that still links, found by building every step.
+
+    The ladder stops at the first refusal, and also stops at the end of the
+    probe: a step that linked at the last rung is a lower bound, never a
+    ceiling, and the page marks it as one.
+    """
     last = None
+    refused = False
     for count in PROBE_COUNTS:
         name = f'{board}_{label}_{route}_probe_{count}'
         sizes = build(
@@ -545,12 +559,20 @@ def _probe(
             topics=count,
         )
         if sizes is None:
+            refused = True
             break
         boards[board].update(sizes['limits'])
         last = {'count': count, 'flash': sizes['flash'], 'ram': sizes['ram']}
-    row = {'board': board, 'frame': label, 'route': route, 'links': 0}
+    row = {'board': board, 'frame': label, 'route': route, 'links': 0, 'ceiling': False}
     if last:
-        row.update({'links': last['count'], 'flash': last['flash'], 'ram': last['ram']})
+        row.update(
+            {
+                'links': last['count'],
+                'flash': last['flash'],
+                'ram': last['ram'],
+                'ceiling': refused,
+            }
+        )
     return row
 
 
@@ -681,6 +703,19 @@ def _board_section(measurements: dict, board: str) -> str:
                 f' {base["flash"]} bytes of flash at this limit.',
                 '',
             ]
+    lines.append('#### Every ladder, for the record')
+    lines.append('')
+    lines.append('| frame | route | shape | topics | flash | RAM |')
+    lines.append('| --- | --- | --- | --- | --- | --- |')
+    for label in measurements['frames']:
+        for route in ROUTES:
+            for shape in shapes():
+                for row in _ladder(measurements['topics'], board, label, route, shape):
+                    lines.append(
+                        f'| {measurements["frames"][label]} | {route} | {shape}'
+                        f' | {row["count"]} | {row["flash"]} | {row["ram"]} |'
+                    )
+    lines.append('')
     for label in measurements['frames']:
         for route in ROUTES:
             runs = _ladder(measurements['topics'], board, label, route, 'mixed')
@@ -705,9 +740,9 @@ def _services_section(measurements: dict) -> str:
         '',
         'The runtime route serving `std_srvs/srv/Trigger` at 64-byte frames, the'
         " cap the service channel's three frame buffers allow on an Uno. The"
-        ' service table is sized to the count, so a measured service pays for its'
-        ' own slot, and the fit is over the ladder that registers one, two and'
-        ' four.',
+        ' service table grows with the ladder while the topic table stays at one'
+        ' slot, so the slope is the cost of the service alone, fitted over the'
+        ' ladder that registers one, two and four.',
         '',
         '| board | per service RAM | per service flash | base RAM | count that fits |',
         '| --- | --- | --- | --- | --- |',
@@ -779,15 +814,19 @@ def _ceiling_section(measurements: dict) -> str:
         '## The largest ladder that linked',
         '',
         'Each row is a firmware that compiled and fit its board, so the count is a'
-        ' build result; the next step of the probe did not link.',
+        ' build result. A row whose count is a ceiling refused the next step of the'
+        ' probe; a row that ran out of probe without a refusal is a lower bound,'
+        ' marked `>=`, and says nothing about where the board actually stops.',
         '',
         '| board | frame | route | topics that linked | flash | RAM |',
         '| --- | --- | --- | --- | --- | --- |',
     ]
     frames = measurements['frames']
     for row in measurements['ceiling']:
+        mark = '' if row.get('ceiling') else '>= '
         lines.append(
-            f'| {row["board"]} | {frames[row["frame"]]} | {row["route"]} | {row["links"]}'
+            f'| {row["board"]} | {frames[row["frame"]]} | {row["route"]}'
+            f' | {mark}{row["links"]}'
             f' | {row.get("flash", "n/a")} | {row.get("ram", "n/a")} |'
         )
     lines.append('')

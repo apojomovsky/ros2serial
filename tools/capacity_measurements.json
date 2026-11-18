@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "inputs": "5fef0b9be25feeef3cb2ca6955f77f5c6893ec0ae66dba0b63faddc1357f7616",
+  "inputs": "5fd74193c3f51c396048e490fac187962a64ccc5e6b3afe6f75eeb5848a985c9",
   "frames": {"128": 128, "bundle": 325},
   "boards": {"mega": {"flash": 253952, "ram": 8192}, "uno": {"flash": 32256, "ram": 2048}},
   "topics": [
@@ -130,23 +130,23 @@
     {"board": "mega", "count": 0, "flash": 5638, "frame": "bundle", "ram": 662, "route": "runtime", "shape": "publisher"}
   ],
   "services": [
-    {"board": "uno", "count": 0, "flash": 6692, "frame": "64", "ram": 629},
-    {"board": "uno", "count": 1, "flash": 12286, "frame": "64", "ram": 803},
-    {"board": "uno", "count": 2, "flash": 12480, "frame": "64", "ram": 940},
-    {"board": "uno", "count": 4, "flash": 12510, "frame": "64", "ram": 1214},
-    {"board": "mega", "count": 0, "flash": 7030, "frame": "64", "ram": 629},
-    {"board": "mega", "count": 1, "flash": 12632, "frame": "64", "ram": 803},
-    {"board": "mega", "count": 2, "flash": 12830, "frame": "64", "ram": 940},
-    {"board": "mega", "count": 4, "flash": 12868, "frame": "64", "ram": 1214}
+    {"board": "uno", "count": 0, "flash": 6692, "ram": 629},
+    {"board": "uno", "count": 1, "flash": 12286, "ram": 803},
+    {"board": "uno", "count": 2, "flash": 12454, "ram": 920},
+    {"board": "uno", "count": 4, "flash": 12472, "ram": 1156},
+    {"board": "mega", "count": 0, "flash": 7030, "ram": 629},
+    {"board": "mega", "count": 1, "flash": 12632, "ram": 803},
+    {"board": "mega", "count": 2, "flash": 12804, "ram": 920},
+    {"board": "mega", "count": 4, "flash": 12830, "ram": 1156}
   ],
   "ceiling": [
-    {"board": "uno", "flash": 12962, "frame": "128", "links": 32, "ram": 1940, "route": "runtime"},
-    {"board": "uno", "flash": 19172, "frame": "128", "links": 96, "ram": 1758, "route": "xmacro"},
-    {"board": "uno", "flash": 12336, "frame": "bundle", "links": 16, "ram": 1438, "route": "runtime"},
-    {"board": "uno", "flash": 19156, "frame": "bundle", "links": 96, "ram": 1956, "route": "xmacro"},
-    {"board": "mega", "flash": 19182, "frame": "128", "links": 160, "ram": 7572, "route": "runtime"},
-    {"board": "mega", "flash": 36254, "frame": "128", "links": 240, "ram": 3670, "route": "xmacro"},
-    {"board": "mega", "flash": 19190, "frame": "bundle", "links": 160, "ram": 7770, "route": "runtime"},
-    {"board": "mega", "flash": 36238, "frame": "bundle", "links": 240, "ram": 3868, "route": "xmacro"}
+    {"board": "uno", "ceiling": true, "flash": 12962, "frame": "128", "links": 32, "ram": 1940, "route": "runtime"},
+    {"board": "uno", "ceiling": true, "flash": 19172, "frame": "128", "links": 96, "ram": 1758, "route": "xmacro"},
+    {"board": "uno", "ceiling": true, "flash": 12336, "frame": "bundle", "links": 16, "ram": 1438, "route": "runtime"},
+    {"board": "uno", "ceiling": true, "flash": 19156, "frame": "bundle", "links": 96, "ram": 1956, "route": "xmacro"},
+    {"board": "mega", "ceiling": true, "flash": 19182, "frame": "128", "links": 160, "ram": 7572, "route": "runtime"},
+    {"board": "mega", "ceiling": true, "flash": 36254, "frame": "128", "links": 240, "ram": 3670, "route": "xmacro"},
+    {"board": "mega", "ceiling": true, "flash": 19190, "frame": "bundle", "links": 160, "ram": 7770, "route": "runtime"},
+    {"board": "mega", "ceiling": true, "flash": 36238, "frame": "bundle", "links": 240, "ram": 3868, "route": "xmacro"}
   ]
 }

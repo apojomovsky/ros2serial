@@ -51,6 +51,73 @@ The library alone costs 464 bytes of RAM and 5294 bytes of flash at this limit.
 
 The library alone costs 662 bytes of RAM and 5300 bytes of flash at this limit.
 
+#### Every ladder, for the record
+
+| frame | route | shape | topics | flash | RAM |
+| --- | --- | --- | --- | --- | --- |
+| 128 | runtime | publisher | 0 | 5294 | 464 |
+| 128 | runtime | publisher | 1 | 8048 | 524 |
+| 128 | runtime | publisher | 2 | 8404 | 556 |
+| 128 | runtime | publisher | 4 | 8496 | 620 |
+| 128 | runtime | publisher | 8 | 8700 | 748 |
+| 128 | runtime | publisher | 16 | 9072 | 1010 |
+| 128 | runtime | subscription | 1 | 7914 | 536 |
+| 128 | runtime | subscription | 2 | 8200 | 580 |
+| 128 | runtime | subscription | 4 | 8136 | 668 |
+| 128 | runtime | subscription | 8 | 8278 | 844 |
+| 128 | runtime | subscription | 16 | 8502 | 1202 |
+| 128 | runtime | mixed | 1 | 7958 | 560 |
+| 128 | runtime | mixed | 2 | 11136 | 638 |
+| 128 | runtime | mixed | 4 | 11826 | 724 |
+| 128 | runtime | mixed | 8 | 12048 | 896 |
+| 128 | runtime | mixed | 16 | 12330 | 1240 |
+| 128 | xmacro | publisher | 1 | 7600 | 478 |
+| 128 | xmacro | publisher | 2 | 7844 | 490 |
+| 128 | xmacro | publisher | 4 | 7958 | 514 |
+| 128 | xmacro | publisher | 8 | 8194 | 562 |
+| 128 | xmacro | publisher | 16 | 8640 | 664 |
+| 128 | xmacro | subscription | 1 | 7324 | 482 |
+| 128 | xmacro | subscription | 2 | 7828 | 494 |
+| 128 | xmacro | subscription | 4 | 8086 | 518 |
+| 128 | xmacro | subscription | 8 | 8596 | 566 |
+| 128 | xmacro | subscription | 16 | 9320 | 668 |
+| 128 | xmacro | mixed | 1 | 7368 | 506 |
+| 128 | xmacro | mixed | 2 | 10078 | 554 |
+| 128 | xmacro | mixed | 4 | 10696 | 578 |
+| 128 | xmacro | mixed | 8 | 11094 | 626 |
+| 128 | xmacro | mixed | 16 | 11636 | 722 |
+| 325 | runtime | publisher | 0 | 5300 | 662 |
+| 325 | runtime | publisher | 1 | 8054 | 722 |
+| 325 | runtime | publisher | 2 | 8412 | 754 |
+| 325 | runtime | publisher | 4 | 8504 | 818 |
+| 325 | runtime | publisher | 8 | 8708 | 946 |
+| 325 | runtime | publisher | 16 | 9080 | 1208 |
+| 325 | runtime | subscription | 1 | 7922 | 734 |
+| 325 | runtime | subscription | 2 | 8208 | 778 |
+| 325 | runtime | subscription | 4 | 8144 | 866 |
+| 325 | runtime | subscription | 8 | 8286 | 1042 |
+| 325 | runtime | subscription | 16 | 8510 | 1400 |
+| 325 | runtime | mixed | 1 | 7966 | 758 |
+| 325 | runtime | mixed | 2 | 11146 | 836 |
+| 325 | runtime | mixed | 4 | 11832 | 922 |
+| 325 | runtime | mixed | 8 | 12054 | 1094 |
+| 325 | runtime | mixed | 16 | 12336 | 1438 |
+| 325 | xmacro | publisher | 1 | 7578 | 676 |
+| 325 | xmacro | publisher | 2 | 7826 | 688 |
+| 325 | xmacro | publisher | 4 | 7940 | 712 |
+| 325 | xmacro | publisher | 8 | 8176 | 760 |
+| 325 | xmacro | publisher | 16 | 8622 | 862 |
+| 325 | xmacro | subscription | 1 | 7302 | 680 |
+| 325 | xmacro | subscription | 2 | 7812 | 692 |
+| 325 | xmacro | subscription | 4 | 8070 | 716 |
+| 325 | xmacro | subscription | 8 | 8580 | 764 |
+| 325 | xmacro | subscription | 16 | 9304 | 866 |
+| 325 | xmacro | mixed | 1 | 7346 | 704 |
+| 325 | xmacro | mixed | 2 | 10062 | 752 |
+| 325 | xmacro | mixed | 4 | 10680 | 776 |
+| 325 | xmacro | mixed | 8 | 11078 | 824 |
+| 325 | xmacro | mixed | 16 | 11620 | 920 |
+
 #### runtime route, mixed list, 128 bytes
 
 | topics | flash | RAM |
@@ -113,6 +180,73 @@ The library alone costs 464 bytes of RAM and 5632 bytes of flash at this limit.
 
 The library alone costs 662 bytes of RAM and 5638 bytes of flash at this limit.
 
+#### Every ladder, for the record
+
+| frame | route | shape | topics | flash | RAM |
+| --- | --- | --- | --- | --- | --- |
+| 128 | runtime | publisher | 0 | 5632 | 464 |
+| 128 | runtime | publisher | 1 | 8384 | 524 |
+| 128 | runtime | publisher | 2 | 8736 | 556 |
+| 128 | runtime | publisher | 4 | 8828 | 620 |
+| 128 | runtime | publisher | 8 | 9032 | 748 |
+| 128 | runtime | publisher | 16 | 9404 | 1010 |
+| 128 | runtime | subscription | 1 | 8260 | 536 |
+| 128 | runtime | subscription | 2 | 8550 | 580 |
+| 128 | runtime | subscription | 4 | 8494 | 668 |
+| 128 | runtime | subscription | 8 | 8652 | 844 |
+| 128 | runtime | subscription | 16 | 8908 | 1202 |
+| 128 | runtime | mixed | 1 | 8304 | 560 |
+| 128 | runtime | mixed | 2 | 11480 | 638 |
+| 128 | runtime | mixed | 4 | 12174 | 724 |
+| 128 | runtime | mixed | 8 | 12404 | 896 |
+| 128 | runtime | mixed | 16 | 12702 | 1240 |
+| 128 | xmacro | publisher | 1 | 7936 | 478 |
+| 128 | xmacro | publisher | 2 | 8180 | 490 |
+| 128 | xmacro | publisher | 4 | 8294 | 514 |
+| 128 | xmacro | publisher | 8 | 8530 | 562 |
+| 128 | xmacro | publisher | 16 | 8976 | 664 |
+| 128 | xmacro | subscription | 1 | 7662 | 482 |
+| 128 | xmacro | subscription | 2 | 8170 | 494 |
+| 128 | xmacro | subscription | 4 | 8416 | 518 |
+| 128 | xmacro | subscription | 8 | 8962 | 566 |
+| 128 | xmacro | subscription | 16 | 9696 | 668 |
+| 128 | xmacro | mixed | 1 | 7706 | 506 |
+| 128 | xmacro | mixed | 2 | 10414 | 554 |
+| 128 | xmacro | mixed | 4 | 11034 | 578 |
+| 128 | xmacro | mixed | 8 | 11432 | 626 |
+| 128 | xmacro | mixed | 16 | 12036 | 722 |
+| 325 | runtime | publisher | 0 | 5638 | 662 |
+| 325 | runtime | publisher | 1 | 8390 | 722 |
+| 325 | runtime | publisher | 2 | 8744 | 754 |
+| 325 | runtime | publisher | 4 | 8836 | 818 |
+| 325 | runtime | publisher | 8 | 9040 | 946 |
+| 325 | runtime | publisher | 16 | 9412 | 1208 |
+| 325 | runtime | subscription | 1 | 8268 | 734 |
+| 325 | runtime | subscription | 2 | 8558 | 778 |
+| 325 | runtime | subscription | 4 | 8502 | 866 |
+| 325 | runtime | subscription | 8 | 8660 | 1042 |
+| 325 | runtime | subscription | 16 | 8916 | 1400 |
+| 325 | runtime | mixed | 1 | 8312 | 758 |
+| 325 | runtime | mixed | 2 | 11490 | 836 |
+| 325 | runtime | mixed | 4 | 12180 | 922 |
+| 325 | runtime | mixed | 8 | 12410 | 1094 |
+| 325 | runtime | mixed | 16 | 12708 | 1438 |
+| 325 | xmacro | publisher | 1 | 7914 | 676 |
+| 325 | xmacro | publisher | 2 | 8162 | 688 |
+| 325 | xmacro | publisher | 4 | 8276 | 712 |
+| 325 | xmacro | publisher | 8 | 8512 | 760 |
+| 325 | xmacro | publisher | 16 | 8958 | 862 |
+| 325 | xmacro | subscription | 1 | 7640 | 680 |
+| 325 | xmacro | subscription | 2 | 8154 | 692 |
+| 325 | xmacro | subscription | 4 | 8400 | 716 |
+| 325 | xmacro | subscription | 8 | 8946 | 764 |
+| 325 | xmacro | subscription | 16 | 9680 | 866 |
+| 325 | xmacro | mixed | 1 | 7684 | 704 |
+| 325 | xmacro | mixed | 2 | 10398 | 752 |
+| 325 | xmacro | mixed | 4 | 11018 | 776 |
+| 325 | xmacro | mixed | 8 | 11416 | 824 |
+| 325 | xmacro | mixed | 16 | 12020 | 920 |
+
 #### runtime route, mixed list, 128 bytes
 
 | topics | flash | RAM |
@@ -155,12 +289,12 @@ The library alone costs 662 bytes of RAM and 5638 bytes of flash at this limit.
 
 ## Services
 
-The runtime route serving `std_srvs/srv/Trigger` at 64-byte frames, the cap the service channel's three frame buffers allow on an Uno. The service table is sized to the count, so a measured service pays for its own slot, and the fit is over the ladder that registers one, two and four.
+The runtime route serving `std_srvs/srv/Trigger` at 64-byte frames, the cap the service channel's three frame buffers allow on an Uno. The service table grows with the ladder while the topic table stays at one slot, so the slope is the cost of the service alone, fitted over the ladder that registers one, two and four.
 
 | board | per service RAM | per service flash | base RAM | count that fits |
 | --- | --- | --- | --- | --- |
-| uno | 137.0 | 66.1 | 629 | 6 |
-| mega | 137.0 | 70.1 | 629 | 51 |
+| uno | 117.7 | 54.4 | 629 | 7 |
+| mega | 117.7 | 58.4 | 629 | 59 |
 
 The measured ladder, for the record:
 
@@ -168,12 +302,12 @@ The measured ladder, for the record:
 | --- | --- | --- | --- |
 | uno | 0 | 6692 | 629 |
 | uno | 1 | 12286 | 803 |
-| uno | 2 | 12480 | 940 |
-| uno | 4 | 12510 | 1214 |
+| uno | 2 | 12454 | 920 |
+| uno | 4 | 12472 | 1156 |
 | mega | 0 | 7030 | 629 |
 | mega | 1 | 12632 | 803 |
-| mega | 2 | 12830 | 940 |
-| mega | 4 | 12868 | 1214 |
+| mega | 2 | 12804 | 920 |
+| mega | 4 | 12830 | 1156 |
 
 ## Runtime route against the X-macro route
 
@@ -204,7 +338,7 @@ The same mixed ladder on both routes at equal frame limits, so the gap between t
 
 ## The largest ladder that linked
 
-Each row is a firmware that compiled and fit its board, so the count is a build result; the next step of the probe did not link.
+Each row is a firmware that compiled and fit its board, so the count is a build result. A row whose count is a ceiling refused the next step of the probe; a row that ran out of probe without a refusal is a lower bound, marked `>=`, and says nothing about where the board actually stops.
 
 | board | frame | route | topics that linked | flash | RAM |
 | --- | --- | --- | --- | --- | --- |
