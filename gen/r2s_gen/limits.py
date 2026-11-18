@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import TextIO
 
 from r2s_gen import bundle
+from r2s_gen import docs
 from r2s_gen.bundle import Library
 from r2s_gen.msgs import MessageError
 
@@ -113,7 +114,7 @@ def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParse
         help='the snapshot distro: jazzy, lyrical or rolling (default jazzy)',
     )
     parser.set_defaults(run=run)
-    return parser
+    return docs.note(parser)
 
 
 def run(args: argparse.Namespace) -> int:

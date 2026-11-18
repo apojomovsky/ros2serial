@@ -90,17 +90,11 @@ classes. Strings are bounded NUL-terminated arrays. Variable-length sequences
 carry storage plus a length field. Inspect the generated header before assigning
 these fields. Out-of-bounds payloads fail rather than silently truncating.
 
-The default bundle supports common scalar, geometry, sensor and TF types.
-Its limits are chosen, not inherited from the definitions: strings are 16
-characters, `JointState` holds six joints and `TFMessage` one transform, and
-`BUNDLE_BOUNDS` is the one place each is written down. No field falls back to a
-default, so a bound the library did not name would fail generation instead of
-producing storage nobody chose. Run `r2s-gen limits` to print every bounded
-field of the bundled types with its capacity and whether `BUNDLE_BOUNDS` or the
-definition supplied it, before relying on a capacity you did not pick. Use
-[generation](custom-interfaces.md) to change bounds or add a message type.
-Large messages and high publish rates can exhaust RAM or serial bandwidth even
-when the sketch compiles.
+The default bundle supports common scalar, geometry, sensor and TF types. Its
+limits are chosen, not inherited from the definitions, so check them before
+relying on a capacity you did not pick: [message bounds](message-bounds.md) has
+the table and the command that prints it. Large messages and high publish rates
+can exhaust RAM or serial bandwidth even when the sketch compiles.
 
 AVR `double` is 32 bits: `float64` fields are sent with that precision and widened
 on the host. The time channel synchronizes timestamps with the host once the firmware

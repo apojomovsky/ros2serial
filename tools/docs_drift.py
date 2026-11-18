@@ -414,6 +414,80 @@ def check_examples() -> list[str]:
     return problems
 
 
+BOUNDS_PAGE = 'docs/message-bounds.md'
+# Only the message-bound spellings count: the prose elsewhere uses "bound" for
+# a timing or a frame-size limit, and a page that means a message field states
+# it as one of these.
+BOUND_TOKEN = re.compile(
+    r'BUNDLE_BOUNDS|--bound|unbounded|string<=|\[<=|`bounds`|^bounds:', re.MULTILINE
+)
+
+
+def bounds_heading_ids(text: str) -> set[str]:
+    """The anchors the bounds page's Markdown headings produce, GitHub style."""
+    ids = set()
+    for line in text.splitlines():
+        matched = re.match(r'^#{1,6}\s+(.*?)\s*$', line)
+        if not matched:
+            continue
+        heading = re.sub(r'<[^>]*>', '', matched.group(1)).lower()
+        heading = re.sub(r'[^a-z0-9 _-]', '', heading).strip()
+        ids.add(re.sub(r'\s+', '-', heading))
+    return ids
+
+
+def check_bounds_links() -> list[str]:
+    """A page stating a bound that does not link the section, or a dead link to it."""
+    page = ROOT / BOUNDS_PAGE
+    headings = bounds_heading_ids(page.read_text(encoding='utf-8')) if page.is_file() else set()
+    problems = []
+    for rel in user_docs():
+        if rel == BOUNDS_PAGE:
+            continue
+        text = _read(rel)
+        if 'message-bounds.md' not in text and BOUND_TOKEN.search(text):
+            problems.append(f'{rel}: mentions bounds but does not link {BOUNDS_PAGE}')
+        # A link is relative to the page that carries it, so the README reaches
+        # the page as docs/message-bounds.md and a docs/ page as its sibling.
+        prefix = '' if '/' in rel else 'docs/'
+        for found in re.finditer(re.escape(f'{prefix}message-bounds.md') + r'(#[\w-]*)?', text):
+            fragment = found.group(1) or ''
+            if not page.is_file():
+                problems.append(f'{rel}: link to {found.group(0)} names no page')
+                break
+            if fragment and fragment[1:] not in headings:
+                problems.append(
+                    f'{rel}: link to {found.group(0)} matches no heading on the bounds page'
+                )
+    return problems
+
+
+SITE = 'https://apojomovsky.github.io/ros2serial/'
+SITE_URL = re.compile(re.escape(SITE) + r"""([^\s'"`)]+)""")
+# The generator's sources are where a message names a reader-facing page.
+POINTER_SOURCES = ('gen/r2s_gen',)
+
+
+def published_pages() -> set[str]:
+    """The files the docs site publishes, read from the builder's page table."""
+    import site_build
+
+    return {page.output for page in site_build.PAGES} | {'index.html'}
+
+
+def check_docs_urls() -> list[str]:
+    """A site URL the generator prints that names no page the site publishes."""
+    pages = published_pages()
+    problems = []
+    for directory in POINTER_SOURCES:
+        for path in sorted((ROOT / directory).rglob('*.py')):
+            rel = str(path.relative_to(ROOT))
+            for found in SITE_URL.finditer(path.read_text(encoding='utf-8')):
+                if found.group(1) not in pages:
+                    problems.append(f'{rel}: {found.group(1)} is no page the site publishes')
+    return problems
+
+
 CHECKS = (
     check_make_targets,
     check_contributing_jobs,
@@ -423,6 +497,8 @@ CHECKS = (
     check_macros,
     check_config_table,
     check_examples,
+    check_bounds_links,
+    check_docs_urls,
 )
 
 

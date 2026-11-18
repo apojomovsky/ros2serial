@@ -235,7 +235,8 @@ against it with the Arduino CLI and the same flags the bundle's build passes.
 ## Bounds and unsupported input
 
 A variable-length field gets its bound from its `.msg` definition or from `bounds`
-in `r2s.yaml`, and from nothing else. With neither, generation fails naming the field:
+in `r2s.yaml`. Bound the field in the `.msg` when you can edit it (`string<=12
+text`); `bounds` is for definitions you cannot change:
 
 ```yaml
 bounds:
@@ -246,36 +247,15 @@ bounds:
   sensor_msgs/msg/JointState.effort: 4
 ```
 
-Bound the field in the `.msg` when you can edit it (`string<=12 text`); `bounds`
-is for definitions you cannot change. An entry on a field the `.msg` already
-bounds is an error, in either direction, because a smaller MCU buffer cannot hold
-what the host may legally send.
+Where each bound comes from, what happens with none, the conflict rule and the
+built-in types' limits are on [message bounds](message-bounds.md), with the
+table `r2s-gen limits` prints. Bounds apply to the MCU storage; they do not
+alter the ROS interface.
 
-These bounds apply to the MCU storage; they do not alter the ROS interface.
 Unsupported fields fail generation. Compact handshake and `--cpp` output are
 not implemented: use the default full handshake and generated C API.
 See the [generator specification](00-design.md#code-generator-specification)
 for the schema and [troubleshooting](troubleshooting.md) for hash mismatches.
-
-### The built-in types' limits
-
-The bundled library's capacities are somebody's choice and may not be what a
-built-in type's fields lead you to expect: a `std_msgs/msg/String` carries 16
-characters, and `TFMessage` holds one transform. Check them before relying on
-one:
-
-```sh
-ros2 run r2s_gen r2s-gen limits
-```
-
-Each row names the field, the storage it resolves to, and whether
-`BUNDLE_BOUNDS` or the `.msg` supplied the capacity, so a limit the library
-chose is told apart from one the definition states. A run prints one distro's
-table, so ask for another with `--distro lyrical` or `--distro rolling`. To give
-a built-in type a different limit, generate a library that carries it with your
-bound, through the
-[type library](#emit-a-type-library-for-the-x-macro-and-runtime-routes) route;
-the library's own name differs, so Arduino cannot pick the stock one.
 
 ## Emit a type library for the X-macro and runtime routes
 
@@ -301,7 +281,8 @@ A sketch then names the type like any bundled one:
 
 Every variable-length field takes its bound from the `.msg` (`string<=12`,
 `T[<=N]`) or from the command line, and a field with neither fails the command
-naming the field:
+naming the field ([message bounds](message-bounds.md) states the rule and the
+conflict case):
 
 ```sh
 ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \

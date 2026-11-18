@@ -115,6 +115,7 @@ the firmware announces its names and types when it connects.
 | Add publishing and subscriptions to my sketch | [Firmware guide](docs/firmware.md) |
 | Start the bridge with my robot; rename topics or connect several boards | [Robot integration](docs/robot-integration.md) |
 | Use my own `.msg` files and generate sources with colcon | [Custom interfaces](docs/custom-interfaces.md) |
+| Set or change the storage bound of a message field | [Message bounds](docs/message-bounds.md) |
 | Use parameters, services, or understand action support | [Services and parameters](docs/services-and-parameters.md) |
 | Find an example for a sensor or actuator | [Examples](examples/README.md) |
 | Port a ROS 1 rosserial sketch | [Migration guide](docs/03-port-rosserial-sketch.md) |
@@ -127,8 +128,9 @@ the firmware announces its names and types when it connects.
 ros2serial is for serial-attached microcontrollers where firmware size and a
 simple publish/subscribe API matter. Common message types are bundled; custom
 interfaces are generated ahead of time. Strings and arrays have explicit bounds
-so the MCU can allocate its storage at compile time. On AVR, `float64` fields
-have the precision of the board's 32-bit `double`.
+so the MCU can allocate its storage at compile time, and [message
+bounds](docs/message-bounds.md) says where each one comes from. On AVR, `float64`
+fields have the precision of the board's 32-bit `double`.
 
 The bridge targets ROS 2 Jazzy, Lyrical and Rolling. Uno and Mega have simulated
 end-to-end coverage. ESP32 examples and the CH32V003, STM32F103 and RP2040 ports
