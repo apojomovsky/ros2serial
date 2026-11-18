@@ -1,5 +1,7 @@
 # ros2serial
 
+![ros2serial](docs/artwork/ros2serial.png)
+
 **Bring your microcontroller's sensors and actuators into ROS 2 over serial.**
 
 Keep the hardware driver on your Arduino. Publish its readings as ROS messages,
