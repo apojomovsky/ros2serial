@@ -53,6 +53,9 @@ class TestHarnessArgv(unittest.TestCase):
             'flood-atmega2560.elf',
             'slice-atmega328p-500000.elf',
             'custom-atmega328p.elf',
+            'custom_xmacro-atmega328p.elf',
+            'custom_xmacro-atmega2560.elf',
+            'custom_runtime-atmega328p.elf',
         ):
             open(os.path.join(fw, image), 'w').close()
         patcher = mock.patch.dict(os.environ, {'R2S_SIMAVR_BIN': harness, 'R2S_E2E_AVR_FW': fw})
@@ -80,9 +83,26 @@ class TestHarnessArgv(unittest.TestCase):
         self.assertIn('atmega328p', argv)
         self.assertTrue(any(str(part).endswith('custom-atmega328p.elf') for part in argv))
 
+    def test_custom_runtime_flavor_names_its_firmware(self):
+        argv = avr.harness_argv('uno', flavor='custom_runtime')
+        self.assertTrue(any(str(part).endswith('custom_runtime-atmega328p.elf') for part in argv))
+
+    def test_an_unknown_flavor_is_rejected(self):
+        with self.assertRaises(AssertionError):
+            avr.harness_argv('uno', flavor='nope')
+
     def test_custom_flavor_takes_no_baud(self):
         with self.assertRaises(AssertionError):
             avr.harness_argv('uno', flavor='custom', baud='500000')
+
+    def test_custom_xmacro_flavor_names_the_xmacro_firmware(self):
+        argv = avr.harness_argv('mega', flavor='custom_xmacro')
+        self.assertIn('atmega2560', argv)
+        self.assertTrue(any(str(part).endswith('custom_xmacro-atmega2560.elf') for part in argv))
+
+    def test_custom_xmacro_flavor_takes_no_baud(self):
+        with self.assertRaises(AssertionError):
+            avr.harness_argv('uno', flavor='custom_xmacro', baud='500000')
 
     def test_baud_names_the_matrix_firmware(self):
         argv = avr.harness_argv('uno', baud='500000')
@@ -175,7 +195,7 @@ class TestScenariosStopInTest(unittest.TestCase):
         # launch_testing never calls tearDownModule, so a scenario that
         # stops its harness only there leaks it and records no peak.
         missing = []
-        names = [f'test_scenario_{scenario}_avr.py' for scenario in (1, 2, 3, 4, 12, 17)]
+        names = [f'test_scenario_{scenario}_avr.py' for scenario in (1, 2, 3, 4, 12, 17, 18, 19)]
         names.append('test_baud_matrix_avr.py')
         for name in names:
             path = os.path.join(os.path.dirname(__file__), name)

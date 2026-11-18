@@ -196,6 +196,9 @@ Actions are served through two hooks the core calls, `r2s_action_on_goal()` and
 `r2s_actions_result()`. `examples/custom_interfaces/custom_firmware` implements
 all three channels against one interface package and is the shortest complete
 example, and `tests/e2e/test_scenario_17_avr.py` runs it against the bridge.
+The C++ runtime route reaches the same three kinds without the hooks, through
+`r2s::Publisher`, `r2s::Service` and `r2s::action::Server` over a type library;
+`tests/e2e/test_scenario_18_avr.py` runs that route against the same package.
 
 The cancel hook is not optional: it is what answers the host. It calls
 `r2s_actions_answer_cancel()` with `R2S_ACT_CANCEL_ACCEPTED`, which moves the
@@ -219,18 +222,49 @@ the bind. A table the firmware writes at run time lives in RAM and binds through
 topics and actions: `r2s_services_get()` returns an entry only for a RAM table,
 and `r2s_services_copy()` reads a flash one out.
 
-## Which Arduino route custom types take
+## Which route custom types take
 
-Custom types do not go through the Arduino sketches or the bundled runtime
-layer. The bundled library ships the descriptors, message headers and topic
-tables for its own types, and `r2s-arduino compile` stages exactly that bundle.
-A custom type needs its own descriptors, which only `r2s-gen` emits, so the
-generated static C API is the route: emit the pair with
-`--layout arduino` or `--layout cmake`, stage the core and your port glue
-beside it, and compile your sketch against that tree instead of the bundled
-library. `--layout arduino` writes `library.properties` plus the pair under
-`src/`, which is a valid Arduino library directory, so a sketch can be built
-against it with the Arduino CLI and the same flags the bundle's build passes.
+A custom type needs descriptors, message headers and the type's hash, and only
+`r2s-gen` emits them. Two routes carry them, and they differ in what the
+firmware is built from rather than in what reaches the wire:
+
+- **A type library for the X-macro and runtime routes.** `r2s-gen types` emits
+  a library for just your types, so a sketch names one in an `R2S_TOPICS` row
+  the way it names a bundled type, and a C++ sketch can register it as a
+  runtime object instead. There is no `r2s.yaml` and no topic list.
+  `examples/arduino_xmacro_custom` is the smallest complete firmware, built
+  from the interface package beside it, and
+  `tests/e2e/test_scenario_19_avr.py` runs it against the bridge. The
+  runtime route's counterpart, `tests/e2e/avr_runtime_custom`, is scenario 18's.
+- **The generated static API**, from `r2s.yaml` and `r2s-gen generate`: emit
+  the pair with `--layout arduino` or `--layout cmake`, stage the core and
+  your port glue beside it, and compile your sketch against that tree. It is
+  what a bare-metal target uses, and what carries a service or an action
+  through the generated indices.
+
+`--layout arduino` writes `library.properties` plus the sources under `src/`
+in both cases, which is a valid Arduino library directory, so a sketch builds
+against either with the Arduino CLI and the flags that library's header
+carries. Keep `r2s.yaml` when the firmware needs what a type list cannot
+state: `limits.max_frame`, `features`, `tier`, and the service and action
+indices the static C hook API switches on.
+
+Both routes put the same bytes on the wire: the type's hash, its field layout
+and its bounds come from the interface package either way, so the bridge
+accepts a topic from either and cannot tell them apart.
+
+Flash differs by the expansion itself, which defines the table, the publish
+wrapper and the dispatch in the sketch's own translation unit instead of in
+generated sources. Measured on one firmware body with one compiler and one flag
+set, the X-macro build costs 74 bytes of flash and 1 byte of bss more than the
+static one on an ATmega328P: 9856 text / 184 data / 157 bss against 9782 / 184
+/ 156. The route is not the cost; the frame limit is. The bundled library sizes
+its frame from a 31-character name allowance, the static route from the names
+its configuration carries, so matching the limits is what makes the two builds
+comparable.
+
+Both firmware are budgeted beside the other examples in
+[budgets](budgets.md).
 
 ## Bounds and unsupported input
 
@@ -291,7 +325,7 @@ ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \
 
 A sketch then names the type like any bundled one:
 
-<!-- snippet: skip until #647: names the reader's own package, which no staged fixture carries -->
+<!-- snippet: skip until #648: names the reader's own package, which no staged fixture carries -->
 ```cpp
 #define R2S_NODE_NAME "sensor_board"
 #define R2S_TOPICS(X) \
@@ -336,6 +370,28 @@ connect time. The frame limit itself stays a build flag, since it sizes the
 core's own buffers: pass it to every translation unit, as the core's header
 requires. A type list whose payloads need more than the protocol's 65277-byte
 frame is refused when the library is generated.
+
+A service or an action arrives through the same library, so a runtime sketch
+names it like a message and writes no struct and no traits:
+
+<!-- snippet: skip until #645: names the reader's own package, which no staged fixture carries -->
+```cpp
+#include <r2s/action.hpp>
+#include <r2s/service.hpp>
+
+r2s::Service<my_robot_interfaces::srv::Calibrate> calibrate_srv(node, "calibrate",
+                                                               on_calibrate);
+r2s::action::Server<my_robot_interfaces::action::Run> run("run", on_run_goal,
+                                                          on_run_cancel,
+                                                          on_run_accepted);
+```
+
+Your own action header carries the same two things a bundled one does: the
+action struct with its `Goal`, `Result` and `Feedback` aliases, and the
+`r2s::action::traits` specialization with the action's type name and hash, so
+the server reads them from the library. A hand-written struct and trait are
+what a sketch needed before the generator emitted them, and neither is needed
+now.
 
 Keep `r2s.yaml` when the firmware needs what a type list cannot state:
 `limits.max_frame`, `features`, `tier`, and the generated service and action
