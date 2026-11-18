@@ -483,13 +483,69 @@ for board in uno mega; do
   done
 done
 
+# The custom-type X-macro sketch builds against a library for the example's
+# own message: `r2s-gen types` emits it from the interface package beside the
+# example, so the row names a custom type exactly as a bundled one is named.
+# The library replaces the bundled stage, so the firmware must link the
+# package's table and no bundled one.
+custstage="$build/arduino_xmacro_custom"
+rm -rf "$custstage"
+mkdir -p "$custstage/src/r2s" || status=1
+PYTHONPATH="$root/gen" python3 -m r2s_gen.cli types \
+  custom_interfaces/msg/SensorReading --msg-path "$root/examples" \
+  --layout arduino --out "$custstage" || exit 1
+cp core/include/r2s/*.h "$custstage/src/r2s/" || status=1
+cp core/src/*.c "$custstage/src/" || status=1
+rm -f "$custstage/src/test_reset.c"
+cp ports/arduino/r2s_arduino_port.cpp ports/arduino/r2s_arduino_port.h "$custstage/src/" || status=1
+custextras=$(PYTHONPATH="$root/gen" python3 - "$custstage/src/r2s_bundled.h" <<'EOF'
+import sys
+
+from r2s_gen import layouts
+from r2s_gen.msgs import MessageError
+
+try:
+    defines = layouts.build_defines(open(sys.argv[1]).read(), "src/r2s_bundled.h")
+except (MessageError, OSError, UnicodeDecodeError) as error:
+    print(f"r2s-gen: error: {error}", file=sys.stderr)
+    raise SystemExit(1)
+print(" ".join("-D" + define for define in defines))
+EOF
+) || exit 1
+case "$custextras" in
+    *R2S_WITH_CODEC*R2S_MAX_FRAME=[0-9]*R2S_MAX_NEST=[0-9]*) ;;
+    *)
+        echo "build-examples: the extracted custom flags name no limits ($custextras)" >&2
+        exit 1
+        ;;
+esac
+for board in uno mega; do
+  out="$build/arduino_xmacro_custom/$board"
+  arduino-cli compile --fqbn "arduino:avr:$board" --build-property "compiler.c.extra_flags=$custextras" \
+    --build-property "compiler.cpp.extra_flags=$custextras" \
+    --library "$custstage" --build-path "$out/build" --output-dir "$out" examples/arduino_xmacro_custom || status=1
+  if ! elf_has_symbol "$out/arduino_xmacro_custom.ino.elf" r2s_bundled_entries_custom_interfaces_SensorReading; then
+    echo "arduino_xmacro_custom ($board): the firmware links no descriptor for the custom type" >&2
+    status=1
+  fi
+  if elf_has_symbol "$out/arduino_xmacro_custom.ino.elf" r2s_runtime_topics; then
+    echo "arduino_xmacro_custom ($board): the firmware links the runtime topic table" >&2
+    status=1
+  fi
+  if elf_has_symbol "$out/arduino_xmacro_custom.ino.elf" r2s_bundled_entries_std_msgs_Float32; then
+    echo "arduino_xmacro_custom ($board): the linker kept a bundled descriptor" >&2
+    status=1
+  fi
+done
+
 # The stack budgets need .su files, which avr-gcc does not write under the
 # shipped link-time optimized flags, so the budget gate rebuilds each sketch
 # without LTO under stack/. Same sources and defines, only the optimizer
 # differs, and the deeper non-LTO paths overestimate rather than hide.
 if [ -n "${R2S_STACK_BUILD:-}" ]; then
   for sketch in arduino_minimal arduino_action arduino_service arduino_hello arduino_blink arduino_button \
-    arduino_button_led arduino_servo arduino_range arduino_xmacro arduino_static arduino_xmacro_c; do
+    arduino_button_led arduino_servo arduino_range arduino_xmacro arduino_static arduino_xmacro_c \
+    arduino_xmacro_custom; do
     # The runtime sketches share the minimal stage; the static C++ and C
     # sketches keep their own.
     case "$sketch" in
@@ -508,6 +564,10 @@ if [ -n "${R2S_STACK_BUILD:-}" ]; then
     arduino_xmacro_c)
       sstage_lib=$cstage
       sflags=$cextras
+      ;;
+    arduino_xmacro_custom)
+      sstage_lib=$custstage
+      sflags=$custextras
       ;;
     arduino_static)
       sstage_lib=$sstage
