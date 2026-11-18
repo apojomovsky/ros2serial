@@ -257,6 +257,26 @@ not implemented: use the default full handshake and generated C API.
 See the [generator specification](00-design.md#code-generator-specification)
 for the schema and [troubleshooting](troubleshooting.md) for hash mismatches.
 
+### The built-in types' limits
+
+The bundled library's capacities are somebody's choice and may not be what a
+built-in type's fields lead you to expect: a `std_msgs/msg/String` carries 16
+characters, and `TFMessage` holds one transform. Check them before relying on
+one:
+
+```sh
+ros2 run r2s_gen r2s-gen limits
+```
+
+Each row names the field, the storage it resolves to, and whether
+`BUNDLE_BOUNDS` or the `.msg` supplied the capacity, so a limit the library
+chose is told apart from one the definition states. A run prints one distro's
+table, so ask for another with `--distro lyrical` or `--distro rolling`. To give
+a built-in type a different limit, generate a library that carries it with your
+bound, through the
+[type library](#emit-a-type-library-for-the-x-macro-and-runtime-routes) route;
+the library's own name differs, so Arduino cannot pick the stock one.
+
 ## Emit a type library for the X-macro and runtime routes
 
 `r2s-gen types` emits an Arduino-style library for your own interface types, so

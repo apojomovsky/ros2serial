@@ -798,7 +798,7 @@ ros2serial/
 │   └── fuzz/                 libFuzzer targets and seed corpora
 ├── cpp/                      C++ layer: runtime API (r2s/runtime.hpp) with the per-message headers, the static API (ros2serial.hpp) and the rosserial-compatible API (ros.h)
 ├── gen/                      r2s-gen: Python package (pip) and ament_python package (ROS)
-│   ├── r2s_gen/              cli.py, config.py, msgs.py, bounds.py, emit.py, descriptors.py, topics.py, services.py, actions.py, cpp.py, static_api.py, layouts.py, bundle.py, arduino.py, vectors.py, typehash.py, version.py, reference/ (Python reference codec), schema/, snapshots/
+│   ├── r2s_gen/              cli.py, config.py, msgs.py, bounds.py, emit.py, descriptors.py, topics.py, services.py, actions.py, cpp.py, static_api.py, layouts.py, bundle.py, types.py, limits.py, arduino.py, vectors.py, typehash.py, version.py, reference/ (Python reference codec), schema/, snapshots/
 │   ├── r2s_rosidl/           the colcon plugin wrapping the generator for firmware packages
 │   └── tests/                pytest: unit, golden-file, property-based
 ├── bridge/
@@ -1125,6 +1125,7 @@ r2s-gen types    <pkg/msg/Type>... | --types-file <yaml> --out <dir> [--msg-path
                  [--bound <pkg/msg/Type.field>=<n>]... [--layout arduino|platformio|cmake]
                  [--write-config <yaml>] [--distro <name>]     # a library for the user's own types
 r2s-gen check    --config r2s.yaml [--msg-path <dir>]...       # validate only, exit code 0 or 1
+r2s-gen limits   [--distro <name>]                             # the built-in types' limits and their source
 r2s-gen vectors  --type <pkg/msg/Type> --message <yaml> [--msg-path <dir>]... [--distro <name>] [--narrow]
 r2s-gen version
 

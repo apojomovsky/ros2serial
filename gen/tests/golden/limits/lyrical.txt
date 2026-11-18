@@ -1,0 +1,18 @@
+# bundled types, distro lyrical
+type                                  field                           kind          limit   source
+geometry_msgs/msg/TransformStamped    child_frame_id                  string        16      BUNDLE_BOUNDS
+sensor_msgs/msg/Imu                   orientation_covariance          array         9       .msg
+sensor_msgs/msg/Imu                   angular_velocity_covariance     array         9       .msg
+sensor_msgs/msg/Imu                   linear_acceleration_covariance  array         9       .msg
+sensor_msgs/msg/JointState            name                            string array  6 x 16  BUNDLE_BOUNDS
+sensor_msgs/msg/JointState            position                        sequence      6       BUNDLE_BOUNDS
+sensor_msgs/msg/JointState            velocity                        sequence      6       BUNDLE_BOUNDS
+sensor_msgs/msg/JointState            effort                          sequence      6       BUNDLE_BOUNDS
+std_msgs/msg/Header                   frame_id                        string        16      BUNDLE_BOUNDS
+std_msgs/msg/String                   data                            string        16      BUNDLE_BOUNDS
+std_srvs/srv/Trigger_Response         message                         string        16      BUNDLE_BOUNDS
+tf2_msgs/action/LookupTransform_Goal  target_frame                    string        16      BUNDLE_BOUNDS
+tf2_msgs/action/LookupTransform_Goal  source_frame                    string        16      BUNDLE_BOUNDS
+tf2_msgs/action/LookupTransform_Goal  fixed_frame                     string        16      BUNDLE_BOUNDS
+tf2_msgs/msg/TF2Error                 error_string                    string        16      BUNDLE_BOUNDS
+tf2_msgs/msg/TFMessage                transforms                      sequence      1       BUNDLE_BOUNDS
