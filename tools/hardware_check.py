@@ -182,6 +182,16 @@ def failures(link, sample, rate_min, rate_max, gap_ms, led_lit):
     return reasons
 
 
+def window_observation(arrivals, window_end, diagnostics, handshake_s, led_lit):
+    """The sample window's Observation, with the arrivals copied at its end.
+
+    The LED phase keeps pumping the node afterwards, and /button keeps
+    arriving, so the window's own list is copied here: the reported count and
+    rate describe the sample, never the messages the question took.
+    """
+    return Observation(tuple(arrivals), window_end, diagnostics, handshake_s, led_lit)
+
+
 def link_failures(observed):
     """The reasons the link itself gives, for a run that never connected."""
     if observed.handshake_s is not None:
@@ -392,12 +402,8 @@ def probe(port, seconds, launched_at):
             if time.monotonic() > deadline:
                 # A board holding the wrong sketch or a port held open by a
                 # serial monitor is a failed check, so the report still prints.
-                return Observation(
-                    (),
-                    time.monotonic(),
-                    state['values'],
-                    None,
-                    False,
+                return window_observation(
+                    state['arrivals'], time.monotonic(), state['values'], None, False
                 )
             rclpy.spin_once(node, timeout_sec=0.2)
         handshake_s = state['connected_at'] - launched_at
@@ -406,8 +412,9 @@ def probe(port, seconds, launched_at):
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.2)
-        window_end = time.monotonic()
-        sampled = tuple(state['arrivals'])
+        sampled = window_observation(
+            state['arrivals'], time.monotonic(), state['values'], handshake_s, False
+        )
 
         say('driving /led true')
         led.publish(Bool(data=True))
@@ -416,7 +423,9 @@ def probe(port, seconds, launched_at):
         say('driving /led false')
         led.publish(Bool(data=False))
         spin_for(node, 0.5)
-        return Observation(sampled, window_end, state['values'], handshake_s, lit)
+        return Observation(
+            sampled.arrivals, sampled.window_end, sampled.diagnostics, sampled.handshake_s, lit
+        )
     finally:
         node.destroy_node()
         try:
@@ -493,25 +502,28 @@ def main(argv=None):
         bridge = launch_bridge(args.port, install, log_path)
         observed = probe(args.port, args.seconds, time.monotonic())
         reasons = link_failures(observed)
-        if observed.diagnostics is None:
-            link = Counters()
-            if not reasons:
-                reasons = ['the bridge published no link diagnostics, so no counter was read']
-        else:
-            link = counters(observed.diagnostics)
-        values['crc errors'] = link.crc_errors
-        values['rx overflows'] = link.rx_overflows
-        values['dropped frames'] = link.dropped_frames
-        values['sequence gaps'] = link.seq_gaps
-        values['dropped topic frames'] = link.topic_drops
-        values['led'] = 'lit' if observed.led_lit else 'did not light'
+        # No status means no counter was read, so every one stays n/a: a zero
+        # there would claim a clean link that never reported.
+        link = None if observed.diagnostics is None else counters(observed.diagnostics)
+        if link is not None:
+            values['crc errors'] = link.crc_errors
+            values['rx overflows'] = link.rx_overflows
+            values['dropped frames'] = link.dropped_frames
+            values['sequence gaps'] = link.seq_gaps
+            values['dropped topic frames'] = link.topic_drops
         if observed.handshake_s is None:
+            # /led is only driven after the handshake, so a link that never
+            # connected says nothing about the LED.
+            values['led'] = 'not driven'
             values['handshake'] = 'never'
             values['button rate'] = 'n/a'
             values['longest gap'] = 'n/a'
             sample = None
         else:
+            values['led'] = 'lit' if observed.led_lit else 'did not light'
             values['handshake'] = f'{observed.handshake_s:.1f} s'
+            if link is None:
+                reasons.append('the bridge published no link diagnostics, so no counter was read')
             try:
                 sample = arrivals(observed.arrivals, observed.window_end)
             except CheckError as error:
@@ -522,7 +534,7 @@ def main(argv=None):
             else:
                 values['button rate'] = f'{sample.hz:.1f} Hz from {sample.count} messages'
                 values['longest gap'] = f'{sample.gap_ms:.0f} ms'
-        if sample is not None:
+        if sample is not None and link is not None:
             reasons += failures(
                 link,
                 sample,

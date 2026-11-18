@@ -153,13 +153,30 @@ def test_a_connected_link_gives_the_counters_no_reason_of_its_own():
     assert hardware_check.link_failures(observed) == []
 
 
-def test_the_rate_ignores_arrivals_past_the_window():
-    window = [index / 10.0 for index in range(21)]
-    # The LED phase appends more arrivals; the window's end is the tail edge.
-    sample = hardware_check.arrivals(window, window[-1] + 0.5)
+def test_the_window_copies_its_arrivals_before_the_led_phase():
+    live = [index / 10.0 for index in range(21)]
+    # The window closes half a second after the last stamp, as a stalled
+    # publisher leaves it; the LED phase then keeps pumping the node.
+    observed = hardware_check.window_observation(live, 2.5, clean_values(), 4.2, False)
+    live += [2.6, 2.7, 2.8]
+    sample = hardware_check.arrivals(observed.arrivals, observed.window_end)
     assert sample.count == 21
     assert sample.hz == pytest.approx(10.0)
     assert sample.gap_ms == pytest.approx(500.0)
+
+
+def test_the_rate_takes_the_silence_at_the_end_of_the_window():
+    sample = hardware_check.arrivals([index / 10.0 for index in range(21)], 2.5)
+    assert sample.gap_ms == pytest.approx(500.0)
+
+
+def test_the_snapshot_helper_is_what_keeps_the_led_phase_out():
+    """A live list would grow; the helper's copy cannot."""
+    live = [0.0, 0.1]
+    observed = hardware_check.window_observation(live, 0.2, None, 1.0, True)
+    live.append(0.3)
+    assert observed.arrivals == (0.0, 0.1)
+    assert isinstance(observed.arrivals, tuple)
 
 
 def test_the_report_lists_every_field_once_and_ends_with_the_verdict():
