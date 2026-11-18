@@ -165,6 +165,33 @@ TEST(TimeSyncEstimate, CorrectsExactlyOnASymmetricLinkWithoutDrift)
     EXPECT_EQ(sync.round_trip_ns(), mcu.rtt_ns);
 }
 
+// The bridge reads the PONG on a poll timer, so its arrival is noticed some
+// time after the wire delivered it. That latency is one-sided: it can only
+// make an estimate late, never early. Some trips are noticed promptly and
+// most are not, so the fastest trip is the one that measures the wire, and
+// the estimate must read the MCU clock through it rather than averaging the
+// poll delay into the offset.
+TEST(TimeSyncEstimate, AOneSidedArrivalDelayDoesNotBiasTheOffset)
+{
+    TimeSync sync(kTickHz);
+    SimMcu mcu;
+        // Seven trips are noticed 3 ms late; the second is noticed at once.
+    const std::int64_t late_ns = 3000000;
+    for (int i = 0; i < 8; ++i) {
+        const std::int64_t send = static_cast<std::int64_t>(i) * 50000000;
+        const std::int64_t dispatch = i == 1 ? 0 : late_ns;
+        const std::int64_t recv = send + mcu.rtt_ns + dispatch;
+        sync.add_sample(send, recv, mcu.ros_at(recv), mcu.tick_at(send + mcu.rtt_ns / 2));
+    }
+    TimeCorrection out;
+    ASSERT_TRUE(sync.correction(out));
+    const std::uint32_t tick0 = mcu.tick_at(7 * 50000000 + mcu.rtt_ns / 2);
+    EXPECT_EQ(out.tick0, tick0);
+    EXPECT_EQ(ros_ns_of(out), mcu.true_ros(tick0))
+        << "the arrival dispatch delay moved the offset by "
+        << ros_ns_of(out) - mcu.true_ros(tick0) << " ns";
+}
+
 TEST(TimeSyncEstimate, FollowsAFixedRosSkew)
 {
     TimeSync sync(kTickHz);
