@@ -36,6 +36,34 @@ def test_render_heading_carries_its_anchor():
     assert headings == ['broadcast-tf']
 
 
+def test_render_centered_logo_above_heading_with_theme_sources():
+    text = (
+        '<div align="center">\n\n'
+        '<picture>\n'
+        '  <source media="(prefers-color-scheme: dark)" '
+        'srcset="docs/artwork/ros2serial-white.png">\n'
+        '  <source media="(prefers-color-scheme: light)" '
+        'srcset="docs/artwork/ros2serial.png">\n'
+        '  <img src="docs/artwork/ros2serial.png" alt="ros2serial logo" '
+        'width="192" height="192">\n'
+        '</picture>\n\n'
+        '# ros2serial\n\n'
+        '</div>\n'
+    )
+    body, headings, problems = site_build.render_markdown(text, 'README.md')
+
+    assert problems == []
+    assert '<div align="center">' in body
+    assert '</div>' in body
+    assert '<picture>' in body and '</picture>' in body
+    assert '<source media="(prefers-color-scheme: dark)"' in body
+    assert 'srcset="docs/artwork/ros2serial-white.png"' in body
+    assert '<source media="(prefers-color-scheme: light)"' in body
+    assert 'width="192" height="192"' in body
+    assert body.index('<img ') < body.index('<h1 id="ros2serial">')
+    assert headings == ['ros2serial']
+
+
 def test_render_setext_heading_becomes_h2():
     body, headings, problems = site_build.render_markdown('Not yet\n---\n', 'docs/a.md')
     assert problems == []
