@@ -11,7 +11,6 @@ be staged there. The stage script builds both, and refuses a tree that
 cannot carry them.
 """
 
-import os
 import subprocess
 from pathlib import Path
 

@@ -47,6 +47,16 @@ directory and a bare report name apart, because Mull joins the two
 itself and an absolute name would land the report under the invocation's
 working directory.
 
+The generator stage runs in a workspace `scripts/stage-mutmut-workspace.sh`
+builds, because two of mutmut's rules fix its shape. mutmut names a mutant
+after the source path it is given, so the package sits at the top of that
+directory for its keys to match the name the tests import; and it runs
+pytest from `mutants/`, so the suite and every tree the tests resolve
+through the repository root are staged there as well. The tests that
+install the package in a subprocess (`test_packaging.py`,
+`test_rosidl_plugin.py`) are ignored: mutmut rewrites the sources to import
+its trampoline, and a pip or colcon subprocess has no mutmut to import.
+
 ## Equivalent mutants
 
 A surviving mutant is either a missing test or a mutant no test could
