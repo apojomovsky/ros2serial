@@ -33,6 +33,7 @@ from typing import Any
 
 from r2s_gen import bounds as bounds_module
 from r2s_gen import bundle
+from r2s_gen import docs
 from r2s_gen import layouts
 from r2s_gen import msgs
 from r2s_gen.bundle import Library
@@ -639,7 +640,7 @@ def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParse
     parser.add_argument('--distro', help='the snapshot distro: jazzy, lyrical or rolling')
     parser.add_argument('--out', required=True, help='the directory receiving the library files')
     parser.set_defaults(run=run)
-    return parser
+    return docs.note(parser)
 
 
 def run(args: argparse.Namespace) -> int:

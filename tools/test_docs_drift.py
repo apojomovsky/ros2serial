@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 import docs_drift
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -300,6 +301,87 @@ def test_a_phantom_job_the_design_table_names_is_named(tmp_path, monkeypatch):
     assert 'docs/00-design.md: the CI table names `ghost`, which is no ci.yml job' in found
 
 
+BOUNDS_PAGE = 'docs/message-bounds.md'
+BOUNDS_HEADINGS = '# Message bounds\n\n## Where a bound comes from\n'
+
+
+def test_a_page_that_mentions_bounds_and_links_the_section_passes(tmp_path, monkeypatch):
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/bounds-user.md'] = (
+        'Bound the field with `string<=12`. See [message bounds](message-bounds.md).\n'
+    )
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_bounds_links) == []
+
+
+def test_a_page_that_mentions_bounds_without_the_link_is_named(tmp_path, monkeypatch):
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/bounds-user.md'] = 'Bound the field with `string<=12`.\n'
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_bounds_links)
+    assert found == [
+        'docs/bounds-user.md: mentions bounds but does not link docs/message-bounds.md'
+    ]
+
+
+def test_a_link_to_a_heading_the_bounds_page_lacks_is_named(tmp_path, monkeypatch):
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/bounds-user.md'] = (
+        'Bound the field with `string<=12`; see [here](message-bounds.md#nowhere).\n'
+    )
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_bounds_links)
+    assert found == [
+        'docs/bounds-user.md: link to message-bounds.md#nowhere matches no heading'
+        ' on the bounds page'
+    ]
+
+
+def test_a_link_to_a_missing_bounds_page_is_named(tmp_path, monkeypatch):
+    files = _with('docs/bounds-user.md', 'Bound it with `string<=12`; [see](message-bounds.md).\n')
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_bounds_links)
+    assert found == ['docs/bounds-user.md: link to message-bounds.md names no page']
+
+
+def test_the_bounds_page_does_not_have_to_link_itself(tmp_path, monkeypatch):
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS + 'Bound it with `string<=12`.\n')
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_bounds_links) == []
+
+
+def test_a_root_page_links_the_bounds_page_by_its_docs_path(tmp_path, monkeypatch):
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['README.md'] = 'Bound it with `string<=12`; see [bounds](docs/message-bounds.md).\n'
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_bounds_links) == []
+
+
+def test_a_published_pointer_to_a_page_the_site_lacks_is_named(tmp_path, monkeypatch):
+    """The generator's messages carry a site URL, so a dropped page leaves a dead pointer."""
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['gen/r2s_gen/docs.py'] = (
+        "BOUNDS_URL = 'https://apojomovsky.github.io/ros2serial/nowhere.html'\n"
+    )
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_docs_urls)
+    assert found == ['gen/r2s_gen/docs.py: nowhere.html is no page the site publishes']
+
+
+def test_a_published_pointer_to_a_page_the_site_carries_passes(tmp_path, monkeypatch):
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['tools/site_build.py'] = (
+        'from collections import namedtuple\n'
+        "Page = namedtuple('Page', 'source output title blurb')\n"
+        "PAGES = (Page('docs/message-bounds.md', 'message-bounds.html', 'Bounds', 'x'),)\n"
+    )
+    files['gen/r2s_gen/docs.py'] = (
+        "BOUNDS_URL = 'https://apojomovsky.github.io/ros2serial/message-bounds.html'\n"
+    )
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_docs_urls) == []
+
+
 def test_the_real_tree_is_green():
     """Every drift the ticket found is fixed, so the gate closes on this tree."""
     proc = subprocess.run(
@@ -310,3 +392,94 @@ def test_the_real_tree_is_green():
         check=False,
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_a_page_under_a_subdirectory_links_the_section_by_a_relative_path(tmp_path, monkeypatch):
+    """docs/research/x.md reaches the page as ../message-bounds.md, not as a sibling."""
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/research/x.md'] = 'Bound with `string<=12`; [here](../message-bounds.md).\n'
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_bounds_links) == []
+
+
+def test_a_nested_page_whose_link_does_not_reach_the_section_is_named(tmp_path, monkeypatch):
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/research/x.md'] = 'Bound with `string<=12`; [here](message-bounds.md).\n'
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_bounds_links)
+    assert found == [
+        'docs/research/x.md: mentions bounds but does not link docs/message-bounds.md'
+    ]
+
+
+def test_a_dead_anchor_from_a_nested_page_is_named(tmp_path, monkeypatch):
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/research/x.md'] = 'Bound with `string<=12`; [here](../message-bounds.md#gone).\n'
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_bounds_links)
+    assert found == [
+        'docs/research/x.md: link to ../message-bounds.md#gone matches no heading'
+        ' on the bounds page'
+    ]
+
+
+def test_a_bound_in_ordinary_prose_counts_as_mentioning_bounds(tmp_path, monkeypatch):
+    """The gate cannot be satisfied by avoiding the token set: plain prose counts."""
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/x.md'] = 'Publishing past the bound fails instead of sending.\n'
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_bounds_links)
+    assert found == ['docs/x.md: mentions bounds but does not link docs/message-bounds.md']
+
+
+def test_a_timing_bound_is_not_a_message_bound(tmp_path, monkeypatch):
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/x.md'] = 'The sync scenario judges stamps within a timing bound.\n'
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_bounds_links) == []
+
+
+@pytest.mark.parametrize(
+    'sentence',
+    [
+        'The sequence bound of JointState.position is six; raise it in r2s.yaml.',
+        'Bounds come from the .msg definition or an r2s.yaml entry.',
+        'Bound each field in its .msg when you can.',
+        'Raise the upper bound on JointState.name so longer names fit.',
+    ],
+)
+def test_a_message_bound_in_any_spelling_counts(sentence):
+    """The gate reads the sentences a reader writes about storage, not a fixed list."""
+    assert docs_drift.states_a_bound(sentence)
+
+
+@pytest.mark.parametrize(
+    'sentence',
+    [
+        'No crash, hang or out-of-bounds access on any input.',
+        'The decoder does a bounds check before it copies.',
+        'The sync scenario judges stamps within a timing bound.',
+        'The stack budget holds; the analysis above proves the bound.',
+        'The loader rejects only what its padding-blind lower bound proves.',
+    ],
+)
+def test_a_limit_that_is_not_a_message_bound_does_not_count(sentence):
+    assert not docs_drift.states_a_bound(sentence)
+
+
+@pytest.mark.parametrize(
+    'link',
+    [
+        '[s](message-bounds.md "bounds")',
+        "[s](message-bounds.md 'bounds')",
+        '[s](<message-bounds.md>)',
+        '[s](message-bounds.md (bounds))',
+    ],
+)
+def test_a_link_with_a_title_or_angle_brackets_still_reaches_the_section(
+    tmp_path, monkeypatch, link
+):
+    files = _with('docs/message-bounds.md', BOUNDS_HEADINGS)
+    files['docs/x.md'] = f'Bound with `string<=12`; see {link}.\n'
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_bounds_links) == []

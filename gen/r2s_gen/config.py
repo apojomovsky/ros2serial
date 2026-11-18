@@ -20,6 +20,8 @@ from dataclasses import field
 from pathlib import Path
 from typing import Any
 
+from r2s_gen import docs
+from r2s_gen.bounds import BoundsError
 from r2s_gen.msgs import MessageError
 from r2s_gen.topics import check_collisions
 from r2s_gen.topics import check_non_empty
@@ -183,7 +185,7 @@ def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParse
         help='search DIR for message packages; repeatable',
     )
     parser.set_defaults(run=run)
-    return parser
+    return docs.note(parser)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -294,29 +296,29 @@ def _describe(path: str, data: dict, error: Any) -> MessageError:
 def _describe_bound(where: str, value: Any) -> MessageError:
     """Describe a bounds value rejection as the golden message, read from the value."""
     if isinstance(value, int) and not isinstance(value, bool):
-        return MessageError(where, 'the bound must be at least 0', 'raise it')
+        return BoundsError(where, 'the bound must be at least 0', 'raise it')
     if not isinstance(value, list):
-        return MessageError(
+        return BoundsError(
             where,
             'expected an integer bound or [count, string_bound]',
             'write 24 or [4, 12]',
         )
     if len(value) != 2:
-        return MessageError(
+        return BoundsError(
             where,
             'a list bound is [count, string_bound]',
             'give the count and the string bound',
         )
     count, element = value
     if isinstance(count, bool) or not isinstance(count, int):
-        return MessageError(where, 'the sequence bound must be an integer', 'give a whole number')
+        return BoundsError(where, 'the sequence bound must be an integer', 'give a whole number')
     if count < 1:
-        return MessageError(where, 'the sequence bound must be at least 1', 'raise it')
+        return BoundsError(where, 'the sequence bound must be at least 1', 'raise it')
     if isinstance(element, bool) or not isinstance(element, int):
-        return MessageError(
+        return BoundsError(
             where, 'the string bound must be an integer', 'give a whole number of characters'
         )
-    return MessageError(where, 'the string bound must be at least 0', 'raise it')
+    return BoundsError(where, 'the string bound must be at least 0', 'raise it')
 
 
 def _describe_unknown(path: str, error: Any) -> MessageError:
@@ -329,7 +331,7 @@ def _describe_unknown(path: str, error: Any) -> MessageError:
         and not any(re.fullmatch(pattern, str(key)) for pattern in patterns)
     )[0]
     if _location(error.absolute_path) == 'bounds':
-        return MessageError(
+        return BoundsError(
             path,
             f"'{unknown}' is not a field path",
             'write package/msg/Type.field, such as std_msgs/msg/Header.frame_id',
