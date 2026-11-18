@@ -40,6 +40,11 @@ jobs:
   nightly:
     if: startsWith(github.ref, 'refs/tags/v')
     uses: ./.github/workflows/nightly-jobs.yml
+    # The called workflow's pic-sim job asks for packages: read, and a call
+    # granting less makes this whole workflow invalid before any job runs.
+    permissions:
+      contents: read
+      packages: read
     with:
       fuzz: false
       soak: false

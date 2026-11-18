@@ -17,6 +17,11 @@ permissions:
 jobs:
   nightly:
     uses: ./.github/workflows/nightly-jobs.yml
+    # The called workflow's pic-sim job asks for packages: read, and a call
+    # granting less makes this whole workflow invalid before any job runs.
+    permissions:
+      contents: read
+      packages: read
     # The soak is the only caller that waits two hours; releases and PRs
     # keep the default off.
     with:
