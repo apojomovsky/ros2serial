@@ -305,7 +305,6 @@ tasks:
       - scripts/e2e-lease.sh
       - tools/snippets_check.py
       - tools/docs_drift.py
-      - tools/docs_walkthrough.py
       - tools/bounds_table.py
       - tools/site_build.py
       - tools/site_links.py
@@ -313,10 +312,6 @@ tasks:
       - CONTRIBUTING.md
       - AGENTS.md
       - docs/**
-      # The walkthrough section runs the IDE page's blocks, so its parser and
-      # the script that owns the board are inputs too. The page itself rides
-      # on docs/** above.
-      - scripts/check-walkthrough-arduino-ide.sh
       # The drift gate names the make targets, CI jobs, examples and
       # scenario files the prose quotes, so their definitions are inputs.
       - Makefile
@@ -325,15 +320,10 @@ tasks:
       - tests/e2e/test_scenario_*.py
       - tests/e2e/run-avr.sh
       # Snippets compile against the core and the C++ layer, and the
-      # reference runs the generator package. The walkthrough section installs
-      # the generator and the bridge, builds the harness, and stages the core
-      # and the port glue inside the archive it compiles against.
+      # reference runs the generator package.
       - core/**
       - cpp/**
       - gen/**
-      - bridge/**
-      - ports/arduino/**
-      - tests/harness/**
       - exclude: gen/tests/**
     cmds:
       - DOCS=1 bash scripts/ci-test.sh
@@ -574,6 +564,12 @@ tasks:
       - scripts/with-build-lock.sh
       - scripts/e2e-lease.sh
       - scripts/check-readme.sh
+      # The IDE walkthrough section builds the interface package the page
+      # carries, generates its archive, compiles the sketch against it and
+      # reads a topic through the bridge on the harness.
+      - scripts/check-walkthrough-arduino-ide.sh
+      - tools/docs_walkthrough.py
+      - docs/arduino-ide-custom-messages.md
       - README.md
       - docs/installation.md
       - docs/without-hardware.md
