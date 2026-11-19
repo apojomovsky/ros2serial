@@ -53,7 +53,8 @@ _DIRS = ('.github', 'docs', 'gen', 'tests', 'examples')
 BASE = {
     'Makefile': (
         'help:\n\t@true\n\ntest:\n\t@true\n\ncheck:\n\t@true\n\n'
-        'lint-docs:\n\t@true\n\ntest-core:\n\t@true\n'
+        'lint-docs:\n\t@true\n\ntest-core:\n\t@true\n\n'
+        'compile:\n\t@$(call pending,compile,G10 in docs/00-design.md)\n'
     ),
     '.github/workflows/ci.yml': (
         'jobs:\n' + ''.join(f'  {job}:\n    steps: []\n' for job in _JOBS)
@@ -108,6 +109,26 @@ def test_a_documented_target_the_makefile_lacks_is_named(tmp_path, monkeypatch):
     repo = _tree(tmp_path, files)
     found = _check(repo, monkeypatch, docs_drift.check_make_targets)
     assert found == ['README.md: `make not-a-target` matches no Makefile target']
+
+
+def test_a_target_the_makefile_implements_read_as_unbuilt_is_named(tmp_path, monkeypatch):
+    files = _with('README.md', '`make test` is not built yet.\n')
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_unbuilt_claims)
+    assert found == ['README.md: `make test` is called not built, but the Makefile implements it']
+
+
+def test_a_pending_target_read_as_unbuilt_passes(tmp_path, monkeypatch):
+    files = _with('README.md', '`make compile` is not built yet.\n')
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_unbuilt_claims) == []
+
+
+def test_an_unbuilt_claim_naming_no_target_is_not_judged(tmp_path, monkeypatch):
+    """The phrase alone names nothing the Makefile can confirm, so it is not read."""
+    files = _with('README.md', 'A one-command board check is not built yet.\n')
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_unbuilt_claims) == []
 
 
 def test_a_make_command_in_prose_is_not_read_as_a_target(tmp_path, monkeypatch):
