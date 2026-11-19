@@ -31,6 +31,7 @@ from dataclasses import field
 from pathlib import Path
 from typing import Any
 
+from r2s_gen import arduino
 from r2s_gen import bounds as bounds_module
 from r2s_gen import bundle
 from r2s_gen import docs
@@ -639,6 +640,12 @@ def add_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParse
     )
     parser.add_argument('--distro', help='the snapshot distro: jazzy, lyrical or rolling')
     parser.add_argument('--out', required=True, help='the directory receiving the library files')
+    parser.add_argument(
+        '--zip',
+        metavar='FILE',
+        help='also write the library as the ZIP the Arduino IDE installs with '
+        'Sketch > Include Library > Add .ZIP Library; the arduino layout only',
+    )
     parser.set_defaults(run=run)
     return docs.note(parser)
 
@@ -657,14 +664,26 @@ def run(args: argparse.Namespace) -> int:
             flagged=flagged,
         )
         files = emit(library, args.layout)
+        if args.zip and args.layout != 'arduino':
+            # The IDE reads the archive as a library folder, so only the layout
+            # whose wrapper it reads can become one.
+            raise MessageError(
+                '--zip',
+                f'the {args.layout} layout is not an Arduino library',
+                'drop --zip, or pass --layout arduino',
+            )
         if args.write_config:
             write_config(args.write_config, library)
         layouts._write(args.out, files)
-    except (MessageError, OSError) as error:
+        if args.zip:
+            arduino.write_archive(args.zip, library, files)
+    except (MessageError, OSError, ValueError) as error:
         print(f'r2s-gen: error: {error}', file=sys.stderr)
         return 1
     for name in files:
         print(name)
+    if args.zip:
+        print(args.zip)
     return 0
 
 
