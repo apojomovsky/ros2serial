@@ -3,6 +3,7 @@
 
 """The release artifacts: an Arduino library that compiles, and the Python sdist and wheel."""
 
+import re
 import shutil
 import subprocess
 import sys
@@ -148,6 +149,69 @@ def test_the_arduino_zip_ships_the_examples_a_first_run_opens(tmp_path):
     for name in ('action', 'service', 'xmacro_custom', 'pio_hello'):
         assert not [entry for entry in names if f'/examples/{name}/' in entry], name
     assert 'ros2serial/src/r2s_config.h' in names
+
+
+def readme_ide_section() -> str:
+    """The README's Arduino IDE block, from its heading to the next one."""
+    lines = (ROOT / 'README.md').read_text(encoding='utf-8').splitlines()
+    start = lines.index('#### Or use the Arduino IDE')
+    end = next(
+        (number for number in range(start + 1, len(lines)) if lines[number].startswith('#')),
+        len(lines),
+    )
+    return '\n'.join(lines[start:end])
+
+
+SENTENCE = re.compile(r'(?<=[.!?])\s+')
+# A sentence that denies the archive a thing, or sends the reader elsewhere for
+# it, is the drift this gate exists to stop; a phrase list would only catch the
+# wording the last reread already removed.
+SECOND_SOURCE = re.compile(
+    r'\b(?:no|not|without|never|lacks?|unless|generat\w*|r2s-arduino)\b', re.IGNORECASE
+)
+
+
+def claims_absent(section: str, thing: str) -> list[str]:
+    """Every sentence of the IDE block that puts ``thing`` out of the archive's reach."""
+    return [
+        sentence
+        for sentence in SENTENCE.split(section)
+        if re.search(thing, sentence, re.IGNORECASE) and SECOND_SOURCE.search(sentence)
+    ]
+
+
+def test_the_readme_ide_route_states_what_the_zip_holds(tmp_path):
+    """The README's IDE block and the archive agree, in both directions.
+
+    A reader adds the ZIP and expects the menu it describes. Promising examples
+    the archive lacks sends them to a second route, and so does offering one the
+    archive ships. The frame limit follows the same rule: the archive either
+    carries `src/r2s_config.h` or the block hands the reader a property to type.
+    """
+    out, result = build(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    (zip_path,) = sorted(out.glob('ros2serial-arduino-*.zip'))
+    names = zipfile.ZipFile(zip_path).namelist()
+    section = readme_ide_section()
+
+    ships_examples = any(name.endswith('.ino') and '/examples/' in name for name in names)
+    assert ships_examples, 'the release ZIP stages no sketch'
+    assert ('File > Examples > ros2serial' in section) is ships_examples
+    assert claims_absent(section, r'examples?') == [], (
+        'the README puts the shipped examples out of the archive reach'
+    )
+
+    # #675 made the archive configure its own build, so the block may only tell
+    # a reader nothing needs configuring while the file is really in it.
+    carries_limit = 'ros2serial/src/r2s_config.h' in names
+    assert carries_limit, 'the release ZIP stages no r2s_config.h'
+    assert claims_absent(section, r'frame[ -]limit') == [], (
+        'the README asks the IDE build for a limit the archive already carries'
+    )
+    for property_name in ('platform.local.txt', 'compiler.c.extra_flags'):
+        assert property_name not in section, (
+            f'the README asks for {property_name} though the archive carries src/r2s_config.h'
+        )
 
 
 def _plain_compile(library, sketch, board, work):
