@@ -49,8 +49,23 @@ if [ "$dry" = 1 ]; then
   "${cliff[@]}" --unreleased --tag "v$next"
   exit 0
 fi
+# The refresh below may only correct the stamp's own banners, so the tree
+# must have matched its measurements before the stamp: a cut on a tree that
+# already drifted refuses here instead of shipping numbers nobody took. A
+# tree older than the capacity measurement has no tool to run; on every tree
+# that does, the check is unconditional, because a missing page is drift too
+# and skipping it would let a deleted page hide a measurement nobody took.
+if [ -f "$PWD/tools/capacity_report.py" ]; then
+  python3 "$PWD/tools/capacity_report.py" check
+fi
 python3 "$root/scripts/set_version.py" "$next" "$PWD"
 make -C "$PWD" regen
+# The stamp rewrites banners under cpp/ that the capacity digest hashes
+# without moving a measured byte, so the digest is refreshed here and the
+# release commit describes its own tree with the budgets gate green.
+if [ -f "$PWD/tools/capacity_report.py" ]; then
+  python3 "$PWD/tools/capacity_report.py" refresh-inputs --after-stamp
+fi
 "${cliff[@]}" --tag "v$next" -o CHANGELOG.md
 # The staged set lives one per line in scripts/release-files.list, so
 # concurrent branches staging different files keep both on merge.
