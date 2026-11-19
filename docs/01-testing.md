@@ -26,6 +26,10 @@ flowchart TB
 
 ### CI flow
 
+What each job's package installs cost per run is measured on the [per-job
+install cost](benchmarks/ci-per-job-install-cost.md) page; it is the record
+behind the decision to keep one image instead of derived ones.
+
 The `plan` job restores each Taskfile task's last successful inputs from the latest `master` run and reports every section whose inputs changed since; each section job gates on its scope. Pushes to `master` and manual runs select every scope and force the tasks, then save the checksums. The SCRIPTS scope runs as one job per shard; the `e2e-isolation` job runs the two e2e sections side by side when the plan selects `NIGHTLY`, and the `nightly` job calls the shared nightly jobs on pull requests carrying the `fuzz-long` label, so the long fuzzing runs on pull requests only with that label. A version tag runs the same nightly jobs with the long fuzzing off, and they gate the publish.
 
 ```mermaid
@@ -280,7 +284,7 @@ Coverage is a floor that catches untested code; mutation score is the measure of
 
 - **Spec coverage is 100%:** every spec ID has at least one test (`tools/spec_coverage.py`).
 - **Error-path coverage is 100%:** every `R2S_ERROR_*` report code, every `R2S_ERR_*` status and every counter is triggered by at least one test.
-- **Mutation testing** runs nightly with Mull (the core and the ROS-free bridge harness in `mutation/bridge`) and mutmut (the generator); research ticket R13 confirms the tools. A measured score below its floor in `tools/robustness.yaml` fails the nightly once the triage report is written; areas the run does not measure yet read no data and never fail. Surviving mutants are triaged: either a test is added, or the mutant is recorded as equivalent with a one-line reason.
+- **Mutation testing** runs nightly with Mull (the core and the ROS-free bridge harness in `mutation/bridge`) and mutmut (the generator); research ticket R13 confirms the tools. The published scores and floors are on the [robustness page](robustness.md). A measured score below its floor in `tools/robustness.yaml` fails the nightly once the triage report is written; areas the run does not measure yet read no data and never fail. Surviving mutants are triaged: either a test is added, or the mutant is recorded as equivalent with a one-line reason.
 - Lines excluded from coverage carry an exclusion comment with a reason, and the exclusions are counted in the report. A changed line that is excluded without a reason fails the gate, naming the file and line.
 - A changed line in a generated file, or in a file the package does not measure, is ignored and reported as ignored, never silently dropped.
 - Branch coverage excludes compiler-generated exception edges: every gcovr measurement passes `--exclude-throw-branches`, so the arcs of calls that never throw in tests never enter the denominator.
@@ -339,7 +343,7 @@ The SCRIPTS scope runs in CI as one job per shard over the collected node ids, s
 | Zone check | Core free of function pointers, float operations and C++ includes | `tools/zone_check.py` on object files | Every PR |
 | Big-endian | Core unit tests on a big-endian target | qemu-user (for example s390x) | Nightly |
 | Fuzzing | rCOBS decoder, framer, codec with every descriptor, session input, bridge framer | libFuzzer; corpora in `core/fuzz/corpus/` | 60 s per target on PRs, 30 min nightly or on PRs labelled `fuzz-long` |
-| Generator unit and golden | Config validation, bounds, naming and collisions, error messages; generated files for example configs | pytest; `make regen` for intentional changes | Every PR |
+| Generator unit and golden | Config validation, [bounds](message-bounds.md), naming and collisions, error messages; generated files for example configs | pytest; `make regen` for intentional changes | Every PR |
 | Generator property and differential | Random message definitions and values: generate C, compile on host, round-trip, compare with the reference | hypothesis + host gcc | Every PR (bounded), more nightly |
 | Generator hashes | RIHS01 equals the installed type support's hash for bundled types, per distro | pytest in the ROS containers | Every PR |
 | C++ layer | Static and runtime APIs: registration, dispatch, construction order, registration-after-spin error | Host builds + avr-g++ compile tests | Every PR |

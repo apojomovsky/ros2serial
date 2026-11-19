@@ -63,8 +63,8 @@ during spin.
 
 Inspect `/diagnostics` and the bridge log. Reduce publication rate or message
 size when serial bandwidth is saturated. Handle `R2S_ERR_TX_BUSY` without
-blocking spin. Check string/sequence bounds when the bridge reports a field
-error. A buffer setting in a sketch alone does not configure the library:
+blocking spin. Check string/sequence bounds ([where they come from](message-bounds.md))
+when the bridge reports a field error. A buffer setting in a sketch alone does not configure the library:
 compile with `ros2 run r2s_gen r2s-arduino compile`, or apply the generated limits
 to every translation unit in your own build.
 

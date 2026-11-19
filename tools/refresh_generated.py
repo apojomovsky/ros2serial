@@ -278,6 +278,12 @@ def _refresh_bundle() -> None:
     for name, text in bundle.bundle().items():
         if name == 'library.properties':
             (GOLDEN / 'bundle' / name).write_text(text, encoding='utf-8')
+        elif name == 'src/r2s_config.h':
+            # The limits header belongs to the staged library alone. cpp/ is
+            # the C++ layer's include root, which other builds put on their
+            # path with no limits of their own, so a copy here would configure
+            # them behind their back (the PIC tier S build).
+            (GOLDEN / 'bundle' / Path(name).name).write_text(text, encoding='utf-8')
         elif name in (
             'src/ros2serial.h',
             'src/ros2serial.hpp',

@@ -179,6 +179,7 @@ def test_the_types_file_set_is_pinned():
             'src/ros2serial.h',
             'src/ros2serial.hpp',
             'src/r2s_bundled.h',
+            'src/r2s_config.h',
             'src/r2s_bundled.c',
             'src/custom_interfaces/msg/sensor_reading.hpp',
             'src/custom_interfaces/srv/calibrate_request.hpp',

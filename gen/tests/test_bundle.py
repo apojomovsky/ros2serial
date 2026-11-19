@@ -24,6 +24,7 @@ from r2s_gen import cpp
 from r2s_gen import descriptors
 from r2s_gen import msgs
 from r2s_gen import typehash
+from r2s_gen.docs import BOUNDS_URL
 from r2s_gen.reference import messages
 from r2s_gen.version import __version__
 from support import write_message
@@ -61,6 +62,7 @@ def test_files_for_names_the_exact_bundle_set():
         'src/ros2serial.h',
         'src/ros2serial.hpp',
         'src/r2s_bundled.h',
+        'src/r2s_config.h',
         'src/r2s_bundled.c',
         'src/builtin_interfaces/msg/time.hpp',
         'src/geometry_msgs/msg/quaternion.hpp',
@@ -171,7 +173,8 @@ def test_a_bundled_field_without_its_entry_is_refused_naming_it(type_name, field
         bounds.resolve(repository, [type_name], bounds=without)
 
     assert str(caught.value) == (
-        f"{type_name}.{field}: unbounded string; set bounds['{type_name}.{field}']"
+        f"{type_name}.{field}: unbounded string; set bounds['{type_name}.{field}'];"
+        f' see {BOUNDS_URL}'
     )
 
 
@@ -205,6 +208,39 @@ def test_the_golden_bundled_header_is_emitted():
 
 def test_the_golden_bundled_source_is_emitted():
     assert files()['src/r2s_bundled.c'] == (GOLDEN / 'r2s_bundled.c').read_text(encoding='utf-8')
+
+
+def test_the_golden_config_header_is_emitted():
+    assert files()['src/r2s_config.h'] == (GOLDEN / 'r2s_config.h').read_text(encoding='utf-8')
+
+
+def test_the_config_header_carries_the_limits_the_bundled_header_declares():
+    """One value, two spellings: the core compiles with what the header says."""
+    config = files()['src/r2s_config.h']
+    bundled = files()['src/r2s_bundled.h']
+
+    for name in ('R2S_MAX_FRAME', 'R2S_MAX_NEST'):
+        assert re.search(rf'^#define {name} [0-9]+u$', config, re.MULTILINE), name
+        assert name in bundled, name
+
+
+def test_the_config_header_defines_each_limit_under_its_own_guard():
+    """A command line flag still wins, so each limit keeps its #ifndef."""
+    config = files()['src/r2s_config.h']
+
+    for name in ('R2S_MAX_FRAME', 'R2S_MAX_NEST', 'R2S_WITH_CODEC'):
+        assert f'#ifndef {name}\n#define {name} ' in config, name
+        assert f'#endif /* {name} */' in config, name
+
+
+def test_the_config_header_turns_on_the_dispatch_the_library_ships():
+    """A library with descriptor tables must dispatch; dropping the flag
+    silently ignores every subscribed frame."""
+    config = files()['src/r2s_config.h']
+
+    assert (
+        '#ifndef R2S_WITH_CODEC\n#define R2S_WITH_CODEC 1\n#endif /* R2S_WITH_CODEC */' in config
+    )
 
 
 def test_the_sketch_header_serves_the_runtime_api_without_a_topic_list():

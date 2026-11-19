@@ -15,6 +15,7 @@ STAMPED = [
     'gen/tests/golden/bundle/library.properties',
     'gen/tests/golden/bundle/r2s_bundled.c',
     'gen/tests/golden/bundle/r2s_bundled.h',
+    'gen/tests/golden/bundle/r2s_config.h',
     'gen/tests/golden/bundle/ros2serial.h',
     'gen/tests/golden/bundle/ros2serial.hpp',
     'gen/tests/golden/actions/lookup_transform.hpp',

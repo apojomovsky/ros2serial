@@ -10,6 +10,7 @@ import jsonschema
 import pytest
 from r2s_gen import cli
 from r2s_gen import config
+from r2s_gen.docs import BOUNDS_URL
 from r2s_gen.msgs import MessageError
 
 VALID = """\
@@ -416,7 +417,8 @@ def test_a_short_bounds_key_is_an_error(tmp_path):
 
     assert str(caught.value) == (
         f"{path}: bounds: 'Float32.data' is not a field path; "
-        'write package/msg/Type.field, such as std_msgs/msg/Header.frame_id'
+        'write package/msg/Type.field, such as std_msgs/msg/Header.frame_id; '
+        f'see {BOUNDS_URL}'
     )
 
 
@@ -431,7 +433,7 @@ def test_a_string_bound_value_is_an_error(tmp_path):
 
     assert str(caught.value) == (
         f"{path}: bounds['std_msgs/msg/Header.frame_id']: expected an integer bound or "
-        '[count, string_bound]; write 24 or [4, 12]'
+        f'[count, string_bound]; write 24 or [4, 12]; see {BOUNDS_URL}'
     )
 
 
@@ -446,7 +448,7 @@ def test_a_bounds_pair_needs_two_entries(tmp_path):
 
     assert str(caught.value) == (
         f"{path}: bounds['sensor_msgs/msg/JointState.name']: a list bound is "
-        '[count, string_bound]; give the count and the string bound'
+        f'[count, string_bound]; give the count and the string bound; see {BOUNDS_URL}'
     )
 
 
@@ -461,7 +463,7 @@ def test_a_zero_sequence_count_is_an_error(tmp_path):
 
     assert str(caught.value) == (
         f"{path}: bounds['sensor_msgs/msg/JointState.name']: the sequence bound must be "
-        'at least 1; raise it'
+        f'at least 1; raise it; see {BOUNDS_URL}'
     )
 
 
@@ -475,7 +477,8 @@ def test_a_negative_bound_is_an_error(tmp_path):
         config.load(path)
 
     assert str(caught.value) == (
-        f"{path}: bounds['std_msgs/msg/Header.frame_id']: the bound must be at least 0; raise it"
+        f"{path}: bounds['std_msgs/msg/Header.frame_id']: the bound must be at least 0; "
+        f'raise it; see {BOUNDS_URL}'
     )
 
 
@@ -492,7 +495,8 @@ def test_a_default_string_bound_is_refused_as_an_unknown_field_path(tmp_path):
 
     assert str(caught.value) == (
         f"{path}: bounds: 'default_string_bound' is not a field path; "
-        'write package/msg/Type.field, such as std_msgs/msg/Header.frame_id'
+        'write package/msg/Type.field, such as std_msgs/msg/Header.frame_id; '
+        f'see {BOUNDS_URL}'
     )
 
 
@@ -611,7 +615,7 @@ def test_a_negative_pair_string_bound_is_an_error(tmp_path):
 
     assert str(caught.value) == (
         f"{path}: bounds['sensor_msgs/msg/JointState.name']: the string bound must be at least "
-        '0; raise it'
+        f'0; raise it; see {BOUNDS_URL}'
     )
 
 
@@ -627,7 +631,7 @@ def test_a_bounds_pair_with_three_entries_is_an_error(tmp_path):
 
     assert str(caught.value) == (
         f"{path}: bounds['sensor_msgs/msg/JointState.name']: a list bound is "
-        '[count, string_bound]; give the count and the string bound'
+        f'[count, string_bound]; give the count and the string bound; see {BOUNDS_URL}'
     )
 
 
@@ -669,7 +673,7 @@ def test_a_string_pair_count_is_an_error(tmp_path):
 
     assert str(caught.value) == (
         f"{path}: bounds['sensor_msgs/msg/JointState.name']: the sequence bound must be an "
-        'integer; give a whole number'
+        f'integer; give a whole number; see {BOUNDS_URL}'
     )
 
 
@@ -685,7 +689,7 @@ def test_a_string_pair_string_bound_is_an_error(tmp_path):
 
     assert str(caught.value) == (
         f"{path}: bounds['sensor_msgs/msg/JointState.name']: the string bound must be an integer; "
-        'give a whole number of characters'
+        f'give a whole number of characters; see {BOUNDS_URL}'
     )
 
 

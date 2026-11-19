@@ -150,6 +150,15 @@ elif ! diff -u "$root/docs/budgets.md" "$build/budgets-doc.md" >/dev/null; then
   status=1
 fi
 
+# The capacity page is generated from its own measurements, so the gate
+# refuses a hand-edited page and a page whose sources moved under it. It
+# reads the committed numbers rather than rebuilding the ladders: the
+# digest behind the check names every source that moves a measured byte.
+if ! python3 "$root/tools/capacity_report.py" check; then
+  echo "budgets: docs/capacity.md is stale; run make capacity-report and commit it" >&2
+  status=1
+fi
+
 {
   echo "### Flash and RAM"
   echo

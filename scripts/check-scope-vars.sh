@@ -11,9 +11,10 @@
 set -uo pipefail
 
 # The scopes ci-test.sh gates on, plus the shard selector it consumes, plus
-# the target parameters and suite knobs make passes through.
+# the target parameters and suite knobs make passes through. PORT and BOARD
+# name the serial device and the board hardware-check flashes.
 scopes="LINT SCRIPTS SCRIPTS_SHARD COMMITS CORE GEN BRIDGE AMENT_LINT CPP E2E COVERAGE DOCS EXAMPLES ESP32 PIC PLATFORMIO STM32 RP2040 BUDGETS FUZZ README NIGHTLY SOAK"
-params="TEST TARGET CMD EXAMPLE BOARD ARGS IMAGE BUILD_ARGS BASE PR_BODY PR_TITLE COMMIT_RANGE"
+params="TEST TARGET CMD EXAMPLE BOARD PORT ARGS IMAGE BUILD_ARGS BASE PR_BODY PR_TITLE COMMIT_RANGE"
 bad=()
 for name in "$@"; do
   case "$name" in R2S_*) continue ;; esac

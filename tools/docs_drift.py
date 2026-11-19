@@ -5,7 +5,9 @@
 
 Every check reads the tree, never a list kept here, so a renamed target, a
 dropped macro, a new CI job or a new scenario fails the gate until the prose
-follows. Exemptions live in the tuples below with the reason they apply.
+follows. A page that calls a target unbuilt while the Makefile implements it
+fails too, so the prose cannot outlive the gap it described. Exemptions live
+in the tuples below with the reason they apply.
 """
 
 import argparse
@@ -118,6 +120,109 @@ def check_make_targets() -> list[str]:
                 continue
             problems.append(f'{rel}: `make {target}` matches no Makefile target')
     return problems
+
+
+# A target the Makefile declares but does not implement refuses through
+# `$(call pending,<target>,<reason>)`, which names the work that will land it.
+PENDING_RECIPE = '$(call pending,'
+# The wording a page uses when it means a command does not run yet. "Built"
+# alone is the firmware verb, so the phrase needs the negation.
+UNBUILT = re.compile(r"\bnot (?:yet )?built\b|\bisn't built\b|\baren't built\b", re.IGNORECASE)
+# The target a claim names: the word after `make`, or the first word of a
+# backticked span, which is how a table row's first cell spells it. Only a
+# name the Makefile implements is judged, so prose like "make its own
+# decision" never matches a target.
+MAKE_WORD = re.compile(r'\bmake ([a-z][a-z0-9-]*)')
+SPAN = re.compile(r'`([^`\n]+)`')
+# A numbered list item and a heading start their own block: a claim in one
+# item must not take a command named in the next as its own.
+ITEM_START = re.compile(r'^(?:\d+[.)]|#{1,6})\s')
+
+
+def claimed_targets(text: str) -> set[str]:
+    """Every target name a block writes, however it spells it."""
+    targets = set(MAKE_WORD.findall(text))
+    for span in SPAN.findall(text):
+        words = span.split()
+        if not words:
+            continue
+        # A span holding the whole command spells it as `make <target>`.
+        targets.add(words[1] if words[0] == 'make' and len(words) > 1 else words[0])
+    targets.discard('make')
+    return targets
+
+
+def built_targets() -> set[str]:
+    """Every target with a recipe of its own, leaving out one that refuses with `pending`.
+
+    A page that calls a command unbuilt points a reader away from a target
+    that works, which is the drift the validation page carried after
+    `hardware-check` shipped.
+    """
+    text = _read('Makefile')
+    built: set[str] = set()
+    for name in make_targets():
+        found = re.search(rf'^{re.escape(name)}:[^\n]*\n((?:\t[^\n]*\n)+)', text, re.MULTILINE)
+        if found and PENDING_RECIPE not in found.group(1):
+            built.add(name)
+    return built
+
+
+def claim_blocks(text: str) -> list[tuple[int, str]]:
+    """Each bullet, numbered item, heading or prose paragraph, and each table row.
+
+    Pages wrap prose, so the sentence that calls something unbuilt and the
+    command it names land on different lines of one bullet. A paragraph would
+    swallow a whole table: one row names an unbuilt thing while the next row
+    mentions a command.
+    """
+    blocks: list[tuple[int, str]] = []
+    start, lines = 1, []
+
+    def flush() -> None:
+        nonlocal start, lines
+        if lines:
+            blocks.append((start, '\n'.join(lines)))
+            lines = []
+
+    for number, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            flush()
+        elif stripped.startswith('|'):
+            flush()
+            blocks.append((number, line))
+        elif stripped.startswith(('- ', '* ')) or ITEM_START.match(stripped):
+            flush()
+            start, lines = number, [line]
+        else:
+            if not lines:
+                start = number
+            lines.append(line)
+    flush()
+    return blocks
+
+
+def check_unbuilt_claims() -> list[str]:
+    """A block calling a target unbuilt while the Makefile implements it.
+
+    The target must be in the block, written the way the pages write it: after
+    `make`, or as a table row's first cell. Nothing else ties "the board
+    check" to `hardware-check`, and guessing that link would fail pages about
+    work that really is unbuilt.
+    """
+    built = built_targets()
+    problems: set[str] = set()
+    for rel in user_docs():
+        for start, block in claim_blocks(_read(rel)):
+            if not UNBUILT.search(block):
+                continue
+            problems |= {
+                f'{rel}:{start}: `{target}` is called not built, but the Makefile implements it'
+                for target in claimed_targets(block)
+                if target in built
+            }
+    return sorted(problems)
 
 
 def ci_jobs() -> list[str]:
@@ -414,8 +519,284 @@ def check_examples() -> list[str]:
     return problems
 
 
+BOUNDS_PAGE = 'docs/message-bounds.md'
+# The message-bound spellings, plus the bare words the prose uses when it means
+# a field's storage. A timing or frame-size "bound" is what the negative
+# contexts below exclude, so a page about a message field always trips one.
+BOUND_TOKEN = re.compile(
+    r'BUNDLE_BOUNDS|--bound|unbounded|string<=|T\[<=|\[<=|`bounds`|^bounds:'
+    r'|\bbounds?\b(?! *violation)',
+    re.MULTILINE | re.IGNORECASE,
+)
+# A page whose only "bound" is one of these is not about message storage. Each
+# entry pairs the phrasing with what it means, so a new exemption is a decision.
+BOUND_ELSEWHERE = (
+    re.compile(r'\b(?:time|clock|timing|jitter|frame|latency|stack)s? bound\b', re.I),
+    re.compile(r'\bbound (?:the|a) (?:frame|tick|time|latency)\b', re.I),
+    re.compile(r'padding-blind lower bound\b', re.I),
+    re.compile(r'proves the bound\b', re.I),
+    re.compile(r'\bstack bound\b|\bbound-sized\b', re.I),
+    # Memory safety, not a field's storage: a decoder bounds-checks a buffer.
+    re.compile(r'out-of-bounds|\bbounds check\b', re.I),
+    # A benchmark page measures sizes, so its "bounds" are the capacities the
+    # tables are computed at rather than a reader's choice to change.
+    re.compile(r"bundle's bounds|documented bounds|field and bound choices", re.I),
+)
+
+
+def bounds_heading_ids(text: str) -> set[str]:
+    """The anchors the bounds page's Markdown headings produce, GitHub style."""
+    ids = set()
+    for line in text.splitlines():
+        matched = re.match(r'^#{1,6}\s+(.*?)\s*$', line)
+        if not matched:
+            continue
+        heading = re.sub(r'<[^>]*>', '', matched.group(1)).lower()
+        heading = re.sub(r'[^a-z0-9 _-]', '', heading).strip()
+        ids.add(re.sub(r'\s+', '-', heading))
+    return ids
+
+
+def states_a_bound(text: str) -> bool:
+    """Whether a page states a message bound rather than a timing or size limit."""
+    stripped = text
+    for pattern in BOUND_ELSEWHERE:
+        stripped = pattern.sub(' ', stripped)
+    return bool(BOUND_TOKEN.search(stripped))
+
+
+# A Markdown link or reference target, with an optional anchor and title. The
+# destination is either angle-bracketed or a bare word, and a title after it is
+# prose, so neither form hides a correct link from the check.
+LINK = re.compile(
+    r'\]\(\s*(?:<([^>\s]+)>|([^)\s]+))(?:\s+(?:"[^"]*"|\'[^\']*\'|\([^)]*\)))?\s*\)'
+    r'|^ {0,3}\[[^]]+\]:\s*(?:<([^>\s]+)>|(\S+))',
+    re.MULTILINE,
+)
+
+
+def _linked_page(rel: str, target: str) -> str | None:
+    """The tree path a link on page `rel` reaches, or None when it leaves the tree."""
+    path = target.split('#', 1)[0]
+    if not path or ':' in path:
+        return None
+    parts = (Path(rel).parent / path).parts
+    joined: list[str] = []
+    for part in parts:
+        if part == '..':
+            if not joined:
+                return None
+            joined.pop()
+        elif part != '.':
+            joined.append(part)
+    return '/'.join(joined)
+
+
+def check_bounds_links() -> list[str]:
+    """A page stating a bound that does not link the section, or a dead link to it."""
+    page = ROOT / BOUNDS_PAGE
+    headings = bounds_heading_ids(page.read_text(encoding='utf-8')) if page.is_file() else set()
+    problems = []
+    for rel in user_docs():
+        if rel == BOUNDS_PAGE:
+            continue
+        text = _read(rel)
+        # The link is judged where it is written: a nested page reaches the
+        # section as ../message-bounds.md, and only reaching the section counts.
+        targets = [
+            next((part for part in found.groups() if part), '') for found in LINK.finditer(text)
+        ]
+        links = [target for target in targets if _linked_page(rel, target) == BOUNDS_PAGE]
+        if not links and states_a_bound(text):
+            problems.append(f'{rel}: mentions bounds but does not link {BOUNDS_PAGE}')
+        for target in links:
+            fragment = target.partition('#')[2]
+            if not page.is_file():
+                problems.append(f'{rel}: link to {target} names no page')
+                continue
+            if fragment and fragment not in headings:
+                problems.append(f'{rel}: link to {target} matches no heading on the bounds page')
+    return problems
+
+
+SITE = 'https://apojomovsky.github.io/ros2serial/'
+SITE_URL = re.compile(re.escape(SITE) + r"""([^\s'"`)]+)""")
+# The generator's sources are where a message names a reader-facing page.
+POINTER_SOURCES = ('gen/r2s_gen',)
+
+
+def published_pages() -> set[str]:
+    """The files the docs site publishes, read from the builder's page table."""
+    import importlib.util
+
+    # The builder is loaded from the tree under test, not from whatever
+    # site_build this interpreter already imported, so a fixture's page table
+    # is the one that judges its fixture's URLs.
+    path = ROOT / 'tools' / 'site_build.py'
+    if not path.is_file():
+        return set()
+    spec = importlib.util.spec_from_file_location('_site_build_under_test', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return {page.output for page in module.PAGES} | {'index.html'}
+
+
+def check_docs_urls() -> list[str]:
+    """A site URL the generator prints that names no page the site publishes."""
+    pages = published_pages()
+    problems = []
+    for directory in POINTER_SOURCES:
+        for path in sorted((ROOT / directory).rglob('*.py')):
+            rel = str(path.relative_to(ROOT))
+            for found in SITE_URL.finditer(path.read_text(encoding='utf-8')):
+                if found.group(1) not in pages:
+                    problems.append(f'{rel}: {found.group(1)} is no page the site publishes')
+    return problems
+
+
+# The pages a reader starts from: the front page, the contributor guide and the
+# rules, which link onward. A page none of them reaches is orphaned for a reader
+# who does not browse the site's navigation.
+ENTRY_PAGES = ('README.md', 'CONTRIBUTING.md', 'AGENTS.md')
+
+
+def page_graph() -> dict[str, set[str]]:
+    """Every prose page, with the in-tree pages it links."""
+    pages = user_docs()
+    known = set(pages)
+    graph: dict[str, set[str]] = {}
+    for rel in pages:
+        text = _read(rel)
+        targets = {
+            page
+            for page in (
+                _linked_page(rel, next(part for part in found.groups() if part))
+                for found in LINK.finditer(text)
+            )
+            if page in known and page != rel
+        }
+        graph[rel] = targets
+    return graph
+
+
+def check_pages_reachable() -> list[str]:
+    """A page no entry page reaches, so a reader following links never lands there."""
+    graph = page_graph()
+    reached = {page for page in ENTRY_PAGES if page in graph}
+    queue = list(reached)
+    while queue:
+        for target in graph[queue.pop()]:
+            if target not in reached:
+                reached.add(target)
+                queue.append(target)
+    return [
+        f'{page}: no page a reader starts from reaches this one'
+        for page in sorted(set(graph) - reached)
+    ]
+
+
+# The generator's subcommand name in a documented command, whatever wraps it:
+# prose writes `r2s-gen generate`, a terminal writes `ros2 run r2s_gen r2s-gen
+# generate`, and both name the same parser entry.
+GENERATOR_COMMAND = re.compile(r'\br2s-gen ([a-z][a-z0-9-]*)')
+ARDUINO_COMMAND = re.compile(r'\br2s-arduino ([a-z][a-z0-9-]*)')
+SUBCOMMAND = re.compile(r"add_parser\(\s*'([a-z][a-z0-9-]*)'")
+
+
+def generator_subcommands(script: str) -> set[str]:
+    """Every subcommand the named console script's parser declares."""
+    found = set()
+    for rel in _git_files():
+        if not rel.endswith('.py') or not rel.startswith('gen/'):
+            continue
+        text = _read(rel)
+        if script == 'r2s-arduino' and 'commands.add_parser(' not in text:
+            continue
+        if script == 'r2s-gen' and 'subparsers.add_parser(' not in text:
+            continue
+        found |= set(SUBCOMMAND.findall(text))
+    return found
+
+
+def documented_commands(pattern: re.Pattern) -> dict[str, list[str]]:
+    """Every subcommand each document names for one console script."""
+    found: dict[str, list[str]] = {}
+    for rel in user_docs():
+        names = pattern.findall(_read(rel))
+        if names:
+            found[rel] = names
+    return found
+
+
+def check_generator_commands() -> list[str]:
+    """A subcommand the documentation names and the generator's parser lacks."""
+    problems = []
+    for script, pattern in (
+        ('r2s-gen', GENERATOR_COMMAND),
+        ('r2s-arduino', ARDUINO_COMMAND),
+    ):
+        known = generator_subcommands(script)
+        for rel, names in documented_commands(pattern).items():
+            problems += [
+                f'{rel}: `{script} {name}` is no generator subcommand'
+                for name in sorted(set(names))
+                if name not in known
+            ]
+    return problems
+
+
+# A pair as a reader types it: the package, then the executable it installs.
+ROS2_RUN = re.compile(r'\bros2 run ([a-z][a-z0-9_]*) ([A-Za-z][A-Za-z0-9_-]*)')
+CONSOLE_SCRIPT = re.compile(r"'([A-Za-z][A-Za-z0-9_-]*) = ")
+
+
+def installed_executables() -> dict[str, set[str]]:
+    """Each ROS package's installed executables, from its manifest and its install rules."""
+    packages: dict[str, set[str]] = {}
+    for manifest in _git_files():
+        if not manifest.endswith('package.xml'):
+            continue
+        text = _read(manifest)
+        found = re.search(r'<name>([^<]+)</name>', text)
+        if not found:
+            continue
+        name = found.group(1)
+        root = Path(manifest).parent
+        names: set[str] = set()
+        setup = ROOT / root / 'setup.py'
+        if setup.is_file():
+            names |= set(CONSOLE_SCRIPT.findall(setup.read_text(encoding='utf-8')))
+        cmake = ROOT / root / 'CMakeLists.txt'
+        if cmake.is_file():
+            names |= set(
+                re.findall(
+                    r'install\(\s*TARGETS\s+([A-Za-z0-9_]+)[^)]*RUNTIME DESTINATION',
+                    cmake.read_text(encoding='utf-8'),
+                )
+            )
+        packages[name] = names
+    return packages
+
+
+def check_ros2_run() -> list[str]:
+    """A `ros2 run` pair whose package or executable the tree does not install."""
+    packages = installed_executables()
+    problems = []
+    for rel in user_docs():
+        text = _read(rel)
+        for package, executable in sorted(set(ROS2_RUN.findall(text))):
+            if package not in packages:
+                problems.append(f'{rel}: `ros2 run {package} {executable}` names no package')
+            elif executable not in packages[package]:
+                problems.append(
+                    f'{rel}: `ros2 run {package} {executable}` names no installed executable'
+                )
+    return problems
+
+
 CHECKS = (
     check_make_targets,
+    check_unbuilt_claims,
     check_contributing_jobs,
     check_design_jobs,
     check_scenarios,
@@ -423,6 +804,11 @@ CHECKS = (
     check_macros,
     check_config_table,
     check_examples,
+    check_bounds_links,
+    check_docs_urls,
+    check_pages_reachable,
+    check_generator_commands,
+    check_ros2_run,
 )
 
 
