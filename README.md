@@ -98,16 +98,12 @@ with `arduino:avr:mega`.
 If you prefer the IDE, download `ros2serial-arduino-<version>.zip` from the
 [releases page](https://github.com/apojomovsky/ros2serial/releases), then choose
 *Sketch > Include Library > Add .ZIP Library* and pick the file. That archive
-carries the library alone, without the example sketches. To get those, generate
-a library with `r2s-arduino library` as in the step above: one with an
-`examples/` directory appears under *File > Examples > ros2serial* once it is in
-your sketchbook's libraries directory.
-
-The IDE needs one extra step for now: the core has no default frame limit, so an
-IDE build must be given one. The [firmware
-guide](docs/firmware.md#the-frame-limit-is-a-build-input) has the file to create
-and its two lines. Nothing else needs configuring, and the extra step goes away
-once the library carries its own limit.
+carries the core, the port glue, the message headers and the sketches, so its
+examples appear under *File > Examples > ros2serial* and compile as they are.
+The archive carries its own `src/r2s_config.h`, so the IDE needs no build
+property and nothing else configured. The [firmware
+guide](docs/firmware.md#the-frame-limit-is-a-build-input) says where each
+route gets its limits.
 
 ### 3. Start the bridge
 
