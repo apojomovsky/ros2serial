@@ -84,7 +84,7 @@ Where the value comes from on each route:
 | Route | Where the value comes from | Overriding it |
 | --- | --- | --- |
 | Arduino IDE (`Sketch > Include Library > Add .ZIP Library`) | The library's `src/r2s_config.h`: nothing to configure | A `platform.local.txt` beside the AVR core's `platform.txt` with `compiler.c.extra_flags=-DR2S_MAX_FRAME=<n>` and the `compiler.cpp.extra_flags` line |
-| A type library from `r2s-gen types` | The same `src/r2s_config.h`, which that library emits too | A flag on your own compile line |
+| A type library from `r2s-gen types`, zipped or not | The same `src/r2s_config.h`, which that library emits too, or the archive `--zip` writes | A flag on your own compile line |
 | `ros2-arduino compile` (`r2s-arduino`) | The same file, plus `-DR2S_MAX_FRAME=<n>` read from `r2s_bundled.h`, which it still passes explicitly | The flag the helper passes, which wins over the file |
 | Arduino CLI by hand against a staged library | The library's `src/r2s_config.h` | `--build-property "compiler.c.extra_flags=-DR2S_MAX_FRAME=<n>"`, and the same for `compiler.cpp.extra_flags` |
 | CMake (`--layout cmake`) | The generated `CMakeLists.txt` reads the value from `r2s_generated.h` and passes it as a target definition | The generator's `limits.max_frame` |
