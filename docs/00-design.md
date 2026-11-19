@@ -1125,7 +1125,8 @@ r2s-gen generate --config r2s.yaml --out <dir> [--msg-path <dir>]... [--layout c
 r2s-gen bundle   --distro <name> --out <dir>                    # the Arduino library with bundled types
 r2s-gen types    <pkg/msg/Type>... | --types-file <yaml> --out <dir> [--msg-path <dir>]...
                  [--bound <pkg/msg/Type.field>=<n>]... [--layout arduino|platformio|cmake]
-                 [--write-config <yaml>] [--distro <name>]     # a library for the user's own types
+                 [--write-config <yaml>] [--distro <name>] [--zip <file>]
+                                                               # a library for the user's own types
 r2s-gen check    --config r2s.yaml [--msg-path <dir>]...       # validate only, exit code 0 or 1
 r2s-gen limits   [--distro <name>]                             # the built-in types' limits and their source
 r2s-gen vectors  --type <pkg/msg/Type> --message <yaml> [--msg-path <dir>]... [--distro <name>] [--narrow]
