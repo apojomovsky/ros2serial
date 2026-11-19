@@ -796,38 +796,71 @@ def check_ros2_run() -> list[str]:
 
 # The boards ros2serial targets do have a heap: malloc, new and Arduino's
 # String all reach it on an Uno. What holds is the firmware's rule, that the
-# core allocates nothing at run time, so a claim about the board or the MCU
-# having no heap is the wrong sentence about a correct rule. A sentence about
-# the host's heap, or about a library's allocation, is the right one.
-# `no heap allocation` and `no heap use` are the firmware's rule spelled
-# correctly, so the lookahead keeps them out of the claim.
-NO_HEAP = re.compile(r'\bno heap\b(?!\s+(?:allocation|use))|\bwithout a heap\b', re.IGNORECASE)
-# One sentence, kept on one line: a claim never reaches across a blank line or
-# a table row, so a heading's subject cannot lend itself to a body's phrase.
-SENTENCE = re.compile(r'[^.!?\n]*[.!?]|[^.!?\n]+')
-BOARD_SUBJECT = re.compile(
-    r'\b(?:MCU|microcontroller|board|Arduino|AVR|Uno|Mega|target|core)\b',
+# core allocates nothing at run time, so a page saying the heap is absent
+# states the wrong fact about a correct rule. Only a predicate about a subject
+# is that claim: `no heap and no shared_ptr anywhere`, which lists what an API
+# avoids, states the rule. Wording that names what the firmware does with the
+# heap (`no heap allocation`, `no heap use`) states it too, and the lookahead
+# keeps that out.
+NO_HEAP = re.compile(
+    r'\b(?:(?:has|have|had|with|keeps?|carries?|holds?)\s+(?:a\s+)?no\s+heap'
+    r'|without\s+(?:a\s+|any\s+)?heap)\b'
+    r'(?!\s*-?\s*(?:allocation|allocations|allocator|allocating|use|usage'
+    r'|memory|space|growth))',
     re.IGNORECASE,
 )
-HOST_HEAP = re.compile(r'\bhost\b', re.IGNORECASE)
+# One sentence at a time, so a subject in one never lends itself to a phrase
+# in the next. A fenced block is code, which the snippet check owns, and a
+# paragraph wraps onto several lines, so the line breaks inside one are not
+# sentence breaks.
+FENCE_BLOCK = re.compile(r'^ {0,3}```.*?^ {0,3}```[ \t]*$', re.MULTILINE | re.DOTALL)
+SENTENCE = re.compile(r'[^.!?]+[.!?]|[^.!?]+')
+# The pages the claim is wrong on: the reader-facing prose and the
+# specification, which states the MCU's rules.
+SPEC_PAGES = 'spec'
+
+
+def heap_pages() -> tuple[str, ...]:
+    """Every page a no-heap claim is wrong on."""
+    pages = list(user_docs())
+    spec = ROOT / SPEC_PAGES
+    if spec.is_dir():
+        pages += [str(path.relative_to(ROOT)) for path in sorted(spec.glob('*.md'))]
+    return tuple(pages)
+
+
+def heap_claims(text: str) -> list[str]:
+    """The sentences of one page that claim the heap is absent."""
+    sentences: list[str] = []
+    paragraph: list[str] = []
+
+    def flush() -> None:
+        if paragraph:
+            sentences.extend(SENTENCE.findall(' '.join(paragraph)))
+            paragraph.clear()
+
+    for line in FENCE_BLOCK.sub('\n\n', text).splitlines():
+        stripped = line.strip()
+        if not stripped:
+            flush()
+        elif stripped.startswith('|'):
+            # A table row stands alone: its cells are separate claims.
+            flush()
+            sentences.extend(SENTENCE.findall(stripped))
+        else:
+            paragraph.append(stripped)
+    flush()
+    return [sentence for sentence in sentences if NO_HEAP.search(sentence)]
 
 
 def check_heap_claims() -> list[str]:
     """A page saying the board or MCU has no heap, which they do."""
-    problems = []
-    for rel in user_docs():
-        for sentence in SENTENCE.findall(_read(rel)):
-            if not NO_HEAP.search(sentence) or HOST_HEAP.search(sentence):
-                continue
-            # A sentence about a library's allocation is the firmware's rule,
-            # spelled as such: `no heap` qualifies only the board's own claim.
-            if not BOARD_SUBJECT.search(sentence):
-                continue
-            problems.append(
-                f'{rel}: claims the MCU or board has no heap; the firmware'
-                ' allocates nothing, the board does have one'
-            )
-    return problems
+    return [
+        f'{rel}: claims the heap is absent; the firmware allocates nothing,'
+        ' the board does have one'
+        for rel in heap_pages()
+        if heap_claims(_read(rel))
+    ]
 
 
 CHECKS = (

@@ -620,46 +620,72 @@ def test_a_ros2_run_pair_the_packages_install_passes(tmp_path, monkeypatch):
     assert _check(repo, monkeypatch, docs_drift.check_ros2_run) == []
 
 
-# The claim the gate refuses: an MCU does have a heap, and ros2serial's
-# allocation rule is the firmware's, not the board's.
+# The claim the gate refuses: the boards carry a heap, and ros2serial's rule
+# is that the firmware allocates nothing at run time, not that none exists.
 NO_HEAP_CLAIMS = (
     'The MCU has no heap and no variable-size storage.\n',
     'The board has no heap, so a field is fixed at build time.\n',
     'A microcontroller with no heap still needs a fixed capacity.\n',
     'The core is a C99 library with no heap.\n',
     'It runs on a board without a heap.\n',
+    'The firmware has no heap.\n',
+    # A paragraph wraps, so the claim often straddles a line break.
+    'The board has\nno heap, so a field is fixed at build time.\n',
+    # A sentence after the claim in the same paragraph is still the claim.
+    'The MCU has no heap, unlike the host.\n',
 )
 
 
 @pytest.mark.parametrize('claim', NO_HEAP_CLAIMS)
-def test_a_page_claiming_the_board_has_no_heap_is_named(tmp_path, monkeypatch, claim):
+def test_a_page_claiming_the_heap_is_absent_is_named(tmp_path, monkeypatch, claim):
     files = _with('docs/heap-user.md', 'Prose.\n\n' + claim)
     repo = _tree(tmp_path, files)
     found = _check(repo, monkeypatch, docs_drift.check_heap_claims)
     assert found == [
-        'docs/heap-user.md: claims the MCU or board has no heap; the firmware'
-        ' allocates nothing, the board does have one'
+        'docs/heap-user.md: claims the heap is absent; the firmware allocates'
+        ' nothing, the board does have one'
     ]
 
 
-def test_a_page_saying_the_firmware_never_allocates_passes(tmp_path, monkeypatch):
-    files = _with(
-        'docs/heap-user.md',
-        'The firmware never allocates: no heap use at run time.\n'
-        'A build keeps no heap allocation of its own.\n'
+def test_a_claim_in_a_spec_page_is_named(tmp_path, monkeypatch):
+    """The specification states the MCU's rules, so the claim is wrong there too."""
+    files = _with('spec/protocol.md', 'The MCU has no heap.\n')
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_heap_claims)
+    assert len(found) == 1 and found[0].startswith('spec/protocol.md:')
+
+
+@pytest.mark.parametrize(
+    'text',
+    [
+        # What the firmware does with the heap is the rule, and what the
+        # ticket asks the two pages to say.
+        'The firmware never allocates: no heap use at run time.\n',
+        'Both routes are the same core: a C99 library with no heap allocation.\n',
         'The core allocates nothing, since no library call allocates.\n',
-    )
+        'The core uses no heap-allocating containers.\n',
+        'The core keeps no heap memory, so nothing fragments.\n',
+        'A build makes no heap allocations of its own.\n',
+        # A host heap is real, so a fact about it is not the claim.
+        'A further frame waits instead of growing the host heap.\n',
+        'The host heap holds what the MCU never sends.\n',
+    ],
+)
+def test_wording_that_states_the_rule_passes(tmp_path, monkeypatch, text):
+    files = _with('docs/heap-user.md', text)
     repo = _tree(tmp_path, files)
     assert _check(repo, monkeypatch, docs_drift.check_heap_claims) == []
 
 
-def test_a_host_side_heap_sentence_in_the_spec_passes(tmp_path, monkeypatch):
-    """A host heap is real, so the rule reads the MCU's claim, not every heap."""
-    files = _with(
-        'docs/heap-user.md',
-        'A further frame waits instead of growing the host heap.\n'
-        'The host heap holds what the MCU never sends.\n',
-    )
+def test_a_fenced_comment_is_code_not_a_claim(tmp_path, monkeypatch):
+    """A fenced block is the snippet check's, so its comments are not prose."""
+    files = _with('docs/heap-user.md', '```c\n/* the board keeps no heap */\n```\n')
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_heap_claims) == []
+
+
+def test_a_table_cell_stating_the_rule_passes(tmp_path, monkeypatch):
+    files = _with('docs/heap-user.md', '| Rule | No heap allocation anywhere |\n')
     repo = _tree(tmp_path, files)
     assert _check(repo, monkeypatch, docs_drift.check_heap_claims) == []
 
