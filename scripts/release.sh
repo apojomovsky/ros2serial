@@ -51,6 +51,10 @@ if [ "$dry" = 1 ]; then
 fi
 python3 "$root/scripts/set_version.py" "$next" "$PWD"
 make -C "$PWD" regen
+# The stamp rewrites banners the capacity digest hashes under cpp/ without
+# moving a measured byte, so the digest is refreshed here: the release
+# commit describes its own tree and the budgets gate stays green.
+python3 "$PWD/tools/capacity_report.py" refresh-inputs
 "${cliff[@]}" --tag "v$next" -o CHANGELOG.md
 # The staged set lives one per line in scripts/release-files.list, so
 # concurrent branches staging different files keep both on merge.
