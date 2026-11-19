@@ -20,11 +20,19 @@ as simulation or a board run say anything about behavior.
 
 ## How to run a board check
 
-A one-command board check is not built yet; it is tracked as
-[#664](https://github.com/apojomovsky/ros2serial/issues/664). Until it lands,
-follow the [quickstart](../README.md) on the real board: compile the example,
-upload it with `arduino-cli`, launch the bridge on the reported port, and read
-the topics with `ros2 topic echo`.
+From the repository root, with the board plugged in and the dev image built
+(`make image`):
+
+```sh
+make hardware-check PORT=/dev/ttyACM0 BOARD=uno
+```
+
+It flashes `button_led`, starts the bridge, samples `/button` for half a
+minute, reads the link counters, drives `/led` and asks you whether it lit,
+then prints one report block ending in a `verdict:` line. The port and the
+board are both required, so the check cannot flash a board it was not told
+about. [Checking a real board](without-hardware.md#checking-a-real-board)
+describes every field of the report and what each failure means.
 
 Two things differ on real hardware:
 
@@ -36,14 +44,15 @@ Two things differ on real hardware:
 
 ## Results
 
-The results below are filled in by the maintainer after each board run. A
-result that has not been produced yet reads `pending`; nothing here is inferred
-from simulation.
+The results below are filled in by the maintainer after each board run. A row
+with no run yet reads `pending` in both the commit and the verdict cells, and a
+board that was unavailable reads `not run`; nothing here is inferred from
+simulation.
 
 | Run | Board | Commit | Verdict | Notes |
 | --- | --- | --- | --- | --- |
-| 0.5.0 board run | Uno | pending | pending | Waiting for the maintainer's run |
-| 0.5.0 board run | Mega | pending | pending | Waiting for the maintainer's run |
+| 0.5.0 board run | Uno | - | not run for 0.5.0 | Board unavailable |
+| 0.5.0 board run | Mega | `master` before the 0.5.0 cut | PASS | `make hardware-check` on 2026-11-18, Arduino AVR core 1.8.6; no figures recorded |
 
 A row is filled in with the firmware commit, the Arduino core version and the
 verdict, or with the failure and the ticket it became.
