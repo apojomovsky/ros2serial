@@ -71,7 +71,10 @@ The example publishes a fixed 0.0 reading, so that number proves the sketch, the
 
 ## Moving to hardware
 
-Not yet verified on hardware ([checklist](https://github.com/apojomovsky/ros2serial/issues/95)). Flash the same build to an Uno and point the bridge at the serial port instead of the pty:
+The 0.5.0 board run passed on a Mega and was not run on an Uno, which was
+unavailable; [real-board validation](hardware-validation.md#results) records
+each run and what is still open. Flash the same build to your board and point
+the bridge at the serial port instead of the pty:
 
 ```console
 arduino-cli upload -p /dev/ttyACM0 --fqbn arduino:avr:uno --input-dir build/uno examples/arduino_minimal
@@ -80,6 +83,78 @@ ros2 topic echo /battery std_msgs/msg/Float32 --once
 ```
 
 The Uno resets when its serial port opens, then runs its bootloader before your sketch starts. The bridge waits this out: `boot_wait_ms` in `bridge/r2s_bridge/config/r2s_bridge.params.yaml` defaults to 2500 ms, which covers the reset and the bootloader. If your board enumerates differently, substitute its port (often `/dev/ttyUSB0`) for `/dev/ttyACM0` in both commands.
+
+### Checking a real board
+
+The walkthrough above proves the path by hand, one command at a time.
+`make hardware-check` does the same pass with one command and one verdict,
+from the repository root, with the board plugged in and the dev image built
+(`make image`):
+
+```sh
+make hardware-check PORT=/dev/ttyACM0 BOARD=uno
+```
+
+`BOARD` is `uno` or `mega`, and both arguments are required: the check
+refuses to flash without them, so it cannot overwrite whatever a different
+board is already running. The command flashes the `button_led` example,
+starts the bridge, and:
+
+- waits for the handshake, and prints how long it took from bridge start;
+- samples `/button` for 30 s and requires 8 to 12 Hz with no silence over
+  300 ms, so a board that publishes once and stalls fails;
+- reads the link counters off `/diagnostics` and requires the MCU's CRC
+  errors, receive overflows and dropped frames, and the bridge's per-topic
+  sequence gaps and drops, at zero;
+- publishes `/led` `true` and asks you to look at the board, then publishes
+  `false`: nothing on the host can read an LED, so your answer is the check.
+
+It ends with one block on stdout, the only thing to copy into a report; the
+progress lines go to stderr, and the bridge's own output lands in
+`hardware-check/bridge.log` under the build directory:
+
+```text
+== ros2serial hardware check
+board: uno
+port: /dev/ttyACM0
+firmware: arduino_button_led arduino:avr:uno
+flash: 11786 bytes
+ram: 1181 bytes
+handshake: 4.3 s
+button rate: 10.0 Hz from 297 messages
+longest gap: 120 ms
+crc errors: 0
+rx overflows: 0
+dropped frames: 0
+sequence gaps: 0
+dropped topic frames: 0
+led: lit
+verdict: PASS
+```
+
+`verdict: PASS` exits 0; a failed run exits 1 and prints one `failed:` line
+per reason above the verdict, including a link that never connected, for
+example:
+
+```text
+failed: 450 ms with no /button message, over 300 ms
+failed: the LED did not light when /led went true
+verdict: FAIL
+```
+
+`handshake: never` with one `failed:` line is what a board running another
+sketch, or a port a serial monitor still holds, reports: the firmware never
+announces itself, so the counters, the rate and the LED all read `n/a`.
+
+A run that cannot start at all exits 2 with what to do about it: no device at
+the port, a board name that is not `uno` or `mega`, or a missing dev image.
+The device reaches the container with its own group, so your user does not
+need adding to `dialout`.
+
+The checker itself is `tools/hardware_check.py`, and an emulated Uno runs it
+in `tests/e2e/run-avr.sh`: `--skip-flash` stands in for the upload a
+simulator has no place for, and `--sketch` builds a different sketch, which
+is how a deliberately wrong run is proven to fail.
 
 ## Virtual MCU
 

@@ -4,6 +4,11 @@ Use the bundled types for the shortest Arduino path. Use `r2s-gen` when you need
 a custom `.msg`, different string/array bounds, or static C firmware.
 The same ROS interface must be available on the host and to the generator.
 
+Which of the two routes carries a custom type, and what each one needs, is on
+[The library route and its config boundary](type-library.md). How you declare
+the topics themselves is on [choosing how to declare your
+topics](declaring-topics.md).
+
 ## Define and build the ROS interface
 
 Create a normal ROS interface package, for example `my_robot_interfaces`, with
@@ -222,23 +227,56 @@ the bind. A table the firmware writes at run time lives in RAM and binds through
 topics and actions: `r2s_services_get()` returns an entry only for a RAM table,
 and `r2s_services_copy()` reads a flash one out.
 
-## Which Arduino route custom types take
+## Which route custom types take
 
-Custom types do not go through the Arduino sketches or the bundled runtime
-layer. The bundled library ships the descriptors, message headers and topic
-tables for its own types, and `r2s-arduino compile` stages exactly that bundle.
-A custom type needs its own descriptors, which only `r2s-gen` emits, so the
-generated static C API is the route: emit the pair with
-`--layout arduino` or `--layout cmake`, stage the core and your port glue
-beside it, and compile your sketch against that tree instead of the bundled
-library. `--layout arduino` writes `library.properties` plus the pair under
-`src/`, which is a valid Arduino library directory, so a sketch can be built
-against it with the Arduino CLI and the same flags the bundle's build passes.
+A custom type needs descriptors, message headers and the type's hash, and only
+`r2s-gen` emits them. Two routes carry them, and they differ in what the
+firmware is built from rather than in what reaches the wire:
+
+- **A type library for the X-macro and runtime routes.** `r2s-gen types` emits
+  a library for just your types, so a sketch names one in an `R2S_TOPICS` row
+  the way it names a bundled type, and a C++ sketch can register it as a
+  runtime object instead. There is no `r2s.yaml` and no topic list.
+  `examples/arduino_xmacro_custom` is the smallest complete firmware, built
+  from the interface package beside it, and
+  `tests/e2e/test_scenario_19_avr.py` runs it against the bridge. The
+  runtime route's counterpart, `tests/e2e/avr_runtime_custom`, is scenario 18's.
+- **The generated static API**, from `r2s.yaml` and `r2s-gen generate`: emit
+  the pair with `--layout arduino` or `--layout cmake`, stage the core and
+  your port glue beside it, and compile your sketch against that tree. It is
+  what a bare-metal target uses, and what carries a service or an action
+  through the generated indices.
+
+`--layout arduino` writes `library.properties` plus the sources under `src/`
+in both cases, which is a valid Arduino library directory, so a sketch builds
+against either with the Arduino CLI and the flags that library's header
+carries. Keep `r2s.yaml` when the firmware needs what a type list cannot
+state: `limits.max_frame`, `features`, `tier`, and the service and action
+indices the static C hook API switches on. [The library route and its config
+boundary](type-library.md) covers that boundary and the staleness rule.
+
+Both routes put the same bytes on the wire: the type's hash, its field layout
+and its bounds come from the interface package either way, so the bridge
+accepts a topic from either and cannot tell them apart.
+
+Flash differs by the expansion itself, which defines the table, the publish
+wrapper and the dispatch in the sketch's own translation unit instead of in
+generated sources. Measured on one firmware body with one compiler and one flag
+set, the X-macro build costs 74 bytes of flash and 1 byte of bss more than the
+static one on an ATmega328P: 9856 text / 184 data / 157 bss against 9782 / 184
+/ 156. The route is not the cost; the frame limit is. The bundled library sizes
+its frame from a 31-character name allowance, the static route from the names
+its configuration carries, so matching the limits is what makes the two builds
+comparable.
+
+Both firmware are budgeted beside the other examples in
+[budgets](budgets.md).
 
 ## Bounds and unsupported input
 
 A variable-length field gets its bound from its `.msg` definition or from `bounds`
-in `r2s.yaml`, and from nothing else. With neither, generation fails naming the field:
+in `r2s.yaml`. Bound the field in the `.msg` when you can edit it (`string<=12
+text`); `bounds` is for definitions you cannot change:
 
 ```yaml
 bounds:
@@ -249,36 +287,15 @@ bounds:
   sensor_msgs/msg/JointState.effort: 4
 ```
 
-Bound the field in the `.msg` when you can edit it (`string<=12 text`); `bounds`
-is for definitions you cannot change. An entry on a field the `.msg` already
-bounds is an error, in either direction, because a smaller MCU buffer cannot hold
-what the host may legally send.
+Where each bound comes from, what happens with none, the conflict rule and the
+built-in types' limits are on [message bounds](message-bounds.md), with the
+table `r2s-gen limits` prints. Bounds apply to the MCU storage; they do not
+alter the ROS interface.
 
-These bounds apply to the MCU storage; they do not alter the ROS interface.
 Unsupported fields fail generation. Compact handshake and `--cpp` output are
 not implemented: use the default full handshake and generated C API.
 See the [generator specification](00-design.md#code-generator-specification)
 for the schema and [troubleshooting](troubleshooting.md) for hash mismatches.
-
-### The built-in types' limits
-
-The bundled library's capacities are somebody's choice and may not be what a
-built-in type's fields lead you to expect: a `std_msgs/msg/String` carries 16
-characters, and `TFMessage` holds one transform. Check them before relying on
-one:
-
-```sh
-ros2 run r2s_gen r2s-gen limits
-```
-
-Each row names the field, the storage it resolves to, and whether
-`BUNDLE_BOUNDS` or the `.msg` supplied the capacity, so a limit the library
-chose is told apart from one the definition states. A run prints one distro's
-table, so ask for another with `--distro lyrical` or `--distro rolling`. To give
-a built-in type a different limit, generate a library that carries it with your
-bound, through the
-[type library](#emit-a-type-library-for-the-x-macro-and-runtime-routes) route;
-the library's own name differs, so Arduino cannot pick the stock one.
 
 ## Emit a type library for the X-macro and runtime routes
 
@@ -294,8 +311,7 @@ ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \
 
 A sketch then names the type like any bundled one:
 
-<!-- snippet: skip until #647: names the reader's own package, which no staged fixture carries -->
-```cpp
+```text
 #define R2S_NODE_NAME "sensor_board"
 #define R2S_TOPICS(X) \
   X(Publisher, my_robot_interfaces::msg::SensorReading, reading_pub, "reading")
@@ -304,7 +320,8 @@ A sketch then names the type like any bundled one:
 
 Every variable-length field takes its bound from the `.msg` (`string<=12`,
 `T[<=N]`) or from the command line, and a field with neither fails the command
-naming the field:
+naming the field ([message bounds](message-bounds.md) states the rule and the
+conflict case):
 
 ```sh
 ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \
@@ -364,4 +381,6 @@ now.
 
 Keep `r2s.yaml` when the firmware needs what a type list cannot state:
 `limits.max_frame`, `features`, `tier`, and the generated service and action
-indices that the static C hook API switches on.
+indices that the static C hook API switches on. [The library route and its
+config boundary](type-library.md) says why each of those has no home in a type
+library, and what to do about a stale one.

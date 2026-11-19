@@ -14,7 +14,7 @@ firmware and the real bridge over a serial line.
   `R2S_RMWS` narrows the RMW loop for a quicker iteration.
 - `run-avr.sh` is the avr entry point: it builds the simavr harness, the
   slice sketch and the example firmwares for Uno and Mega, checks the helper
-  assertions, then runs scenarios 1 to 4, 12, 14, 16, 17 and 18 on both
+  assertions, then runs scenarios 1 to 4, 12 and 14, and 16 to 19 on both
   boards under each RMW, plus the baud matrix (the scenario 2 flow gates per
   baud per board) under the first RMW only. The suite runs it for
   `E2E=avr`; `R2S_RMWS`, `R2S_E2E_BOARDS` and `R2S_E2E_BAUDS` narrow the

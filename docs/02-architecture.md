@@ -117,7 +117,8 @@ flowchart LR
 `r2s-gen check` validates `r2s.yaml` without emitting anything, and
 `r2s-gen generate --layout arduino|cmake` emits the structs (`emit.py`),
 the descriptors (`descriptors.py`), the topic table and publish
-wrappers (`topics.py`), with bounds resolved by `bounds.py`. Layouts include
+wrappers (`topics.py`), with [bounds](message-bounds.md) resolved by `bounds.py`.
+Layouts include
 `arduino`, `cmake` and `platformio`; `compact` handshakes need the node map, which
 `generate` does not emit yet, so use `handshake: full`. The
 firmware announces each topic in a TOPIC frame; the bridge resolves the

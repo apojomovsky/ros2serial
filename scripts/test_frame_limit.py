@@ -7,7 +7,9 @@
 so a build that leaves it out would compile one limit and announce another
 (#640). The header refuses such a build and names the flag, and a build that
 passes a value compiles at exactly that value: the capacity the handshake
-announces follows it.
+announces follows it. A library ships its own `r2s_config.h` beside its
+sources, so the Arduino routes need no flag; a flag on the command line still
+wins, which is how an application overrides the shipped limit.
 """
 
 import subprocess
@@ -32,9 +34,10 @@ REPORT = (
 )
 
 
-def compile_probe(tmp_path, source, *defines):
+def compile_probe(tmp_path, source, *defines, includes=()):
     path = tmp_path / 'probe.c'
     path.write_text(source, encoding='utf-8')
+    extra = [item for include in includes for item in ('-I', str(include))]
     return subprocess.run(
         [
             'cc',
@@ -45,6 +48,7 @@ def compile_probe(tmp_path, source, *defines):
             '-Werror',
             '-I',
             str(CORE_INCLUDE),
+            *extra,
             *defines,
             str(path),
             '-o',
@@ -53,6 +57,11 @@ def compile_probe(tmp_path, source, *defines):
         capture_output=True,
         text=True,
     )
+
+
+def reported(probe):
+    done = subprocess.run([str(probe)], capture_output=True, text=True, check=True)
+    return done.stdout.split()
 
 
 def test_a_build_without_the_frame_limit_fails_naming_it(tmp_path):
@@ -68,8 +77,35 @@ def test_the_compiled_limit_is_the_one_the_handshake_announces(tmp_path):
     for limit in (52, 325):
         done = compile_probe(tmp_path, REPORT, f'-DR2S_MAX_FRAME={limit}')
         assert done.returncode == 0, done.stderr
-        reported = subprocess.run(
-            [str(tmp_path / 'probe')], capture_output=True, text=True, check=True
-        ).stdout.split()
         # COB-8: the encoded bound of the limit, one byte per byte plus one.
-        assert reported == [str(limit), str(limit + limit // 254 + 1)]
+        assert reported(tmp_path / 'probe') == [str(limit), str(limit + limit // 254 + 1)]
+
+
+def test_a_shipped_config_header_sets_the_limit_without_a_flag(tmp_path):
+    """The library route: r2s_config.h rides on the include path, no -D at all."""
+    config = tmp_path / 'src'
+    config.mkdir()
+    (config / 'r2s_config.h').write_text(
+        '#ifndef R2S_MAX_FRAME\n#define R2S_MAX_FRAME 200u\n#endif /* R2S_MAX_FRAME */\n',
+        encoding='utf-8',
+    )
+
+    done = compile_probe(tmp_path, REPORT, includes=(config,))
+
+    assert done.returncode == 0, done.stderr
+    assert reported(tmp_path / 'probe') == ['200', str(200 + 200 // 254 + 1)]
+
+
+def test_a_flag_overrides_the_shipped_config_header(tmp_path):
+    """An application that wants another limit passes the flag; it wins."""
+    config = tmp_path / 'src'
+    config.mkdir()
+    (config / 'r2s_config.h').write_text(
+        '#ifndef R2S_MAX_FRAME\n#define R2S_MAX_FRAME 200u\n#endif /* R2S_MAX_FRAME */\n',
+        encoding='utf-8',
+    )
+
+    done = compile_probe(tmp_path, REPORT, '-DR2S_MAX_FRAME=300', includes=(config,))
+
+    assert done.returncode == 0, done.stderr
+    assert reported(tmp_path / 'probe') == ['300', str(300 + 300 // 254 + 1)]

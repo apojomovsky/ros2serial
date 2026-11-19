@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.5.0 (2026-11-19)
+
+### Breaking
+
+- **core:** Require the frame limit instead of defaulting it (#650)
+- **gen:** One rule for bounds, no silent defaults (#652)
+
+### Features
+
+- **ports:** PIC18F4550 EUSART port and the MPLAB SIM harness (#633)
+- **examples:** Custom message, service and action from the interface package to firmware (#635)
+- **gen:** R2s-gen types emits a type library, with --bound and --write-config (#653)
+- **gen:** The sketch header derives its includes from the type list (#656)
+- **gen:** R2s-gen limits prints the built-in types' bounds (#657)
+- **gen:** The action header carries the entity and its traits (#665)
+- **examples:** A custom type through the X-macro route on AVR (#666)
+- **ports:** Make hardware-check validates a real Uno or Mega (#669)
+- **core:** The Arduino ZIP library compiles in the IDE with no platform.local.txt (#675)
+- **docs:** The drift gate names a target a page calls unbuilt (#677)
+
+### Fixes
+
+- **core:** Bind the generated service table from flash (#638)
+- **examples:** Answer the cancel in the custom interface firmware (#649)
+- **gen:** Include stddef and declare the publish wrappers in the sketch header (#651)
+- **ci:** Write the nightly mutation reports inside their directory (#658)
+- **e2e:** Scenario 8 judges the ten least delayed stamps (#661)
+- **docs:** A message-bounds page whose table and links stay live (#663)
+- **examples:** Measured capacity per board (#671)
+- **examples:** Re-measure capacity after the r2s_config.h include (#680)
+
+### Documentation
+
+- The route-choice pages and the 0.5.0 documentation pass (#672)
+- Add project logo and centered README header (#673)
+
+### Tests
+
+- **e2e:** Renumber the avr services scenario to 14 so 15 means actions (#631)
+
+### CI
+
+- Log in to ghcr in the nightly pic-sim job (#662)
 ## 0.4.0 (2026-11-14)
 
 ### Features

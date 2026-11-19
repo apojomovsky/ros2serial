@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The r2s-gen command line: the version command, and the refusal of unknown ones."""
+"""The r2s-gen command line: the version command, the refusals, and the docs pointers."""
+
+import argparse
 
 from r2s_gen import cli
+from r2s_gen.docs import BOUNDS_URL
 from r2s_gen.version import PROTOCOL_VERSION
 from r2s_gen.version import __version__
 
@@ -26,3 +29,15 @@ def test_an_unknown_subcommand_names_itself_and_exits_with_the_usage_code(capsys
 def test_no_subcommand_exits_with_the_usage_code(capsys):
     assert cli.main([]) == 2
     assert 'usage' in capsys.readouterr().err.lower()
+
+
+def test_every_bound_taking_command_points_at_the_bounds_section():
+    """A reader who meets a bound in help needs the one page that explains it."""
+    parser = cli.build_parser()
+    subparsers = next(
+        action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
+    )
+
+    for name in ('check', 'generate', 'limits', 'types'):
+        help_text = subparsers.choices[name].format_help()
+        assert BOUNDS_URL in help_text, f'{name} help does not name the bounds section'

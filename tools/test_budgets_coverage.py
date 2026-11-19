@@ -29,6 +29,7 @@ AVR_SKETCHES = [
     'arduino_xmacro',
     'arduino_static',
     'arduino_xmacro_c',
+    'arduino_xmacro_custom',
 ]
 
 # The CH32V00x tier M proof: one static firmware on the CH32V003.
