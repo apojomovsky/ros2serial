@@ -109,7 +109,8 @@ resource limits are specified in the
 An action the MCU declares is an action it serves. The board never sends a
 goal, and the API has no action client: the bridge is the ROS 2 action server
 on the MCU's behalf, and the goal UUIDs, the cancel and the result are the
-host's, per [ACT-2] in [the specification](../spec/protocol.md#79-actions-channel-id-8).
+host's, per [ACT-2] and [SES-35] in
+[the specification](../spec/protocol.md#79-actions-channel-id-8).
 A firmware that has to start an action reaches it the other way round, through
 a service: the sketch calls a small host node, that node sends the goal with
 `rclcpp_action` or `rclpy`, and it answers the call when the goal is accepted
@@ -217,7 +218,7 @@ the sketch already runs.
 #include <std_srvs/srv/trigger.hpp>
 
 r2s::Node node("arm");
-r2s::Client<std_srvs::srv::Trigger> start_grasp(node, "start_grasp");
+r2s::Client<std_srvs::srv::Trigger> start_spin(node, "start_spin");
 
 /* The call spins the node while it waits, so the servers the sketch runs
  * keep answering: a goal the relay sends back reaches them. */
@@ -227,7 +228,7 @@ static void request_grasp()
     std_srvs::srv::Trigger::Response res;
 
     req.structure_needs_at_least_one_member = 0u;
-    if (!start_grasp.call(req, res)) {
+    if (!start_spin.call(req, res)) {
         return;
     }
     /* res.success reports the goal's outcome, not the transport's. */
