@@ -794,6 +794,42 @@ def check_ros2_run() -> list[str]:
     return problems
 
 
+# The boards ros2serial targets do have a heap: malloc, new and Arduino's
+# String all reach it on an Uno. What holds is the firmware's rule, that the
+# core allocates nothing at run time, so a claim about the board or the MCU
+# having no heap is the wrong sentence about a correct rule. A sentence about
+# the host's heap, or about a library's allocation, is the right one.
+# `no heap allocation` and `no heap use` are the firmware's rule spelled
+# correctly, so the lookahead keeps them out of the claim.
+NO_HEAP = re.compile(r'\bno heap\b(?!\s+(?:allocation|use))|\bwithout a heap\b', re.IGNORECASE)
+# One sentence, kept on one line: a claim never reaches across a blank line or
+# a table row, so a heading's subject cannot lend itself to a body's phrase.
+SENTENCE = re.compile(r'[^.!?\n]*[.!?]|[^.!?\n]+')
+BOARD_SUBJECT = re.compile(
+    r'\b(?:MCU|microcontroller|board|Arduino|AVR|Uno|Mega|target|core)\b',
+    re.IGNORECASE,
+)
+HOST_HEAP = re.compile(r'\bhost\b', re.IGNORECASE)
+
+
+def check_heap_claims() -> list[str]:
+    """A page saying the board or MCU has no heap, which they do."""
+    problems = []
+    for rel in user_docs():
+        for sentence in SENTENCE.findall(_read(rel)):
+            if not NO_HEAP.search(sentence) or HOST_HEAP.search(sentence):
+                continue
+            # A sentence about a library's allocation is the firmware's rule,
+            # spelled as such: `no heap` qualifies only the board's own claim.
+            if not BOARD_SUBJECT.search(sentence):
+                continue
+            problems.append(
+                f'{rel}: claims the MCU or board has no heap; the firmware'
+                ' allocates nothing, the board does have one'
+            )
+    return problems
+
+
 CHECKS = (
     check_make_targets,
     check_unbuilt_claims,
@@ -805,6 +841,7 @@ CHECKS = (
     check_config_table,
     check_examples,
     check_bounds_links,
+    check_heap_claims,
     check_docs_urls,
     check_pages_reachable,
     check_generator_commands,

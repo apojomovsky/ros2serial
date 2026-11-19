@@ -618,3 +618,52 @@ def test_a_ros2_run_pair_the_packages_install_passes(tmp_path, monkeypatch):
     files['README.md'] = '```sh\nros2 run r2s_gen r2s-gen version\n```\n'
     repo = _tree(tmp_path, files)
     assert _check(repo, monkeypatch, docs_drift.check_ros2_run) == []
+
+
+# The claim the gate refuses: an MCU does have a heap, and ros2serial's
+# allocation rule is the firmware's, not the board's.
+NO_HEAP_CLAIMS = (
+    'The MCU has no heap and no variable-size storage.\n',
+    'The board has no heap, so a field is fixed at build time.\n',
+    'A microcontroller with no heap still needs a fixed capacity.\n',
+    'The core is a C99 library with no heap.\n',
+    'It runs on a board without a heap.\n',
+)
+
+
+@pytest.mark.parametrize('claim', NO_HEAP_CLAIMS)
+def test_a_page_claiming_the_board_has_no_heap_is_named(tmp_path, monkeypatch, claim):
+    files = _with('docs/heap-user.md', 'Prose.\n\n' + claim)
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_heap_claims)
+    assert found == [
+        'docs/heap-user.md: claims the MCU or board has no heap; the firmware'
+        ' allocates nothing, the board does have one'
+    ]
+
+
+def test_a_page_saying_the_firmware_never_allocates_passes(tmp_path, monkeypatch):
+    files = _with(
+        'docs/heap-user.md',
+        'The firmware never allocates: no heap use at run time.\n'
+        'A build keeps no heap allocation of its own.\n'
+        'The core allocates nothing, since no library call allocates.\n',
+    )
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_heap_claims) == []
+
+
+def test_a_host_side_heap_sentence_in_the_spec_passes(tmp_path, monkeypatch):
+    """A host heap is real, so the rule reads the MCU's claim, not every heap."""
+    files = _with(
+        'docs/heap-user.md',
+        'A further frame waits instead of growing the host heap.\n'
+        'The host heap holds what the MCU never sends.\n',
+    )
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_heap_claims) == []
+
+
+def test_the_real_tree_states_no_heap_the_board_lacks():
+    """The gate closes on this tree, so the wording cannot come back."""
+    assert docs_drift.check_heap_claims() == []
