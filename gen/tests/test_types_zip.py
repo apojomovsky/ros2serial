@@ -316,10 +316,28 @@ def test_a_zip_path_under_a_file_fails_naming_the_path(tmp_path, capsys):
 
 def test_two_runs_write_the_same_archive(tmp_path):
     """A rebuilt library is a byte-identical artifact, as the release zip is."""
-    _, first = zipped(tmp_path)
-    _, second = zipped(tmp_path)
+    archives = []
+    for run in ('first', 'second'):
+        out = tmp_path / run / 'out'
+        archive = tmp_path / run / 'types.zip'
+        assert (
+            cli.main(
+                [
+                    'types',
+                    TYPE,
+                    '--msg-path',
+                    str(EXAMPLES),
+                    '--out',
+                    str(out),
+                    '--zip',
+                    str(archive),
+                ]
+            )
+            == 0
+        )
+        archives.append(archive.read_bytes())
 
-    assert first.read_bytes() == second.read_bytes()
+    assert archives[0] == archives[1]
 
 
 def test_a_zip_path_that_is_a_directory_fails_naming_it(tmp_path, capsys):
