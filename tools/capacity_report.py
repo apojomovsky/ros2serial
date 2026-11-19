@@ -989,9 +989,10 @@ def refresh_inputs(measurements_path: Path = MEASUREMENTS, root: Path = ROOT) ->
     so a release commit would otherwise claim it measured a tree that no
     longer exists, with every measured byte unchanged. This is not a way to
     accept a source change: the rows keep describing the last measurement,
-    and scripts/release.sh only calls it after `check` passed on the tree it
-    stamps, so the cut proves the stamp is the only delta. `--after-stamp`
-    keeps the command reachable from the cut alone.
+    and the caller attests to that with `--after-stamp`, which only the cut
+    passes after `check` accepted the tree it stamps. A hand-run flag
+    attests to the same thing and is trusted; the measured rows are what a
+    reader compares, and only `make capacity-report` may move them.
     """
     measurements = load(measurements_path)
     measurements['inputs'] = input_digest(root)
