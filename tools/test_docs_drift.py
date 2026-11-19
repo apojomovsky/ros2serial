@@ -115,9 +115,15 @@ def test_a_target_the_makefile_implements_read_as_unbuilt_is_named(tmp_path, mon
     files = _with('README.md', '`make test` is not built yet.\n')
     repo = _tree(tmp_path, files)
     found = _check(repo, monkeypatch, docs_drift.check_unbuilt_claims)
-    assert found == [
-        'README.md:1: `make test` is called not built, but the Makefile implements it'
-    ]
+    assert found == ['README.md:1: `test` is called not built, but the Makefile implements it']
+
+
+def test_a_target_named_without_the_make_word_is_still_judged(tmp_path, monkeypatch):
+    """The table row and the backticked name are how the pages spell a target."""
+    files = _with('README.md', '| `test` | Not built yet (pending) |\n')
+    repo = _tree(tmp_path, files)
+    found = _check(repo, monkeypatch, docs_drift.check_unbuilt_claims)
+    assert found == ['README.md:1: `test` is called not built, but the Makefile implements it']
 
 
 def test_a_pending_target_read_as_unbuilt_passes(tmp_path, monkeypatch):
@@ -135,16 +141,24 @@ def test_an_unbuilt_claim_naming_no_target_is_not_judged(tmp_path, monkeypatch):
 
 def test_a_claim_wrapping_the_command_onto_the_next_line_still_names_it(tmp_path, monkeypatch):
     """Pages wrap prose, so the claim and the command sit on different lines."""
-    files = _with('README.md', 'The check is not built\nyet; it is `make test`.\n')
+    files = _with('README.md', '- The check is not built\n  yet; it is `make test`.\n')
     repo = _tree(tmp_path, files)
     found = _check(repo, monkeypatch, docs_drift.check_unbuilt_claims)
-    assert found == [
-        'README.md:1: `make test` is called not built, but the Makefile implements it'
-    ]
+    assert found == ['README.md:1: `test` is called not built, but the Makefile implements it']
 
 
 def test_a_command_in_another_paragraph_is_not_read_as_the_claim(tmp_path, monkeypatch):
     files = _with('README.md', 'The check is not built yet.\n\nRun `make test` to see it.\n')
+    repo = _tree(tmp_path, files)
+    assert _check(repo, monkeypatch, docs_drift.check_unbuilt_claims) == []
+
+
+def test_a_command_in_a_later_numbered_item_is_not_the_claim(tmp_path, monkeypatch):
+    """A numbered item is its own block, so the claim does not reach the next one."""
+    files = _with(
+        'README.md',
+        '1. The check is not built yet.\n2. Run `make test` to cover it.\n',
+    )
     repo = _tree(tmp_path, files)
     assert _check(repo, monkeypatch, docs_drift.check_unbuilt_claims) == []
 

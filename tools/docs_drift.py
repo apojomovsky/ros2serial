@@ -128,10 +128,28 @@ PENDING_RECIPE = '$(call pending,'
 # The wording a page uses when it means a command does not run yet. "Built"
 # alone is the firmware verb, so the phrase needs the negation.
 UNBUILT = re.compile(r"\bnot (?:yet )?built\b|\bisn't built\b|\baren't built\b", re.IGNORECASE)
-# The command a claim names, backticked or bare. Only a name the Makefile
-# implements can be judged, so a phrase like "make its own decision" is never
-# a problem even though it reads as a command.
-CLAIMED_TARGET = re.compile(r'\bmake ([a-z][a-z0-9-]*)')
+# The target a claim names: the word after `make`, or the first word of a
+# backticked span, which is how a table row's first cell spells it. Only a
+# name the Makefile implements is judged, so prose like "make its own
+# decision" never matches a target.
+MAKE_WORD = re.compile(r'\bmake ([a-z][a-z0-9-]*)')
+SPAN = re.compile(r'`([^`\n]+)`')
+# A numbered list item and a heading start their own block: a claim in one
+# item must not take a command named in the next as its own.
+ITEM_START = re.compile(r'^(?:\d+[.)]|#{1,6})\s')
+
+
+def claimed_targets(text: str) -> set[str]:
+    """Every target name a block writes, however it spells it."""
+    targets = set(MAKE_WORD.findall(text))
+    for span in SPAN.findall(text):
+        words = span.split()
+        if not words:
+            continue
+        # A span holding the whole command spells it as `make <target>`.
+        targets.add(words[1] if words[0] == 'make' and len(words) > 1 else words[0])
+    targets.discard('make')
+    return targets
 
 
 def built_targets() -> set[str]:
@@ -151,7 +169,7 @@ def built_targets() -> set[str]:
 
 
 def claim_blocks(text: str) -> list[tuple[int, str]]:
-    """Each bullet or prose paragraph, and each table row, with the line it starts on.
+    """Each bullet, numbered item, heading or prose paragraph, and each table row.
 
     Pages wrap prose, so the sentence that calls something unbuilt and the
     command it names land on different lines of one bullet. A paragraph would
@@ -174,7 +192,7 @@ def claim_blocks(text: str) -> list[tuple[int, str]]:
         elif stripped.startswith('|'):
             flush()
             blocks.append((number, line))
-        elif stripped.startswith(('- ', '* ')):
+        elif stripped.startswith(('- ', '* ')) or ITEM_START.match(stripped):
             flush()
             start, lines = number, [line]
         else:
@@ -186,13 +204,12 @@ def claim_blocks(text: str) -> list[tuple[int, str]]:
 
 
 def check_unbuilt_claims() -> list[str]:
-    """A paragraph calling `make <target>` unbuilt while the Makefile implements it.
+    """A block calling a target unbuilt while the Makefile implements it.
 
-    The command must be in the paragraph: nothing in a page ties "the board
-    check" to `hardware-check` but the prose around it, and guessing that link
-    would fail pages about work that really is unbuilt. The page this ticket
-    repairs named no command at all, so the gate would not have caught it; the
-    gate catches the next page that names one.
+    The target must be in the block, written the way the pages write it: after
+    `make`, or as a table row's first cell. Nothing else ties "the board
+    check" to `hardware-check`, and guessing that link would fail pages about
+    work that really is unbuilt.
     """
     built = built_targets()
     problems: set[str] = set()
@@ -201,9 +218,8 @@ def check_unbuilt_claims() -> list[str]:
             if not UNBUILT.search(block):
                 continue
             problems |= {
-                f'{rel}:{start}: `make {target}` is called not built,'
-                ' but the Makefile implements it'
-                for target in CLAIMED_TARGET.findall(block)
+                f'{rel}:{start}: `{target}` is called not built, but the Makefile implements it'
+                for target in claimed_targets(block)
                 if target in built
             }
     return sorted(problems)
