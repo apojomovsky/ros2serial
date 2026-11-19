@@ -10,6 +10,8 @@ both. It then walks a mixed list up until a build stops linking, so the
 ceiling the page states is a firmware that linked, not an extrapolation.
 `measure` takes the numbers, `render` writes docs/capacity.md from them, and
 `check` fails when the page or the sources behind it moved.
+`refresh-inputs` rewrites the digest alone after a version stamp, which moves
+the banners the digest hashes but no measured byte.
 """
 
 import argparse
@@ -784,6 +786,13 @@ the base cost is the measured build that registers nothing. A count fits when
 ALLOWANCE reserved for the application. The headline counts are not that
 formula: they are the largest ladder that still linked, so a whole build backs
 each one. The raw ladders live in `tools/capacity_measurements.json`.
+
+The digest those numbers carry names every source that can move a measured
+byte. A version stamp rewrites the generated banners under `cpp/` without
+moving one, so the release cut refreshes the digest after `make regen`
+(`capacity_report.py refresh-inputs --after-stamp`) instead of demanding a
+remeasure. The cut checks the tree against the digest before it stamps, so
+the refresh can only correct the stamp's own banners.
 """.replace('ALLOWANCE', allowance)
     ]
     for board in BOARDS:
@@ -973,8 +982,25 @@ def check(
     return problems
 
 
+def refresh_inputs(measurements_path: Path = MEASUREMENTS, root: Path = ROOT) -> None:
+    """Rewrite the digest alone, leaving every measured row as it was.
+
+    A version stamp rewrites the banners under cpp/ that the digest hashes,
+    so a release commit would otherwise claim it measured a tree that no
+    longer exists, with every measured byte unchanged. This is not a way to
+    accept a source change: the rows keep describing the last measurement,
+    and the caller attests to that with `--after-stamp`, which only the cut
+    passes after `check` accepted the tree it stamps. A hand-run flag
+    attests to the same thing and is trusted; the measured rows are what a
+    reader compares, and only `make capacity-report` may move them.
+    """
+    measurements = load(measurements_path)
+    measurements['inputs'] = input_digest(root)
+    save(measurements, measurements_path)
+
+
 def main(argv: list | None = None) -> int:
-    """measure, render or check the capacity page."""
+    """measure, render, refresh or check the capacity page."""
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
     measure_cmd = sub.add_parser('measure', help='build the ladders and save the numbers')
@@ -984,6 +1010,17 @@ def main(argv: list | None = None) -> int:
     render_cmd = sub.add_parser('render', help='write the page from the saved numbers')
     render_cmd.add_argument('--measurements', default=str(MEASUREMENTS))
     render_cmd.add_argument('--out', default=str(PAGE))
+    refresh_cmd = sub.add_parser(
+        'refresh-inputs',
+        help='rewrite the digest of the measured tree (release cut only)',
+    )
+    refresh_cmd.add_argument('--measurements', default=str(MEASUREMENTS))
+    refresh_cmd.add_argument(
+        '--after-stamp',
+        action='store_true',
+        required=True,
+        help='state that the caller stamped the version and rebuilt nothing',
+    )
     check_cmd = sub.add_parser('check', help='fail on a stale page or moved sources')
     check_cmd.add_argument('--measurements', default=str(MEASUREMENTS))
     check_cmd.add_argument('--page', default=str(PAGE))
@@ -1003,6 +1040,9 @@ def main(argv: list | None = None) -> int:
             return 0
         if args.command == 'render':
             Path(args.out).write_text(render_page(load(Path(args.measurements))), encoding='utf-8')
+            return 0
+        if args.command == 'refresh-inputs':
+            refresh_inputs(Path(args.measurements))
             return 0
         problems = check(Path(args.measurements), Path(args.page))
     except CapacityError as error:
