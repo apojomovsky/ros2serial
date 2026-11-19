@@ -24,6 +24,19 @@ namespace
 // Diagnostics ride the poll timer instead of their own: the snapshot must
 // read on the thread that polls the router, whose session keeps no lock.
 // The deadline is wall-clock, so the period does not drift when polling slows.
+// How often the link is polled, and so the longest a reply waits for its read.
+// The PING leaves during one pass and its PONG is read during another, so this
+// period bounds what a round trip can measure; it must stay well under the
+// accuracy the time sync targets. At one millisecond a reply that came back at
+// once still waited a full period on the receive side alone, and the scenario 8
+// bound is one millisecond.
+constexpr std::chrono::microseconds kPollPeriod{100};
+// Half this period lands on the offset as a one-sided error, so a period wider
+// than a quarter of the sync target could not hold the bound however good the
+// clock is. A build that edits the period fails here instead of in the nightly.
+static_assert(
+  kPollPeriod * 4 < std::chrono::milliseconds{1},
+  "kPollPeriod must stay far under the scenario 8 accuracy target");
 constexpr std::chrono::seconds kDiagnosticsPeriod{1};
 
 }  // namespace

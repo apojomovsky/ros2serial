@@ -6,12 +6,10 @@
 // covers: SES-24, SES-25
 #include <gtest/gtest.h>
 
-#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <stdexcept>
 
-#include "r2s_bridge/bridge.hpp"
 #include "r2s_bridge/time_sync.hpp"
 
 namespace r2s_bridge
@@ -173,20 +171,6 @@ TEST(TimeSyncEstimate, CorrectsExactlyOnASymmetricLinkWithoutDrift)
 // most are not, so the fastest trip is the one that measures the wire, and
 // the estimate must read the MCU clock through it rather than averaging the
 // poll delay into the offset.
-// The bridge polls its link on a wall timer, so a PONG that has already arrived
-// waits for the next pass before it is read. That wait lands on the receive
-// side alone, so half of it reaches the offset as a one-sided error. The period
-// must therefore stay far below the accuracy the sync targets.
-TEST(TimeSyncPollPeriod, StaysWellUnderTheTimeSyncTarget)
-{
-    constexpr std::int64_t kTargetNs = 1000000;
-    const auto period_ns =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(kPollPeriod).count();
-    EXPECT_LT(period_ns * 4, kTargetNs)
-        << "a poll period of " << period_ns << " ns leaves the offset up to "
-        << period_ns / 2 << " ns off against a " << kTargetNs << " ns target";
-}
-
 TEST(TimeSyncEstimate, AOneSidedArrivalDelayDoesNotBiasTheOffset)
 {
     TimeSync sync(kTickHz);

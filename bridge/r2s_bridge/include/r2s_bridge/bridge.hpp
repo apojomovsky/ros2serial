@@ -22,16 +22,6 @@
 namespace r2s_bridge
 {
 
-/// How often the bridge polls its link, and so the longest a reply waits.
-/**
- * The PING leaves during one pass and its PONG is read during another, so this
- * period bounds what a round trip can measure. It must stay well under the
- * accuracy the time sync targets: at one millisecond a reply that came back at
- * once still waited a full period on the receive side alone, and the scenario
- * 8 bound is one millisecond.
- */
-constexpr std::chrono::microseconds kPollPeriod{100};
-
 /// The host bridge node, one instance per serial port.
 /**
  * Parameters are declared on construction so `ros2 param` can list and set

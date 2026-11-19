@@ -540,9 +540,11 @@ struct Session::Impl
         front_offset_ += wrote.bytes;
       }
       if (front.topic_id == kTimeTopic && front.control && front.opcode == kPing) {
-            // The round trip starts when the last PING byte leaves, not when
-            // the frame was queued: the poll may write it a period later, and
-            // an arrival stamped from a queued send reads the trip long.
+            // The round trip starts when the port accepted the last byte, not
+            // when the frame was queued: the poll may write it a period later,
+            // and a send stamped at the queue reads the trip long. A non-blocking
+            // write leaves up to one frame time still to drain, which is the same
+            // order as the link itself and stays on the send side alone.
         last_ping_send_ns_ = now_ns();
       }
       pending_bytes_ -= front.bytes.size();
