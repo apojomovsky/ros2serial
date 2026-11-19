@@ -237,29 +237,26 @@ class TestScenario8(unittest.TestCase):
             self.assertGreaterEqual(len(stamps), MIN_STAMPS, 'too few time_now stamps arrived')
             self.assertGreaterEqual(len(rtts), 5, 'too few round trips came back')
             judged_ns = checks.least_delayed_error_ns(stamps, rtts, JUDGE_STAMPS)
-            _lags = sorted(host_ns - stamp_ns for stamp_ns, host_ns in stamps)
-            _n = len(_lags)
-            _errs = sorted(
-                abs(stamp_ns - (host_ns - min(rtts) // 2)) for stamp_ns, host_ns in stamps
+            _one = min(rtts) // 2
+            _pairs = sorted(
+                (host_ns - stamp_ns, stamp_ns, host_ns) for stamp_ns, host_ns in stamps
             )
-            _diag = _diagnostic_values(received)
+            _by_lag = sorted(abs(stamp_ns - (host_ns - _one)) for _, stamp_ns, host_ns in _pairs)[
+                :JUDGE_STAMPS
+            ]
+            _by_err = sorted(abs(stamp_ns - (host_ns - _one)) for stamp_ns, host_ns in stamps)[
+                :JUDGE_STAMPS
+            ]
+            _lags = [lag for lag, _, _ in _pairs]
             print(
-                f'S8DIAG judge={judged_ns} min_rtt={min(rtts)} '
-                f'rtt_med={sorted(rtts)[len(rtts) // 2]} rtt_n={len(rtts)}',
+                f'S8DIAG judge_by_lag={_by_lag[len(_by_lag) // 2]} '
+                f'judge_by_err={_by_err[len(_by_err) // 2]} '
+                f'min_rtt={min(rtts)} one_way={_one}',
                 flush=True,
             )
             print(
-                f'S8DIAG lag_min={_lags[0]} lag_p10={_lags[_n // 10]} lag_med={_lags[_n // 2]}',
-                flush=True,
-            )
-            print(
-                f'S8DIAG err_min={_errs[0]} err_med={_errs[_n // 2]} stamps_n={_n}',
-                flush=True,
-            )
-            print(
-                f'S8DIAG diag_offset={_diag.get("time sync offset")} '
-                f'diag_drift={_diag.get("time sync drift")} '
-                f'diag_rtt={_diag.get("time sync round trip")}',
+                f'S8DIAG lag_min={_lags[0]} lag_p10={_lags[len(_lags) // 10]} '
+                f'lag_med={_lags[len(_lags) // 2]} lag_max={_lags[-1]}',
                 flush=True,
             )
             self.assertLessEqual(
