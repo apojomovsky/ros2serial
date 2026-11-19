@@ -38,9 +38,20 @@ RUNTIME = (
 )
 
 
+@pytest.fixture(autouse=True)
+def jazzy(monkeypatch):
+    """Resolve jazzy on every test here, whatever distro sourced the shell.
+
+    The farm legs run this suite under each distro with ROS sourced, and the
+    digest keys on the distro, so an unpinned command would compare two
+    libraries that were never meant to match.
+    """
+    monkeypatch.delenv('ROS_DISTRO', raising=False)
+
+
 def planned():
     """The library the type list resolves to, the archive's expected content."""
-    return types.plan([types.Entry(TYPE)], msg_paths=[str(EXAMPLES)])
+    return types.plan([types.Entry(TYPE)], msg_paths=[str(EXAMPLES)], distro='jazzy')
 
 
 def zipped(tmp_path, *extra):
@@ -224,6 +235,33 @@ def test_a_zip_under_another_layout_fails_naming_it(tmp_path, capsys):
     assert 'arduino' in capsys.readouterr().err
 
 
+def expected_runtime(library):
+    """The staged paths, read from the asset trees rather than from the archive."""
+    names = set()
+    for root, prefix in (
+        (ROOT / 'core' / 'include' / 'r2s', 'src/r2s'),
+        (ROOT / 'cpp' / 'include' / 'r2s', 'src/r2s'),
+        (ROOT / 'cpp' / 'include' / 'ros2serial', 'src/ros2serial'),
+        (ROOT / 'core' / 'src', 'src'),
+        (ROOT / 'cpp' / 'src', 'src'),
+        (ROOT / 'ports' / 'arduino', 'src'),
+    ):
+        names |= {
+            f'{library.name}/{prefix}/{path.relative_to(root).as_posix()}'
+            for path in root.rglob('*')
+            if path.is_file() and path.suffix in ('.c', '.h', '.cpp', '.hpp')
+        }
+    # A shipped library carries the port's two glue files and none of the test
+    # code: the port's stubs and the core's test source stay behind.
+    names -= {
+        f'{library.name}/src/test_reset.c',
+        f'{library.name}/src/tests/test_arduino_port.cpp',
+        f'{library.name}/src/tests/stubs/Arduino.cpp',
+        f'{library.name}/src/tests/stubs/Arduino.h',
+    }
+    return names
+
+
 def test_the_archive_carries_the_emitted_files_and_the_runtime_and_nothing_else(tmp_path):
     """Every entry is one of the two, under one folder: no scratch file travels."""
     library = planned()
@@ -237,17 +275,20 @@ def test_the_archive_carries_the_emitted_files_and_the_runtime_and_nothing_else(
     }
     with zipfile.ZipFile(archive) as opened:
         found = set(opened.namelist())
-    runtime = {
-        name
-        for name in found
-        if name.removeprefix(f'{library.name}/src/').startswith(
-            ('r2s/', 'ros2serial/', 'r2s_arduino_port.')
-        )
-        or re.fullmatch(rf'{library.name}/src/[a-z0-9_]+\.(c|cpp)', name)
-    }
+
+    runtime = expected_runtime(library)
 
     assert found == emitted | runtime
-    assert runtime
+
+
+def test_the_runtime_entries_are_compressed(tmp_path):
+    """The archive is a download the IDE installs: stored bytes cost three times the size."""
+    _, archive = zipped(tmp_path)
+
+    with zipfile.ZipFile(archive) as opened:
+        methods = {info.compress_type for info in opened.infolist()}
+
+    assert methods == {zipfile.ZIP_DEFLATED}
 
 
 def test_a_zip_path_under_a_file_fails_naming_the_path(tmp_path, capsys):
@@ -276,7 +317,7 @@ def test_a_zip_path_under_a_file_fails_naming_the_path(tmp_path, capsys):
 def test_two_runs_write_the_same_archive(tmp_path):
     """A rebuilt library is a byte-identical artifact, as the release zip is."""
     _, first = zipped(tmp_path)
-    _, second = zipped(tmp_path, '--distro', 'jazzy')
+    _, second = zipped(tmp_path)
 
     assert first.read_bytes() == second.read_bytes()
 

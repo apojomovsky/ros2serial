@@ -101,10 +101,13 @@ def write_archive(path: str | Path, library: bundle.Library, files: Mapping[str,
             destination.parent.mkdir(parents=True, exist_ok=True)
             # Fixed timestamps and modes keep a rebuilt archive byte-identical,
             # as the release zip is: a diff between two builds means a change.
+            # A ZipInfo starts at ZIP_STORED, so each entry names its method
+            # itself; the archive's default never reaches it.
             with zipfile.ZipFile(destination, 'w', zipfile.ZIP_DEFLATED) as archive:
                 for name in entries:
                     info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
                     info.external_attr = 0o644 << 16
+                    info.compress_type = zipfile.ZIP_DEFLATED
                     archive.writestr(info, (Path(staging) / name).read_bytes())
         except OSError as error:
             raise OSError(f'cannot write {destination} ({error}); check the path') from error
