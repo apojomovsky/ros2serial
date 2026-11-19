@@ -43,8 +43,9 @@ MARKER = re.compile(
 )
 FENCE = re.compile(r'^ {0,3}```([A-Za-z0-9+#-]+)?[ \t]*$')
 # Any marker-shaped line, however deep: a marker past column 3 is literal text to
-# a Markdown renderer, so the scan reports it instead of reading it as one.
-MARKER_LIKE = re.compile(r'^ {4,}<!-- docs-walkthrough:.*-->[ \t]*$')
+# a Markdown renderer, so the scan reports it instead of reading it as one. A tab
+# reaches the same column, since Markdown advances it to the next tab stop.
+MARKER_LIKE = re.compile(r'^(?: {4,}| {0,3}\t)<!-- docs-walkthrough:.*-->[ \t]*$')
 # The one command each long-running kind may hold: a block that starts a
 # second process, lists the graph or publishes would check the host rather
 # than the page.

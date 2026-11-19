@@ -108,6 +108,15 @@ def test_prose_between_a_marker_and_its_fence_is_refused():
     assert len(problems) == 1 and 'run' in problems[0]
 
 
+def test_a_tab_indented_marker_is_refused():
+    """A tab is a Markdown indent too, so it must not hide a marker either."""
+    _, problems = docs_walkthrough.parse(
+        page('Prose.\n\n\t<!-- docs-walkthrough: run -->\n\t```sh\nexit 0\n```\n')
+    )
+
+    assert len(problems) == 1 and 'literal' in problems[0]
+
+
 def test_a_marker_indented_into_a_list_item_is_refused():
     """Past column 3 a marker is literal text to a renderer, so it must not vanish."""
     _, problems = docs_walkthrough.parse(
