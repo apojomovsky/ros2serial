@@ -150,6 +150,48 @@ def test_the_arduino_zip_ships_the_examples_a_first_run_opens(tmp_path):
     assert 'ros2serial/src/r2s_config.h' in names
 
 
+def readme_ide_section() -> str:
+    """The README's Arduino IDE block, from its heading to the next one."""
+    lines = (ROOT / 'README.md').read_text(encoding='utf-8').splitlines()
+    start = lines.index('#### Or use the Arduino IDE')
+    end = next(
+        (number for number in range(start + 1, len(lines)) if lines[number].startswith('#')),
+        len(lines),
+    )
+    return '\n'.join(lines[start:end])
+
+
+def test_the_readme_ide_route_states_what_the_zip_holds(tmp_path):
+    """The README's IDE block and the archive agree, in both directions.
+
+    A reader adds the ZIP and expects the menu it describes: promising
+    examples the archive lacks, or hiding the ones it ships, sends them to a
+    second route for nothing. The frame limit follows the same rule, because
+    the archive either carries `src/r2s_config.h` or leaves the reader a
+    property to type.
+    """
+    out, result = build(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    (zip_path,) = sorted(out.glob('ros2serial-arduino-*.zip'))
+    names = zipfile.ZipFile(zip_path).namelist()
+    section = readme_ide_section()
+
+    ships_examples = any(name.endswith('.ino') and '/examples/' in name for name in names)
+    assert ships_examples, 'the release ZIP stages no sketch'
+    assert ('File > Examples > ros2serial' in section) is ships_examples
+    assert 'without the example' not in section, (
+        'the README says the archive carries no examples while it ships them'
+    )
+
+    carries_limit = 'ros2serial/src/r2s_config.h' in names
+    assert carries_limit, 'the release ZIP stages no r2s_config.h'
+    for property_name in ('platform.local.txt', 'compiler.c.extra_flags'):
+        assert (property_name in section) is not carries_limit, (
+            f'the README asks for {property_name} only when the archive cannot '
+            'configure the build itself'
+        )
+
+
 def _plain_compile(library, sketch, board, work):
     return subprocess.run(
         [
