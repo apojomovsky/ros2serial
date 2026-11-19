@@ -11,6 +11,8 @@ slope, a capacity that floors, and a builder that emits the shape it names.
 """
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import capacity_report
@@ -189,6 +191,29 @@ def test_refresh_inputs_rewrites_the_digest_alone(tmp_path):
     assert {key: value for key, value in refreshed.items() if key != 'inputs'} == {
         key: value for key, value in measurements.items() if key != 'inputs'
     }
+
+
+def test_refresh_inputs_is_reachable_only_from_the_cut():
+    """A hand-run must not rebaseline numbers nobody retook.
+
+    scripts/release.sh checks the tree against its measurements before it
+    stamps, so a cut only ever corrects the banners the stamp rewrote; the
+    flag keeps that one caller deliberate instead of a flagless command
+    anybody can reach for after a real source change.
+    """
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / 'tools' / 'capacity_report.py'),
+            'refresh-inputs',
+            '--measurements',
+            str(ROOT / 'tools' / 'capacity_measurements.json'),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert '--after-stamp' in result.stderr
 
 
 def test_committed_measurements_are_written_one_run_per_line():

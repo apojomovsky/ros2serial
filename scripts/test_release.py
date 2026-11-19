@@ -374,8 +374,8 @@ VERSIONED_TESTS = [
 ]
 
 
-def cut_fixture(tmp_path, version=None):
-    """A copy of the tree in a fresh repository, cut with release.sh --bump patch.
+def cut_fixture_base(tmp_path, version=None):
+    """A copy of the tree in a fresh repository, one releasable commit, uncut.
 
     `version`, when given, stands in for the tree's VERSION, as on a tree
     whose last release is that version.
@@ -394,8 +394,14 @@ def cut_fixture(tmp_path, version=None):
     released = (cut / 'VERSION').read_text(encoding='utf-8').strip()
     git(cut, 'tag', f'v{released}')
     git(cut, 'commit', '-q', '--allow-empty', '-m', 'feat(core): cut fixture')
+    return cut
+
+
+def cut_fixture(tmp_path, version=None):
+    """A copy of the tree in a fresh repository, cut with release.sh --bump patch."""
+    cut = cut_fixture_base(tmp_path, version)
     result = subprocess.run(
-        ['bash', str(ROOT / 'scripts/release.sh'), '--bump', 'patch'],
+        ['bash', str(ROOT / 'scripts' / 'release.sh'), '--bump', 'patch'],
         cwd=cut,
         capture_output=True,
         text=True,
@@ -441,6 +447,28 @@ def test_a_version_bump_alone_leaves_the_capacity_digest_matching(tmp_path):
     assert committed['inputs'] != original['inputs']
     for name in ('frames', 'boards', 'topics', 'services', 'ceiling'):
         assert committed[name] == original[name], name
+
+
+def test_the_cut_refuses_a_tree_that_already_drifted(tmp_path):
+    """The digest refresh may only correct the stamp, so a drifted cut stops.
+
+    release.sh checks the tree against its measurements before it stamps: a
+    source change nobody remeasured fails there, so the digest the cut writes
+    can never stand in for a measurement.
+    """
+    cut = cut_fixture_base(tmp_path)
+    core = cut / 'core' / 'src' / 'session.c'
+    core.write_text(core.read_text(encoding='utf-8') + '\n/* drift */\n', encoding='utf-8')
+    git(cut, 'commit', '-q', '-am', 'feat(core): a source move')
+    result = subprocess.run(
+        ['bash', str(ROOT / 'scripts' / 'release.sh'), '--bump', 'patch'],
+        cwd=cut,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert 'measured a different tree' in result.stdout + result.stderr
+    assert (cut / 'VERSION').read_text(encoding='utf-8').strip() != '0.0.1'
 
 
 def test_a_simulated_cut_leaves_the_versioned_tests_green(tmp_path):

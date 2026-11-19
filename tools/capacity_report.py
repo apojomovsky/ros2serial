@@ -985,10 +985,11 @@ def refresh_inputs(measurements_path: Path = MEASUREMENTS, root: Path = ROOT) ->
 
     A version stamp rewrites the banners under cpp/ that the digest hashes,
     so a release commit would otherwise claim it measured a tree that no
-    longer exists, with every measured byte unchanged. The caller has
-    regenerated the stamped files and rebuilt nothing: the rows still
-    describe the last measurement, and the digest names the tree they are
-    being shipped from.
+    longer exists, with every measured byte unchanged. This is not a way to
+    accept a source change: the rows keep describing the last measurement,
+    and scripts/release.sh only calls it after `check` passed on the tree it
+    stamps, so the cut proves the stamp is the only delta. `--after-stamp`
+    keeps the command reachable from the cut alone.
     """
     measurements = load(measurements_path)
     measurements['inputs'] = input_digest(root)
@@ -1006,8 +1007,17 @@ def main(argv: list | None = None) -> int:
     render_cmd = sub.add_parser('render', help='write the page from the saved numbers')
     render_cmd.add_argument('--measurements', default=str(MEASUREMENTS))
     render_cmd.add_argument('--out', default=str(PAGE))
-    refresh_cmd = sub.add_parser('refresh-inputs', help='rewrite the digest of the measured tree')
+    refresh_cmd = sub.add_parser(
+        'refresh-inputs',
+        help='rewrite the digest of the measured tree (release cut only)',
+    )
     refresh_cmd.add_argument('--measurements', default=str(MEASUREMENTS))
+    refresh_cmd.add_argument(
+        '--after-stamp',
+        action='store_true',
+        required=True,
+        help='state that the caller stamped the version and rebuilt nothing',
+    )
     check_cmd = sub.add_parser('check', help='fail on a stale page or moved sources')
     check_cmd.add_argument('--measurements', default=str(MEASUREMENTS))
     check_cmd.add_argument('--page', default=str(PAGE))
