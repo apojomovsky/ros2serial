@@ -694,8 +694,9 @@ tasks:
       - bridge/**
       # The leg builds and launches the posix firmware shapes. The avr-only
       # files stay with the avr leg; the isolation pairs run in the
-      # e2e-isolation job and the soak checks in the nightly workflow
-      # instead.
+      # e2e-isolation job and the soak driver in the nightly workflow
+      # instead. The soak checker itself runs here too: run.sh calls it
+      # before any scenario, so a broken checker fails fast.
       - ports/posix/**
       - tests/e2e/**
       - exclude: tests/e2e/run-avr.sh
