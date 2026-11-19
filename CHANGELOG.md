@@ -1,10 +1,6 @@
 # Changelog
 
-## 0.5.0 (unreleased)
-
-The release cut stamps the date and this section's final text: `cut-release.yml`
-regenerates the file from the commits with git-cliff, so what follows is the
-current grouping, not a frozen record.
+## 0.5.0 (2026-11-19)
 
 ### Breaking
 
@@ -15,11 +11,14 @@ current grouping, not a frozen record.
 
 - **ports:** PIC18F4550 EUSART port and the MPLAB SIM harness (#633)
 - **examples:** Custom message, service and action from the interface package to firmware (#635)
-- **gen:** `r2s-gen types` emits a type library, with --bound and --write-config (#653)
+- **gen:** R2s-gen types emits a type library, with --bound and --write-config (#653)
 - **gen:** The sketch header derives its includes from the type list (#656)
-- **gen:** `r2s-gen limits` prints the built-in types' bounds (#657)
+- **gen:** R2s-gen limits prints the built-in types' bounds (#657)
 - **gen:** The action header carries the entity and its traits (#665)
 - **examples:** A custom type through the X-macro route on AVR (#666)
+- **ports:** Make hardware-check validates a real Uno or Mega (#669)
+- **core:** The Arduino ZIP library compiles in the IDE with no platform.local.txt (#675)
+- **docs:** The drift gate names a target a page calls unbuilt (#677)
 
 ### Fixes
 
@@ -29,6 +28,13 @@ current grouping, not a frozen record.
 - **ci:** Write the nightly mutation reports inside their directory (#658)
 - **e2e:** Scenario 8 judges the ten least delayed stamps (#661)
 - **docs:** A message-bounds page whose table and links stay live (#663)
+- **examples:** Measured capacity per board (#671)
+- **examples:** Re-measure capacity after the r2s_config.h include (#680)
+
+### Documentation
+
+- The route-choice pages and the 0.5.0 documentation pass (#672)
+- Add project logo and centered README header (#673)
 
 ### Tests
 
@@ -37,7 +43,6 @@ current grouping, not a frozen record.
 ### CI
 
 - Log in to ghcr in the nightly pic-sim job (#662)
-
 ## 0.4.0 (2026-11-14)
 
 ### Features
