@@ -27,7 +27,7 @@ on:
 permissions:
   contents: read
 
-# Manual runs force every section. A pull request and a push to master run
+# Manual runs and pushes to master force every section. A pull request runs
 # the jobs its diff selects; the nightly sweep covers the whole tree.
 env:
   R2S_FULL: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}

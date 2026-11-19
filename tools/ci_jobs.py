@@ -198,12 +198,12 @@ def select(paths, by_task=None):
     for path in paths:
         if any(glob_match(pattern, path) for pattern in SHARED):
             return {FULL: '1'}
-        prose = next((jobs for pattern, jobs in PROSE.items() if glob_match(pattern, path)), None)
-        if prose is not None:
-            for job in prose:
-                outputs[job] = '1'
-            continue
         hit = False
+        # A page under docs/ is prose, but a task may still name it as an
+        # input: one of the gates keeps the page honest, so both select.
+        prose = next((jobs for pattern, jobs in PROSE.items() if glob_match(pattern, path)), None)
+        for job in prose or ():
+            outputs[job] = '1'
         for name, sources in by_task.items():
             if not covers(sources, path):
                 continue
@@ -212,7 +212,7 @@ def select(paths, by_task=None):
                 backends.add(name.removeprefix('e2e-'))
                 continue
             outputs[OUTPUTS[name]] = '1'
-        if not hit:
+        if prose is None and not hit:
             return {FULL: '1'}
     if backends:
         outputs['e2e'] = 'both' if len(backends) == 2 else backends.pop()

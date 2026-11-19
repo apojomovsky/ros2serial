@@ -36,6 +36,24 @@ CASES = (
         {'scripts', 'readme', 'bridge', 'core'},
     ),
     (
+        # A gate can name a prose page as its input: the page is prose and
+        # the gate still runs, so both selections apply.
+        ['docs/budgets.md'],
+        {'lint', 'docs', 'mermaid', 'budgets'},
+        {'scripts', 'readme', 'bridge', 'core', 'e2e-avr', 'e2e-posix'},
+    ),
+    (
+        ['docs/capacity.md'],
+        {'lint', 'docs', 'mermaid', 'budgets'},
+        {'scripts', 'readme', 'bridge', 'core'},
+    ),
+    (
+        # The walkthrough check greps this page for its anchors.
+        ['docs/without-hardware.md'],
+        {'lint', 'docs', 'mermaid', 'readme'},
+        {'scripts', 'budgets', 'bridge', 'core', 'e2e-avr'},
+    ),
+    (
         ['tools/site_build.py'],
         {'lint', 'scripts', 'docs'},
         {'bridge', 'core', 'e2e-avr', 'e2e-posix', 'budgets'},
@@ -124,6 +142,13 @@ def test_a_shared_tree_runs_the_full_matrix():
 
 def test_the_map_itself_runs_the_full_matrix():
     assert ci_jobs.select(['tools/ci_jobs.py']) == {ci_jobs.FULL: '1'}
+
+
+def test_a_prose_page_a_gate_names_keeps_that_gate():
+    """The Taskfile lists docs/budgets.md under the budgets section."""
+    taskfile = yaml.safe_load((ROOT / 'Taskfile.yml').read_text(encoding='utf-8'))['tasks']
+    assert 'docs/budgets.md' in taskfile['budgets']['sources']
+    assert 'budgets' in selected(['docs/budgets.md'])
 
 
 def test_a_path_no_section_reads_runs_the_full_matrix():
