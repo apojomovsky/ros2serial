@@ -172,6 +172,25 @@ def test_digest_names_the_pins_and_the_sources_that_move_a_byte():
     assert not any(root.startswith('ci') for root in capacity_report.DIGEST_ROOTS)
 
 
+def test_refresh_inputs_rewrites_the_digest_alone(tmp_path):
+    """A version stamp rewrites banners the digest names, not a measured byte.
+
+    The release cut calls this after `make regen`, so the digest it commits
+    describes its own tree; every measured row must come back untouched,
+    because nothing was rebuilt.
+    """
+    path = tmp_path / 'measurements.json'
+    measurements = capacity_report.load(MEASUREMENTS)
+    measurements['inputs'] = 'stale'
+    capacity_report.save(measurements, path)
+    capacity_report.refresh_inputs(path, ROOT)
+    refreshed = capacity_report.load(path)
+    assert refreshed['inputs'] == capacity_report.input_digest(ROOT)
+    assert {key: value for key, value in refreshed.items() if key != 'inputs'} == {
+        key: value for key, value in measurements.items() if key != 'inputs'
+    }
+
+
 def test_committed_measurements_are_written_one_run_per_line():
     """The generated file keeps its compact shape: a reformatted copy is drift."""
     assert MEASUREMENTS.read_text(encoding='utf-8') == capacity_report.dumps(_measurements())

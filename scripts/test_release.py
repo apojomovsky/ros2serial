@@ -3,6 +3,7 @@
 
 """The release cut: VERSION is the single source, and the next version follows the commits."""
 
+import json
 import re
 import shutil
 import subprocess
@@ -137,6 +138,13 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
     )
     (repo / 'tools').mkdir()
     shutil.copy(ROOT / 'tools' / 'refresh_generated.py', repo / 'tools' / 'refresh_generated.py')
+    # The cut refreshes the capacity digest after the stamp, so the fixture
+    # carries the tool and the numbers it rewrites, as the real tree does.
+    shutil.copy(ROOT / 'tools' / 'capacity_report.py', repo / 'tools' / 'capacity_report.py')
+    shutil.copy(
+        ROOT / 'tools' / 'capacity_measurements.json',
+        repo / 'tools' / 'capacity_measurements.json',
+    )
     shutil.copy(
         ROOT / 'scripts' / 'check-main-clone-build.sh',
         repo / 'scripts' / 'check-main-clone-build.sh',
@@ -406,6 +414,33 @@ def test_a_cut_after_a_release_moves_past_it(tmp_path):
         text=True,
     ).stdout.split()
     assert 'VERSION' in committed
+
+
+def test_a_version_bump_alone_leaves_the_capacity_digest_matching(tmp_path):
+    """The cut stamps the version into files the capacity digest hashes under cpp/.
+
+    The banners a stamp rewrites move the digest without moving a measured
+    byte, so the cut refreshes it the way it regenerates the goldens: a
+    release commit carries the digest of its own tree, every measured row
+    stays put, and the budgets gate is green with nothing hand-pushed.
+    """
+    cut = cut_fixture(tmp_path)
+    check = subprocess.run(
+        [sys.executable, str(cut / 'tools' / 'capacity_report.py'), 'check'],
+        cwd=cut,
+        capture_output=True,
+        text=True,
+    )
+    assert check.returncode == 0, check.stdout + check.stderr
+    status = subprocess.run(
+        ['git', 'status', '--porcelain'], cwd=cut, capture_output=True, text=True
+    )
+    assert status.stdout == '', status.stdout
+    committed = json.loads((cut / 'tools' / 'capacity_measurements.json').read_text())
+    original = json.loads((ROOT / 'tools' / 'capacity_measurements.json').read_text())
+    assert committed['inputs'] != original['inputs']
+    for name in ('frames', 'boards', 'topics', 'services', 'ceiling'):
+        assert committed[name] == original[name], name
 
 
 def test_a_simulated_cut_leaves_the_versioned_tests_green(tmp_path):
