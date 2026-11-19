@@ -106,9 +106,9 @@ guide](docs/firmware.md#the-frame-limit-is-a-build-input) says where each
 route gets its limits.
 
 A library for your own interface types installs the same way: `r2s-gen types`
-writes the archive with `--zip`, as [custom
-interfaces](docs/custom-interfaces.md#install-the-type-library-in-the-arduino-ide)
-shows.
+writes the archive with `--zip`. [Custom messages in the Arduino
+IDE](docs/arduino-ide-custom-messages.md) walks that path end to end, from your
+own `.msg` to a board publishing it.
 
 ### 3. Start the bridge
 
@@ -190,6 +190,7 @@ see light. The format and both verdicts are documented in
 | Build in C, with CMake or PlatformIO, or on my own board | [C and bare metal](docs/c-and-bare-metal.md) |
 | Start the bridge with my robot; rename topics or connect several boards | [Robot integration](docs/robot-integration.md) |
 | Use my own `.msg` files and generate sources with colcon | [Custom interfaces](docs/custom-interfaces.md) |
+| Take my own `.msg` to a board from the Arduino IDE | [Custom messages in the Arduino IDE](docs/arduino-ide-custom-messages.md) |
 | Emit a library for my own types, without `r2s.yaml` | [The library route](docs/type-library.md) |
 | Set or change the storage bound of a message field | [Message bounds](docs/message-bounds.md) |
 | See the limits the bundled types ship with | [Message bounds](docs/message-bounds.md#the-built-in-types-limits) |

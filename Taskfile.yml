@@ -577,6 +577,12 @@ tasks:
       # it drives, and pairs their ptys itself.
       - ports/posix/**
       - tests/harness/**
+      # The IDE walkthrough section builds the interface package the page
+      # carries, generates its archive, compiles the sketch against it and
+      # reads a topic through the bridge on the harness.
+      - scripts/check-walkthrough-arduino-ide.sh
+      - tools/docs_walkthrough.py
+      - docs/arduino-ide-custom-messages.md
       - README.md
       - docs/installation.md
       - docs/without-hardware.md

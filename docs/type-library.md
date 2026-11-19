@@ -104,9 +104,9 @@ ros2 run r2s_gen r2s-gen types --types-file r2s-types.yaml \
 
 The archive's top folder is the library's name, so two type lists installed
 side by side never collide, and the same inputs write the same bytes. Only the
-`arduino` layout becomes an archive. [Custom
-interfaces](custom-interfaces.md#install-the-type-library-in-the-arduino-ide)
-carries the reader-facing walkthrough.
+`arduino` layout becomes an archive. [Custom messages in the Arduino
+IDE](arduino-ide-custom-messages.md) carries the reader-facing walkthrough,
+from the `.msg` to a board publishing it.
 
 ## Bounds
 

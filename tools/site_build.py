@@ -72,6 +72,12 @@ PAGES = (
         'Emit a type library, and know what it cannot carry.',
     ),
     Page(
+        'docs/arduino-ide-custom-messages.md',
+        'arduino-ide-custom-messages.html',
+        'Arduino IDE custom messages',
+        'Your own message from its definition to a running board.',
+    ),
+    Page(
         'docs/message-bounds.md',
         'message-bounds.html',
         'Message bounds',

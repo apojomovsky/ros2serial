@@ -94,6 +94,23 @@ CASES = (
         {'e2e-avr', 'e2e-posix', 'bridge'},
     ),
     (
+        # The Arduino IDE walkthrough page, its script and its generator
+        # are the readme task's inputs, and the page is prose besides.
+        ['scripts/check-walkthrough-arduino-ide.sh'],
+        {'lint', 'readme', 'scripts'},
+        {'bridge', 'core', 'docs', 'mermaid', 'budgets', 'e2e-avr', 'e2e-posix'},
+    ),
+    (
+        ['docs/arduino-ide-custom-messages.md'],
+        {'lint', 'docs', 'mermaid', 'readme'},
+        {'scripts', 'bridge', 'core', 'budgets', 'e2e-avr'},
+    ),
+    (
+        ['tools/docs_walkthrough.py'],
+        {'lint', 'readme', 'scripts'},
+        {'bridge', 'core', 'docs', 'budgets', 'e2e-avr'},
+    ),
+    (
         # Both e2e runners build the bridge through this script before
         # their scenarios, so a change to it can break either leg.
         ['scripts/bridge-test.sh'],
