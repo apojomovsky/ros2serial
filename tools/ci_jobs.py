@@ -133,10 +133,10 @@ SHARED = (
     'gen/**',
 )
 
-# A prose-only change: no build can see it, so only the gates that read
-# prose run. Every markdown page also feeds the mermaid parser, and the
-# README carries the anchors the walkthrough check greps for, so a README
-# edit runs that check too.
+# A prose change: no build can see it, so the gates that read prose run,
+# and so does any task that names the page in its sources. Every markdown
+# page feeds the mermaid parser, and the README carries the anchors the
+# walkthrough check greps for.
 PROSE = {
     'docs/**': ('docs', 'mermaid'),
     'README.md': ('docs', 'mermaid', 'readme'),
