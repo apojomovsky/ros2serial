@@ -169,6 +169,171 @@ def glob_match(pattern, path):
     return re.fullmatch(''.join(out), path) is not None
 
 
+# A runner invocation: an interpreter, then a repo-relative script path. The
+# path may be quoted, rooted or relative, because the runners write it both
+# ways (`bash scripts/ci-test.sh`, `bash "$root/scripts/core-test.sh"`).
+INVOKE = re.compile(
+    r'(?:^|[\s;&|(])(?:exec\s+)?(?:bash|sh|python3|source)\s+'
+    r'(?:env\s+\S+\s+)?(?:"|\')?(?:\$(?:root|\{root\})|\./)?'
+    r'((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.$-]+\.(?:sh|py))'
+)
+
+# A scope assignment a task's `cmds` hands the suite (`CORE=1`, `E2E=both`).
+SCOPE_ASSIGN = re.compile(r'\b([A-Z0-9_]+)=(\S+)')
+
+
+def _invoked(text):
+    """The repo scripts one text runs, as written."""
+    return {match.group(1) for match in INVOKE.finditer(text)}
+
+
+def _scope_blocks(text):
+    """Each `if wants VAR; then ... fi` block of the suite runner, by VAR."""
+    blocks = {}
+    lines = text.splitlines()
+    index = 0
+    while index < len(lines):
+        found = re.match(r'\s*if wants ([A-Z0-9_]+); then(.*)$', lines[index])
+        if not found:
+            index += 1
+            continue
+        scope, tail = found.group(1), found.group(2)
+        if tail.rstrip().endswith('fi'):
+            body, index = [tail], index + 1
+        else:
+            body, depth, cursor = [tail], 1, index + 1
+            while cursor < len(lines):
+                line = lines[cursor]
+                body.append(line)
+                if re.match(r'\s*if\b', line):
+                    depth += 1
+                if re.match(r'\s*fi\b', line):
+                    depth -= 1
+                    if depth == 0:
+                        break
+                cursor += 1
+            index = cursor + 1
+        blocks.setdefault(scope, []).append('\n'.join(body))
+    return blocks
+
+
+def _functions(text):
+    """The shell functions a runner defines, by name.
+
+    Brace counting, not a regex: a one-line function (`f() { ...; }`) leaves
+    its closing brace mid-line, and a lazy regex then swallows the next
+    function whole.
+    """
+    found = {}
+    for match in re.finditer(r'(?m)^([a-z_][a-z0-9_]*)\(\)\s*\{', text):
+        depth, cursor = 0, match.end() - 1
+        while cursor < len(text):
+            char = text[cursor]
+            if char == '{':
+                depth += 1
+            elif char == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            cursor += 1
+        found[match.group(1)] = text[match.start() : cursor + 1]
+    return found
+
+
+def _case_arms(text, values):
+    """Keep only the arms of a `case "${VAR:-}" in` that the value selects.
+
+    The e2e block dispatches on the backend (`E2E=both` runs two runners, a
+    single backend runs one), so reading every arm would credit a leg with
+    the other leg's scripts.
+    """
+    selected = None
+    for scope, value in values.items():
+        if re.search(r'case\s+"?\$\{' + scope + r':-\}"?\s+in\b', text):
+            selected = value
+            break
+    if selected is None:
+        return text
+    lines = text.splitlines(keepends=True)
+    out, depth, take = [], 0, True
+    for line in lines:
+        label = re.match(r'\s*([^\s()]+)\)', line)
+        if label and depth == 1:
+            names = {part.strip('"\'') for part in label.group(1).split('|')}
+            take = selected in names or '' in names and selected == ''
+        if take:
+            out.append(line)
+        if re.search(r'\bcase\b', line):
+            depth += 1
+        if re.search(r'\besac\b', line):
+            depth = max(0, depth - 1)
+    return ''.join(out)
+
+
+def _body(path, text, scopes, values):
+    """The text one invoked script contributes, cut to the task's scopes.
+
+    `scripts/ci-test.sh` is the suite's dispatcher: reading it whole would
+    credit every section to every scope. The task's `cmds` name the scope, so
+    only that scope's block runs, plus the helper functions it calls.
+    """
+    if path != 'scripts/ci-test.sh' or not scopes:
+        return text
+    blocks = _scope_blocks(text)
+    functions = _functions(text)
+    chosen = [_case_arms(body, values) for scope in scopes for body in blocks.get(scope, [])]
+    called = {
+        name
+        for body in chosen
+        for name in re.findall(r'\b([a-z_][a-z0-9_]*)\b', body)
+        if name in functions
+    }
+    pending, extra = list(called), []
+    while pending:
+        name = pending.pop()
+        extra.append(functions[name])
+        for inner in re.findall(r'\b([a-z_][a-z0-9_]*)\b', functions[name]):
+            if inner in functions and inner not in called:
+                called.add(inner)
+                pending.append(inner)
+    return '\n'.join(chosen) + '\n' + ''.join(extra)
+
+
+# Tasks Task always runs: with no `sources:`, nothing can drop them from a
+# pull request, so a file they reach is never a selection gap.
+ALWAYS_RUN = {'lint', 'commits'}
+
+
+def reachable_scripts(cmds, repo=ROOT):
+    """Every `scripts/` and `tools/` file one task's commands reach.
+
+    Follows the runners a task names, then the runners those name, so a
+    helper no task lists in its `sources:` shows up as a file that can break
+    the section without ever selecting it. Every repo script reached is
+    returned, `tests/` runners included, because a test helper that calls an
+    unlisted script hides the same gap one step further out.
+    """
+    root = Path(repo)
+    values = dict(SCOPE_ASSIGN.findall(cmds))
+    scopes = set(values)
+    reached, seen = set(), set()
+    pending = [('', cmds)]
+    while pending:
+        path, text = pending.pop()
+        for target in _invoked(text):
+            if '$' in target or target in seen:
+                continue
+            seen.add(target)
+            file = root / target
+            if not file.is_file():
+                continue
+            reached.add(target)
+            pending.append(
+                (target, _body(target, file.read_text(errors='ignore'), scopes, values))
+            )
+    return reached
+
+
 def sections(taskfile=ROOT / TASKFILE):
     """The section tasks' source patterns, by task name."""
     import yaml

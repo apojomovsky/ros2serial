@@ -94,6 +94,13 @@ CASES = (
         {'e2e-avr', 'e2e-posix', 'bridge'},
     ),
     (
+        # Both e2e runners build the bridge through this script before
+        # their scenarios, so a change to it can break either leg.
+        ['scripts/bridge-test.sh'],
+        {'lint', 'scripts', 'bridge', 'e2e-avr', 'e2e-posix'},
+        {'docs', 'budgets', 'core', 'readme', 'build-matrix'},
+    ),
+    (
         ['tests/harness/simavr/run.sh'],
         {'lint', 'readme', 'e2e-avr'},
         {'bridge', 'core', 'e2e-posix', 'scripts'},
@@ -142,6 +149,52 @@ def test_a_shared_tree_runs_the_full_matrix():
 
 def test_the_map_itself_runs_the_full_matrix():
     assert ci_jobs.select(['tools/ci_jobs.py']) == {ci_jobs.FULL: '1'}
+
+
+def test_every_script_a_task_invokes_is_one_of_its_sources():
+    """A helper a section runs but does not list can never select that section.
+
+    The tasks reach their work through runner scripts (`scripts/ci-test.sh`
+    dispatches by scope, the e2e runners source the firmware helpers), so the
+    scan follows the scripts each task's `cmds` name, then theirs, and fails
+    on any invoked `scripts/` or `tools/` file the task's `sources:` misses.
+    """
+    taskfile = yaml.safe_load((ROOT / 'Taskfile.yml').read_text(encoding='utf-8'))['tasks']
+    gaps = {}
+    for name, task in taskfile.items():
+        if name in ('default', 'local') or name in ci_jobs.ALWAYS_RUN:
+            continue
+        cmds = '\n'.join(str(command) for command in (task.get('cmds') or []))
+        sources = task.get('sources') or []
+        missing = [
+            path
+            for path in sorted(ci_jobs.reachable_scripts(cmds))
+            if not any(isinstance(s, str) and ci_jobs.glob_match(s, path) for s in sources)
+        ]
+        if missing:
+            gaps[name] = missing
+    assert not gaps, 'tasks run files their sources do not list: ' + repr(gaps)
+
+
+def test_the_script_scan_follows_the_scope_a_runner_dispatches():
+    """ci-test.sh runs one section per scope: the scan must not read the rest."""
+    reached = ci_jobs.reachable_scripts('CORE=1 bash scripts/ci-test.sh')
+    assert 'scripts/core-test.sh' in reached
+    assert 'scripts/cpp-test.sh' not in reached, 'the CORE scope pulled in the cpp section'
+    assert 'scripts/ci-test.sh' in reached
+
+
+def test_the_script_scan_reaches_the_e2e_helpers():
+    reached = ci_jobs.reachable_scripts('E2E=both bash scripts/ci-test.sh')
+    assert 'tests/e2e/run.sh' in reached
+    assert 'tests/e2e/run-avr.sh' in reached
+
+
+def test_the_script_scan_resolves_a_runner_helper_function():
+    """check_commits calls commit_check.py through a shell function."""
+    reached = ci_jobs.reachable_scripts('COMMITS=1 bash scripts/ci-test.sh')
+    assert 'scripts/commit_check.py' in reached
+    assert 'scripts/prose_check.py' in reached
 
 
 def test_a_prose_page_a_gate_names_keeps_that_gate():
