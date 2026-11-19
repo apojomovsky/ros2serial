@@ -27,10 +27,12 @@ PAGE = ROOT / 'docs' / 'services-and-parameters.md'
 CALL_TIMEOUT = 60
 SERVER_TIMEOUT = 20.0
 
-# Runs the fence the page prints, as the reader runs it: the module is loaded
-# from the extracted page source, so the test never carries a copy of it.
-DRIVER = '''import importlib.util
-import json
+# Drives the page as a reader does: the fence runs as its own program, from
+# its own `main()`, so the executor wiring the page prints is the one the call
+# crosses. This process holds the action server and the caller.
+# `sys.argv[1]` is the outcome to end the goal with, `sys.argv[2]` the fence.
+DRIVER = '''import json
+import subprocess
 import sys
 import threading
 
@@ -40,13 +42,10 @@ from rclpy.action import CancelResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from tf2_msgs.action import LookupTransform
 
 outcome = sys.argv[1]
 SERVER_TIMEOUT = 20.0
-
-spec = importlib.util.spec_from_file_location('page_relay', sys.argv[2])
-page = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(page)
 
 
 class Spin(Node):
@@ -55,7 +54,7 @@ class Spin(Node):
     def __init__(self):
         super().__init__('relay_page_spin')
         self.server = ActionServer(
-            self, page.LookupTransform, 'spin', self._execute,
+            self, LookupTransform, 'spin', self._execute,
             cancel_callback=lambda _handle: CancelResponse.ACCEPT,
             callback_group=ReentrantCallbackGroup())
 
@@ -64,35 +63,47 @@ class Spin(Node):
             handle.succeed()
         else:
             handle.abort()
-        return page.LookupTransform.Result()
+        return LookupTransform.Result()
 
 
 def main():
     from std_srvs.srv import Trigger
 
+    # The page's program, run exactly as the reader runs it.
+    relay = subprocess.Popen(
+        [sys.executable, sys.argv[2]], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True)
     rclpy.init()
-    relay = page.Relay()
-    caller = rclpy.create_node('relay_page_caller')
     spin = Spin() if outcome != 'none' else None
-    executor = MultiThreadedExecutor(num_threads=4)
-    for node in (relay, caller, spin):
-        if node is not None:
-            executor.add_node(node)
+    caller = rclpy.create_node('relay_page_caller')
+    executor = MultiThreadedExecutor(num_threads=2)
+    executor.add_node(caller)
+    if spin is not None:
+        executor.add_node(spin)
     thread = threading.Thread(target=executor.spin, daemon=True)
     thread.start()
     try:
         client = caller.create_client(Trigger, 'start_spin')
         if not client.wait_for_service(timeout_sec=SERVER_TIMEOUT):
-            raise SystemExit('the page node served no start_spin')
+            raise SystemExit('the page program served no start_spin')
         future = client.call_async(Trigger.Request())
         rclpy.spin_until_future_complete(caller, future, timeout_sec=SERVER_TIMEOUT)
         if not future.done():
-            raise SystemExit('the page node never answered the call')
+            raise SystemExit('the page program never answered the call: its executor stalled')
         answer = future.result()
         print(json.dumps({'success': bool(answer.success), 'message': answer.message}))
     finally:
         executor.shutdown()
         thread.join(timeout=SERVER_TIMEOUT)
+        relay.terminate()
+        try:
+            out, err = relay.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            relay.kill()
+            out, err = relay.communicate()
+        if out or err:
+            sys.stderr.write(out + err)
+        rclpy.shutdown()
 
 
 main()
