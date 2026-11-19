@@ -30,12 +30,12 @@ What each job's package installs cost per run is measured on the [per-job
 install cost](benchmarks/ci-per-job-install-cost.md) page; it is the record
 behind the decision to keep one image instead of derived ones.
 
-The `plan` job restores each Taskfile task's last successful inputs from the latest `master` run and reports every section whose inputs changed since; each section job gates on its scope. Pushes to `master` and manual runs select every scope and force the tasks, then save the checksums. The SCRIPTS scope runs as one job per shard; the `e2e-isolation` job runs the two e2e sections side by side when the plan selects `NIGHTLY`, and the `nightly` job calls the shared nightly jobs on pull requests carrying the `fuzz-long` label, so the long fuzzing runs on pull requests only with that label. A version tag runs the same nightly jobs with the long fuzzing off, and they gate the publish.
+The `plan` job maps a pull request's changed files to the jobs those files can affect (`tools/ci_jobs.py`), and each section job gates on its own output. The map reads the Taskfile's `sources:` lists, so it and what each section reads cannot disagree; a change to a tree every job builds in, a workflow or the suite plumbing, and a path no section reads, all select the full matrix. Pushes to `master` and manual runs select every job. The SCRIPTS scope runs as one job per shard; the `e2e-isolation` job runs the two e2e sections side by side when the map selects the `nightly` output, and the `nightly` job calls the shared nightly jobs on pull requests carrying the `fuzz-long` label, so the long fuzzing runs on pull requests only with that label. A version tag runs the same nightly jobs with the long fuzzing off, and they gate the publish.
 
 ```mermaid
 flowchart TB
-    cache["Task checksums from the latest master run"]
-    plan["plan: one task status per section; a miss runs everything"]
+    diff["changed files"]
+    plan["plan: one job per changed file set; an unknown path runs everything"]
     subgraph jobs["Section jobs, each running only when its scope is selected"]
         lint["lint"]
         shards["scripts, one job per shard"]
@@ -44,12 +44,12 @@ flowchart TB
         gates["coverage, docs, readme, examples, budgets, fuzz-smoke"]
         cinight["nightly: nightly-jobs.yml when labelled fuzz-long; fuzz-long only with that label"]
     end
-    full["Master or manual: every job forced, checksums saved"]
+    full["Master or manual: every job runs"]
     shared["nightly-jobs.yml: fuzz-long, soak, mutation, big-endian"]
     sched["nightly.yml on schedule"]
     rel["release.yml on a version tag: nightly jobs with fuzz off gate the publish; a plain tag ships Latest, an -rc tag ships a pre-release"]
 
-    cache --> plan --> jobs
+    diff --> plan --> jobs
     full --> jobs
     cinight --> shared
     sched --> shared
@@ -314,7 +314,7 @@ fast gates that catch the mistakes a push actually makes. Everything else
 CI on every pull request, where parallel jobs keep it fast. A failure there
 still blocks the merge, no matter how green the push was.
 
-Each Taskfile task lists the files its section reads (`Taskfile.yml`), and the lint and commits tasks always run. `tools/taskfile_coverage.py` fails the lint section on a tracked file no task lists, so adding a file the suite should cover means listing it, and files no section reads carry their reason in that script's allowlist. Scopes named on the command line select their tasks, and `R2S_FULL=1` forces them. CI is where the suite runs: the plan gates each section job on its task status on the merge with master, and a PR merges only on green CI.
+Each Taskfile task lists the files its section reads (`Taskfile.yml`), and the lint and commits tasks always run. `tools/taskfile_coverage.py` fails the lint section on a tracked file no task lists, so adding a file the suite should cover means listing it, and files no section reads carry their reason in that script's allowlist. A task also has to list the scripts its runners execute: `tools/test_ci_jobs.py` follows each task's `cmds` through the runners it names, cut to the scope the task sets, and fails when an invoked `scripts/` or `tools/` file is missing from that task's sources, so a helper cannot drop out of selection unnoticed. Scopes named on the command line select their tasks, and `R2S_FULL=1` forces them. CI is where the suite runs: the plan gates each section job on the jobs the pull request's files can affect, and a PR merges only on green CI.
 
 Suites share nothing: every section that starts ROS nodes (bridge, coverage, e2e) leases its own DDS domain from one slot pool (`scripts/e2e-lease.sh`), and the e2e legs take a Zenoh router port from the same slot, so two suites on one host never see each other's topics.
 

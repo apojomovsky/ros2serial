@@ -7,13 +7,11 @@ name: ci
 # contributor does locally. Placeholder jobs mark where each test layer lands;
 # each names the ticket that fills it in.
 #
-# The plan job asks Task which ci-test.sh sections are stale and exposes
-# one output per section. Each section job needs the plan and runs only
-# when its task is stale; workflow_dispatch runs every job, and a FULL
-# result runs every job. A job skipped by its if still satisfies branch
-# protection, so skipping is safe. Master pushes run the same selection
-# as a pull request on the same diff; the nightly full sweep keeps
-# whole-tree coverage.
+# The plan job maps a pull request's changed files to the jobs they can
+# affect and exposes one output per job. Each section job needs the plan and
+# runs only when its output is set; workflow_dispatch and pushes to master
+# run every job, and a FULL result runs every job too. A job skipped by its
+# if still satisfies branch protection, so skipping is safe.
 #
 # Timeouts: every job that builds or pulls an image carries at least 30
 # minutes. On a cold GHA cache the image step is slow, and its cache is
@@ -29,8 +27,8 @@ on:
 permissions:
   contents: read
 
-# Manual runs force their sections. Pull requests and master pushes run the
-# stale tasks only; the nightly full sweep covers the whole tree.
+# Manual runs and pushes to master force every section. A pull request runs
+# the jobs its diff selects; the nightly sweep covers the whole tree.
 env:
   R2S_FULL: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
 
@@ -42,232 +40,78 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Change detection by checksum: the plan restores each task's last
-  # successful inputs from the latest master run and reports every section
-  # whose inputs changed since. A cache miss runs everything; a task that
-  # Task itself cannot check fails the plan safe to FULL. Jobs that run on
-  # master save the checksums: single-job sections save their own, and
-  # each matrix section saves through a final job needing every leg, so
-  # one passing leg never marks its section fresh.
+  # Change detection by path: the plan maps the pull request's changed
+  # files to the jobs those files can affect. tools/ci_jobs.py reads the
+  # Taskfile's own `sources:` lists, so the map and what each section
+  # reads cannot disagree; the trees every job builds in, the workflows
+  # and the suite plumbing select the full matrix, and so does a path no
+  # section reads. Pushes to master and manual runs keep the full matrix.
+  # A job skipped by its if still satisfies branch protection, so
+  # skipping is safe.
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
-      lint: ${{ steps.statuses.outputs.lint }}
-      scripts: ${{ steps.statuses.outputs.scripts }}
-      # No ci.yml job reads this; COMMITS runs via pr-title.yml instead.
-      commits: ${{ steps.statuses.outputs.commits }}
-      core: ${{ steps.statuses.outputs.core }}
-      gen: ${{ steps.statuses.outputs.gen }}
-      bridge: ${{ steps.statuses.outputs.bridge }}
-      ament_lint: ${{ steps.statuses.outputs.ament_lint }}
-      cpp: ${{ steps.statuses.outputs.cpp }}
-      e2e: ${{ steps.statuses.outputs.e2e }}
-      esp32: ${{ steps.statuses.outputs.esp32 }}
-      pic: ${{ steps.statuses.outputs.pic }}
-      stm32: ${{ steps.statuses.outputs.stm32 }}
-      rp2040: ${{ steps.statuses.outputs.rp2040 }}
-      platformio: ${{ steps.statuses.outputs.platformio }}
-      coverage: ${{ steps.statuses.outputs.coverage }}
-      docs: ${{ steps.statuses.outputs.docs }}
-      mermaid: ${{ steps.statuses.outputs.mermaid }}
-      examples: ${{ steps.statuses.outputs.examples }}
-      budgets: ${{ steps.statuses.outputs.budgets }}
-      fuzz: ${{ steps.statuses.outputs.fuzz }}
-      nightly: ${{ steps.statuses.outputs.nightly }}
-      readme: ${{ steps.statuses.outputs.readme }}
-      full: ${{ steps.statuses.outputs.full }}
+      lint: ${{ steps.jobs.outputs.lint }}
+      ament_lint: ${{ steps.jobs.outputs.ament_lint }}
+      scripts: ${{ steps.jobs.outputs.scripts }}
+      core: ${{ steps.jobs.outputs.core }}
+      gen: ${{ steps.jobs.outputs.gen }}
+      cpp: ${{ steps.jobs.outputs.cpp }}
+      docs: ${{ steps.jobs.outputs.docs }}
+      mermaid: ${{ steps.jobs.outputs.mermaid }}
+      readme: ${{ steps.jobs.outputs.readme }}
+      coverage: ${{ steps.jobs.outputs.coverage }}
+      bridge: ${{ steps.jobs.outputs.bridge }}
+      e2e: ${{ steps.jobs.outputs.e2e }}
+      fuzz: ${{ steps.jobs.outputs.fuzz }}
+      nightly: ${{ steps.jobs.outputs.nightly }}
+      examples: ${{ steps.jobs.outputs.examples }}
+      esp32: ${{ steps.jobs.outputs.esp32 }}
+      pic: ${{ steps.jobs.outputs.pic }}
+      platformio: ${{ steps.jobs.outputs.platformio }}
+      stm32: ${{ steps.jobs.outputs.stm32 }}
+      rp2040: ${{ steps.jobs.outputs.rp2040 }}
+      budgets: ${{ steps.jobs.outputs.budgets }}
+      full: ${{ steps.jobs.outputs.full }}
     steps:
-      # Shallow: the status checks read files, not history.
+      # Full history: the map diffs the pull request against its merge base.
       - uses: actions/checkout@v4.2.2
         with:
-          fetch-depth: 1
-      - name: Install Task
-        run: sudo python3 scripts/install-task.py
-      # One checksum file per task, so parallel saves never collide. The
-      # branch key falls back to master; only master runs save, so a pull
-      # request compares its files against the latest master run.
-      - uses: actions/cache/restore@v4.2.2
+          fetch-depth: 0
+      # The tool reads Taskfile.yml, whose parser is PyYAML: the pinned
+      # interpreter keeps the install out of the system Python.
+      - name: Load pinned versions
+        run: grep -v '^#' ci/versions.env >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5.3.0
         with:
-          path: .task/checksum/scripts
-          key: r2s-task-scripts-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-scripts-${{ github.ref }}-
-            r2s-task-scripts-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/core
-          key: r2s-task-core-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-core-${{ github.ref }}-
-            r2s-task-core-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/gen
-          key: r2s-task-gen-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-gen-${{ github.ref }}-
-            r2s-task-gen-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/bridge
-          key: r2s-task-bridge-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-bridge-${{ github.ref }}-
-            r2s-task-bridge-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/ament_lint
-          key: r2s-task-ament_lint-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-ament_lint-${{ github.ref }}-
-            r2s-task-ament_lint-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/cpp
-          key: r2s-task-cpp-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-cpp-${{ github.ref }}-
-            r2s-task-cpp-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/coverage
-          key: r2s-task-coverage-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-coverage-${{ github.ref }}-
-            r2s-task-coverage-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/docs
-          key: r2s-task-docs-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-docs-${{ github.ref }}-
-            r2s-task-docs-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/examples
-          key: r2s-task-examples-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-examples-${{ github.ref }}-
-            r2s-task-examples-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/pic
-          key: r2s-task-pic-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-pic-${{ github.ref }}-
-            r2s-task-pic-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/platformio
-          key: r2s-task-platformio-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-platformio-${{ github.ref }}-
-            r2s-task-platformio-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/stm32
-          key: r2s-task-stm32-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-stm32-${{ github.ref }}-
-            r2s-task-stm32-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/rp2040
-          key: r2s-task-rp2040-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-rp2040-${{ github.ref }}-
-            r2s-task-rp2040-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/budgets
-          key: r2s-task-budgets-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-budgets-${{ github.ref }}-
-            r2s-task-budgets-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/esp32
-          key: r2s-task-esp32-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-esp32-${{ github.ref }}-
-            r2s-task-esp32-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/readme
-          key: r2s-task-readme-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-readme-${{ github.ref }}-
-            r2s-task-readme-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/fuzz
-          key: r2s-task-fuzz-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-fuzz-${{ github.ref }}-
-            r2s-task-fuzz-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/e2e-avr
-          key: r2s-task-e2e-avr-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-e2e-avr-${{ github.ref }}-
-            r2s-task-e2e-avr-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/e2e-posix
-          key: r2s-task-e2e-posix-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-e2e-posix-${{ github.ref }}-
-            r2s-task-e2e-posix-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/nightly
-          key: r2s-task-nightly-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-nightly-${{ github.ref }}-
-            r2s-task-nightly-refs/heads/master-
-      - uses: actions/cache/restore@v4.2.2
-        with:
-          path: .task/checksum/mermaid
-          key: r2s-task-mermaid-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            r2s-task-mermaid-${{ github.ref }}-
-            r2s-task-mermaid-refs/heads/master-
-      - id: statuses
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install PyYAML at the pinned version
         run: |
-          statuses="$RUNNER_TEMP/status.env"
-          full=""
-          # A task without a checksum file (lint, commits) is always stale.
-          # Exit 0 is fresh, 1 is stale; anything else fails safe to FULL.
-          for task in lint commits scripts core gen bridge ament_lint cpp coverage docs examples esp32 pic platformio stm32 rp2040 budgets readme fuzz e2e-avr e2e-posix nightly mermaid; do
-            rc=0
-            task --status "$task" >/dev/null 2>&1 || rc=$?
-            case $rc in
-              0) value="" ;;
-              1) value="1" ;;
-              *) full=1; value="" ;;
-            esac
-            echo "$task=$value" >> "$statuses"
-          done
-          # The e2e legs share one output with the backend value.
-          e2e=""
-          avr=$(sed -n 's/^e2e-avr=//p' "$statuses")
-          posix=$(sed -n 's/^e2e-posix=//p' "$statuses")
-          if [ -n "$avr" ] && [ -n "$posix" ]; then e2e="both"
-          elif [ -n "$avr" ]; then e2e="avr"
-          elif [ -n "$posix" ]; then e2e="posix"
+          pin=$(sed -n 's/^PYYAML_VERSION=//p' ci/versions.env)
+          python3 -m pip install --quiet "pyyaml==$pin"
+      - id: jobs
+        env:
+          # The base branch the map diffs against; empty off a pull request.
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            git fetch --quiet origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+            base="origin/$BASE_REF"
+          else
+            # A push to master and a manual run keep the full matrix. The map
+            # still reports the diff so the nightly caller follows the fuzz
+            # selection; a squash merge's parent is the previous master tip.
+            echo "full=1" >> "$GITHUB_OUTPUT"
+            base=HEAD^
           fi
-          {
-            echo "e2e=$e2e"
-            echo "full=${full:-}"
-          } >> "$statuses"
-          cat "$statuses"
-          # The legs report through the shared e2e output only.
-          while IFS='=' read -r key value; do
-            case $key in e2e-avr | e2e-posix) continue ;; esac
-            echo "$key=$value" >> "$GITHUB_OUTPUT"
-          done < "$statuses"
+          # A map that fails would leave every output unset, which every
+          # job's if reads as skip: fail safe to the full matrix instead.
+          if ! map=$(python3 tools/ci_jobs.py --base "$base"); then
+            map="full=1"
+          fi
+          printf '%s\n' "$map" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
 
   lint:
     needs: plan
@@ -299,12 +143,6 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test AMENT_LINT=1
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/ament_lint
-          key: r2s-task-ament_lint-refs/heads/master-${{ github.sha }}
-
   # The SCRIPTS scope runs as one job per shard over the collected node
   # ids, spread round-robin in sorted order (scripts/shard_nodes.py). The
   # e2e isolation pairs run in the e2e-isolation job instead.
@@ -321,33 +159,6 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test SCRIPTS=1 SCRIPTS_SHARD=${{ matrix.shard }}
-      # One upload per shard: the scripts-save job saves the checksum
-      # only when every shard passed.
-      - if: success() && github.ref == 'refs/heads/master'
-        uses: actions/upload-artifact@v6.0.0
-        with:
-          name: r2s-checksum-scripts-shard-${{ matrix.shard }}
-          path: .task/checksum/scripts
-          retention-days: 1
-
-  # The scripts checksum, saved only when every shard passed: this job
-  # needs the whole matrix, so a red shard skips the save and the
-  # section reruns on the next run that selects it.
-  scripts-save:
-    needs: [plan, scripts]
-    if: github.ref == 'refs/heads/master'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/download-artifact@v6.0.0
-        with:
-          pattern: r2s-checksum-scripts-*
-          merge-multiple: true
-          path: .task/checksum/scripts
-      - uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/scripts
-          key: r2s-task-scripts-refs/heads/master-${{ github.sha }}
 
   core:
     needs: plan
@@ -358,11 +169,6 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test CORE=1
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/core
-          key: r2s-task-core-refs/heads/master-${{ github.sha }}
 
   gen:
     needs: plan
@@ -373,11 +179,7 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test GEN=1
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/gen
-          key: r2s-task-gen-refs/heads/master-${{ github.sha }}
+
   cpp:
     needs: plan
     if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.cpp == '1'
@@ -387,11 +189,7 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test CPP=1
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/cpp
-          key: r2s-task-cpp-refs/heads/master-${{ github.sha }}
+
   docs:
     needs: plan
     if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.docs == '1'
@@ -401,13 +199,9 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test DOCS=1
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/docs
-          key: r2s-task-docs-refs/heads/master-${{ github.sha }}
+
   # Mermaid blocks, parsed by mermaid itself under the pinned node image
-  # (never the dev image, which gains no Node). Runs when markdown or the
+  # (never the dev image, which gains no Node). Runs when a prose page or the
   # tool changes; make lint-docs runs the same command locally.
   mermaid:
     needs: plan
@@ -422,16 +216,9 @@ jobs:
           key: mermaid-npm-${{ hashFiles('tools/mermaid-check/package-lock.json') }}
           restore-keys: |
             mermaid-npm-
-      - name: Install Task
-        run: sudo python3 scripts/install-task.py
-      # The host check runs through its task, so its inputs are checksummed
-      # like every section; make lint-docs stays the local entry point.
-      - run: task --concurrency 1 mermaid
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/mermaid
-          key: r2s-task-mermaid-refs/heads/master-${{ github.sha }}
+      # The host check drives docker itself: the runner needs only the CLI.
+      - run: bash scripts/lint-docs.sh
+
   readme:
     needs: plan
     if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.readme == '1'
@@ -441,11 +228,7 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test README=1
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/readme
-          key: r2s-task-readme-refs/heads/master-${{ github.sha }}
+
   coverage:
     needs: plan
     if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.coverage == '1'
@@ -462,11 +245,6 @@ jobs:
           COMMIT_RANGE="$range" make test COVERAGE=1
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/coverage
-          key: r2s-task-coverage-refs/heads/master-${{ github.sha }}
 
   e2e-avr:
     needs: plan
@@ -477,11 +255,6 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test E2E=avr
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/e2e-avr
-          key: r2s-task-e2e-avr-refs/heads/master-${{ github.sha }}
 
   # The bridge job's distro images, resolved from ci/versions.env before it
   # starts: a job's container is fixed before any step runs, so the bridge job
@@ -519,33 +292,6 @@ jobs:
         env:
           R2S_IN_IMAGE: 1
           R2S_BUILD_DIR: /tmp/r2s-build
-      # One upload per distro: the bridge-save job saves the checksum
-      # only when every distro passed.
-      - if: success() && github.ref == 'refs/heads/master'
-        uses: actions/upload-artifact@v6.0.0
-        with:
-          name: r2s-checksum-bridge-${{ matrix.distro }}
-          path: .task/checksum/bridge
-          retention-days: 1
-
-  # The bridge checksum, saved only when every distro passed: this job
-  # needs the whole matrix, so a red distro skips the save and the
-  # section reruns on the next run that selects it.
-  bridge-save:
-    needs: [plan, bridge]
-    if: github.ref == 'refs/heads/master'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/download-artifact@v6.0.0
-        with:
-          pattern: r2s-checksum-bridge-*
-          merge-multiple: true
-          path: .task/checksum/bridge
-      - uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/bridge
-          key: r2s-task-bridge-refs/heads/master-${{ github.sha }}
 
   # End-to-end on the posix virtual MCU: scenarios 1 to 4 under every RMW the
   # design names, with the Zenoh router started first on its leg. The suite
@@ -579,33 +325,6 @@ jobs:
           R2S_RMWS: ${{ matrix.rmw }}
           # Scenario 8's median bound: pinned to the 5 ms default for the shared host.
           R2S_SYNC_BOUND_NS: 5000000
-      # One upload per leg: the e2e-posix-save job saves the checksum
-      # only when every distro and RMW leg passed.
-      - if: success() && github.ref == 'refs/heads/master'
-        uses: actions/upload-artifact@v6.0.0
-        with:
-          name: r2s-checksum-e2e-posix-${{ matrix.distro }}-${{ matrix.rmw }}
-          path: .task/checksum/e2e-posix
-          retention-days: 1
-
-  # The e2e-posix checksum, saved only when every leg passed: this job
-  # needs the whole matrix, so a red leg skips the save and the section
-  # reruns on the next run that selects it.
-  e2e-posix-save:
-    needs: [plan, e2e-posix]
-    if: github.ref == 'refs/heads/master'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/download-artifact@v6.0.0
-        with:
-          pattern: r2s-checksum-e2e-posix-*
-          merge-multiple: true
-          path: .task/checksum/e2e-posix
-      - uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/e2e-posix
-          key: r2s-task-e2e-posix-refs/heads/master-${{ github.sha }}
 
   # Placeholders. Each becomes a real job in the ticket it names, and stays
   # out of the required checks until then.
@@ -618,11 +337,7 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test FUZZ=1
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/fuzz
-          key: r2s-task-fuzz-refs/heads/master-${{ github.sha }}
+
   # Two full e2e sections side by side on one host, measured about 28
   # minutes including setup (#577): the bound keeps roughly double
   # headroom. The load-sensitive scenario is skipped and the sync bound
@@ -652,11 +367,7 @@ jobs:
           name: e2e-isolation-logs
           path: isolation-logs/
           if-no-files-found: warn
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/nightly
-          key: r2s-task-nightly-refs/heads/master-${{ github.sha }}
+
   # The reusable nightly jobs left on a pull request: only the long
   # fuzzing, and only when the fuzz-long label opts in. The isolation
   # pairs run as the e2e-isolation job above, so no pull request runs a
@@ -683,6 +394,7 @@ jobs:
       mutation: false
       # The big-endian qemu job is nightly-only too: it never runs here.
       bigendian: false
+
   build-matrix:
     needs: plan
     if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.examples == '1'
@@ -693,11 +405,6 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test EXAMPLES=1
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/examples
-          key: r2s-task-examples-refs/heads/master-${{ github.sha }}
 
   # The ESP32 check: the example sketches and the staged Arduino library
   # compile for the ESP32 Dev Module at the core version pinned in
@@ -718,11 +425,6 @@ jobs:
           restore-keys: |
             esp32-core-
       - run: make test ESP32=1
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/esp32
-          key: r2s-task-esp32-refs/heads/master-${{ github.sha }}
 
   # The PIC canary: the core and the static C++ sketch compile with
   # epic-cc for PIC16F1938 and PIC18F4550. New epic-cc failures fail the
@@ -747,12 +449,6 @@ jobs:
           restore-keys: |
             epic-cc-
       - run: make test PIC=1
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/pic
-          key: r2s-task-pic-refs/heads/master-${{ github.sha }}
-
   # The STM32 firmware: the core and the generated pair link with
   # arm-none-eabi-gcc for the Blue Pill. The toolchain ships in the
   # dev image.
@@ -765,11 +461,6 @@ jobs:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image
       - run: make test STM32=1
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/stm32
-          key: r2s-task-stm32-refs/heads/master-${{ github.sha }}
 
   # The RP2040 firmware: the core and the generated pair link with
   # arm-none-eabi-gcc for the Pico. The toolchain ships in the dev
@@ -790,11 +481,7 @@ jobs:
           restore-keys: |
             pico-sdk-
       - run: make test RP2040=1
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/rp2040
-          key: r2s-task-rp2040-refs/heads/master-${{ github.sha }}
+
   platformio:
     needs: plan
     if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.platformio == '1'
@@ -810,11 +497,7 @@ jobs:
           restore-keys: |
             platformio-
       - run: make test PLATFORMIO=1
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/platformio
-          key: r2s-task-platformio-refs/heads/master-${{ github.sha }}
+
   budgets:
     needs: plan
     if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.budgets == '1'
@@ -847,11 +530,6 @@ jobs:
           exit "$status"
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/budgets
-          key: r2s-task-budgets-refs/heads/master-${{ github.sha }}
       # The table is one click from the run on every push, whether or not the
       # gate passes: an empty path means the builds failed before any table.
       - if: always()

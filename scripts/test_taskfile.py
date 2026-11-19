@@ -507,17 +507,26 @@ def test_the_big_endian_scripts_belong_to_bigendian_not_the_section_tasks():
 
 
 def test_the_soak_checks_belong_to_soak_not_the_e2e_legs():
-    """The soak driver and its checks run on schedule, never in the legs."""
+    """The soak driver runs on schedule, never in the legs.
+
+    `soak_check_test.py` is the one shared piece: the posix leg runs it
+    before any scenario so a broken checker fails fast instead of after a
+    two hour soak, which is what its own docstring states. A change to it
+    can therefore break the posix leg, and that leg lists it.
+    """
     for path in (
         'tests/e2e/run-soak.sh',
         'tests/e2e/e2e_support/soak.py',
         'tests/e2e/test_soak_avr.py',
         'tests/e2e/test_soak_posix.py',
-        'tests/e2e/soak_check_test.py',
     ):
         assert matches(tasks()['soak'], path), path
         assert not matches(tasks()['e2e-avr'], path), path
         assert not matches(tasks()['e2e-posix'], path), path
+    shared = 'tests/e2e/soak_check_test.py'
+    assert matches(tasks()['soak'], shared), shared
+    assert matches(tasks()['e2e-posix'], shared), shared
+    assert not matches(tasks()['e2e-avr'], shared), shared
 
 
 @needs_task

@@ -79,11 +79,6 @@ jobs:
           name: fuzz-new-inputs
           path: fuzz-artifacts/
           if-no-files-found: warn
-      - if: github.ref == 'refs/heads/master'
-        uses: actions/cache/save@v4.2.2
-        with:
-          path: .task/checksum/fuzz
-          key: r2s-task-fuzz-refs/heads/master-${{ github.sha }}
 
   # Two hours of clean-link traffic on each soak backend. The wire counters
   # must stay exactly consistent and the bridge memory must plateau, as the
@@ -179,7 +174,6 @@ jobs:
       - name: Log in to ghcr.io
         run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       - run: make pic-sim
-      # No checksum save: schedule-only, nothing plans it on pull requests.
 
   # The core unit and vector tests cross-built for s390x and run under
   # qemu-user, plus the generator reference suite and the vector check, in
@@ -200,4 +194,3 @@ jobs:
       - name: Install Task
         run: sudo python3 scripts/install-task.py
       - run: task --concurrency 1 bigendian
-      # No checksum save: schedule-only, nothing plans it on pull requests.

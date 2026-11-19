@@ -346,6 +346,8 @@ tasks:
       - scripts/e2e-lease.sh
       - scripts/build-examples.sh
       - examples/**
+      # The stack measurement builds the simavr harness for the AVR boards.
+      - tests/harness/**
       # The bundle is emitted at build time; the core, the runtime layer
       # and the port glue are staged into it.
       - gen/**
@@ -387,8 +389,10 @@ tasks:
       - tools/capacity_report.py
       - tools/capacity_measurements.json
       - docs/capacity.md
-      # The gate rebuilds the example sketches, so it reads what they build.
+      # The gate rebuilds the example sketches, so it reads what they build,
+      # the simavr harness for the AVR stack numbers among them.
       - examples/**
+      - tests/harness/**
       - gen/**
       - exclude: gen/tests/**
       - core/**
@@ -564,6 +568,15 @@ tasks:
       - scripts/with-build-lock.sh
       - scripts/e2e-lease.sh
       - scripts/check-readme.sh
+      # The walkthrough check drives both helpers directly: the retry
+      # wrapper around each ROS command and the tree killer behind a
+      # timed-out wait.
+      - scripts/with-retry.sh
+      - scripts/kill-tree.sh
+      # The walkthrough builds the posix firmware and the simavr harness
+      # it drives, and pairs their ptys itself.
+      - ports/posix/**
+      - tests/harness/**
       # The IDE walkthrough section builds the interface package the page
       # carries, generates its archive, compiles the sketch against it and
       # reads a topic through the bridge on the harness.
@@ -584,7 +597,6 @@ tasks:
       - examples/arduino_minimal/**
       - examples/arduino_button_led/**
       - bridge/**
-      - tests/harness/**
     cmds:
       - README=1 bash scripts/ci-test.sh
 
@@ -629,6 +641,9 @@ tasks:
       - scripts/clean-git-env.sh
       - scripts/with-build-lock.sh
       - scripts/e2e-lease.sh
+      # The legs build the bridge through this script before their
+      # scenarios, so a change to it can break either backend.
+      - scripts/bridge-test.sh
       # The legs launch the bridge against firmware built from the core,
       # the runtime layer and the arduino port glue.
       - core/**
@@ -678,12 +693,16 @@ tasks:
       - scripts/clean-git-env.sh
       - scripts/with-build-lock.sh
       - scripts/e2e-lease.sh
+      # The legs build the bridge through this script before their
+      # scenarios, so a change to it can break either backend.
+      - scripts/bridge-test.sh
       - core/**
       - bridge/**
       # The leg builds and launches the posix firmware shapes. The avr-only
       # files stay with the avr leg; the isolation pairs run in the
-      # e2e-isolation job and the soak checks in the nightly workflow
-      # instead.
+      # e2e-isolation job and the soak driver in the nightly workflow
+      # instead. The soak checker itself runs here too: run.sh calls it
+      # before any scenario, so a broken checker fails fast.
       - ports/posix/**
       - tests/e2e/**
       - exclude: tests/e2e/run-avr.sh
@@ -696,7 +715,6 @@ tasks:
       - exclude: tests/e2e/e2e_support/soak.py
       - exclude: tests/e2e/test_soak_avr.py
       - exclude: tests/e2e/test_soak_posix.py
-      - exclude: tests/e2e/soak_check_test.py
     cmds:
       - E2E=posix bash scripts/ci-test.sh
 
@@ -738,11 +756,19 @@ tasks:
       - scripts/clean-git-env.sh
       - scripts/with-build-lock.sh
       - scripts/e2e-lease.sh
+      # The legs build the bridge through this script before their
+      # scenarios, so a change to it can break either backend.
+      - scripts/bridge-test.sh
+      # The soak builds the avr leg and runs its own checks and the launch
+      # checks the e2e legs share.
+      - tests/e2e/run-avr.sh
+      - tests/e2e/test_avr_support.py
+      - tests/e2e/checks_test.py
       # The soak driver, its helpers and its checks. The soak runs on
-      # schedule only: ci.yml keeps it off on pull requests, so the plan
-      # carries no soak output and nothing restores this checksum. The task
-      # stays out of the default task so an unscoped run never starts the
-      # multi-hour soak; `make test SOAK=1` runs it by name.
+      # schedule only: ci.yml keeps it off on pull requests and the plan
+      # carries no soak output. The task stays out of the default task so an
+      # unscoped run never starts the multi-hour soak; `make test SOAK=1`
+      # runs it by name.
       - tests/e2e/run-soak.sh
       - tests/e2e/e2e_support/soak.py
       - tests/e2e/test_soak_avr.py
