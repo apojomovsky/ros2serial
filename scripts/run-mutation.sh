@@ -185,6 +185,9 @@ export R2S_HOST_LIB_DIR="$host_dir"
 # loads every conftest it finds, so one staged inside the tree would load the
 # repository's own conftest beside the copy and register its options twice.
 work=$(mktemp -d "${TMPDIR:-/tmp}/r2s-mutmut-XXXXXX") || exit 2
+# A failing step exits from inside the subshell, so the cleanup needs to run
+# on every exit path rather than after the last command.
+trap 'rm -rf "$work"' EXIT
 bash scripts/stage-mutmut-workspace.sh "$root" "$work" >"$out/mutmut-stage.log" 2>&1 || {
   cat "$out/mutmut-stage.log"
   exit 1
@@ -247,9 +250,6 @@ json.dump({"component": "gen", "mutants": mutants}, open(os.path.join(out, "mutm
 print(f"mutmut: {len(mutants)} mutants")
 EOF
 ) || exit 1
-# The workspace is scratch: its staged copy is tens of megabytes and the
-# report directory is what the job uploads.
-rm -rf "$work"
 
 python3 scripts/mutation_triage.py --mull "$out/mull.json" --mutmut "$out/mutmut.json" \
   --bridge "$out/bridge.json" \

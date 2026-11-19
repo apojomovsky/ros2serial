@@ -12,7 +12,6 @@ cannot carry them.
 """
 
 import subprocess
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -26,6 +25,8 @@ def make_repo(tmp_path):
         'gen/r2s_gen/__init__.py': '',
         'gen/r2s_gen/bounds.py': '',
         'gen/tests/test_bounds.py': 'from r2s_gen import bounds\n',
+        'gen/tests/test_packaging.py': 'def test_installs():\n    pass\n',
+        'gen/tests/test_rosidl_plugin.py': 'def test_builds():\n    pass\n',
         'gen/pyproject.toml': '[tool.mutmut]\nsource_paths = ["gen/r2s_gen"]\n',
         'conftest.py': '',
         'spec/vectors/m.yaml': 'name: m\n',
@@ -185,24 +186,21 @@ def test_the_stage_skips_the_files_mutmut_cannot_run(tmp_path):
     """The two files that install the package cannot import mutmut's trampoline.
 
     mutmut rewrites the sources to import it, and a pip or colcon subprocess
-    has no mutmut on its path. The check collects the staged suite the way
-    mutmut does, so the claim is observed rather than read off the config.
+    has no mutmut on its path. The stage names both files as ignores, in
+    mutmut's argument order: the selection first, the flags after it, which
+    is the order in which pytest honors them.
     """
     repo = make_repo(tmp_path)
     workspace = tmp_path / 'ws'
     assert stage(repo, workspace).returncode == 0
     config = (workspace / 'pyproject.toml').read_text()
-    for name in ('test_packaging.py', 'test_rosidl_plugin.py'):
-        assert name in config
-    args = ['-p', 'no:randomly', '--collect-only', '-q']
-    for name in ('test_packaging.py', 'test_rosidl_plugin.py'):
-        args += ['--ignore', f'gen/tests/{name}']
-    collected = subprocess.run(
-        [sys.executable, '-m', 'pytest', '--rootdir=.', *args, 'gen/tests'],
-        capture_output=True,
-        text=True,
-        cwd=workspace / 'mutants',
-        timeout=120,
-    )
-    assert 'test_packaging' not in collected.stdout, collected.stdout
-    assert 'test_rosidl_plugin' not in collected.stdout, collected.stdout
+    import tomllib
+
+    settings = tomllib.loads(config)['tool']['mutmut']
+    assert settings['pytest_add_cli_args_test_selection'] == ['gen/tests']
+    assert settings['pytest_add_cli_args'] == [
+        '--ignore',
+        'gen/tests/test_packaging.py',
+        '--ignore',
+        'gen/tests/test_rosidl_plugin.py',
+    ]
