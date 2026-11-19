@@ -169,11 +169,29 @@ def test_every_script_a_task_invokes_is_one_of_its_sources():
         missing = [
             path
             for path in sorted(ci_jobs.reachable_scripts(cmds))
-            if not any(isinstance(s, str) and ci_jobs.glob_match(s, path) for s in sources)
+            if not ci_jobs.covers(sources, path)
         ]
         if missing:
             gaps[name] = missing
     assert not gaps, 'tasks run files their sources do not list: ' + repr(gaps)
+
+
+def test_the_script_scan_reads_every_way_the_tree_writes_an_invocation():
+    """The repo writes both `bash scripts/x.sh` and `bash "$root/scripts/x.sh"`.
+
+    The quoted, rooted form is the common one inside the runners, so a scan
+    that missed it would follow almost nothing and stay green.
+    """
+    forms = (
+        ('bash scripts/ci-test.sh', 'scripts/ci-test.sh'),
+        ('bash "$root/scripts/ci-test.sh"', 'scripts/ci-test.sh'),
+        ('exec env R2S_X=1 bash "$root/scripts/ci-test.sh"', 'scripts/ci-test.sh'),
+        ('bash ./scripts/run-tasks.sh', 'scripts/run-tasks.sh'),
+        ('python3 "$root/tools/size_report.py" --check', 'tools/size_report.py'),
+        ('python3 tools/size_report.py', 'tools/size_report.py'),
+    )
+    for text, expected in forms:
+        assert ci_jobs._invoked(text) == {expected}, text
 
 
 def test_the_script_scan_follows_the_scope_a_runner_dispatches():

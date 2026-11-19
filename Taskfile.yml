@@ -346,6 +346,8 @@ tasks:
       - scripts/e2e-lease.sh
       - scripts/build-examples.sh
       - examples/**
+      # The stack measurement builds the simavr harness for the AVR boards.
+      - tests/harness/**
       # The bundle is emitted at build time; the core, the runtime layer
       # and the port glue are staged into it.
       - gen/**
@@ -387,8 +389,10 @@ tasks:
       - tools/capacity_report.py
       - tools/capacity_measurements.json
       - docs/capacity.md
-      # The gate rebuilds the example sketches, so it reads what they build.
+      # The gate rebuilds the example sketches, so it reads what they build,
+      # the simavr harness for the AVR stack numbers among them.
       - examples/**
+      - tests/harness/**
       - gen/**
       - exclude: gen/tests/**
       - core/**
@@ -704,7 +708,6 @@ tasks:
       - exclude: tests/e2e/e2e_support/soak.py
       - exclude: tests/e2e/test_soak_avr.py
       - exclude: tests/e2e/test_soak_posix.py
-      - exclude: tests/e2e/soak_check_test.py
     cmds:
       - E2E=posix bash scripts/ci-test.sh
 

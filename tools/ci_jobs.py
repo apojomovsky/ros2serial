@@ -174,7 +174,8 @@ def glob_match(pattern, path):
 # ways (`bash scripts/ci-test.sh`, `bash "$root/scripts/core-test.sh"`).
 INVOKE = re.compile(
     r'(?:^|[\s;&|(])(?:exec\s+)?(?:bash|sh|python3|source)\s+'
-    r'(?:env\s+\S+\s+)?(?:"|\')?(?:\$(?:root|\{root\})|\./)?'
+    r'(?:env\s+\S+\s+)?(?:"|\')?(?:(?:\$(?:root|\{root\})/|\./)|'
+    r'(?=(?:scripts|tools|tests|ports|examples|core|gen|bridge|benchmark)/))'
     r'((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.$-]+\.(?:sh|py))'
 )
 
