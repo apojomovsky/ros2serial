@@ -95,7 +95,7 @@ def write_archive(path: str | Path, library: bundle.Library, files: Mapping[str,
         layouts._write(str(root), dict(files))
         stage_runtime(root)
         entries = sorted(
-            (item.relative_to(staging).as_posix() for item in root.rglob('*') if item.is_file()),
+            item.relative_to(staging).as_posix() for item in root.rglob('*') if item.is_file()
         )
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)

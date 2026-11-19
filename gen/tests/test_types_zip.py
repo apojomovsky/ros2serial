@@ -224,6 +224,32 @@ def test_a_zip_under_another_layout_fails_naming_it(tmp_path, capsys):
     assert 'arduino' in capsys.readouterr().err
 
 
+def test_the_archive_carries_the_emitted_files_and_the_runtime_and_nothing_else(tmp_path):
+    """Every entry is one of the two, under one folder: no scratch file travels."""
+    library = planned()
+
+    out, archive = zipped(tmp_path)
+
+    emitted = {
+        f'{library.name}/{path.relative_to(out).as_posix()}'
+        for path in out.rglob('*')
+        if path.is_file()
+    }
+    with zipfile.ZipFile(archive) as opened:
+        found = set(opened.namelist())
+    runtime = {
+        name
+        for name in found
+        if name.removeprefix(f'{library.name}/src/').startswith(
+            ('r2s/', 'ros2serial/', 'r2s_arduino_port.')
+        )
+        or re.fullmatch(rf'{library.name}/src/[a-z0-9_]+\.(c|cpp)', name)
+    }
+
+    assert found == emitted | runtime
+    assert runtime
+
+
 def test_two_runs_write_the_same_archive(tmp_path):
     """A rebuilt library is a byte-identical artifact, as the release zip is."""
     _, first = zipped(tmp_path)
