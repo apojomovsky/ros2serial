@@ -21,10 +21,6 @@ namespace r2s_bridge
 namespace
 {
 
-// A poll period shorter than the 1 ms the PONG needs to come back, so a
-// reply waits at most this long for its read and the round trip measures
-// the link instead of the timer.
-constexpr std::chrono::microseconds kPollPeriod{100};
 // Diagnostics ride the poll timer instead of their own: the snapshot must
 // read on the thread that polls the router, whose session keeps no lock.
 // The deadline is wall-clock, so the period does not drift when polling slows.
