@@ -138,9 +138,9 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
     )
     (repo / 'tools').mkdir()
     shutil.copy(ROOT / 'tools' / 'refresh_generated.py', repo / 'tools' / 'refresh_generated.py')
-    # The cut refreshes the capacity digest after the stamp, so the fixture
-    # carries the tool and the numbers it rewrites, as the real tree does.
-    shutil.copy(ROOT / 'tools' / 'capacity_report.py', repo / 'tools' / 'capacity_report.py')
+    # This fixture predates the capacity measurement, as a 0.1.0 tree did, so
+    # it carries no capacity_report.py and the cut skips the digest work. It
+    # keeps the measurements file the staged list names.
     shutil.copy(
         ROOT / 'tools' / 'capacity_measurements.json',
         repo / 'tools' / 'capacity_measurements.json',
@@ -457,6 +457,7 @@ def test_the_cut_refuses_a_tree_that_already_drifted(tmp_path):
     can never stand in for a measurement.
     """
     cut = cut_fixture_base(tmp_path)
+    before = (cut / 'VERSION').read_text(encoding='utf-8').strip()
     core = cut / 'core' / 'src' / 'session.c'
     core.write_text(core.read_text(encoding='utf-8') + '\n/* drift */\n', encoding='utf-8')
     git(cut, 'commit', '-q', '-am', 'feat(core): a source move')
@@ -468,7 +469,8 @@ def test_the_cut_refuses_a_tree_that_already_drifted(tmp_path):
     )
     assert result.returncode != 0, result.stdout + result.stderr
     assert 'measured a different tree' in result.stdout + result.stderr
-    assert (cut / 'VERSION').read_text(encoding='utf-8').strip() != '0.0.1'
+    # The stamp comes after the check, so a refusal leaves the version alone.
+    assert (cut / 'VERSION').read_text(encoding='utf-8').strip() == before
 
 
 def test_a_simulated_cut_leaves_the_versioned_tests_green(tmp_path):

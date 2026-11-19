@@ -790,7 +790,9 @@ each one. The raw ladders live in `tools/capacity_measurements.json`.
 The digest those numbers carry names every source that can move a measured
 byte. A version stamp rewrites the generated banners under `cpp/` without
 moving one, so the release cut refreshes the digest after `make regen`
-(`capacity_report.py refresh-inputs`) instead of demanding a remeasure.
+(`capacity_report.py refresh-inputs --after-stamp`) instead of demanding a
+remeasure. The cut checks the tree against the digest before it stamps, so
+the refresh can only correct the stamp's own banners.
 """.replace('ALLOWANCE', allowance)
     ]
     for board in BOARDS:
