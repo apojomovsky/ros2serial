@@ -76,7 +76,8 @@ def test_the_plan_runs_the_map_against_the_pull_request_base():
     steps = jobs()['plan']['steps']
     runs = ' '.join(str(step.get('run', '')) for step in steps)
     assert 'tools/ci_jobs.py' in runs
-    assert '--base "origin/$BASE_REF"' in runs
+    assert 'base="origin/$BASE_REF"' in runs
+    assert 'python3 tools/ci_jobs.py --base "$base"' in runs
     envs = [step.get('env', {}) or {} for step in steps]
     assert any(
         'github.event.pull_request.base.ref' in str(value)
