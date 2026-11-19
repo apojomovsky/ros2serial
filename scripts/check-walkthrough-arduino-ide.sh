@@ -21,15 +21,19 @@ fi
 
 page=docs/arduino-ide-custom-messages.md
 work=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/walkthrough
-rm -rf "$work"
-mkdir -p "$work" || exit 1
 
 # One lock for the work directory, held for the whole run: a direct run and a
-# suite run of one tree must not write the same firmware.
+# suite run of one tree must not write the same firmware. The lock file sits
+# beside the directory, not inside it, because the run clears the directory and
+# unlinking a lock file lets the next run lock a fresh inode while this one
+# still holds the old.
 if [ -z "${R2S_WALKTHROUGH_LOCKED:-}" ]; then
-  exec env R2S_WALKTHROUGH_LOCKED=1 bash "$root/scripts/with-build-lock.sh" "$work/.lock" \
+  mkdir -p "$(dirname "$work")" || exit 1
+  exec env R2S_WALKTHROUGH_LOCKED=1 bash "$root/scripts/with-build-lock.sh" "$work.lock" \
     bash "$root/scripts/check-walkthrough-arduino-ide.sh"
 fi
+rm -rf "$work"
+mkdir -p "$work" || exit 1
 
 : "${ROS_DISTRO:?ROS_DISTRO is not set: run it in a ROS container}"
 if [ -z "${AMENT_PREFIX_PATH:-}" ] && [ -f "/opt/ros/$ROS_DISTRO/setup.bash" ]; then

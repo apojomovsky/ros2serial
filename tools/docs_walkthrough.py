@@ -42,6 +42,9 @@ MARKER = re.compile(
     r'^ {0,3}<!-- docs-walkthrough:[ \t]*(file|run|serve|live)[ \t]*([^>]*?)[ \t]*-->[ \t]*$'
 )
 FENCE = re.compile(r'^ {0,3}```([A-Za-z0-9+#-]+)?[ \t]*$')
+# Any marker-shaped line, however deep: a marker past column 3 is literal text to
+# a Markdown renderer, so the scan reports it instead of reading it as one.
+MARKER_LIKE = re.compile(r'^ {4,}<!-- docs-walkthrough:.*-->[ \t]*$')
 # The one command each long-running kind may hold: a block that starts a
 # second process, lists the graph or publishes would check the host rather
 # than the page.
@@ -73,41 +76,44 @@ def _refuse_path(path: str) -> str | None:
 
 
 def parse(text: str) -> tuple[list[Block], list[str]]:
-    """Extract the marked blocks; problems, empty when every marker has a block."""
+    """Extract the marked blocks; problems, empty when every marker has a block.
+
+    A marker binds the fence on the line below it and nothing else, so a page
+    that loses a fence fails instead of attaching the marker to the next code
+    sample. A marker indented past column 3 is literal text to a Markdown
+    renderer, so it is reported rather than silently dropped.
+    """
     lines = text.splitlines()
     blocks: list[Block] = []
     problems: list[str] = []
-    pending: tuple[str, int, str] | None = None
     saw_marker = False
     i = 0
     while i < len(lines):
         marker = MARKER.match(lines[i])
-        if marker:
-            saw_marker = True
-            if pending is not None:
+        if marker is None:
+            if MARKER_LIKE.match(lines[i]):
                 problems.append(
-                    f'line {pending[1]}: a second marker above one fence; '
-                    f'the first names {pending[2] or pending[0]}'
+                    f'line {i + 1}: a docs-walkthrough marker starts past column 3, '
+                    'so it is literal text'
                 )
-            pending = (marker.group(1), i + 1, marker.group(2).strip())
+                saw_marker = True
             i += 1
             continue
-        fence = FENCE.match(lines[i])
-        if fence is None:
+        saw_marker = True
+        kind, at, detail = marker.group(1), i + 1, marker.group(2).strip()
+        named = detail or kind
+        if i + 1 >= len(lines) or not FENCE.match(lines[i + 1]):
+            problems.append(f'line {at}: the marker naming {named} sits above no fence')
             i += 1
             continue
-        if pending is None:
-            i += 1
-            continue
-        kind, at, detail = pending
-        pending = None
+        fence = FENCE.match(lines[i + 1])
         body = []
-        i += 1
+        i += 2
         while i < len(lines) and not FENCE.match(lines[i]):
             body.append(lines[i])
             i += 1
         if i == len(lines):
-            problems.append(f'line {at}: the fence never closes')
+            problems.append(f'line {at}: the fence after {named} never closes')
             break
         i += 1
         code = '\n'.join(body) + '\n'
@@ -137,9 +143,6 @@ def parse(text: str) -> tuple[list[Block], list[str]]:
             problems.append(f'line {at}: a live block holds one `ros2 topic echo <topic>` line')
             continue
         blocks.append(Block('live', at, code.strip(), topic=topics[0]))
-    if pending is not None:
-        named = pending[2] or pending[0]
-        problems.append(f'line {pending[1]}: a marker naming {named} sits above no fence')
     if not blocks and not saw_marker:
         problems.append('the page marks no block; add a docs-walkthrough marker')
     return blocks, problems
@@ -181,24 +184,37 @@ def execute(block: Block, cwd: Path, timeout: int, command: str | None = None) -
 
 
 def emitted(blocks: list[Block], directory: Path, port: str | None) -> list[str]:
-    """Write each serve and live block as a script; problems, empty when green."""
+    """Write the serve and live blocks as scripts; problems, empty when green.
+
+    A page holds at most one of each kind, because the caller starts one
+    bridge and repeats one echo. A second block is reported rather than
+    overwriting the first, so an added block cannot go unexercised.
+    """
     problems: list[str] = []
-    directory.mkdir(parents=True, exist_ok=True)
+    written: dict[str, Block] = {}
     for block in blocks:
         if block.kind not in ('serve', 'live'):
             continue
+        if block.kind in written:
+            problems.append(
+                f'line {block.line}: a second {block.kind} block; the page may hold one'
+            )
+            continue
+        written[block.kind] = block
+    for kind, block in written.items():
         command = block.code
-        if block.kind == 'serve':
-            if PORT.search(command) is None or port is None:
+        if kind == 'serve':
+            if PORT.search(command) is None:
+                problems.append(
+                    f'line {block.line}: a serve block names the port it runs on, `port:=...`'
+                )
+                continue
+            if port is None:
+                problems.append('--port names the serial port the serve block runs on')
                 continue
             command = PORT.sub(f'port:={port}', command)
-        (directory / f'{block.kind}.sh').write_text(command + '\n', encoding='utf-8')
-    for kind in ('serve', 'live'):
-        if (
-            any(block.kind == kind for block in blocks)
-            and not (directory / f'{kind}.sh').is_file()
-        ):
-            problems.append(f'the {kind} block needs --port naming the serial port')
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / f'{kind}.sh').write_text(command + '\n', encoding='utf-8')
     return problems
 
 
@@ -237,9 +253,13 @@ def main(argv: list[str] | None = None) -> int:
 
     home = Path(args.home) if args.home else Path(tempfile.mkdtemp(prefix='r2s-walkthrough-'))
     home.mkdir(parents=True, exist_ok=True)
-    write_files(blocks, home)
     status = 0
+    # Page order: a file is written where the page prints it, so a command that
+    # reads it finds it, and one that must not find it yet still does not.
     for block in blocks:
+        if block.kind == 'file':
+            write_files([block], home)
+            continue
         if block.kind != 'run':
             continue
         failure = execute(block, home, args.timeout)

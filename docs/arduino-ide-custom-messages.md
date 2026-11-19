@@ -7,10 +7,12 @@ Library*, and the bridge loads the same package on the host.
 
 The blocks marked below are the walkthrough the check runs: they are written
 and executed in order on a clean home directory, and the sketch is compiled
-against the archive this page builds. If a command here drifts from the code,
-the check fails. Which route carries a custom type, and what each one needs, is
-on [The library route and its config boundary](type-library.md); a field's
-storage is on [message bounds](message-bounds.md).
+against the archive this page builds. Start every shell with a ROS 2
+environment sourced, as [installation](installation.md) sets one up, because
+the first command builds the package with colcon. If a command here drifts from
+the code, the check fails. Which route carries a custom type, and what each one
+needs, is on [The library route and its config boundary](type-library.md); a
+field's storage is on [message bounds](message-bounds.md).
 
 ## 1. Define the interface package
 
@@ -84,8 +86,10 @@ ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \
 ```
 
 Its single top folder is named from the type list, so a second library installs
-beside it instead of replacing it. The out directory holds the same files
-unarchived, which is what you review; [The library route and its config
+beside it instead of replacing it. The out directory holds the files the
+generator emitted, which is what you review; the archive holds those same files
+plus the core, the C++ layer and the Arduino port, because the IDE passes no
+build property to supply them; [The library route and its config
 boundary](type-library.md#the-archive-the-arduino-ide-installs) says what the
 archive carries and why the limit travels inside it.
 

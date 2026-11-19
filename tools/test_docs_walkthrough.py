@@ -99,16 +99,22 @@ def test_a_path_climbing_out_of_home_is_refused():
     assert len(problems) == 1 and 'escape' in problems[0]
 
 
-def test_two_markers_above_one_fence_are_refused():
+def test_prose_between_a_marker_and_its_fence_is_refused():
+    """A marker binds the very next line, so a lost fence cannot adopt a later one."""
     _, problems = docs_walkthrough.parse(
-        page(
-            '<!-- docs-walkthrough: file a.txt -->\n'
-            '<!-- docs-walkthrough: run -->\n'
-            '```sh\nx\n```\n'
-        )
+        page('<!-- docs-walkthrough: run -->\n\nProse.\n\n```sh\nexit 0\n```\n')
     )
 
-    assert len(problems) == 1 and 'a.txt' in problems[0]
+    assert len(problems) == 1 and 'run' in problems[0]
+
+
+def test_a_marker_indented_into_a_list_item_is_refused():
+    """Past column 3 a marker is literal text to a renderer, so it must not vanish."""
+    _, problems = docs_walkthrough.parse(
+        page('1. Step one.\n\n    <!-- docs-walkthrough: run -->\n    ```sh\nexit 0\n```\n')
+    )
+
+    assert len(problems) == 1 and 'literal' in problems[0]
 
 
 def test_a_run_marker_on_a_fence_that_is_not_sh_is_refused():
@@ -175,6 +181,34 @@ def test_emit_refuses_a_serve_block_with_no_port(tmp_path):
     problems = docs_walkthrough.emitted(blocks, tmp_path, None)
 
     assert len(problems) == 1 and 'port' in problems[0]
+
+
+def test_emit_refuses_a_second_live_block_instead_of_overwriting(tmp_path):
+    """A page holds one echo, so an added one fails instead of going unexercised."""
+    other = LIVE_BLOCK.replace('/reading', '/status')
+    blocks, _ = docs_walkthrough.parse(page(LIVE_BLOCK, other))
+
+    problems = docs_walkthrough.emitted(blocks, tmp_path, '/dev/pts/7')
+
+    assert len(problems) == 1 and 'second live' in problems[0]
+
+
+def test_run_executes_the_page_in_order(tmp_path):
+    """A run block sees the file printed above it and not the one printed below."""
+    text = page(
+        '<!-- docs-walkthrough: file early.txt -->\n```text\nhere\n```\n',
+        '<!-- docs-walkthrough: run -->\n```sh\ntest -e early.txt && test ! -e later.txt\n```\n',
+        '<!-- docs-walkthrough: file later.txt -->\n```text\nhere\n```\n',
+    )
+    page_file = tmp_path / 'page.md'
+    page_file.write_text(text, encoding='utf-8')
+
+    status = docs_walkthrough.main(
+        ['--page', str(page_file), '--run', '--home', str(tmp_path / 'home')]
+    )
+
+    assert status == 0
+    assert (tmp_path / 'home' / 'later.txt').read_text() == 'here\n'
 
 
 def test_the_tree_page_names_the_package_the_sketch_and_the_live_topic():
