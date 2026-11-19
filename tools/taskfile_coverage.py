@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""Every tracked file maps to a task or says why not.
+"""Every tracked file maps to a job or says why not.
 
-The retired scope map failed safe to the full suite on unknown paths; the
-Taskfile cannot, so this check fails on a tracked file no task lists. A
-file no section reads carries its reason in UNLISTED instead, so adding a
-file the suite should cover means listing it in the Taskfile, and wiring a
-new reader means the same. Every task but default also appears in the
-plan loop, or carries its reason in PLANLESS instead: a task the plan
-never checks would silently never run on pull requests.
+The Taskfile lists what each section reads and `tools/ci_jobs.py` maps
+those tasks to the ci.yml jobs they run, so this check fails on a tracked
+file no task lists and on a task no job runs. A file no section reads
+carries its reason in UNLISTED instead, so adding a file the suite should
+cover means listing it in the Taskfile, and wiring a new reader means the
+same. A task ci.yml never plans carries its reason in the map's
+TASKS_WITHOUT_A_JOB instead.
 """
 
 import argparse
@@ -53,18 +53,8 @@ UNLISTED = {
 #: Tasks that only group other tasks: they read no sources and CI never plans them.
 AGGREGATES = {'default', 'local'}
 
-PLANLESS = {
-    # Schedule-only: the plan carries no soak output and CI restores no
-    # soak checksum, so nothing selects it on a pull request.
-    'soak': 'schedule-only soak, selected by name and by the schedule',
-    # Nightly-only: the plan carries no big-endian output, so nothing
-    # selects it on a pull request; the nightly workflow runs it by name.
-    'bigendian': 'nightly-only big-endian job, selected by name and by the schedule',
-    # Nightly-only and host-only: it needs the MPLAB SIM image and a Docker
-    # daemon, so the plan carries no output for it; the nightly workflow
-    # runs it by name, as it runs the big-endian job.
-    'pic-sim': 'nightly-only MPLAB SIM job, selected by name and by the schedule',
-}
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ci_jobs  # noqa: E402
 
 
 def glob_match(pattern, path):
@@ -91,6 +81,13 @@ def glob_match(pattern, path):
     return re.fullmatch(''.join(out), path) is not None
 
 
+def task_names(taskfile):
+    """Every task the Taskfile defines, aggregates included."""
+    import yaml
+
+    return list(yaml.safe_load((taskfile).read_text())['tasks'])
+
+
 def task_sources(taskfile):
     import yaml
 
@@ -114,23 +111,17 @@ def covered(by_task, path):
     return any(task_covers(sources, path) for sources in by_task.values())
 
 
-def plan_tasks(workflow):
-    """The task names in the plan loop's `for task in ...` line."""
-    for line in workflow.splitlines():
-        words = line.split()
-        if len(words) > 4 and words[0] == 'for' and words[1] == 'task' and words[2] == 'in':
-            return [word.rstrip(';') for word in words[3:] if word != 'do']
-    return []
-
-
-def check_plan(task_names, planned):
-    """Every task but default is planned or planless, and vice versa."""
+def check_plan(task_names):
+    """Every task but the aggregates runs a job, and the exceptions are real tasks."""
+    planned = ci_jobs.TASK_JOBS
     missing = [
         name
         for name in task_names
-        if name not in AGGREGATES and name not in planned and name not in PLANLESS
+        if name not in AGGREGATES
+        and name not in planned
+        and name not in ci_jobs.TASKS_WITHOUT_A_JOB
     ]
-    stale = [name for name in PLANLESS if name not in task_names]
+    stale = [name for name in ci_jobs.TASKS_WITHOUT_A_JOB if name not in task_names]
     return missing, stale
 
 
@@ -150,18 +141,14 @@ def main(argv=None):
         print(f'taskfile-coverage: git ls-files failed: {proc.stderr.strip()}')
         return 1
     by_task = task_sources(root / 'Taskfile.yml')
-    workflow = root / '.github' / 'workflows' / 'ci.yml'
-    if not workflow.exists():
-        print(f'taskfile-coverage: no plan loop at {workflow}')
-        return 1
-    unplanned, stale = check_plan(list(by_task), plan_tasks(workflow.read_text()))
+    unplanned, stale = check_plan(task_names(root / 'Taskfile.yml'))
     if unplanned:
         for name in unplanned:
-            print(f'taskfile-coverage: task {name} is in no plan output')
+            print(f'taskfile-coverage: task {name} runs no ci.yml job')
         return 1
     if stale:
         for name in stale:
-            print(f'taskfile-coverage: planless exception {name} is no task')
+            print(f'taskfile-coverage: exception {name} is no task')
         return 1
     missing = []
     for path in proc.stdout.splitlines():

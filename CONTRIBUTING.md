@@ -139,7 +139,7 @@ Node image through Docker:
 
 | CI job | Local reproduction |
 | --- | --- |
-| `plan` | No local run. `make check` runs the same checksum selection and names the tasks it ran |
+| `plan` | No local run. Print what a diff selects with `python3 tools/ci_jobs.py --base origin/master` |
 | `lint` | `make test LINT=1` |
 | `scripts` | `make test-scripts`, or one shard with `make test SCRIPTS=1 SCRIPTS_SHARD=N` |
 | `core` | `make test-core` |
@@ -164,13 +164,12 @@ Node image through Docker:
 | `budgets` | `make test BUDGETS=1` |
 
 Four jobs have no local twin. `bridge-images` is CI setup: it only reads
-`ci/versions.env` to pick the bridge images. `plan` only reports which
-tasks are stale; `make check` selects the same scope. `e2e-isolation` runs
+`ci/versions.env` to pick the bridge images. `plan` only names the jobs a
+pull request's files can affect. `e2e-isolation` runs
 the nightly isolation pairs, which need a quiet host. `nightly` runs the
 shared nightly jobs on a manual run, when the plan cannot check its tasks,
 and on a pull request labelled `fuzz-long`; the schedule starts the same
-jobs from `nightly.yml`. The `-save` jobs only persist checksums after a
-green run.
+jobs from `nightly.yml`.
 
 Read the failure in the job log: open the failed job in the Actions tab,
 or run `gh run view <run-id> --log-failed`. Fix the cause, not the

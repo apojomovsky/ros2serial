@@ -11,9 +11,8 @@ does a path no section reads: an unknown path must never select too few.
 import subprocess
 from pathlib import Path
 
-import yaml
-
 import ci_jobs
+import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 

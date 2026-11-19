@@ -28,6 +28,9 @@ def tiny_repo(tmp_path, files):
     git(repo, 'config', 'user.name', 't')
     (repo / 'Taskfile.yml').write_text(
         "version: '3'\ntasks:\n"
+        '  default:\n    cmds:\n      - true\n'
+        '  local:\n    cmds:\n      - true\n'
+        '  commits:\n    cmds:\n      - true\n'
         '  gen:\n    sources:\n      - Taskfile.yml\n      - gen/**\n'
         '    cmds:\n      - true\n'
         '  soak:\n    cmds:\n      - true\n'
@@ -83,11 +86,11 @@ def test_the_real_tree_is_fully_mapped():
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
-def test_a_task_missing_from_the_plan_loop_fails_naming_it(tmp_path):
-    """A task the plan never checks would silently never run on pull requests."""
+def test_a_task_no_job_runs_fails_naming_it(tmp_path):
+    """A task the map never runs would silently never run on pull requests."""
     repo = tiny_repo(tmp_path, {'gen/a.py': 'x\n'})
-    plan = repo / '.github' / 'workflows' / 'ci.yml'
-    plan.write_text(plan.read_text().replace('for task in gen;', 'for task in lint;'))
+    taskfile = repo / 'Taskfile.yml'
+    taskfile.write_text(taskfile.read_text() + '  mystery:\n    cmds:\n      - true\n')
     proc = coverage(repo)
     assert proc.returncode == 1, proc.stdout + proc.stderr
-    assert 'gen' in proc.stdout + proc.stderr
+    assert 'mystery' in proc.stdout + proc.stderr

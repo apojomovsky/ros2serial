@@ -33,11 +33,15 @@ TASKFILE = 'Taskfile.yml'
 # The plan output that forces every job, whatever the diff says.
 FULL = 'full'
 
-# The plan outputs each ci.yml section job gates on. The e2e legs share one
-# output and split on its backend value.
-OUTPUTS = {
+# The pull request label that opts into the long fuzzing.
+FUZZ_LONG_LABEL = 'fuzz-long'
+
+# The section tasks and the ci.yml job each one runs. A task listed here is
+# a planned job; `tools/taskfile_coverage.py` reads this table, so a task
+# added to the Taskfile without a job fails the lint gate.
+TASK_JOBS = {
     'lint': 'lint',
-    'ament_lint': 'ament_lint',
+    'ament_lint': 'ament-lint',
     'scripts': 'scripts',
     'core': 'core',
     'gen': 'gen',
@@ -47,19 +51,21 @@ OUTPUTS = {
     'readme': 'readme',
     'coverage': 'coverage',
     'bridge': 'bridge',
-    'e2e': 'e2e',
-    'fuzz': 'fuzz',
-    'nightly': 'nightly',
-    'examples': 'examples',
+    'e2e-avr': 'e2e-avr',
+    'e2e-posix': 'e2e-posix',
+    'fuzz': 'fuzz-smoke',
+    'nightly': 'e2e-isolation',
+    'examples': 'build-matrix',
     'esp32': 'esp32',
-    'pic': 'pic',
+    'pic': 'pic-canary',
     'stm32': 'stm32',
     'rp2040': 'rp2040',
     'platformio': 'platformio',
     'budgets': 'budgets',
 }
 
-# Every ci.yml section job and the plan output it gates on.
+# Every ci.yml section job and the plan output it gates on. The e2e legs
+# share one output and split on its backend value.
 JOBS = {
     'lint': 'lint',
     'ament-lint': 'ament_lint',
@@ -85,20 +91,17 @@ JOBS = {
     'budgets': 'budgets',
 }
 
-# Tasks that are not a ci.yml section job: the aggregates, the standing
-# commits gate (pr-title.yml runs it), and the host-only and nightly-only
-# jobs ci.yml never plans.
-NOT_A_JOB = {'default', 'local', 'commits', 'soak', 'bigendian', 'pic-sim'}
+# The plan output each task selects.
+OUTPUTS = {task: JOBS[job] for task, job in TASK_JOBS.items()}
 
-# A section task whose name is not its job's name.
-TASK_OUTPUT = {
-    'ament_lint': 'ament_lint',
-    'pic': 'pic',
-    'fuzz': 'fuzz',
-    'examples': 'examples',
-    'nightly': 'nightly',
-    'e2e-avr': 'e2e',
-    'e2e-posix': 'e2e',
+# Tasks ci.yml never plans, each with the reason it stays out.
+TASKS_WITHOUT_A_JOB = {
+    'default': 'the aggregate that runs every section locally',
+    'local': 'the fast gates the hook and the takeoff run',
+    'commits': 'pr-title.yml runs it on every pull request event',
+    'soak': 'schedule-only soak, selected by name and by the schedule',
+    'bigendian': 'nightly-only big-endian job, selected by name and by the schedule',
+    'pic-sim': 'nightly-only MPLAB SIM job, selected by name and by the schedule',
 }
 
 # The trees every section builds in, the image, the suite plumbing and the
@@ -166,9 +169,7 @@ def sections(taskfile=ROOT / TASKFILE):
     import yaml
 
     tasks = yaml.safe_load(Path(taskfile).read_text(encoding='utf-8'))['tasks']
-    return {
-        name: task.get('sources') or [] for name, task in tasks.items() if name not in NOT_A_JOB
-    }
+    return {name: task.get('sources') or [] for name, task in tasks.items() if name in TASK_JOBS}
 
 
 def covers(sources, path):
@@ -204,7 +205,7 @@ def select(paths, by_task=None):
             if name in ('e2e-avr', 'e2e-posix'):
                 backends.add(name.removeprefix('e2e-'))
                 continue
-            outputs[TASK_OUTPUT.get(name, name)] = '1'
+            outputs[OUTPUTS[name]] = '1'
         if not hit:
             return {FULL: '1'}
     if backends:
