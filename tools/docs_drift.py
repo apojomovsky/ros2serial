@@ -120,6 +120,53 @@ def check_make_targets() -> list[str]:
     return problems
 
 
+# A target the Makefile declares but does not implement refuses through
+# `$(call pending,<target>,<reason>)`, which names the work that will land it.
+PENDING_RECIPE = '$(call pending,'
+# The wording a page uses when it means a command does not run yet. "Built"
+# alone is the firmware verb, so the phrase needs the negation.
+UNBUILT = re.compile(r"\bnot (?:yet )?built\b|\bisn't built\b|\baren't built\b", re.IGNORECASE)
+
+
+def built_targets() -> set[str]:
+    """Every target with a recipe of its own, leaving out one that refuses with `pending`.
+
+    A page that calls a command unbuilt points a reader away from a target
+    that works, which is the drift the validation page carried after
+    `hardware-check` shipped.
+    """
+    text = _read('Makefile')
+    built: set[str] = set()
+    for name in make_targets():
+        found = re.search(rf'^{re.escape(name)}:[^\n]*\n((?:\t[^\n]*\n)+)', text, re.MULTILINE)
+        if found and PENDING_RECIPE not in found.group(1):
+            built.add(name)
+    return built
+
+
+def check_unbuilt_claims() -> list[str]:
+    """A line calling `make <target>` unbuilt while the Makefile implements it.
+
+    The claim is judged line by line, so a target named on the same sentence is
+    the one it calls unbuilt; a page that says a feature is unbuilt without
+    naming the command has nothing here to compare and stays prose.
+    """
+    built = built_targets()
+    problems: set[str] = set()
+    for rel in user_docs():
+        for line in _read(rel).splitlines():
+            if not UNBUILT.search(line):
+                continue
+            named = set(MAKE_TOKEN.findall(line))
+            named |= set(re.findall(r'`make ([a-z][a-z0-9-]*)', line))
+            problems |= {
+                f'{rel}: `make {target}` is called not built, but the Makefile implements it'
+                for target in named
+                if target in built
+            }
+    return sorted(problems)
+
+
 def ci_jobs() -> list[str]:
     """Every job ci.yml runs, in file order."""
     with open(ROOT / CI, encoding='utf-8') as handle:
@@ -691,6 +738,7 @@ def check_ros2_run() -> list[str]:
 
 CHECKS = (
     check_make_targets,
+    check_unbuilt_claims,
     check_contributing_jobs,
     check_design_jobs,
     check_scenarios,
