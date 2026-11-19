@@ -158,7 +158,7 @@ Alongside the levels, these test kinds apply where they fit:
 | Budget and performance | Firmware builds, simavr | Flash, RAM, stack, cycles per byte, latency at given rates |
 | Soak | Integration and system levels | Hours of traffic without leaks, counter drift or lost sync |
 | Compatibility | Whole stack | Distro and RMW matrix, compilers, Arduino core versions, big-endian |
-| Documentation | Examples, README and docs snippets | Every code snippet compiles; every example builds |
+| Documentation | Examples, README and docs snippets | Every code snippet compiles; every example builds; every walkthrough page runs its own blocks |
 
 ## 5. How to test
 

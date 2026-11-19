@@ -392,6 +392,10 @@ ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \
   --msg-path ~/ros2_ws/src --out firmware/lib --zip firmware/dist/types.zip
 ```
 
+For the reader-facing version of that route, from the `.msg` to a board
+publishing it, see [custom messages in the Arduino
+IDE](arduino-ide-custom-messages.md); CI runs that page block by block.
+
 The archive's single top folder is the library's name, so two type lists
 install side by side and neither overwrites the other. Inside it are the files
 the out directory holds plus the runtime a sketch compiles against but the type

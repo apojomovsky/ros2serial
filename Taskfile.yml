@@ -564,6 +564,12 @@ tasks:
       - scripts/with-build-lock.sh
       - scripts/e2e-lease.sh
       - scripts/check-readme.sh
+      # The IDE walkthrough section builds the interface package the page
+      # carries, generates its archive, compiles the sketch against it and
+      # reads a topic through the bridge on the harness.
+      - scripts/check-walkthrough-arduino-ide.sh
+      - tools/docs_walkthrough.py
+      - docs/arduino-ide-custom-messages.md
       - README.md
       - docs/installation.md
       - docs/without-hardware.md
