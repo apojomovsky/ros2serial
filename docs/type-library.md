@@ -17,6 +17,9 @@ bundled list:
   table, the publish wrappers and the dispatch.
 - `r2s_bundled.h` and `r2s_bundled.c`, the descriptors, hashes and frame limit
   for the types it carries.
+- `r2s_config.h`, the same limit again under an `#ifndef` per macro, which the
+  core's own sources include, so a build that compiles the library needs no
+  flag for it.
 - One message header per type, at the `<pkg>/msg/<type>.hpp` path, plus a
   service or action header for each service or action named.
 - `library.properties`, whose `name` carries a digest of the type list and its
@@ -48,7 +51,7 @@ of them, it keeps an `r2s.yaml` and uses the generated static API instead.
 
 | Setting | Why the library cannot carry it | Where it lives |
 | --- | --- | --- |
-| `limits.max_frame` | The limit sizes the core's own buffers, which compile in the library and in your sketch, so every translation unit must agree on it | A build flag, or the limit the library's header declares |
+| `limits.max_frame` | The limit sizes the core's own buffers and every translation unit must agree on it; the library sizes it from its types, which a `r2s.yaml` limit would have to undercut or restate | `r2s_config.h`, sized from the type list, or a build flag that wins over it |
 | `bounds` for a field you cannot edit | A bound is a decision about storage, and the library takes it per type on the command line or in the type list | `--bound`, or the type list's `bounds` |
 | `features` and `tier` | `r2s.yaml` records both in the generated header's config hash; no macro reaches the C core from them yet, since the feature macros are still build flags | The configuration hash, with `-DR2S_WITH_*` flags on every unit for the channel itself |
 | Service and action indices | The static C hook API switches on generated `R2S_SERVICE_*_ID` and `R2S_ACTION_*_ID` values, which only `r2s-gen generate` emits | The generated static API |
@@ -75,15 +78,35 @@ that leaves it out fails with:
 R2S_MAX_FRAME is not set: pass -DR2S_MAX_FRAME=<n> to every translation unit
 ```
 
-The library's `r2s_bundled.h` declares a limit for the types it carries. Pass it
-to the build the way [the firmware guide](firmware.md#the-frame-limit-is-a-build-input)
-shows for your toolchain. A limit larger than the one the header declares is
-your call; a limit smaller than a row's frame fails the build at that row,
-naming the object.
+The library declares a limit for the types it carries, twice: `r2s_bundled.h`
+gives the sketch header the number to check its rows against, and
+`r2s_config.h` gives the core's own translation units the same number under an
+`#ifndef`, so a build against the library passes no flag. A limit larger than
+the library's is your call; a limit smaller than a row's frame fails the build
+at that row, naming the object. [The firmware
+guide](firmware.md#the-frame-limit-is-a-build-input) shows the flag for the
+toolchains that need one anyway.
 
 The [firmware guide](firmware.md#the-frame-limit-is-a-build-input) owns the
-per-toolchain table; this page only says why the value is a build input rather
-than a line in the sketch.
+per-toolchain table; this page only says where the library's own number comes
+from and how a build overrides it.
+
+## The archive the Arduino IDE installs
+
+`--zip` writes the library as the archive *Sketch > Include Library > Add .ZIP
+Library* installs, with the core, the C++ layer and the port staged beside the
+emitted files, so the IDE build needs no build property for any of them:
+
+```sh
+ros2 run r2s_gen r2s-gen types --types-file r2s-types.yaml \
+  --msg-path ~/ros2_ws/src --out firmware/lib --zip firmware/dist/types.zip
+```
+
+The archive's top folder is the library's name, so two type lists installed
+side by side never collide, and the same inputs write the same bytes. Only the
+`arduino` layout becomes an archive. [Custom
+interfaces](custom-interfaces.md#install-the-type-library-in-the-arduino-ide)
+carries the reader-facing walkthrough.
 
 ## Bounds
 

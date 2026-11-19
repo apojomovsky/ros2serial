@@ -105,6 +105,11 @@ property and nothing else configured. The [firmware
 guide](docs/firmware.md#the-frame-limit-is-a-build-input) says where each
 route gets its limits.
 
+A library for your own interface types installs the same way: `r2s-gen types`
+writes the archive with `--zip`, as [custom
+interfaces](docs/custom-interfaces.md#install-the-type-library-in-the-arduino-ide)
+shows.
+
 ### 3. Start the bridge
 
 In a terminal with the workspace sourced:

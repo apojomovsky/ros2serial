@@ -352,10 +352,12 @@ fails the build naming the object that does not fit, in both the C and the C++
 spelling; the runtime route gets the same check as a `constexpr` over the
 library. Each check counts the payload and the announce it makes, name length
 varints included, so a limit one byte too small fails at that row rather than at
-connect time. The frame limit itself stays a build flag, since it sizes the
-core's own buffers: pass it to every translation unit, as the core's header
-requires. A type list whose payloads need more than the protocol's 65277-byte
-frame is refused when the library is generated.
+connect time. The library carries the limit itself: its `src/r2s_config.h`
+defines `R2S_MAX_FRAME` under an `#ifndef`, sized from the type list and its
+bounds, so a build against the library needs no flag at all. A flag still wins
+where an application lowers or raises the limit for its own buffers. A type
+list whose payloads need more than the protocol's 65277-byte frame is refused
+when the library is generated.
 
 A service or an action arrives through the same library, so a runtime sketch
 names it like a message and writes no struct and no traits:
@@ -378,6 +380,30 @@ action struct with its `Goal`, `Result` and `Feedback` aliases, and the
 the server reads them from the library. A hand-written struct and trait are
 what a sketch needed before the generator emitted them, and neither is needed
 now.
+
+## Install the type library in the Arduino IDE
+
+An IDE user cannot pass a build property, so the IDE takes libraries as
+archives. `--zip` writes one from the same type list, and the archive is what
+*Sketch > Include Library > Add .ZIP Library* installs:
+
+```sh
+ros2 run r2s_gen r2s-gen types my_robot_interfaces/msg/SensorReading \
+  --msg-path ~/ros2_ws/src --out firmware/lib --zip firmware/dist/types.zip
+```
+
+The archive's single top folder is the library's name, so two type lists
+install side by side and neither overwrites the other. Inside it are the files
+the out directory holds plus the runtime a sketch compiles against but the type
+list does not name: the core, its headers, the C++ layer and the Arduino port.
+Nothing else is staged, and `src/r2s_config.h` travels with them, so an IDE
+build passes no build property. The same archive is byte-identical across
+runs, so a rebuilt library diffs when its types or bounds changed.
+
+The out directory stays the reviewable artifact, and `--zip` adds the archive
+rather than replacing it. Only the `arduino` layout becomes an archive, since
+it is the only one whose wrapper the IDE reads; `--zip` beside another layout
+is refused naming the layout.
 
 Keep `r2s.yaml` when the firmware needs what a type list cannot state:
 `limits.max_frame`, `features`, `tier`, and the generated service and action
