@@ -24,9 +24,11 @@ CASES = (
         {'scripts', 'core', 'bridge', 'readme', 'budgets', 'e2e-avr', 'e2e-posix'},
     ),
     (
+        # The walkthrough check greps the README for its anchors, so a README
+        # edit can break it; the other prose gates run as well.
         ['README.md'],
-        {'lint', 'docs', 'mermaid'},
-        {'readme', 'scripts', 'bridge', 'core', 'budgets'},
+        {'lint', 'docs', 'mermaid', 'readme'},
+        {'scripts', 'bridge', 'core', 'budgets', 'e2e-avr'},
     ),
     (
         ['CHANGELOG.md'],

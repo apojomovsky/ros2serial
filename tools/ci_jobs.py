@@ -134,9 +134,14 @@ SHARED = (
 )
 
 # A prose-only change: no build can see it, so only the gates that read
-# prose run. Every markdown page also feeds the mermaid parser.
-PROSE = ('docs/**', 'README.md', 'CHANGELOG.md')
-PROSE_JOBS = ('docs', 'mermaid')
+# prose run. Every markdown page also feeds the mermaid parser, and the
+# README carries the anchors the walkthrough check greps for, so a README
+# edit runs that check too.
+PROSE = {
+    'docs/**': ('docs', 'mermaid'),
+    'README.md': ('docs', 'mermaid', 'readme'),
+    'CHANGELOG.md': ('docs', 'mermaid'),
+}
 
 
 def glob_match(pattern, path):
@@ -193,8 +198,9 @@ def select(paths, by_task=None):
     for path in paths:
         if any(glob_match(pattern, path) for pattern in SHARED):
             return {FULL: '1'}
-        if any(glob_match(pattern, path) for pattern in PROSE):
-            for job in PROSE_JOBS:
+        prose = next((jobs for pattern, jobs in PROSE.items() if glob_match(pattern, path)), None)
+        if prose is not None:
+            for job in prose:
                 outputs[job] = '1'
             continue
         hit = False
