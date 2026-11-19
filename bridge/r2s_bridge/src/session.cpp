@@ -539,7 +539,10 @@ struct Session::Impl
         }
         front_offset_ += wrote.bytes;
       }
-      if (front.topic_id == kTimeTopic && front.control && front.opcode == kPing) {
+            // The time topic is a control channel, so every frame on it is a
+            // control frame: queue_frame puts it through the slot that sets
+            // control, and the check would never read false.
+      if (front.topic_id == kTimeTopic && front.opcode == kPing) {
             // The round trip starts when the port accepted the last byte, not
             // when the frame was queued: the poll may write it a period later,
             // and a send stamped at the queue reads the trip long. A non-blocking
