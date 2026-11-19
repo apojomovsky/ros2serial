@@ -149,3 +149,23 @@ def test_the_page_node_answers_a_call_from_the_goal_outcome(tmp_path, outcome, e
 
     assert done.returncode == 0, done.stdout + done.stderr
     assert json.loads(done.stdout.strip().splitlines()[-1]) == expected
+
+
+def test_the_sketch_calls_the_service_the_page_s_node_serves():
+    """The two halves are copied together, so a rename in one must fail here."""
+    relay = page_fence()
+    served = re.search(r"create_service\(\s*Trigger,\s*'([^']+)'", relay)
+    assert served is not None, 'the page node creates no service'
+    calls = set(
+        re.findall(r'Client<std_srvs::srv::Trigger>\s+\w+\(\w+,\s*"([^"]+)"\)', page_sketch())
+    )
+
+    assert calls == {served.group(1)}
+
+
+def page_sketch() -> str:
+    """The page's one cpp fence: the sketch snippet the firmware side copies."""
+    text = PAGE.read_text(encoding='utf-8')
+    blocks = re.findall(r'^```cpp\n(.*?)^```', text, re.MULTILINE | re.DOTALL)
+    assert len(blocks) == 1, f'{PAGE} carries {len(blocks)} cpp fences, expected one'
+    return blocks[0]

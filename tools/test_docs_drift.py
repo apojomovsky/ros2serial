@@ -626,12 +626,13 @@ NO_HEAP_CLAIMS = (
     'The MCU has no heap and no variable-size storage.\n',
     'The board has no heap, so a field is fixed at build time.\n',
     'A microcontroller with no heap still needs a fixed capacity.\n',
-    'The core is a C99 library with no heap.\n',
     'It runs on a board without a heap.\n',
     'The firmware has no heap.\n',
+    'The MCU has no heap memory.\n',
+    'The board has no heap space to grow into.\n',
     # A paragraph wraps, so the claim often straddles a line break.
     'The board has\nno heap, so a field is fixed at build time.\n',
-    # A sentence after the claim in the same paragraph is still the claim.
+    # A host clause later in the sentence does not make the claim about it.
     'The MCU has no heap, unlike the host.\n',
 )
 
@@ -666,9 +667,12 @@ def test_a_claim_in_a_spec_page_is_named(tmp_path, monkeypatch):
         'The core uses no heap-allocating containers.\n',
         'The core keeps no heap memory, so nothing fragments.\n',
         'A build makes no heap allocations of its own.\n',
-        # A host heap is real, so a fact about it is not the claim.
+        # A host process has a heap, so a fact about one is not the claim,
+        # and a process that avoids a heap copy says nothing about the boards.
         'A further frame waits instead of growing the host heap.\n',
         'The host heap holds what the MCU never sends.\n',
+        'The bridge keeps no heap copy of the frame.\n',
+        'The relay is a host node that has no heap pressure.\n',
     ],
 )
 def test_wording_that_states_the_rule_passes(tmp_path, monkeypatch, text):

@@ -797,16 +797,30 @@ def check_ros2_run() -> list[str]:
 # The boards ros2serial targets do have a heap: malloc, new and Arduino's
 # String all reach it on an Uno. What holds is the firmware's rule, that the
 # core allocates nothing at run time, so a page saying the heap is absent
-# states the wrong fact about a correct rule. Only a predicate about a subject
-# is that claim: `no heap and no shared_ptr anywhere`, which lists what an API
-# avoids, states the rule. Wording that names what the firmware does with the
-# heap (`no heap allocation`, `no heap use`) states it too, and the lookahead
-# keeps that out.
+# states the wrong fact about a correct rule.
+#
+# Three things make a sentence the claim rather than the rule: an existence
+# verb (`has no heap`, `without a heap`), the heap as the thing it names
+# rather than a word it qualifies (`no heap allocation`, `no heap use`), and
+# a board-side subject. `keeps no heap memory` states the rule, and a host
+# process, which does have a heap, is never the subject.
 NO_HEAP = re.compile(
-    r'\b(?:(?:has|have|had|with|keeps?|carries?|holds?)\s+(?:a\s+)?no\s+heap'
-    r'|without\s+(?:a\s+|any\s+)?heap)\b'
-    r'(?!\s*-?\s*(?:allocation|allocations|allocator|allocating|use|usage'
-    r'|memory|space|growth))',
+    r'\b(?:has|have|had|with)\s+(?:a\s+)?no\s+heap\b'
+    r'|\bwithout\s+(?:a\s+|any\s+)?heap\b',
+    re.IGNORECASE,
+)
+# What the heap may qualify and stay the rule rather than the claim.
+HEAP_QUALIFIERS = {
+    'allocation',
+    'allocations',
+    'allocator',
+    'allocating',
+    'use',
+    'usage',
+    'growth',
+}
+BOARD_SUBJECT = re.compile(
+    r'\b(?:MCU|microcontroller|board|Arduino|AVR|Uno|Mega|target|core|firmware)\b',
     re.IGNORECASE,
 )
 # One sentence at a time, so a subject in one never lends itself to a phrase
@@ -829,8 +843,8 @@ def heap_pages() -> tuple[str, ...]:
     return tuple(pages)
 
 
-def heap_claims(text: str) -> list[str]:
-    """The sentences of one page that claim the heap is absent."""
+def heap_sentences(text: str) -> list[str]:
+    """One page's sentences, paragraph joins kept, fenced code dropped."""
     sentences: list[str] = []
     paragraph: list[str] = []
 
@@ -850,7 +864,23 @@ def heap_claims(text: str) -> list[str]:
         else:
             paragraph.append(stripped)
     flush()
-    return [sentence for sentence in sentences if NO_HEAP.search(sentence)]
+    return sentences
+
+
+def heap_claims(text: str) -> list[str]:
+    """The sentences of one page that claim the heap is absent."""
+    claims = []
+    for sentence in heap_sentences(text):
+        matched = NO_HEAP.search(sentence)
+        if matched is None:
+            continue
+        after = sentence[matched.end() :].split()
+        if after and after[0].strip('-.,;:').lower() in HEAP_QUALIFIERS:
+            continue
+        if not BOARD_SUBJECT.search(sentence[: matched.start()]):
+            continue
+        claims.append(sentence)
+    return claims
 
 
 def check_heap_claims() -> list[str]:
