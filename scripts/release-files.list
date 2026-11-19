@@ -1,8 +1,10 @@
 # The files the release commit refreshes and stages: the version stamp, the
-# changelog and every version-stamped generated file. scripts/release.sh reads
-# this; one per line so concurrent branches staging different files keep both.
+# changelog, every version-stamped generated file and the capacity digest
+# that names them. scripts/release.sh reads this; one per line so concurrent
+# branches staging different files keep both.
 VERSION
 CHANGELOG.md
+tools/capacity_measurements.json
 gen/r2s_gen/version.py
 gen/package.xml
 gen/r2s_rosidl/package.xml

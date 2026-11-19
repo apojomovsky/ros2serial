@@ -11,6 +11,8 @@ slope, a capacity that floors, and a builder that emits the shape it names.
 """
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import capacity_report
@@ -170,6 +172,48 @@ def test_digest_names_the_pins_and_the_sources_that_move_a_byte():
     assert digest == capacity_report.input_digest(ROOT)
     assert 'ci/versions.env' in capacity_report.DIGEST_FILES
     assert not any(root.startswith('ci') for root in capacity_report.DIGEST_ROOTS)
+
+
+def test_refresh_inputs_rewrites_the_digest_alone(tmp_path):
+    """A version stamp rewrites banners the digest names, not a measured byte.
+
+    The release cut calls this after `make regen`, so the digest it commits
+    describes its own tree; every measured row must come back untouched,
+    because nothing was rebuilt.
+    """
+    path = tmp_path / 'measurements.json'
+    measurements = capacity_report.load(MEASUREMENTS)
+    measurements['inputs'] = 'stale'
+    capacity_report.save(measurements, path)
+    capacity_report.refresh_inputs(path, ROOT)
+    refreshed = capacity_report.load(path)
+    assert refreshed['inputs'] == capacity_report.input_digest(ROOT)
+    assert {key: value for key, value in refreshed.items() if key != 'inputs'} == {
+        key: value for key, value in measurements.items() if key != 'inputs'
+    }
+
+
+def test_refresh_inputs_is_reachable_only_from_the_cut():
+    """A hand-run must not rebaseline numbers nobody retook.
+
+    scripts/release.sh checks the tree against its measurements before it
+    stamps, so a cut only ever corrects the banners the stamp rewrote; the
+    flag keeps that one caller deliberate instead of a flagless command
+    anybody can reach for after a real source change.
+    """
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / 'tools' / 'capacity_report.py'),
+            'refresh-inputs',
+            '--measurements',
+            str(ROOT / 'tools' / 'capacity_measurements.json'),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert '--after-stamp' in result.stderr
 
 
 def test_committed_measurements_are_written_one_run_per_line():

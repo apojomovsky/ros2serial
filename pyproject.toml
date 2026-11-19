@@ -23,10 +23,10 @@ addopts = "-q"
 pythonpath = ["gen"]
 
 # Nightly-only mutation testing (scripts/run-mutation.sh in the
-# docker/mutation image): mutmut runs the gen suite once per mutant.
-[tool.mutmut]
-source_paths = ["gen/r2s_gen"]
-pytest_add_cli_args_test_selection = ["gen/tests"]
+# docker/mutation image). Its configuration is not here: mutmut maps a
+# source path to a module name from the directory it runs in, so
+# scripts/stage-mutmut-workspace.sh writes the configuration in the
+# workspace it stages, and nothing runs mutmut from the repository root.
 
 # Generator line and branch coverage. The gate passes the same scope as
 # flags, so this stays a local-run default rather than the judge.

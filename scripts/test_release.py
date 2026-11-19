@@ -3,6 +3,7 @@
 
 """The release cut: VERSION is the single source, and the next version follows the commits."""
 
+import json
 import re
 import shutil
 import subprocess
@@ -137,6 +138,13 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
     )
     (repo / 'tools').mkdir()
     shutil.copy(ROOT / 'tools' / 'refresh_generated.py', repo / 'tools' / 'refresh_generated.py')
+    # This fixture predates the capacity measurement, as a 0.1.0 tree did, so
+    # it carries no capacity_report.py and the cut skips the digest work. It
+    # keeps the measurements file the staged list names.
+    shutil.copy(
+        ROOT / 'tools' / 'capacity_measurements.json',
+        repo / 'tools' / 'capacity_measurements.json',
+    )
     shutil.copy(
         ROOT / 'scripts' / 'check-main-clone-build.sh',
         repo / 'scripts' / 'check-main-clone-build.sh',
@@ -366,8 +374,8 @@ VERSIONED_TESTS = [
 ]
 
 
-def cut_fixture(tmp_path, version=None):
-    """A copy of the tree in a fresh repository, cut with release.sh --bump patch.
+def cut_fixture_base(tmp_path, version=None):
+    """A copy of the tree in a fresh repository, one releasable commit, uncut.
 
     `version`, when given, stands in for the tree's VERSION, as on a tree
     whose last release is that version.
@@ -386,8 +394,14 @@ def cut_fixture(tmp_path, version=None):
     released = (cut / 'VERSION').read_text(encoding='utf-8').strip()
     git(cut, 'tag', f'v{released}')
     git(cut, 'commit', '-q', '--allow-empty', '-m', 'feat(core): cut fixture')
+    return cut
+
+
+def cut_fixture(tmp_path, version=None):
+    """A copy of the tree in a fresh repository, cut with release.sh --bump patch."""
+    cut = cut_fixture_base(tmp_path, version)
     result = subprocess.run(
-        ['bash', str(ROOT / 'scripts/release.sh'), '--bump', 'patch'],
+        ['bash', str(ROOT / 'scripts' / 'release.sh'), '--bump', 'patch'],
         cwd=cut,
         capture_output=True,
         text=True,
@@ -406,6 +420,57 @@ def test_a_cut_after_a_release_moves_past_it(tmp_path):
         text=True,
     ).stdout.split()
     assert 'VERSION' in committed
+
+
+def test_a_version_bump_alone_leaves_the_capacity_digest_matching(tmp_path):
+    """The cut stamps the version into files the capacity digest hashes under cpp/.
+
+    The banners a stamp rewrites move the digest without moving a measured
+    byte, so the cut refreshes it the way it regenerates the goldens: a
+    release commit carries the digest of its own tree, every measured row
+    stays put, and the budgets gate is green with nothing hand-pushed.
+    """
+    cut = cut_fixture(tmp_path)
+    check = subprocess.run(
+        [sys.executable, str(cut / 'tools' / 'capacity_report.py'), 'check'],
+        cwd=cut,
+        capture_output=True,
+        text=True,
+    )
+    assert check.returncode == 0, check.stdout + check.stderr
+    status = subprocess.run(
+        ['git', 'status', '--porcelain'], cwd=cut, capture_output=True, text=True
+    )
+    assert status.stdout == '', status.stdout
+    committed = json.loads((cut / 'tools' / 'capacity_measurements.json').read_text())
+    original = json.loads((ROOT / 'tools' / 'capacity_measurements.json').read_text())
+    assert committed['inputs'] != original['inputs']
+    for name in ('frames', 'boards', 'topics', 'services', 'ceiling'):
+        assert committed[name] == original[name], name
+
+
+def test_the_cut_refuses_a_tree_that_already_drifted(tmp_path):
+    """The digest refresh may only correct the stamp, so a drifted cut stops.
+
+    release.sh checks the tree against its measurements before it stamps: a
+    source change nobody remeasured fails there, so the digest the cut writes
+    can never stand in for a measurement.
+    """
+    cut = cut_fixture_base(tmp_path)
+    before = (cut / 'VERSION').read_text(encoding='utf-8').strip()
+    core = cut / 'core' / 'src' / 'session.c'
+    core.write_text(core.read_text(encoding='utf-8') + '\n/* drift */\n', encoding='utf-8')
+    git(cut, 'commit', '-q', '-am', 'feat(core): a source move')
+    result = subprocess.run(
+        ['bash', str(ROOT / 'scripts' / 'release.sh'), '--bump', 'patch'],
+        cwd=cut,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert 'measured a different tree' in result.stdout + result.stderr
+    # The stamp comes after the check, so a refusal leaves the version alone.
+    assert (cut / 'VERSION').read_text(encoding='utf-8').strip() == before
 
 
 def test_a_simulated_cut_leaves_the_versioned_tests_green(tmp_path):
