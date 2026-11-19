@@ -250,6 +250,29 @@ def test_the_archive_carries_the_emitted_files_and_the_runtime_and_nothing_else(
     assert runtime
 
 
+def test_a_zip_path_under_a_file_fails_naming_the_path(tmp_path, capsys):
+    """A destination the filesystem refuses names the archive, not a raw traceback."""
+    blocker = tmp_path / 'not-a-directory'
+    blocker.write_text('', encoding='utf-8')
+
+    assert (
+        cli.main(
+            [
+                'types',
+                TYPE,
+                '--msg-path',
+                str(EXAMPLES),
+                '--out',
+                str(tmp_path / 'out'),
+                '--zip',
+                str(blocker / 'types.zip'),
+            ]
+        )
+        == 1
+    )
+    assert 'types.zip' in capsys.readouterr().err
+
+
 def test_two_runs_write_the_same_archive(tmp_path):
     """A rebuilt library is a byte-identical artifact, as the release zip is."""
     _, first = zipped(tmp_path)
