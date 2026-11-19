@@ -35,19 +35,25 @@ for rel in "$(realpath --relative-to="$src" "$dst" 2>/dev/null || true)" \
   esac
   exclude_dst+=("--exclude=./$rel")
 done
+
+# The workspace top is the repository, so a tool that reads its own path
+# upward (r2s-arduino does, for the firmware assets) finds the tree. Its
+# conftest stays out: pytest loads the conftest of every directory above its
+# rootdir, and a second copy beside the staged one registers --shard twice.
 tar -C "$src" -cf - \
-  --exclude=./.git --exclude=./mutants --exclude=./gen/r2s_gen --exclude='__pycache__' \
+  --exclude=./.git --exclude=./gen/r2s_gen --exclude=./conftest.py --exclude='__pycache__' \
   "${exclude_dst[@]}" \
   . | tar -C "$dst" -xf - || exit 1
 # The package at the top, where its path names the module the tests import.
+# mutmut copies and mutates it into mutants/ itself.
 cp -a "$src/gen/r2s_gen" "$dst/r2s_gen" || exit 1
 
-# The tree pytest runs in, with the package left out because mutmut copies
-# and mutates that one itself.
+# The tree pytest runs in: the same copy, so the suite and every tree it
+# resolves through the root are there.
 tree="$dst/mutants"
 mkdir -p "$tree" || exit 2
-tar -C "$dst" -cf - --exclude=./mutants --exclude=./.git --exclude=./r2s_gen . \
-  | tar -C "$tree" -xf - || exit 1
+tar -C "$dst" -cf - --exclude=./mutants --exclude=./r2s_gen . | tar -C "$tree" -xf - || exit 1
+cp -a "$src/conftest.py" "$tree/conftest.py" || exit 1
 
 cat >"$dst/pyproject.toml" <<'TOML'
 # SPDX-License-Identifier: MIT

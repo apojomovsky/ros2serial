@@ -48,14 +48,20 @@ itself and an absolute name would land the report under the invocation's
 working directory.
 
 The generator stage runs in a workspace `scripts/stage-mutmut-workspace.sh`
-builds, because two of mutmut's rules fix its shape. mutmut names a mutant
-after the source path it is given, so the package sits at the top of that
-directory for its keys to match the name the tests import; and it runs
-pytest from `mutants/`, so the suite and every tree the tests resolve
-through the repository root are staged there as well. The tests that
-install the package in a subprocess (`test_packaging.py`,
-`test_rosidl_plugin.py`) are ignored: mutmut rewrites the sources to import
-its trampoline, and a pip or colcon subprocess has no mutmut to import.
+builds, because mutmut's rules fix its shape. mutmut names a mutant after
+the source path it is given, so the package sits at the top of that
+directory for its keys to match the name the tests import, and the rest of
+the tree sits beside it for the tools that read their own path upward (the
+arduino library builder looks for the firmware assets that way). mutmut
+runs pytest from `mutants/`, so the suite and every tree the tests resolve
+through the repository root are staged there too. The workspace lives
+outside the checkout, and its copied tree carries one `conftest.py`: pytest
+loads the conftest of every directory above its rootdir, so a workspace
+inside the checkout, or a second copy at its top, registers the repository
+root's options twice. The tests that install the package in a subprocess
+(`test_packaging.py`, `test_rosidl_plugin.py`) are ignored: mutmut rewrites
+the sources to import its trampoline, and a pip or colcon subprocess has no
+mutmut to import.
 
 ## Equivalent mutants
 

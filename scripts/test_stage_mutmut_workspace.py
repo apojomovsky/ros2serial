@@ -101,10 +101,11 @@ def test_the_workspace_leaves_git_and_the_old_tree_out(tmp_path):
 
 
 def test_a_workspace_inside_the_tree_is_not_copied_into_itself(tmp_path):
-    """The nightly stages into its report directory, which sits in the tree.
+    """A caller may put the workspace under the report directory in the tree.
 
-    A copy that steps into its own output fails with "file changed as we
-    read it" and never produces mutants/, which aborted the whole stage.
+    The runner stages into a temporary directory, but the script must stay
+    safe for a destination inside the tree: a copy that steps into its own
+    output fails with "file changed as we read it" and produces no mutants/.
     """
     repo = make_repo(tmp_path)
     report = repo / 'mutation-report'
@@ -124,6 +125,51 @@ def test_a_workspace_inside_the_tree_is_not_copied_into_itself(tmp_path):
     # The report directory is this run's output, never an input.
     assert not (workspace / 'mutation-report').exists()
     assert not (workspace / 'mutants' / 'mutation-report').exists()
+
+
+def test_the_workspace_top_is_repo_shaped_but_carries_no_conftest(tmp_path):
+    """A tool that reads its own path upward must find the tree.
+
+    r2s-arduino resolves the firmware assets from its own location, so the
+    package at the top needs the rest of the tree beside it. Its conftest
+    must stay out: pytest loads the conftest of every directory above its
+    rootdir, and a second copy registers --shard twice.
+    """
+    repo = make_repo(tmp_path)
+    (repo / 'core' / 'include' / 'r2s').mkdir(parents=True)
+    (repo / 'core' / 'include' / 'r2s' / 'r2s.h').write_text('')
+    workspace = tmp_path / 'ws'
+    assert stage(repo, workspace).returncode == 0
+    assert (workspace / 'core' / 'include' / 'r2s' / 'r2s.h').is_file()
+    assert (workspace / 'mutants' / 'core' / 'include' / 'r2s' / 'r2s.h').is_file()
+    assert not (workspace / 'conftest.py').exists()
+    assert (workspace / 'mutants' / 'conftest.py').is_file()
+
+
+def test_the_workspace_config_survives_the_repository_copy(tmp_path):
+    """The repository's own pyproject.toml must not overwrite the run's."""
+    repo = make_repo(tmp_path)
+    workspace = tmp_path / 'ws'
+    assert stage(repo, workspace).returncode == 0
+    config = (workspace / 'pyproject.toml').read_text()
+    assert 'source_paths = ["r2s_gen"]' in config
+    assert 'gen/tests' in config
+
+
+def test_the_workspace_carries_one_conftest_so_pytest_loads_it_once(tmp_path):
+    """Two copies of the root conftest register its options twice.
+
+    pytest loads the conftest of every directory above its rootdir, so a copy
+    at the workspace top beside the one in mutants/ raised "option names
+    {'--shard'} already added" and mutmut never ran.
+    """
+    repo = make_repo(tmp_path)
+    workspace = tmp_path / 'ws'
+    assert stage(repo, workspace).returncode == 0
+    found = sorted(
+        path.relative_to(workspace).as_posix() for path in workspace.rglob('conftest.py')
+    )
+    assert found == ['mutants/conftest.py'], found
 
 
 def test_the_stage_refuses_a_tree_without_the_suite(tmp_path):
