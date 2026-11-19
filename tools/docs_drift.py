@@ -5,7 +5,9 @@
 
 Every check reads the tree, never a list kept here, so a renamed target, a
 dropped macro, a new CI job or a new scenario fails the gate until the prose
-follows. Exemptions live in the tuples below with the reason they apply.
+follows. A page that calls a target unbuilt while the Makefile implements it
+fails too, so the prose cannot outlive the gap it described. Exemptions live
+in the tuples below with the reason they apply.
 """
 
 import argparse
