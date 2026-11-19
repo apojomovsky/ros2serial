@@ -11,6 +11,7 @@ The last proof unpacks the archive and compiles the example sketch against it
 with the Arduino CLI, so the IDE path is checked without the IDE.
 """
 
+import re
 import shutil
 import subprocess
 import zipfile
@@ -170,6 +171,57 @@ def test_a_flagged_limit_overrides_the_archived_one(tmp_path):
 
     assert compiled.returncode != 0
     assert 'reading_pub' in compiled.stdout + compiled.stderr
+
+
+def test_the_archived_frame_limit_follows_the_type_list_bounds(tmp_path):
+    """The limit is sized from the types, so a wider bound reaches a wider frame."""
+    limits = []
+    for bound in ('40', '200'):
+        archive = tmp_path / f'bound-{bound}.zip'
+        assert (
+            cli.main(
+                [
+                    'types',
+                    'std_msgs/msg/String',
+                    '--bound',
+                    f'std_msgs/msg/String.data={bound}',
+                    '--out',
+                    str(tmp_path / f'out-{bound}'),
+                    '--zip',
+                    str(archive),
+                ]
+            )
+            == 0
+        )
+        with zipfile.ZipFile(archive) as opened:
+            (config_name,) = [n for n in opened.namelist() if n.endswith('src/r2s_config.h')]
+            config = opened.read(config_name).decode('utf-8')
+        limits.append(int(re.search(r'^#define R2S_MAX_FRAME ([0-9]+)u$', config, re.M).group(1)))
+
+    assert limits[0] < limits[1]
+
+
+def test_a_zip_under_another_layout_fails_naming_it(tmp_path, capsys):
+    """An archive is the Arduino IDE's library: another layout has no such route."""
+    assert (
+        cli.main(
+            [
+                'types',
+                TYPE,
+                '--msg-path',
+                str(EXAMPLES),
+                '--layout',
+                'cmake',
+                '--out',
+                str(tmp_path / 'out'),
+                '--zip',
+                str(tmp_path / 'types.zip'),
+            ]
+        )
+        == 1
+    )
+    assert not (tmp_path / 'types.zip').exists()
+    assert 'arduino' in capsys.readouterr().err
 
 
 def test_two_runs_write_the_same_archive(tmp_path):

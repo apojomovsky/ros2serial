@@ -8,6 +8,9 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
+import zipfile
+from collections.abc import Mapping
 from pathlib import Path
 
 from r2s_gen import bundle
@@ -23,23 +26,39 @@ def _assets() -> tuple[Path, Path]:
     return checkout, checkout / 'cpp'
 
 
-def _library(args: argparse.Namespace) -> int:
-    destination = Path(args.out)
-    if destination.exists():
-        raise ValueError(f'{destination} already exists; choose a new library directory')
-    files = bundle.bundle(args.distro)
+def _runtime_sources() -> tuple[Path, Path]:
+    """Return the asset roots, refusing an installation that lacks them."""
     assets, cpp = _assets()
-    # Resolve inputs before creating the destination: an incomplete installation
-    # must not leave a library that appears ready to compile.
-    sources = {
-        'src/r2s': assets / 'core/include/r2s',
-        'src/ros2serial': cpp / 'include/ros2serial',
-    }
-    for source in (*sources.values(), assets / 'core/src', cpp / 'src'):
+    for source in (
+        assets / 'core/include/r2s',
+        cpp / 'include/ros2serial',
+        assets / 'core/src',
+        cpp / 'src',
+        cpp / 'include/r2s',
+        assets / 'ports/arduino',
+    ):
         if not source.is_dir():
             raise ValueError(f'missing firmware assets at {source}; rebuild r2s_gen')
-    layouts._write(str(destination), files)
-    for target, source in sources.items():
+    return assets, cpp
+
+
+def stage_runtime(destination: Path) -> None:
+    """
+    Copy the runtime a sketch compiles against into the library at `destination`.
+
+    The core sources and headers, the C++ layer and the Arduino port glue: what
+    `r2s_bundled.c` and the sketch's `#include <ros2serial.h>` reach but the
+    emitted files do not carry. The test core source stays behind, as in every
+    library the repository ships.
+
+    :param destination: the library root, whose `src/` receives the files.
+    :raises ValueError: if the installation lacks the assets.
+    """
+    assets, cpp = _runtime_sources()
+    for target, source in {
+        'src/r2s': assets / 'core/include/r2s',
+        'src/ros2serial': cpp / 'include/ros2serial',
+    }.items():
         shutil.copytree(source, destination / target, dirs_exist_ok=True)
     shutil.copytree(cpp / 'include/r2s', destination / 'src/r2s', dirs_exist_ok=True)
     for source in (assets / 'core/src').glob('*.c'):
@@ -49,6 +68,58 @@ def _library(args: argparse.Namespace) -> int:
         shutil.copy2(source, destination / 'src' / source.name)
     for name in ('r2s_arduino_port.h', 'r2s_arduino_port.cpp'):
         shutil.copy2(assets / 'ports/arduino' / name, destination / 'src' / name)
+
+
+def write_archive(path: str | Path, library: bundle.Library, files: Mapping[str, str]) -> None:
+    """
+    Write a library as the ZIP the Arduino IDE installs.
+
+    Add .ZIP Library takes the archive's single top folder as the library, so
+    every entry sits under one folder named for the library, and the entries are
+    the bytes the out directory holds. The runtime a sketch compiles against
+    joins them there: the IDE passes no build property, so the archive is the
+    only place the core, the C++ layer and the port can come from.
+
+    :param path: the archive to write.
+    :param library: the library the files describe, whose name the folder takes.
+    :param files: relative path to file text, as the out directory holds them.
+    :raises MessageError: if the path names a directory.
+    :raises ValueError: if the installation lacks the runtime assets.
+    :raises OSError: if the archive cannot be written.
+    """
+    destination = Path(path)
+    if destination.is_dir():
+        raise MessageError('--zip', f'{destination} is a directory', 'name the archive file')
+    with tempfile.TemporaryDirectory() as staging:
+        root = Path(staging) / library.name
+        layouts._write(str(root), dict(files))
+        stage_runtime(root)
+        entries = sorted(
+            (item.relative_to(staging).as_posix() for item in root.rglob('*') if item.is_file()),
+        )
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            # Fixed timestamps and modes keep a rebuilt archive byte-identical,
+            # as the release zip is: a diff between two builds means a change.
+            with zipfile.ZipFile(destination, 'w', zipfile.ZIP_DEFLATED) as archive:
+                for name in entries:
+                    info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
+                    info.external_attr = 0o644 << 16
+                    archive.writestr(info, (Path(staging) / name).read_bytes())
+        except OSError as error:
+            raise OSError(f'cannot write {destination} ({error}); check the path') from error
+
+
+def _library(args: argparse.Namespace) -> int:
+    destination = Path(args.out)
+    if destination.exists():
+        raise ValueError(f'{destination} already exists; choose a new library directory')
+    files = bundle.bundle(args.distro)
+    # Resolve inputs before creating the destination: an incomplete installation
+    # must not leave a library that appears ready to compile.
+    assets, _ = _runtime_sources()
+    layouts._write(str(destination), files)
+    stage_runtime(destination)
     for sketch in (assets / 'examples').glob('*/*.ino'):
         name = sketch.parent.name.removeprefix('arduino_')
         target = destination / 'examples' / name

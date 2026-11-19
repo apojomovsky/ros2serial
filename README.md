@@ -103,11 +103,15 @@ a library with `r2s-arduino library` as in the step above: one with an
 `examples/` directory appears under *File > Examples > ros2serial* once it is in
 your sketchbook's libraries directory.
 
-The IDE needs one extra step for now: the core has no default frame limit, so an
-IDE build must be given one. The [firmware
-guide](docs/firmware.md#the-frame-limit-is-a-build-input) has the file to create
-and its two lines. Nothing else needs configuring, and the extra step goes away
-once the library carries its own limit.
+The archive configures the build itself: its `src/r2s_config.h` carries the frame
+limit, so an IDE build needs no extra file. To override it, the [firmware
+guide](docs/firmware.md#the-frame-limit-is-a-build-input) has the
+`platform.local.txt` to create and its two lines.
+
+A library for your own interface types installs the same way: `r2s-gen types`
+writes the archive with `--zip`, as [custom
+interfaces](docs/custom-interfaces.md#install-the-type-library-in-the-arduino-ide)
+shows.
 
 ### 3. Start the bridge
 
