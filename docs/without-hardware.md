@@ -71,7 +71,10 @@ The example publishes a fixed 0.0 reading, so that number proves the sketch, the
 
 ## Moving to hardware
 
-Not yet verified on hardware ([checklist](https://github.com/apojomovsky/ros2serial/issues/95)). Flash the same build to an Uno and point the bridge at the serial port instead of the pty:
+The 0.5.0 board run passed on a Mega and was not run on an Uno, which was
+unavailable; [real-board validation](hardware-validation.md#results) records
+each run and what is still open. Flash the same build to your board and point
+the bridge at the serial port instead of the pty:
 
 ```console
 arduino-cli upload -p /dev/ttyACM0 --fqbn arduino:avr:uno --input-dir build/uno examples/arduino_minimal

@@ -5,7 +5,9 @@
 
 Every check reads the tree, never a list kept here, so a renamed target, a
 dropped macro, a new CI job or a new scenario fails the gate until the prose
-follows. Exemptions live in the tuples below with the reason they apply.
+follows. A page that calls a target unbuilt while the Makefile implements it
+fails too, so the prose cannot outlive the gap it described. Exemptions live
+in the tuples below with the reason they apply.
 """
 
 import argparse
@@ -118,6 +120,109 @@ def check_make_targets() -> list[str]:
                 continue
             problems.append(f'{rel}: `make {target}` matches no Makefile target')
     return problems
+
+
+# A target the Makefile declares but does not implement refuses through
+# `$(call pending,<target>,<reason>)`, which names the work that will land it.
+PENDING_RECIPE = '$(call pending,'
+# The wording a page uses when it means a command does not run yet. "Built"
+# alone is the firmware verb, so the phrase needs the negation.
+UNBUILT = re.compile(r"\bnot (?:yet )?built\b|\bisn't built\b|\baren't built\b", re.IGNORECASE)
+# The target a claim names: the word after `make`, or the first word of a
+# backticked span, which is how a table row's first cell spells it. Only a
+# name the Makefile implements is judged, so prose like "make its own
+# decision" never matches a target.
+MAKE_WORD = re.compile(r'\bmake ([a-z][a-z0-9-]*)')
+SPAN = re.compile(r'`([^`\n]+)`')
+# A numbered list item and a heading start their own block: a claim in one
+# item must not take a command named in the next as its own.
+ITEM_START = re.compile(r'^(?:\d+[.)]|#{1,6})\s')
+
+
+def claimed_targets(text: str) -> set[str]:
+    """Every target name a block writes, however it spells it."""
+    targets = set(MAKE_WORD.findall(text))
+    for span in SPAN.findall(text):
+        words = span.split()
+        if not words:
+            continue
+        # A span holding the whole command spells it as `make <target>`.
+        targets.add(words[1] if words[0] == 'make' and len(words) > 1 else words[0])
+    targets.discard('make')
+    return targets
+
+
+def built_targets() -> set[str]:
+    """Every target with a recipe of its own, leaving out one that refuses with `pending`.
+
+    A page that calls a command unbuilt points a reader away from a target
+    that works, which is the drift the validation page carried after
+    `hardware-check` shipped.
+    """
+    text = _read('Makefile')
+    built: set[str] = set()
+    for name in make_targets():
+        found = re.search(rf'^{re.escape(name)}:[^\n]*\n((?:\t[^\n]*\n)+)', text, re.MULTILINE)
+        if found and PENDING_RECIPE not in found.group(1):
+            built.add(name)
+    return built
+
+
+def claim_blocks(text: str) -> list[tuple[int, str]]:
+    """Each bullet, numbered item, heading or prose paragraph, and each table row.
+
+    Pages wrap prose, so the sentence that calls something unbuilt and the
+    command it names land on different lines of one bullet. A paragraph would
+    swallow a whole table: one row names an unbuilt thing while the next row
+    mentions a command.
+    """
+    blocks: list[tuple[int, str]] = []
+    start, lines = 1, []
+
+    def flush() -> None:
+        nonlocal start, lines
+        if lines:
+            blocks.append((start, '\n'.join(lines)))
+            lines = []
+
+    for number, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            flush()
+        elif stripped.startswith('|'):
+            flush()
+            blocks.append((number, line))
+        elif stripped.startswith(('- ', '* ')) or ITEM_START.match(stripped):
+            flush()
+            start, lines = number, [line]
+        else:
+            if not lines:
+                start = number
+            lines.append(line)
+    flush()
+    return blocks
+
+
+def check_unbuilt_claims() -> list[str]:
+    """A block calling a target unbuilt while the Makefile implements it.
+
+    The target must be in the block, written the way the pages write it: after
+    `make`, or as a table row's first cell. Nothing else ties "the board
+    check" to `hardware-check`, and guessing that link would fail pages about
+    work that really is unbuilt.
+    """
+    built = built_targets()
+    problems: set[str] = set()
+    for rel in user_docs():
+        for start, block in claim_blocks(_read(rel)):
+            if not UNBUILT.search(block):
+                continue
+            problems |= {
+                f'{rel}:{start}: `{target}` is called not built, but the Makefile implements it'
+                for target in claimed_targets(block)
+                if target in built
+            }
+    return sorted(problems)
 
 
 def ci_jobs() -> list[str]:
@@ -691,6 +796,7 @@ def check_ros2_run() -> list[str]:
 
 CHECKS = (
     check_make_targets,
+    check_unbuilt_claims,
     check_contributing_jobs,
     check_design_jobs,
     check_scenarios,
