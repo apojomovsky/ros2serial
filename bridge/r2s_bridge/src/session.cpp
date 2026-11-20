@@ -1848,11 +1848,9 @@ struct Session::Impl
     if (!reader.u32(tick) || !reader.at_end()) {
       return;
     }
-        // The sample is measured from the read that completed this frame, so
-        // the poll dispatch after it, and the decoding above, stay out of the
-        // round trip. Both clocks were read together at that instant.
-    sync->add_sample(last_ping_send_ns_, rx_ns_, rx_ros_ns_, tick);
-    maybe_send_correction(rx_ns_);
+    const std::int64_t now = now_ns();
+    sync->add_sample(last_ping_send_ns_, now, ros_now_ns(), tick);
+    maybe_send_correction(now);
   }
 
     // A log line ([LOG-1]): the level, the text, the value kind and the
@@ -2196,11 +2194,6 @@ struct Session::Impl
     if (reader) {
       Frame frame;
       while (reader && reader->poll(frame)) {
-            // Read both clocks before anything else touches the frame: the
-            // arrival is this call, and every nanosecond between it and the
-            // stamp lands on the receive side alone.
-        rx_ns_ = now_ns();
-        rx_ros_ns_ = ros_now_ns();
         on_frame(frame);
         reader->release();
         flush();
@@ -2226,12 +2219,6 @@ struct Session::Impl
 
   std::unique_ptr<Transport> transport;
   std::unique_ptr<FrameReader> reader;
-    // The clocks read the instant the reader handed this frame over, in
-    // nanoseconds. Frames on the time channel are measured from here rather
-    // than from the handler that decodes them: a handler can run after other
-    // work in the same pass, and that latency lands on the round trip alone.
-  std::int64_t rx_ns_ = 0;
-  std::int64_t rx_ros_ns_ = 0;
     // The frames the link has not taken yet, oldest first, with their total
     // encoded size. The front frame may be partially written.
   std::deque<QueuedFrame> queue_;
