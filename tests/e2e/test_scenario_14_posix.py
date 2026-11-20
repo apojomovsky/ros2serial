@@ -90,12 +90,12 @@ def _wait_link_ready(node, received, since):
 
 
 def _service_firmware():
-    """Whether this leg boots a firmware serving services: the C shape or the ros compat shape."""
+    """Whether this leg boots a firmware serving services: the C shape or the C++ services shape."""
     given = os.environ.get('R2S_E2E_FW', '')
     return (
         not given
         or given.endswith('/r2s_posix_firmware')
-        or given.endswith('/r2s_posix_ros_firmware')
+        or given.endswith('/r2s_posix_services_firmware')
     )
 
 

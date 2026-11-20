@@ -22,7 +22,6 @@ extern "C" {
 #include "r2s/r2s_session.h"
 #include "r2s/runtime.hpp"
 #include "r2s/service.hpp"
-#include "ros2serial/std_msgs/Float32.h"
 #include "std_msgs/msg/float32.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include "unity.h"

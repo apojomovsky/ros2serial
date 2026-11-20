@@ -173,63 +173,8 @@ action_sources=("$build/check_action_sketch.cpp" "$build/check_action_static.cpp
 printf '#include <std_msgs/msg/float32.hpp>\n#include <geometry_msgs/msg/twist.hpp>\n' \
   >"$build/check_sketch.cpp"
 sources+=("$build/check_sketch.cpp")
-# A rosserial-style sketch over the compatibility headers, proving the
-# spelling a ported sketch uses, with the size parameters ros_lib sketches
-# carry. The member-function arity rides along, so both subscribe forms
-# compile for the board.
-cat >"$build/check_ros_sketch.cpp" <<'EOF'
-#include <ros2serial/ros.h>
-#include <ros2serial/std_msgs/Float32.h>
-#include <ros2serial/geometry_msgs/Twist.h>
-ros::NodeHandle nh;
-std_msgs::Float32 battery;
-ros::Publisher battery_pub("battery", &battery);
-void on_cmd_vel(const geometry_msgs::Twist &msg)
-{
-    (void)msg;
-}
-ros::Subscriber<geometry_msgs::Twist> cmd_vel_sub("cmd_vel", &on_cmd_vel);
-class Echo
-{
-  public:
-    void on_twist(const geometry_msgs::Twist &msg)
-    {
-        (void)msg;
-    }
-};
-Echo echo;
-ros::Subscriber<geometry_msgs::Twist, Echo> echo_sub("echo_vel", &Echo::on_twist, &echo);
-ros::NodeHandle_<ros::ArduinoHardware, 1, 1, 64, 64> nh_small;
-ros::Time stamp;
-ros::Duration timeout(1, 0);
-void setup()
-{
-    nh.initNode();
-    nh.advertise(battery_pub);
-    nh.subscribe(cmd_vel_sub);
-    nh.subscribe(echo_sub);
-    nh.setSpinTimeout(100u);
-    (void)nh.getHardware();
-}
-void loop()
-{
-    battery.data = 1.0f;
-    battery_pub.publish(&battery);
-    (void)nh.spinOnce();
-    (void)nh.connected();
-    stamp = nh.now();
-    stamp += timeout;
-    nh.logdebug("dbg");
-    nh.loginfo("inf");
-    nh.logwarn("wrn");
-    nh.logerror("err");
-    nh.logfatal("ftl");
-}
-EOF
-sources+=("$build/check_ros_sketch.cpp")
-# The same sketch for the Arduino build, so initNode's Serial branch
-# compiles too. The stub stands in for the core's stream type, and the
-# syntax check needs no link.
+# The stub stands in for the core's stream type, so the Arduino build below
+# resolves Serial and the flash strings the log macros read.
 cat >"$stage/Arduino.h" <<'EOF'
 #ifndef R2S_AVR_SYNTAX_ARDUINO_H
 #define R2S_AVR_SYNTAX_ARDUINO_H
@@ -245,94 +190,51 @@ class HardwareSerial : public Stream
     }
 };
 extern HardwareSerial Serial;
-// The flash-string helper and macro the core's F() sketches use, spelled
-// the way WString.h spells them, so the log overloads below resolve.
+// The flash-string helper WString.h declares, which the sketch header
+// reaches on AVR.
 class __FlashStringHelper;
-#define F(s) (reinterpret_cast<const __FlashStringHelper *>(s))
 #endif
 EOF
-cat >"$build/check_ros_arduino.cpp" <<'EOF'
+cat >"$build/check_migrated_arduino.cpp" <<'EOF'
 #include <Arduino.h>
-#include <ros2serial/ros.h>
-#include <ros2serial/std_msgs/Float32.h>
-ros::NodeHandle nh;
-std_msgs::Float32 battery;
-ros::Publisher battery_pub("battery", &battery);
-void setup()
-{
-    nh.initNode();
-    nh.advertise(battery_pub);
-    nh.loginfo(F("boot"));
-}
-void loop()
-{
-    battery_pub.publish(&battery);
-    nh.spinOnce();
-    nh.loginfo(F("loop"));
-}
-EOF
-# The porting guide's one-line edits, compiling for the board: strings copy
-# into fixed buffers, bounded arrays set their size beside the elements, and
-# the header fills its stamp and frame id. The tf broadcaster keeps its
-# ros_lib shape, advertising /tf and sending the stamped transform.
-cat >"$build/check_ros_edits.cpp" <<'EOF'
-#include <ros2serial/ros.h>
-#include <ros2serial/geometry_msgs/TransformStamped.h>
-#include <ros2serial/sensor_msgs/Imu.h>
-#include <ros2serial/sensor_msgs/JointState.h>
-#include <ros2serial/std_msgs/Header.h>
-#include <ros2serial/std_msgs/String.h>
-#include <ros2serial/tf/transform_broadcaster.h>
 #include <stdio.h>
-ros::NodeHandle nh;
-tf::TransformBroadcaster broadcaster;
-sensor_msgs::JointState joints;
-std_msgs::String greeting;
-std_msgs::Header frame;
-sensor_msgs::Imu imu;
-void fill_greeting(std_msgs::String &msg, const char *text)
+#include <ros2serial.h>
+#include <geometry_msgs/msg/twist.hpp>
+#include <std_msgs/msg/float32.hpp>
+#include <std_msgs/msg/header.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <tf2_msgs/msg/tf_message.hpp>
+r2s::Node node("migrated");
+r2s::Publisher<std_msgs::msg::Float32> battery_pub(node, "battery");
+r2s::Publisher<tf2_msgs::msg::TFMessage> tf_pub(node, "/tf");
+void on_cmd_vel(const geometry_msgs::msg::Twist &msg)
 {
-    (void)snprintf(msg.data, sizeof msg.data, "%s", text);
+    (void)msg;
 }
-void fill_joints(sensor_msgs::JointState &msg)
-{
-    msg.position.size = 2u;
-    msg.position.data[0] = 1.5;
-    msg.position.data[1] = -0.5;
-    msg.name.size = 2u;
-    (void)snprintf(msg.name.data[0], sizeof msg.name.data[0], "%s", "left");
-    (void)snprintf(msg.name.data[1], sizeof msg.name.data[1], "%s", "right");
-}
-void fill_frame(std_msgs::Header &msg)
-{
-    msg.stamp.sec = 12;
-    msg.stamp.nanosec = 500000000u;
-    (void)snprintf(msg.frame_id, sizeof msg.frame_id, "%s", "base_link");
-}
+r2s::Subscription<geometry_msgs::msg::Twist> cmd_vel_sub(node, "cmd_vel", on_cmd_vel);
 void setup()
 {
-    nh.initNode();
-    broadcaster.init(nh);
-    imu.orientation_covariance[0] = 0.0;
-    fill_greeting(greeting, "hello");
-    fill_joints(joints);
-    fill_frame(frame);
+    node.begin(Serial, 115200);
+    R2S_LOG_INFO("boot");
 }
 void loop()
 {
-    geometry_msgs::TransformStamped transform;
+    std_msgs::msg::Float32 battery;
+    std_msgs::msg::String text;
+    std_msgs::msg::Header frame;
+    tf2_msgs::msg::TFMessage tf;
 
-    transform.header.stamp.sec = 1;
-    transform.header.stamp.nanosec = 0u;
-    (void)snprintf(transform.header.frame_id, sizeof transform.header.frame_id, "%s", "base");
-    (void)snprintf(transform.child_frame_id, sizeof transform.child_frame_id, "%s", "gripper");
-    transform.transform.translation.x = 1.0;
-    transform.transform.rotation.w = 1.0;
-    broadcaster.sendTransform(transform);
-    (void)nh.spinOnce();
+    battery.data = 1.0f;
+    battery_pub.publish(battery);
+    (void)snprintf(text.data, sizeof(text.data), "%s", "hello");
+    frame.stamp.sec = 1;
+    (void)snprintf(frame.frame_id, sizeof(frame.frame_id), "%s", "base_link");
+    tf.transforms.size = 1u;
+    tf.transforms.data[0].child_frame_id[0] = '\0';
+    tf_pub.publish(tf);
+    node.spin_some();
 }
 EOF
-sources+=("$build/check_ros_edits.cpp")
 
 status=0
 for source in "${sources[@]}"; do
@@ -341,10 +243,8 @@ for source in "${sources[@]}"; do
     status=1
   fi
 done
-# A service sketch, runtime and compat: the Trigger service rides on the
-# bundled tables, proving both declaration paths compile for the board.
-# The getParam calls ride along without the parameters channel, so a
-# sketch using them builds for every tier.
+# A service sketch: the Trigger service rides on the bundled tables, so
+# the declaration path a firmware uses compiles for the board.
 cat >"$build/check_service_sketch.cpp" <<'EOF'
 #include <std_srvs/srv/trigger.hpp>
 #include <r2s/service.hpp>
@@ -364,60 +264,10 @@ bool call_trigger()
     return trigger.call(req, res);
 }
 EOF
-cat >"$build/check_ros_service.cpp" <<'EOF'
-#include <ros2serial/ros.h>
-#include <ros2serial/std_srvs/Trigger.h>
-ros::NodeHandle nh;
-void on_reset(const std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res)
-{
-    (void)req;
-    res.success = 1u;
-    res.message[0] = '\0';
-}
-ros::ServiceServer<std_srvs::Trigger::Request, std_srvs::Trigger::Response> reset_srv("reset",
-    &on_reset);
-class Adder
-{
-  public:
-    void on_add(const std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res)
-    {
-        (void)req;
-        res.success = 1u;
-    }
-};
-Adder adder;
-ros::ServiceServer<std_srvs::Trigger::Request, std_srvs::Trigger::Response, Adder> add_srv("add",
-    &Adder::on_add, &adder);
-ros::ServiceClient<std_srvs::Trigger::Request, std_srvs::Trigger::Response> trigger_cli(
-    "trigger");
-void setup()
-{
-    int count = 0;
-    float gain = 0.0f;
-    char text[32];
-    char *slot = text;
-    bool flag = false;
-    nh.initNode();
-    nh.advertiseService(reset_srv);
-    nh.advertiseService(add_srv);
-    nh.serviceClient(trigger_cli);
-    (void)nh.getParam("count", &count);
-    (void)nh.getParam("gain", &gain);
-    (void)nh.getParam("label", &slot);
-    (void)nh.getParam("flag", &flag);
-}
-void loop()
-{
-    std_srvs::Trigger::Request req;
-    std_srvs::Trigger::Response res;
-    (void)trigger_cli.call(req, res);
-    (void)nh.spinOnce();
-}
-EOF
-service_sources=("$build/check_service_sketch.cpp" "$build/check_ros_service.cpp")
-# The service sketches and the registry source, with the services channel
-# on: the channel is a build flag, so these prove the flag the sketches
-# build with.
+service_sources=("$build/check_service_sketch.cpp")
+# The service sketch and the registry source, with the services channel on:
+# the channel is a build flag, so these prove the flag the sketch builds
+# with.
 service_flags=("${flags[@]}" -DR2S_WITH_SERVICES)
 for source in "${service_sources[@]}" "$root/cpp/src/service.cpp"; do
   if ! avr-g++ "${service_flags[@]}" -fsyntax-only "$source"; then
@@ -442,11 +292,12 @@ for source in "${action_sources[@]}" "$root/cpp/src/action.cpp"; do
     status=1
   fi
 done
-# The Arduino build of the rosserial sketch, so initNode's Serial branch
-# compiles against the same stub the TU above stages. The port glue lives
-# beside the sketch on a board, so its directory rides along here.
-if ! avr-g++ "${flags[@]}" -fsyntax-only -DARDUINO -I "$root/ports/arduino" "$build/check_ros_arduino.cpp"; then
-  echo "avr-syntax: $build/check_ros_arduino.cpp did not compile"
+# The Arduino build of the migration guide's after sketch, so the native
+# API's Serial branch and its flash-string log compile for the board. The
+# log channel is a build flag, so the sketch that logs passes it. The port
+# glue lives beside the sketch on a board, so its directory rides along.
+if ! avr-g++ "${flags[@]}" -fsyntax-only -DARDUINO -DR2S_WITH_LOG -I "$root/ports/arduino" "$build/check_migrated_arduino.cpp"; then
+  echo "avr-syntax: $build/check_migrated_arduino.cpp did not compile"
   status=1
 fi
 [ "$status" = 0 ] || exit 1
