@@ -94,7 +94,8 @@ tasks:
       - core/tests/CMakeLists.txt
       - core/fuzz/corpus/**
       - ports/arduino/**
-      # The benchmark test compiles and runs the framing benchmark.
+      # The benchmark test compiles and runs the framing benchmark, and the
+      # bridge benchmark test drives the idle CPU script's argv handling.
       - benchmark/**
       # The release tests pin the checked-in generated outputs.
       - examples/cmake_minimal/lib/**
@@ -194,6 +195,9 @@ tasks:
       - scripts/e2e-lease.sh
       - scripts/bridge-test.sh
       - bridge/**
+      # The bridge benchmark builds this bridge and the posix firmware, and
+      # measures them over a pty pair.
+      - benchmark/bridge/**
       # The framing library links the core.
       - core/**
       # The hash test takes its type hashes from the generator package.
