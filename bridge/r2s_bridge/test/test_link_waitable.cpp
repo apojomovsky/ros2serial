@@ -280,6 +280,83 @@ TEST_F(LinkWaitableTest, ArmsAgainAfterAnotherWatch)
   EXPECT_EQ(rcl_wait_set_fini(&wait_set), RCL_RET_OK);
 }
 
+// A waitable with nothing to run would swallow every wakeup and leave the
+// link silent with no error, so the constructor refuses it.
+TEST_F(LinkWaitableTest, RefusesAWaitableWithNoCallback)
+{
+  EXPECT_THROW(
+    LinkWaitable(rclcpp::contexts::get_global_default_context(), LinkWaitable::ReadyCallback()),
+    std::invalid_argument);
+}
+
+// A disarm with the helper already idle returns at once: it must not block on
+// a poll that is not running, which is the state an armed-then-idle link is
+// in when the port closes.
+TEST_F(LinkWaitableTest, UnwatchReturnsWhenTheHelperIsIdle)
+{
+  Pty pty;
+  TermiosTransport transport(TermiosOptions{pty.name()});
+  LinkWaitable waitable(rclcpp::contexts::get_global_default_context(), []() {});
+  waitable.watch(transport.native_handle());
+  waitable.unwatch();
+  waitable.unwatch();
+  EXPECT_EQ(waitable.watched(), -1);
+}
+
+// The disarm that matters: the helper is blocked in poll() when the port
+// closes, so unwatch must interrupt it and wait for it to leave before the
+// descriptor goes away. A wait that returned early would leave the helper
+// polling a number the next open hands to somebody else.
+TEST_F(LinkWaitableTest, UnwatchInterruptsAHelperParkedInPoll)
+{
+  Pty pty;
+  TermiosTransport transport(TermiosOptions{pty.name()});
+  LinkWaitable waitable(rclcpp::contexts::get_global_default_context(), []() {});
+  waitable.watch(transport.native_handle());
+  // The helper enters poll() as soon as it sees the watch; this lets it get
+  // there before the disarm, which is the ordering the port close takes.
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+  const auto started = std::chrono::steady_clock::now();
+  waitable.unwatch();
+  const auto took = std::chrono::steady_clock::now() - started;
+
+  EXPECT_EQ(waitable.watched(), -1);
+  EXPECT_LT(took, std::chrono::seconds(2)) << "the disarm must not wait for a byte";
+}
+
+// A watch that replaces one descriptor with another while the helper sleeps
+// in poll() on the first: the old readiness must be discarded, or the next
+// link would inherit a wakeup that belonged to its predecessor.
+TEST_F(LinkWaitableTest, AReplacedDescriptorDiscardsTheOldReadiness)
+{
+  Pty first;
+  Pty second;
+  TermiosTransport first_transport(TermiosOptions{first.name()});
+  TermiosTransport second_transport(TermiosOptions{second.name()});
+  int ready = 0;
+  LinkWaitable waitable(
+    rclcpp::contexts::get_global_default_context(), [&ready]() {++ready;});
+  waitable.watch(first_transport.native_handle());
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  // The first link has bytes when the swap lands, so its readiness is the
+  // one the helper sees and must discard.
+  first.write_byte();
+  waitable.watch(second_transport.native_handle());
+  second.write_byte();
+  rcl_wait_set_t wait_set = rcl_get_zero_initialized_wait_set();
+  ASSERT_EQ(
+    rcl_wait_set_init(&wait_set, 0, 1, 0, 0, 0, 0,
+    rclcpp::contexts::get_global_default_context()->get_rcl_context().get(),
+    rcl_get_default_allocator()), RCL_RET_OK);
+
+  ASSERT_EQ(wait_once(wait_set, waitable, std::chrono::seconds(5)), RCL_RET_OK);
+  waitable.execute(waitable.take_data());
+  EXPECT_EQ(ready, 1) << "the second link's byte is what wakes the executor";
+  EXPECT_EQ(waitable.watched(), second_transport.native_handle());
+  EXPECT_EQ(rcl_wait_set_fini(&wait_set), RCL_RET_OK);
+}
+
 }  // namespace
 }  // namespace test
 }  // namespace r2s_bridge

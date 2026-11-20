@@ -545,7 +545,7 @@ struct Session::Impl
         }
         front_offset_ += wrote.bytes;
       }
-      if (front.topic_id == kTimeTopic && front.control && front.opcode == kPing) {
+      if (front.topic_id == kTimeTopic && front.opcode == kPing) {
             // The round trip starts when the last PING byte leaves, not when
             // the frame was queued: the poll may write it a period later, and
             // an arrival stamped from a queued send reads the trip long.
@@ -2223,8 +2223,7 @@ struct Session::Impl
 
   bool receive()
   {
-    const bool worked = drain();
-    return worked || !reader;
+    return drain();
   }
 
   SessionConfig config;

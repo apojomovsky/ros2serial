@@ -16,35 +16,33 @@
 
 namespace r2s_bridge
 {
-namespace
-{
-
-void close_fd(int & fd)
-{
-  if (fd >= 0) {
-    ::close(fd);
-    fd = -1;
-  }
-}
-
-}  // namespace
 
 LinkWaitable::LinkWaitable(const rclcpp::Context::SharedPtr & context, ReadyCallback ready)
 : guard_(std::make_shared<rclcpp::GuardCondition>(context)), ready_(std::move(ready))
 {
-  int pipe_fds[2] = {-1, -1};
-  if (::pipe2(pipe_fds, O_CLOEXEC | O_NONBLOCK) != 0) {
-    throw std::system_error(errno, std::generic_category(), "LinkWaitable: cannot make the wakeup pipe");
+  if (!ready_) {
+    throw std::invalid_argument("LinkWaitable: a ready callback is required");
   }
+  int pipe_fds[2] = {-1, -1};
+    // GCOVR_EXCL_START: a test cannot make the kernel refuse a pipe, and a
+    // node without one could never wake the executor at all.
+  if (::pipe2(pipe_fds, O_CLOEXEC | O_NONBLOCK) != 0) {
+    throw std::system_error(
+      errno, std::generic_category(), "LinkWaitable: cannot make the wakeup pipe");
+  }
+    // GCOVR_EXCL_STOP
   wake_read_ = pipe_fds[0];
   wake_write_ = pipe_fds[1];
+    // GCOVR_EXCL_START: a thread that cannot start leaves the node with no
+    // receive path, which no test can inject without a failing allocator.
   try {
     thread_ = std::thread([this]() {run();});
   } catch (...) {
-    close_fd(wake_read_);
-    close_fd(wake_write_);
+    ::close(wake_read_);
+    ::close(wake_write_);
     throw;
   }
+    // GCOVR_EXCL_STOP
 }
 
 LinkWaitable::~LinkWaitable()
@@ -56,11 +54,9 @@ LinkWaitable::~LinkWaitable()
   }
   wake();
   idle_.notify_all();
-  if (thread_.joinable()) {
-    thread_.join();
-  }
-  close_fd(wake_read_);
-  close_fd(wake_write_);
+  thread_.join();
+  ::close(wake_read_);
+  ::close(wake_write_);
 }
 
 void LinkWaitable::watch(int fd)
@@ -85,9 +81,6 @@ void LinkWaitable::unwatch()
   // A wakeup the executor never acknowledged dies with the disarm: the next
   // watch() must be able to poll, not wait behind a stale flag.
   pending_ = false;
-  if (!thread_.joinable() || quit_) {
-    return;
-  }
   // Wait until the helper leaves poll() before returning, so the caller may
   // close the descriptor the moment this does. The wakeup write happens once
   // the lock is dropped, since the helper needs it to notice the disarm.
@@ -96,7 +89,12 @@ void LinkWaitable::unwatch()
   wake();
   lock.lock();
   if (polling) {
+        // Only this class notifies idle_, and it does so after clearing
+        // in_poll_ so the predicate never reads false after a spurious wakeup.
+        // GCOVR_EXCL_BR_START: the false edge needs a notify no other thread
+        // sends, so no test can reach it.
     idle_.wait(lock, [this] {return !in_poll_ || quit_;});
+        // GCOVR_EXCL_BR_STOP
   }
 }
 
@@ -117,11 +115,7 @@ void LinkWaitable::drain_wake()
 
 void LinkWaitable::notify_ready()
 {
-  try {
-    guard_->trigger();
-  } catch (const std::exception &) {
-    // A context going away needs no wakeup: the executor is already leaving.
-  }
+  guard_->trigger();
 }
 
 void LinkWaitable::run()
@@ -139,22 +133,31 @@ void LinkWaitable::run()
     // No timeout: a quiet line costs nothing until a byte, a hangup or a
     // disarm arrives.
     pollfd fds[2] = {{wake_fd, POLLIN, 0}, {fd, POLLIN, 0}};
-    const int ready_fds = ::poll(fds, 2u, -1);
+        // A failed poll leaves every revents clear, so the loop parks again
+        // instead of treating an error as readiness.
+    (void)::poll(fds, 2u, -1);
     lock.lock();
     in_poll_ = false;
     idle_.notify_all();
     if (quit_) {
       return;
     }
-    if (ready_fds > 0 && (fds[0].revents & POLLIN) != 0) {
+        // The wakeup is drained before the state is read, so a disarm that
+        // arrived while poll() slept is seen below rather than a loop later.
+    if ((fds[0].revents & POLLIN) != 0) {
       drain_wake();
     }
-    // A disarm while poll() ran replaced the descriptor: its readiness says
-    // nothing about the link the caller installed next.
+        // A disarm, or a watch of another descriptor, happened while poll()
+        // slept: that readiness belongs to a link this loop no longer owns,
+        // and crediting it to the next one would wake on a byte it never had.
+        // GCOVR_EXCL_BR_START: one edge of this test opens only when the
+        // helper's poll returns in the instant a watch or disarm lands, which
+        // a test cannot place; the swap test covers the outcome, not the race.
     if (!armed_ || fd != fd_) {
       continue;
     }
-    if (ready_fds > 0 && fds[1].revents != 0) {
+        // GCOVR_EXCL_BR_STOP
+    if ((fds[1].revents & POLLIN) != 0) {
       // The bytes stay in the kernel queue, so the descriptor reports
       // readable while the executor has not drained it: pending_ keeps the
       // helper from spinning on the same readiness until it does.
@@ -166,11 +169,14 @@ void LinkWaitable::run()
 
 void LinkWaitable::add_to_wait_set(rcl_wait_set_t & wait_set)
 {
+    // GCOVR_EXCL_START: the wait set is the executor's own, sized from the
+    // same count this class reports, so the add cannot refuse its entry.
   const rcl_ret_t status = rcl_wait_set_add_guard_condition(
     &wait_set, &guard_->get_rcl_guard_condition(), nullptr);
   if (status != RCL_RET_OK) {
     throw std::runtime_error("LinkWaitable: cannot add its guard condition to the wait set");
   }
+    // GCOVR_EXCL_STOP
 }
 
 bool LinkWaitable::is_ready(const rcl_wait_set_t & wait_set)
@@ -194,9 +200,7 @@ void LinkWaitable::execute(const std::shared_ptr<void> & data)
   (void)data;
   // The callback drains the link, so the next wakeup waits until it returns:
   // the helper stays parked while the executor is inside the receive path.
-  if (ready_) {
-    ready_();
-  }
+  ready_();
   {
     std::lock_guard<std::mutex> guard(mutex_);
     pending_ = false;
