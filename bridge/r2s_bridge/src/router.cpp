@@ -1345,7 +1345,7 @@ struct Router::Impl
   }
 
     // Takes pending ROS requests on every action server: a take that finds
-    // nothing resets the middleware error and moves on; the 1 ms poll takes
+    // nothing resets the middleware error and moves on; the next poll takes
     // again.
   void take_action_requests()
   {
@@ -1914,7 +1914,7 @@ struct Router::Impl
 
     // Takes pending ROS requests on the rcl fallback: the generic service
     // feeds its own callback instead. A take that finds nothing resets the
-    // middleware error and moves on; the 1 ms poll takes again.
+    // middleware error and moves on; the next poll takes again.
   void take_ros_requests()
   {
 #if !defined(R2S_HAS_GENERIC_SERVICE)

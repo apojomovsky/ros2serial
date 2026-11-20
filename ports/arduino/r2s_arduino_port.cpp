@@ -103,10 +103,12 @@ uint16_t r2s_port_tx_free(void)
 #endif
 }
 
-/* micros() resolves 4 us, fine for the 1 ms tick the core announces. */
+/* millis() is a 32-bit millisecond counter on AVR and on ESP32, so the tick
+ * already wraps at 2^32 as the core reads it. micros() wraps at 2^32 us, which
+ * is 71.6 minutes, and every now - then check would then see a huge interval. */
 uint32_t r2s_port_tick(void)
 {
-  return (uint32_t)(micros() / 1000UL);
+  return (uint32_t)millis();
 }
 
 #ifdef R2S_TESTING

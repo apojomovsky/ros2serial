@@ -36,7 +36,13 @@ void TimeSync::add_sample(
 {
   const std::int64_t rtt = recv_ns - send_ns;
   Sample sample;
-  sample.ros_mid_ns = ros_recv_ns - rtt / 2;
+    // The poll dispatch delay sits in ros_recv and in rtt alike, so
+    // ros_recv - rtt cancels it and leaves the ROS time of the PING send.
+    // Halving the raw receive instead carried half that delay into every
+    // estimate, always in one direction, so a loaded runner read the MCU
+    // clock as milliseconds ahead. The half round trip returns below, from
+    // the window's fastest sample, which is the only part the delay skews.
+  sample.ros_send_ns = ros_recv_ns - rtt;
   sample.rtt_ns = rtt;
   if (!has_base_) {
     latest_tick_ = tick;
@@ -77,11 +83,22 @@ TimeSync::Estimate TimeSync::estimate() const
   double y[kWindow]{};
   double rtt[kWindow]{};
   const std::uint64_t base = samples_[head_].tick;
+    // The fastest trip the window saw carries the least poll delay, so its
+    // half is the delay-free distance from the PING send to the MCU's tick
+    // (TIM-1). The other trips only say how late their own arrival was.
+  std::int64_t fastest_rtt = samples_[head_].rtt_ns;
+  for (std::size_t i = 0; i < count_; ++i) {
+    const Sample & sample = samples_[(head_ + i) % kWindow];
+    if (sample.rtt_ns < fastest_rtt) {
+      fastest_rtt = sample.rtt_ns;
+    }
+  }
   for (std::size_t i = 0; i < count_; ++i) {
     const Sample & sample = samples_[(head_ + i) % kWindow];
     const auto elapsed = static_cast<double>(sample.tick - base) * ns_per_tick_;
     x[i] = elapsed;
-    y[i] = static_cast<double>(sample.ros_mid_ns) - elapsed;
+    y[i] = static_cast<double>(sample.ros_send_ns) - elapsed +
+      static_cast<double>(fastest_rtt) / 2.0;
     rtt[i] = static_cast<double>(sample.rtt_ns);
   }
   double sum_x = 0.0;
@@ -134,7 +151,8 @@ TimeSync::Estimate TimeSync::estimate() const
       continue;
     }
     const Sample & sample = samples_[(head_ + i) % kWindow];
-    ros_base += static_cast<double>(sample.ros_mid_ns) -
+    ros_base += static_cast<double>(sample.ros_send_ns) +
+      static_cast<double>(fastest_rtt) / 2.0 -
       (1.0 + slope) * static_cast<double>(sample.tick) * ns_per_tick_;
   }
   ros_base /= static_cast<double>(taken);

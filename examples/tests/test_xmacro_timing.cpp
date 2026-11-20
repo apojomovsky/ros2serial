@@ -26,7 +26,7 @@ static uint8_t s_battery;
 
 static void set_tick(uint32_t ms)
 {
-  set_stub_micros((unsigned long)ms * 1000UL);
+  set_stub_millis((unsigned long)ms);
 }
 
 /* Boots the sketch at tick ms and handshakes there with the tick frozen. */

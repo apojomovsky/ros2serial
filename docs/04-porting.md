@@ -47,7 +47,8 @@ cores, so the reader needs no lock. It must never block or sleep, and
 it should stay near 1 ms accuracy, since the host estimates the MCU
 clock from it during time sync. The rate is announced in the handshake.
 The template runs its timer at 1 kHz and reads the counter as the tick; ch32v
-accumulates the SysTick count into a millisecond tick; Arduino reads `micros()`;
+accumulates the SysTick count into a millisecond tick; Arduino reads `millis()`,
+whose 32-bit millisecond counter already wraps where the core expects it;
 the posix port reads `CLOCK_MONOTONIC`.
 
 ## Transport and budgets

@@ -339,9 +339,11 @@ The boot HELLO goes out behind one `0x00` (`r2s_tx_flush_line()`), because a chi
 
 The drift term matters: the Uno's ATmega328P runs from a ceramic resonator that can be off by thousands of ppm, which is several milliseconds per second.
 
-The tick comes from the port: `micros()` on Arduino (1 MHz nominal, 4 µs resolution), a 1 ms tick from epic-hal on PIC, a hardware timer elsewhere. The tick rate is announced in the handshake. The bridge also sets the serial port to low latency where the OS supports it. Target accuracy: about 1 ms, bounded by the tick resolution. Phase 2 measured the real figure in #348 (scenario 8); #655 restated it with the statistic named.
+The tick comes from the port: `millis()` on Arduino (a 32-bit millisecond counter that wraps at 2^32), a 1 ms tick from epic-hal on PIC, a hardware timer elsewhere. The tick rate is announced in the handshake. The bridge also sets the serial port to low latency where the OS supports it. Target accuracy: about 1 ms, bounded by the tick resolution. Phase 2 measured the real figure in #348 (scenario 8); #655 restated it with the statistic named.
 
 **What the measured figure means.** Scenario 8 judges the median error of the ten least delayed of about a hundred stamps in a ten second window, so the number describes the clock and not the probe that reads it. Host reads of a stamp are one-sided: a probe the scheduler starves reads the clock after the stamp arrived and reports it late, never early. An error computed against a minimum round trip is biased the same way, so the median over every stamp moved between 0.5 and 1.8 ms across twelve loaded runs on one host while the same link's clock error stayed in the hundreds of microseconds. Ranking by lag, rather than by error magnitude, is what keeps the judge honest: an error common to every stamp leaves the lag order alone, so a real clock error cannot hide by making some samples look lucky. On a quiet runner the ten least delayed stamps land within 359 µs across five runs. Adding a synthetic 2 ms error to every stamp of those same windows put all five over the 1 ms bound, so the judge still fails when the clock is genuinely wrong.
+
+**Why the poll period bounds the accuracy.** The bridge reads its link on a wall timer, so a PONG that comes back in microseconds still waits for the next pass before the host timestamps it. That wait is one-sided, and the estimator's midpoint halves the round trip, so half of it reached every correction: at a one millisecond period the offset was a constant half millisecond or worse, which is the same width as the target. The period is set far under the target for that reason, and the PING's own send time is taken when the port accepts it rather than when the frame was queued, since the queue carried the same one-sided wait.
 
 ## User API
 
@@ -808,7 +810,7 @@ ros2serial/
 │   └── r2s_bridge_tests/     launch_testing integration tests (ROS package, test-only)
 ├── ports/
 │   ├── posix/                host "virtual MCU" over a pty: used by integration tests and fuzzing
-│   ├── arduino/              Arduino library glue (Serial, micros)
+│   ├── arduino/              Arduino library glue (Serial, millis)
 │   ├── avr/                  planned bare-metal AVR glue (placeholder)
 │   ├── ch32v/                CH32V003 glue, host-tested, budgeted
 │   ├── stm32/                STM32F103 glue
