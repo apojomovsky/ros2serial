@@ -46,26 +46,26 @@ the refresh can only correct the stamp's own banners.
 
 | frame | route | entity | RAM per entity | flash per entity |
 | --- | --- | --- | --- | --- |
-| 128 | xmacro | publisher | 12.4 | 63.5 |
-| 128 | xmacro | subscription | 12.4 | 121.4 |
-| 128 | runtime | publisher | 32.4 | 58.7 |
+| 128 | xmacro | publisher | 12.4 | 63.0 |
+| 128 | xmacro | subscription | 12.4 | 118.8 |
+| 128 | runtime | publisher | 32.4 | 59.5 |
 | 128 | runtime | subscription | 44.4 | 31.8 |
-| 325 | xmacro | publisher | 12.4 | 63.6 |
-| 325 | xmacro | subscription | 12.4 | 121.6 |
-| 325 | runtime | publisher | 32.4 | 58.7 |
+| 325 | xmacro | publisher | 12.4 | 63.0 |
+| 325 | xmacro | subscription | 12.4 | 119.0 |
+| 325 | runtime | publisher | 32.4 | 59.5 |
 | 325 | runtime | subscription | 44.4 | 31.8 |
 
 ### Marginal cost, Mega
 
 | frame | route | entity | RAM per entity | flash per entity |
 | --- | --- | --- | --- | --- |
-| 128 | xmacro | publisher | 12.4 | 63.5 |
-| 128 | xmacro | subscription | 12.4 | 124.2 |
-| 128 | runtime | publisher | 32.4 | 58.5 |
+| 128 | xmacro | publisher | 12.4 | 62.1 |
+| 128 | xmacro | subscription | 12.4 | 123.7 |
+| 128 | runtime | publisher | 32.4 | 59.3 |
 | 128 | runtime | subscription | 44.4 | 35.8 |
-| 325 | xmacro | publisher | 12.4 | 63.6 |
-| 325 | xmacro | subscription | 12.4 | 124.4 |
-| 325 | runtime | publisher | 32.4 | 58.6 |
+| 325 | xmacro | publisher | 12.4 | 62.2 |
+| 325 | xmacro | subscription | 12.4 | 123.9 |
+| 325 | runtime | publisher | 32.4 | 59.3 |
 | 325 | runtime | subscription | 44.4 | 35.8 |
 
 ### Services
@@ -74,14 +74,14 @@ The runtime route serving `std_srvs/srv/Trigger` at 64-byte frames, the cap the 
 
 | board | services | flash | RAM |
 | --- | --- | --- | --- |
-| Uno | 0 | 6692 | 629 |
-| Uno | 1 | 12286 | 803 |
-| Uno | 2 | 12454 | 920 |
-| Uno | 4 | 12472 | 1156 |
-| Mega | 0 | 7030 | 629 |
-| Mega | 1 | 12632 | 803 |
-| Mega | 2 | 12804 | 920 |
-| Mega | 4 | 12830 | 1156 |
+| Uno | 0 | 6566 | 629 |
+| Uno | 1 | 12174 | 803 |
+| Uno | 2 | 12342 | 920 |
+| Uno | 4 | 12360 | 1156 |
+| Mega | 0 | 6906 | 629 |
+| Mega | 1 | 12520 | 803 |
+| Mega | 2 | 12692 | 920 |
+| Mega | 4 | 12718 | 1156 |
 
 Uno: 117.7 bytes of RAM per service, and 7 fit the RAM left by the allowance (fitted, not built).
 Mega: 117.7 bytes of RAM per service, and 59 fit the RAM left by the allowance (fitted, not built).
