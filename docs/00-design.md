@@ -16,7 +16,7 @@ The intended user experience is a hobbyist's: install a library, declare a few t
 
 **Goals**
 
-- A user experience equivalent to rosserial, with naming adapted to ROS 2 conventions, and a rosserial-compatible C++ API so existing sketches port in minutes.
+- A user experience equivalent to rosserial, with naming adapted to ROS 2 conventions, and a migration guide that ports an existing rosserial sketch to the one C++ API.
 - MCU core in C99, with no malloc, no external dependencies and no hardware access, portable across architectures (AVR, PIC, ARM Cortex-M, RISC-V), endianness and compilers (avr-gcc, epic-cc, arm-none-eabi-gcc, XC8 and other C99 compilers).
 - Small-part constraint: the core must eventually fit PIC16-class parts (PIC16F1938 class: 1 KB RAM, linear addressing) as well as Uno/Mega-class boards (2 KB tight bound on the Uno). PIC work comes last, but the constraint shapes the core now.
 - On the host side, a regular ROS 2 node (Jazzy onwards) that works with any RMW (Fast DDS, Cyclone, rmw_zenoh).
@@ -57,7 +57,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 
 ## Scope: parity with rosserial
 
-*Status (0.2.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++, the reliable channel, rosserial-compatible runtime registration with the porting guide, parameters in #155, and services in #156; specified: services and actions in #316. Status (0.4.0): built: the generator action support in X10a (#317), the MCU action server in X10b (#318), and the bridge action server in X10c (#319) with end-to-end scenarios in X10d (#320).*
+*Status (0.2.0): built: P0 publish/subscribe, handshake, log, time estimation, runtime and static C++, the reliable channel, and the rosserial migration guide, parameters in #155, and services in #156; specified: services and actions in #316. Status (0.4.0): built: the generator action support in X10a (#317), the MCU action server in X10b (#318), and the bridge action server in X10c (#319) with end-to-end scenarios in X10d (#320).*
 
 | Feature | Priority | Notes |
 | --- | --- | --- |
@@ -68,7 +68,7 @@ Proposed targets, to adjust with the Phase 0 spike and Phase 1 measurements:
 | Time synchronization (`now()` on the MCU) | P0 | Host-side estimation; see Time |
 | C++ API, runtime registration with ROS 2 names | P0 | Objects declared at file scope; gcc-class targets; see User API |
 | C++ API, static topics | P0 | Topics from the X-macro list; `r2s.yaml` emits a C API only; see User API |
-| C++ API, rosserial-compatible runtime registration | P0 (Phase 2) | gcc-class targets; see User API |
+| C++ API, one runtime registration path | P0 (Phase 2) | gcc-class targets; see User API |
 | Parameters | P1 | Declared by the MCU, exposed as ROS 2 parameters of the bridge node |
 | Services (server and client) | P1 | Need the reliable channel |
 | TF and diagnostics | P2 | Probably better handled on the host |
@@ -103,7 +103,7 @@ The PIC16 constraints are real but should only cost something where PIC actually
 
 | | Portable core | Comfortable layer |
 | --- | --- | --- |
-| What | Framing, CRC, session, time, log, codec interpreter, C API, static topic table | C++ API, runtime registration with ROS 2 names, rosserial-compatible runtime registration |
+| What | Framing, CRC, session, time, log, codec interpreter, C API, static topic table | C++ API, runtime registration with ROS 2 names |
 | Language | C99 | The epic-cc C++ subset (see User API) |
 | Rules | No function pointers, no recursion, no malloc, no VLAs, no 64-bit arithmetic, no float arithmetic, bounded loops and nesting, buffers that fit one RAM bank on PIC | Templates, namespaces, classes; stored callbacks allowed on gcc-class targets only; no exceptions, RTTI, heap, multiple inheritance or virtuals |
 | Compiled by | Every target | AVR, 32-bit gcc targets; static C++ path also on epic-cc |
@@ -120,7 +120,7 @@ PIC-enabling rules that apply from day one, even though PIC work comes last:
 
 ## Declaring topics
 
-*Status (0.2.0): built: runtime registration, the X-macro list, and `r2s.yaml` with the generator, plus rosserial-compatible runtime registration in Phase 2.*
+*Status (0.2.0): built: runtime registration, the X-macro list, and `r2s.yaml` with the generator, plus the rosserial migration guide in Phase 2.*
 
 This section is the contributor view: it says what each route costs inside the
 implementation. The reader-facing guide to the same choice is [Choosing how to
@@ -324,7 +324,7 @@ rCOBS decoding runs backwards in place in the frame buffer once the delimiter ar
 
 *Status (0.2.0): built: PONG with delimiter tick, CORRECTION and `r2s_now()` with the host estimator; measured: the accuracy figure in the scenario 8 end-to-end test.*
 
-**What rosserial did.** Right after connecting, and then every few seconds, the MCU asked the host for the current time. When the reply came, the MCU stored an offset from its own `millis()`, correcting for the round trip. From then on `nh.now()` was that offset plus `millis()`, with millisecond resolution. That is how sketches stamped their messages.
+**What rosserial did.** Right after connecting, and then every few seconds, the MCU asked the host for the current time. When the reply came, the MCU stored an offset from its own `millis()`, correcting for the round trip. From then on `nh.now()` was that offset plus `millis()`, with millisecond resolution: the clock the native `r2s_now()` now reads. That is how sketches stamped their messages.
 
 **Why it matters for IMUs.** A 150-byte Imu frame takes about 13 ms to send at 115200 baud. USB-serial adapters add jitter on top: an FTDI adapter's default latency timer is 16 ms, and the Uno's ATmega16U2 and CH340 clones behave differently again. If the bridge stamped messages on arrival, the stamps would be late and irregular. Stamping at the moment of sampling needs `now()` on the MCU.
 
@@ -343,7 +343,7 @@ The tick comes from the port: `micros()` on Arduino (1 MHz nominal, 4 µs resolu
 
 ## User API
 
-*Status (0.2.0): built: C, runtime C++ and static C++ APIs, rosserial-compatible runtime registration in #145 and the porting guide in #149.*
+*Status (0.2.0): built: C, runtime C++ and static C++ APIs, and the rosserial migration guide.*
 
 ### C (P0)
 
@@ -443,29 +443,6 @@ void setup() { node.begin(Serial, 115200); }
 void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node.spin_some(); }
 ```
 
-**3. rosserial-compatible runtime registration** (gcc-class targets, Phase 2). Existing rosserial sketches port by changing the include:
-
-```cpp
-#include <ros2serial.h>
-#include <ros2serial/ros.h>
-#include <ros2serial/std_msgs/Float32.h>
-#include <ros2serial/geometry_msgs/Twist.h>
-
-/* The board hooks the sketch calls; a real firmware drives the hardware. */
-static void set_motors(double linear, double angular) { (void)linear; (void)angular; }
-static float read_battery(void) { return 0.0f; }
-
-ros::NodeHandle nh;
-std_msgs::Float32 battery;
-ros::Publisher battery_pub("battery", &battery);
-
-void on_cmd_vel(const geometry_msgs::Twist &msg) { set_motors(msg.linear.x, msg.angular.z); }
-ros::Subscriber<geometry_msgs::Twist> cmd_vel_sub("cmd_vel", &on_cmd_vel);
-
-void setup() { nh.initNode(); nh.advertise(battery_pub); nh.subscribe(cmd_vel_sub); }
-void loop()  { battery.data = read_battery(); battery_pub.publish(&battery); nh.spinOnce(); }
-```
-
 **The 1-to-1 map.** The runtime API and the static API map line for line. Each runtime declaration has a twin X-macro line with the same words, type, object name, topic string and callback; everything after the declarations is identical. A runtime declaration with a QoS argument has no X-macro twin: the static path always announces best effort. The block below shows both forms side by side, so it is an illustration and not a program:
 
 ```text
@@ -496,13 +473,13 @@ void loop()  { battery.data = read_battery(); battery_pub.publish(battery); node
 
 The figures come from the linked firmware, not from a note: `scripts/build-examples.sh` prints the topic table's size, the per-topic cost, the publisher and subscriber records and the sketch's own objects for every board it builds, and `make test EXAMPLES=1` runs it.
 
-The core calls one C hook for the dispatch, which the C++ layer implements with a stored callback, so the core itself stays free of function pointers. Each subscriber holds its own message storage, as in rosserial. `nh.loginfo()` accepts both RAM strings and Arduino `F()` strings. The runtime API stores its callbacks in the C++ layer, so no switch selects it and the core still holds no function pointer.
+The core calls one C hook for the dispatch, which the C++ layer implements with a stored callback, so the core itself stays free of function pointers. Each subscriber holds its own message storage, as in rosserial. The log macros take a literal, which stays in flash on AVR, and the RAM-text calls take a pointer. The runtime API stores its callbacks in the C++ layer, so no switch selects it and the core still holds no function pointer.
 
 **Evidence for the split** (probe on Oct 20, 2026, epic-cc master `0a8828e` with a clang 18 front end, compile only, not simulated): a two-subscriber dispatch compiled to the same flash size in plain C and in C++ with template-instantiated direct calls (599 words on PIC18F4550, 594 on PIC16F1938). The same dispatch with stored callbacks cost 72 more words on PIC18F4550 and 159 more on PIC16F1938, growing with every subscriber. Non-virtual C++, including global constructors, already compiled for the PIC16F1938.
 
 The C++ objects are globals, as in rosserial sketches, which relies on static constructors running before `setup()`. A conformance test checks construction order across source files on every supported compiler.
 
-ROS 2-style aliases (`std_msgs::msg::Float32`) are always provided; rosserial-style aliases (`std_msgs::Float32`) come with the compatibility headers.
+The message types carry their ROS 2 names only (`std_msgs::msg::Float32`); the rosserial spellings went with the compatibility layer, and the [migration guide](03-port-rosserial-sketch.md) maps each one.
 
 ### Services and actions (P1)
 
@@ -696,7 +673,7 @@ Each phase ends in a decision gate and a publishable artifact.
 - Framing and CRC benchmark on AVR (Uno/Mega): rCOBS vs COBS vs SLIP vs rosserial style; CRC variants. Flash, RAM, cycles per byte, recovery time.
 - Encoding benchmark: packed vs CDR vs MAVLink as a baseline, for Float32, Twist, Range, Imu, JointState.
 - P0 complete: logging, time sync with measured accuracy, reconnection and reset detection, Range, Imu, JointState with bounds.
-- rosserial-compatible runtime registration and a draft "port your rosserial sketch" guide.
+- The rosserial migration guide, "port your rosserial sketch".
 - Fuzzing, the protocol spec v1.0, flash, RAM and stack tracking, the baud-rate matrix, the advisory epic-cc compile job.
 - *Gate:* P0 complete and tier M budgets met. *Artifact:* benchmark write-up, the spec, and a rosserial migration post.
 
@@ -753,7 +730,7 @@ Decided since v2: MIT for every component, personal repository, runtime registra
 | The two registration paths drift apart | Every end-to-end scenario runs on both paths |
 | rCOBS is less familiar than COBS | Exact spec, vectors, Python reference; the Phase 2 benchmark compares it with COBS |
 | Introspection conversion is slow for large messages | Measure in Phase 2; cache per-type conversion plans |
-| Config feels like friction compared with rosserial | X-macro path with bundled types, and the rosserial-compatible API |
+| Config feels like friction compared with rosserial | X-macro path with bundled types, and the migration guide |
 | 8-bit compiler gaps block the PIC port | epic-cc is maintained by the same author; gaps become epic-cc tickets with minimal repros |
 | Prior art exists that was not found | Phase 0 sweep before investing in code |
 | Low demand as 32-bit MCUs get cheaper | Validate early; the value is the experience and robustness, not only size, and the core also runs on 32-bit MCUs |
@@ -796,7 +773,7 @@ ros2serial/
 │   ├── src/                  crc.c, rcobs.c, varint.c, framer.c, tx.c, session.c, time.c, log.c, rx.c, codec.c, topics.c, actions.c, services.c, params.c, error.c
 │   ├── tests/                Unity unit tests, vector runner, CMakeLists.txt
 │   └── fuzz/                 libFuzzer targets and seed corpora
-├── cpp/                      C++ layer: runtime API (r2s/runtime.hpp) with the per-message headers, the static API (ros2serial.hpp) and the rosserial-compatible API (ros.h)
+├── cpp/                      C++ layer: runtime API (r2s/runtime.hpp) with the per-message headers and the static API (ros2serial.hpp)
 ├── gen/                      r2s-gen: Python package (pip) and ament_python package (ROS)
 │   ├── r2s_gen/              cli.py, config.py, msgs.py, bounds.py, emit.py, descriptors.py, topics.py, services.py, actions.py, cpp.py, static_api.py, layouts.py, bundle.py, types.py, limits.py, arduino.py, vectors.py, typehash.py, version.py, reference/ (Python reference codec), schema/, snapshots/
 │   ├── r2s_rosidl/           the colcon plugin wrapping the generator for firmware packages
@@ -1390,11 +1367,11 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | P8 | Big-endian qemu job | C1 | Nightly green |
 | P9 | Framing and CRC benchmark (AVR Uno/Mega): rCOBS, COBS, SLIP, rosserial style | V4, R7 | Write-up in [the framing benchmark](benchmarks/framing-crc.md) |
 | P10 | Encoding benchmark (packed vs CDR vs MAVLink) | G7 | Write-up; decision on narrow per field |
-| P11 | rosserial-compatible runtime registration: RAM topic table backend, `ros::NodeHandle` and `NodeHandle_<...>` (size parameters accepted and ignored), `Publisher`, `Subscriber<T>` and `Subscriber<T, ObjT>` (member functions), `initNode()`, `advertise()`, `subscribe()`, `spinOnce()`, `connected()`, `now()`, `setSpinTimeout()`, `getHardware()`, `ros::Time` and `ros::Duration` arithmetic, `tf::TransformBroadcaster`, compatibility headers | V5, C13 | Every e2e scenario also passes on the runtime path; rosserial example sketches with fixed-size messages build unmodified apart from includes; arrays, strings and `Header` need the one-line edits the migration guide documents; services fail to compile with a clear message until X6 |
+| P11 | Runtime registration over RAM topic table backend: `r2s::Node`, `Publisher`, `Subscription<T>`, `connected()`, `now()`, `spin_some()`, the message types under their ROS 2 names | V5, C13 | Every e2e scenario passes on the runtime path; the posix suite runs a C++ services leg beside the C firmware |
 | P12 | Link saturation and TX_BUSY | C6, V1 | Scenario 12 |
 | P13 | Baud-rate matrix: 115200, 250000, 500000, 1000000 in simavr and on hardware | V4 | Results documented; default confirmed or changed |
 | P14 | PIC canary job with epic-cc (advisory) | C9, V5 | Core and static C++ compile for PIC16F1938 and PIC18F4550 |
-| P15 | Draft "port your rosserial sketch" guide | P11 | Reviewed by the maintainer |
+| P15 | The rosserial migration guide: an exhaustive mapping table, the non-mechanical rules, and a sketch before and after | P11 | Reviewed by the maintainer; the after sketch compiles in the docs snippet check |
 | P16 | Protocol spec v1.0 freeze | P1 to P5, P12, S8 | Tagged; vectors frozen |
 
 ### E7: 32-bit ports and P1 (Phase 3)

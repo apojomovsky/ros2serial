@@ -21,8 +21,8 @@ measured two-topic Uno example it saves 418 of 1256 bytes of RAM (33 %) and
 926 of 11198 bytes of flash (8 %), from [size and stack
 budgets](budgets.md).
 
-Coming from rosserial? The [porting guide](03-port-rosserial-sketch.md) comes
-first, and it ends on the runtime objects.
+Coming from rosserial? The [migration guide](03-port-rosserial-sketch.md) comes
+first, and it lands on the runtime objects.
 
 ## Pick by situation
 

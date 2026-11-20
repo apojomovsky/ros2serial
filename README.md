@@ -233,8 +233,9 @@ posix and avr (see [Services and parameters](docs/services-and-parameters.md)).
 WiFi and other network transports are outside the project's scope.
 
 Coming from **rosserial**, you get the same basic sketch-to-ROS workflow in ROS 2,
-with a compatibility API for existing sketches. **micro-ROS** provides a broader
-ROS client environment on supported embedded platforms through a DDS-XRCE agent.
+with one C++ API and a [migration guide](docs/03-port-rosserial-sketch.md) that
+ports an existing sketch onto it. **micro-ROS** provides a broader ROS client
+environment on supported embedded platforms through a DDS-XRCE agent.
 ros2serial focuses on a small firmware library and a serial bridge,
 including 8-bit boards.
 

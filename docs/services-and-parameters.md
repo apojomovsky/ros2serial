@@ -7,9 +7,8 @@ It does not automatically enable services, parameters, or actions.
 
 The sketch interface here is the native one: `r2s::Service`, `r2s::Client` and
 `r2s::action::Server` for C++, and the `r2s_services.h` and `r2s_actions.h`
-calls for C. The rosserial-compatible API covers topics only, and the
-[porting guide](03-port-rosserial-sketch.md) shows it. Which declaration style
-to start from is on [choosing how to declare your topics](declaring-topics.md).
+calls for C. Which declaration style to start from is on
+[choosing how to declare your topics](declaring-topics.md).
 
 ## Parameters
 
@@ -22,8 +21,9 @@ The bundled Arduino helper leaves the parameter channel out, so add the flag
 the way the services recipe below adds its own: `-DR2S_WITH_PARAMS` in both
 `compiler.c.extra_flags` and `compiler.cpp.extra_flags`.
 
-The [parameter example](03-port-rosserial-sketch.md#parameters) shows a boolean
-`led` and a bounded string `label`, including the storage the MCU owns.
+The [migration guide's parameter section](03-port-rosserial-sketch.md#parameters)
+shows a boolean `led` and a bounded string `label`, including the storage the
+MCU owns.
 After that firmware connects:
 
 ```sh
@@ -41,10 +41,10 @@ firmware declaring it.
 ## Services
 
 Services support both directions: a ROS client calling an MCU server, and an MCU
-client calling a ROS server. The native `r2s::Service` and `r2s::Client` classes
-are the sketch interface, and `examples/arduino_service` uses both. The
-rosserial-compatible `advertiseService` spelling is covered by the
-[porting guide](03-port-rosserial-sketch.md#services).
+client calling a ROS server. The `r2s::Service` and `r2s::Client` classes are the
+sketch interface, and `examples/arduino_service` uses both. A rosserial sketch's
+`advertiseService` and `serviceClient` port onto them; the
+[migration guide](03-port-rosserial-sketch.md#services) maps each call.
 
 Enable `R2S_WITH_SERVICES` in every firmware translation unit, as well as the
 sketch. For an MCU server declaring `reset` as `std_srvs/srv/Trigger`:
