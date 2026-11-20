@@ -2,9 +2,27 @@
 // Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
 // Publish the debounced button state and receive LED commands independently.
-// Pin 2 is active low; LED_BUILTIN is active high on Uno and Mega.
+// The button reads BUTTON_PIN, active low: 0 on the classic ESP32 and the S3,
+// 9 on the C3 and C6, which is their BOOT button, and 2 elsewhere, which is
+// the Uno and the Mega. The LED is LED_BUILTIN, or GPIO2 on the boards whose
+// variant names none, the classic ESP32 and the DevKit modules. On the S3, the
+// C3 and the C6 LED_BUILTIN drives the addressable RGB LED through digitalWrite.
 #include <ros2serial.h>
 #include <std_msgs/msg/bool.hpp>
+
+#if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3)
+#define BUTTON_PIN 0
+#elif defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6)
+#define BUTTON_PIN 9
+#else
+#define BUTTON_PIN 2
+#endif
+
+/* The classic ESP32 variant names no built-in LED, so the example falls back
+ * to GPIO2, the LED pin on the common DevKit boards and a strapping pin. */
+#ifndef LED_BUILTIN
+#define LED_BUILTIN 2
+#endif
 
 r2s::Node node("panel");
 r2s::Publisher<std_msgs::msg::Bool> button_pub(node, "button");
@@ -22,9 +40,9 @@ static unsigned long published_at;
 
 void setup()
 {
-    pinMode(2, INPUT_PULLUP);
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
     pinMode(LED_BUILTIN, OUTPUT);
-    last_reading = stable_reading = (uint8_t)digitalRead(2);
+    last_reading = stable_reading = (uint8_t)digitalRead(BUTTON_PIN);
     changed_at = millis();
     node.begin(Serial, 115200);
 }
@@ -33,7 +51,7 @@ void loop()
 {
     node.spin_some();
     const unsigned long now = millis();
-    const uint8_t reading = (uint8_t)digitalRead(2);
+    const uint8_t reading = (uint8_t)digitalRead(BUTTON_PIN);
     if (reading != last_reading) {
         changed_at = now;
         last_reading = reading;

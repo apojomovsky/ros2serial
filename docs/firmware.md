@@ -43,8 +43,13 @@ In Arduino `setup()`, call `node.begin(Serial, 115200)`. In `loop()`, call
 blocking sensor reads, long delays, or waiting for another ROS message.
 
 The checked-in button/LED example debounces without delays and republishes
-state at 10 Hz. Periodic state is useful after reconnects and for subscribers
-that start later. An event published once before a connection exists is lost.
+state at 10 Hz. It reads the active-low button on pin 2, which is the Uno and
+Mega wiring, and on an ESP32 it reads the BOOT button the devkit already has:
+GPIO0 on the classic ESP32 and the S3, GPIO9 on the C3 and the C6. Its LED is
+`LED_BUILTIN`, falling back to GPIO2 on the boards whose variant names none,
+the classic ESP32 included. Periodic state is useful after reconnects and for
+subscribers that start later. An event published once before a connection
+exists is lost.
 Check `node.connected()` before publishing and inspect the publish result:
 `R2S_OK` means accepted, `R2S_ERR_TX_BUSY` means retry or drop according to your
 application, and `R2S_ERR_NOT_CONNECTED` means the link is not ready.

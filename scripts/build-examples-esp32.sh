@@ -105,8 +105,8 @@ elf_has_symbol() {
   esac
 }
 status=0
-for sketch in arduino_minimal arduino_hello arduino_blink arduino_button arduino_servo arduino_range \
-  arduino_xmacro arduino_static arduino_xmacro_c; do
+for sketch in arduino_minimal arduino_hello arduino_blink arduino_button arduino_button_led arduino_servo \
+  arduino_range arduino_xmacro arduino_static arduino_xmacro_c; do
   out="$build/$sketch/esp32"
   arduino-cli compile --fqbn "esp32:esp32:esp32" \
     --build-property "compiler.c.extra_flags=$extras -fstack-usage" \
@@ -122,7 +122,7 @@ for sketch in arduino_minimal arduino_hello arduino_blink arduino_button arduino
       status=1
     fi
     ;;
-  arduino_hello | arduino_blink | arduino_button | arduino_servo | arduino_range)
+  arduino_hello | arduino_blink | arduino_button | arduino_button_led | arduino_servo | arduino_range)
     if ! elf_has_symbol "$out/$sketch.ino.elf" r2s_runtime_topics; then
       echo "$sketch (esp32): the firmware links no runtime topic table" >&2
       status=1
