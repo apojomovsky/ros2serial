@@ -498,6 +498,33 @@ TEST_F(RouterNode, HostToMcuSendsThePackedMessage)
     EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 2u, decoded.end() - 2u), want);
 }
 
+// The readiness wakeup enters here, not through poll(): the bytes must reach
+// their publisher with no timer pass, or every arrival would wait for one.
+TEST_F(RouterNode, ReceiveForwardsArrivalsWithNoTimerPass)
+{
+    RouterFixture fixture("wake", remapped(), RouterParams{});
+    fixture.handshake();
+    std::vector<float> received;
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
+        "power/battery", rclcpp::QoS(10).best_effort(),
+    [&received](const std_msgs::msg::Float32 & msg) {received.push_back(msg.data);});
+    fixture.script_frame(kBattery, 0u, {0x00, 0x00, 0xC0, 0x3F});
+    ASSERT_TRUE(fixture.router().receive()) << "the arrival is work the callback must do";
+    rclcpp::spin_some(fixture.node());
+    ASSERT_EQ(received.size(), 1u);
+    EXPECT_FLOAT_EQ(received[0], 1.5F);
+    EXPECT_FALSE(fixture.router().receive()) << "a drained link reports nothing to do";
+}
+
+// A quiet link costs one read: the executor must be able to sleep again
+// instead of running the receive path until the timer returns.
+TEST_F(RouterNode, ReceiveReportsNothingOnAQuietLink)
+{
+    RouterFixture fixture("quiet", remapped(), RouterParams{});
+    fixture.handshake();
+    EXPECT_FALSE(fixture.router().receive());
+}
+
 TEST_F(RouterNode, BadPayloadLogsTheTopicAndField)
 {
     RouterFixture fixture("bad", remapped(), RouterParams{});

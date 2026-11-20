@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include <poll.h>
 #include <pty.h>
 #include <termios.h>
 #include <unistd.h>
@@ -300,6 +301,34 @@ TEST(TermiosTransport, ReportsClosedAfterThePeerHangsUp)
 
     EXPECT_EQ(transport.read(buffer, sizeof buffer), (IoResult{0, IoStatus::kClosed}));
     EXPECT_EQ(transport.write(buffer, 1), (IoResult{0, IoStatus::kClosed}));
+}
+
+// The descriptor is what the receive path waits on, so it must be the open
+// port's own and must stop existing the moment the port closes: a stale
+// number would be watched and would wake on somebody else's readiness.
+TEST(TermiosTransport, ReportsTheDescriptorOfTheOpenPort)
+{
+    Pty pty;
+    TermiosTransport transport(OptionsFor(pty));
+
+    const int fd = transport.native_handle();
+
+    ASSERT_GE(fd, 0) << "an open port has a descriptor";
+    ASSERT_EQ(::write(pty.master(), "x", 1), 1);
+    pollfd watch{fd, POLLIN, 0};
+    EXPECT_EQ(::poll(&watch, 1, 1000), 1) << "the port's own descriptor turns readable";
+    EXPECT_NE(watch.revents & POLLIN, 0);
+}
+
+TEST(TermiosTransport, ReportsNoDescriptorOnceClosed)
+{
+    Pty pty;
+    TermiosTransport transport(OptionsFor(pty));
+    ASSERT_GE(transport.native_handle(), 0);
+
+    transport.close();
+
+    EXPECT_EQ(transport.native_handle(), -1) << "a closed port must not hand out its old number";
 }
 
 TEST(TermiosTransport, CloseEndsTheLinkAndIsIdempotent)

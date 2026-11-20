@@ -51,6 +51,23 @@ void FakeTransport::close()
   script_.clear();
 }
 
+void FakeTransport::set_native_handle(int fd)
+{
+  fd_ = fd;
+}
+
+int FakeTransport::native_handle() const
+{
+  return closed_ ? -1 : fd_;
+}
+
+void FakeTransport::reopen()
+{
+  script_.clear();
+  write_script_.clear();
+  closed_ = false;
+}
+
 IoResult FakeTransport::read(std::uint8_t *buffer, std::size_t capacity)
 {
   if (closed_) {

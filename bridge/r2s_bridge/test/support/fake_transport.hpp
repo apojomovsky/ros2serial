@@ -45,6 +45,16 @@ public:
     // Discards the queued reads. Reads and writes afterwards report kClosed.
   void close() override;
 
+    // The descriptor this fake reports, -1 by default: a scripted link has no
+    // readiness of its own, so the receive path falls back to the timer.
+  void set_native_handle(int fd);
+
+  int native_handle() const override;
+
+    // Opens the link again, as a reconnect's own port would be fresh: the
+    // queued reads are gone and reads and writes report kOk paths.
+  void reopen();
+
   IoResult read(std::uint8_t *buffer, std::size_t capacity) override;
   IoResult write(const std::uint8_t *data, std::size_t size) override;
 
@@ -67,6 +77,7 @@ private:
   std::deque<IoResult> write_script_;
   std::vector<std::vector<std::uint8_t>> writes_;
   std::size_t write_limit_ = std::numeric_limits<std::size_t>::max();
+  int fd_ = -1;
   bool closed_ = false;
 };
 
