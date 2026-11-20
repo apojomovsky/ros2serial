@@ -6,13 +6,14 @@ from, what happens when nobody states one, and how to change it.
 
 ## Why a bound exists
 
-The MCU has no heap and no variable-size storage. A `string` field becomes
-`char name[N + 1]`, a `T[<=N]` field becomes an array plus a count, and `N` is
-what makes the struct a fixed size at compile time. The bound is therefore part
-of the firmware's memory picture, not part of the ROS interface: it never
-travels on the wire and the host never learns it. The serializer refuses a
-value past the bound instead of truncating it, and the host's own copy of the
-message keeps its unbounded ROS definition.
+The firmware never allocates at run time, so a variable-length field has no
+storage to grow into: no heap use means no fragmentation to design around in a
+few KB of RAM. A `string` field becomes `char name[N + 1]`, a `T[<=N]` field
+becomes an array plus a count, and `N` is what makes the struct a fixed size at
+compile time. The bound is therefore part of the firmware's memory picture, not
+part of the ROS interface: it never travels on the wire and the host never
+learns it. The serializer refuses a value past the bound instead of truncating
+it, and the host's own copy of the message keeps its unbounded ROS definition.
 
 ## Where a bound comes from
 
