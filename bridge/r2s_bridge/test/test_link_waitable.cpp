@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <thread>
 #include <stdexcept>
 #include <string>
 
@@ -241,13 +242,18 @@ TEST_F(LinkWaitableTest, AByteRunsTheCallbackOnTheExecutor)
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
 
-  pty.write_byte();
-  // One bounded spin: the byte was written before this call, so a wakeup the
-  // waitable already triggered must come back without waiting for a timer.
+  EXPECT_EQ(waitable->watched(), transport.native_handle());
+  // The byte lands while the executor waits, which is the production order:
+  // a wakeup only exists for the wait it interrupts.
+  std::thread writer([&pty]() {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      pty.write_byte();
+    });
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
   while (ready == 0 && std::chrono::steady_clock::now() < deadline) {
-    executor.spin_once(std::chrono::milliseconds(100));
+    executor.spin_once(std::chrono::milliseconds(50));
   }
+  writer.join();
 
   EXPECT_EQ(ready, 1) << "the executor must run the receive path on the byte's wakeup";
   node->get_node_waitables_interface()->remove_waitable(waitable, group);

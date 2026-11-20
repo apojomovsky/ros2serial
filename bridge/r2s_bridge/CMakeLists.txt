@@ -28,6 +28,7 @@ add_library(r2s_bridge_component SHARED
   src/core_port.cpp
   src/diagnostics.cpp
   src/framing.cpp
+  src/link_waitable.cpp
   src/ros_clock.cpp
   src/router.cpp
   src/scheduler.cpp
@@ -210,6 +211,11 @@ if(BUILD_TESTING)
   # openpty comes from libutil; the pty test uses it instead of a device.
   ament_add_gtest(test_termios_transport test/test_termios_transport.cpp)
   target_link_libraries(test_termios_transport r2s_bridge_component util)
+
+  # The waitable drives one wait set by hand against a pty, so a wakeup is
+  # what it asserts, not a poll loop's output; openpty comes from libutil.
+  ament_add_gtest(test_link_waitable test/test_link_waitable.cpp)
+  target_link_libraries(test_link_waitable r2s_bridge_component util)
 
   # The core port seam is header-private to the bridge sources, so its test
   # includes them directly. It attaches scripted transports, so it links the

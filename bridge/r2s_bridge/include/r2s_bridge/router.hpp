@@ -120,6 +120,19 @@ public:
   /// Advances the session and flushes due host-to-MCU frames.
   void poll();
 
+  /// Handles what arrived on the link and runs no timer.
+  /**
+   * The readiness wakeup's entry: the receive half alone, so a byte on a
+   * quiet line costs its frames and nothing of the pacer, the repairs or
+   * the diagnostics. It shares the lock discipline of poll(), and both run
+   * on the executor's thread, never together.
+   *
+   * \return Whether the link produced work; false means the executor may
+   * sleep until the next readiness or timer.
+   */
+  bool receive();
+
+
   /// One announced topic's H8 values.
   /**
    * The announced name and direction, the host's TOPIC_STATUS verdict for

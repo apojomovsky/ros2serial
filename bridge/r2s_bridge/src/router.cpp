@@ -2313,6 +2313,11 @@ void Router::poll()
     });
 }
 
+bool Router::receive()
+{
+  return impl_->session_.receive();
+}
+
 std::size_t Router::publisher_count() const
 {
   std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
