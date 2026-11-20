@@ -18,7 +18,6 @@
 #include "ros2serial.h"
 
 #include <builtin_interfaces/msg/time.hpp>
-#include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/string.hpp>
 
@@ -88,15 +87,6 @@ void on_cmd_vel(const geometry_msgs::msg::Twist & msg)
   }
 }
 
-static uint32_t s_joints_count;
-
-void on_joints(const sensor_msgs::msg::JointState & msg)
-{
-  (void)msg;
-  s_joints_count++;
-  fprintf(stderr, "r2s_posix: joints n=%lu\n", (unsigned long)s_joints_count);
-}
-
 /* Answers reset the way the C firmware does: success with the MCU's own
  * text, so the ROS call proves the round trip carries MCU content. */
 static void on_reset(
@@ -128,7 +118,8 @@ static void usage(FILE *out)
   fprintf(out, "Usage: r2s_posix_services_firmware PORT [--node NAME] [--rate HZ]\n"
                  "           [--pub NAME | --no-pub] [--sub NAME | --no-sub]\n"
                  "           [--echo NAME | --no-echo] [--time-now NAME | --no-time-now]\n"
-                 "           [--log-text NAME | --no-log-text] [--log-lines] [--tick-skew-ppm PPM]\n");
+                 "           [--log-text NAME | --no-log-text] [--log-lines] [--tick-skew-ppm PPM]\n"
+                 "           [--trigger]\n");
 }
 
 static const char * take_value(int argc, char **argv, int *i, const char *flag)

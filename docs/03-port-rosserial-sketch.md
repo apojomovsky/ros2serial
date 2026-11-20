@@ -66,7 +66,7 @@ Every type moves under its ROS 2 name: `std_msgs::Float32` becomes
 | `nh.setSpinTimeout(ms);` | no equivalent | Drop the call; the loop controls how long one pass takes. |
 | `nh.getHardware();` | no equivalent | There is no hardware object: the port is the `Serial` stream your sketch already names. |
 | `nh.now();` | `r2s_now();` | With `R2S_WITH_TIME`, the same shared clock as `builtin_interfaces::msg::Time`. Without it, `node.now()` gives milliseconds since boot. |
-| `ros::Time`, `ros::Duration` | `builtin_interfaces::msg::Time`, `msg::Duration` | Plain structs with no arithmetic; see [time arithmetic](#time-and-duration-arithmetic). |
+| `ros::Time`, `ros::Duration` | `builtin_interfaces::msg::Time`, `builtin_interfaces::msg::Duration` | Plain structs with no arithmetic; see [time arithmetic](#time-and-duration-arithmetic). |
 
 ### Services
 
