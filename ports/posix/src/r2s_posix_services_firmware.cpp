@@ -3,10 +3,10 @@
 
 /* Services posix firmware: the runtime firmware's topics and timing plus the
  * services channel, so the end-to-end suite drives r2s::Service and r2s::Client
- * against a ROS client. The firmware serves reset and calls trigger (both
- * std_srvs Trigger), and reports the call's outcome on log_text. Publish
- * intervals come from the monotonic clock rather than the skewed port tick,
- * so they stay true-time under --tick-skew-ppm. */
+ * against a ROS client. The firmware serves reset, and with --trigger calls
+ * trigger (both std_srvs Trigger) and reports the call's outcome on log_text.
+ * Publish intervals come from the monotonic clock rather than the skewed port
+ * tick, so they stay true-time under --tick-skew-ppm. */
 
 #include <cerrno>
 #include <cstdint>
@@ -40,9 +40,10 @@
  * whole severity range. */
 #define LOG_PERIOD_MS 2000u
 
-/* How long to wait between trigger calls while the host has no client for
- * it yet, so a refused attempt does not flood the link with frames. */
-#define TRIGGER_RETRY_MS 200u
+/* How long to wait before retrying the MCU's call: the bridge builds its
+ * client route at the handshake, so a call that beats it comes back refused
+ * and the next attempt finds the route. */
+#define TRIGGER_RETRY_MS 250u
 
 /* The skew range the wire correction carries (spec/protocol.md [TIM-4]):
  * past it the host must refuse the correction, so the knob stops here. */
@@ -68,6 +69,7 @@ struct options
   int32_t skew_ppm;
   unsigned rate;
   uint8_t log_lines;
+  uint8_t trigger;
 };
 
 /* The echo publisher the callback reaches: set once the topics register, so
@@ -225,6 +227,7 @@ static void parse_options(int argc, char **argv, struct options *opts)
   opts->skew_ppm = 0;
   opts->rate = 10u;
   opts->log_lines = 0u;
+  opts->trigger = 0u;
   for (; i < argc; i++) {
     const char *arg = argv[i];
 
@@ -261,6 +264,8 @@ static void parse_options(int argc, char **argv, struct options *opts)
       opts->time_now = NULL;
     } else if (strcmp(arg, "--log-lines") == 0) {
       opts->log_lines = 1u;
+    } else if (strcmp(arg, "--trigger") == 0) {
+      opts->trigger = 1u;
     } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
       usage(stdout);
       exit(0);
@@ -377,18 +382,20 @@ int main(int argc, char **argv)
     }
         /* Applied SETs print here, so the suite reads the live values. */
     r2s_posix_params_report();
-    if (trigger_called == 0u) {
-            /* One call per connection, retried on a spacing: the bridge
-             * builds its client route at the handshake, so the first
-             * attempt can still find no ROS client and come back refused.
-             * The answer's marker goes out on log_text, which is how the
-             * service scenario observes the MCU-initiated round trip. */
-      std_srvs::srv::Trigger::Request req;
-      std_srvs::srv::Trigger::Response res;
-
-      req.structure_needs_at_least_one_member = 0u;
+    if (opts.trigger != 0u && trigger_called == 0u) {
+            /* The call blocks until its answer, a refusal or the call
+             * timeout, so the loop stalls while it waits: a firmware that
+             * publishes on a schedule leaves this off rather than paying
+             * that stall on every connection. A refused call retries on a
+             * spacing, since the bridge builds its client route at the
+             * handshake. The answer's marker goes out on log_text, which is
+             * how the service scenario observes the round trip. */
       if (trigger_last_try == 0u || (now - trigger_last_try) >= TRIGGER_RETRY_MS) {
+        std_srvs::srv::Trigger::Request req;
+        std_srvs::srv::Trigger::Response res;
+
         trigger_last_try = now;
+        req.structure_needs_at_least_one_member = 0u;
         if (trigger_cli.call(req, res)) {
           trigger_called = 1u;
           if (opts.log_text != NULL) {
