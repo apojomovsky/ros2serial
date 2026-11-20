@@ -3,7 +3,7 @@
 
 /* The Arduino glue's host test: the port contract against stub streams.
  * Fails unless the glue reads the selected stream, writes to it, reports
- * blocking TX space and ticks from micros. */
+ * blocking TX space and ticks from millis. */
 #include <stdint.h>
 #include <stdio.h>
 
@@ -29,7 +29,7 @@ static void reset_all(void)
 {
   Serial = StubStream();
   Serial1 = StubStream();
-  set_stub_micros(0);
+  set_stub_millis(0);
   r2s_arduino_port_test_reset();
 }
 
@@ -89,13 +89,29 @@ static int check_tx_free_reports_blocking(void)
   return 0;
 }
 
-static int check_tick_is_micros_in_milliseconds(void)
+static int check_tick_is_the_millis_counter(void)
 {
   reset_all();
-  set_stub_micros(1500UL);
-  CHECK(r2s_port_tick() == 1u);
-  set_stub_micros(4000000000UL);
-  CHECK(r2s_port_tick() == 4000000u);
+  set_stub_millis(1500UL);
+  CHECK(r2s_port_tick() == 1500u);
+  set_stub_millis(4000000000UL);
+  CHECK(r2s_port_tick() == 4000000000u);
+  return 0;
+}
+
+/* The core reads every interval as after - before, so the tick must cross
+ * from 0xFFFFFFFF to 0 with an elapsed count of one, not a two-billion jump. */
+static int check_tick_wraps_at_2_32(void)
+{
+  uint32_t before;
+  uint32_t after;
+
+  reset_all();
+  set_stub_millis(0xFFFFFFFFUL);
+  before = r2s_port_tick();
+  set_stub_millis(0UL);
+  after = r2s_port_tick();
+  CHECK((uint32_t)(after - before) == 1u);
   return 0;
 }
 
@@ -134,9 +150,9 @@ static int check_tx_cap_budgets_writes_per_tick(void)
   CHECK(r2s_port_tx_free() == 16u);
   r2s_port_write(out, sizeof out);
   CHECK(r2s_port_tx_free() == 14u);
-  set_stub_micros(999);
+  set_stub_millis(0);
   CHECK(r2s_port_tx_free() == 14u);
-  set_stub_micros(1000);
+  set_stub_millis(1);
   CHECK(r2s_port_tx_free() == 16u);
   r2s_test_set_tx_cap(0xFFFFu);
   CHECK(r2s_port_tx_free() == 0xFFFFu);
@@ -150,7 +166,8 @@ int main(void)
   CHECK(check_read_stops_at_empty() == 0);
   CHECK(check_write_goes_to_serial() == 0);
   CHECK(check_tx_free_reports_blocking() == 0);
-  CHECK(check_tick_is_micros_in_milliseconds() == 0);
+  CHECK(check_tick_is_the_millis_counter() == 0);
+  CHECK(check_tick_wraps_at_2_32() == 0);
   CHECK(check_another_port_is_selectable_without_port_code() == 0);
 #ifdef R2S_TEST_TX_CAP
   CHECK(check_tx_cap_starts_disarmed() == 0);
