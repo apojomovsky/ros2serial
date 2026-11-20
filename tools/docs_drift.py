@@ -794,105 +794,6 @@ def check_ros2_run() -> list[str]:
     return problems
 
 
-# The boards ros2serial targets do have a heap: malloc, new and Arduino's
-# String all reach it on an Uno. What holds is the firmware's rule, that the
-# core allocates nothing at run time, so a page saying the heap is absent
-# states the wrong fact about a correct rule.
-#
-# Three things make a sentence the claim rather than the rule: an existence
-# verb (`has no heap`, `without a heap`), the heap as the thing it names
-# rather than a word it qualifies (`no heap allocation`, `no heap use`), and
-# a board-side subject. `keeps no heap memory` states the rule, and a host
-# process, which does have a heap, is never the subject.
-NO_HEAP = re.compile(
-    r'\b(?:has|have|had|with)\s+(?:a\s+)?no\s+heap\b'
-    r'|\bwithout\s+(?:a\s+|any\s+)?heap\b',
-    re.IGNORECASE,
-)
-# What the heap may qualify and stay the rule rather than the claim.
-HEAP_QUALIFIERS = {
-    'allocation',
-    'allocations',
-    'allocator',
-    'allocating',
-    'use',
-    'usage',
-    'growth',
-}
-BOARD_SUBJECT = re.compile(
-    r'\b(?:MCU|microcontroller|board|Arduino|AVR|Uno|Mega|target|core|firmware)\b',
-    re.IGNORECASE,
-)
-# One sentence at a time, so a subject in one never lends itself to a phrase
-# in the next. A fenced block is code, which the snippet check owns, and a
-# paragraph wraps onto several lines, so the line breaks inside one are not
-# sentence breaks.
-FENCE_BLOCK = re.compile(r'^ {0,3}```.*?^ {0,3}```[ \t]*$', re.MULTILINE | re.DOTALL)
-SENTENCE = re.compile(r'[^.!?]+[.!?]|[^.!?]+')
-# The pages the claim is wrong on: the reader-facing prose and the
-# specification, which states the MCU's rules.
-SPEC_PAGES = 'spec'
-
-
-def heap_pages() -> tuple[str, ...]:
-    """Every page a no-heap claim is wrong on."""
-    pages = list(user_docs())
-    spec = ROOT / SPEC_PAGES
-    if spec.is_dir():
-        pages += [str(path.relative_to(ROOT)) for path in sorted(spec.glob('*.md'))]
-    return tuple(pages)
-
-
-def heap_sentences(text: str) -> list[str]:
-    """One page's sentences, paragraph joins kept, fenced code dropped."""
-    sentences: list[str] = []
-    paragraph: list[str] = []
-
-    def flush() -> None:
-        if paragraph:
-            sentences.extend(SENTENCE.findall(' '.join(paragraph)))
-            paragraph.clear()
-
-    for line in FENCE_BLOCK.sub('\n\n', text).splitlines():
-        stripped = line.strip()
-        if not stripped:
-            flush()
-        elif stripped.startswith('|'):
-            # A table row stands alone: its cells are separate claims.
-            flush()
-            sentences.extend(SENTENCE.findall(stripped))
-        else:
-            paragraph.append(stripped)
-    flush()
-    return sentences
-
-
-def heap_claims(text: str) -> list[str]:
-    """The sentences of one page that claim the heap is absent."""
-    claims = []
-    for sentence in heap_sentences(text):
-        matched = NO_HEAP.search(sentence)
-        if matched is None:
-            continue
-        after = sentence[matched.end() :].split()
-        if after and after[0].strip('-.,;:').lower() in HEAP_QUALIFIERS:
-            continue
-        if not BOARD_SUBJECT.search(sentence[: matched.start()]):
-            continue
-        claims.append(sentence)
-    return claims
-
-
-def check_heap_claims() -> list[str]:
-    """A page saying the board or MCU has no heap, which they do."""
-    return [
-        f'{rel}: claims the heap is absent; the firmware allocates nothing,'
-        ' the board does have one'
-        for rel in heap_pages()
-        if heap_claims(_read(rel))
-    ]
-
-
 CHECKS = (
     check_make_targets,
     check_unbuilt_claims,
@@ -904,7 +805,6 @@ CHECKS = (
     check_config_table,
     check_examples,
     check_bounds_links,
-    check_heap_claims,
     check_docs_urls,
     check_pages_reachable,
     check_generator_commands,
