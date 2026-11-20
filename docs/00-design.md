@@ -1228,7 +1228,7 @@ Rules:
 - A reusable workflow's permissions are capped by its caller, and GitHub rejects the caller at startup, before any `if` runs, when a called job asks for more than the call grants. A job added to `nightly-jobs.yml` therefore comes with the same scope on all three calls (`ci.yml`, `nightly.yml`, `release.yml`), even the ones whose inputs turn it off; `scripts/test_nightly_workflow.py` fails on any shortfall.
 - Every job runs on GitHub-hosted `ubuntu-24.04` runners; hardware validation stays a manual checklist tracked in #95.
 - Pull request runs supersede each other; `master` runs never cancel, so every merged commit keeps its own conclusion.
-- Required checks on `master`: everything in `ci.yml` except advisory jobs and jobs whose prerequisites haven't landed yet; each such job is marked `continue-on-error` with a link to its ticket until it lands.
+- Required checks on `master`: everything in `ci.yml` except advisory jobs and jobs whose prerequisites haven't landed yet; each such job is marked `continue-on-error` with a link to its ticket until it lands. A matrix job's required names are its expanded ones (`bridge (jazzy)`, `scripts (0)`), and GitHub reports a job-level skip of a matrix job under the bare job name without expanding the matrix, so a matrix job gates its steps and never the job (#702).
 
 ## Research tickets
 
