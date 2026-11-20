@@ -218,7 +218,13 @@ def test_the_lone_strict_suite_runs_only_scenario_8():
     assert 'make test NIGHTLY=1' not in ' '.join(str(step.get('run', '')) for step in job['steps'])
     env = runs[0].get('env', {})
     skipped = set(str(env.get('R2S_E2E_SKIP', '')).split())
-    runnable = list_file_entries('scenarios.list') | list_file_entries('scenarios-compat.list')
+    # Every leg list the posix suite can read, so the lone suite skips all of
+    # them but the sync scenario it judges.
+    runnable = {
+        name
+        for list_name in ('scenarios.list', 'scenarios-short.list')
+        for name in list_file_entries(list_name)
+    }
     assert 'test_scenario_8_posix' in runnable
     assert skipped == runnable - {'test_scenario_8_posix'}
 
