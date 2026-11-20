@@ -10,8 +10,11 @@ name: ci
 # The plan job maps a pull request's changed files to the jobs they can
 # affect and exposes one output per job. Each section job needs the plan and
 # runs only when its output is set; workflow_dispatch and pushes to master
-# run every job, and a FULL result runs every job too. A job skipped by its
-# if still satisfies branch protection, so skipping is safe.
+# run every job, and a FULL result runs every job too. A skipped job counts
+# as success for branch protection, so skipping is safe, but only where the
+# check name it reports is the one the ruleset requires. A job-level skip on
+# a matrix job reports the bare job name and never expands the matrix, so a
+# matrix job gates its steps instead of the job (#702).
 #
 # Timeouts: every job that builds or pulls an image carries at least 30
 # minutes. On a cold GHA cache the image step is slow, and its cache is
@@ -46,8 +49,6 @@ jobs:
   # reads cannot disagree; the trees every job builds in, the workflows
   # and the suite plumbing select the full matrix, and so does a path no
   # section reads. Pushes to master and manual runs keep the full matrix.
-  # A job skipped by its if still satisfies branch protection, so
-  # skipping is safe.
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -146,19 +147,30 @@ jobs:
   # The SCRIPTS scope runs as one job per shard over the collected node
   # ids, spread round-robin in sorted order (scripts/shard_nodes.py). The
   # e2e isolation pairs run in the e2e-isolation job instead.
+  #
+  # The gate sits on the steps, not the job: a job-level skip never expands
+  # the matrix, so GitHub reports `scripts` alone and the required
+  # `scripts (0)` and its siblings stay expected forever (#702). R2S_SELECTED
+  # writes the condition once, so the steps cannot drift from each other.
+  # A skipped shard still starts its runner, and nothing else: its steps are
+  # what cost time.
   scripts:
     needs: plan
-    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.scripts == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         shard: [0, 1, 2, 3]
+    env:
+      R2S_SELECTED: ${{ (github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.scripts == '1') && '1' || '' }}
     steps:
       - uses: actions/checkout@v4.2.2
+        if: env.R2S_SELECTED == '1'
       - uses: ./.github/actions/dev-image
-      - run: make test SCRIPTS=1 SCRIPTS_SHARD=${{ matrix.shard }}
+        if: env.R2S_SELECTED == '1'
+      - if: env.R2S_SELECTED == '1'
+        run: make test SCRIPTS=1 SCRIPTS_SHARD=${{ matrix.shard }}
 
   core:
     needs: plan
@@ -272,10 +284,13 @@ jobs:
 
   # The bridge is built and tested on every supported distro, in that distro's
   # own pinned image. The dev image is the jazzy one, so the local run and the
-  # jazzy job share a toolchain.
+  # jazzy job share a toolchain. The gate sits on the steps, because a
+  # job-level skip reports `bridge` and never `bridge (jazzy)` and its
+  # siblings, which the ruleset requires (#702). A skipped leg still pulls
+  # its image, since the container starts before any step runs: that pull is
+  # what the expanded check name costs.
   bridge:
     needs: [plan, bridge-images]
-    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.bridge == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -283,12 +298,17 @@ jobs:
       matrix: ${{ fromJSON(needs.bridge-images.outputs.matrix) }}
     container:
       image: ${{ fromJSON(needs.bridge-images.outputs.images)[matrix.distro] }}
+    env:
+      R2S_SELECTED: ${{ (github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.bridge == '1') && '1' || '' }}
     steps:
       - uses: actions/checkout@v4.2.2
+        if: env.R2S_SELECTED == '1'
       # The distro images carry no dev image: the runner installs pinned Task.
       - name: Install Task
+        if: env.R2S_SELECTED == '1'
         run: python3 scripts/install-task.py
-      - run: make test BRIDGE=1
+      - if: env.R2S_SELECTED == '1'
+        run: make test BRIDGE=1
         env:
           R2S_IN_IMAGE: 1
           R2S_BUILD_DIR: /tmp/r2s-build
@@ -296,9 +316,11 @@ jobs:
   # End-to-end on the posix virtual MCU: scenarios 1 to 4 under every RMW the
   # design names, with the Zenoh router started first on its leg. The suite
   # runs the same run.sh locally, so each leg matches `make test E2E=posix`.
+  # The gate sits on the steps, so every distro and RMW leg reports its
+  # expanded name whether or not it is selected (#702); an unselected leg
+  # pays its image pull and nothing more.
   e2e-posix:
     needs: [plan, bridge-images]
-    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.e2e == 'posix' || needs.plan.outputs.e2e == 'both'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -308,17 +330,23 @@ jobs:
         rmw: [rmw_fastrtps_cpp, rmw_cyclonedds_cpp, rmw_zenoh_cpp]
     container:
       image: ${{ fromJSON(needs.bridge-images.outputs.images)[matrix.distro] }}
+    env:
+      R2S_SELECTED: ${{ (github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.e2e == 'posix' || needs.plan.outputs.e2e == 'both') && '1' || '' }}
     steps:
       - uses: actions/checkout@v4.2.2
-      - run: |
+        if: env.R2S_SELECTED == '1'
+      - if: env.R2S_SELECTED == '1'
+        run: |
           bash scripts/apt-install.sh update
           bash scripts/apt-install.sh install -y --no-install-recommends "ros-${DISTRO}-rmw-cyclonedds-cpp" "ros-${DISTRO}-rmw-zenoh-cpp"
         env:
           DISTRO: ${{ matrix.distro }}
       # The distro images carry no dev image: the runner installs pinned Task.
       - name: Install Task
+        if: env.R2S_SELECTED == '1'
         run: python3 scripts/install-task.py
-      - run: make test E2E=posix
+      - if: env.R2S_SELECTED == '1'
+        run: make test E2E=posix
         env:
           R2S_IN_IMAGE: 1
           R2S_BUILD_DIR: /tmp/r2s-build
