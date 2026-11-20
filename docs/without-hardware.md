@@ -118,7 +118,7 @@ progress lines go to stderr, and the bridge's own output lands in
 board: uno
 port: /dev/ttyACM0
 firmware: arduino_button_led arduino:avr:uno
-flash: 11786 bytes
+flash: 11640 bytes
 ram: 1181 bytes
 handshake: 4.3 s
 button rate: 10.0 Hz from 297 messages
