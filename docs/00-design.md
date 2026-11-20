@@ -313,6 +313,8 @@ rCOBS decoding runs backwards in place in the frame buffer once the delimiter ar
 
 **Transmit.** A publish first computes the frame's encoded size bound and asks the port for free space with `r2s_port_tx_free()`. If the frame does not fit, the publish returns `R2S_ERR_TX_BUSY` and writes nothing, so the user's loop never blocks on a slow link and a frame is never half-sent. Otherwise the codec serializes field by field into the CRC and the rCOBS encoder, which hands small chunks (`R2S_TX_CHUNK`, default 8 bytes) to `r2s_port_write`. A port with a blocking write and no TX buffer reports `0xFFFF` free space and accepts blocking.
 
+The boot HELLO goes out behind one `0x00` (`r2s_tx_flush_line()`), because a chip whose ROM loader logs on the data UART hands the line to the firmware with bytes on it and no delimiter. Without the flush those bytes prefix the first HELLO, which the host drops for a bad CRC, and the handshake waits for the 1 s repeat. The flush is the boot's alone: every later HELLO starts a line the core owns.
+
 | Port | RX path | TX path |
 | --- | --- | --- |
 | Arduino (any core) | `r2s_port_read` reads `Serial` | `Serial.write`, which blocks, so `0xFFFF` |

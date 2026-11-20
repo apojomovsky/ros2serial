@@ -91,6 +91,24 @@ void test_framer_ignores_empty_frames_without_counting_them(void)
   TEST_ASSERT_EQUAL_UINT16(1, counters()->rx_frames);
 }
 
+/* covers: FRM-14 */
+void test_framer_a_lone_delimiter_before_a_frame_is_ignored_and_uncounted(void)
+{
+  const uint8_t payload[] = {0x01, 0x02};
+  r2s_frame_t frame;
+  uint16_t len = r2s_test_frame(wire, 16, 0, payload, sizeof payload);
+
+  fake_port_queue_rx_hex("00");
+  fake_port_queue_rx(wire, len);
+
+  TEST_ASSERT_EQUAL_UINT8(1, r2s_framer_poll(&frame));
+  TEST_ASSERT_EQUAL_UINT16(6, frame.len);
+  TEST_ASSERT_EQUAL_HEX8(16, frame.data[0]);
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(payload, frame.data + 2, sizeof payload);
+  TEST_ASSERT_EQUAL_UINT16(0, counters()->dropped_frames);
+  TEST_ASSERT_EQUAL_UINT16(1, counters()->rx_frames);
+}
+
 /* covers: FRM-7 */
 void test_framer_drops_a_frame_shorter_than_four_bytes(void)
 {

@@ -158,6 +158,70 @@ void test_session_boot_sends_hello_and_announces(void)
   assert_tx(0, 0, 0, expected, len);
 }
 
+/* covers: SES-1, FRM-14 */
+void test_session_boot_flushes_the_line_before_the_hello(void)
+{
+  static uint8_t expected[R2S_FRAMER_RX_CAPACITY + 2u];
+  uint8_t hello[64];
+  uint16_t hello_len;
+  uint16_t expected_len;
+  uint16_t len;
+  const uint8_t *tx;
+
+  configure(one_topic, 1);
+
+  tx = fake_port_tx(&len);
+  TEST_ASSERT_EQUAL_HEX8(0x00, tx[0]);
+  hello_len = hello_payload(hello, 0u, 1);
+  expected[0] = 0x00u;
+  expected_len = (uint16_t)(r2s_test_frame(expected + 1u, 0, 0, hello, hello_len) + 1u);
+  R2S_ASSERT_BYTES(expected, expected_len, tx, fake_port_tx_len(), "flush then the boot HELLO");
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+}
+
+/* covers: SES-5, SES-3, SES-1, FRM-14 */
+void test_session_later_hellos_carry_no_flush(void)
+{
+  const uint8_t hello_req[] = {0x01u, R2S_PROTOCOL_VERSION};
+  const uint8_t user[] = {0x00u};
+  uint8_t hello[64];
+  static uint8_t expected[R2S_FRAMER_RX_CAPACITY + 2u];
+  uint16_t hello_len;
+  uint16_t wire_len;
+  uint16_t len;
+  const uint8_t *tx;
+
+  configure(one_topic, 1);
+  hello_len = hello_payload(hello, 0u, 1);
+
+    /* The flush belongs to the boot, the only moment a partial frame can be
+     * on the line: the 1 s repeat carries its frame and nothing before it. */
+  fake_port_tx_clear();
+  fake_port_advance(1000);
+  r2s_spin_some();
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+  wire_len = r2s_test_frame(expected, 0, 1, hello, hello_len);
+  tx = fake_port_tx(&len);
+  R2S_ASSERT_BYTES(expected, wire_len, tx, len, "the repeat HELLO alone");
+
+    /* The answer to HELLO_REQ is a frame alone in the same way. */
+  fake_port_tx_clear();
+  feed_host(0, 0, hello_req, sizeof hello_req);
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+  wire_len = r2s_test_frame(expected, 0, 2, hello, hello_len);
+  tx = fake_port_tx(&len);
+  R2S_ASSERT_BYTES(expected, wire_len, tx, len, "the solicited HELLO alone");
+
+    /* So is the rate-limited answer to any other host frame (SES-3). */
+  fake_port_tx_clear();
+  fake_port_advance(100);
+  feed_host(16, 0, user, sizeof user);
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+  wire_len = r2s_test_frame(expected, 0, 3, hello, hello_len);
+  tx = fake_port_tx(&len);
+  R2S_ASSERT_BYTES(expected, wire_len, tx, len, "the nack HELLO alone");
+}
+
 /* covers: CTL-16 */
 void test_session_names_of_128_bytes_or_more_travel_whole(void)
 {

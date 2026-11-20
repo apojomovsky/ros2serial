@@ -226,6 +226,29 @@ TEST(FrameReader, AClosedLinkFaultsOnlyItsOwnReader)
     reader_b.release();
 }
 
+TEST(FrameReader, ADelimiterBeforeAFrameIsIgnoredAndNotDelivered)
+{
+    // [FRM-14]: a sender may flush the line with a 0x00 before a frame, so the
+    // host reads the frame behind it and never sees the empty unit as one.
+    // The counters that show it uncounted are pinned in core/tests/test_framer.c,
+    // which runs this same framer.
+    const std::vector<std::uint8_t> wire = wire_of(6u);
+    std::vector<std::uint8_t> prefixed{0x00u};
+    prefixed.insert(prefixed.end(), wire.begin(), wire.end());
+
+    FakeTransport transport;
+    ManualClock clock;
+    FrameReader reader(transport, clock);
+    transport.script_read(prefixed);
+
+    Frame received;
+    ASSERT_TRUE(reader.poll(received));
+    EXPECT_EQ(received.size, 6u);
+    EXPECT_EQ(received.data[0u], 0x10u);
+    reader.release();
+    EXPECT_FALSE(reader.poll(received)) << "the empty unit is not a frame";
+}
+
 }  // namespace
 }  // namespace test
 }  // namespace r2s_bridge
