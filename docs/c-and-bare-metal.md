@@ -11,8 +11,8 @@ routes.
 | CMake, PlatformIO, a bare-metal `main()`, a vendor toolchain | `r2s.yaml` and `r2s-gen` |
 | Your own `.msg`, `.srv` or `.action` types, in C | `r2s.yaml`, or a type library from `r2s-gen types` |
 
-Both routes are the same core: a C99 library with no heap, no function
-pointers and no floating-point arithmetic, plus a port you provide.
+Both routes are the same core: a C99 library with no heap allocation, no
+function pointers and no floating-point arithmetic, plus a port you provide.
 
 ## The X-macro list, in C
 
