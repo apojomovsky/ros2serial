@@ -183,6 +183,7 @@ void test_session_boot_flushes_the_line_before_the_hello(void)
 void test_session_later_hellos_carry_no_flush(void)
 {
   const uint8_t hello_req[] = {0x01u, R2S_PROTOCOL_VERSION};
+  const uint8_t user[] = {0x00u};
   uint8_t hello[64];
   static uint8_t expected[R2S_FRAMER_RX_CAPACITY + 2u];
   uint16_t hello_len;
@@ -210,6 +211,15 @@ void test_session_later_hellos_carry_no_flush(void)
   wire_len = r2s_test_frame(expected, 0, 2, hello, hello_len);
   tx = fake_port_tx(&len);
   R2S_ASSERT_BYTES(expected, wire_len, tx, len, "the solicited HELLO alone");
+
+    /* So is the rate-limited answer to any other host frame (SES-3). */
+  fake_port_tx_clear();
+  fake_port_advance(100);
+  feed_host(16, 0, user, sizeof user);
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+  wire_len = r2s_test_frame(expected, 0, 3, hello, hello_len);
+  tx = fake_port_tx(&len);
+  R2S_ASSERT_BYTES(expected, wire_len, tx, len, "the nack HELLO alone");
 }
 
 /* covers: CTL-16 */
