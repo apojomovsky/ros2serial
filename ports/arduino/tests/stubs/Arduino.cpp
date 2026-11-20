@@ -4,16 +4,16 @@
 /* The stub Arduino core behind the glue's host test. */
 #include "Arduino.h"
 
-static unsigned long s_micros;
+static unsigned long s_millis;
 
-unsigned long micros(void)
+unsigned long millis(void)
 {
-  return s_micros;
+  return s_millis;
 }
 
-void set_stub_micros(unsigned long value)
+void set_stub_millis(unsigned long value)
 {
-  s_micros = value;
+  s_millis = value;
 }
 
 StubStream::StubStream(void)

@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
 /* The stub Arduino core the glue's host test compiles against: a fake
- * Stream the test drives and a controllable micros clock. Only the calls
+ * Stream the test drives and a controllable millis clock. Only the calls
  * the glue makes exist here, so a new Arduino call fails to link. */
 #ifndef ARDUINO_H
 #define ARDUINO_H
@@ -16,8 +16,8 @@
 typedef bool boolean;
 typedef uint8_t byte;
 
-unsigned long micros(void);
-void set_stub_micros(unsigned long value);
+unsigned long millis(void);
+void set_stub_millis(unsigned long value);
 
 class Print
 {
