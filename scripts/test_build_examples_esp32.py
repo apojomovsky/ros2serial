@@ -21,6 +21,7 @@ SKETCHES = (
     'arduino_hello',
     'arduino_blink',
     'arduino_button',
+    'arduino_button_led',
     'arduino_servo',
     'arduino_range',
     'arduino_xmacro',

@@ -5,8 +5,8 @@
 // The button reads BUTTON_PIN, active low: 0 on the classic ESP32 and the S3,
 // 9 on the C3 and C6, which is their BOOT button, and 2 elsewhere, which is
 // the Uno and the Mega. The LED is LED_BUILTIN, or GPIO2 on the boards whose
-// variant names none, the classic ESP32 and the DevKit modules. On the S3 and
-// the C3 LED_BUILTIN drives the addressable RGB LED through digitalWrite.
+// variant names none, the classic ESP32 and the DevKit modules. On the S3, the
+// C3 and the C6 LED_BUILTIN drives the addressable RGB LED through digitalWrite.
 #include <ros2serial.h>
 #include <std_msgs/msg/bool.hpp>
 
