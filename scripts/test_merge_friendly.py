@@ -60,7 +60,7 @@ LIST_FILES = [
     'scripts/release-files.list',
     'tests/e2e/legs.list',
     'tests/e2e/scenarios.list',
-    'tests/e2e/scenarios-compat.list',
+    'tests/e2e/scenarios-short.list',
 ]
 
 GENERATED_DIRS = [

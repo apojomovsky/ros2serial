@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Breaking
+
+- **cpp:** Remove the rosserial compatibility layer; the native API is the only
+  C++ API, and the
+  [migration guide](https://apojomovsky.github.io/ros2serial/port-guide.html)
+  ports a sketch from it
+
 ## 0.5.0 (2026-11-19)
 
 ### Breaking

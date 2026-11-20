@@ -664,7 +664,7 @@ tasks:
       - exclude: tests/e2e/run.sh
       - exclude: tests/e2e/legs.list
       - exclude: tests/e2e/scenarios.list
-      - exclude: tests/e2e/scenarios-compat.list
+      - exclude: tests/e2e/scenarios-short.list
       - exclude: tests/e2e/test_*_posix.py
       - exclude: tests/e2e/e2e_support/firmware.py
       - exclude: tests/e2e/test_isolation.py

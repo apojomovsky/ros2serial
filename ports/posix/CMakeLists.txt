@@ -103,29 +103,29 @@ set_target_properties(r2s_posix_runtime_firmware PROPERTIES CXX_EXTENSIONS OFF)
 target_compile_options(r2s_posix_runtime_firmware PRIVATE
     -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow -Wundef)
 
-# The compat path announces the same topics through the rosserial-compatible
-# layer: the firmware registers ros:: publishers and subscribers, and the
-# end-to-end suite runs the same scenarios against it. The message headers
-# come from the same staged bundle, so the type hashes match on every path.
-# The firmware also serves reset and calls trigger (scenario 14) and carries
-# the parameter table the bridge walks (scenario 13), like the C firmware.
-add_executable(r2s_posix_ros_firmware
+# The native C++ services path announces the same topics as the runtime
+# shape, registered as r2s::Node objects, and carries r2s::Service and
+# r2s::Client so the end-to-end suite drives the services channel from C++.
+# The message headers come from the same staged bundle, so the type hashes
+# match on every path. The firmware also carries the parameter table the
+# bridge walks (scenario 13).
+add_executable(r2s_posix_services_firmware
     ${R2S_CORE_SOURCES}
     "${R2S_REPO_ROOT}/cpp/src/runtime.cpp"
     "${R2S_REPO_ROOT}/cpp/src/service.cpp"
     "${R2S_BUNDLE_DIR}/src/r2s_bundled.c"
     src/r2s_posix_port.c
     src/r2s_posix_params.c
-    src/r2s_posix_ros_firmware.cpp)
-target_include_directories(r2s_posix_ros_firmware PRIVATE
+    src/r2s_posix_services_firmware.cpp)
+target_include_directories(r2s_posix_services_firmware PRIVATE
     "${R2S_REPO_ROOT}/core/include" "${R2S_REPO_ROOT}/cpp/include"
     "${R2S_BUNDLE_DIR}/src" src)
-target_compile_definitions(r2s_posix_ros_firmware PRIVATE
+target_compile_definitions(r2s_posix_services_firmware PRIVATE
     R2S_WITH_CODEC R2S_WITH_TIME R2S_WITH_LOG R2S_WITH_PARAMS R2S_WITH_SERVICES
     R2S_MAX_FRAME=${R2S_BUNDLE_MAX_FRAME} R2S_MAX_NEST=${R2S_BUNDLE_MAX_NEST})
-target_compile_features(r2s_posix_ros_firmware PRIVATE cxx_std_11)
-set_target_properties(r2s_posix_ros_firmware PROPERTIES CXX_EXTENSIONS OFF)
-target_compile_options(r2s_posix_ros_firmware PRIVATE
+target_compile_features(r2s_posix_services_firmware PRIVATE cxx_std_11)
+set_target_properties(r2s_posix_services_firmware PROPERTIES CXX_EXTENSIONS OFF)
+target_compile_options(r2s_posix_services_firmware PRIVATE
     -pedantic -Wall -Wextra -Werror -Wconversion -Wshadow -Wundef)
 
 # The static C++ path announces the same topics through an R2S_TOPICS list:

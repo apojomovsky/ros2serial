@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The ros compat leg runs scenarios 1 to 4 plus the parameter and service
-scenarios its firmware carries; the static C++ leg reads the same list and
-skips those two from inside. The runtime legs keep the whole file list.
-These tests read the same list files as the runner, so a list the runner
-cannot see fails here.
+"""Every posix firmware leg runs the scenario files its shape can serve.
+
+The C firmware and the runtime C++ firmware serve the whole list. The two
+narrower C++ firmwares, the one carrying the services and the static one,
+run the short list: scenarios 1 to 4 plus 13 and 14, and each scenario
+skips a firmware that lacks the parameter table or the services it needs.
+These tests read the same list files and the same selection the runner
+does, so a leg the runner cannot see fails here.
 """
 
 import subprocess
@@ -18,11 +21,17 @@ SHORT = [
     'test_scenario_2_posix',
     'test_scenario_3_posix',
     'test_scenario_4_posix',
-]
-COMPAT = SHORT + [
     'test_scenario_13_posix',
     'test_scenario_14_posix',
 ]
+# One firmware per leg: what it announces and serves is what its leg covers.
+FIRMWARES = {
+    'static': 'r2s_posix_firmware',
+    'runtime': 'r2s_posix_runtime_firmware',
+    'services_cpp': 'r2s_posix_services_firmware',
+    'static_cpp': 'r2s_posix_static_firmware',
+}
+NARROW = ('services_cpp', 'static_cpp')
 
 
 def entries(name):
@@ -34,47 +43,79 @@ def entries(name):
     ]
 
 
+def legs():
+    """The legs the runner walks, in order."""
+    return entries('legs.list')
+
+
+def leg_block(needle):
+    """The run.sh case block over $leg whose body holds needle."""
+    lines = RUN_SH.read_text().splitlines()
+    for start, line in enumerate(lines):
+        if line.strip() != 'case $leg in':
+            continue
+        end = next(i for i in range(start, len(lines)) if lines[i].strip() == 'esac')
+        body = '\n'.join(lines[start : end + 1])
+        if needle in body:
+            return body
+    raise AssertionError(f'run.sh carries no case block holding {needle!r}')
+
+
 def files_for(leg):
     """The file list the runner selects for one leg, through its own case block."""
-    script = f'leg={leg}\n' + leg_block() + '\necho "$files"\n'
+    script = (
+        f'root={ROOT}\nleg={leg}\n'
+        + leg_block('scenarios-short.list')
+        + '\n'
+        + next(
+            line.strip()
+            for line in RUN_SH.read_text().splitlines()
+            if line.strip().startswith('files=$(grep')
+        )
+        + '\necho "$files"\n'
+    )
     proc = subprocess.run(['bash', '-c', script], capture_output=True, text=True)
     assert proc.returncode == 0, proc.stderr
-    return proc.stdout.strip()
+    return proc.stdout.split()
 
 
-def leg_block():
-    """The runner's leg-to-files selection, exactly as run.sh carries it."""
-    lines = RUN_SH.read_text().splitlines()
-    starts = [i for i, line in enumerate(lines) if 'case $leg in' in line]
-    for start in starts:
-        end = next(i for i in range(start, len(lines)) if lines[i].strip() == 'esac')
-        block = '\n'.join(lines[start : end + 1])
-        if 'scenarios-compat.list' in block and 'scenarios.list' in block:
-            files = next(line for line in lines[end + 1 :] if line.strip().startswith('files='))
-            return f'root={ROOT}\n' + block + '\n' + files.strip() + '\n'
-    raise AssertionError('run.sh carries no leg-to-list block')
+def test_the_leg_list_names_one_firmware_shape_per_leg():
+    assert legs() == list(FIRMWARES)
 
 
-def test_the_compat_list_covers_the_compat_scenarios():
-    assert entries('scenarios-compat.list') == COMPAT
+def test_the_runner_points_each_leg_at_its_firmware():
+    mapping = leg_block('R2S_E2E_FW=')
+    for leg, firmware in FIRMWARES.items():
+        assert f'{leg}) export R2S_E2E_FW=$build/ports/posix/{firmware} ;;' in mapping
 
 
-def test_the_runtime_list_starts_with_scenarios_1_to_4():
+def test_every_leg_firmware_is_a_build_target():
+    targets = ' '.join((ROOT / 'ports' / 'posix' / 'CMakeLists.txt').read_text().split())
+    for firmware in FIRMWARES.values():
+        assert f'add_executable({firmware} ' in targets, firmware
+
+
+def test_the_short_list_covers_the_narrow_legs():
+    assert entries('scenarios-short.list') == SHORT
+
+
+def test_the_narrow_legs_run_the_short_list():
+    for leg in NARROW:
+        assert files_for(leg) == SHORT
+
+
+def test_the_wide_legs_run_the_whole_list():
     full = entries('scenarios.list')
-    assert full[:4] == SHORT
-    assert 'test_scenario_6_posix' in full
+    for leg in ('static', 'runtime'):
+        assert files_for(leg) == full
 
 
-def test_the_runner_reads_the_leg_list():
-    assert 'tests/e2e/legs.list' in RUN_SH.read_text()
+def test_the_short_list_is_part_of_the_whole_list():
+    full = entries('scenarios.list')
+    assert [name for name in SHORT if name in full] == SHORT
 
 
-def test_compat_legs_cover_the_compat_list():
-    for leg in ('ros', 'static_cpp'):
-        assert files_for(leg).split() == COMPAT
-
-
-def test_runtime_legs_run_the_whole_list():
-    full = files_for('runtime').split()
-    assert full[:4] == SHORT
-    assert 'test_scenario_6_posix' in full
+def test_the_removed_compat_list_is_gone():
+    assert not (ROOT / 'tests' / 'e2e' / 'scenarios-compat.list').exists()
+    for path in ('tests/e2e/run.sh', 'Taskfile.yml', '.gitattributes'):
+        assert 'scenarios-compat' not in (ROOT / path).read_text(), path

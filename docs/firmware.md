@@ -124,7 +124,7 @@ section](00-design.md#time) describes the protocol.
 Do not print debugging text to the serial stream used by ros2serial. Use its
 logging API, which the bridge forwards to `/rosout` once the firmware defines
 `R2S_WITH_LOG`, or a separate debug port.
-For compatibility logging, time, and existing ROS 1 sketches, see the
+To port an existing ROS 1 rosserial sketch, logging and time included, see the
 [migration guide](03-port-rosserial-sketch.md).
 
 ## Bundled types

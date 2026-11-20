@@ -89,13 +89,26 @@ def _wait_link_ready(node, received, since):
         rclpy.spin_once(node, timeout_sec=0.2)
 
 
+def _spawn_args():
+    """The firmware arguments: the services shape calls trigger only when asked.
+
+    The C firmware sends its call without waiting, so it reports the outcome
+    by itself; the native r2s::Client blocks until the answer or the call
+    timeout, so a schedule-publishing firmware opts in.
+    """
+    args = ['--rate', '10']
+    if os.environ.get('R2S_E2E_FW', '').endswith('/r2s_posix_services_firmware'):
+        args.append('--trigger')
+    return tuple(args)
+
+
 def _service_firmware():
-    """Whether this leg boots a firmware serving services: the C shape or the ros compat shape."""
+    """Whether this leg boots a firmware serving services: the C shape or the services shape."""
     given = os.environ.get('R2S_E2E_FW', '')
     return (
         not given
         or given.endswith('/r2s_posix_firmware')
-        or given.endswith('/r2s_posix_ros_firmware')
+        or given.endswith('/r2s_posix_services_firmware')
     )
 
 
@@ -145,7 +158,7 @@ class TestScenario14(unittest.TestCase):
                         time.monotonic(), deadline, 'no /diagnostics flow from the bridge'
                     )
                 received.clear()
-                _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, ('--rate', '10'))
+                _SPAWNED = firmware.spawn(_FIRMWARE, _RELAY.mcu_port, _spawn_args())
                 link_ready_at = _wait_link_ready(node, received, _SPAWNED.ready_at)
                 took = checks.wait_for_handshake(
                     received,
