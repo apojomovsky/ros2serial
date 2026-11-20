@@ -21,12 +21,15 @@ def test_library_contains_runtime_core_port_and_example(tmp_path):
         'src/runtime.cpp',
         'src/r2s_arduino_port.cpp',
         'src/r2s_config.h',
-        'src/ros2serial/ros.h',
         'src/std_msgs/msg/bool.hpp',
         'examples/button_led/button_led.ino',
     ):
         assert (out / name).is_file(), name
     assert not (out / 'src/test_reset.c').exists()
+    # The library stages one C++ API: the compat headers and their directory
+    # are gone from the tree, so the library carries neither.
+    assert not (out / 'src/ros2serial').exists()
+    assert not any(out.rglob('ros.h'))
 
 
 def test_library_refuses_existing_destination(tmp_path, capsys):

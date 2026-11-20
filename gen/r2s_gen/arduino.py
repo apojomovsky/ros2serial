@@ -31,7 +31,6 @@ def _runtime_sources() -> tuple[Path, Path]:
     assets, cpp = _assets()
     for source in (
         assets / 'core/include/r2s',
-        cpp / 'include/ros2serial',
         assets / 'core/src',
         cpp / 'src',
         cpp / 'include/r2s',
@@ -55,11 +54,7 @@ def stage_runtime(destination: Path) -> None:
     :raises ValueError: if the installation lacks the assets.
     """
     assets, cpp = _runtime_sources()
-    for target, source in {
-        'src/r2s': assets / 'core/include/r2s',
-        'src/ros2serial': cpp / 'include/ros2serial',
-    }.items():
-        shutil.copytree(source, destination / target, dirs_exist_ok=True)
+    shutil.copytree(assets / 'core/include/r2s', destination / 'src/r2s', dirs_exist_ok=True)
     shutil.copytree(cpp / 'include/r2s', destination / 'src/r2s', dirs_exist_ok=True)
     for source in (assets / 'core/src').glob('*.c'):
         if source.name != 'test_reset.c':

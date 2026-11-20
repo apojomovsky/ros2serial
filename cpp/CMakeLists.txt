@@ -20,10 +20,9 @@ add_compile_definitions(R2S_TESTING)
 # Firmware takes the value from the generated configuration.
 add_compile_definitions(R2S_MAX_FRAME=512)
 # The same feature set the core's host tests use, so the runtime speaks the
-# same protocol there as on a board, plus the actions channel the action
-# server needs and the services and parameters channels the compat layer
-# maps. The stack holds the deepest bundled closure: a stamp in a header in
-# a stamped transform in a TFMessage.
+# same protocol there as on a board, plus the actions, services and
+# parameters channels the layer implements. The stack holds the deepest
+# bundled closure: a stamp in a header in a stamped transform in a TFMessage.
 add_compile_definitions(R2S_WITH_CODEC R2S_MAX_NEST=4 R2S_WITH_LOG R2S_WITH_TIME R2S_WITH_ACTIONS R2S_WITH_SERVICES R2S_WITH_PARAMS)
 set(R2S_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
@@ -115,7 +114,3 @@ target_link_libraries(r2s_bundled PUBLIC r2s_core)
 # The static test resets the action registry through the shared hooks, so it
 # links the runtime library for the reset beside the bundled tables.
 r2s_cpp_unit_test(tests/test_static.cpp r2s_bundled r2s_runtime)
-
-# The rosserial-compatible API over the runtime registry and the bundled
-# tables, so the announce and the bytes are the ones a ported sketch sends.
-r2s_cpp_unit_test(tests/test_ros_compat.cpp r2s_runtime r2s_bundled)

@@ -2,5 +2,5 @@
 # branches appending a leg keep both.
 static
 runtime
-ros
+services_cpp
 static_cpp
