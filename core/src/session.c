@@ -1097,6 +1097,11 @@ void r2s_init(void)
   session.tx_seq_time = 0u;
 #endif
   enter_announcing(now);
+    /* A chip whose loader logs on the data UART leaves bytes with no
+     * delimiter on the line, which would prefix this HELLO and make the host
+     * drop it for a bad CRC (FRM-14). The flush is the boot's alone: no
+     * later HELLO can find a partial frame it did not send. */
+  (void)r2s_tx_flush_line();
   send_hello();
 }
 

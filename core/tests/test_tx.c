@@ -72,6 +72,56 @@ void test_tx_a_run_of_254_non_zero_bytes_carries_its_group_code(void)
   assert_sent(16, 1, payload, sizeof payload);
 }
 
+/* covers: FRM-14 */
+void test_tx_the_line_flush_writes_one_delimiter_and_no_frame(void)
+{
+  static uint8_t expected[R2S_FRAMER_RX_CAPACITY + 2u];
+  const uint8_t payload[] = {0x22};
+  uint16_t expected_len;
+  uint16_t len;
+  const uint8_t *tx;
+
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_tx_flush_line());
+
+  tx = fake_port_tx(&len);
+  TEST_ASSERT_EQUAL_UINT16(1, len);
+  R2S_ASSERT_BYTES((const uint8_t *)"\x00", 1, tx, len, "the lone delimiter");
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_frame_count());
+
+    /* The delimiter closes whatever the line held, so the frame after it is
+     * its own unit and not a continuation of the empty one. */
+  send(16, 0, payload, sizeof payload);
+  expected[0] = 0x00u;
+  expected_len = r2s_test_frame(expected + 1u, 16, 0, payload, sizeof payload);
+  tx = fake_port_tx(&len);
+  R2S_ASSERT_BYTES(expected, (uint16_t)(expected_len + 1u), tx, len, "flush then frame");
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+}
+
+/* covers: FRM-14 */
+void test_tx_the_line_flush_writes_nothing_without_space(void)
+{
+  fake_port_set_tx_free(0u);
+
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_TX_BUSY, r2s_tx_flush_line());
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_len());
+  TEST_ASSERT_EQUAL_UINT16(0, fake_port_tx_write_calls());
+}
+
+/* A delimiter inside a frame would cut it short, so the flush refuses while
+ * one is open. */
+void test_tx_the_line_flush_refuses_an_active_frame(void)
+{
+  const uint8_t payload[] = {0x11};
+
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_tx_begin(16, 0, sizeof payload));
+  TEST_ASSERT_EQUAL_INT8(R2S_ERR_BOUNDS, r2s_tx_flush_line());
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_tx_byte(payload[0]));
+  TEST_ASSERT_EQUAL_INT8(R2S_OK, r2s_tx_end());
+
+  assert_sent(16, 0, payload, sizeof payload);
+}
+
 void test_tx_a_busy_port_writes_nothing(void)
 {
   const uint8_t payload[] = {0x01, 0x02};

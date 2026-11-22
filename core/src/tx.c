@@ -129,6 +129,20 @@ r2s_status_t r2s_tx_end(void)
   return R2S_OK;
 }
 
+r2s_status_t r2s_tx_flush_line(void)
+{
+  uint8_t delimiter = 0x00u;
+
+  if (tx.active != 0u) {
+    return R2S_ERR_BOUNDS;
+  }
+  if (r2s_port_tx_free() == 0u) {
+    return R2S_ERR_TX_BUSY;
+  }
+  r2s_port_write(&delimiter, 1u);
+  return R2S_OK;
+}
+
 #ifdef R2S_TESTING
 void r2s_tx_test_reset(void)
 {

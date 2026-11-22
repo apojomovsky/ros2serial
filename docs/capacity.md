@@ -74,14 +74,14 @@ The runtime route serving `std_srvs/srv/Trigger` at 64-byte frames, the cap the 
 
 | board | services | flash | RAM |
 | --- | --- | --- | --- |
-| Uno | 0 | 6566 | 629 |
-| Uno | 1 | 12174 | 803 |
-| Uno | 2 | 12342 | 920 |
-| Uno | 4 | 12360 | 1156 |
-| Mega | 0 | 6906 | 629 |
-| Mega | 1 | 12520 | 803 |
-| Mega | 2 | 12692 | 920 |
-| Mega | 4 | 12718 | 1156 |
+| Uno | 0 | 6600 | 629 |
+| Uno | 1 | 12208 | 803 |
+| Uno | 2 | 12376 | 920 |
+| Uno | 4 | 12394 | 1156 |
+| Mega | 0 | 6940 | 629 |
+| Mega | 1 | 12554 | 803 |
+| Mega | 2 | 12726 | 920 |
+| Mega | 4 | 12752 | 1156 |
 
 Uno: 117.7 bytes of RAM per service, and 7 fit the RAM left by the allowance (fitted, not built).
 Mega: 117.7 bytes of RAM per service, and 59 fit the RAM left by the allowance (fitted, not built).

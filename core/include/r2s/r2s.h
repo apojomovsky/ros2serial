@@ -37,9 +37,10 @@ extern "C" {
 /// Starts the session.
 /**
  * Clears the session token, sends HELLO and enters ANNOUNCING (SES-1,
- * SES-10). The table set by r2s_session_configure() or
- * r2s_session_configure_ram() stays; without one the node announces itself
- * nameless with no topics.
+ * SES-10). A single `0x00` goes out ahead of that HELLO, so bytes a loader
+ * left on the line do not prefix it (FRM-14); later HELLOs carry none. The
+ * table set by r2s_session_configure() or r2s_session_configure_ram() stays;
+ * without one the node announces itself nameless with no topics.
  */
 void r2s_init(void);
 
