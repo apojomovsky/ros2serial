@@ -3,10 +3,10 @@
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
 # Build every example sketch for the ESP32 Dev Module through the Arduino
-# layout: the ESP32 core installs into a cache directory at the version
-# pinned in ci/versions.env, never into the dev image. The staged library is
-# the same bundle the AVR build stages, so the two builds share no sources.
-# Builds go under R2S_BUILD_DIR, so the tree stays clean.
+# layout. The staged library is the same bundle the AVR build stages, so the
+# two builds share no sources. Builds go under R2S_BUILD_DIR, so the tree
+# stays clean. The ESP32 core lives in a cache directory, never in the
+# dev image; the shared setup below owns that download.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root" || exit 2
@@ -20,34 +20,11 @@ if [ -z "${R2S_EXAMPLES_LOCKED:-}" ]; then
 fi
 mkdir -p "$build" || exit 1
 
-# The ESP32 core lives outside the image: the first run downloads it into the
-# cache, later runs and CI restore it from the cache. The data directory
-# defaults under R2S_CACHE_DIR, which the image mounts on the shared cache,
-# because the image's own HOME is ephemeral.
-esp32_url="https://espressif.github.io/arduino-esp32/package_esp32_index.json"
-data_dir=${R2S_ARDUINO_DATA_DIR:-${R2S_CACHE_DIR:-$HOME/.cache/ros2serial}/arduino-esp32}
-pin=$(grep '^ARDUINO_ESP32_CORE_VERSION=' "$root/ci/versions.env" | cut -d= -f2)
-[ -n "$pin" ] || {
-  echo "build-examples-esp32: ci/versions.env names no ARDUINO_ESP32_CORE_VERSION" >&2
-  exit 1
-}
-export ARDUINO_DIRECTORIES_DATA="$data_dir"
-export ARDUINO_DIRECTORIES_USER="$data_dir/user"
-mkdir -p "$data_dir/user" || exit 1
-if ! arduino-cli core list 2>/dev/null | grep -q "esp32:esp32 $pin"; then
-  arduino-cli core update-index --additional-urls "$esp32_url" || exit 1
-  arduino-cli core install --additional-urls "$esp32_url" "esp32:esp32@$pin" || exit 1
-fi
-# The Xtensa binutils measure the firmware for the budgets table, which runs
-# later in the same shell, so the toolchain joins PATH here. The folder name
-# holding the toolchain moves between core releases, so the script locates
-# the size binary instead of naming the folder; the pin fixes the layout.
-tc_size=$(find "$data_dir/packages/esp32/tools" -name xtensa-esp32-elf-size -type f 2>/dev/null | head -n 1)
-[ -n "$tc_size" ] || {
-  echo "build-examples-esp32: no xtensa toolchain under $data_dir" >&2
-  exit 1
-}
-export PATH="$(dirname "$tc_size"):$PATH"
+# The ESP32 core and its toolchains come from the shared setup: the first run
+# downloads the pinned core into the cache, later runs and CI restore it from
+# the cache. The data directory stays the one the CI cache key covers.
+# shellcheck source=scripts/esp32-core.sh
+source "$root/scripts/esp32-core.sh" || exit 1
 
 # The runtime sketch builds against the bundled library: r2s-gen emits the
 # library at build time, the core and the C++ runtime layer join it here,

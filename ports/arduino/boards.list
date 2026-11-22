@@ -1,0 +1,11 @@
+# One board per line: <name> <fqbn> <binutils-prefix>. Lines starting with
+# '#' are comments, and blank lines are ignored. ports/arduino/build.sh
+# compiles with the listed FQBN, and scripts/esp32-core.sh finds each ESP32
+# toolchain by searching for <binutils-prefix>-size under the cached core.
+uno arduino:avr:uno avr
+mega arduino:avr:mega avr
+esp32 esp32:esp32:esp32 xtensa-esp32-elf
+esp32s3 esp32:esp32:esp32s3 xtensa-esp32s3-elf
+esp32s3-usb esp32:esp32:esp32s3:USBMode=hwcdc,CDCOnBoot=cdc xtensa-esp32s3-elf
+esp32c3 esp32:esp32:esp32c3 riscv32-esp-elf
+esp32c3-usb esp32:esp32:esp32c3:CDCOnBoot=cdc riscv32-esp-elf
