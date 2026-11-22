@@ -45,4 +45,4 @@ scripts/pass-vars.list merge=union
 scripts/release-files.list merge=union
 tests/e2e/legs.list merge=union
 tests/e2e/scenarios.list merge=union
-tests/e2e/scenarios-compat.list merge=union
+tests/e2e/scenarios-short.list merge=union

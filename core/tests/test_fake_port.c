@@ -56,6 +56,23 @@ void test_fake_port_tx_is_captured_and_split_into_encoded_frames(void)
   TEST_ASSERT_NULL(fake_port_tx_frame(2, &len));
 }
 
+/* The split follows the receiver's own reading of the delimiter: a unit with
+ * no bytes is the empty frame [FRM-14] ignores, so it is not a captured
+ * frame. */
+void test_fake_port_an_empty_unit_is_not_one_of_the_frames(void)
+{
+  uint16_t len;
+  const uint8_t *frame;
+
+  r2s_port_write((const uint8_t *)"\x00\x11\x01\x00", 4);
+
+  TEST_ASSERT_EQUAL_UINT16(4, fake_port_tx_len());
+  TEST_ASSERT_EQUAL_UINT16(1, fake_port_tx_frame_count());
+  frame = fake_port_tx_frame(0, &len);
+  R2S_ASSERT_BYTES((const uint8_t *)"\x11\x01", 2, frame, len, "the frame after the empty unit");
+  TEST_ASSERT_NULL(fake_port_tx_frame(1, &len));
+}
+
 void test_fake_port_tick_is_settable_and_wraps(void)
 {
   fake_port_set_tick(0xFFFFFFFEu);

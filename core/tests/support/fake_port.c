@@ -105,9 +105,19 @@ uint16_t fake_port_tx_len(void)
 uint16_t fake_port_tx_frame_count(void)
 {
   uint16_t count = 0;
+  uint16_t start = 0;
 
   for (uint16_t i = 0; i < port.tx_len; i++) {
-    count = (uint16_t)(count + (port.tx[i] == 0x00));
+    if (port.tx[i] != 0x00) {
+      continue;
+    }
+        /* A unit with no encoded bytes is the empty frame two consecutive
+         * delimiters make, which a receiver ignores without counting it
+         * (FRM-14). */
+    if (i > start) {
+      count++;
+    }
+    start = (uint16_t)(i + 1);
   }
   return count;
 }
@@ -120,11 +130,13 @@ const uint8_t * fake_port_tx_frame(uint16_t index, uint16_t *len)
     if (port.tx[i] != 0x00) {
       continue;
     }
-    if (index == 0) {
-      *len = (uint16_t)(i - start);
-      return port.tx + start;
+    if (i > start) {
+      if (index == 0) {
+        *len = (uint16_t)(i - start);
+        return port.tx + start;
+      }
+      index--;
     }
-    index--;
     start = (uint16_t)(i + 1);
   }
   *len = 0;

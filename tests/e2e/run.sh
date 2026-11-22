@@ -47,8 +47,11 @@ source "$build/bridge/install/setup.bash"
 set -u
 
 # All four firmware shapes announce the same topics: the generated C
-# firmware, the runtime C++ firmware, the compat C++ firmware and the static
-# C++ firmware, so one scenario file covers every leg through R2S_E2E_FW.
+# firmware, the runtime C++ firmware, the services C++ firmware and the
+# static C++ firmware, so one scenario file covers every leg through
+# R2S_E2E_FW. The services shape is the C++ leg that answers scenario 14 and
+# carries the parameter table scenario 13 sets; the static shape has neither,
+# so both scenarios skip it from inside.
 bash ports/posix/run.sh --build-only || exit 1
 
 # The scenario files import the framework as a package; direct launch_test
@@ -75,7 +78,7 @@ for leg in $legs; do
   case $leg in
     static) export R2S_E2E_FW=$build/ports/posix/r2s_posix_firmware ;;
     runtime) export R2S_E2E_FW=$build/ports/posix/r2s_posix_runtime_firmware ;;
-    ros) export R2S_E2E_FW=$build/ports/posix/r2s_posix_ros_firmware ;;
+    services_cpp) export R2S_E2E_FW=$build/ports/posix/r2s_posix_services_firmware ;;
     static_cpp) export R2S_E2E_FW=$build/ports/posix/r2s_posix_static_firmware ;;
   esac
   for rmw in $rmws; do
@@ -101,11 +104,11 @@ for leg in $legs; do
       sleep 2
       kill -0 "$router" 2>/dev/null || { echo "rmw_zenohd on port $R2S_ZENOH_ROUTER_PORT died"; status=1; break; }
     fi
-    # The static C++ and ros compat legs cover scenarios 1 to 4; the
+    # The two narrow C++ legs cover scenarios 1 to 4 plus 13 and 14; the
     # other legs run the whole file list. Each list file holds one scenario
     # per line, so concurrent branches appending different scenarios keep both.
     case $leg in
-      static_cpp|ros) list=scenarios-compat.list ;;
+      services_cpp|static_cpp) list=scenarios-short.list ;;
       *) list=scenarios.list ;;
     esac
     # shellcheck disable=SC2086 # splitting the list into files is intended.

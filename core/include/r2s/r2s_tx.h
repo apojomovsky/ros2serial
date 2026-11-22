@@ -81,6 +81,19 @@ r2s_status_t r2s_tx_byte(uint8_t byte);
  */
 r2s_status_t r2s_tx_end(void);
 
+/// Closes whatever is on the line with one delimiter.
+/**
+ * Writes a single `0x00` and nothing else, so bytes left on the line, a boot
+ * log or a partial frame, are cut off before the next frame starts (FRM-14).
+ * Two consecutive delimiters carry an empty frame, which every receiver
+ * ignores without counting it.
+ *
+ * \return R2S_OK, R2S_ERR_BOUNDS writing nothing when a frame is active, or
+ * R2S_ERR_TX_BUSY writing nothing when the port cannot take the byte now.
+ * \pre No frame is active: a delimiter inside one would cut it short.
+ */
+r2s_status_t r2s_tx_flush_line(void);
+
 #ifdef R2S_TESTING
 /// Resets the transmitter for host test builds.
 /**

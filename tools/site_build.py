@@ -117,8 +117,8 @@ PAGES = (
     Page(
         'docs/03-port-rosserial-sketch.md',
         'port-guide.html',
-        'Port your rosserial sketch',
-        'Keep the sketch, swap the includes, fix the fields.',
+        'Port a rosserial sketch',
+        'Map every call onto the native API, rule by rule.',
     ),
     Page(
         'docs/04-porting.md',
