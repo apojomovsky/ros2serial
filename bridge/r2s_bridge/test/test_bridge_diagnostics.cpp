@@ -185,8 +185,10 @@ TEST_F(BridgeDiagnostics, AReadablePortDrivesTheSessionWithNoPoll)
     decoded.insert(decoded.end(), hello.begin(), hello.end());
     pty.write_all(helper_wire_of(helper_with_check(decoded)));
 
-    // Only the executor runs, and only the waitable's wakeup reaches the
-    // session: Bridge::poll() is never called here.
+    // The wait set holds the timer as well as the waitable, so this loop
+    // proves delivery through the wired node, not waitable-only delivery:
+    // the isolation lives in test_link_waitable.cpp, which drives the wait
+    // set by hand with no timer.
     const auto shaking = [&received]() {
       return !received.empty() && received.back().status[0].message == "handshaking";
     };

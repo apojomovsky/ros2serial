@@ -133,8 +133,11 @@ void LinkWaitable::run()
     // No timeout: a quiet line costs nothing until a byte, a hangup or a
     // disarm arrives.
     pollfd fds[2] = {{wake_fd, POLLIN, 0}, {fd, POLLIN, 0}};
-        // A failed poll leaves every revents clear, so the loop parks again
-        // instead of treating an error as readiness.
+        // A -1 return leaves every revents clear, so the loop polls again
+        // instead of treating an error as readiness. POLLERR and POLLNVAL
+        // arrive through revents instead, and without POLLIN the loop polls
+        // again at once: that needs the descriptor closed without unwatch(),
+        // which the contract forbids, and the timer backstops the receive.
     (void)::poll(fds, 2u, -1);
     lock.lock();
     in_poll_ = false;
