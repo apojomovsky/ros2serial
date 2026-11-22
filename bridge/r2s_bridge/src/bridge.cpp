@@ -26,7 +26,7 @@ namespace
 // reports. Each of those is due on a deadline of its own, so a period far
 // under the shortest of them (the 500 ms heartbeat) keeps them accurate while
 // the node sleeps instead of running a pass 1000 times a second.
-constexpr std::chrono::milliseconds kPollPeriod{10};
+constexpr std::chrono::milliseconds kPollPeriod{20};
 // Diagnostics ride the poll timer instead of their own: the snapshot must
 // read on the thread that polls the router, whose session keeps no lock.
 // The deadline is wall-clock, so the period does not drift when polling slows.
