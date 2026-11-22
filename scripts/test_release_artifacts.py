@@ -68,7 +68,11 @@ def test_the_arduino_zip_stages_the_bundle_and_the_core(tmp_path):
         'ros2serial/src/r2s/r2s_codec.h',
         'ros2serial/src/session.c',
         'ros2serial/src/r2s/runtime.hpp',
+        'ros2serial/src/r2s/service.hpp',
+        'ros2serial/src/r2s/action.hpp',
         'ros2serial/src/runtime.cpp',
+        'ros2serial/src/service.cpp',
+        'ros2serial/src/action.cpp',
         'ros2serial/src/r2s_arduino_port.cpp',
         'ros2serial/src/std_msgs/msg/float32.hpp',
     ):
@@ -110,7 +114,11 @@ def test_the_arduino_zip_is_the_platformio_artifact(tmp_path):
         'src/r2s_arduino_port.cpp',
         'src/r2s_arduino_port.h',
         'src/r2s/r2s_codec.h',
+        'src/r2s/service.hpp',
+        'src/r2s/action.hpp',
         'src/runtime.cpp',
+        'src/service.cpp',
+        'src/action.cpp',
     ):
         assert (lib / name).is_file(), name
     defines = layouts.build_defines((lib / 'src/r2s_bundled.h').read_text(encoding='utf-8'))
