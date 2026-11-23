@@ -58,6 +58,7 @@ repository development and CI, not installation into a robot workspace.
 | `size-report` | Regenerate the flash, RAM and stack report |
 | `capacity-report` | Regenerate `docs/capacity.md` and the measurements behind it |
 | `bench-bridge` | Measure the bridge's idle and 10 Hz CPU over a pty pair |
+| `bench-latency` | Measure host-to-MCU publish-to-echo latency over a pty pair |
 | `vectors` | Validate every vector file |
 | `regen` | Regenerate every version-stamped generated file (goldens, example and cpp libraries, posix sources) |
 | `bounds-table` | Refresh the limits table in [docs/message-bounds.md](docs/message-bounds.md) from `r2s-gen limits` |
