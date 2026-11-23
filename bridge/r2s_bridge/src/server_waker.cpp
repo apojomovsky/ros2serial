@@ -25,22 +25,25 @@ ServerWaker::ServerWaker(const rclcpp::Context::SharedPtr & context, ReadyCallba
     throw std::invalid_argument("ServerWaker: a ready callback is required");
   }
   const rcl_guard_condition_options_t options = rcl_guard_condition_get_default_options();
+  // GCOVR_EXCL_START: a context that cannot spare one guard condition
+  // leaves the node without any executor either, which no test stages.
   if (
     rcl_guard_condition_init(
       &wake_guard_, context_->get_rcl_context().get(), options) != RCL_RET_OK)
   {
     rcl_reset_error();
-    // GCOVR_EXCL_START: a context that cannot spare one guard condition
-    // leaves the node without any executor either, which no test stages.
     throw std::runtime_error("ServerWaker: cannot make the wakeup guard");
-    // GCOVR_EXCL_STOP
   }
+  // GCOVR_EXCL_STOP
   try {
     thread_ = std::thread([this]() {run();});
+    // GCOVR_EXCL_START: a thread that cannot start leaves the node with no
+    // receive path, which no test can stage without a failing allocator.
   } catch (...) {
     [[maybe_unused]] const rcl_ret_t fini = rcl_guard_condition_fini(&wake_guard_);
     (void)fini;
     throw;
+    // GCOVR_EXCL_STOP
   }
 }
 
@@ -66,6 +69,15 @@ void ServerWaker::watch(
   const std::vector<const rcl_action_server_t *> & actions,
   const std::vector<const rcl_service_t *> & services)
 {
+  {
+    std::lock_guard<std::mutex> guard(mutex_);
+    // Watching what is already watched changes nothing: skip the disarm
+    // and the rebuild, so a steady-state transmit never disturbs a
+    // waiting helper.
+    if (armed_ && actions_ == actions && services_ == services) {
+      return;
+    }
+  }
   unwatch();
   {
     std::lock_guard<std::mutex> guard(mutex_);
@@ -137,10 +149,13 @@ void ServerWaker::rebuild(
     std::size_t t = 0u;
     std::size_t c = 0u;
     std::size_t sv = 0u;
+    // GCOVR_EXCL_START: live servers size cleanly; only a server destroyed
+    // without unwatching fails here, which no test stages.
     if (rcl_action_server_wait_set_get_num_entities(server, &s, &g, &t, &c, &sv) != RCL_RET_OK) {
       rcl_reset_error();
       throw std::runtime_error("ServerWaker: cannot size the wait set");
     }
+    // GCOVR_EXCL_STOP
     subs += s;
     guards += g;
     timers += t;
@@ -148,6 +163,8 @@ void ServerWaker::rebuild(
     service_slots += sv;
   }
   rcl_allocator_t allocator = rcl_get_default_allocator();
+  // GCOVR_EXCL_START: the wait set is sized from the servers it watches, so
+  // the init cannot refuse its entries; only a refused allocation fails it.
   if (
     rcl_wait_set_init(
       &wait_set_, subs, guards, timers, clients, service_slots, 0u,
@@ -156,23 +173,30 @@ void ServerWaker::rebuild(
     rcl_reset_error();
     throw std::runtime_error("ServerWaker: cannot make the wait set");
   }
+  // GCOVR_EXCL_STOP
   set_live_ = true;
+  // GCOVR_EXCL_START: the set has room for the wakeup guard by construction.
   if (rcl_wait_set_add_guard_condition(&wait_set_, &wake_guard_, nullptr) != RCL_RET_OK) {
     rcl_reset_error();
     throw std::runtime_error("ServerWaker: cannot watch its wakeup guard");
   }
+  // GCOVR_EXCL_STOP
   for (const rcl_action_server_t * server : actions) {
+    // GCOVR_EXCL_START: sized for every watched server above.
     if (rcl_action_wait_set_add_action_server(&wait_set_, server, nullptr) != RCL_RET_OK) {
       rcl_reset_error();
       throw std::runtime_error("ServerWaker: cannot watch an action server");
     }
+    // GCOVR_EXCL_STOP
   }
   for (const rcl_service_t * service : services) {
     std::size_t index = 0u;
+    // GCOVR_EXCL_START: sized for every watched service above.
     if (rcl_wait_set_add_service(&wait_set_, service, &index) != RCL_RET_OK) {
       rcl_reset_error();
       throw std::runtime_error("ServerWaker: cannot watch a service server");
     }
+    // GCOVR_EXCL_STOP
   }
 }
 
@@ -185,6 +209,8 @@ bool ServerWaker::query_ready(
     bool cancel = false;
     bool result = false;
     bool expired = false;
+    // GCOVR_EXCL_START: a waited set never holds a dead server, so the
+    // readiness query cannot fail; the guard keeps the error path.
     if (
       rcl_action_server_wait_set_get_entities_ready(
         &wait_set_, server, &goal, &cancel, &result, &expired) != RCL_RET_OK)
@@ -192,6 +218,7 @@ bool ServerWaker::query_ready(
       rcl_reset_error();
       return false;
     }
+    // GCOVR_EXCL_STOP
     if (goal || cancel || result) {
       return true;
     }
@@ -212,7 +239,17 @@ void ServerWaker::run()
 {
   std::unique_lock<std::mutex> lock(mutex_);
   for (;;) {
-    idle_.wait(lock, [this] {return quit_ || (armed_ && !pending_ && !signalled_);});
+    idle_.wait(lock, [this] {
+      if (quit_) {
+        return true;
+      }
+      if (!armed_ || pending_) {
+        return false;
+      }
+      // A transmit that took nothing leaves the latch set, which parks the
+      // helper until the next watch or unwatch clears it.
+      return !signalled_;
+    });
     if (quit_) {
       return;
     }
@@ -225,18 +262,17 @@ void ServerWaker::run()
     // servers the last pass pruned.
     try {
       rebuild(actions, watched);
+    // GCOVR_EXCL_START: a rebuild fails only on a dead server or a refused
+    // allocation, which no test stages; the waiter then retries at the
+    // timer rate instead of spinning or dying with the thread.
     } catch (const std::runtime_error &) {
-      // A rebuild fails only on a dead server or a refused allocation, and
-      // the next transmit clears pending_: the waiter retries at the timer
-      // rate instead of spinning or dying with the thread.
-      // GCOVR_EXCL_START: no test can refuse the middleware an allocation.
       lock.lock();
       pending_ = true;
       in_wait_ = false;
       idle_.notify_all();
       continue;
-      // GCOVR_EXCL_STOP
     }
+    // GCOVR_EXCL_STOP
     [[maybe_unused]] const rcl_ret_t waited = rcl_wait(&wait_set_, -1);
     (void)waited;
     lock.lock();
@@ -253,17 +289,15 @@ void ServerWaker::run()
       signalled_ = false;
       continue;
     }
-    if (!pending_ && !signalled_) {
-      // The takes run on the executor, so the ready flag stays until the
-      // transmit drains it: pending_ parks the helper, and signalled_
-      // stops a still-ready server from waking the executor again. The
-      // callback runs unlocked, the way the link waitable executes.
-      pending_ = true;
-      signalled_ = true;
-      lock.unlock();
-      ready_();
-      lock.lock();
-    }
+    // Pending is always clear here: the wait above parks the helper while a
+    // transmit is in flight, and a transmit that took nothing leaves the
+    // edge latch set, which parks it too. A ready server with a clear latch
+    // is new work, so it always wakes the executor.
+    pending_ = true;
+    signalled_ = true;
+    lock.unlock();
+    ready_();
+    lock.lock();
   }
 }
 

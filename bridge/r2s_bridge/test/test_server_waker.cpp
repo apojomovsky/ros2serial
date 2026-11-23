@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -157,6 +158,20 @@ protected:
 
   rclcpp::Node::SharedPtr node_;
 };
+
+// A waker needs a context for its wait set and a callback to run: both are
+// checked up front, before any thread starts.
+TEST_F(ServerWakerTest, RejectsANullContext)
+{
+  EXPECT_THROW(ServerWaker(nullptr, []() {}), std::invalid_argument);
+}
+
+TEST_F(ServerWakerTest, RejectsAnEmptyCallback)
+{
+  ServerWaker::ReadyCallback ready;
+  EXPECT_THROW(
+    ServerWaker(node_->get_node_base_interface()->get_context(), ready), std::invalid_argument);
+}
 
 // A goal request wakes the waiter: the take it announces runs on the
 // executor's transmit, not on the watcher thread.

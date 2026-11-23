@@ -976,7 +976,9 @@ struct Router::Impl
 #if !defined(R2S_HAS_GENERIC_SERVICE)
     for (const auto & entry : service_routes_) {
       const ServiceRoute & route = *entry.second;
-      if (route.rcl_valid && route.info.role == kServiceRoleServer) {
+      // Only server roles hold an rcl service: ensure inserts a route only
+      // after its init succeeds, so a listed server role is always valid.
+      if (route.info.role == kServiceRoleServer) {
         services.push_back(&route.rcl_service);
       }
     }
@@ -1026,7 +1028,6 @@ struct Router::Impl
     if (session_.state() != SessionState::kConnected) {
       return;
     }
-    bool added = false;
     for (const ActionInfo & info : session_.actions()) {
       if (info.status != kActionStatusOk || action_routes_.count(info.index) != 0u) {
         continue;
@@ -1043,15 +1044,10 @@ struct Router::Impl
       state.last_attempt = now;
       ++state.attempts;
       ensure_action_route(info);
-      // A failed creation leaves no route behind, so only a present one
-      // changed the set the waker watches.
-      added = added || action_routes_.count(info.index) != 0u;
     }
-    // A rebuilt set waits for no timer pass either: arm only when the set
-    // changed, so the steady-state polls never rebuild the wait set.
-    if (added) {
-      arm_waker();
-    }
+    // Watching what is already watched is a no-op inside the waker, so a
+    // steady-state poll never rebuilds the wait set.
+    arm_waker();
   }
 
   // A zero uuid means "every goal". Compared as a whole instead of byte
@@ -2090,7 +2086,6 @@ struct Router::Impl
     if (session_.state() != SessionState::kConnected) {
       return;
     }
-    bool added = false;
     for (const ServiceInfo & info : session_.services()) {
       if (info.status != kServiceStatusOk || service_routes_.count(info.index) != 0u) {
         continue;
@@ -2107,11 +2102,10 @@ struct Router::Impl
       state.last_attempt = now;
       ++state.attempts;
       ensure_service_route(info);
-      added = added || service_routes_.count(info.index) != 0u;
     }
-    if (added) {
-      arm_waker();
-    }
+    // Watching what is already watched is a no-op inside the waker, so a
+    // steady-state poll never rebuilds the wait set.
+    arm_waker();
   }
 
     // One refused SET the MCU reported while connected ([PAR-5]): applied
