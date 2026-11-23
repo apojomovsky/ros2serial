@@ -45,6 +45,9 @@ UNLISTED = {
     # Nightly-only mutation testing runs outside Task, in the mutation job
     # of .github/workflows/nightly-jobs.yml, so no task lists its inputs.
     'docker/mutation': 'nightly-only image, built by the mutation job',
+    # The ESP32 emulation spike image: scripts/esp32-qemu-check.sh builds
+    # it directly, and the nightly follow-up wires it into a job.
+    'docker/esp32-qemu': 'spike image, built by scripts/esp32-qemu-check.sh',
     'mull.yml': 'nightly-only Mull config, read by run-mutation.sh',
     'mutation': 'nightly-only triage inputs and bridge harness, read by run-mutation.sh',
 }
