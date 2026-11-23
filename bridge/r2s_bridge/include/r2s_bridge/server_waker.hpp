@@ -55,8 +55,8 @@ public:
   /**
    * The servers stay owned by the caller: watch() returns only after the
    * helper thread left the wait, and unwatch() is what lets the caller
-   * destroy a server it previously watched. Watching two empty sets parks
-   * the helper until the next watch.
+   * destroy a watched server. Watching two empty sets parks the helper
+   * until the next watch.
    *
    * \param[in] actions the action servers to watch, empty to watch none.
    * \param[in] services the service servers to watch, empty to watch none.

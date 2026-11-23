@@ -34,7 +34,8 @@ from pathlib import Path
 
 import rclpy
 from geometry_msgs.msg import Twist
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import QoSProfile
+from rclpy.qos import ReliabilityPolicy
 
 HERE = Path(__file__).resolve().parent
 
