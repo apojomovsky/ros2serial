@@ -247,6 +247,12 @@ def test_every_job_carries_a_timeout():
         assert 'timeout-minutes' in job, name
 
 
+def test_the_scripts_shards_exist():
+    """The scripts scope fans out over shards; each one runs its slice."""
+    shards = jobs()['scripts']
+    assert shards['strategy']['matrix']['shard']
+
+
 def test_the_bridge_matrix_keeps_its_images_setup_job():
     """The bridge legs run in the distro images the setup job resolves."""
     assert 'bridge-images' in jobs()
