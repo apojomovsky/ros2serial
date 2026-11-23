@@ -30,8 +30,10 @@ BUDGET_S=60
 # padded out to it.
 FLASH_BYTES=4194304
 # DDS discovery is host-wide, so the spike takes its own domain: the e2e
-# pool starts at 89, and another agent's run must never lend us buttons.
-DOMAIN_ID=${R2S_QEMU_DOMAIN_ID:-72}
+# pool starts at 89, so the default derives from this shell's pid into the
+# 150 to 169 range, and two concurrent spike runs still hear only their own
+# buttons. An explicit R2S_QEMU_DOMAIN_ID wins for a fixed setup.
+DOMAIN_ID=${R2S_QEMU_DOMAIN_ID:-$((150 + $$ % 20))}
 
 pin() { sed -n "s/^$1=//p" "$root/ci/versions.env" | tail -1; }
 say() { echo "esp32-qemu-check: $*" >&2; }
@@ -52,7 +54,7 @@ if [ -z "${R2S_IN_IMAGE:-}" ]; then
   mkdir -p "$cache" "$build" || exit 1
   exec docker run --rm --user "$(id -u):$(id -g)" \
     -v "$root:$root" -w "$root" -v "$cache:$cache" \
-    -e "R2S_BUILD_DIR=$build" -e "R2S_CACHE_DIR=$cache" -e "R2S_HOST_MOUNT=$root" \
+    -e "R2S_BUILD_DIR=$build" -e "R2S_CACHE_DIR=$cache" \
     -e "R2S_QEMU_DOMAIN_ID=$DOMAIN_ID" \
     "$IMAGE" bash scripts/esp32-qemu-check.sh
 fi
