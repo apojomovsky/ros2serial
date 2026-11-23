@@ -55,11 +55,35 @@ jobs:
       # publish.
       bigendian: false
 
+  # The e2e isolation pairs in full: pull requests run them only when the
+  # plan selects the nightly scope, so the tag runs the whole pairs here
+  # before anything is published (#728). Skipped off a tag, like the
+  # nightly caller.
+  e2e-isolation:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: ./.github/actions/dev-image
+      - run: make test NIGHTLY=1
+        env:
+          R2S_E2E_SKIP: test_scenario_8_posix
+          R2S_SYNC_BOUND_NS: 5000000
+      - if: always()
+        run: bash scripts/collect-isolation-logs.sh "$HOME/.cache/ros2serial" isolation-logs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-isolation-logs
+          path: isolation-logs/
+          if-no-files-found: warn
+
   release:
-    needs: [nightly]
-    # The nightly gate only binds on a tag: a skipped caller (a pull request
+    needs: [nightly, e2e-isolation]
+    # The gates only bind on a tag: a skipped caller (a pull request
     # or a dispatch) still builds below, while a red one blocks the publish.
-    if: always() && (needs.nightly.result == 'success' || needs.nightly.result == 'skipped')
+    if: always() && (needs.nightly.result == 'success' || needs.nightly.result == 'skipped') && (needs.e2e-isolation.result == 'success' || needs.e2e-isolation.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
