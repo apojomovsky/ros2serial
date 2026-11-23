@@ -134,7 +134,10 @@ def test_off_a_pull_request_every_section_job_runs():
 
 
 def test_each_section_job_needs_the_plan_and_gates_on_its_output():
-    known = set(ci_jobs.JOBS)
+    # e2e-isolation keeps pull requests under the wall-clock budget by
+    # running on them only when the plan selects the nightly scope;
+    # scripts/test_nightly_workflow.py pins that rule instead.
+    known = set(ci_jobs.JOBS) - {'e2e-isolation'}
     for name in sorted(known):
         job = jobs()[name]
         assert 'plan' in needs(job), name
