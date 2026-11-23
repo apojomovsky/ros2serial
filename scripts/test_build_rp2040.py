@@ -66,9 +66,22 @@ def test_the_sdk_hash_is_pinned_in_versions_env():
     assert re.fullmatch(r'[0-9a-f]{64}', pinned('PICO_SDK_SHA256')), pinned('PICO_SDK_SHA256')
 
 
-def test_the_script_reads_all_four_pins_from_versions_env():
+def test_the_arm_toolchain_comes_from_the_shared_fetch_script():
     text = SCRIPT.read_text(encoding='utf-8')
-    for name in ('ARM_GCC_VERSION', 'ARM_GCC_SHA256', 'PICO_SDK_VERSION', 'PICO_SDK_SHA256'):
+    assert 'ports/common/arm_toolchain.sh' in text
+
+
+def test_the_script_reads_the_sdk_pins_from_versions_env():
+    text = SCRIPT.read_text(encoding='utf-8')
+    for name in ('PICO_SDK_VERSION', 'PICO_SDK_SHA256'):
+        assert name in text, name
+    assert 'ci/versions.env' in text
+
+
+def test_the_shared_script_reads_the_arm_pins_from_versions_env():
+    shared = ROOT / 'ports' / 'common' / 'arm_toolchain.sh'
+    text = shared.read_text(encoding='utf-8')
+    for name in ('ARM_GCC_VERSION', 'ARM_GCC_SHA256'):
         assert name in text, name
     assert 'ci/versions.env' in text
 
@@ -100,7 +113,8 @@ def test_the_script_fetches_the_sdk_boot_stage_from_a_verified_tarball():
 
 
 def test_the_toolchain_cache_lands_beside_the_other_bundles():
-    text = SCRIPT.read_text(encoding='utf-8')
+    shared = ROOT / 'ports' / 'common' / 'arm_toolchain.sh'
+    text = shared.read_text(encoding='utf-8')
     assert 'R2S_CACHE_DIR' in text
     assert 'xpack' in text
     assert '/opt' not in text
@@ -121,11 +135,16 @@ def test_the_helper_rejects_a_missing_option_value_without_hanging(tmp_path):
 
 
 def test_the_helper_fails_when_versions_env_names_no_arm_gcc(tmp_path):
+    versions = tmp_path / 'no-arm-versions.env'
+    versions.write_text(
+        f'PICO_SDK_VERSION={pinned("PICO_SDK_VERSION")}\n'
+        f'PICO_SDK_SHA256={pinned("PICO_SDK_SHA256")}\n'
+    )
     result = run(
         ['bash', str(SCRIPT), '--stage-only'],
         ROOT,
         tmp_path,
-        extra_env={'R2S_VERSIONS_ENV': str(tmp_path / 'empty-versions.env')},
+        extra_env={'R2S_VERSIONS_ENV': str(versions)},
     )
 
     assert result.returncode != 0
