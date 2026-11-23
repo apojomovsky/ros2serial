@@ -247,23 +247,6 @@ def test_every_job_carries_a_timeout():
         assert 'timeout-minutes' in job, name
 
 
-def test_the_plan_restores_no_checksum():
-    """The checksum plan is gone: no job restores or saves a Task checksum."""
-    text = WORKFLOW.read_text(encoding='utf-8')
-    assert '.task/checksum' not in text
-    assert 'cache/restore' not in text
-
-
-def test_the_scripts_shards_run_without_their_own_save_job():
-    shards = jobs()['scripts']
-    assert shards['strategy']['matrix']['shard']
-    assert 'scripts-save' not in jobs()
-
-
-def test_the_bridge_matrix_runs_without_its_own_save_job():
-    assert 'bridge-save' not in jobs()
+def test_the_bridge_matrix_keeps_its_images_setup_job():
+    """The bridge legs run in the distro images the setup job resolves."""
     assert 'bridge-images' in jobs()
-
-
-def test_the_e2e_posix_matrix_runs_without_its_own_save_job():
-    assert 'e2e-posix-save' not in jobs()

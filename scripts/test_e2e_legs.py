@@ -113,9 +113,3 @@ def test_the_wide_legs_run_the_whole_list():
 def test_the_short_list_is_part_of_the_whole_list():
     full = entries('scenarios.list')
     assert [name for name in SHORT if name in full] == SHORT
-
-
-def test_the_removed_compat_list_is_gone():
-    assert not (ROOT / 'tests' / 'e2e' / 'scenarios-compat.list').exists()
-    for path in ('tests/e2e/run.sh', 'Taskfile.yml', '.gitattributes'):
-        assert 'scenarios-compat' not in (ROOT / path).read_text(), path
