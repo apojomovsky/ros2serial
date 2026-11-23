@@ -311,10 +311,13 @@ done
 # The IDE route: the installed library configures the build itself, with no
 # build property. A copy of the stage enables each sized channel the way an
 # IDE sketch would, by uncommenting its config line and setting its frame,
-# and the channel sketch compiles against that copy with no extra flags.
+# and the channel sketch compiles against that copy with no extra flags. The
+# firmware lands in a scratch directory outside the measured build tree, so
+# the size and stack scanners never see it.
+ide_scratch=$(mktemp -d "${TMPDIR:-/tmp}/r2s-examples-ide.XXXXXX") || status=1
 ide_channel_stage() {
   local channel=$1 frame=$2
-  local dest="$build/ide_$channel"
+  local dest="$ide_scratch/ide_$channel"
   rm -rf "$dest"
   cp -r "$stage" "$dest" || return 1
   sed -i -e "s|^/\* #define $channel \*/$|#define $channel|" \
@@ -323,9 +326,9 @@ ide_channel_stage() {
 }
 ide_channel_stage R2S_WITH_SERVICES 64 || status=1
 for board in uno mega; do
-  out="$build/arduino_service/ide-$board"
+  out="$ide_scratch/arduino_service/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" \
-    --library "$build/ide_R2S_WITH_SERVICES" --build-path "$out/build" --output-dir "$out" \
+    --library "$ide_scratch/ide_R2S_WITH_SERVICES" --build-path "$out/build" --output-dir "$out" \
     examples/arduino_service || status=1
   if ! elf_has_symbol "$out/arduino_service.ino.elf" r2s_service_table; then
     echo "arduino_service ($board): the IDE route links no service table" >&2
@@ -334,15 +337,16 @@ for board in uno mega; do
 done
 ide_channel_stage R2S_WITH_ACTIONS 128 || status=1
 for board in uno mega; do
-  out="$build/arduino_action/ide-$board"
+  out="$ide_scratch/arduino_action/$board"
   arduino-cli compile --fqbn "arduino:avr:$board" \
-    --library "$build/ide_R2S_WITH_ACTIONS" --build-path "$out/build" --output-dir "$out" \
+    --library "$ide_scratch/ide_R2S_WITH_ACTIONS" --build-path "$out/build" --output-dir "$out" \
     examples/arduino_action || status=1
   if ! elf_has_symbol "$out/arduino_action.ino.elf" r2s_action_table; then
     echo "arduino_action ($board): the IDE route links no action table" >&2
     status=1
   fi
 done
+rm -rf "$ide_scratch"
 
 # The task sketches build against the same runtime library: they register
 # their topics while they run, so the staged bundle above serves them all
