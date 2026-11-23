@@ -135,11 +135,16 @@ def test_the_helper_rejects_a_missing_option_value_without_hanging(tmp_path):
 
 
 def test_the_helper_fails_when_versions_env_names_no_arm_gcc(tmp_path):
+    versions = tmp_path / 'no-arm-versions.env'
+    versions.write_text(
+        f'PICO_SDK_VERSION={pinned("PICO_SDK_VERSION")}\n'
+        f'PICO_SDK_SHA256={pinned("PICO_SDK_SHA256")}\n'
+    )
     result = run(
         ['bash', str(SCRIPT), '--stage-only'],
         ROOT,
         tmp_path,
-        extra_env={'R2S_VERSIONS_ENV': str(tmp_path / 'empty-versions.env')},
+        extra_env={'R2S_VERSIONS_ENV': str(versions)},
     )
 
     assert result.returncode != 0
