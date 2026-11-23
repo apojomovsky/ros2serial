@@ -180,8 +180,8 @@ TEST_F(ServerWakerTest, WakesWhenAGoalArrives)
   RawServer server(node_, "spin");
   std::atomic<bool> fired{false};
   ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
-    fired.store(true);
-  });
+      fired.store(true);
+    });
   waker.watch({server.handle()}, {});
   auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(node_, "spin");
   ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
@@ -197,8 +197,8 @@ TEST_F(ServerWakerTest, StaysQuietWithNoServers)
 {
   std::atomic<bool> fired{false};
   ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
-    fired.store(true);
-  });
+      fired.store(true);
+    });
   waker.watch({}, {});
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
   EXPECT_FALSE(fired.load()) << "an empty watch must not wake";
@@ -212,8 +212,8 @@ TEST_F(ServerWakerTest, StaysQuietOnAnIdleServer)
   RawServer server(node_, "spin");
   std::atomic<bool> fired{false};
   ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
-    fired.store(true);
-  });
+      fired.store(true);
+    });
   waker.watch({server.handle()}, {});
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
   EXPECT_FALSE(fired.load()) << "an idle server must not wake";
@@ -227,8 +227,8 @@ TEST_F(ServerWakerTest, UnwatchStopsTheWakeups)
   RawServer server(node_, "spin");
   std::atomic<bool> fired{false};
   ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
-    fired.store(true);
-  });
+      fired.store(true);
+    });
   waker.watch({server.handle()}, {});
   auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(node_, "spin");
   ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
@@ -254,8 +254,8 @@ TEST_F(ServerWakerTest, WatchSwapsTheWatchedSet)
   RawServer second(node_, "spin2");
   std::atomic<int> fires{0};
   ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fires]() {
-    ++fires;
-  });
+      ++fires;
+    });
   auto first_client =
     rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(node_, "spin");
   auto second_client =
@@ -301,8 +301,8 @@ TEST_F(ServerWakerTest, WatchingTheSameSetSkipsTheRebuild)
   RawServer server(node_, "spin");
   std::atomic<int> fires{0};
   ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fires]() {
-    ++fires;
-  });
+      ++fires;
+    });
   waker.watch({server.handle()}, {});
   // An identical watch is a no-op: the server stays watched.
   waker.watch({server.handle()}, {});
@@ -330,8 +330,8 @@ TEST_F(ServerWakerTest, WatchingNewServicesKeepsTheActions)
   RawService service(node_, "reset");
   std::atomic<int> fires{0};
   ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fires]() {
-    ++fires;
-  });
+      ++fires;
+    });
   waker.watch({server.handle()}, {});
   // Same actions, new services: the set changed, so the waiter rebuilds.
   waker.watch({server.handle()}, {service.handle()});
@@ -353,7 +353,8 @@ TEST_F(ServerWakerTest, WatchingNewServicesKeepsTheActions)
   ASSERT_EQ(fires.load(), 1) << "a goal must wake after the services join";
   ASSERT_TRUE(server.take_goal());
   waker.notify_served(true);
-  auto future = service_client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  auto future =
+    service_client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
   const auto second = std::chrono::steady_clock::now();
   while (fires.load() < 2 &&
     std::chrono::steady_clock::now() - second < std::chrono::seconds(10))
@@ -371,8 +372,8 @@ TEST_F(ServerWakerTest, ServedRearmsTheWaiter)
   RawServer server(node_, "spin");
   std::atomic<int> fires{0};
   ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fires]() {
-    ++fires;
-  });
+      ++fires;
+    });
   waker.watch({server.handle()}, {});
   auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(node_, "spin");
   ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
@@ -408,8 +409,8 @@ TEST_F(ServerWakerTest, WakesWhenAServiceRequestArrives)
   RawService server(node_, "reset");
   std::atomic<bool> fired{false};
   ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
-    fired.store(true);
-  });
+      fired.store(true);
+    });
   waker.watch({}, {server.handle()});
   auto client = node_->create_client<std_srvs::srv::Trigger>("reset");
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
@@ -425,8 +426,8 @@ TEST_F(ServerWakerTest, StaysQuietOnAnIdleServiceServer)
   RawService server(node_, "reset");
   std::atomic<bool> fired{false};
   ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
-    fired.store(true);
-  });
+      fired.store(true);
+    });
   waker.watch({}, {server.handle()});
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
   EXPECT_FALSE(fired.load()) << "an idle service server must not wake";

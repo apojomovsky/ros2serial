@@ -99,7 +99,9 @@ protected:
 // One bounded wait on a wait set holding the waitable's guard condition. The
 // wait set is cleared and refilled every time, as the executor's rebuild does,
 // so the arrays never carry a stale entry between waits.
-rcl_ret_t wait_once(rcl_wait_set_t & wait_set, LinkWaitable & waitable, std::chrono::nanoseconds how)
+rcl_ret_t wait_once(
+  rcl_wait_set_t & wait_set, LinkWaitable & waitable,
+  std::chrono::nanoseconds how)
 {
   rcl_ret_t status = rcl_wait_set_clear(&wait_set);
   if (status != RCL_RET_OK) {
@@ -370,9 +372,9 @@ TEST_F(LinkWaitableTest, EventsExecutorSurfaceReportsOneEntity)
   std::size_t count = 0u;
   int id = -1;
   waitable.set_on_ready_callback([&calls, &count, &id](std::size_t n, int entity) {
-    ++calls;
-    count = n;
-    id = entity;
+      ++calls;
+      count = n;
+      id = entity;
   });
   waitable.trigger();
   EXPECT_EQ(calls, 1u);

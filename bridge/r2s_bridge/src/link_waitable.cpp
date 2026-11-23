@@ -142,7 +142,7 @@ void LinkWaitable::call_on_ready()
 void LinkWaitable::run()
 {
   std::unique_lock<std::mutex> lock(mutex_);
-  for (;;) {
+  for (;; ) {
     idle_.wait(lock, [this] {return quit_ || (armed_ && !pending_);});
     if (quit_) {
       return;

@@ -333,9 +333,9 @@ struct Router::Impl
     // no server can exist, so no waiter is needed either.
     if (node_services_.base != nullptr) {
       waker_ = std::make_unique<ServerWaker>(node_services_.base->get_context(), [this] {
-          if (kick_) {
-            kick_();
-          }
+            if (kick_) {
+              kick_();
+            }
         });
     }
   }

@@ -238,17 +238,17 @@ bool ServerWaker::query_ready(
 void ServerWaker::run()
 {
   std::unique_lock<std::mutex> lock(mutex_);
-  for (;;) {
+  for (;; ) {
     idle_.wait(lock, [this] {
-      if (quit_) {
-        return true;
-      }
-      if (!armed_ || pending_) {
-        return false;
-      }
+        if (quit_) {
+          return true;
+        }
+        if (!armed_ || pending_) {
+          return false;
+        }
       // A transmit that took nothing leaves the latch set, which parks the
       // helper until the next watch or unwatch clears it.
-      return !signalled_;
+        return !signalled_;
     });
     if (quit_) {
       return;
