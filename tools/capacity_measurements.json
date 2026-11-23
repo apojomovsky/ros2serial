@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "inputs": "7791dcae5b5d72fc54bc34b214b3505916d48a7e51634cd2b7fbf1f41ca01afe",
+  "inputs": "c2826b3e1860cea9285e2a5adb901be22b0057c1f8cfb14aef5971d0e7a63434",
   "frames": {"128": 128, "bundle": 325},
   "boards": {"mega": {"flash": 253952, "ram": 8192}, "uno": {"flash": 32256, "ram": 2048}},
   "topics": [
