@@ -251,7 +251,7 @@ def stub_toolbox(path: Path) -> Path:
         'esac\n',
         encoding='utf-8',
     )
-    (path / 'xtensa-esp32-elf-nm').write_text(
+    esp32_nm = (
         '#!/usr/bin/env bash\n'
         "echo '008001eb b r2s_rx_buf'\n"
         'case "$*" in\n'
@@ -261,9 +261,16 @@ def stub_toolbox(path: Path) -> Path:
         "        echo '00800410 00000050 b r2s_runtime_subscribers'\n"
         "        echo '00800540 00000050 b r2s_runtime_publishers'\n"
         '        ;;\n'
-        'esac\n',
-        encoding='utf-8',
+        'esac\n'
     )
+    # The S3 and C3 builds check their firmware through their own board
+    # toolchain, so every prefix the board list names gets the same nm.
+    for tool in (
+        'xtensa-esp32-elf-nm',
+        'xtensa-esp32s3-elf-nm',
+        'riscv32-esp-elf-nm',
+    ):
+        (path / tool).write_text(esp32_nm, encoding='utf-8')
     # The CH32V firmware builds with the RISC-V toolchain, which the stubbed
     # run lacks: the stubs exit 0 and the static firmware's buffer symbol
     # stands in for the linker, the way the AVR stubs stand in.
@@ -285,6 +292,8 @@ def stub_toolbox(path: Path) -> Path:
         'avr-objdump',
         'avr-nm',
         'xtensa-esp32-elf-nm',
+        'xtensa-esp32s3-elf-nm',
+        'riscv32-esp-elf-nm',
         'riscv-none-elf-gcc',
         'riscv-none-elf-size',
         'riscv-none-elf-nm',
