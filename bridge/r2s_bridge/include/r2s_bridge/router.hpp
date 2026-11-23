@@ -132,6 +132,26 @@ public:
    */
   bool receive();
 
+  /// Serves what arrived from ROS and runs no link timers.
+  /**
+   * The ROS-side wakeup's entry: the takes, the pumps and the pacer drain,
+   * so a message, call or goal on an idle link leaves on the kick instead
+   * of the next timer pass. The timer still runs it as a backstop. It
+   * shares the lock discipline of poll(), and both run on the executor's
+   * thread, never together.
+   */
+  void transmit();
+
+  /// Kicks the transmit path when ROS-side work arrives.
+  /**
+   * Set once by the node, before any route exists: the subscription and
+   * service callbacks and the action waker call it after queueing work.
+   * Empty by default, which keeps the timer the only driver.
+   *
+   * \param[in] kick what runs the transmit half on the executor's thread.
+   */
+  void set_kick(std::function<void()> kick);
+
 
   /// One announced topic's H8 values.
   /**

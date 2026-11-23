@@ -23,6 +23,7 @@ find_package(diagnostic_msgs REQUIRED)
 
 add_library(r2s_bridge_component SHARED
   src/action_types.cpp
+  src/server_waker.cpp
   src/bridge.cpp
   src/converter.cpp
   src/core_port.cpp
@@ -217,13 +218,14 @@ if(BUILD_TESTING)
   ament_add_gtest(test_link_waitable test/test_link_waitable.cpp)
   target_link_libraries(test_link_waitable r2s_bridge_component util)
 
-  # The action waker watches raw rcl action servers by hand, so a wakeup is
-  # what it asserts, not a take a poll loop could have produced.
-  ament_add_gtest(test_action_waker test/test_action_waker.cpp)
-  target_link_libraries(test_action_waker
+  # The server waker watches raw rcl servers by hand, so a wakeup is what
+  # it asserts, not a take a poll loop could have produced.
+  ament_add_gtest(test_server_waker test/test_server_waker.cpp)
+  target_link_libraries(test_server_waker
     r2s_bridge_component
     action_msgs::action_msgs__rosidl_typesupport_cpp
     rclcpp_action::rclcpp_action
+    std_srvs::std_srvs__rosidl_typesupport_cpp
     tf2_msgs::tf2_msgs__rosidl_typesupport_cpp)
 
   # The core port seam is header-private to the bridge sources, so its test

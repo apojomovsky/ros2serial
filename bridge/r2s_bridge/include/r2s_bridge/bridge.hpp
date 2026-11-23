@@ -82,8 +82,15 @@ private:
   /// Runs the receive half when the port turns readable.
   void on_readable();
 
+  /// Runs the transmit half when ROS-side work arrives.
+  void on_ros_work();
+
   SteadyClock clock_;
   RosClock ros_clock_;
+    // Before the router, so the router's destructor joins the action waker
+    // before this guard condition can be destroyed from under it.
+  std::shared_ptr<LinkWaitable> kick_;
+  rclcpp::CallbackGroup::SharedPtr kick_group_;
   std::unique_ptr<Router> router_;
   std::shared_ptr<LinkWaitable> link_;
   rclcpp::CallbackGroup::SharedPtr link_group_;

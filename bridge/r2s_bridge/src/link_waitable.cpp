@@ -118,6 +118,11 @@ void LinkWaitable::notify_ready()
   guard_->trigger();
 }
 
+void LinkWaitable::trigger()
+{
+  guard_->trigger();
+}
+
 void LinkWaitable::run()
 {
   std::unique_lock<std::mutex> lock(mutex_);

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-// The action waker: a raw rcl action server stands in for a route, and each
-// test drives the waker by hand instead of an executor, so what it asserts
-// is the wakeup itself rather than a take a poll loop could have produced.
+// The server waker: raw rcl servers stand in for routes, and each test
+// drives the waker by hand instead of an executor, so what it asserts is
+// the wakeup itself rather than a take a poll loop could have produced.
 #include <gtest/gtest.h>
 
 #include <atomic>
@@ -14,13 +14,16 @@
 #include <thread>
 #include <vector>
 
+#include <rcl/service.h>
 #include <rcl_action/action_server.h>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
+#include <std_srvs/srv/trigger.hpp>
 #include <tf2_msgs/action/lookup_transform.hpp>
 
 #include "r2s_bridge/action_types.hpp"
-#include "r2s_bridge/action_waker.hpp"
+#include "r2s_bridge/service_types.hpp"
+#include "r2s_bridge/server_waker.hpp"
 
 namespace r2s_bridge
 {
@@ -79,7 +82,45 @@ private:
   rcl_action_server_t server_ = rcl_action_get_zero_initialized_server();
 };
 
-class ActionWakerTest : public ::testing::Test
+// One raw rcl service server on the node, the way a route holds one where
+// the middleware has no generic service: the waker watches the handle,
+// never the route.
+class RawService
+{
+public:
+  RawService(rclcpp::Node::SharedPtr node, const std::string & name)
+  : node_(std::move(node)), types_("std_srvs/srv/Trigger")
+  {
+    rcl_node_t * node_handle = node_->get_node_base_interface()->get_shared_rcl_node_handle().get();
+    const rcl_service_options_t options = rcl_service_get_default_options();
+    if (
+      rcl_service_init(
+        &server_, node_handle, types_.cpp_service_handle(), name.c_str(), &options) !=
+      RCL_RET_OK)
+    {
+      rcl_reset_error();
+      throw std::runtime_error("cannot init the raw service server");
+    }
+  }
+  ~RawService()
+  {
+    rcl_node_t * node_handle = node_->get_node_base_interface()->get_shared_rcl_node_handle().get();
+    if (rcl_service_fini(&server_, node_handle) != RCL_RET_OK) {
+      rcl_reset_error();
+    }
+  }
+  RawService(const RawService &) = delete;
+  RawService & operator=(const RawService &) = delete;
+
+  const rcl_service_t * handle() const {return &server_;}
+
+private:
+  rclcpp::Node::SharedPtr node_;
+  ServiceTypes types_;
+  rcl_service_t server_ = rcl_get_zero_initialized_service();
+};
+
+class ServerWakerTest : public ::testing::Test
 {
 protected:
   static void SetUpTestSuite()
@@ -118,30 +159,31 @@ protected:
 
 // A goal request wakes the waiter: the take it announces runs on the
 // executor's transmit, not on the watcher thread.
-TEST_F(ActionWakerTest, WakesWhenAGoalArrives)
+TEST_F(ServerWakerTest, WakesWhenAGoalArrives)
 {
   RawServer server(node_, "spin");
   std::atomic<bool> fired{false};
-  ActionWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
+  ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
     fired.store(true);
   });
-  waker.watch({server.handle()});
+  waker.watch({server.handle()}, {});
   auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(node_, "spin");
   ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
   tf2_msgs::action::LookupTransform_Goal goal;
   goal.target_frame = "base";
+  client->async_send_goal(goal);
   ASSERT_TRUE(spin_until_triggered(node_, fired)) << "a goal must wake the waiter";
   waker.unwatch();
 }
 
 // No servers means no wakeups: the waiter parks instead of polling.
-TEST_F(ActionWakerTest, StaysQuietWithNoServers)
+TEST_F(ServerWakerTest, StaysQuietWithNoServers)
 {
   std::atomic<bool> fired{false};
-  ActionWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
+  ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
     fired.store(true);
   });
-  waker.watch({});
+  waker.watch({}, {});
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
   EXPECT_FALSE(fired.load()) << "an empty watch must not wake";
   waker.unwatch();
@@ -149,14 +191,14 @@ TEST_F(ActionWakerTest, StaysQuietWithNoServers)
 
 // A watched server with no traffic stays quiet: the waiter blocks in the
 // wait instead of spinning on an idle set.
-TEST_F(ActionWakerTest, StaysQuietOnAnIdleServer)
+TEST_F(ServerWakerTest, StaysQuietOnAnIdleServer)
 {
   RawServer server(node_, "spin");
   std::atomic<bool> fired{false};
-  ActionWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
+  ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
     fired.store(true);
   });
-  waker.watch({server.handle()});
+  waker.watch({server.handle()}, {});
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
   EXPECT_FALSE(fired.load()) << "an idle server must not wake";
   waker.unwatch();
@@ -164,14 +206,14 @@ TEST_F(ActionWakerTest, StaysQuietOnAnIdleServer)
 
 // Unwatching drops the set: a goal that arrives after the drop wakes
 // nothing, even though its entity is still ready.
-TEST_F(ActionWakerTest, UnwatchStopsTheWakeups)
+TEST_F(ServerWakerTest, UnwatchStopsTheWakeups)
 {
   RawServer server(node_, "spin");
   std::atomic<bool> fired{false};
-  ActionWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
+  ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
     fired.store(true);
   });
-  waker.watch({server.handle()});
+  waker.watch({server.handle()}, {});
   auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(node_, "spin");
   ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
   tf2_msgs::action::LookupTransform_Goal goal;
@@ -190,12 +232,12 @@ TEST_F(ActionWakerTest, UnwatchStopsTheWakeups)
 
 // Watching a new set drops the old one: a goal on the dropped server is
 // invisible, and a goal on the watched one still wakes.
-TEST_F(ActionWakerTest, WatchSwapsTheWatchedSet)
+TEST_F(ServerWakerTest, WatchSwapsTheWatchedSet)
 {
   RawServer first(node_, "spin");
   RawServer second(node_, "spin2");
   std::atomic<int> fires{0};
-  ActionWaker waker(node_->get_node_base_interface()->get_context(), [&fires]() {
+  ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fires]() {
     ++fires;
   });
   auto first_client =
@@ -206,7 +248,7 @@ TEST_F(ActionWakerTest, WatchSwapsTheWatchedSet)
   ASSERT_TRUE(second_client->wait_for_action_server(std::chrono::seconds(10)));
   tf2_msgs::action::LookupTransform_Goal goal;
   goal.target_frame = "base";
-  waker.watch({first.handle()});
+  waker.watch({first.handle()}, {});
   first_client->async_send_goal(goal);
   const auto start = std::chrono::steady_clock::now();
   while (fires.load() < 1 &&
@@ -220,7 +262,7 @@ TEST_F(ActionWakerTest, WatchSwapsTheWatchedSet)
   // serves: the re-arm below must see an idle server and not a leftover.
   ASSERT_TRUE(first.take_goal());
   waker.notify_served(true);
-  waker.watch({second.handle()});
+  waker.watch({second.handle()}, {});
   second_client->async_send_goal(goal);
   const auto swap = std::chrono::steady_clock::now();
   while (fires.load() < 2 &&
@@ -237,14 +279,14 @@ TEST_F(ActionWakerTest, WatchSwapsTheWatchedSet)
 }
 
 // A served wakeup re-arms: the next goal on the same server wakes again.
-TEST_F(ActionWakerTest, ServedRearmsTheWaiter)
+TEST_F(ServerWakerTest, ServedRearmsTheWaiter)
 {
   RawServer server(node_, "spin");
   std::atomic<int> fires{0};
-  ActionWaker waker(node_->get_node_base_interface()->get_context(), [&fires]() {
+  ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fires]() {
     ++fires;
   });
-  waker.watch({server.handle()});
+  waker.watch({server.handle()}, {});
   auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(node_, "spin");
   ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
   tf2_msgs::action::LookupTransform_Goal goal;
@@ -269,6 +311,23 @@ TEST_F(ActionWakerTest, ServedRearmsTheWaiter)
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
   }
   EXPECT_EQ(fires.load(), 2) << "a second goal must wake again after the serve";
+  waker.unwatch();
+}
+
+// A service request wakes the waiter where the middleware has no generic
+// service: the take it announces runs on the executor's transmit.
+TEST_F(ServerWakerTest, WakesWhenAServiceRequestArrives)
+{
+  RawService server(node_, "reset");
+  std::atomic<bool> fired{false};
+  ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
+    fired.store(true);
+  });
+  waker.watch({}, {server.handle()});
+  auto client = node_->create_client<std_srvs::srv::Trigger>("reset");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+  auto future = client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  ASSERT_TRUE(spin_until_triggered(node_, fired)) << "a request must wake the waiter";
   waker.unwatch();
 }
 

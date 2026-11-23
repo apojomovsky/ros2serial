@@ -2,7 +2,8 @@
 // Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
 // The host bridge node: parameters in, a Router out, woken by the port's
-// readiness for the receive path and polled on a timer for everything else.
+// readiness for the receive path and by ROS arrivals for the transmit path,
+// and polled on a timer for everything else.
 #include "r2s_bridge/bridge.hpp"
 
 #include <chrono>
@@ -21,11 +22,14 @@ namespace r2s_bridge
 namespace
 {
 
-// The receive path no longer waits for this period: a byte wakes the executor
-// through the link waitable, so the timer only paces, beats, reconnects and
-// reports. Each of those is due on a deadline of its own, so a period far
-// under the shortest of them (the 500 ms heartbeat) keeps them accurate while
-// the node sleeps instead of running a pass 1000 times a second.
+// The receive and transmit paths no longer wait for this period: a byte
+// wakes the executor through the link waitable and a ROS arrival through
+// the kick waitable, so the timer only paces, beats, reconnects and
+// reports, and backs up both halves. Each of those is due on a deadline of
+// its own, so
+// a period far under the shortest of them (the 500 ms heartbeat) keeps them
+// accurate while the node sleeps instead of running a pass 1000 times a
+// second.
 constexpr std::chrono::milliseconds kPollPeriod{20};
 // Diagnostics ride the poll timer instead of their own: the snapshot must
 // read on the thread that polls the router, whose session keeps no lock.
@@ -136,6 +140,16 @@ Bridge::Bridge(const rclcpp::NodeOptions & options)
       }, clock_, ros_clock_,
         std::move(pacing), forward_log, std::move(link), forward_mcu_log,
       get_node_parameters_interface(), std::move(node_services));
+    // The transmit path is woken by ROS arrivals, not by the timer: the
+    // kick watches no descriptor and runs the transmit half on this same
+    // thread. The router is told before any route exists, so no callback
+    // can fire unkicked.
+  kick_ = std::make_shared<LinkWaitable>(
+    get_node_base_interface()->get_context(), [this]() {on_ros_work();});
+  kick_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  get_node_waitables_interface()->add_waitable(kick_, kick_group_);
+  kick_->watch(-1);
+  router_->set_kick([this] {kick_->trigger();});
   diagnostics_hardware_id_ = serial.port;
   diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10);
     // The receive path is woken by the port, not by the timer: the waitable
@@ -164,6 +178,11 @@ void Bridge::on_port(int fd)
 void Bridge::on_readable()
 {
   router_->receive();
+}
+
+void Bridge::on_ros_work()
+{
+  router_->transmit();
 }
 
 const std::shared_ptr<LinkWaitable> & Bridge::link_waitable() const

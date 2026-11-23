@@ -66,6 +66,15 @@ public:
    */
   void watch(int fd);
 
+  /// Wakes the executor without touching the descriptor.
+  /**
+   * A ROS-side arrival runs on the executor already, so it cannot wait for
+   * the helper thread: it fires the guard condition directly, and the next
+   * wait returns with is_ready() true. Thread-safe, like the helper's own
+   * wakeups.
+   */
+  void trigger();
+
   /// Stops watching, waiting until the helper thread left the descriptor.
   /**
    * Must run before the watched descriptor is closed: once this returns, the
