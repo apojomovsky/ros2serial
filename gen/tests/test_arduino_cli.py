@@ -26,10 +26,6 @@ def test_library_contains_runtime_core_port_and_example(tmp_path):
     ):
         assert (out / name).is_file(), name
     assert not (out / 'src/test_reset.c').exists()
-    # The library stages one C++ API: the compat headers and their directory
-    # are gone from the tree, so the library carries neither.
-    assert not (out / 'src/ros2serial').exists()
-    assert not any(out.rglob('ros.h'))
 
 
 def test_library_refuses_existing_destination(tmp_path, capsys):

@@ -371,10 +371,13 @@ jobs:
   # headroom. The load-sensitive scenario is skipped and the sync bound
   # keeps headroom for the shared host, as the CI e2e jobs do. A direct
   # job, not a reusable-workflow call, so the pull request shows
-  # e2e-isolation instead of a nightly caller (#586).
+  # e2e-isolation instead of a nightly caller (#586). The pairs stay off
+  # the PR critical path: a pull request runs them only when the plan
+  # selects the nightly scope, while master pushes and manual runs keep
+  # them (#728). Version tags run them in release.yml instead.
   e2e-isolation:
     needs: plan
-    if: github.event_name == 'workflow_dispatch' || needs.plan.outputs.full == '1' || needs.plan.outputs.nightly == '1'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || needs.plan.outputs.nightly == '1'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:

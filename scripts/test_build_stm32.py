@@ -55,8 +55,14 @@ def test_the_toolchain_hash_is_pinned_in_versions_env():
     assert re.fullmatch(r'[0-9a-f]{64}', pinned('ARM_GCC_SHA256')), pinned('ARM_GCC_SHA256')
 
 
-def test_the_script_reads_both_pins_from_versions_env():
+def test_the_arm_toolchain_comes_from_the_shared_fetch_script():
     text = SCRIPT.read_text(encoding='utf-8')
+    assert 'ports/common/arm_toolchain.sh' in text
+
+
+def test_the_shared_script_reads_both_pins_from_versions_env():
+    shared = ROOT / 'ports' / 'common' / 'arm_toolchain.sh'
+    text = shared.read_text(encoding='utf-8')
     for name in ('ARM_GCC_VERSION', 'ARM_GCC_SHA256'):
         assert name in text, name
     assert 'ci/versions.env' in text
@@ -78,7 +84,8 @@ def test_the_script_stages_the_shared_config_and_the_blue_pill_glue():
 
 
 def test_the_toolchain_cache_lands_beside_the_other_bundles():
-    text = SCRIPT.read_text(encoding='utf-8')
+    shared = ROOT / 'ports' / 'common' / 'arm_toolchain.sh'
+    text = shared.read_text(encoding='utf-8')
     assert 'R2S_CACHE_DIR' in text
     assert 'xpack' in text
     assert '/opt' not in text

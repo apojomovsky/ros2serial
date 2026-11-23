@@ -97,14 +97,23 @@ def ci_nightly_call():
     return next(iter(calls.values()))
 
 
-def test_pr_ci_runs_the_isolation_job_when_the_plan_selects_nightly():
+def test_pr_ci_runs_the_isolation_job_only_when_the_plan_selects_nightly():
+    """The 33 minute isolation pairs stay off the PR critical path: a pull
+    request runs them only when the map selects the nightly scope, never
+    through the full matrix."""
     job = workflow(CI)['jobs']['e2e-isolation']
     needs = job['needs'] if isinstance(job['needs'], list) else [job['needs']]
     assert 'plan' in needs
     condition = str(job.get('if', ''))
-    assert 'github.event_name' in condition
-    assert 'needs.plan.outputs.full' in condition
     assert 'needs.plan.outputs.nightly' in condition
+    assert 'needs.plan.outputs.full' not in condition
+
+
+def test_the_isolation_job_still_runs_on_master_and_dispatch():
+    """Master pushes and manual runs keep the full matrix, isolation included."""
+    condition = str(workflow(CI)['jobs']['e2e-isolation'].get('if', ''))
+    assert "github.event_name == 'workflow_dispatch'" in condition
+    assert "github.event_name == 'push'" in condition
 
 
 def test_the_isolation_job_keeps_its_sixty_minute_budget():
