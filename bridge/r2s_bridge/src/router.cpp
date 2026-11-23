@@ -44,6 +44,7 @@
 
 #include "r2s_bridge/action_types.hpp"
 #include "r2s_bridge/converter.hpp"
+#include "r2s_bridge/server_waker.hpp"
 #include "r2s_bridge/service_types.hpp"
 #include "r2s_bridge/type_support.hpp"
 extern "C" {
@@ -326,6 +327,16 @@ struct Router::Impl
     if (node_params_ != nullptr) {
       param_hook_ = node_params_->add_on_set_parameters_callback(
         [this](const std::vector<rclcpp::Parameter> & params) {return on_mcu_param_set(params);});
+    }
+    // The waker watches the action servers for ROS arrivals, so a goal
+    // waits for no timer pass before the takes run. Without node services
+    // no server can exist, so no waiter is needed either.
+    if (node_services_.base != nullptr) {
+      waker_ = std::make_unique<ServerWaker>(node_services_.base->get_context(), [this] {
+            if (kick_) {
+              kick_();
+            }
+        });
     }
   }
 
@@ -855,6 +866,11 @@ struct Router::Impl
         route.client->remove_pending_request(mcu.second.future_seq);
       }
     }
+    // The helper may wait on these servers: disarm it before the clear
+    // hands their numbers to somebody else.
+    if (waker_) {
+      waker_->unwatch();
+    }
     service_routes_.clear();
     service_repairs_.clear();
     for (const ServiceInfo & info : session_.services()) {
@@ -863,6 +879,7 @@ struct Router::Impl
       }
       ensure_service_route(info);
     }
+    arm_waker();
   }
 
     // One ROS action server for an MCU action: the rcl server the ROS
@@ -941,6 +958,33 @@ struct Router::Impl
     action_routes_[info.index] = std::move(route);
   }
 
+    // Arms the waker on the live servers: goals, cancels, results and
+    // (where the middleware needs them) service requests wake the executor
+    // from here on, instead of waiting for a timer take. Runs wherever the
+    // server set changes, on the executor's thread.
+  void arm_waker()
+  {
+    if (!waker_) {
+      return;
+    }
+    std::vector<const rcl_action_server_t *> actions;
+    for (const auto & entry : action_routes_) {
+      actions.push_back(&entry.second->server);
+    }
+    std::vector<const rcl_service_t *> services;
+#if !defined(R2S_HAS_GENERIC_SERVICE)
+    for (const auto & entry : service_routes_) {
+      const ServiceRoute & route = *entry.second;
+      // Only server roles hold an rcl service: ensure inserts a route only
+      // after its init succeeds, so a listed server role is always valid.
+      if (route.info.role == kServiceRoleServer) {
+        services.push_back(&route.rcl_service);
+      }
+    }
+#endif
+    waker_->watch(actions, services);
+  }
+
     // Every handshake aborts the live goals first ([SES-35]): the MCU drops
     // its side on the re-handshake ([REL-5]), so every ROS client learns
     // the abort instead of waiting. Then the ok actions get new servers.
@@ -959,6 +1003,11 @@ struct Router::Impl
         route.active->last_status_ms = now_ms();
       }
     }
+    // The helper may wait on these servers: disarm it before the clear
+    // hands their numbers to somebody else.
+    if (waker_) {
+      waker_->unwatch();
+    }
     action_routes_.clear();
     action_repairs_.clear();
     for (const ActionInfo & info : session_.actions()) {
@@ -967,6 +1016,7 @@ struct Router::Impl
       }
       ensure_action_route(info);
     }
+    arm_waker();
   }
 
     // Retries actions missing despite an ok verdict, the way the service
@@ -994,6 +1044,9 @@ struct Router::Impl
       ++state.attempts;
       ensure_action_route(info);
     }
+    // Watching what is already watched is a no-op inside the waker, so a
+    // steady-state poll never rebuilds the wait set.
+    arm_waker();
   }
 
   // A zero uuid means "every goal". Compared as a whole instead of byte
@@ -1088,14 +1141,14 @@ struct Router::Impl
 
     // One taken ROS goal request: rejected at once when another goal is
     // live, packed and sent to the MCU otherwise ([SES-35], [ACT-3]).
-  void on_ros_goal_request(ActionRoute & route)
+  bool on_ros_goal_request(ActionRoute & route)
   {
     rmw_request_id_t header{};
     if (rcl_action_take_goal_request(
           &route.server, &header, route.goal_request_take.storage.data()) != RCL_RET_OK)
     {
       rcl_reset_error();
-      return;
+      return false;
     }
     std::array<std::uint8_t, 16> uuid{};
     // GCOVR_EXCL_START: typed ROS clients always set the goal id; the
@@ -1106,7 +1159,7 @@ struct Router::Impl
       std::uint32_t nanosec = 0;
       const std::int64_t sec = ros_now_sec(nanosec);
       answer_goal(route, header, false, static_cast<std::int32_t>(sec), nanosec);
-      return;
+      return true;
     }
     // GCOVR_EXCL_STOP
     if (route.pending || (route.active && route.active->terminal < 0)) {
@@ -1115,7 +1168,7 @@ struct Router::Impl
       answer_goal(route, header, false, static_cast<std::int32_t>(sec), nanosec);
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': rejected, a goal is already active");
-      return;
+      return true;
     }
     const void *goal = route.types.goal_of(route.goal_request_take);
     std::vector<std::uint8_t> packed;
@@ -1133,7 +1186,7 @@ struct Router::Impl
       std::uint32_t nanosec = 0;
       const std::int64_t sec = ros_now_sec(nanosec);
       answer_goal(route, header, false, static_cast<std::int32_t>(sec), nanosec);
-      return;
+      return true;
     }
     const std::uint8_t seq = choose_goal_seq(route);
     if (!session_.send_action_goal(route.info.index, seq, packed)) {
@@ -1142,7 +1195,7 @@ struct Router::Impl
       std::uint32_t nanosec = 0;
       const std::int64_t sec = ros_now_sec(nanosec);
       answer_goal(route, header, false, static_cast<std::int32_t>(sec), nanosec);
-      return;
+      return true;
     }
     PendingGoal pending;
     pending.header = header;
@@ -1150,6 +1203,7 @@ struct Router::Impl
     pending.wire_seq = seq;
     pending.sent_ms = now_ms();
     route.pending = pending;
+    return true;
   }
 
     // Answers one taken cancel request against one route.
@@ -1200,14 +1254,14 @@ struct Router::Impl
 
     // One taken ROS cancel request: matched against the live goal, forwarded
     // to the MCU, and answered when the MCU answers ([ACT-5]).
-  void on_ros_cancel_request(ActionRoute & route)
+  bool on_ros_cancel_request(ActionRoute & route)
   {
     rmw_request_id_t header{};
     if (rcl_action_take_cancel_request(
           &route.server, &header, route.cancel_request_take.storage.data()) != RCL_RET_OK)
     {
       rcl_reset_error();
-      return;
+      return false;
     }
     std::array<std::uint8_t, 16> uuid{};
     std::int32_t sec = 0;
@@ -1218,42 +1272,43 @@ struct Router::Impl
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': dropped ROS cancel without an id");
       answer_cancel(route, header, kCancelRejected, false);
-      return;
+      return true;
     }
     // GCOVR_EXCL_STOP
     // GCOVR_EXCL_START: a cancel always names its accepted goal, so a
     // taker without one cannot come from a typed client.
     if (!route.active) {
       answer_cancel(route, header, kCancelUnknownGoal, false);
-      return;
+      return true;
     }
     // GCOVR_EXCL_STOP
     if (route.active->terminal >= 0) {
       answer_cancel(route, header, kCancelTerminated, false);
-      return;
+      return true;
     }
     // GCOVR_EXCL_START: a mismatch names another goal's id, which only a
     // hostile client sends; typed cancels always name their own goal.
     if (!cancel_matches(*route.active, uuid, sec, nanosec)) {
       answer_cancel(route, header, kCancelUnknownGoal, false);
-      return;
+      return true;
     }
     // GCOVR_EXCL_STOP
     if (route.active->cancel_requested) {
       answer_cancel(route, header, kCancelNone, true, &*route.active);
-      return;
+      return true;
     }
     if (!session_.send_action_cancel(route.active->wire_seq)) {
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': the link refused the ROS cancel");
       answer_cancel(route, header, kCancelRejected, false);
-      return;
+      return true;
     }
     PendingCancel pending;
     pending.header = header;
     pending.sent_ms = now_ms();
     route.pending_cancel = pending;
     route.active->cancel_requested = true;
+    return true;
   }
 
     // Answers one waiting result request from the stored terminal result:
@@ -1313,14 +1368,14 @@ struct Router::Impl
 
     // One taken ROS result request: answered from the stored result when
     // terminal, queued behind the MCU otherwise.
-  void on_ros_result_request(ActionRoute & route)
+  bool on_ros_result_request(ActionRoute & route)
   {
     rmw_request_id_t header{};
     if (rcl_action_take_result_request(
           &route.server, &header, route.result_request_take.storage.data()) != RCL_RET_OK)
     {
       rcl_reset_error();
-      return;
+      return false;
     }
     std::array<std::uint8_t, 16> uuid{};
     // GCOVR_EXCL_START: typed ROS clients always set the result id, and
@@ -1330,33 +1385,40 @@ struct Router::Impl
       emit(SessionLog::kWarning,
         "action '" + route.info.action_name + "': dropped ROS result without an id");
       answer_result_waiter(route, header, kGoalUnknown, std::nullopt);
-      return;
+      return true;
     }
     if (!route.active || route.active->uuid != uuid) {
       answer_result_waiter(route, header, kGoalUnknown, std::nullopt);
-      return;
+      return true;
     }
     // GCOVR_EXCL_STOP
     if (route.active->terminal >= 0) {
       answer_result_waiter(route, header, route.active->terminal, route.active->packed_result);
-      return;
+      return true;
     }
     route.active->result_waiters.push_back(header);
+    return true;
   }
 
     // Takes pending ROS requests on every action server: a take that finds
-    // nothing resets the middleware error and moves on; the next poll takes
-    // again.
-  void take_action_requests()
+    // nothing resets the middleware error and moves on; the next transmit
+    // takes again. True when any take found a request, so the waker serving
+    // the transmit knows the entities drained.
+  bool take_action_requests()
   {
     // Every mapped route finished construction: ensure inserts only after
     // the server and the status publisher are both up.
+    bool took = false;
     for (auto & entry : action_routes_) {
       ActionRoute & route = *entry.second;
-      on_ros_goal_request(route);
-      on_ros_cancel_request(route);
-      on_ros_result_request(route);
+      // Every take runs even after one found work: a goal, a cancel and
+      // a result may all wait on the same server.
+      const bool goal = on_ros_goal_request(route);
+      const bool cancel = on_ros_cancel_request(route);
+      const bool result = on_ros_result_request(route);
+      took = took || goal || cancel || result;
     }
+    return took;
   }
 
   ActionRoute * action_route_for(std::uint8_t index)
@@ -1643,15 +1705,16 @@ struct Router::Impl
 
     // Moves every action route: ROS requests taken, pending MCU answers
     // timed out, terminal goals expired per the rcl defaults, and the
-    // status array published on change and while a goal is live.
-  void poll_actions()
+    // status array published on change and while a goal is live. True when
+    // the takes found a request, so the transmit knows the entities drained.
+  bool poll_actions()
   {
     const bool connected = session_.state() == SessionState::kConnected;
     const std::int64_t now = now_ms();
     // Takes run whether or not the link is up: the ROS side answers from
     // stored state while down, and a disconnect aborts below instead of
     // stranding the take.
-    take_action_requests();
+    const bool took = take_action_requests();
     if (!connected) {
       abort_all_actions();
     } else {
@@ -1702,6 +1765,7 @@ struct Router::Impl
         route.active->last_status_ms = now;
       }
     }
+    return took;
   }
 
     // One packed ROS request from the take path: queued behind the
@@ -1753,6 +1817,9 @@ struct Router::Impl
       return;
     }
     enqueue_ros_call(index, std::move(call));
+    if (kick_) {
+      kick_();
+    }
   }
 #endif
 
@@ -1915,9 +1982,10 @@ struct Router::Impl
     // Takes pending ROS requests on the rcl fallback: the generic service
     // feeds its own callback instead. A take that finds nothing resets the
     // middleware error and moves on; the next poll takes again.
-  void take_ros_requests()
+  bool take_ros_requests()
   {
 #if !defined(R2S_HAS_GENERIC_SERVICE)
+    bool took = false;
     for (auto & entry : service_routes_) {
       ServiceRoute & route = *entry.second;
       if (!route.rcl_valid || route.info.role != kServiceRoleServer) {
@@ -1930,6 +1998,7 @@ struct Router::Impl
         rcl_reset_error();
         continue;
       }
+      took = true;
       RosCall call;
       call.header = header.request_id;
       const ConvertResult result = converter_.pack_from_struct(
@@ -1944,18 +2013,21 @@ struct Router::Impl
       }
       enqueue_ros_call(route.info.index, std::move(call));
     }
+    return took;
+#else
+    return false;
 #endif
   }
 
     // Moves every service route: queued ROS calls go out, answered MCU
     // calls complete, and calls older than the call timeout report back
     // ([SVR-8]) instead of leaking (research ticket R4).
-  void poll_services()
+  bool poll_services()
   {
     if (session_.state() != SessionState::kConnected) {
-      return;
+      return false;
     }
-    take_ros_requests();
+    const bool took = take_ros_requests();
     const std::int64_t now = now_ms();
     for (auto & entry : service_routes_) {
       ServiceRoute & route = *entry.second;
@@ -2002,6 +2074,7 @@ struct Router::Impl
         it = route.mcu_inflight.erase(it);
       }
     }
+    return took;
   }
 
     // Retries service routes missing despite an ok verdict, the way the
@@ -2029,6 +2102,9 @@ struct Router::Impl
       ++state.attempts;
       ensure_service_route(info);
     }
+    // Watching what is already watched is a no-op inside the waker, so a
+    // steady-state poll never rebuilds the wait set.
+    arm_waker();
   }
 
     // One refused SET the MCU reported while connected ([PAR-5]): applied
@@ -2233,6 +2309,9 @@ struct Router::Impl
     }
     std::lock_guard<std::recursive_mutex> guard(mutex);
     scheduler_.submit(topic_id, std::move(packed));
+    if (kick_) {
+      kick_();
+    }
   }
 
   std::string field_text(const std::string & type, std::uint8_t field)
@@ -2281,6 +2360,8 @@ struct Router::Impl
     // hook on the same thread, which takes the guard again.
   std::recursive_mutex mutex;
   Session session_;
+  std::function<void()> kick_;
+  std::unique_ptr<ServerWaker> waker_;
 };
 
 Router::Router(
@@ -2302,15 +2383,38 @@ void Router::poll()
 {
   impl_->session_.poll();
   const std::chrono::nanoseconds now = impl_->clock.now();
+  {
+    std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
+    impl_->repair_missing_routes(now);
+    impl_->repair_missing_services(now);
+    impl_->repair_missing_actions(now);
+  }
+  transmit();
+}
+
+void Router::transmit()
+{
   std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
-  impl_->repair_missing_routes(now);
-  impl_->repair_missing_services(now);
-  impl_->repair_missing_actions(now);
-  impl_->poll_services();
-  impl_->poll_actions();
+  const bool took_services = impl_->poll_services();
+  const bool took_actions = impl_->poll_actions();
+  const std::chrono::nanoseconds now = impl_->clock.now();
   impl_->scheduler_.poll(now, [this](std::uint8_t id, const std::vector<std::uint8_t> & payload) {
       return impl_->session_.send_user(id, payload);
     });
+  if (impl_->waker_) {
+    impl_->waker_->notify_served(took_services || took_actions);
+  }
+}
+
+void Router::set_kick(std::function<void()> kick)
+{
+  std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
+  impl_->kick_ = std::move(kick);
+}
+
+bool Router::receive()
+{
+  return impl_->session_.receive();
 }
 
 std::size_t Router::publisher_count() const

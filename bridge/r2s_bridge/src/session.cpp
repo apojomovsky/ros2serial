@@ -404,11 +404,17 @@ struct Session::Impl
     clear_queue();
     state = SessionState::kBootWait;
     boot_wait_deadline_ms = now_ms() + config.boot_wait_ms;
+        // The receiver waits on this descriptor instead of sampling the
+        // timer, so it learns of the open here and of the close below.
+    config.on_port(transport->native_handle());
   }
 
   void close_link()
   {
     reader.reset();
+        // Disarm the receiver before the number stops meaning this link:
+        // the callback keeps the descriptor until this returns.
+    config.on_port(-1);
     if (transport) {
       transport->close();
     }
@@ -2188,12 +2194,16 @@ struct Session::Impl
     }
   }
 
-  void poll()
+    // The receive half both entrants run: bytes in, frames handled, the
+    // queue flushed, a dead link closed. Returns whether anything moved.
+  bool drain()
   {
+    bool worked = false;
     flush();
     if (reader) {
       Frame frame;
       while (reader && reader->poll(frame)) {
+        worked = true;
         on_frame(frame);
         reader->release();
         flush();
@@ -2201,11 +2211,24 @@ struct Session::Impl
             // A close inside the loop already dropped the reader.
       if (reader && reader->link_faulted()) {
         close_link();
-        return;
+        return true;
       }
     }
+    return worked;
+  }
+
+  void poll()
+  {
+    drain();
+        // A dead link closed above leaves nothing for the timers to watch,
+        // and run_timers() owns the reconnect that a closed link schedules.
     run_timers();
     flush();
+  }
+
+  bool receive()
+  {
+    return drain();
   }
 
   SessionConfig config;
@@ -2724,6 +2747,11 @@ std::uint16_t Session::mcu_rx_capacity() const
 void Session::poll()
 {
   impl_->poll();
+}
+
+bool Session::receive()
+{
+  return impl_->receive();
 }
 
 }  // namespace r2s_bridge

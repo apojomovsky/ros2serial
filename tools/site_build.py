@@ -176,6 +176,12 @@ PAGES = (
         'What each CI job installs, and what it costs.',
     ),
     Page(
+        'docs/benchmarks/bridge-idle-cpu.md',
+        'bridge-idle-cpu.html',
+        'Bridge idle CPU',
+        'What an idle link costs, before and after the readiness wakeup.',
+    ),
+    Page(
         'docs/research/R4-generic-service-and-client-apis.md',
         'research-r4.html',
         'Research: generic services',

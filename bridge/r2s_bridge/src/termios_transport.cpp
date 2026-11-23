@@ -249,4 +249,9 @@ void TermiosTransport::close()
   }
 }
 
+int TermiosTransport::native_handle() const
+{
+  return closed_ ? -1 : fd_;
+}
+
 }  // namespace r2s_bridge

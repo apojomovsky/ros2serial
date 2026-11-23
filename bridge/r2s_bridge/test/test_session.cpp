@@ -209,6 +209,10 @@ public:
   void close() override
   {
   }
+  int native_handle() const override
+  {
+    return inner_.native_handle();
+  }
 
 private:
   FakeTransport & inner_;
@@ -300,6 +304,40 @@ public:
   void script_write(IoResult outcome)
   {
     transport_.script_write(outcome);
+  }
+
+    // Queues one read outcome that carries no bytes, such as a hangup.
+  void script_read(IoStatus status)
+  {
+    transport_.script_read(status);
+  }
+
+    // Queues one frame's wire bytes for the next read, without polling.
+  void script_frame(
+    std::uint8_t topic_id, std::uint8_t seq,
+    const std::vector<std::uint8_t> & payload)
+  {
+    std::vector<std::uint8_t> decoded{topic_id, seq};
+    decoded.insert(decoded.end(), payload.begin(), payload.end());
+    const std::uint16_t crc =
+      r2s_crc16_update_buf(R2S_CRC16_INIT, decoded.data(),
+            static_cast<std::uint16_t>(decoded.size()));
+    decoded.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+    decoded.push_back(static_cast<std::uint8_t>(crc >> 8u));
+    transport_.script_read(wire_of(decoded));
+  }
+
+    // The descriptor the fake reports, so a test can script the number the
+    // reopen publishes without a real port.
+  void set_native_handle(int fd)
+  {
+    transport_.set_native_handle(fd);
+  }
+
+    // Opens the fake link again, the way a reconnect's own port arrives.
+  void reopen_link()
+  {
+    transport_.reopen();
   }
 
   Session & session()
@@ -5685,6 +5723,74 @@ TEST(ServiceExchange, PrioritizesTheAnswerOverQueuedRequests)
   const auto next = drain_decoded(fixture);
   ASSERT_EQ(next.size(), 1u);
   EXPECT_EQ(next[0], with_check({kHelperServices, 2u, kHelperSvcRequest, 0x02u, 0x02u, 0x01u}));
+}
+
+// The receive entry reads what arrived and runs no timer: a wakeup on the
+// port must cost the bytes and nothing else, or an idle line would still do
+// the timer's work once per byte.
+TEST(SessionReceive, DrainsArrivalsWithoutRunningATimer)
+{
+    SessionConfig config = quiet_config();
+    config.time_sync_enabled = false;
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config};
+    fixture.advance_to(2500);
+    fixture.drain_units();
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    fixture.drain_units();
+    // The clock stands still, so a pass that ran the timers would move them:
+    // the heartbeat is due after 500 ms of link time and this one is free.
+    fixture.script_frame(kHeartbeat, 0u, {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u});
+    EXPECT_TRUE(fixture.session().receive());
+    EXPECT_TRUE(fixture.drain_units().empty()) << "the receive pass sends nothing of its own";
+}
+
+// A link with nothing to read costs one read and returns, so the executor is
+// free to sleep again instead of spinning on the callback.
+TEST(SessionReceive, ReportsNothingWhenTheLinkIsQuiet)
+{
+    Fixture fixture;
+    fixture.advance_to(100);
+    EXPECT_FALSE(fixture.session().receive()) << "no bytes, no work";
+}
+
+// A hangup is the receive pass's business: it must land in the same
+// disconnected state the timer path reaches, without waiting for the timer.
+TEST(SessionReceive, ClosesTheLinkOnAHangup)
+{
+    Fixture fixture;
+    fixture.advance_to(2500);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0u, 0u));
+    ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
+    fixture.script_read(IoStatus::kClosed);
+    EXPECT_TRUE(fixture.session().receive());
+    EXPECT_EQ(fixture.session().state(), SessionState::kDisconnected)
+        << "a hung-up link is closed where it was noticed";
+}
+
+// The open publishes the descriptor the receive path waits on, and the close
+// publishes -1: a waitable must never watch a number the session is about to
+// hand to somebody else.
+TEST(SessionPort, ReportsTheDescriptorOnOpenAndLosesItOnClose)
+{
+    std::vector<int> reported;
+    SessionConfig config = quiet_config();
+    config.on_port = [&reported](int fd) {reported.push_back(fd);};
+    Fixture fixture{[](const TopicInfo &) {return std::uint8_t{0};}, config};
+    fixture.set_native_handle(42);
+    // The constructor's open ran before the fake learned its descriptor, so
+    // the reopen below is the one that carries it.
+    fixture.script_read(IoStatus::kClosed);
+    fixture.session().poll();
+    fixture.reopen_link();
+    ASSERT_EQ(fixture.session().state(), SessionState::kDisconnected);
+    fixture.advance_to(4000);
+    ASSERT_NE(fixture.session().state(), SessionState::kDisconnected) << "the reconnect reopened";
+    ASSERT_FALSE(reported.empty());
+    EXPECT_EQ(reported.back(), 42) << "the reopened link publishes its descriptor";
+    fixture.script_read(IoStatus::kClosed);
+    fixture.session().poll();
+    EXPECT_EQ(reported.back(), -1) << "a closed link publishes no descriptor";
 }
 
 }  // namespace

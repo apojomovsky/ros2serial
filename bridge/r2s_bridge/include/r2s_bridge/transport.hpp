@@ -95,6 +95,16 @@ public:
    * Reads and writes afterwards report kClosed.
    */
   virtual void close() = 0;
+
+  /// The descriptor that turns readable when the link has bytes.
+  /**
+   * -1 means this link cannot say when it has data, and the caller keeps
+   * polling it on its timer. A real port reports its descriptor, so the
+   * receive path waits on readiness instead of sampling.
+   *
+   * \return The readable descriptor, or -1 when the link has none.
+   */
+  virtual int native_handle() const {return -1;}
 };
 
 }  // namespace r2s_bridge

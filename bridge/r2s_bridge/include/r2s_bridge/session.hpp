@@ -182,6 +182,13 @@ struct SessionConfig
    */
   bool time_sync_enabled = true;
   int time_sync_period_ms = 5000;  ///< Delay between PINGs, 1 to 5000 ms.
+  /// The port's descriptor, or -1 when the link has none.
+  /**
+   * Called on every open and close so the receiver can wait on readiness
+   * instead of sampling. -1 means the link cannot say when it has bytes,
+   * which leaves the timer as its only reader.
+   */
+  std::function<void(int)> on_port = [](int) {};
 };
 
 /// Opens the port.
@@ -722,6 +729,17 @@ public:
    * Nothing else moves time or touches the port.
    */
   void poll();
+
+  /// Drains what arrived and runs no timer.
+  /**
+   * The readiness wakeup's entry: bytes cost their frames and nothing else,
+   * so a byte on a quiet line never pays for a timer pass. A hung-up link is
+   * closed here the same way poll() closes it.
+   *
+   * \return True when the link produced bytes, a frame landed, or the link
+   * closed; false when the port had nothing and the caller may sleep again.
+   */
+  bool receive();
 
 private:
   struct Impl;

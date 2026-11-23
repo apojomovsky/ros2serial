@@ -3,7 +3,8 @@
 
 // The host bridge node, one instance per serial port. Parameters are declared
 // on construction so `ros2 param` can list and set them before a link exists;
-// a Router owned here moves the traffic, polled on a short wall timer.
+// a Router owned here moves the traffic, woken by the port's readiness and
+// polled on a wall timer for the pacer and the heartbeats.
 #ifndef R2S_BRIDGE__BRIDGE_HPP_
 #define R2S_BRIDGE__BRIDGE_HPP_
 
@@ -15,6 +16,7 @@
 
 #include <diagnostic_msgs/msg/diagnostic_array.hpp>
 
+#include "r2s_bridge/link_waitable.hpp"
 #include "r2s_bridge/ros_clock.hpp"
 #include "r2s_bridge/router.hpp"
 #include "r2s_bridge/steady_clock.hpp"
@@ -47,6 +49,16 @@ public:
    */
   void poll();
 
+  /// The readiness entity the executor waits on beside the timer.
+  /**
+   * One per node: it watches the port the router opened and runs the
+   * receive half when a byte arrives. Public so a test proves the node
+   * wired its port to it.
+   *
+   * \return The waitable, never null.
+   */
+  const std::shared_ptr<LinkWaitable> & link_waitable() const;
+
 protected:
   /// Publishes one /diagnostics message.
   /**
@@ -57,9 +69,32 @@ protected:
   virtual void publish_diagnostics(const diagnostic_msgs::msg::DiagnosticArray & message);
 
 private:
+  /// Tracks the port the session opened, for the waitable.
+  /**
+   * The session publishes the descriptor on every open and -1 on every
+   * close, on the thread that polls it, so the waitable never watches a
+   * number the session already handed to somebody else.
+   *
+   * \param[in] fd the open port's descriptor, or -1.
+   */
+  void on_port(int fd);
+
+  /// Runs the receive half when the port turns readable.
+  void on_readable();
+
+  /// Runs the transmit half when ROS-side work arrives.
+  void on_ros_work();
+
   SteadyClock clock_;
   RosClock ros_clock_;
+    // Before the router, so the router's destructor joins the action waker
+    // before this guard condition can be destroyed from under it.
+  std::shared_ptr<LinkWaitable> kick_;
+  rclcpp::CallbackGroup::SharedPtr kick_group_;
   std::unique_ptr<Router> router_;
+  std::shared_ptr<LinkWaitable> link_;
+  rclcpp::CallbackGroup::SharedPtr link_group_;
+  int link_fd_ = -1;
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_pub_;
   std::string diagnostics_hardware_id_;

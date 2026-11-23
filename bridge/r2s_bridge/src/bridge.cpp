@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-// The host bridge node: parameters in, a Router out, polled on a short wall
-// timer so the pacer and the heartbeats track the link latency.
+// The host bridge node: parameters in, a Router out, woken by the port's
+// readiness for the receive path and by ROS arrivals for the transmit path,
+// and polled on a timer for everything else.
 #include "r2s_bridge/bridge.hpp"
 
 #include <chrono>
@@ -21,22 +22,18 @@ namespace r2s_bridge
 namespace
 {
 
+// The receive and transmit paths no longer wait for this period: a byte
+// wakes the executor through the link waitable and a ROS arrival through
+// the kick waitable, so the timer only paces, beats, reconnects and
+// reports, and backs up both halves. Each of those is due on a deadline of
+// its own, so
+// a period far under the shortest of them (the 500 ms heartbeat) keeps them
+// accurate while the node sleeps instead of running a pass 1000 times a
+// second.
+constexpr std::chrono::milliseconds kPollPeriod{20};
 // Diagnostics ride the poll timer instead of their own: the snapshot must
 // read on the thread that polls the router, whose session keeps no lock.
 // The deadline is wall-clock, so the period does not drift when polling slows.
-// How often the link is polled, and so the longest a reply waits for its read.
-// The PING leaves during one pass and its PONG is read during another, so this
-// period bounds what a round trip can measure; it must stay well under the
-// accuracy the time sync targets. At one millisecond a reply that came back at
-// once still waited a full period on the receive side alone, and the scenario 8
-// bound is one millisecond.
-constexpr std::chrono::microseconds kPollPeriod{100};
-// Half this period lands on the offset as a one-sided error, so a period wider
-// than a quarter of the sync target could not hold the bound however good the
-// clock is. A build that edits the period fails here instead of in the nightly.
-static_assert(
-  kPollPeriod * 4 < std::chrono::milliseconds{1},
-  "kPollPeriod must stay far under the scenario 8 accuracy target");
 constexpr std::chrono::seconds kDiagnosticsPeriod{1};
 
 }  // namespace
@@ -121,6 +118,10 @@ Bridge::Bridge(const rclcpp::NodeOptions & options)
     // The session refuses a period outside 1 to 5000 ms, because SES-25
     // needs a correction at least every 5 s.
   link.time_sync_enabled = get_parameter("time_sync.enabled").as_bool();
+    // Published from the session's own thread on every open and close; the
+    // waitable is made below, so the first open lands before it exists and
+    // the watch is installed from the descriptor it left behind.
+  link.on_port = [this](int fd) {on_port(fd);};
   link.time_sync_period_ms = static_cast<int>(get_parameter("time_sync.period_ms").as_int());
   TermiosOptions serial;
   serial.port = get_parameter("port").as_string();
@@ -139,9 +140,54 @@ Bridge::Bridge(const rclcpp::NodeOptions & options)
       }, clock_, ros_clock_,
         std::move(pacing), forward_log, std::move(link), forward_mcu_log,
       get_node_parameters_interface(), std::move(node_services));
+    // The transmit path is woken by ROS arrivals, not by the timer: the
+    // kick watches no descriptor and runs the transmit half on this same
+    // thread. The router is told before any route exists, so no callback
+    // can fire unkicked.
+  kick_ = std::make_shared<LinkWaitable>(
+    get_node_base_interface()->get_context(), [this]() {on_ros_work();});
+  kick_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  get_node_waitables_interface()->add_waitable(kick_, kick_group_);
+  kick_->watch(-1);
+  router_->set_kick([this] {kick_->trigger();});
   diagnostics_hardware_id_ = serial.port;
   diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10);
+    // The receive path is woken by the port, not by the timer: the waitable
+    // watches the descriptor the session publishes on every open, and runs
+    // the receive half on this same thread. A link without a descriptor
+    // leaves it inert and the timer as the only reader, as before.
+  link_ = std::make_shared<LinkWaitable>(
+    get_node_base_interface()->get_context(), [this]() {on_readable();});
+    // Its own mutually exclusive group, which a single-threaded executor
+    // serialises with everything else anyway: the group exists because the
+    // waitables interface requires one, not to run anything beside the timer.
+  link_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  get_node_waitables_interface()->add_waitable(link_, link_group_);
+  link_->watch(link_fd_);
   timer_ = create_wall_timer(kPollPeriod, [this]() {poll();});
+}
+
+void Bridge::on_port(int fd)
+{
+  link_fd_ = fd;
+  if (link_) {
+    link_->watch(fd);
+  }
+}
+
+void Bridge::on_readable()
+{
+  router_->receive();
+}
+
+void Bridge::on_ros_work()
+{
+  router_->transmit();
+}
+
+const std::shared_ptr<LinkWaitable> & Bridge::link_waitable() const
+{
+  return link_;
 }
 
 void Bridge::poll()

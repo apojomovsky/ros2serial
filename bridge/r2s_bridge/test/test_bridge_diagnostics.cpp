@@ -151,6 +151,54 @@ TEST_F(BridgeDiagnostics, PublishesBootWaitThenHandshaking)
     EXPECT_EQ(received.back().status[0].hardware_id, pty.path());
 }
 
+// The receive path is woken by the port, not by the timer: a HELLO written
+// to the pty must reach the session through the waitable alone, with no poll
+// pass of any kind, or every arrival waits for the period.
+TEST_F(BridgeDiagnostics, AReadablePortDrivesTheSessionWithNoPoll)
+{
+    Pty pty;
+    rclcpp::NodeOptions options;
+    options.parameter_overrides(
+    {rclcpp::Parameter("port", pty.path()), rclcpp::Parameter("boot_wait_ms", 60000)});
+    auto bridge = std::make_shared<r2s_bridge::Bridge>(options);
+    auto probe = std::make_shared<rclcpp::Node>("wake_probe");
+    std::vector<diagnostic_msgs::msg::DiagnosticArray> received;
+    auto sub = probe->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
+        "/diagnostics", 10,
+    [&received](diagnostic_msgs::msg::DiagnosticArray msg) {received.push_back(std::move(msg));});
+    const auto both = [&bridge, &probe]() {
+      rclcpp::spin_some(bridge);
+      rclcpp::spin_some(probe);
+    };
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (received.empty() && std::chrono::steady_clock::now() < deadline) {
+    both();
+    }
+    ASSERT_FALSE(received.empty());
+    // The node's waitable watches the descriptor the session opened, so the
+    // wakeup below travels the receive path and not the timer.
+    EXPECT_GE(bridge->link_waitable()->watched(), 0)
+        << "the bridge must wait on the port it opened";
+
+    std::vector<std::uint8_t> decoded{kHelperControl, 0u};
+    const std::vector<std::uint8_t> hello = helper_hello(9u, 1u);
+    decoded.insert(decoded.end(), hello.begin(), hello.end());
+    pty.write_all(helper_wire_of(helper_with_check(decoded)));
+
+    // The wait set holds the timer as well as the waitable, so this loop
+    // proves delivery through the wired node, not waitable-only delivery:
+    // the isolation lives in test_link_waitable.cpp, which drives the wait
+    // set by hand with no timer.
+    const auto shaking = [&received]() {
+      return !received.empty() && received.back().status[0].message == "handshaking";
+    };
+    const auto moved = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!shaking() && std::chrono::steady_clock::now() < moved) {
+    both();
+    }
+    EXPECT_TRUE(shaking()) << "a byte must reach the session through the waitable";
+}
+
 // A Bridge whose /diagnostics publish throws on demand, standing in for the
 // teardown race that takes the typed publish down on a later rclcpp.
 class ThrowingBridge : public r2s_bridge::Bridge

@@ -186,6 +186,15 @@ public:
    */
   void close() override;
 
+  /// The open port's descriptor, or -1 once it is closed.
+  /**
+   * The kernel turns it readable when a byte arrives or the peer hangs up,
+   * which is what the receive path waits on.
+   *
+   * \return The descriptor, or -1 when the port is not open.
+   */
+  int native_handle() const override;
+
 private:
   const TermiosSyscalls & syscalls_;
   int fd_ = -1;

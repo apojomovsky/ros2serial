@@ -38,7 +38,7 @@ $(if $(_SCOPE_ERROR),$(error $(_SCOPE_ERROR)))
 
 .PHONY: help bootstrap doctor check test test-core test-gen test-bridge test-cpp test-scripts \
 	test-all e2e-posix e2e-avr pytest ctest fmt shell image exec ci-local compile fuzz size-report \
-	capacity-report vectors regen bounds-table rosdoc2 docs-gen lint check-warnings setup-hooks pre-pr-check guard-main-clone cache-dir pic-sim hardware-check
+	capacity-report bench-bridge vectors regen bounds-table rosdoc2 docs-gen lint check-warnings setup-hooks pre-pr-check guard-main-clone cache-dir pic-sim hardware-check
 
 ##@Everyday
 
@@ -121,6 +121,12 @@ fuzz: guard-main-clone cache-dir ## Fuzz each target for 60 s (TARGET=name and R
 
 size-report: guard-main-clone cache-dir ## Regenerate the flash, RAM and stack report
 	@$(call in_image,bash scripts/budgets-check.sh --report)
+
+bench-bridge: guard-main-clone cache-dir ## Measure the bridge's idle and 10 Hz CPU over a pty pair
+	@$(call in_image,bash benchmark/bridge/run.sh)
+
+bench-latency: guard-main-clone cache-dir ## Measure host-to-MCU latency over a pty pair
+	@$(call in_image,bash benchmark/bridge/latency.sh)
 
 capacity-report: guard-main-clone cache-dir ## Regenerate docs/capacity.md and the measurements behind it
 	@$(call in_image,python3 tools/capacity_report.py measure --build-dir $(BUILD_DIR))

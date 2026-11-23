@@ -94,7 +94,8 @@ Each budget is a promise that a feature earns its bytes on an Uno with
 * The table-driven CRC stays out. It would roughly halve framing plus
   check cost on CRC-heavy frames for 498 bytes of flash, so it remains
   an option for its own ticket, not part of the shipped firmware. See
-  `docs/benchmarks/framing-crc.md`.
+  `docs/benchmarks/framing-crc.md`. The bridge's own idle cost, which that
+  page does not cover, is measured in [the bridge idle CPU page](benchmarks/bridge-idle-cpu.md).
 * Narrowing stays per topic, not per field. Per-field narrowing would
   save 40 bytes on one mixed message while adding descriptor flags and
   bridge conversion for every message; per-topic narrow already takes

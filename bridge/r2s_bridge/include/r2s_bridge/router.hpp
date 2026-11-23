@@ -120,6 +120,39 @@ public:
   /// Advances the session and flushes due host-to-MCU frames.
   void poll();
 
+  /// Handles what arrived on the link and runs no timer.
+  /**
+   * The readiness wakeup's entry: the receive half alone, so a byte on a
+   * quiet line costs its frames and nothing of the pacer, the repairs or
+   * the diagnostics. It shares the lock discipline of poll(), and both run
+   * on the executor's thread, never together.
+   *
+   * \return Whether the link produced work; false means the executor may
+   * sleep until the next readiness or timer.
+   */
+  bool receive();
+
+  /// Serves what arrived from ROS and runs no link timers.
+  /**
+   * The ROS-side wakeup's entry: the takes, the pumps and the pacer drain,
+   * so a message, call or goal on an idle link leaves on the kick instead
+   * of the next timer pass. The timer still runs it as a backstop. It
+   * shares the lock discipline of poll(), and both run on the executor's
+   * thread, never together.
+   */
+  void transmit();
+
+  /// Kicks the transmit path when ROS-side work arrives.
+  /**
+   * Set once by the node, before any route exists: the subscription and
+   * service callbacks and the action waker call it after queueing work.
+   * Empty by default, which keeps the timer the only driver.
+   *
+   * \param[in] kick what runs the transmit half on the executor's thread.
+   */
+  void set_kick(std::function<void()> kick);
+
+
   /// One announced topic's H8 values.
   /**
    * The announced name and direction, the host's TOPIC_STATUS verdict for
