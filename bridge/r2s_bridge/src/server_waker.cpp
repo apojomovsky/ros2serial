@@ -4,13 +4,13 @@
 // server waker: waited-on servers in, an executor wakeup out.
 #include "r2s_bridge/server_waker.hpp"
 
+#include <rcl_action/wait.h>
+
 #include <cstdint>
 #include <stdexcept>
 #include <system_error>
 #include <utility>
 #include <vector>
-
-#include <rcl_action/wait.h>
 
 namespace r2s_bridge
 {

@@ -6,6 +6,9 @@
 // the wakeup itself rather than a take a poll loop could have produced.
 #include <gtest/gtest.h>
 
+#include <rcl/service.h>
+#include <rcl_action/action_server.h>
+
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -14,8 +17,6 @@
 #include <thread>
 #include <vector>
 
-#include <rcl/service.h>
-#include <rcl_action/action_server.h>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <std_srvs/srv/trigger.hpp>

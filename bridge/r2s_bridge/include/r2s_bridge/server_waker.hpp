@@ -10,6 +10,9 @@
 #ifndef R2S_BRIDGE__SERVER_WAKER_HPP_
 #define R2S_BRIDGE__SERVER_WAKER_HPP_
 
+#include <rcl/service.h>
+#include <rcl_action/action_server.h>
+
 #include <condition_variable>
 #include <cstddef>
 #include <functional>
@@ -18,8 +21,6 @@
 #include <thread>
 #include <vector>
 
-#include <rcl/service.h>
-#include <rcl_action/action_server.h>
 #include <rclcpp/rclcpp.hpp>
 
 namespace r2s_bridge

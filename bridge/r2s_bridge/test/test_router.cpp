@@ -8,6 +8,8 @@
 // covers: LOG-1, LOG-2
 #include <gtest/gtest.h>
 
+#include <rcl/rcl.h>
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -25,7 +27,6 @@
 
 #include <action_msgs/msg/goal_status_array.hpp>
 #include <geometry_msgs/msg/twist.hpp>
-#include <rcl/rcl.h>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <sensor_msgs/srv/set_camera_info.hpp>
@@ -563,7 +564,8 @@ TEST_F(RouterNode, TransmitServesRosArrivalsWithNoTimerPass)
   geometry_msgs::msg::Twist twist;
   twist.linear.x = 1.0;
   pub->publish(twist);
-  ASSERT_TRUE(spin_until_kicked(fixture, harness)) << "the subscription must kick the transmit path";
+  ASSERT_TRUE(spin_until_kicked(fixture, harness))
+      << "the subscription must kick the transmit path";
   fire_kick(harness);
   const std::vector<std::uint8_t> decoded = fixture.expect_one_frame();
   ASSERT_GE(decoded.size(), 4u);
@@ -2982,7 +2984,8 @@ TEST_F(RouterNode, TransmitTakesQueuedGoalsWithNoTimerPass)
   const auto want = pack_action(
     "tf2_msgs/action/LookupTransform_Goal", &spin_goal, converter);
   auto goal_handle = client->async_send_goal(make_spin_goal());
-  ASSERT_TRUE(spin_until_kicked(fixture, harness)) << "the action waker must kick the transmit path";
+  ASSERT_TRUE(spin_until_kicked(fixture, harness))
+      << "the action waker must kick the transmit path";
   fire_kick(harness);
   bool found = false;
   for (const auto & unit : fixture.drain()) {

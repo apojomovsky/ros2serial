@@ -7,6 +7,8 @@
 #include <gtest/gtest.h>
 
 #include <pty.h>
+#include <rcl/rcl.h>
+#include <rclcpp/version.h>
 #include <unistd.h>
 
 #include <cerrno>
@@ -18,9 +20,7 @@
 #include <stdexcept>
 #include <string>
 
-#include <rcl/rcl.h>
 #include <rclcpp/rclcpp.hpp>
-#include <rclcpp/version.h>
 
 #include "r2s_bridge/link_waitable.hpp"
 #include "r2s_bridge/termios_transport.hpp"

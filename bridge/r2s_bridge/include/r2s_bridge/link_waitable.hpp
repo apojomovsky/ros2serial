@@ -9,6 +9,8 @@
 #ifndef R2S_BRIDGE__LINK_WAITABLE_HPP_
 #define R2S_BRIDGE__LINK_WAITABLE_HPP_
 
+#include <rclcpp/version.h>
+
 #include <condition_variable>
 #include <cstddef>
 #include <functional>
@@ -18,7 +20,6 @@
 #include <vector>
 
 #include <rclcpp/rclcpp.hpp>
-#include <rclcpp/version.h>
 
 namespace r2s_bridge
 {
