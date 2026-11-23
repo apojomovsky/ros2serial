@@ -10,6 +10,11 @@
 #ifndef R2S_ACTION_HPP
 #define R2S_ACTION_HPP
 
+/* A staged library enables this channel in its r2s_config.h, which the IDE
+ * route compiles with and no flag reaches, so the header reads the config
+ * before it refuses a channel the build left out. */
+#include "r2s/r2s_arch.h"
+
 #ifndef R2S_WITH_ACTIONS
 #error "The action server needs R2S_WITH_ACTIONS: the core gates the actions channel on it."
 #endif

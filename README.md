@@ -103,7 +103,12 @@ examples appear under *File > Examples > ros2serial* and compile as they are.
 The archive carries its own `src/r2s_config.h`, so the IDE needs no build
 property and nothing else configured. The [firmware
 guide](docs/firmware.md#the-frame-limit-is-a-build-input) says where each
-route gets its limits.
+route gets its limits. Services, parameters and actions stay off until
+enabled: open the installed library's `src/r2s_config.h`, uncomment the
+channel's line, and use the frame value beside it. Installing a newer library
+replaces that file, so keep the edit to apply it again. [Parameters,
+services, and actions](docs/services-and-parameters.md#enabling-a-channel)
+details each channel.
 
 A library for your own interface types installs the same way: `r2s-gen types`
 writes the archive with `--zip`. [Custom messages in the Arduino

@@ -292,6 +292,54 @@ for source in "${action_sources[@]}" "$root/cpp/src/action.cpp"; do
     status=1
   fi
 done
+# The IDE route: the channel headers read a staged r2s_config.h before their
+# #error, so a sketch including one of them first builds with no flag.
+config_stage="$build/config_stage"
+rm -rf "$config_stage"
+mkdir -p "$config_stage"
+printf '#define R2S_WITH_SERVICES\n#define R2S_WITH_ACTIONS\n' >"$config_stage/r2s_config.h"
+cat >"$build/check_config_first.cpp" <<'EOF'
+#include <r2s/service.hpp>
+#include <r2s/action.hpp>
+int main()
+{
+    return 0;
+}
+EOF
+if ! avr-g++ "${flags[@]}" -I "$config_stage" -fsyntax-only "$build/check_config_first.cpp"; then
+  echo "avr-syntax: the channel headers ignore a staged r2s_config.h"
+  status=1
+fi
+# The registry sources guard on the same flag, so they compile against the
+# staged config too: the sketch links them with no flag of its own.
+for source in "$root/cpp/src/service.cpp" "$root/cpp/src/action.cpp"; do
+  if ! avr-g++ "${flags[@]}" -I "$config_stage" -I "$root/cpp/include" -fsyntax-only "$source"; then
+    echo "avr-syntax: $source ignores a staged r2s_config.h"
+    status=1
+  fi
+done
+# Without the flag and without the config the headers still refuse, so a
+# topics-only build never pays for the channels.
+cat >"$build/check_service_noflag.cpp" <<'EOF'
+#include <r2s/service.hpp>
+int main()
+{
+    return 0;
+}
+EOF
+cat >"$build/check_action_noflag.cpp" <<'EOF'
+#include <r2s/action.hpp>
+int main()
+{
+    return 0;
+}
+EOF
+for source in "$build/check_service_noflag.cpp" "$build/check_action_noflag.cpp"; do
+  if avr-g++ "${flags[@]}" -fsyntax-only "$source"; then
+    echo "avr-syntax: $source compiled without its channel flag"
+    status=1
+  fi
+done
 # The Arduino build of the migration guide's after sketch, so the native
 # API's Serial branch and its flash-string log compile for the board. The
 # log channel is a build flag, so the sketch that logs passes it. The port

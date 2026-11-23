@@ -6,9 +6,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* The bundled types, tables and limits come first, so the sketch's
- * translation unit reads the bundle's frame and nesting limits rather
- * than the core defaults below. */
+/* The staged limits come first: r2s_arch.h reads the library's
+ * r2s_config.h, so a channel or frame the sketch enables there
+ * reaches this translation unit, and the core agrees with it. A
+ * flag the build passes still wins, because every limit keeps its
+ * guard. */
+#include "r2s/r2s_arch.h"
+
+/* The bundled types, tables and default limits. An edited
+ * r2s_config.h already applied above, so these stay defaults. */
 #include "r2s_bundled.h"
 
 #include "r2s/r2s_codec.h"

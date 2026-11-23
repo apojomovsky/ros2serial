@@ -243,6 +243,33 @@ def test_the_config_header_turns_on_the_dispatch_the_library_ships():
     )
 
 
+def test_the_config_header_offers_each_channel_as_a_commented_line():
+    """The IDE passes no build property, so each channel waits as a comment."""
+    config = files()['src/r2s_config.h']
+
+    for name in ('R2S_WITH_SERVICES', 'R2S_WITH_PARAMS', 'R2S_WITH_ACTIONS'):
+        assert f'/* #define {name} */' in config, name
+        assert re.search(rf'^#define {name}(\s|$)', config, re.MULTILINE) is None, name
+
+
+def test_the_config_header_pairs_each_sized_channel_with_its_frame():
+    """The template pairs each sized channel with its frame."""
+    config = files()['src/r2s_config.h']
+    lines = config.splitlines()
+
+    for name, frame in (('R2S_WITH_SERVICES', '64'), ('R2S_WITH_ACTIONS', '128')):
+        at = next(index for index, line in enumerate(lines) if name in line)
+        window = '\n'.join(lines[max(0, at - 3) : at + 1])
+        assert frame in window, name
+
+
+def test_the_sketch_header_reads_the_config_before_the_bundle():
+    """A lowered frame in r2s_config.h must reach the sketch, not just the core."""
+    header = files()['src/ros2serial.h']
+
+    assert header.index('#include "r2s/r2s_arch.h"') < header.index('#include "r2s_bundled.h"')
+
+
 def test_the_sketch_header_serves_the_runtime_api_without_a_topic_list():
     header = files()['src/ros2serial.h']
 
