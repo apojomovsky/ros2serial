@@ -14,6 +14,48 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / 'ports' / 'arduino' / 'build.sh'
+BOARDS_LIST = ROOT / 'ports' / 'arduino' / 'boards.list'
+
+
+def board_entries():
+    """The board list as name to (fqbn, prefix), skipping blanks and comments."""
+    entries = {}
+    for line in BOARDS_LIST.read_text(encoding='utf-8').splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            continue
+        parts = stripped.split()
+        assert len(parts) == 3, f'a board line names <name> <fqbn> <prefix>: {line!r}'
+        name, fqbn, prefix = parts
+        assert name not in entries, f'duplicate board {name!r}'
+        entries[name] = (fqbn, prefix)
+    return entries
+
+
+def stub_arduino_cli(bin_dir):
+    """An arduino-cli stand-in that reports both cores and records the rest.
+
+    `core list` names the pinned cores, so neither the AVR nor the ESP32
+    setup downloads anything; every other invocation is appended to
+    R2S_ARDUINO_LOG with the PATH it ran with, so the tests prove which
+    FQBN compiled and which toolchains were visible.
+    """
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    cli = bin_dir / 'arduino-cli'
+    cli.write_text(
+        '#!/usr/bin/env bash\n'
+        'if [ "$1" = core ] && [ "$2" = list ]; then\n'
+        '  echo "arduino:avr 1.8.6"\n'
+        '  # The suite runs from the repository root, so the pin reads from\n'
+        '  # the same file the shared core setup reads.\n'
+        "  pin=$(grep '^ARDUINO_ESP32_CORE_VERSION=' ci/versions.env | cut -d= -f2)\n"
+        '  echo "esp32:esp32 $pin"\n'
+        '  exit 0\n'
+        'fi\n'
+        'echo "ARDUINO_CLI $* PATH=$PATH" >> "$R2S_ARDUINO_LOG"\n'
+        'exit 0\n'
+    )
+    cli.chmod(0o755)
 
 
 def run(args, cwd, tmp_path, extra_env=None):
@@ -32,6 +74,93 @@ def test_the_helper_rejects_an_unknown_board(tmp_path):
     result = run(['bash', str(SCRIPT), '--board', 'bogus'], ROOT, tmp_path)
     assert result.returncode != 0
     assert 'bogus' in result.stderr
+
+
+def test_the_helper_rejects_an_unknown_board_with_exit_2_and_the_known_ones(tmp_path):
+    entries = board_entries()
+    result = run(['bash', str(SCRIPT), '--board', 'bogus'], ROOT, tmp_path)
+    assert result.returncode == 2
+    assert 'bogus' in result.stderr
+    for name in entries:
+        assert name in result.stderr, f'the error must name the known board {name!r}'
+
+
+def test_the_build_compiles_mega_with_the_listed_fqbn(tmp_path):
+    entries = board_entries()
+    bin_dir = tmp_path / 'bin'
+    stub_arduino_cli(bin_dir)
+    log = tmp_path / 'arduino.log'
+    result = run(
+        [
+            'bash',
+            str(SCRIPT),
+            '--board',
+            'mega',
+            '--lib',
+            str(tmp_path / 'lib'),
+            '--out',
+            str(tmp_path / 'fw'),
+        ],
+        ROOT,
+        tmp_path,
+        extra_env={
+            'PATH': f'{bin_dir}:/usr/bin:/bin:/usr/local/bin',
+            'R2S_ARDUINO_LOG': str(log),
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    invocation = log.read_text(encoding='utf-8')
+    assert 'compile' in invocation
+    assert entries['mega'][0] in invocation
+
+
+def fake_esp32_toolchains(tmp_path):
+    """Stand-in ESP32 toolchains under the cache data directory.
+
+    The build resolves its cache from HOME when R2S_CACHE_DIR is unset,
+    so the fakes live where the shared core setup searches for <prefix>-size.
+    """
+    tools = tmp_path / '.cache' / 'ros2serial' / 'arduino-esp32' / 'packages' / 'esp32' / 'tools'
+    xtensa = tools / 'esp-x32-test' / 'bin'
+    riscv = tools / 'esp-rv32-test' / 'bin'
+    xtensa.mkdir(parents=True)
+    riscv.mkdir(parents=True)
+    for name in ('xtensa-esp32-elf-size', 'xtensa-esp32s3-elf-size'):
+        (xtensa / name).write_text('#!/bin/sh\nexit 0\n')
+    (riscv / 'riscv32-esp-elf-size').write_text('#!/bin/sh\nexit 0\n')
+    return xtensa, riscv
+
+
+def test_the_build_compiles_esp32_with_the_listed_fqbn_and_toolchains(tmp_path):
+    entries = board_entries()
+    xtensa_dir, riscv_dir = fake_esp32_toolchains(tmp_path)
+    bin_dir = tmp_path / 'bin'
+    stub_arduino_cli(bin_dir)
+    log = tmp_path / 'arduino.log'
+    result = run(
+        [
+            'bash',
+            str(SCRIPT),
+            '--board',
+            'esp32',
+            '--lib',
+            str(tmp_path / 'lib'),
+            '--out',
+            str(tmp_path / 'fw'),
+        ],
+        ROOT,
+        tmp_path,
+        extra_env={
+            'PATH': f'{bin_dir}:/usr/bin:/bin:/usr/local/bin',
+            'R2S_ARDUINO_LOG': str(log),
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    invocation = log.read_text(encoding='utf-8')
+    assert 'compile' in invocation
+    assert entries['esp32'][0] in invocation
+    assert str(xtensa_dir) in invocation
+    assert str(riscv_dir) in invocation
 
 
 def test_the_helper_rejects_an_unknown_option(tmp_path):
