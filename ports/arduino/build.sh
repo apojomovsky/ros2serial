@@ -2,20 +2,38 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-# Stage the Arduino library and compile a sketch for Uno or Mega.
-# Usage: build.sh [--board uno|mega] [--sketch DIR] [--lib DIR] [--out DIR]
+# Stage the Arduino library and compile a sketch for a board of
+# ports/arduino/boards.list.
+# Usage: build.sh [--board NAME] [--sketch DIR] [--lib DIR] [--out DIR]
 # [--distro NAME] [--stage-only] [--no-bundle]. Builds go under
 # R2S_BUILD_DIR, so the tree stays clean. The sketch's limits travel as
 # flags read from the bundled header, since the core never includes it.
+# An ESP32 board sources scripts/esp32-core.sh before the compile, so the
+# pinned core and its toolchains are on PATH; staging needs neither, so a
+# stage-only run stays offline for every board.
 set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$root" || exit 2
 build=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/arduino
+boards_list="$root/ports/arduino/boards.list"
+
+# One board name per line, skipping the comments and blank lines.
+board_names() {
+  awk 'NF && $1 !~ /^#/ {print $1}' "$boards_list"
+}
+
+# Field 2 (the FQBN) or 3 (the binutils prefix) of one board, or nothing
+# when the list names no such board.
+board_field() {
+  awk -v board="$1" -v column="$2" \
+    'NF && $1 !~ /^#/ && $1 == board {print $column}' "$boards_list"
+}
 
 board=uno
 sketch=examples/arduino_minimal
 lib=$build/lib
-out=build/uno
+out=""
+out_set=0
 distro=jazzy
 stage_only=0
 no_bundle=0
@@ -29,32 +47,42 @@ while [ "$#" -gt 0 ]; do
         --board) board=$2 ;;
         --sketch) sketch=$2 ;;
         --lib) lib=$2 ;;
-        --out) out=$2 ;;
+        --out) out=$2; out_set=1 ;;
         --distro) distro=$2 ;;
       esac
       shift 2
       ;;
     --stage-only) stage_only=1; shift ;;
     --no-bundle) no_bundle=1; shift ;;
-    -h|--help) echo "usage: ports/arduino/build.sh [--board uno|mega] [--sketch DIR] [--lib DIR] [--out DIR] [--distro NAME] [--stage-only] [--no-bundle]" >&2; exit 0 ;;
+    -h|--help) echo "usage: ports/arduino/build.sh [--board $(board_names | paste -sd'|')] [--sketch DIR] [--lib DIR] [--out DIR] [--distro NAME] [--stage-only] [--no-bundle]" >&2; exit 0 ;;
     *) echo "ports/arduino/build.sh: unknown option '$1'" >&2; exit 2 ;;
   esac
 done
-case "$board" in
-  uno|mega) ;;
-  *) echo "ports/arduino/build.sh: unknown board '$board': known are uno and mega" >&2; exit 2 ;;
-esac
+fqbn=$(board_field "$board" 2)
+[ -n "$fqbn" ] || {
+  echo "ports/arduino/build.sh: unknown board '$board': known are $(board_names | paste -sd' ')" >&2
+  exit 2
+}
+[ "$out_set" = 1 ] || out="build/$board"
 [ -d "$sketch" ] || { echo "ports/arduino/build.sh: no sketch at '$sketch'" >&2; exit 2; }
 
 if [ "$stage_only" = 0 ]; then
   command -v arduino-cli >/dev/null 2>&1 || { echo "ports/arduino/build.sh: arduino-cli not found" >&2; exit 1; }
-  # The dev image carries the pinned core, so a present core stays
-  # untouched and no network is needed.
-  if arduino-cli core list | grep -q "arduino:avr"; then
-    echo "arduino build: arduino:avr core already installed"
-  else
-    arduino-cli core install arduino:avr || exit 1
-  fi
+  case "$fqbn" in
+    esp32:*)
+      # shellcheck source=scripts/esp32-core.sh
+      source "$root/scripts/esp32-core.sh" || exit 1
+      ;;
+    *)
+      # The dev image carries the pinned core, so a present core stays
+      # untouched and no network is needed.
+      if arduino-cli core list | grep -q "arduino:avr"; then
+        echo "arduino build: arduino:avr core already installed"
+      else
+        arduino-cli core install arduino:avr || exit 1
+      fi
+      ;;
+  esac
 fi
 
 if [ "$no_bundle" = 0 ]; then
@@ -97,7 +125,7 @@ esac
 echo "arduino build: limits $extras"
 [ "$stage_only" = 1 ] && exit 0
 
-arduino-cli compile --fqbn "arduino:avr:$board" \
+arduino-cli compile --fqbn "$fqbn" \
   --build-property "compiler.c.extra_flags=$extras" \
   --build-property "compiler.cpp.extra_flags=$extras" \
   --library "$lib" --output-dir "$out" "$sketch" || exit 1
