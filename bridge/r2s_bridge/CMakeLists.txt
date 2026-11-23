@@ -217,6 +217,15 @@ if(BUILD_TESTING)
   ament_add_gtest(test_link_waitable test/test_link_waitable.cpp)
   target_link_libraries(test_link_waitable r2s_bridge_component util)
 
+  # The action waker watches raw rcl action servers by hand, so a wakeup is
+  # what it asserts, not a take a poll loop could have produced.
+  ament_add_gtest(test_action_waker test/test_action_waker.cpp)
+  target_link_libraries(test_action_waker
+    r2s_bridge_component
+    action_msgs::action_msgs__rosidl_typesupport_cpp
+    rclcpp_action::rclcpp_action
+    tf2_msgs::tf2_msgs__rosidl_typesupport_cpp)
+
   # The core port seam is header-private to the bridge sources, so its test
   # includes them directly. It attaches scripted transports, so it links the
   # test fakes and sees the same link count as the component.

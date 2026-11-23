@@ -125,6 +125,9 @@ size-report: guard-main-clone cache-dir ## Regenerate the flash, RAM and stack r
 bench-bridge: guard-main-clone cache-dir ## Measure the bridge's idle and 10 Hz CPU over a pty pair
 	@$(call in_image,bash benchmark/bridge/run.sh)
 
+bench-latency: guard-main-clone cache-dir ## Measure host-to-MCU latency over a pty pair
+	@$(call in_image,bash benchmark/bridge/latency.sh)
+
 capacity-report: guard-main-clone cache-dir ## Regenerate docs/capacity.md and the measurements behind it
 	@$(call in_image,python3 tools/capacity_report.py measure --build-dir $(BUILD_DIR))
 	@echo "capacity-report: refreshed docs/capacity.md and tools/capacity_measurements.json"

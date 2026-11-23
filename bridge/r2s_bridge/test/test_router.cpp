@@ -24,6 +24,7 @@
 
 #include <action_msgs/msg/goal_status_array.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include <rcl/rcl.h>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <sensor_msgs/srv/set_camera_info.hpp>
@@ -38,6 +39,7 @@
 #include "manual_clock.hpp"
 #include "r2s_bridge/action_types.hpp"
 #include "r2s_bridge/converter.hpp"
+#include "r2s_bridge/link_waitable.hpp"
 #include "r2s_bridge/router.hpp"
 #include "rosidl_runtime_c/type_hash.h"
 
@@ -496,6 +498,99 @@ TEST_F(RouterNode, HostToMcuSendsThePackedMessage)
     std::vector<std::uint8_t> want{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x3F};
     want.resize(48u, 0x00u);
     EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 2u, decoded.end() - 2u), want);
+}
+
+// Wires a kick waitable that runs the transmit half: the subscription and
+// service callbacks trigger it, and the hand-driven wait set below proves
+// the wakeup instead of a poll loop's output.
+struct KickHarness
+{
+  explicit KickHarness(RouterFixture & fixture)
+  : kick(std::make_shared<LinkWaitable>(
+      fixture.node()->get_node_base_interface()->get_context(),
+      [&fixture]() {fixture.router().transmit();}))
+  {
+    kick->watch(-1);
+    fixture.router().set_kick([this]() {
+      kicked = true;
+      kick->trigger();
+    });
+  }
+  bool kicked = false;
+  std::shared_ptr<LinkWaitable> kick;
+};
+
+// Runs the kick's waitable by hand and asserts it fired: no timer runs here,
+// so the executor could only have woken for the kick.
+void fire_kick(KickHarness & harness)
+{
+  rcl_wait_set_t wait_set = rcl_get_zero_initialized_wait_set();
+  EXPECT_EQ(
+    rcl_wait_set_init(&wait_set, 0, 1, 0, 0, 0, 0,
+    rclcpp::contexts::get_global_default_context()->get_rcl_context().get(),
+    rcl_get_default_allocator()), RCL_RET_OK);
+  EXPECT_EQ(rcl_wait_set_clear(&wait_set), RCL_RET_OK);
+  harness.kick->add_to_wait_set(wait_set);
+  EXPECT_EQ(rcl_wait(&wait_set, 0), RCL_RET_OK) << "the kick must wake the executor";
+  EXPECT_TRUE(harness.kick->is_ready(wait_set));
+  harness.kick->execute(harness.kick->take_data());
+  EXPECT_EQ(rcl_wait_set_fini(&wait_set), RCL_RET_OK);
+}
+
+// Spins until the ROS arrival kicks the transmit path, or the wait expires:
+// discovery still needs a turn before the first callback runs.
+bool spin_until_kicked(RouterFixture & fixture, KickHarness & harness)
+{
+  const auto start = std::chrono::steady_clock::now();
+  while (!harness.kicked && std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    rclcpp::spin_some(fixture.node());
+  }
+  return harness.kicked;
+}
+
+// A ROS message on an idle link must reach the wire without waiting for
+// the timer: the subscription hands the pacer the message and kicks the
+// transmit path, so the frame leaves on the kick instead of the next pass.
+TEST_F(RouterNode, TransmitServesRosArrivalsWithNoTimerPass)
+{
+  RouterFixture fixture("kick", remapped(), RouterParams{});
+  fixture.handshake();
+  KickHarness harness(fixture);
+  auto pub = fixture.node()->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+  geometry_msgs::msg::Twist twist;
+  twist.linear.x = 1.0;
+  pub->publish(twist);
+  ASSERT_TRUE(spin_until_kicked(fixture, harness)) << "the subscription must kick the transmit path";
+  fire_kick(harness);
+  const std::vector<std::uint8_t> decoded = fixture.expect_one_frame();
+  ASSERT_GE(decoded.size(), 4u);
+  EXPECT_EQ(decoded[0], kCmdVel);
+  EXPECT_EQ(decoded[1], 0u) << "the first frame on a topic carries seq 0";
+}
+
+// A ROS service call on an idle link must reach the wire without waiting
+// for the timer: the service callback enqueues the call and kicks the
+// transmit path, so the pump sends it on the kick instead of the next pass.
+TEST_F(RouterNode, TransmitPumpsQueuedServiceCallsWithNoTimerPass)
+{
+  RouterFixture fixture("kick_svc", remapped(), RouterParams{});
+  fixture.handshake_with_services();
+  KickHarness harness(fixture);
+  auto client = fixture.node()->create_client<std_srvs::srv::Trigger>("reset");
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(10)));
+  auto future = client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  ASSERT_TRUE(spin_until_kicked(fixture, harness)) << "the service must kick the transmit path";
+  fire_kick(harness);
+  bool found = false;
+  for (const auto & unit : fixture.drain()) {
+    const auto decoded = fixture.checked_decode(unit);
+    if (decoded.size() >= 6u && decoded[0] == kServicesTopic &&
+      decoded[2] == kHelperSvcRequest)
+    {
+      found = true;
+    }
+  }
+  EXPECT_TRUE(found) << "the REQUEST must reach the wire on the kick";
 }
 
 // The readiness wakeup enters here, not through poll(): the bytes must reach
@@ -2865,6 +2960,38 @@ TEST_F(RouterNode, AcceptsAGoalAndStreamsFeedbackAndResult)
   EXPECT_EQ(wrapped.code, rclcpp_action::ResultCode::SUCCEEDED);
   EXPECT_EQ(wrapped.result->transform.header.frame_id, "b");
   EXPECT_TRUE(status_shows(4)) << "the status array never showed the goal succeeded";
+}
+
+// A ROS goal on an idle link must reach the wire without waiting for the
+// timer: the action waker sees the request arrive and kicks the transmit
+// path, so the take sends it on the kick instead of the next pass.
+TEST_F(RouterNode, TransmitTakesQueuedGoalsWithNoTimerPass)
+{
+  RouterFixture fixture("kick_act", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  KickHarness harness(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+  Converter converter;
+  const auto spin_goal = make_spin_goal();
+  const auto want = pack_action(
+    "tf2_msgs/action/LookupTransform_Goal", &spin_goal, converter);
+  auto goal_handle = client->async_send_goal(make_spin_goal());
+  ASSERT_TRUE(spin_until_kicked(fixture, harness)) << "the action waker must kick the transmit path";
+  fire_kick(harness);
+  bool found = false;
+  for (const auto & unit : fixture.drain()) {
+    const auto decoded = fixture.checked_decode(unit);
+    if (decoded.size() >= 7u && decoded[0] == kHelperActions &&
+      decoded[2] == kHelperActGoal)
+    {
+      EXPECT_EQ(std::vector<std::uint8_t>(decoded.begin() + 6, decoded.end() - 2), want);
+      found = true;
+    }
+  }
+  EXPECT_TRUE(found) << "the ACT_GOAL must reach the wire on the kick";
 }
 
 // A handshake announcing one LookupTransform action on a 32-bit-double
