@@ -294,6 +294,77 @@ TEST_F(ServerWakerTest, WatchSwapsTheWatchedSet)
   waker.unwatch();
 }
 
+// Watching the same set again changes nothing: the helper keeps waiting
+// instead of disarming and rebuilding, and the next arrival still wakes.
+TEST_F(ServerWakerTest, WatchingTheSameSetSkipsTheRebuild)
+{
+  RawServer server(node_, "spin");
+  std::atomic<int> fires{0};
+  ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fires]() {
+    ++fires;
+  });
+  waker.watch({server.handle()}, {});
+  // An identical watch is a no-op: the server stays watched.
+  waker.watch({server.handle()}, {});
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(node_, "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+  tf2_msgs::action::LookupTransform_Goal goal;
+  goal.target_frame = "base";
+  client->async_send_goal(goal);
+  const auto first = std::chrono::steady_clock::now();
+  while (fires.load() < 1 &&
+    std::chrono::steady_clock::now() - first < std::chrono::seconds(10))
+  {
+    rclcpp::spin_some(node_);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  EXPECT_EQ(fires.load(), 1) << "a goal must wake after an identical re-watch";
+  waker.unwatch();
+}
+
+// Watching new services beside watched actions re-arms: the action half
+// stays watched while the service half joins it.
+TEST_F(ServerWakerTest, WatchingNewServicesKeepsTheActions)
+{
+  RawServer server(node_, "spin");
+  RawService service(node_, "reset");
+  std::atomic<int> fires{0};
+  ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fires]() {
+    ++fires;
+  });
+  waker.watch({server.handle()}, {});
+  // Same actions, new services: the set changed, so the waiter rebuilds.
+  waker.watch({server.handle()}, {service.handle()});
+  auto goal_client =
+    rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(node_, "spin");
+  ASSERT_TRUE(goal_client->wait_for_action_server(std::chrono::seconds(10)));
+  auto service_client = node_->create_client<std_srvs::srv::Trigger>("reset");
+  ASSERT_TRUE(service_client->wait_for_service(std::chrono::seconds(10)));
+  tf2_msgs::action::LookupTransform_Goal goal;
+  goal.target_frame = "base";
+  goal_client->async_send_goal(goal);
+  const auto first = std::chrono::steady_clock::now();
+  while (fires.load() < 1 &&
+    std::chrono::steady_clock::now() - first < std::chrono::seconds(10))
+  {
+    rclcpp::spin_some(node_);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  ASSERT_EQ(fires.load(), 1) << "a goal must wake after the services join";
+  ASSERT_TRUE(server.take_goal());
+  waker.notify_served(true);
+  auto future = service_client->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  const auto second = std::chrono::steady_clock::now();
+  while (fires.load() < 2 &&
+    std::chrono::steady_clock::now() - second < std::chrono::seconds(10))
+  {
+    rclcpp::spin_some(node_);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  EXPECT_EQ(fires.load(), 2) << "a request must wake after the services join";
+  waker.unwatch();
+}
+
 // A served wakeup re-arms: the next goal on the same server wakes again.
 TEST_F(ServerWakerTest, ServedRearmsTheWaiter)
 {
