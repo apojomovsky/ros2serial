@@ -38,10 +38,11 @@ def run(args, env=None):
     )
 
 
-def test_a_missing_board_is_refused_with_the_two_names():
+def test_a_missing_board_is_refused_with_the_known_names_listed():
     result = run(['/dev/null', ''])
     assert result.returncode == 2
-    assert 'uno or mega' in result.stderr
+    for name in board_names():
+        assert name in result.stderr
 
 
 def test_a_blank_port_is_refused_with_where_to_find_it():
@@ -108,13 +109,6 @@ def board_names():
         if parts and not parts[0].startswith('#'):
             names.append(parts[0])
     return names
-
-
-def test_the_usage_lists_every_board_in_the_board_list():
-    result = run(['/dev/null', ''])
-    assert result.returncode == 2
-    for name in board_names():
-        assert name in result.stderr
 
 
 def test_an_unknown_board_is_refused_with_the_known_names():

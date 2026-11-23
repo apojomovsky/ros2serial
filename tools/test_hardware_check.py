@@ -204,7 +204,15 @@ def test_the_report_carries_what_the_ticket_names():
 
 
 def test_the_board_names_the_arduino_fqbn():
-    assert hardware_check.BOARDS == {'mega': 'arduino:avr:mega', 'uno': 'arduino:avr:uno'}
+    assert hardware_check.BOARDS == {
+        'uno': 'arduino:avr:uno',
+        'mega': 'arduino:avr:mega',
+        'esp32': 'esp32:esp32:esp32',
+        'esp32s3': 'esp32:esp32:esp32s3',
+        'esp32s3-usb': 'esp32:esp32:esp32s3:USBMode=hwcdc,CDCOnBoot=cdc',
+        'esp32c3': 'esp32:esp32:esp32c3',
+        'esp32c3-usb': 'esp32:esp32:esp32c3:CDCOnBoot=cdc',
+    }
 
 
 def test_the_port_is_required(capsys):

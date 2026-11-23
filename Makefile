@@ -110,7 +110,7 @@ exec: guard-main-clone cache-dir ## One-off command inside the image: make exec 
 ci-local: guard-main-clone cache-dir image ## The exact CI run, unscoped, in the ci image
 	@$(DOCKER_BASE) -e R2S_FULL=1 $(IMAGE) bash scripts/run-tasks.sh
 
-hardware-check: cache-dir ## Check a real Uno or Mega end to end: PORT=/dev/ttyACM0 BOARD=uno|mega
+hardware-check: cache-dir ## Check a real board end to end: PORT=/dev/ttyACM0 BOARD=name in ports/arduino/boards.list
 	@bash scripts/hardware-check.sh '$(PORT)' '$(BOARD)'
 
 compile: ## Not built yet (pending G10 and V4): will build an example firmware
