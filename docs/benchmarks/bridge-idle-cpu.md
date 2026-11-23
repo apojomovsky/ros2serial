@@ -60,3 +60,35 @@ receive half was nearly free on an idle line, because the port answered
 slowing the timer to a period its own deadlines need (the shortest is the
 500 ms heartbeat) is what moved the figure, not any change inside the receive
 path itself.
+
+## Outbound latency
+
+Question: how long does a ROS message wait before the wire carries it? The
+transmit half used to run on the same timer, so a publish on an idle link
+waited up to one period before the pacer even saw it. The transmit path now
+runs on arrival: the subscription and service callbacks kick it directly,
+and a waker thread watches the raw rcl servers the executor cannot see and
+kicks when a goal, cancel, result or service request lands. The timer still
+runs the transmit as a backstop.
+
+`make bench-latency` runs `benchmark/bridge/latency.sh`, which builds the
+bridge and the posix firmware from the same tree, joins them with a pty
+pair, and runs `benchmark/bridge/outbound_latency.py`. The probe publishes
+fifty Twists on `/cmd_vel` two per second and matches each echo on
+`/echo_vel` by its index; the figure is the publish-to-echo delay as
+p50/p99. The link is idle between samples, so each one measures a wakeup
+and not a queue.
+
+| Tree | p50 | p99 |
+| --- | --- | --- |
+| #703, timer-only transmit, 20 ms timer | 19.71 ms | 21.03 ms |
+| #703, kick on arrival, 20 ms timer | 3.02 ms | 33.51 ms |
+| #703, kick on arrival, 20 ms timer | 2.82 ms | 5.25 ms |
+| #703, kick on arrival, 20 ms timer | 2.82 ms | 5.71 ms |
+
+The timer-only row waits out the period first, which is the regression the
+kick repairs: the median falls from a period to the wakeup's own cost. The
+first kick row's p99 is one scheduling spike on the shared host; the repeats
+put the tail where the median is. The round trip stays above a millisecond
+because both directions cross DDS and the firmware answers between them, so
+the p50 is the wakeup plus two stack crossings, not the wire.
