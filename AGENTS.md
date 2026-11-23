@@ -52,7 +52,7 @@ repository development and CI, not installation into a robot workspace.
 | `pytest` ARGS=`...` | Runs one pytest file or node in the image |
 | `ctest` ARGS=`...` | Reruns core unit tests by name in the image |
 | `ci-local` | The exact CI run, unscoped, in the `ci` image |
-| `hardware-check PORT=... BOARD=uno\|mega` | Checks a real board end to end: flashes `button_led`, samples `/button`, reads the counters, drives `/led` and prints one report with a verdict |
+| `hardware-check PORT=... BOARD=<name in boards.list>` | Checks a real board end to end: flashes `button_led`, samples `/button`, reads the counters, drives `/led` and prints one report with a verdict |
 | `compile EXAMPLE=<name> BOARD=<uno\|mega\|...>` | Not built yet (pending G10 and V4): will build an example firmware and print flash, RAM and stack |
 | `fuzz TARGET=<name>` | Run one libFuzzer target for 60 s |
 | `size-report` | Regenerate the flash, RAM and stack report |

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""One command that validates a real Uno or Mega end to end.
+"""One command that validates a real board end to end.
 
 Compiles the button_led example for the board, uploads it, starts the bridge,
 waits for the handshake, samples /button for half a minute, reads the link
@@ -12,11 +12,14 @@ and a verdict. The report goes to stdout, so it survives a copy; progress and
 the LED question go to stderr.
 
 The device reaches the container through `make hardware-check`, which passes
-it in with its own group: the caller's uid need not be in dialout.
+it in with its own group: the caller's uid need not be in dialout. Boards,
+their FQBNs and their size-tool prefixes come from ports/arduino/boards.list,
+so a new row there needs no code change here.
 """
 
 import argparse
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -33,7 +36,34 @@ ROOT = Path(__file__).resolve().parent.parent
 # The example that exercises both directions: a 10 Hz /button publisher and an
 # /led subscription driving LED_BUILTIN.
 SKETCH = 'examples/arduino_button_led'
-BOARDS = {'mega': 'arduino:avr:mega', 'uno': 'arduino:avr:uno'}
+BOARDS_LIST = ROOT / 'ports/arduino/boards.list'
+VERSIONS_ENV = ROOT / 'ci/versions.env'
+
+
+def load_boards(path=None):
+    """Read the board list into FQBN and size-tool prefix tables.
+
+    Args:
+        path: the boards.list file to read.
+
+    Returns:
+        A pair of dicts keyed by board name: the FQBNs, then the prefixes.
+    """
+    wanted = Path(path) if path is not None else BOARDS_LIST
+    fqbns = {}
+    prefixes = {}
+    for number, line in enumerate(wanted.read_text(encoding='utf-8').splitlines(), 1):
+        parts = line.split()
+        if not parts or parts[0].startswith('#'):
+            continue
+        if len(parts) < 3:
+            raise ValueError(f'{wanted}:{number} names no FQBN and prefix: {line!r}')
+        fqbns[parts[0]] = parts[1]
+        prefixes[parts[0]] = parts[2]
+    return fqbns, prefixes
+
+
+BOARDS, BOARD_PREFIXES = load_boards()
 # The diagnostics status the bridge labels with this task carries the link
 # state in its message and every counter in its values.
 LINK_TASK = 'link'
@@ -49,6 +79,7 @@ FIELD_ORDER = (
     'board',
     'port',
     'firmware',
+    'core',
     'flash',
     'ram',
     'handshake',
@@ -61,6 +92,8 @@ FIELD_ORDER = (
     'dropped topic frames',
     'led',
 )
+# How long an ESP32 USB-Serial/JTAG re-enumeration may take after the upload.
+PORT_WAIT_S = 10.0
 
 
 class CheckError(Exception):
@@ -95,7 +128,7 @@ class Observation:
     window_end: float
     diagnostics: dict | None
     handshake_s: float
-    led_lit: bool
+    led_lit: bool | None
 
 
 def arrivals(stamps, window_end=None):
@@ -148,11 +181,92 @@ def counters(values):
     )
 
 
+def is_esp32(board):
+    """Whether the board builds against the ESP32 Arduino core.
+
+    Args:
+        board: the board name from the board list.
+
+    Returns:
+        True for the ESP32 rows of the list, False for AVR ones.
+    """
+    return BOARDS.get(board, '').startswith('esp32:')
+
+
+def size_tool(board):
+    """The Berkeley size tool for the board's toolchain.
+
+    Args:
+        board: the board name from the board list.
+
+    Returns:
+        The `<prefix>-size` name the list rows for the board.
+    """
+    return f'{BOARD_PREFIXES[board]}-size'
+
+
+def core_for_board(board, versions_path=None):
+    """The `core:` report field for the board's pinned Arduino core.
+
+    Args:
+        board: the board name from the board list.
+        versions_path: the versions.env file to read.
+
+    Returns:
+        The core coordinate with its pinned version.
+    """
+    wanted = Path(versions_path) if versions_path is not None else VERSIONS_ENV
+    pins = {}
+    for line in wanted.read_text(encoding='utf-8').splitlines():
+        if '=' in line and not line.startswith('#'):
+            name, _, value = line.partition('=')
+            pins[name.strip()] = value.strip()
+    pin = 'ARDUINO_ESP32_CORE_VERSION' if is_esp32(board) else 'ARDUINO_AVR_CORE_VERSION'
+    if pin not in pins:
+        raise CheckError(f'{wanted} names no {pin}')
+    if is_esp32(board):
+        return f'esp32:esp32@{pins[pin]}'
+    return f'arduino:avr@{pins[pin]}'
+
+
+def wait_for_port(port, timeout_s=PORT_WAIT_S, poll_s=0.2):
+    """Wait for the device node to exist and open after an ESP32 upload.
+
+    The USB-Serial/JTAG re-enumerates after the reset, so the node the upload
+    used may be gone for a moment. Retries opening the same node until it
+    opens or the budget runs out.
+
+    Args:
+        port: the serial device node to wait for.
+        timeout_s: how long to keep retrying.
+        poll_s: how long to sleep between tries.
+
+    Raises:
+        CheckError: the node never came back.
+    """
+    deadline = time.monotonic() + timeout_s
+    while True:
+        if os.path.exists(port):
+            try:
+                with open(port, 'rb'):
+                    return
+            except OSError:
+                pass
+        if time.monotonic() >= deadline:
+            raise CheckError(
+                'the port did not come back after the upload: '
+                'a board which re-enumerates under another name needs '
+                'PORT=/dev/serial/by-id/... and a rerun'
+            )
+        time.sleep(poll_s)
+
+
 def failures(link, sample, rate_min, rate_max, gap_ms, led_lit):
     """Every reason the run fails, in report order.
 
     sample is the Sample the window produced, or the CheckError that stopped
-    it from being measured.
+    it from being measured. led_lit is None when the board has no LED to
+    check, and a skipped LED never fails the run.
     """
     reasons = []
     if link.crc_errors:
@@ -177,7 +291,7 @@ def failures(link, sample, rate_min, rate_max, gap_ms, led_lit):
             )
         if sample.gap_ms > gap_ms:
             reasons.append(f'{sample.gap_ms:.0f} ms with no /button message, over {gap_ms:.0f} ms')
-    if not led_lit:
+    if led_lit is False:
         reasons.append('the LED did not light when /led went true')
     return reasons
 
@@ -203,11 +317,20 @@ def link_failures(observed):
 
 
 def format_report(values, failed):
-    """The paste-able report block: every field, each failure, then the verdict."""
+    """The paste-able report block: every field, each failure, then the verdict.
+
+    A skipped LED keeps the run green but says so: the verdict then reads
+    `PASS (LED not checked)`.
+    """
     lines = ['== ros2serial hardware check']
     lines += [f'{name}: {values.get(name, "n/a")}' for name in FIELD_ORDER]
     lines += [f'failed: {reason}' for reason in failed]
-    lines.append('verdict: ' + ('FAIL' if failed else 'PASS'))
+    if failed:
+        lines.append('verdict: FAIL')
+    elif values.get('led') == 'skipped':
+        lines.append('verdict: PASS (LED not checked)')
+    else:
+        lines.append('verdict: PASS')
     return '\n'.join(lines) + '\n'
 
 
@@ -265,28 +388,53 @@ def build_firmware(board, sketch, build):
 
 
 def upload(board, port, sketch, build):
-    """Flash the built firmware to the board."""
+    """Flash the built firmware to the board.
+
+    An ESP32 upload runs through the pinned core setup, so the upload uses
+    the core scripts/esp32-core.sh fetches into the cache.
+    """
     say(f'uploading to {port}')
-    run(
-        [
-            'arduino-cli',
-            'upload',
-            '--port',
-            port,
-            '--fqbn',
-            BOARDS[board],
-            '--input-dir',
-            str(build / 'hardware-check' / sketch_name(sketch)),
-            sketch,
-        ],
-        'the upload',
-    )
+    command = [
+        'arduino-cli',
+        'upload',
+        '--port',
+        port,
+        '--fqbn',
+        BOARDS[board],
+        '--input-dir',
+        str(build / 'hardware-check' / sketch_name(sketch)),
+        sketch,
+    ]
+    if is_esp32(board):
+        quoted = ' '.join(shlex.quote(part) for part in command[1:])
+        run(
+            ['bash', '-c', f'source scripts/esp32-core.sh && exec arduino-cli {quoted}'],
+            'the upload',
+        )
+        return
+    run(command, 'the upload')
 
 
-def sizes(elf):
-    """The flash and static RAM the linked firmware costs, in bytes."""
+def sizes(elf, board='uno'):
+    """The flash and static RAM the linked firmware costs, in bytes.
+
+    The Berkeley table reads the same for every toolchain, so the parser
+    stays while the tool follows the board list prefix.
+
+    Args:
+        elf: the linked firmware to measure.
+        board: the board name from the board list.
+    """
+    tool = size_tool(board)
+    if is_esp32(board):
+        # bash -c assigns its first extra argument to $0, so the ELF is $1,
+        # the way launch_bridge above numbers its own arguments.
+        inner = f'source scripts/esp32-core.sh && exec {tool} "$1"'
+        command = ['bash', '-c', inner, 'hardware-check-size', str(elf)]
+    else:
+        command = [tool, str(elf)]
     try:
-        return parse_avr_size(run(['avr-size', str(elf)], 'the size report'))
+        return parse_avr_size(run(command, 'the size report'))
     except SizeError as error:
         raise CheckError(str(error)) from None
 
@@ -352,10 +500,32 @@ def stop_bridge(proc):
         proc.wait(timeout=10.0)
 
 
-def ask_led():
-    """Ask the person at the board, which is the only reader of its LED."""
-    print('did the LED on the board light up? [y/n]: ', end='', file=sys.stderr, flush=True)
-    return sys.stdin.readline().strip().lower() in ('y', 'yes')
+def ask_led(board):
+    """Ask the person at the board, which is the only reader of its LED.
+
+    `s` means the board has no user LED on the sketch pin: only ESP32 boards
+    accept it, since every AVR board in the list wires one.
+
+    Args:
+        board: the board name from the board list.
+
+    Returns:
+        True when the LED lit, False when it did not, None when skipped.
+    """
+    choices = '[y/n/s]' if is_esp32(board) else '[y/n]'
+    while True:
+        question = f'did the LED on the board light up? {choices}: '
+        print(question, end='', file=sys.stderr, flush=True)
+        answer = sys.stdin.readline().strip().lower()
+        if answer in ('y', 'yes'):
+            return True
+        if answer in ('n', 'no', ''):
+            # A bare Enter or a closed stdin counts as no
+            # instead of asking forever.
+            return False
+        if answer in ('s', 'skip', 'skipped') and is_esp32(board):
+            return None
+        print(f'answer y, n{", s" if is_esp32(board) else ""}', file=sys.stderr, flush=True)
 
 
 def spin_for(node, seconds):
@@ -367,7 +537,7 @@ def spin_for(node, seconds):
         rclpy.spin_once(node, timeout_sec=0.1)
 
 
-def probe(port, seconds, launched_at):
+def probe(port, board, seconds, launched_at):
     """Wait for the handshake, sample /button, read the counters, drive /led."""
     import rclpy
     from diagnostic_msgs.msg import DiagnosticArray
@@ -419,7 +589,7 @@ def probe(port, seconds, launched_at):
         say('driving /led true')
         led.publish(Bool(data=True))
         spin_for(node, 1.0)
-        lit = ask_led()
+        lit = ask_led(board)
         say('driving /led false')
         led.publish(Bool(data=False))
         spin_for(node, 0.5)
@@ -447,7 +617,7 @@ def check_port(port):
 def main(argv=None):
     """Run the check and print its report; 0 on PASS, 1 on FAIL, 2 on a stop."""
     parser = argparse.ArgumentParser(
-        description='Check a real Uno or Mega against the button_led example end to end.'
+        description='Check a real board against the button_led example end to end.'
     )
     parser.add_argument('--port', required=True, help='serial device the board is on')
     parser.add_argument('--board', required=True, choices=sorted(BOARDS), help='board to check')
@@ -478,6 +648,7 @@ def main(argv=None):
         'board': args.board,
         'port': args.port,
         'firmware': f'{sketch_name(args.sketch)} {BOARDS[args.board]}',
+        'core': core_for_board(args.board),
     }
     bridge = None
     try:
@@ -492,15 +663,18 @@ def main(argv=None):
             f'{sketch_name(args.sketch)}.ino.elf'
         )
         if measured_elf.is_file():
-            measured = sizes(measured_elf)
+            measured = sizes(measured_elf, args.board)
             values['flash'] = f'{measured["flash"]} bytes'
             values['ram'] = f'{measured["ram"]} bytes'
         if elf is not None:
             upload(args.board, args.port, args.sketch, build)
+            if is_esp32(args.board):
+                say('waiting for the port to come back after the upload')
+                wait_for_port(args.port)
         log_path = build / 'hardware-check' / 'bridge.log'
         say(f'starting the bridge on {args.port} (log: {log_path})')
         bridge = launch_bridge(args.port, install, log_path)
-        observed = probe(args.port, args.seconds, time.monotonic())
+        observed = probe(args.port, args.board, args.seconds, time.monotonic())
         reasons = link_failures(observed)
         # No status means no counter was read, so every one stays n/a: a zero
         # there would claim a clean link that never reported.
@@ -520,7 +694,10 @@ def main(argv=None):
             values['longest gap'] = 'n/a'
             sample = None
         else:
-            values['led'] = 'lit' if observed.led_lit else 'did not light'
+            if observed.led_lit is None:
+                values['led'] = 'skipped'
+            else:
+                values['led'] = 'lit' if observed.led_lit else 'did not light'
             values['handshake'] = f'{observed.handshake_s:.1f} s'
             if link is None:
                 reasons.append('the bridge published no link diagnostics, so no counter was read')

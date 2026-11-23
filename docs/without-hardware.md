@@ -95,7 +95,8 @@ from the repository root, with the board plugged in and the dev image built
 make hardware-check PORT=/dev/ttyACM0 BOARD=uno
 ```
 
-`BOARD` is `uno` or `mega`, and both arguments are required: the check
+`BOARD` names a row of `ports/arduino/boards.list` (`uno`, `mega`, `esp32`,
+`esp32s3` and the rest), and both arguments are required: the check
 refuses to flash without them, so it cannot overwrite whatever a different
 board is already running. The command flashes the `button_led` example,
 starts the bridge, and:
@@ -118,6 +119,7 @@ progress lines go to stderr, and the bridge's own output lands in
 board: uno
 port: /dev/ttyACM0
 firmware: arduino_button_led arduino:avr:uno
+core: arduino:avr@1.8.6
 flash: 11640 bytes
 ram: 1181 bytes
 handshake: 4.3 s
@@ -147,9 +149,12 @@ sketch, or a port a serial monitor still holds, reports: the firmware never
 announces itself, so the counters, the rate and the LED all read `n/a`.
 
 A run that cannot start at all exits 2 with what to do about it: no device at
-the port, a board name that is not `uno` or `mega`, or a missing dev image.
+the port, a board name outside `ports/arduino/boards.list`, a USB/UART
+mismatch on an ESP32 board, or a missing dev image.
 The device reaches the container with its own group, so your user does not
-need adding to `dialout`.
+need adding to `dialout`. On an ESP32 board with no user LED on the sketch
+pin, answer the LED question with `s`: the report prints `led: skipped` and
+the verdict reads `verdict: PASS (LED not checked)`.
 
 The checker itself is `tools/hardware_check.py`, and an emulated Uno runs it
 in `tests/e2e/run-avr.sh`: `--skip-flash` stands in for the upload a
