@@ -427,8 +427,10 @@ def sizes(elf, board='uno'):
     """
     tool = size_tool(board)
     if is_esp32(board):
-        inner = f'source scripts/esp32-core.sh && exec {tool} "$0"'
-        command = ['bash', '-c', inner, tool, str(elf)]
+        # bash -c assigns its first extra argument to $0, so the ELF is $1,
+        # the way launch_bridge above numbers its own arguments.
+        inner = f'source scripts/esp32-core.sh && exec {tool} "$1"'
+        command = ['bash', '-c', inner, 'hardware-check-size', str(elf)]
     else:
         command = [tool, str(elf)]
     try:
@@ -517,7 +519,9 @@ def ask_led(board):
         answer = sys.stdin.readline().strip().lower()
         if answer in ('y', 'yes'):
             return True
-        if answer in ('n', 'no'):
+        if answer in ('n', 'no', ''):
+            # A bare Enter or a closed stdin counts as no, the way the
+            # single question before it did, instead of asking forever.
             return False
         if answer in ('s', 'skip', 'skipped') and is_esp32(board):
             return None

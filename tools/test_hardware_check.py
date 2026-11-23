@@ -350,3 +350,79 @@ def test_the_core_field_names_the_pinned_core(tmp_path):
 
 def test_the_report_field_order_carries_the_core():
     assert 'core' in hardware_check.FIELD_ORDER
+
+
+def test_an_esp32_size_measures_the_elf_through_the_core(monkeypatch, tmp_path):
+    elf = tmp_path / 'arduino_button_led.ino.elf'
+    elf.write_bytes(b'ELF')
+    commands = []
+    output = '100 20 30 dec hex firmware\n'
+
+    def fake_run(command, what, cwd=None):
+        commands.append(command)
+        return output
+
+    monkeypatch.setattr(hardware_check, 'run', fake_run)
+    measured = hardware_check.sizes(elf, 'esp32s3')
+    assert commands == [
+        [
+            'bash',
+            '-c',
+            'source scripts/esp32-core.sh && exec xtensa-esp32s3-elf-size "$1"',
+            'hardware-check-size',
+            str(elf),
+        ]
+    ]
+    assert measured['flash'] == 120
+    assert measured['ram'] == 50
+
+
+def test_an_avr_size_calls_the_tool_directly(monkeypatch, tmp_path):
+    elf = tmp_path / 'arduino_button_led.ino.elf'
+    elf.write_bytes(b'ELF')
+    commands = []
+    output = '100 20 30 dec hex firmware\n'
+
+    def fake_run(command, what, cwd=None):
+        commands.append(command)
+        return output
+
+    monkeypatch.setattr(hardware_check, 'run', fake_run)
+    hardware_check.sizes(elf, 'uno')
+    assert commands == [['avr-size', str(elf)]]
+
+
+def test_an_esp32_upload_sources_the_core_and_names_the_fqbn(monkeypatch, tmp_path):
+    commands = []
+
+    def fake_run(command, what, cwd=None):
+        commands.append(command)
+        return ''
+
+    monkeypatch.setattr(hardware_check, 'run', fake_run)
+    hardware_check.upload('esp32s3', '/dev/ttyACM0', 'examples/arduino_button_led', tmp_path)
+    assert len(commands) == 1
+    shell = commands[0]
+    assert shell[:2] == ['bash', '-c']
+    assert 'source scripts/esp32-core.sh' in shell[2]
+    assert 'esp32:esp32:esp32s3' in shell[2]
+
+
+def test_an_avr_upload_calls_arduino_cli_directly(monkeypatch, tmp_path):
+    commands = []
+
+    def fake_run(command, what, cwd=None):
+        commands.append(command)
+        return ''
+
+    monkeypatch.setattr(hardware_check, 'run', fake_run)
+    hardware_check.upload('uno', '/dev/ttyACM0', 'examples/arduino_button_led', tmp_path)
+    assert commands[0][:2] == ['arduino-cli', 'upload']
+    assert 'arduino:avr:uno' in commands[0]
+
+
+def test_a_closed_led_answer_counts_as_no(monkeypatch, capsys):
+    monkeypatch.setattr('sys.stdin', io.StringIO(''))
+    assert hardware_check.ask_led('uno') is False
+    monkeypatch.setattr('sys.stdin', io.StringIO(''))
+    assert hardware_check.ask_led('esp32s3') is False
