@@ -377,6 +377,7 @@ tasks:
       - scripts/budgets-check.sh
       - scripts/build-examples.sh
       - scripts/build-examples-esp32.sh
+      - scripts/esp32-core.sh
       - scripts/build-examples-ch32v.sh
       - ports/stm32/build.sh
       - ports/rp2040/build.sh
@@ -421,6 +422,7 @@ tasks:
       - scripts/with-build-lock.sh
       - scripts/e2e-lease.sh
       - scripts/build-examples-esp32.sh
+      - scripts/esp32-core.sh
       - examples/**
       # The bundle is emitted at build time; the core, the runtime layer
       # and the port glue are staged into it.
@@ -568,6 +570,7 @@ tasks:
       - scripts/with-build-lock.sh
       - scripts/e2e-lease.sh
       - scripts/check-readme.sh
+      - scripts/esp32-core.sh
       # The walkthrough check drives both helpers directly: the retry
       # wrapper around each ROS command and the tree killer behind a
       # timed-out wait.
