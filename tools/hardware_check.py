@@ -520,8 +520,8 @@ def ask_led(board):
         if answer in ('y', 'yes'):
             return True
         if answer in ('n', 'no', ''):
-            # A bare Enter or a closed stdin counts as no, the way the
-            # single question before it did, instead of asking forever.
+            # A bare Enter or a closed stdin counts as no
+            # instead of asking forever.
             return False
         if answer in ('s', 'skip', 'skipped') and is_esp32(board):
             return None

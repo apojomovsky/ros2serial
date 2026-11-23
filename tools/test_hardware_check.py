@@ -421,8 +421,21 @@ def test_an_avr_upload_calls_arduino_cli_directly(monkeypatch, tmp_path):
     assert 'arduino:avr:uno' in commands[0]
 
 
+class _EofAfterTwo:
+    """A stdin that ends, then errors: a looping reader fails, never hangs."""
+
+    def __init__(self):
+        self.reads = 0
+
+    def readline(self):
+        self.reads += 1
+        if self.reads > 2:
+            raise EOFError('ask_led asked again after a closed stdin')
+        return ''
+
+
 def test_a_closed_led_answer_counts_as_no(monkeypatch, capsys):
-    monkeypatch.setattr('sys.stdin', io.StringIO(''))
+    monkeypatch.setattr('sys.stdin', _EofAfterTwo())
     assert hardware_check.ask_led('uno') is False
-    monkeypatch.setattr('sys.stdin', io.StringIO(''))
+    monkeypatch.setattr('sys.stdin', _EofAfterTwo())
     assert hardware_check.ask_led('esp32s3') is False
