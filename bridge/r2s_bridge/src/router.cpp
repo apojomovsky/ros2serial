@@ -34,8 +34,6 @@
 #else
 #include <rcl/error_handling.h>
 #include <rcl/service.h>
-
-#include "r2s_bridge/server_waker.hpp"
 #endif
 
 #include <rcl_action/action_server.h>
@@ -46,6 +44,7 @@
 
 #include "r2s_bridge/action_types.hpp"
 #include "r2s_bridge/converter.hpp"
+#include "r2s_bridge/server_waker.hpp"
 #include "r2s_bridge/service_types.hpp"
 #include "r2s_bridge/type_support.hpp"
 extern "C" {
