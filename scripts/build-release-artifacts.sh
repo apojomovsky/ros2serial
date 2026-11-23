@@ -52,7 +52,9 @@ cp "$root"/core/include/r2s/*.h "$out/ros2serial/src/r2s/"
 cp "$root"/core/src/*.c "$out/ros2serial/src/"
 rm -f "$out/ros2serial/src/test_reset.c"
 cp "$root/cpp/include/r2s/runtime.hpp" "$out/ros2serial/src/r2s/"
+cp "$root/cpp/include/r2s/service.hpp" "$root/cpp/include/r2s/action.hpp" "$out/ros2serial/src/r2s/"
 cp "$root/cpp/src/runtime.cpp" "$out/ros2serial/src/"
+cp "$root/cpp/src/service.cpp" "$root/cpp/src/action.cpp" "$out/ros2serial/src/"
 cp "$root"/ports/arduino/r2s_arduino_port.cpp "$root"/ports/arduino/r2s_arduino_port.h "$out/ros2serial/src/"
 # The examples a first run opens from the IDE's File > Examples menu: the
 # ones the shipped library configures completely, so a reader compiles them
