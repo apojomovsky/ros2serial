@@ -99,7 +99,11 @@ Where the value comes from on each route:
 Whichever value reaches the build first wins: every limit in `r2s_config.h`
 keeps its `#ifndef`, so a flag an application passes overrides the shipped
 one. `docs/services-and-parameters.md` shows the flag strings for the service
-and action examples, which lower the limit to fit a smaller part.
+and action examples, which lower the limit to fit a smaller part. The optional
+channels stay off until enabled: services, parameters and actions each wait
+as a commented line in the same file, with the frame the channel needs beside
+it. [Enabling a channel](services-and-parameters.md#enabling-a-channel)
+describes the edit, which a library update overwrites.
 
 ## Message storage and limits
 

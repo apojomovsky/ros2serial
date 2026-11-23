@@ -189,6 +189,16 @@ compiles cleanly and then makes the bridge reject every topic of that type at
 handshake; [staleness](type-library.md#staleness-regenerate-after-a-msg-change)
 says why.
 
+## Enabling services, parameters and actions
+
+The archive configures the topics path on its own; the optional channels
+wait as commented lines in the installed library's `src/r2s_config.h`, with
+the frame each needs beside it. Uncomment the channel's line, set the frame
+(64 for services, 128 for actions), and rebuild the sketch with no board
+property. Installing a newer archive replaces that file, so keep the edit to
+apply it again. [Parameters, services, and
+actions](services-and-parameters.md#enabling-a-channel) details each channel.
+
 ## Where to go next
 
 - Generate for another toolchain, or drive a service or an action:

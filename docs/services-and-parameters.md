@@ -5,6 +5,16 @@ build settings; their availability depends on the API and configuration you
 compile. The basic Arduino helper prepares the bundled publish/subscribe path.
 It does not automatically enable services, parameters, or actions.
 
+## Enabling a channel
+
+The IDE passes no build property, so a sketch that needs a channel enables
+it in the installed library: open the library's `src/r2s_config.h`,
+uncomment the channel's line, and use the frame value beside it. Services
+need the frame at 64 and actions at 128; parameters need no frame change.
+Installing a newer library replaces that file, so keep the edit to apply it
+again. On the command line the same channels ride as flags instead, as each
+recipe below shows, and the flag wins over the file.
+
 The sketch interface here is the native one: `r2s::Service`, `r2s::Client` and
 `r2s::action::Server` for C++, and the `r2s_services.h` and `r2s_actions.h`
 calls for C. Which declaration style to start from is on
@@ -17,9 +27,12 @@ Firmware declares a parameter table before its first spin. With
 become parameters on the bridge node; the sets travel over the reliable channel.
 They are not parameters of a separate ROS node named after the MCU.
 
-The bundled Arduino helper leaves the parameter channel out, so add the flag
-the way the services recipe below adds its own: `-DR2S_WITH_PARAMS` in both
-`compiler.c.extra_flags` and `compiler.cpp.extra_flags`.
+The bundled Arduino helper leaves the parameter channel out. In the IDE,
+uncomment the parameters line in the installed library's `src/r2s_config.h`,
+as [enabling a channel](#enabling-a-channel) describes; on the command line,
+add the flag the way the services recipe below adds its own:
+`-DR2S_WITH_PARAMS` in both `compiler.c.extra_flags` and
+`compiler.cpp.extra_flags`.
 
 The [migration guide's parameter section](03-port-rosserial-sketch.md#parameters)
 shows a boolean `led` and a bounded string `label`, including the storage the
@@ -76,6 +89,13 @@ channel flag and the smaller frame are passed here. The frame stays at 64
 because the service channel keeps three frame-sized buffers: larger frames
 leave the Uno no room beside them.
 
+In the IDE there is no build property to pass, so install the archive with
+*Sketch > Include Library > Add .ZIP Library*, copy
+`examples/arduino_service` into your sketchbook, and enable the channel in
+the installed library's `src/r2s_config.h` as [enabling a
+channel](#enabling-a-channel) describes. The sketch then compiles for Uno
+and Mega with nothing else configured.
+
 ## Actions
 
 The MCU action API and the bridge action server exist: the bridge presents each
@@ -94,6 +114,13 @@ arduino-cli compile --fqbn arduino:avr:uno \
   --library firmware/ros2serial --build-path firmware/build/action \
   --output-dir firmware/build/action examples/arduino_action
 ```
+
+In the IDE, the same sketch compiles with no build property once the actions
+line is uncommented in the installed library's `src/r2s_config.h` and the
+frame beside it is set to 128, as [enabling a
+channel](#enabling-a-channel) describes; copy `examples/arduino_action`
+into your sketchbook first, since the archive ships only the sketches that
+compile with no edit.
 
 The `arduino_action` sketch serves the bundled `tf2_msgs/action/LookupTransform`
 action: the goal, result and feedback structs, the announced type name and the
