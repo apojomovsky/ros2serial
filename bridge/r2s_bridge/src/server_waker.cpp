@@ -43,8 +43,8 @@ ServerWaker::ServerWaker(const rclcpp::Context::SharedPtr & context, ReadyCallba
     [[maybe_unused]] const rcl_ret_t fini = rcl_guard_condition_fini(&wake_guard_);
     (void)fini;
     throw;
-    // GCOVR_EXCL_STOP
   }
+  // GCOVR_EXCL_STOP
 }
 
 ServerWaker::~ServerWaker()
