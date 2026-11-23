@@ -20,6 +20,7 @@
 
 #include <rcl/rcl.h>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/version.h>
 
 #include "r2s_bridge/link_waitable.hpp"
 #include "r2s_bridge/termios_transport.hpp"
@@ -355,6 +356,34 @@ TEST_F(LinkWaitableTest, AReplacedDescriptorDiscardsTheOldReadiness)
   EXPECT_EQ(ready, 1) << "the second link's byte is what wakes the executor";
   EXPECT_EQ(waitable.watched(), second_transport.native_handle());
   EXPECT_EQ(rcl_wait_set_fini(&wait_set), RCL_RET_OK);
+}
+
+// The events-executor surface the newer rclcpp requires: one entity, so
+// every id takes the same empty data, every readiness reports one wakeup
+// of entity zero, and no timers live in the waitable.
+TEST_F(LinkWaitableTest, EventsExecutorSurfaceReportsOneEntity)
+{
+  LinkWaitable waitable(rclcpp::contexts::get_global_default_context(), []() {});
+  EXPECT_EQ(waitable.take_data_by_entity_id(0u), nullptr);
+  EXPECT_EQ(waitable.take_data_by_entity_id(7u), nullptr);
+  std::size_t calls = 0u;
+  std::size_t count = 0u;
+  int id = -1;
+  waitable.set_on_ready_callback([&calls, &count, &id](std::size_t n, int entity) {
+    ++calls;
+    count = n;
+    id = entity;
+  });
+  waitable.trigger();
+  EXPECT_EQ(calls, 1u);
+  EXPECT_EQ(count, 1u);
+  EXPECT_EQ(id, 0);
+  waitable.clear_on_ready_callback();
+  waitable.trigger();
+  EXPECT_EQ(calls, 1u) << "a cleared callback must not run";
+#if RCLCPP_VERSION_MAJOR >= 29
+  EXPECT_TRUE(waitable.get_timers().empty());
+#endif
 }
 
 }  // namespace

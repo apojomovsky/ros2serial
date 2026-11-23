@@ -15,8 +15,10 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/version.h>
 
 namespace r2s_bridge
 {
@@ -101,6 +103,36 @@ public:
    */
   std::shared_ptr<void> take_data() override;
 
+  /// Nothing to take by entity either: the waitable has one entity.
+  /**
+   * Every entity id takes the same empty data as take_data().
+   *
+   * \param[in] id ignored: the guard condition is the only entity.
+   * \return Always null.
+   */
+  std::shared_ptr<void> take_data_by_entity_id(std::size_t id) override;
+
+  /// Remembers the callback the events executor runs on readiness.
+  /**
+   * The waitable has one entity, so every readiness invokes it with a
+   * count of one and an entity id of zero. The single-threaded executor
+   * the bridge spins never sets one.
+   *
+   * \param[in] callback what runs when the guard condition fires.
+   */
+  void set_on_ready_callback(std::function<void(std::size_t, int)> callback) override;
+
+  /// Forgets the callback set above.
+  void clear_on_ready_callback() override;
+
+#if RCLCPP_VERSION_MAJOR >= 29
+  /// No timers live in this waitable.
+  /**
+   * \return Always empty: readiness comes from the guard condition alone.
+   */
+  std::vector<std::shared_ptr<rclcpp::TimerBase>> get_timers() const override;
+#endif
+
   /// Runs the ready callback and arms the next wakeup.
   /**
    * The condition is rearmed here rather than when it fires, so a byte that
@@ -130,9 +162,14 @@ private:
   void wake();
   void drain_wake();
   void notify_ready();
+  void call_on_ready();
 
   rclcpp::GuardCondition::SharedPtr guard_;
   ReadyCallback ready_;
+  // Its own mutex: notify_ready() runs with the state mutex held, and the
+  // callback must never wait on that lock.
+  std::mutex on_ready_mutex_;
+  std::function<void(std::size_t, int)> on_ready_callback_;
   bool pending_ = false;
   std::thread thread_;
 

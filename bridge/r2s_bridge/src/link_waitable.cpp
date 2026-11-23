@@ -116,11 +116,27 @@ void LinkWaitable::drain_wake()
 void LinkWaitable::notify_ready()
 {
   guard_->trigger();
+  call_on_ready();
 }
 
 void LinkWaitable::trigger()
 {
   guard_->trigger();
+  call_on_ready();
+}
+
+void LinkWaitable::call_on_ready()
+{
+  std::function<void(std::size_t, int)> callback;
+  {
+    std::lock_guard<std::mutex> guard(on_ready_mutex_);
+    callback = on_ready_callback_;
+  }
+  // One entity wakes at most once per trigger, so the count the events
+  // executor reads is always 1 and the entity id is always 0.
+  if (callback) {
+    callback(1u, 0);
+  }
 }
 
 void LinkWaitable::run()
@@ -202,6 +218,31 @@ std::shared_ptr<void> LinkWaitable::take_data()
 {
   return nullptr;
 }
+
+std::shared_ptr<void> LinkWaitable::take_data_by_entity_id(std::size_t id)
+{
+  (void)id;
+  return take_data();
+}
+
+void LinkWaitable::set_on_ready_callback(std::function<void(std::size_t, int)> callback)
+{
+  std::lock_guard<std::mutex> guard(on_ready_mutex_);
+  on_ready_callback_ = std::move(callback);
+}
+
+void LinkWaitable::clear_on_ready_callback()
+{
+  std::lock_guard<std::mutex> guard(on_ready_mutex_);
+  on_ready_callback_ = nullptr;
+}
+
+#if RCLCPP_VERSION_MAJOR >= 29
+std::vector<std::shared_ptr<rclcpp::TimerBase>> LinkWaitable::get_timers() const
+{
+  return {};
+}
+#endif
 
 void LinkWaitable::execute(const std::shared_ptr<void> & data)
 {
