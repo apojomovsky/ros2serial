@@ -134,6 +134,31 @@ def test_release_publishes_only_after_the_nightly_jobs():
     assert callers[0] in needs
 
 
+def test_the_release_runs_the_isolation_pairs_in_full_on_a_tag():
+    """Pull requests run isolation only when selected, so the tag runs the
+    whole pairs here before anything is published."""
+    doc = workflow()
+    assert 'e2e-isolation' in doc['jobs'], 'release.yml runs no isolation pairs'
+    job = doc['jobs']['e2e-isolation']
+    assert 'refs/tags/v' in str(job.get('if', '')), 'the pairs gate on the tag'
+    assert job.get('timeout-minutes', 0) >= 60, 'the pairs need their hour'
+    runs = '\n'.join(str(step.get('run', '')) for step in job['steps'])
+    assert 'make test NIGHTLY=1' in runs
+    assert 'R2S_E2E_SKIP' in '\n'.join(str(step.get('env', '')) for step in job['steps'])
+
+
+def test_the_release_publishes_only_after_the_isolation_pairs():
+    doc = workflow()
+    (job,) = [job for name, job in doc['jobs'].items() if name == 'release']
+    needs = job.get('needs', [])
+    if isinstance(needs, str):
+        needs = [needs]
+    assert 'e2e-isolation' in needs
+    condition = str(job.get('if', ''))
+    assert 'needs.e2e-isolation.result' in condition
+    assert "'success'" in condition and "'skipped'" in condition
+
+
 def test_release_still_builds_when_the_nightly_call_is_skipped():
     """A skipped caller must not skip the build: pull requests touching this
     file and manual dispatches run the same build without publishing."""

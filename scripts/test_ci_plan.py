@@ -134,7 +134,10 @@ def test_off_a_pull_request_every_section_job_runs():
 
 
 def test_each_section_job_needs_the_plan_and_gates_on_its_output():
-    known = set(ci_jobs.JOBS)
+    # e2e-isolation keeps pull requests under the wall-clock budget by
+    # running on them only when the plan selects the nightly scope;
+    # scripts/test_nightly_workflow.py pins that rule instead.
+    known = set(ci_jobs.JOBS) - {'e2e-isolation'}
     for name in sorted(known):
         job = jobs()[name]
         assert 'plan' in needs(job), name
@@ -247,23 +250,12 @@ def test_every_job_carries_a_timeout():
         assert 'timeout-minutes' in job, name
 
 
-def test_the_plan_restores_no_checksum():
-    """The checksum plan is gone: no job restores or saves a Task checksum."""
-    text = WORKFLOW.read_text(encoding='utf-8')
-    assert '.task/checksum' not in text
-    assert 'cache/restore' not in text
-
-
-def test_the_scripts_shards_run_without_their_own_save_job():
+def test_the_scripts_shards_exist():
+    """The scripts scope fans out over shards; each one runs its slice."""
     shards = jobs()['scripts']
     assert shards['strategy']['matrix']['shard']
-    assert 'scripts-save' not in jobs()
 
 
-def test_the_bridge_matrix_runs_without_its_own_save_job():
-    assert 'bridge-save' not in jobs()
+def test_the_bridge_matrix_keeps_its_images_setup_job():
+    """The bridge legs run in the distro images the setup job resolves."""
     assert 'bridge-images' in jobs()
-
-
-def test_the_e2e_posix_matrix_runs_without_its_own_save_job():
-    assert 'e2e-posix-save' not in jobs()

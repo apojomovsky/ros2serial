@@ -6,7 +6,8 @@
 Each run.sh and run-avr.sh leases its own DDS domain and zenoh port, so
 two suites never see each other's topics though they share the tree. The
 pairs skip load-sensitive scenario 8; the standalone legs keep judging
-it. The nightly workflow runs this file; PR CI does not.
+it. Master pushes, manual runs and tags always run this file; a pull
+request runs it only when the plan selects the nightly scope.
 """
 
 import contextlib
