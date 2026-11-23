@@ -73,6 +73,22 @@ SKETCHES = (
 )
 
 
+# The sketches the script also compiles for the S3 and C3 boards, and the
+# extra boards themselves: the S3 over UART, both USB CDC variants.
+EXTRA_SKETCHES = (
+    'arduino_hello',
+    'arduino_static',
+    'arduino_xmacro_c',
+    'arduino_button_led',
+)
+
+EXTRA_BOARDS = (
+    'esp32s3',
+    'esp32s3-usb',
+    'esp32c3-usb',
+)
+
+
 def pinned_version():
     for line in VERSIONS.read_text(encoding='utf-8').splitlines():
         if line.startswith('ARDUINO_ESP32_CORE_VERSION='):
@@ -104,6 +120,45 @@ def test_build_help_names_the_listed_boards_and_only_those(tmp_path):
     assert match, 'the usage names the boards in one [--board ...] group'
     named = [word for word in re.split(r'[|, ]+', match.group(1)) if word]
     assert sorted(named) == sorted(listed)
+
+
+def test_the_extra_boards_build_the_extra_sketches():
+    text = SCRIPT.read_text(encoding='utf-8')
+    joined = re.sub(r'\\\n', ' ', text)
+    boards = ' '.join(EXTRA_BOARDS)
+    assert f'for board in {boards}' in joined
+    sketches = ' '.join(EXTRA_SKETCHES)
+    assert f'for sketch in {sketches}' in joined
+
+
+def test_the_extra_builds_take_fqbn_and_prefix_from_the_board_list():
+    text = SCRIPT.read_text(encoding='utf-8')
+    assert 'ports/arduino/boards.list' in text
+    assert 'esp32:esp32:esp32s3' not in text
+    assert 'esp32:esp32:esp32c3' not in text
+    assert 'xtensa-esp32s3-elf' not in text
+    assert 'riscv32-esp-elf' not in text
+
+
+def test_the_symbol_check_runs_through_the_board_toolchain():
+    text = SCRIPT.read_text(encoding='utf-8')
+    assert 'xtensa-esp32-elf-nm' not in text
+    assert '"$prefix-nm"' in text
+    for symbol in ('r2s_runtime_topics', 'r2s_rx_buf'):
+        assert text.count(symbol) >= 2, f'the extra loop checks no {symbol}'
+
+
+def test_the_extra_outputs_stay_outside_the_measured_tree():
+    text = SCRIPT.read_text(encoding='utf-8')
+    assert 'esp32-boards' in text
+    assert 'examples/<sketch>/esp32/' in text
+    for path in (
+        ROOT / 'scripts' / 'budgets-check.sh',
+        ROOT / 'tools' / 'size_report.py',
+        ROOT / 'tools' / 'budgets.yaml',
+        ROOT / 'docs' / 'budgets.md',
+    ):
+        assert 'esp32-boards' not in path.read_text(encoding='utf-8'), path
 
 
 def test_the_build_sources_the_shared_core_setup_for_esp32():
