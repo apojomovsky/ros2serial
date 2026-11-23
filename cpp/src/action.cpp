@@ -7,6 +7,11 @@
  * callbacks live here. Without R2S_WITH_ACTIONS the core carries no actions
  * channel, so this stays an empty translation unit and the sketches that
  * need none are untouched. */
+/* A staged library enables this channel in its r2s_config.h, which the IDE
+ * route compiles with and no flag reaches, so the guard below reads the
+ * config before anything else. */
+#include "r2s/r2s_arch.h"
+
 #ifdef R2S_WITH_ACTIONS
 
 #include "r2s/action.hpp"

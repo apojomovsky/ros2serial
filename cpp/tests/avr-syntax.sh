@@ -310,6 +310,14 @@ if ! avr-g++ "${flags[@]}" -I "$config_stage" -fsyntax-only "$build/check_config
   echo "avr-syntax: the channel headers ignore a staged r2s_config.h"
   status=1
 fi
+# The registry sources guard on the same flag, so they compile against the
+# staged config too: the sketch links them with no flag of its own.
+for source in "$root/cpp/src/service.cpp" "$root/cpp/src/action.cpp"; do
+  if ! avr-g++ "${flags[@]}" -I "$config_stage" -I "$root/cpp/include" -fsyntax-only "$source"; then
+    echo "avr-syntax: $source ignores a staged r2s_config.h"
+    status=1
+  fi
+done
 # Without the flag and without the config the headers still refuse, so a
 # topics-only build never pays for the channels.
 cat >"$build/check_service_noflag.cpp" <<'EOF'
