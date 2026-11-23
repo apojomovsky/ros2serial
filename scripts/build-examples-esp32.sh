@@ -69,13 +69,16 @@ case "$extras" in
 esac
 # Whether the ELF's symbol table names a symbol: reads the whole table
 # first, since grep -q quits on its first match and the closed pipe fails
-# the producer under pipefail.
+# the producer under pipefail. The caller passes the board's binutils
+# prefix from ports/arduino/boards.list, since the classic, S3 and C3
+# toolchains ship different nm binaries.
 elf_has_symbol() {
-  local elf=$1
-  local want=$2
+  local prefix=$1
+  local elf=$2
+  local want=$3
   local symbols
 
-  symbols=$(xtensa-esp32-elf-nm "$elf" 2>/dev/null || true)
+  symbols=$("$prefix-nm" "$elf" 2>/dev/null || true)
   case $symbols in
   *"$want"*) return 0 ;;
   *) return 1 ;;
@@ -94,29 +97,29 @@ for sketch in arduino_minimal arduino_hello arduino_blink arduino_button arduino
   # receive buffer instead and must not link the runtime table.
   case "$sketch" in
   arduino_minimal)
-    if ! elf_has_symbol "$out/$sketch.ino.elf" r2s_runtime_subscribers; then
+    if ! elf_has_symbol xtensa-esp32-elf "$out/$sketch.ino.elf" r2s_runtime_subscribers; then
       echo "arduino_minimal (esp32): the firmware links no subscriber records" >&2
       status=1
     fi
     ;;
   arduino_hello | arduino_blink | arduino_button | arduino_button_led | arduino_servo | arduino_range)
-    if ! elf_has_symbol "$out/$sketch.ino.elf" r2s_runtime_topics; then
+    if ! elf_has_symbol xtensa-esp32-elf "$out/$sketch.ino.elf" r2s_runtime_topics; then
       echo "$sketch (esp32): the firmware links no runtime topic table" >&2
       status=1
     fi
     ;;
   arduino_xmacro)
-    if ! elf_has_symbol "$out/$sketch.ino.elf" r2s_rx_buf; then
+    if ! elf_has_symbol xtensa-esp32-elf "$out/$sketch.ino.elf" r2s_rx_buf; then
       echo "$sketch (esp32): the firmware links no receive buffer" >&2
       status=1
     fi
     ;;
   arduino_static | arduino_xmacro_c)
-    if ! elf_has_symbol "$out/$sketch.ino.elf" r2s_rx_buf; then
+    if ! elf_has_symbol xtensa-esp32-elf "$out/$sketch.ino.elf" r2s_rx_buf; then
       echo "$sketch (esp32): the firmware links no receive buffer" >&2
       status=1
     fi
-    if elf_has_symbol "$out/$sketch.ino.elf" r2s_runtime_topics; then
+    if elf_has_symbol xtensa-esp32-elf "$out/$sketch.ino.elf" r2s_runtime_topics; then
       echo "$sketch (esp32): the firmware links the runtime topic table" >&2
       status=1
     fi
@@ -124,12 +127,63 @@ for sketch in arduino_minimal arduino_hello arduino_blink arduino_button arduino
   esac
   if [ "$sketch" = arduino_xmacro ] || [ "$sketch" = arduino_static ] || [ "$sketch" = arduino_xmacro_c ]; then
     for unused in sensor_msgs_Imu geometry_msgs_Quaternion std_msgs_Header; do
-      if elf_has_symbol "$out/$sketch.ino.elf" "r2s_bundled_table_$unused"; then
+      if elf_has_symbol xtensa-esp32-elf "$out/$sketch.ino.elf" "r2s_bundled_table_$unused"; then
         echo "$sketch (esp32): the linker kept the unused $unused table" >&2
         status=1
       fi
     done
   fi
+done
+
+# Field 2 (the FQBN) or 3 (the binutils prefix) of one board of the shared
+# board list, or nothing when the list names no such board.
+board_field() {
+  awk -v board="$1" -v column="$2" \
+    'NF && $1 !~ /^#/ && $1 == board {print $column}' "$root/ports/arduino/boards.list"
+}
+
+# The S3 and C3 builds land beside the measured tree, never in it: the
+# size report walks every *.elf under the examples tree, so an output
+# there would add rows to docs/budgets.md and fail the freshness check.
+# The classic outputs above stay at examples/<sketch>/esp32/.
+boards_build=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/esp32-boards
+mkdir -p "$boards_build" || exit 1
+for sketch in arduino_hello arduino_static arduino_xmacro_c arduino_button_led; do
+  for board in esp32s3 esp32s3-usb esp32c3-usb; do
+    fqbn=$(board_field "$board" 2)
+    prefix=$(board_field "$board" 3)
+    if [ -z "$fqbn" ] || [ -z "$prefix" ]; then
+      echo "build-examples-esp32: boards.list names no FQBN and prefix for $board" >&2
+      status=1
+      continue
+    fi
+    out="$boards_build/$sketch/$board"
+    arduino-cli compile --fqbn "$fqbn" \
+      --build-property "compiler.c.extra_flags=$extras -fstack-usage" \
+      --build-property "compiler.cpp.extra_flags=$extras -fstack-usage" \
+      --library "$stage" --build-path "$out/build" --output-dir "$out" "examples/$sketch" || status=1
+    # The runtime sketches link the runtime topic table; the static C++
+    # and C sketches link the receive buffer instead and must not link
+    # the runtime table.
+    case "$sketch" in
+    arduino_hello | arduino_button_led)
+      if ! elf_has_symbol "$prefix" "$out/$sketch.ino.elf" r2s_runtime_topics; then
+        echo "$sketch ($board): the firmware links no runtime topic table" >&2
+        status=1
+      fi
+      ;;
+    arduino_static | arduino_xmacro_c)
+      if ! elf_has_symbol "$prefix" "$out/$sketch.ino.elf" r2s_rx_buf; then
+        echo "$sketch ($board): the firmware links no receive buffer" >&2
+        status=1
+      fi
+      if elf_has_symbol "$prefix" "$out/$sketch.ino.elf" r2s_runtime_topics; then
+        echo "$sketch ($board): the firmware links the runtime topic table" >&2
+        status=1
+      fi
+      ;;
+    esac
+  done
 done
 
 exit "$status"
