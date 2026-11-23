@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -516,7 +517,9 @@ struct KickHarness
       kick->trigger();
     });
   }
-  bool kicked = false;
+  // Atomic: the action waker fires the kick from its helper thread, while
+  // the subscription and service callbacks fire it on the spinning thread.
+  std::atomic<bool> kicked{false};
   std::shared_ptr<LinkWaitable> kick;
 };
 

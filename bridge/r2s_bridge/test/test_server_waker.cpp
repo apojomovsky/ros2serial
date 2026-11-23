@@ -331,6 +331,21 @@ TEST_F(ServerWakerTest, WakesWhenAServiceRequestArrives)
   waker.unwatch();
 }
 
+// A watched service server with no traffic stays quiet: the waiter blocks
+// in the wait instead of spinning on an idle set.
+TEST_F(ServerWakerTest, StaysQuietOnAnIdleServiceServer)
+{
+  RawService server(node_, "reset");
+  std::atomic<bool> fired{false};
+  ServerWaker waker(node_->get_node_base_interface()->get_context(), [&fired]() {
+    fired.store(true);
+  });
+  waker.watch({}, {server.handle()});
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  EXPECT_FALSE(fired.load()) << "an idle service server must not wake";
+  waker.unwatch();
+}
+
 }  // namespace
 }  // namespace test
 }  // namespace r2s_bridge
