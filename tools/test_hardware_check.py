@@ -3,6 +3,9 @@
 
 """Unit tests for the hardware check's verdict, with no ROS and no board."""
 
+import io
+from pathlib import Path
+
 import hardware_check
 import pytest
 
@@ -223,3 +226,119 @@ def test_a_missing_device_names_the_command_that_passes_it(capsys):
     reported = capsys.readouterr().err
     assert '/nonexistent/ttyACM0' in reported
     assert 'make hardware-check PORT=/nonexistent/ttyACM0 BOARD=uno' in reported
+
+
+def test_the_board_list_parses_every_board_with_its_fqbn_and_prefix(tmp_path):
+    boards = tmp_path / 'boards.list'
+    boards.write_text(
+        '# comment\n\nuno arduino:avr:uno avr\n'
+        'esp32s3 esp32:esp32:esp32s3 xtensa-esp32s3-elf\n'
+        'esp32s3-usb esp32:esp32:esp32s3:USBMode=hwcdc,CDCOnBoot=cdc'
+        ' xtensa-esp32s3-elf\n'
+    )
+    fqbns, prefixes = hardware_check.load_boards(boards)
+    assert fqbns == {
+        'uno': 'arduino:avr:uno',
+        'esp32s3': 'esp32:esp32:esp32s3',
+        'esp32s3-usb': 'esp32:esp32:esp32s3:USBMode=hwcdc,CDCOnBoot=cdc',
+    }
+    assert prefixes == {
+        'uno': 'avr',
+        'esp32s3': 'xtensa-esp32s3-elf',
+        'esp32s3-usb': 'xtensa-esp32s3-elf',
+    }
+
+
+def test_the_shipped_board_list_names_the_esp32_boards():
+    root = Path(hardware_check.__file__).resolve().parent.parent
+    fqbns, prefixes = hardware_check.load_boards(root / 'ports/arduino/boards.list')
+    assert fqbns['uno'] == 'arduino:avr:uno'
+    assert fqbns['mega'] == 'arduino:avr:mega'
+    assert fqbns['esp32s3'] == 'esp32:esp32:esp32s3'
+    assert fqbns['esp32s3-usb'] == 'esp32:esp32:esp32s3:USBMode=hwcdc,CDCOnBoot=cdc'
+    assert prefixes['esp32s3'] == 'xtensa-esp32s3-elf'
+    assert prefixes['esp32c3'] == 'riscv32-esp-elf'
+
+
+def test_the_size_tool_comes_from_the_board_list_prefix():
+    assert hardware_check.size_tool('uno') == 'avr-size'
+    assert hardware_check.size_tool('mega') == 'avr-size'
+    assert hardware_check.size_tool('esp32s3') == 'xtensa-esp32s3-elf-size'
+    assert hardware_check.size_tool('esp32s3-usb') == 'xtensa-esp32s3-elf-size'
+    assert hardware_check.size_tool('esp32c3') == 'riscv32-esp-elf-size'
+    assert hardware_check.size_tool('esp32c3-usb') == 'riscv32-esp-elf-size'
+
+
+def test_wait_for_port_returns_once_the_node_opens(monkeypatch):
+    calls = {'count': 0}
+
+    def fake_exists(path):
+        calls['count'] += 1
+        return calls['count'] >= 3
+
+    opened = []
+
+    class FakeHandle:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_open(path, mode='rb'):
+        opened.append(path)
+        return FakeHandle()
+
+    monkeypatch.setattr('os.path.exists', fake_exists)
+    monkeypatch.setattr('builtins.open', fake_open)
+    monkeypatch.setattr(hardware_check.time, 'sleep', lambda seconds: None)
+    hardware_check.wait_for_port('/dev/ttyACM0', timeout_s=10.0, poll_s=0.1)
+    assert opened, 'the node was never opened'
+
+
+def test_wait_for_port_times_out_with_the_port_and_the_by_id_hint(monkeypatch):
+    monkeypatch.setattr('os.path.exists', lambda path: False)
+    monkeypatch.setattr(hardware_check.time, 'sleep', lambda seconds: None)
+    with pytest.raises(hardware_check.CheckError) as error:
+        hardware_check.wait_for_port('/dev/ttyACM0', timeout_s=0.3, poll_s=0.1)
+    assert 'the port did not come back after the upload' in str(error.value)
+    assert 'PORT=/dev/serial/by-id/' in str(error.value)
+
+
+def test_the_led_question_accepts_skip_for_an_esp32_board(monkeypatch, capsys):
+    monkeypatch.setattr('sys.stdin', io.StringIO('s\n'))
+    assert hardware_check.ask_led('esp32s3') is None
+
+
+def test_the_led_question_rejects_skip_for_an_avr_board(monkeypatch, capsys):
+    monkeypatch.setattr('sys.stdin', io.StringIO('s\nn\n'))
+    assert hardware_check.ask_led('uno') is False
+
+
+def test_a_skipped_led_adds_no_failure():
+    link = hardware_check.counters(clean_values())
+    reasons = hardware_check.failures(
+        link, hardware_check.arrivals(TEN_HZ), 8.0, 12.0, 300.0, None
+    )
+    assert reasons == []
+
+
+def test_a_skipped_led_prints_skipped_and_a_qualified_pass():
+    lines = hardware_check.format_report(
+        {'board': 'esp32s3', 'led': 'skipped', 'core': 'esp32:esp32@3.3.12'}, []
+    ).splitlines()
+    assert 'led: skipped' in lines
+    assert lines[-1] == 'verdict: PASS (LED not checked)'
+
+
+def test_the_core_field_names_the_pinned_core(tmp_path):
+    versions = tmp_path / 'versions.env'
+    versions.write_text('ARDUINO_AVR_CORE_VERSION=1.8.6\nARDUINO_ESP32_CORE_VERSION=3.3.12\n')
+    assert hardware_check.core_for_board('uno', versions) == 'arduino:avr@1.8.6'
+    assert hardware_check.core_for_board('mega', versions) == 'arduino:avr@1.8.6'
+    assert hardware_check.core_for_board('esp32s3', versions) == 'esp32:esp32@3.3.12'
+    assert hardware_check.core_for_board('esp32s3-usb', versions) == 'esp32:esp32@3.3.12'
+
+
+def test_the_report_field_order_carries_the_core():
+    assert 'core' in hardware_check.FIELD_ORDER
