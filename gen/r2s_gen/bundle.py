@@ -455,7 +455,11 @@ def _config_h(library: Library, max_nest: int) -> str:
     compiler flag is needed (#670). Each limit keeps its guard, so a value
     passed on the command line wins and a build that ships neither still
     fails at the limit it lacks. The values repeat what the generated headers
-    declare: one build, one number, whichever file the build reads.
+    declare: one build, one number, whichever file the build reads. The
+    optional channels wait here as commented lines, because the Arduino IDE
+    passes no build property (#690): uncommenting a channel enables it for
+    every unit the library compiles, and the frame beside it is the one the
+    channel's example build proves on the Uno.
     """
     lines = [
         _banner('/*', library) + ' */',
@@ -470,6 +474,26 @@ def _config_h(library: Library, max_nest: int) -> str:
         '#ifndef R2S_WITH_CODEC',
         '#define R2S_WITH_CODEC 1',
         '#endif /* R2S_WITH_CODEC */',
+        '',
+        '/* Services, parameters and actions. The IDE passes no build',
+        ' * property, so a sketch that needs a channel enables it here by',
+        ' * uncommenting its line. The flags are #ifdef, so each line stays',
+        ' * a bare #define. A flag the build passes still wins, because these',
+        ' * lines stay commented. Updating the library overwrites this file,',
+        ' * so keep an edit to apply it again. */',
+        '/* Services: uncomment the channel and set R2S_MAX_FRAME to 64u',
+        ' * below. The service channel keeps three frame-sized buffers, and',
+        ' * larger frames leave the Uno no room beside them. */',
+        '/* #define R2S_WITH_SERVICES */',
+        '',
+        '/* Parameters: uncomment the channel. Parameters travel over the',
+        ' * reliable channel, so the frame below stays as it is. */',
+        '/* #define R2S_WITH_PARAMS */',
+        '',
+        '/* Actions: uncomment the channel and set R2S_MAX_FRAME to 128u',
+        ' * below. The action channel keeps frame-sized buffers, and the',
+        ' * bundle default leaves the Uno no room beside them. */',
+        '/* #define R2S_WITH_ACTIONS */',
         '',
         '/* The frame limit: the largest payload any carried type encodes, in',
         ' * either float64 width, plus headroom for the hello and announce frames',
@@ -1137,9 +1161,15 @@ def _sketch_h(
         '#include <stddef.h>',
         '#include <stdint.h>',
         '',
-        "/* The bundled types, tables and limits come first, so the sketch's",
-        " * translation unit reads the bundle's frame and nesting limits rather",
-        ' * than the core defaults below. */',
+        "/* The staged limits come first: r2s_arch.h reads the library's",
+        ' * r2s_config.h, so a channel or frame the sketch enables there',
+        ' * reaches this translation unit, and the core agrees with it. A',
+        ' * flag the build passes still wins, because every limit keeps its',
+        ' * guard. */',
+        '#include "r2s/r2s_arch.h"',
+        '',
+        '/* The bundled types, tables and default limits. An edited',
+        ' * r2s_config.h already applied above, so these stay defaults. */',
         '#include "r2s_bundled.h"',
         '',
         '#include "r2s/r2s_codec.h"',

@@ -11,6 +11,26 @@
 #define R2S_WITH_CODEC 1
 #endif /* R2S_WITH_CODEC */
 
+/* Services, parameters and actions. The IDE passes no build
+ * property, so a sketch that needs a channel enables it here by
+ * uncommenting its line. The flags are #ifdef, so each line stays
+ * a bare #define. A flag the build passes still wins, because these
+ * lines stay commented. Updating the library overwrites this file,
+ * so keep an edit to apply it again. */
+/* Services: uncomment the channel and set R2S_MAX_FRAME to 64u
+ * below. The service channel keeps three frame-sized buffers, and
+ * larger frames leave the Uno no room beside them. */
+/* #define R2S_WITH_SERVICES */
+
+/* Parameters: uncomment the channel. Parameters travel over the
+ * reliable channel, so the frame below stays as it is. */
+/* #define R2S_WITH_PARAMS */
+
+/* Actions: uncomment the channel and set R2S_MAX_FRAME to 128u
+ * below. The action channel keeps frame-sized buffers, and the
+ * bundle default leaves the Uno no room beside them. */
+/* #define R2S_WITH_ACTIONS */
+
 /* The frame limit: the largest payload any carried type encodes, in
  * either float64 width, plus headroom for the hello and announce frames
  * of node and topic names to 31 characters. A longer name fails configure
