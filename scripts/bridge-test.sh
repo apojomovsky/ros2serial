@@ -25,7 +25,7 @@ sanitize=0
 case "${R2S_BRIDGE_SANITIZE:-}" in
   "" | 0) ;;
   1) sanitize=1; workspace=$workspace/sanitize ;;
-  *) echo "R2S_BRIDGE_SANITIZE must be 1 or unset (got '${R2S_BRIDGE_SANITIZE}')"; exit 2 ;;
+  *) echo "R2S_BRIDGE_SANITIZE must be 1, 0 or unset (got '${R2S_BRIDGE_SANITIZE}')"; exit 2 ;;
 esac
 if [ "$sanitize" = 1 ]; then
   export LSAN_OPTIONS="suppressions=$root/bridge/lsan_suppressions.txt"

@@ -461,7 +461,11 @@ struct Router::Impl
     std::int32_t accept_sec = 0;
     std::uint32_t accept_nanosec = 0;
     bool cancel_requested = false;
-    rcl_action_goal_handle_t *handle = nullptr;
+    // A copy of the server-tracked handle: the server frees its own struct
+    // when the goal expires or the server ends, and this copy frees the
+    // shared goal state once nothing tracks it.
+    rcl_action_goal_handle_t handle = rcl_action_get_zero_initialized_goal_handle();
+    bool handle_valid = false;
     std::int8_t terminal = -1;
     // The terminal result as wire bytes: unpacked fresh for every waiter,
     // so no struct is ever copied with its heap buffers ([SES-35]).
@@ -470,6 +474,16 @@ struct Router::Impl
     std::int64_t last_status_ms = 0;
     bool status_dirty = true;
   };
+
+    // One terminal goal replaced before it expired: its handle copy is
+    // freed once the server stops tracking it, or with the route.
+    struct RetiredGoal
+    {
+      rcl_action_goal_handle_t handle = rcl_action_get_zero_initialized_goal_handle();
+      std::array<std::uint8_t, 16> uuid{};
+      std::int32_t accept_sec = 0;
+      std::uint32_t accept_nanosec = 0;
+    };
 
     // One routed action's endpoints: the rcl action server the ROS clients
     // talk to, answered from the MCU over the reliable channel. Move-only:
@@ -480,11 +494,18 @@ struct Router::Impl
     : info(std::move(in_info)), types(std::move(in_types)) {}
     ~ActionRoute()
     {
-      if (active && active->handle != nullptr) {
-        [[maybe_unused]] const rcl_ret_t handle_fini = rcl_action_goal_handle_fini(active->handle);
+      if (active && active->handle_valid) {
+        [[maybe_unused]] const rcl_ret_t handle_fini =
+          rcl_action_goal_handle_fini(&active->handle);
         (void)handle_fini;
-        active->handle = nullptr;
+        active->handle_valid = false;
       }
+      for (auto & retired : retired_handles) {
+        [[maybe_unused]] const rcl_ret_t handle_fini =
+          rcl_action_goal_handle_fini(&retired.handle);
+        (void)handle_fini;
+      }
+      retired_handles.clear();
       if (rcl_valid) {
         [[maybe_unused]] const rcl_ret_t fini =
           rcl_action_server_fini(&server, rcl_node.get());
@@ -504,6 +525,7 @@ struct Router::Impl
     std::optional<PendingGoal> pending;
     std::optional<PendingCancel> pending_cancel;
     std::optional<ActiveGoal> active;
+    std::vector<RetiredGoal> retired_handles;
     ActionTypes::Struct goal_request_take;
     ActionTypes::Struct result_request_take;
     ActionTypes::Struct cancel_request_take;
@@ -1420,12 +1442,15 @@ struct Router::Impl
       goal.wire_seq = seq;
       goal.accept_sec = static_cast<std::int32_t>(sec);
       goal.accept_nanosec = nanosec;
-      goal.handle = handle;
-      if (route.active && route.active->handle != nullptr) {
-        [[maybe_unused]] const rcl_ret_t handle_fini =
-          rcl_action_goal_handle_fini(route.active->handle);
-        (void)handle_fini;
-        route.active->handle = nullptr;
+      goal.handle = *handle;
+      goal.handle_valid = true;
+      if (route.active && route.active->handle_valid) {
+        RetiredGoal retired;
+        retired.handle = route.active->handle;
+        retired.uuid = route.active->uuid;
+        retired.accept_sec = route.active->accept_sec;
+        retired.accept_nanosec = route.active->accept_nanosec;
+        route.retired_handles.push_back(retired);
       }
       route.pending.reset();
       // GCOVR_EXCL_START: the update fails only when the middleware
@@ -1463,7 +1488,7 @@ struct Router::Impl
         // GCOVR_EXCL_START: the update fails only when the middleware
         // cannot allocate, which a unit test cannot stage.
         if (rcl_action_update_goal_state(
-              route.active->handle, GOAL_EVENT_CANCEL_GOAL) != RCL_RET_OK)
+              &route.active->handle, GOAL_EVENT_CANCEL_GOAL) != RCL_RET_OK)
         {
           rcl_reset_error();
           emit(SessionLog::kWarning,
@@ -1576,8 +1601,8 @@ struct Router::Impl
       status == kGoalCanceled ? GOAL_EVENT_CANCELED : GOAL_EVENT_ABORT;
     // GCOVR_EXCL_START: both calls fail only when the middleware cannot
     // allocate, which a unit test cannot stage without breaking itself.
-    if (goal.handle != nullptr &&
-      rcl_action_update_goal_state(goal.handle, event) != RCL_RET_OK)
+    if (goal.handle_valid &&
+      rcl_action_update_goal_state(&goal.handle, event) != RCL_RET_OK)
     {
       rcl_reset_error();
       emit(SessionLog::kWarning,
@@ -1693,17 +1718,33 @@ struct Router::Impl
         // delay, far beyond a deterministic test.
         if (rcl_action_expire_goals(&route.server, nullptr, 0u, nullptr) != RCL_RET_OK) {
           rcl_reset_error();
-        } else if (route.active && route.active->terminal >= 0) {
-          const rcl_action_goal_info_t info = goal_info_of(route.active->uuid,
-              route.active->accept_sec, route.active->accept_nanosec);
-          if (!rcl_action_server_goal_exists(&route.server, &info)) {
-            if (route.active->handle != nullptr) {
-              [[maybe_unused]] const rcl_ret_t handle_fini =
-          rcl_action_goal_handle_fini(route.active->handle);
-        (void)handle_fini;
-              route.active->handle = nullptr;
+        } else {
+          if (route.active && route.active->terminal >= 0) {
+            const rcl_action_goal_info_t info = goal_info_of(route.active->uuid,
+                route.active->accept_sec, route.active->accept_nanosec);
+            if (!rcl_action_server_goal_exists(&route.server, &info)) {
+              if (route.active->handle_valid) {
+                [[maybe_unused]] const rcl_ret_t handle_fini =
+                  rcl_action_goal_handle_fini(&route.active->handle);
+                (void)handle_fini;
+                route.active->handle_valid = false;
+              }
+              route.active.reset();
             }
-            route.active.reset();
+          }
+          for (auto retired = route.retired_handles.begin();
+            retired != route.retired_handles.end();)
+          {
+            const rcl_action_goal_info_t info = goal_info_of(retired->uuid,
+                retired->accept_sec, retired->accept_nanosec);
+            if (rcl_action_server_goal_exists(&route.server, &info)) {
+              ++retired;
+              continue;
+            }
+            [[maybe_unused]] const rcl_ret_t handle_fini =
+              rcl_action_goal_handle_fini(&retired->handle);
+            (void)handle_fini;
+            retired = route.retired_handles.erase(retired);
           }
         }
         // GCOVR_EXCL_STOP
