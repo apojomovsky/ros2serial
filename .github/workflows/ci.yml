@@ -312,6 +312,7 @@ jobs:
         env:
           R2S_IN_IMAGE: 1
           R2S_BUILD_DIR: /tmp/r2s-build
+          R2S_BRIDGE_SANITIZE: ${{ matrix.distro == 'jazzy' && '1' || '' }}
 
   # End-to-end on the posix virtual MCU: scenarios 1 to 4 under every RMW the
   # design names, with the Zenoh router started first on its leg. The suite

@@ -480,6 +480,11 @@ struct Router::Impl
     : info(std::move(in_info)), types(std::move(in_types)) {}
     ~ActionRoute()
     {
+      if (active && active->handle != nullptr) {
+        [[maybe_unused]] const rcl_ret_t handle_fini = rcl_action_goal_handle_fini(active->handle);
+        (void)handle_fini;
+        active->handle = nullptr;
+      }
       if (rcl_valid) {
         [[maybe_unused]] const rcl_ret_t fini =
           rcl_action_server_fini(&server, rcl_node.get());
@@ -1416,6 +1421,12 @@ struct Router::Impl
       goal.accept_sec = static_cast<std::int32_t>(sec);
       goal.accept_nanosec = nanosec;
       goal.handle = handle;
+      if (route.active && route.active->handle != nullptr) {
+        [[maybe_unused]] const rcl_ret_t handle_fini =
+          rcl_action_goal_handle_fini(route.active->handle);
+        (void)handle_fini;
+        route.active->handle = nullptr;
+      }
       route.pending.reset();
       // GCOVR_EXCL_START: the update fails only when the middleware
       // cannot allocate, which a unit test cannot stage.
@@ -1638,6 +1649,8 @@ struct Router::Impl
       status.status = entry.status;
       message.status_list.push_back(status);
     }
+    [[maybe_unused]] const rcl_ret_t array_fini = rcl_action_goal_status_array_fini(&array);
+    (void)array_fini;
     route.status_pub->publish(message);
   }
 
@@ -1684,6 +1697,12 @@ struct Router::Impl
           const rcl_action_goal_info_t info = goal_info_of(route.active->uuid,
               route.active->accept_sec, route.active->accept_nanosec);
           if (!rcl_action_server_goal_exists(&route.server, &info)) {
+            if (route.active->handle != nullptr) {
+              [[maybe_unused]] const rcl_ret_t handle_fini =
+          rcl_action_goal_handle_fini(route.active->handle);
+        (void)handle_fini;
+              route.active->handle = nullptr;
+            }
             route.active.reset();
           }
         }

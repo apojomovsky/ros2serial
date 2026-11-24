@@ -306,7 +306,8 @@ TEST_F(DiagnosticsNode, CountsFirstFrameSeqAsGaps)
     fixture.handshake();
     const std::vector<std::uint8_t> one{0x00, 0x00, 0x80, 0x3F};
     fixture.deliver_frame(kBattery, 3u, one);
-    const TopicDiagnostics *battery = find_topic(fixture.snapshot(), kBattery);
+    const Diagnostics diagnostics = fixture.snapshot();
+    const TopicDiagnostics *battery = find_topic(diagnostics, kBattery);
     ASSERT_NE(battery, nullptr);
     EXPECT_EQ(battery->seq_gaps, 3u) << "the first frame after a handshake expects seq 0";
 }
@@ -537,7 +538,8 @@ TEST_F(DiagnosticsNode, FrameBeforeHelloLeavesNoTrace)
     EXPECT_EQ(fixture.snapshot().link_state, "boot_wait");
     fixture.handshake();
     fixture.deliver_frame(kBattery, 0u, one);
-    const TopicDiagnostics *battery = find_topic(fixture.snapshot(), kBattery);
+    const Diagnostics diagnostics = fixture.snapshot();
+    const TopicDiagnostics *battery = find_topic(diagnostics, kBattery);
     ASSERT_NE(battery, nullptr);
     EXPECT_EQ(battery->seq_gaps, 0u) << "traffic before the handshake sets no expectation";
 }

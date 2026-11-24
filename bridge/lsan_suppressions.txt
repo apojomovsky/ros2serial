@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+# LSan suppressions for the sanitized bridge run (scripts/bridge-test.sh).
+# One entry per leak outside this repository, each with its reason above it.
+# The RMW caches one type object per type for the life of the process.
+leak:librosidl_typesupport_cpp
+# rcutils keeps the path string of each library it loads.
+leak:rcutils_load_shared_library

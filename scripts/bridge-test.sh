@@ -21,6 +21,16 @@ build_only=0
 if [ "${1:-}" = --build-only ]; then build_only=1; shift; fi
 [ "$#" -eq 0 ] || { echo "usage: scripts/bridge-test.sh [--build-only]"; exit 2; }
 workspace=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/bridge
+sanitize=0
+case "${R2S_BRIDGE_SANITIZE:-}" in
+  "" | 0) ;;
+  1) sanitize=1; workspace=$workspace/sanitize ;;
+  *) echo "R2S_BRIDGE_SANITIZE must be 1 or unset (got '${R2S_BRIDGE_SANITIZE}')"; exit 2 ;;
+esac
+if [ "$sanitize" = 1 ]; then
+  export LSAN_OPTIONS="suppressions=$root/bridge/lsan_suppressions.txt"
+  export UBSAN_OPTIONS="print_stacktrace=1"
+fi
 # One isolation slot per run: a leased DDS domain, so concurrent suites never
 # see each other's nodes. Held for the whole run, exactly like the build
 # lock below. The pool base is 0, the domain a lone bridge run always used.
@@ -41,12 +51,17 @@ mkdir -p "$workspace" || exit 1
 export ROS_DOMAIN_ID=${R2S_E2E_DOMAIN_ID:?e2e-lease.sh provides it}
 echo "== bridge isolation: ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
 echo "== bridge: $ROS_DISTRO"
+cmake_args=()
+if [ "$sanitize" = 1 ]; then
+  echo "== bridge: ASan and UBSan on"
+  cmake_args=(--cmake-args -DR2S_SANITIZE=ON)
+fi
 
 colcon --log-base "$workspace/log" build \
   --base-paths bridge \
   --build-base "$workspace/build" \
   --install-base "$workspace/install" \
-  --event-handlers console_direct+ || exit 1
+  --event-handlers console_direct+ "${cmake_args[@]}" || exit 1
 [ "$build_only" = 1 ] && exit 0
 
 # shellcheck source=/dev/null
