@@ -279,6 +279,69 @@ ConvertFail decode_ops(
   const std::vector<Op> & ops, std::uint8_t *base, Reader & reader, bool narrow,
   std::uint32_t & counter, std::uint8_t & field);
 
+std::size_t sat_add(std::size_t a, std::size_t b)
+{
+  return b > kUnbounded - a ? kUnbounded : a + b;
+}
+
+std::size_t sat_mul(std::size_t a, std::size_t b)
+{
+  return a != 0 && b > kUnbounded / a ? kUnbounded : a * b;
+}
+
+std::size_t scalar_min_wire(std::uint8_t type, bool narrow)
+{
+  switch (type) {
+    case ROS_TYPE_UINT16:
+    case ROS_TYPE_INT16:
+      return 2;
+    case ROS_TYPE_UINT32:
+    case ROS_TYPE_INT32:
+    case ROS_TYPE_FLOAT:
+      return 4;
+    case ROS_TYPE_UINT64:
+    case ROS_TYPE_INT64:
+      return 8;
+    case ROS_TYPE_DOUBLE:
+      return narrow ? 4 : 8;
+    default:
+      return 1;
+  }
+}
+
+std::size_t message_min_wire(const std::vector<Op> & ops, bool narrow);
+
+std::size_t element_min_wire(const Op & op, bool narrow)
+{
+  if (op.type == ROS_TYPE_MESSAGE) {
+    return message_min_wire(op.nested, narrow);
+  }
+  return scalar_min_wire(op.type, narrow);
+}
+
+std::size_t field_min_wire(const Op & op, bool narrow)
+{
+  if (op.is_array) {
+    if (op.is_sequence) {
+      return 1;
+    }
+    return sat_mul(op.bound, element_min_wire(op, narrow));
+  }
+  if (op.type == ROS_TYPE_MESSAGE) {
+    return message_min_wire(op.nested, narrow);
+  }
+  return scalar_min_wire(op.type, narrow);
+}
+
+std::size_t message_min_wire(const std::vector<Op> & ops, bool narrow)
+{
+  std::size_t total = 0;
+  for (const Op & op : ops) {
+    total = sat_add(total, field_min_wire(op, narrow));
+  }
+  return total;
+}
+
 ConvertFail decode_element(
   const Op & op, std::uint8_t *base, std::uint32_t i, Reader & reader, bool narrow,
   std::uint32_t here, std::uint32_t & counter, std::uint8_t & field)
@@ -331,6 +394,15 @@ ConvertFail decode_ops(
         if (count > op.bound) {
           field = static_cast<std::uint8_t>(here);
           return ConvertFail::kOverBound;
+        }
+        // A zero minimum element is capped by the bound check above alone.
+        const std::size_t min_wire = element_min_wire(op, narrow);
+        if (min_wire != 0) {
+          const auto remaining = static_cast<std::size_t>(reader.end - reader.at);
+          if (count > remaining / min_wire) {
+            field = static_cast<std::uint8_t>(here);
+            return ConvertFail::kTruncated;
+          }
         }
         op.resize(base + op.offset, count);
       }

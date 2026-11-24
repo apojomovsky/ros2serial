@@ -672,7 +672,7 @@ TEST(ConverterSequences, RefusesAnEncodeOverBoundSequence)
     EXPECT_EQ(result.fail, ConvertFail::kOverBound);
 }
 
-TEST(ConverterSequences, NumbersNestedArrayElementsDynamically)
+TEST(ConverterSequences, RefusesPoseCountsBeyondRemainingPayload)
 {
     Converter converter;
     std::vector<std::uint8_t> cdr;
@@ -681,21 +681,21 @@ TEST(ConverterSequences, NumbersNestedArrayElementsDynamically)
           cdr);
     };
 
-    // poses is 5, its first position is 6: cutting inside position.y names 8.
+    // poses is 5: a count the remaining bytes cannot hold names it before
+    // any resize, so the inner fields are never reached.
     std::vector<std::uint8_t> mid(9, 0x00);
     mid.push_back(0x01);
     mid.insert(mid.end(), 10, 0x00);
     ConvertResult result = convert(mid);
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
-    EXPECT_EQ(result.field, 8u);
+    EXPECT_EQ(result.field, 5u);
 
-    // Two poses consume 5 to 14 and 15 to 23: cutting the last byte names 23.
     std::vector<std::uint8_t> two(9, 0x00);
     two.push_back(0x02);
     two.insert(two.end(), 111, 0x00);
     result = convert(two);
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
-    EXPECT_EQ(result.field, 23u);
+    EXPECT_EQ(result.field, 5u);
 }
 
 TEST(ConverterNested, ReportsNestedFieldIndices)
@@ -1187,6 +1187,79 @@ TEST(ConverterSequences, RefusesNestedCountBeyondRemainingPayload)
     EXPECT_TRUE(resized_nested_counts.empty()) << "resized to a count the payload cannot hold";
 }
 
+struct FakeStrInner
+{
+  std::string name;
+};
+
+struct FakeStrSeq
+{
+  std::vector<FakeStrInner> items;
+};
+
+void fake_str_init(void *memory, MessageInitialization)
+{
+  new (&(static_cast<FakeStrSeq *>(memory)->items)) std::vector<FakeStrInner>();
+}
+
+void fake_str_fini(void *memory)
+{
+  static_cast<FakeStrSeq *>(memory)->items.~vector();
+}
+
+void * fake_str_get(void *memory, std::size_t index)
+{
+  return &(static_cast<FakeStrSeq *>(memory)->items[index]);
+}
+
+void fake_str_resize(void *memory, std::size_t size)
+{
+  static_cast<FakeStrSeq *>(memory)->items.resize(size);
+}
+
+TEST(ConverterSequences, NumbersNestedStringElementsDynamically)
+{
+    Converter converter;
+    MessageMember element{};
+    element.name_ = "name";
+    element.type_id_ = ROS_TYPE_STRING;
+    MessageMembers inner{};
+    inner.message_namespace_ = "fake";
+    inner.message_name_ = "StrInner";
+    inner.member_count_ = 1;
+    inner.size_of_ = sizeof(FakeStrInner);
+    inner.members_ = &element;
+    const rosidl_message_type_support_t inner_handle = fake_ts_for(&inner);
+    MessageMember member{};
+    member.name_ = "items";
+    member.type_id_ = ROS_TYPE_MESSAGE;
+    member.is_array_ = true;
+    member.members_ = &inner_handle;
+    member.get_function = fake_str_get;
+    member.resize_function = fake_str_resize;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "StrSeq";
+    members.member_count_ = 1;
+    members.size_of_ = sizeof(FakeStrSeq);
+    members.members_ = &member;
+    members.init_function = fake_str_init;
+    members.fini_function = fake_str_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/StrSeq", &handle));
+
+    std::vector<std::uint8_t> cdr;
+    const auto convert = [&](const std::vector<std::uint8_t> & payload) {
+      return converter.to_cdr("fake/msg/StrSeq", false, payload.data(), payload.size(), cdr);
+    };
+    ConvertResult result = convert({0x01, 0x03, 'a'});
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 1u);
+    result = convert({0x02, 0x01, 'a', 0x03, 'b'});
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 2u);
+}
+
 TEST(ConverterSequences, ConvertsMessagesPastTheInitialBuffer)
 {
     // A CDR larger than the initial serialize buffer reallocates mid-write,
@@ -1488,7 +1561,7 @@ TEST(ConverterSequences, ConvertsBooleanSequencesThroughAssign)
           cdr);
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
     EXPECT_EQ(result.field, 0u);
-    EXPECT_EQ(resized_bool_counts, std::vector<std::size_t>{2});
+    EXPECT_TRUE(resized_bool_counts.empty());
 
     result = converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x01, 0x02}.data(),
           2, cdr);
