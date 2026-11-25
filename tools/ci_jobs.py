@@ -131,6 +131,7 @@ SHARED = (
     'ports/**',
     'bridge/**',
     'gen/**',
+    'rosidl/**',
 )
 
 # A prose change: no build can see it, so the gates that read prose run,

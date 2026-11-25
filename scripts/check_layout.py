@@ -28,6 +28,7 @@ REQUIRED_DIRS = [
     'core/fuzz',
     'cpp',
     'gen/r2s_gen',
+    'rosidl/r2s_rosidl',
     'gen/tests',
     'bridge/r2s_bridge',
     'bridge/r2s_bridge_tests',

@@ -51,7 +51,7 @@ run_doxygen() {
 run_doxygen core zero || fail=1
 run_doxygen bridge/r2s_bridge report || fail=1
 
-for pkg in bridge/r2s_bridge bridge/r2s_bridge_tests gen gen/r2s_rosidl; do
+for pkg in bridge/r2s_bridge bridge/r2s_bridge_tests gen rosidl/r2s_rosidl; do
   name=$(basename "$pkg")
   echo "== rosdoc2: build $pkg"
   rosdoc2 build --package-path "$pkg" \

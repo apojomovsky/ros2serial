@@ -7,8 +7,8 @@ port and handshake, then check the ROS graph, then inspect payloads.
 
 Source the ROS underlay and your workspace's `install/setup.bash` in every
 terminal. Check `ros2 pkg executables r2s_gen` and `ros2 pkg prefix r2s_bridge`.
-If the workspace was built before the tools were added, rebuild it. For the
-nested `r2s_rosidl` package, use the explicit discovery command in
+If the workspace was built before the tools were added, rebuild it. For
+`r2s_rosidl`, use the plain discovery command in
 [Custom interfaces](custom-interfaces.md#generate-as-part-of-colcon-build).
 
 ## Upload or launch cannot open the port

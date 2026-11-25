@@ -32,7 +32,7 @@ ROSDEP = os.environ.get('R2S_ROSDEP', 'rosdep')
 
 RELEASED = [
     Path('gen/package.xml'),
-    Path('gen/r2s_rosidl/package.xml'),
+    Path('rosidl/r2s_rosidl/package.xml'),
     Path('bridge/r2s_bridge/package.xml'),
 ]
 

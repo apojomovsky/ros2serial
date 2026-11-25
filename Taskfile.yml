@@ -156,7 +156,7 @@ tasks:
       # The packages, their tests and their goldens, listed separately so
       # the tests stay with this task only: nothing else reads them.
       - gen/r2s_gen/**
-      - gen/r2s_rosidl/**
+      - rosidl/r2s_rosidl/**
       - gen/tests/**
       - gen/pyproject.toml
       - gen/setup.py
@@ -225,7 +225,7 @@ tasks:
       - scripts/ament-lint.sh
       - bridge/r2s_bridge/**
       - gen/r2s_gen/**
-      - gen/r2s_rosidl/**
+      - rosidl/r2s_rosidl/**
       - gen/tests/**
       - gen/package.xml
       - gen/pyproject.toml
