@@ -465,6 +465,8 @@ struct Router::Impl
     // when the goal expires or the server ends, and this copy frees the
     // shared goal state once nothing tracks it.
     rcl_action_goal_handle_t handle = rcl_action_get_zero_initialized_goal_handle();
+    // A live goal always holds a valid handle: the only clear runs as the
+    // goal itself is reset, in poll_actions.
     bool handle_valid = false;
     std::int8_t terminal = -1;
     // The terminal result as wire bytes: unpacked fresh for every waiter,
@@ -494,7 +496,7 @@ struct Router::Impl
     : info(std::move(in_info)), types(std::move(in_types)) {}
     ~ActionRoute()
     {
-      if (active && active->handle_valid) {
+      if (active) {
         [[maybe_unused]] const rcl_ret_t handle_fini =
           rcl_action_goal_handle_fini(&active->handle);
         (void)handle_fini;
@@ -1444,7 +1446,7 @@ struct Router::Impl
       goal.accept_nanosec = nanosec;
       goal.handle = *handle;
       goal.handle_valid = true;
-      if (route.active && route.active->handle_valid) {
+      if (route.active) {
         RetiredGoal retired;
         retired.handle = route.active->handle;
         retired.uuid = route.active->uuid;
