@@ -4,11 +4,13 @@
 """Scenario 3: the host publishes Twist and the MCU echoes it back.
 
 Five distinct Twists go out on cmd_vel; the firmware republishes each on
-echo_vel, and every echoed field matches what was sent within the float32
-round trip the 8-bit MCU keeps. The handshake runs the unchanged 3 s budget
-from bridge-up, and discovery of the echo topics waits on its own generous
-timeout from the handshake, so a slow runner cannot fail a correct echo
-path on the priming budget.
+echo_vel, and every echoed field matches what was sent byte for byte. On
+this 32-bit-double build the float64 fields are held as binary32, so the
+values below are ones binary32 represents exactly: narrowing on the way
+in and widening on the way out are then both exact. The handshake runs the
+unchanged 3 s budget from bridge-up, and discovery of the echo topics waits
+on its own generous timeout from the handshake, so a slow runner cannot
+fail a correct echo path on the priming budget.
 """
 
 import os
@@ -27,13 +29,13 @@ from geometry_msgs.msg import Twist
 from rclpy.qos import QoSProfile
 from rclpy.qos import ReliabilityPolicy
 
-# covers: SES-9, SES-18, SES-31
+# covers: SES-9, SES-18, SES-31, DSC-27
 
 ECHO_COUNT = 5
 FLOW_TIMEOUT = 20.0
-# The MCU holds float32: the widest relative error the round trip keeps.
-REL_TOL = 1e-6
-ABS_TOL = 1e-9
+# Every SENT value is exact in binary32, so the round trip is byte-exact.
+REL_TOL = 0.0
+ABS_TOL = 0.0
 # The bridge reports announced names without the graph's leading slash.
 HANDSHAKE_TOPICS = ['battery', 'cmd_vel', 'echo_vel', 'log_text']
 # Both directions of the echo path, as the graph names them.
@@ -53,7 +55,7 @@ def _twist(linear, angular):
 
 
 SENT = [
-    _twist((1.5, -2.25, 3.125), (-0.5, 100.25, -0.001)),
+    _twist((1.5, -2.25, 3.125), (-0.5, 100.25, -0.0078125)),
     _twist((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)),
     _twist((-7.75, 42.0, -0.125), (3.0, -3.0, 9.5)),
     _twist((1000.0, -1000.0, 0.5), (-0.25, 0.25, -44.0)),

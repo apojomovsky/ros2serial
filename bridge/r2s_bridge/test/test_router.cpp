@@ -271,9 +271,10 @@ public:
   std::vector<std::vector<std::uint8_t>> handshake_with_params(
     std::uint32_t token = 7u, bool full = true,
     bool led_i64 = false,
-    bool long_label = false)
+    bool long_label = false, bool narrow = false)
   {
-    deliver_frame(kHelperControl, 0u, helper_hello(token, 2u, max_frame_, 0x04u));
+    deliver_frame(kHelperControl, 0u,
+      helper_hello(token, 2u, max_frame_, narrow ? 0x14u : 0x04u));
     expect_topic_req(0u);
     const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
     deliver_frame(
@@ -303,9 +304,15 @@ public:
                       helper_declare(1u, 0x01u, 0x00u, "rate",
       {0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
     expect_param_req(2u);
-    deliver_frame(kParamsTopic, 2u,
-                      helper_declare(2u, 0x02u, 0x00u, "gain",
-      {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF8u, 0x3Fu}));
+    if (narrow) {
+      deliver_frame(kParamsTopic, 2u,
+                        helper_declare(2u, 0x02u, 0x00u, "gain",
+        {0x00u, 0x00u, 0xC0u, 0x3Fu}));
+    } else {
+      deliver_frame(kParamsTopic, 2u,
+                        helper_declare(2u, 0x02u, 0x00u, "gain",
+        {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF8u, 0x3Fu}));
+    }
     expect_param_req(3u);
     if (long_label) {
       std::vector<std::uint8_t> wide{0xC8u, 0x01u};
@@ -998,6 +1005,23 @@ TEST_F(RouterNode, McuParameterCodecsCoverAllTypes)
     ASSERT_EQ(third.count(3u), 1u);
     EXPECT_EQ(third.at(3u).value,
           std::vector<std::uint8_t>{0x00u}) << "an empty string is one zero byte";
+}
+
+// covers: PAR-1, PAR-3, ENC-12
+TEST_F(RouterNode, Float64ParameterTravelsNarrowOn32BitDoubleMcus)
+{
+    RouterFixture fixture("paramnarrow", remapped(), RouterParams{});
+    fixture.handshake_with_params(7u, true, false, false, true);
+    ASSERT_TRUE(fixture.node()->has_parameter("gain")) << "the narrow f64 is a ROS parameter";
+    EXPECT_DOUBLE_EQ(fixture.node()->get_parameter("gain").as_double(), 1.5);
+    const auto result = fixture.node()->set_parameters({rclcpp::Parameter("gain", 2.5)});
+    ASSERT_EQ(result.size(), 1u);
+    EXPECT_TRUE(result[0].successful) << result[0].reason;
+    const auto sets = fixture.param_sets();
+    ASSERT_EQ(sets.count(2u), 1u);
+    EXPECT_EQ(sets.at(2u).value,
+              std::vector<std::uint8_t>({0x00u, 0x00u, 0x20u, 0x40u}))
+        << "the f64 set travels as binary32 on a narrow link";
 }
 
 // covers: PAR-9
