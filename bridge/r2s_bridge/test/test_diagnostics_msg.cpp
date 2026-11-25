@@ -51,6 +51,8 @@ Router::Diagnostics connected_snapshot()
   battery.topic_id = 16u;
   battery.topic_name = "battery";
   battery.device_to_host = true;
+  battery.reliability = "reliable";
+  battery.durability = "transient_local";
   battery.seq_gaps = 4u;
   battery.dropped = 0u;
   battery.publish_failures = 1u;
@@ -92,6 +94,8 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(values.at("mcu error code 6"), "9");
     EXPECT_EQ(values.at("topic 16 battery mcu errors"), "1=0 2=2 3=0 4=0 5=0 6=5");
     EXPECT_EQ(values.at("topic 17 cmd_vel mcu errors"), "1=0 2=0 3=0 4=0 5=0 6=0");
+    EXPECT_EQ(values.at("topic 16 battery reliability"), "reliable");
+    EXPECT_EQ(values.at("topic 16 battery durability"), "transient_local");
     EXPECT_EQ(values.at("topic 16 battery direction"), "device to host");
     EXPECT_EQ(values.at("topic 16 battery route"), "ok");
     EXPECT_EQ(values.at("topic 17 cmd_vel route"), "ok");
