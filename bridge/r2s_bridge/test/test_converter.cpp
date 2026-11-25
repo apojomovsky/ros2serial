@@ -672,7 +672,7 @@ TEST(ConverterSequences, RefusesAnEncodeOverBoundSequence)
     EXPECT_EQ(result.fail, ConvertFail::kOverBound);
 }
 
-TEST(ConverterSequences, NumbersNestedArrayElementsDynamically)
+TEST(ConverterSequences, RefusesPoseCountsBeyondRemainingPayload)
 {
     Converter converter;
     std::vector<std::uint8_t> cdr;
@@ -681,21 +681,21 @@ TEST(ConverterSequences, NumbersNestedArrayElementsDynamically)
           cdr);
     };
 
-    // poses is 5, its first position is 6: cutting inside position.y names 8.
+    // poses is 5: a count the remaining bytes cannot hold names it before
+    // any resize, so the inner fields are never reached.
     std::vector<std::uint8_t> mid(9, 0x00);
     mid.push_back(0x01);
     mid.insert(mid.end(), 10, 0x00);
     ConvertResult result = convert(mid);
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
-    EXPECT_EQ(result.field, 8u);
+    EXPECT_EQ(result.field, 5u);
 
-    // Two poses consume 5 to 14 and 15 to 23: cutting the last byte names 23.
     std::vector<std::uint8_t> two(9, 0x00);
     two.push_back(0x02);
     two.insert(two.end(), 111, 0x00);
     result = convert(two);
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
-    EXPECT_EQ(result.field, 23u);
+    EXPECT_EQ(result.field, 5u);
 }
 
 TEST(ConverterNested, ReportsNestedFieldIndices)
@@ -735,8 +735,11 @@ using rosidl_typesupport_introspection_cpp::MessageMember;
 using rosidl_typesupport_introspection_cpp::MessageMembers;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_BOOLEAN;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_DOUBLE;
+using rosidl_typesupport_introspection_cpp::ROS_TYPE_INT32;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_MESSAGE;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_STRING;
+using rosidl_typesupport_introspection_cpp::ROS_TYPE_UINT16;
+using rosidl_typesupport_introspection_cpp::ROS_TYPE_UINT64;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_UINT8;
 using rosidl_typesupport_introspection_cpp::ROS_TYPE_WSTRING;
 
@@ -1050,6 +1053,494 @@ TEST(ConverterSequences, RefusesOverBoundSequences)
     EXPECT_EQ(result.field, 0u);
 }
 
+struct FakeInts
+{
+  std::vector<std::int32_t> values;
+};
+
+std::vector<std::size_t> resized_int_counts;
+
+void fake_ints_init(void *memory, MessageInitialization)
+{
+  new (&(static_cast<FakeInts *>(memory)->values)) std::vector<std::int32_t>();
+  resized_int_counts.clear();
+}
+
+void fake_ints_fini(void *memory)
+{
+  static_cast<FakeInts *>(memory)->values.~vector();
+}
+
+void * fake_ints_get(void *memory, std::size_t index)
+{
+  return &(static_cast<FakeInts *>(memory)->values[index]);
+}
+
+void fake_ints_resize(void *memory, std::size_t size)
+{
+  static_cast<FakeInts *>(memory)->values.resize(size);
+  resized_int_counts.push_back(size);
+}
+
+TEST(ConverterSequences, RefusesInt32CountBeyondRemainingPayload)
+{
+    Converter converter;
+    MessageMember member{};
+    member.name_ = "data";
+    member.type_id_ = ROS_TYPE_INT32;
+    member.is_array_ = true;
+    member.get_function = fake_ints_get;
+    member.resize_function = fake_ints_resize;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "Ints";
+    members.member_count_ = 1;
+    members.size_of_ = sizeof(FakeInts);
+    members.members_ = &member;
+    members.init_function = fake_ints_init;
+    members.fini_function = fake_ints_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/Ints", &handle));
+
+    std::vector<std::uint8_t> payload{0xFFu, 0xFFu, 0x03u};
+    payload.insert(payload.end(), 7, 0x00);
+    ASSERT_EQ(payload.size(), 10u);
+    std::vector<std::uint8_t> cdr;
+    const ConvertResult result =
+    converter.to_cdr("fake/msg/Ints", false, payload.data(), payload.size(), cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 0u);
+    EXPECT_TRUE(resized_int_counts.empty()) << "resized to a count the payload cannot hold";
+}
+
+struct FakeSeqInner
+{
+  std::int32_t x;
+};
+
+struct FakeNestedSeq
+{
+  std::vector<FakeSeqInner> items;
+};
+
+std::vector<std::size_t> resized_nested_counts;
+
+void fake_nested_init(void *memory, MessageInitialization)
+{
+  new (&(static_cast<FakeNestedSeq *>(memory)->items)) std::vector<FakeSeqInner>();
+  resized_nested_counts.clear();
+}
+
+void fake_nested_fini(void *memory)
+{
+  static_cast<FakeNestedSeq *>(memory)->items.~vector();
+}
+
+void * fake_nested_get(void *memory, std::size_t index)
+{
+  return &(static_cast<FakeNestedSeq *>(memory)->items[index]);
+}
+
+void fake_nested_resize(void *memory, std::size_t size)
+{
+  static_cast<FakeNestedSeq *>(memory)->items.resize(size);
+  resized_nested_counts.push_back(size);
+}
+
+TEST(ConverterSequences, RefusesNestedCountBeyondRemainingPayload)
+{
+    Converter converter;
+    MessageMember element{};
+    element.name_ = "x";
+    element.type_id_ = ROS_TYPE_INT32;
+    MessageMembers inner{};
+    inner.message_namespace_ = "fake";
+    inner.message_name_ = "SeqInner";
+    inner.member_count_ = 1;
+    inner.size_of_ = sizeof(FakeSeqInner);
+    inner.members_ = &element;
+    const rosidl_message_type_support_t inner_handle = fake_ts_for(&inner);
+    MessageMember member{};
+    member.name_ = "items";
+    member.type_id_ = ROS_TYPE_MESSAGE;
+    member.is_array_ = true;
+    member.members_ = &inner_handle;
+    member.get_function = fake_nested_get;
+    member.resize_function = fake_nested_resize;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "NestedSeq";
+    members.member_count_ = 1;
+    members.size_of_ = sizeof(FakeNestedSeq);
+    members.members_ = &member;
+    members.init_function = fake_nested_init;
+    members.fini_function = fake_nested_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/NestedSeq2", &handle));
+
+    std::vector<std::uint8_t> payload{0xFFu, 0xFFu, 0x03u};
+    payload.insert(payload.end(), 7, 0x00);
+    ASSERT_EQ(payload.size(), 10u);
+    std::vector<std::uint8_t> cdr;
+    const ConvertResult result =
+    converter.to_cdr("fake/msg/NestedSeq2", false, payload.data(), payload.size(), cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 0u);
+    EXPECT_TRUE(resized_nested_counts.empty()) << "resized to a count the payload cannot hold";
+}
+
+struct FakeArrayInner
+{
+  std::uint64_t wide;
+  std::vector<std::int32_t> values;
+  std::uint16_t fixed[3];
+};
+
+struct FakeArraySeq
+{
+  std::vector<FakeArrayInner> items;
+};
+
+std::vector<std::size_t> resized_array_counts;
+
+void fake_array_init(void *memory, MessageInitialization)
+{
+  new (&(static_cast<FakeArraySeq *>(memory)->items)) std::vector<FakeArrayInner>();
+  resized_array_counts.clear();
+}
+
+void fake_array_fini(void *memory)
+{
+  static_cast<FakeArraySeq *>(memory)->items.~vector();
+}
+
+void * fake_array_get(void *memory, std::size_t index)
+{
+  return &(static_cast<FakeArraySeq *>(memory)->items[index]);
+}
+
+void fake_array_resize(void *memory, std::size_t size)
+{
+  static_cast<FakeArraySeq *>(memory)->items.resize(size);
+  resized_array_counts.push_back(size);
+}
+
+void * fake_member_get(void *memory, std::size_t)
+{
+  return memory;
+}
+
+void fake_member_resize(void *, std::size_t)
+{
+}
+
+TEST(ConverterSequences, RefusesNestedWithArrayFieldsBeyondRemainingPayload)
+{
+    Converter converter;
+    MessageMember seq{};
+    seq.name_ = "values";
+    seq.type_id_ = ROS_TYPE_INT32;
+    seq.is_array_ = true;
+    seq.get_function = fake_member_get;
+    seq.resize_function = fake_member_resize;
+    MessageMember fixed{};
+    fixed.name_ = "fixed";
+    fixed.type_id_ = ROS_TYPE_UINT16;
+    fixed.is_array_ = true;
+    fixed.array_size_ = 3;
+    fixed.get_function = fake_member_get;
+    MessageMember wide{};
+    wide.name_ = "wide";
+    wide.type_id_ = ROS_TYPE_UINT64;
+    MessageMember empty_fixed{};
+    empty_fixed.name_ = "empty_fixed";
+    empty_fixed.type_id_ = ROS_TYPE_UINT8;
+    empty_fixed.is_array_ = true;
+    empty_fixed.array_size_ = 0;
+    empty_fixed.get_function = fake_member_get;
+    MessageMember inner_fields[4];
+    inner_fields[0] = seq;
+    inner_fields[1] = fixed;
+    inner_fields[2] = wide;
+    inner_fields[3] = empty_fixed;
+    MessageMembers inner{};
+    inner.message_namespace_ = "fake";
+    inner.message_name_ = "ArrayInner";
+    inner.member_count_ = 4;
+    inner.size_of_ = sizeof(FakeArrayInner);
+    inner.members_ = inner_fields;
+    const rosidl_message_type_support_t inner_handle = fake_ts_for(&inner);
+    MessageMember member{};
+    member.name_ = "items";
+    member.type_id_ = ROS_TYPE_MESSAGE;
+    member.is_array_ = true;
+    member.members_ = &inner_handle;
+    member.get_function = fake_array_get;
+    member.resize_function = fake_array_resize;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "ArraySeq";
+    members.member_count_ = 1;
+    members.size_of_ = sizeof(FakeArraySeq);
+    members.members_ = &member;
+    members.init_function = fake_array_init;
+    members.fini_function = fake_array_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/ArraySeq", &handle));
+
+    std::vector<std::uint8_t> payload{0xFFu, 0xFFu, 0x03u};
+    payload.insert(payload.end(), 7, 0x00);
+    ASSERT_EQ(payload.size(), 10u);
+    std::vector<std::uint8_t> cdr;
+    const ConvertResult result =
+    converter.to_cdr("fake/msg/ArraySeq", false, payload.data(), payload.size(), cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 0u);
+    EXPECT_TRUE(resized_array_counts.empty()) << "resized to a count the payload cannot hold";
+}
+
+TEST(ConverterSequences, RefusesASaturatingNestedCount)
+{
+    Converter converter;
+    MessageMember leaf{};
+    leaf.name_ = "data";
+    leaf.type_id_ = ROS_TYPE_UINT64;
+    leaf.is_array_ = true;
+    leaf.array_size_ = 0xFFFFFFFFu;
+    leaf.get_function = fake_member_get;
+    MessageMembers level_a{};
+    level_a.message_namespace_ = "fake";
+    level_a.message_name_ = "LevelA";
+    level_a.member_count_ = 1;
+    level_a.size_of_ = 1;
+    level_a.members_ = &leaf;
+    const rosidl_message_type_support_t a_handle = fake_ts_for(&level_a);
+    MessageMember mid_field{};
+    mid_field.name_ = "items";
+    mid_field.type_id_ = ROS_TYPE_MESSAGE;
+    mid_field.is_array_ = true;
+    mid_field.array_size_ = 0xFFFFFFFFu;
+    mid_field.members_ = &a_handle;
+    mid_field.get_function = fake_member_get;
+    MessageMembers level_b{};
+    level_b.message_namespace_ = "fake";
+    level_b.message_name_ = "LevelB";
+    level_b.member_count_ = 1;
+    level_b.size_of_ = 1;
+    level_b.members_ = &mid_field;
+    const rosidl_message_type_support_t b_handle = fake_ts_for(&level_b);
+    MessageMember huge{};
+    huge.name_ = "huge";
+    huge.type_id_ = ROS_TYPE_MESSAGE;
+    huge.is_array_ = true;
+    huge.array_size_ = 0xFFFFFFFFu;
+    huge.members_ = &b_handle;
+    huge.get_function = fake_member_get;
+    MessageMember tail{};
+    tail.name_ = "tail";
+    tail.type_id_ = ROS_TYPE_UINT8;
+    MessageMember top_fields[2];
+    top_fields[0] = huge;
+    top_fields[1] = tail;
+    MessageMembers top_inner{};
+    top_inner.message_namespace_ = "fake";
+    top_inner.message_name_ = "HugeInner";
+    top_inner.member_count_ = 2;
+    top_inner.size_of_ = 1;
+    top_inner.members_ = top_fields;
+    const rosidl_message_type_support_t top_handle = fake_ts_for(&top_inner);
+    MessageMember member{};
+    member.name_ = "items";
+    member.type_id_ = ROS_TYPE_MESSAGE;
+    member.is_array_ = true;
+    member.members_ = &top_handle;
+    member.get_function = fake_array_get;
+    member.resize_function = fake_array_resize;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "HugeSeq";
+    members.member_count_ = 1;
+    members.size_of_ = sizeof(FakeArraySeq);
+    members.members_ = &member;
+    members.init_function = fake_array_init;
+    members.fini_function = fake_array_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/HugeSeq", &handle));
+
+    std::vector<std::uint8_t> payload{0xFFu, 0xFFu, 0x03u};
+    payload.insert(payload.end(), 7, 0x00);
+    std::vector<std::uint8_t> cdr;
+    const ConvertResult result =
+    converter.to_cdr("fake/msg/HugeSeq", false, payload.data(), payload.size(), cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 0u);
+    EXPECT_TRUE(resized_array_counts.empty()) << "resized to a count the payload cannot hold";
+}
+
+struct FakeStrInner
+{
+  std::string name;
+};
+
+struct FakeStrSeq
+{
+  std::vector<FakeStrInner> items;
+};
+
+void fake_str_init(void *memory, MessageInitialization)
+{
+  new (&(static_cast<FakeStrSeq *>(memory)->items)) std::vector<FakeStrInner>();
+}
+
+void fake_str_fini(void *memory)
+{
+  static_cast<FakeStrSeq *>(memory)->items.~vector();
+}
+
+void * fake_str_get(void *memory, std::size_t index)
+{
+  return &(static_cast<FakeStrSeq *>(memory)->items[index]);
+}
+
+void fake_str_resize(void *memory, std::size_t size)
+{
+  static_cast<FakeStrSeq *>(memory)->items.resize(size);
+}
+
+std::vector<std::size_t> resized_empty_counts;
+
+void * fake_empty_seq_get(void *memory, std::size_t)
+{
+  return memory;
+}
+
+void fake_empty_seq_resize(void *, std::size_t size)
+{
+  resized_empty_counts.push_back(size);
+}
+
+void fake_empty_init(void *, MessageInitialization)
+{
+  resized_empty_counts.clear();
+}
+
+TEST(ConverterSequences, CapsAnEmptyNestedSequenceAtItsBound)
+{
+    Converter converter;
+    MessageMembers inner{};
+    inner.message_namespace_ = "fake";
+    inner.message_name_ = "Empty";
+    inner.member_count_ = 0;
+    inner.size_of_ = 1;
+    const rosidl_message_type_support_t inner_handle = fake_ts_for(&inner);
+    MessageMember member{};
+    member.name_ = "items";
+    member.type_id_ = ROS_TYPE_MESSAGE;
+    member.is_array_ = true;
+    member.is_upper_bound_ = true;
+    member.array_size_ = 2;
+    member.members_ = &inner_handle;
+    member.get_function = fake_empty_seq_get;
+    member.resize_function = fake_empty_seq_resize;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "BoundedEmptySeq";
+    members.member_count_ = 1;
+    members.size_of_ = 1;
+    members.members_ = &member;
+    members.init_function = fake_empty_init;
+    members.fini_function = fake_noop_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/BoundedEmptySeq", &handle));
+
+    std::vector<std::uint8_t> cdr;
+    const std::vector<std::uint8_t> payload{0x03};
+    const ConvertResult result =
+    converter.to_cdr("fake/msg/BoundedEmptySeq", false, payload.data(), payload.size(), cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kOverBound);
+    EXPECT_EQ(result.field, 0u);
+    EXPECT_TRUE(resized_empty_counts.empty());
+}
+
+TEST(ConverterSequences, ResizesAnUnboundedEmptyNestedSequence)
+{
+    Converter converter;
+    MessageMembers inner{};
+    inner.message_namespace_ = "fake";
+    inner.message_name_ = "Empty";
+    inner.member_count_ = 0;
+    inner.size_of_ = 1;
+    const rosidl_message_type_support_t inner_handle = fake_ts_for(&inner);
+    MessageMember member{};
+    member.name_ = "items";
+    member.type_id_ = ROS_TYPE_MESSAGE;
+    member.is_array_ = true;
+    member.members_ = &inner_handle;
+    member.get_function = fake_empty_seq_get;
+    member.resize_function = fake_empty_seq_resize;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "EmptySeq";
+    members.member_count_ = 1;
+    members.size_of_ = 1;
+    members.members_ = &member;
+    members.init_function = fake_empty_init;
+    members.fini_function = fake_noop_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/EmptySeq", &handle));
+
+    std::vector<std::uint8_t> cdr;
+    const std::vector<std::uint8_t> payload{0x03};
+    const ConvertResult result =
+    converter.to_cdr("fake/msg/EmptySeq", false, payload.data(), payload.size(), cdr);
+    EXPECT_EQ(result.fail, ConvertFail::kUnsupportedField);
+    EXPECT_EQ(result.field, 0xFFu);
+    EXPECT_EQ(resized_empty_counts, std::vector<std::size_t>{3});
+}
+
+TEST(ConverterSequences, NumbersNestedStringElementsDynamically)
+{
+    Converter converter;
+    MessageMember element{};
+    element.name_ = "name";
+    element.type_id_ = ROS_TYPE_STRING;
+    MessageMembers inner{};
+    inner.message_namespace_ = "fake";
+    inner.message_name_ = "StrInner";
+    inner.member_count_ = 1;
+    inner.size_of_ = sizeof(FakeStrInner);
+    inner.members_ = &element;
+    const rosidl_message_type_support_t inner_handle = fake_ts_for(&inner);
+    MessageMember member{};
+    member.name_ = "items";
+    member.type_id_ = ROS_TYPE_MESSAGE;
+    member.is_array_ = true;
+    member.members_ = &inner_handle;
+    member.get_function = fake_str_get;
+    member.resize_function = fake_str_resize;
+    MessageMembers members{};
+    members.message_namespace_ = "fake";
+    members.message_name_ = "StrSeq";
+    members.member_count_ = 1;
+    members.size_of_ = sizeof(FakeStrSeq);
+    members.members_ = &member;
+    members.init_function = fake_str_init;
+    members.fini_function = fake_str_fini;
+    const rosidl_message_type_support_t handle = fake_ts_for(&members);
+    ASSERT_TRUE(converter.install_plan_for_test("fake/msg/StrSeq", &handle));
+
+    std::vector<std::uint8_t> cdr;
+    const auto convert = [&](const std::vector<std::uint8_t> & payload) {
+      return converter.to_cdr("fake/msg/StrSeq", false, payload.data(), payload.size(), cdr);
+    };
+    ConvertResult result = convert({0x01, 0x03, 'a'});
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 1u);
+    result = convert({0x02, 0x01, 'a', 0x03, 'b'});
+    EXPECT_EQ(result.fail, ConvertFail::kTruncated);
+    EXPECT_EQ(result.field, 2u);
+}
+
 TEST(ConverterSequences, ConvertsMessagesPastTheInitialBuffer)
 {
     // A CDR larger than the initial serialize buffer reallocates mid-write,
@@ -1351,7 +1842,7 @@ TEST(ConverterSequences, ConvertsBooleanSequencesThroughAssign)
           cdr);
     EXPECT_EQ(result.fail, ConvertFail::kTruncated);
     EXPECT_EQ(result.field, 0u);
-    EXPECT_EQ(resized_bool_counts, std::vector<std::size_t>{2});
+    EXPECT_TRUE(resized_bool_counts.empty());
 
     result = converter.to_cdr("fake/msg/Bools", false, std::vector<std::uint8_t>{0x01, 0x02}.data(),
           2, cdr);

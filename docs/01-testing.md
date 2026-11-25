@@ -154,7 +154,7 @@ Alongside the levels, these test kinds apply where they fit:
 | Fault injection | Bridge and MCU through a corrupting pty proxy | Recovery and counters under corruption, loss and duplication |
 | Golden | Generator outputs, error messages | Make every output change visible in review |
 | Static analysis | All C, C++, Python | cppcheck, ruff, uncrustify, actionlint; the zone check on the core |
-| Sanitizers | Host builds of core and bridge | ASan and UBSan on every PR |
+| Sanitizers | Host builds of core, C++ layer and bridge | ASan and UBSan on every PR; the bridge in the jazzy leg |
 | Budget and performance | Firmware builds, simavr | Flash, RAM, stack, cycles per byte, latency at given rates |
 | Soak | Integration and system levels | Hours of traffic without leaks, counter drift or lost sync |
 | Compatibility | Whole stack | Distro and RMW matrix, compilers, Arduino core versions, big-endian |
@@ -337,6 +337,7 @@ The SCRIPTS scope runs in CI as one job per shard over the collected node ids, s
 | Core unit and component | CRC, rCOBS, varint, framer, ring, session, time math, log encoding, codec, topic accessors, each error path; on the minimal, default and full feature builds | Unity, CMake/CTest, gcc and clang, `-m32` build too | Every PR |
 | Core contract | Every vector in `spec/vectors/` through the C code | Unity runner generated from YAML | Every PR |
 | Core sanitizers | Unit tests under ASan and UBSan | clang | Every PR |
+| Bridge sanitizers | Bridge gtests under ASan and UBSan, with LSan suppressions for leaks outside this repository in `bridge/lsan_suppressions.txt` | `scripts/bridge-test.sh` with `R2S_BRIDGE_SANITIZE=1` | Every PR, jazzy leg only |
 | Core model-based | Session against the Python model through `libr2s_host` | hypothesis + ctypes | Every PR (bounded), longer nightly |
 | Coverage and spec coverage | Line, branch, spec IDs, error paths | gcovr, coverage.py, `tools/spec_coverage.py` | Every PR |
 | Mutation testing | Core, C++ layer, generator, bridge logic | Mull, mutmut (R13) | Nightly |

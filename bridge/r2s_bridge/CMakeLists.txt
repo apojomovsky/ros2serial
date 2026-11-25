@@ -11,6 +11,12 @@ if(NOT CMAKE_CXX_STANDARD_REQUIRED)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
 
+option(R2S_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+if(R2S_SANITIZE)
+  add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=address,undefined)
+endif()
+
 find_package(ament_cmake REQUIRED)
 find_package(action_msgs REQUIRED)
 find_package(rclcpp REQUIRED)

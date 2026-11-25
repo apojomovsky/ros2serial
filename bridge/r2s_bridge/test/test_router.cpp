@@ -2840,6 +2840,124 @@ TEST_F(RouterNode, AcceptsAGoalAndStreamsFeedbackAndResult)
   EXPECT_TRUE(status_shows(4)) << "the status array never showed the goal succeeded";
 }
 
+// covers: SES-35, ACT-4
+TEST_F(RouterNode, AcceptsAThirdGoalWithTwoRetiredHandles)
+{
+  RouterFixture fixture("act_next", remapped(), RouterParams{},
+    512u, true, action_session_config());
+  handshake_with_actions(fixture);
+  auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+    fixture.node(), "spin");
+  ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+  Converter converter;
+
+  auto first = client->async_send_goal(make_spin_goal());
+  std::uint8_t goal_seq = 0xFFu;
+  std::vector<std::uint8_t> payload;
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, goal_seq, 0x00u});
+  fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+  ASSERT_TRUE(spin_until_ready(fixture, first));
+  const auto first_handle = first.get();
+  ASSERT_NE(first_handle, nullptr);
+  tf2_msgs::action::LookupTransform_Result result;
+  result.transform.header.frame_id = "b";
+  const auto packed = pack_action(
+    "tf2_msgs/action/LookupTransform_Result", &result, converter);
+  auto first_result = client->async_get_result(first_handle);
+  std::vector<std::uint8_t> frame{kHelperActResult, 0x01u, goal_seq, 0x04u};
+  frame.insert(frame.end(), packed.begin(), packed.end());
+  fixture.deliver_frame(kHelperActions, 3u, frame);
+  ASSERT_TRUE(spin_until_ready(fixture, first_result));
+  EXPECT_EQ(first_result.get().code, rclcpp_action::ResultCode::SUCCEEDED);
+
+  std::vector<action_msgs::msg::GoalStatusArray> statuses;
+  auto status_sub = fixture.node()->create_subscription<action_msgs::msg::GoalStatusArray>(
+    "spin/_action/status", 10,
+    [&statuses](action_msgs::msg::GoalStatusArray::SharedPtr message) {
+      statuses.push_back(*message);
+    });
+  auto second = client->async_send_goal(make_spin_goal());
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  fixture.deliver_frame(kHelperActions, 4u, {kHelperActGoalResp, 0x02u, goal_seq, 0x00u});
+  fixture.deliver_frame(kAckTopic, 4u, {kHelperActions, 0x01u});
+  ASSERT_TRUE(spin_until_ready(fixture, second));
+  const auto second_handle = second.get();
+  ASSERT_NE(second_handle, nullptr);
+  const auto start = std::chrono::steady_clock::now();
+  bool executing = false;
+  while (!executing && std::chrono::steady_clock::now() - start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & array : statuses) {
+      for (const auto & entry : array.status_list) {
+        if (entry.goal_info.goal_id.uuid == second_handle->get_goal_id() && entry.status == 2) {
+          executing = true;
+        }
+      }
+    }
+  }
+  EXPECT_TRUE(executing) << "the status array never showed the second goal executing";
+  auto second_result = client->async_get_result(second_handle);
+  frame = {kHelperActResult, 0x03u, goal_seq, 0x04u};
+  frame.insert(frame.end(), packed.begin(), packed.end());
+  fixture.deliver_frame(kHelperActions, 5u, frame);
+  ASSERT_TRUE(spin_until_ready(fixture, second_result));
+  EXPECT_EQ(second_result.get().code, rclcpp_action::ResultCode::SUCCEEDED);
+
+  // A third goal retires the second beside the first: terminal goals stay
+  // tracked far past this test, so two retired handles are held at once
+  // without waiting for the rcl expiry path.
+  auto third = client->async_send_goal(make_spin_goal());
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  fixture.deliver_frame(kHelperActions, 6u, {kHelperActGoalResp, 0x04u, goal_seq, 0x00u});
+  fixture.deliver_frame(kAckTopic, 6u, {kHelperActions, 0x02u});
+  ASSERT_TRUE(spin_until_ready(fixture, third));
+  const auto third_handle = third.get();
+  ASSERT_NE(third_handle, nullptr);
+  const auto third_start = std::chrono::steady_clock::now();
+  executing = false;
+  while (!executing && std::chrono::steady_clock::now() - third_start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & array : statuses) {
+      for (const auto & entry : array.status_list) {
+        if (entry.goal_info.goal_id.uuid == third_handle->get_goal_id() && entry.status == 2) {
+          executing = true;
+        }
+      }
+    }
+  }
+  EXPECT_TRUE(executing) << "the status array never showed the third goal executing";
+  auto third_result = client->async_get_result(third_handle);
+  frame = {kHelperActResult, 0x05u, goal_seq, 0x04u};
+  frame.insert(frame.end(), packed.begin(), packed.end());
+  fixture.deliver_frame(kHelperActions, 7u, frame);
+  ASSERT_TRUE(spin_until_ready(fixture, third_result));
+  EXPECT_EQ(third_result.get().code, rclcpp_action::ResultCode::SUCCEEDED);
+}
+
+// covers: SES-35, ACT-4
+TEST_F(RouterNode, DestroyingTheRouterWithAnActiveGoalFreesItsHandle)
+{
+  {
+    RouterFixture fixture("act_live", remapped(), RouterParams{},
+      512u, true, action_session_config());
+    handshake_with_actions(fixture);
+    auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+      fixture.node(), "spin");
+    ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+    auto goal_handle = client->async_send_goal(make_spin_goal());
+    std::uint8_t goal_seq = 0xFFu;
+    std::vector<std::uint8_t> payload;
+    ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+    fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, goal_seq, 0x00u});
+    fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+    ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+    ASSERT_NE(goal_handle.get(), nullptr) << "the goal stays active as the router dies";
+  }
+}
+
 // A handshake announcing one LookupTransform action on a 32-bit-double
 // MCU: the features byte carries bit 4, so every float64 travels narrow.
 void handshake_with_narrow_actions(RouterFixture & fixture)
