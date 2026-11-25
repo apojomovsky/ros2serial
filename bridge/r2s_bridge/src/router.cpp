@@ -733,10 +733,12 @@ struct Router::Impl
     const bool transient = effective.durability() == rclcpp::DurabilityPolicy::TransientLocal;
     const std::string durability_suffix = transient ? ",transient_local" : "";
     if (policy_kind == RMW_QOS_POLICY_DURABILITY) {
-      const std::string fix = publisher_route ?
-        info.topic_name + "=" + reliability_name(ours) + ",transient_local" :
-        info.topic_name + "=" + reliability_name(ours);
-      const char * remote_need = publisher_route ? "transient_local" : "volatile";
+      std::string fix = info.topic_name + "=" + reliability_name(ours);
+      const char * remote_need = "volatile";
+      if (publisher_route) {
+        fix += ",transient_local";
+        remote_need = "transient_local";
+      }
       emit(SessionLog::kWarning,
           "topic '" + info.topic_name + "': incompatible QoS durability: host endpoint is " +
           reliability_name(ours) + (transient ? " transient_local" : " volatile") +
