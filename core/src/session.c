@@ -613,8 +613,8 @@ static void send_declare(uint8_t index)
   } else if (param->type == R2S_PARAM_F64) {
     uint64_t bits = 0u;
 
-    memcpy(&bits, &param->initial.f, 8u);
-    for (i = 0u; i < 8u; i++) {
+    memcpy(&bits, &param->initial.f, sizeof(param->initial.f));
+    for (i = 0u; i < (uint16_t)sizeof(param->initial.f); i++) {
       put_byte((uint8_t)(bits >> (i * 8u)));
     }
   } else {

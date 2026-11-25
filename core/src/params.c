@@ -34,8 +34,9 @@ static uint16_t default_len(const r2s_param_t *param)
     case R2S_PARAM_BOOL:
       return 1u;
     case R2S_PARAM_I64:
-    case R2S_PARAM_F64:
       return 8u;
+    case R2S_PARAM_F64:
+      return (uint16_t)sizeof(double);
     default:
       return (uint16_t)((uint32_t)varint_len((uint16_t)strlen(param->initial.s)) +
              (uint32_t)strlen(param->initial.s));
@@ -180,8 +181,12 @@ int r2s_params_check_set(uint8_t index, const uint8_t *value, uint16_t len)
     if (value[0] > 1u) {
       return -1;
     }
-  } else if (param->type == R2S_PARAM_I64 || param->type == R2S_PARAM_F64) {
+  } else if (param->type == R2S_PARAM_I64) {
     if (len != 8u) {
+      return R2S_PARAM_BAD_TYPE_OR_LENGTH;
+    }
+  } else if (param->type == R2S_PARAM_F64) {
+    if (len != (uint16_t)sizeof(double)) {
       return R2S_PARAM_BAD_TYPE_OR_LENGTH;
     }
   } else {
@@ -230,9 +235,13 @@ void r2s_params_store(uint8_t index, const uint8_t *value, uint16_t len)
 
     memcpy(&param->value.i, &bits, 8u);
   } else if (param->type == R2S_PARAM_F64) {
-    uint64_t bits = wire_u64(value);
+    uint64_t bits = 0u;
+    uint16_t i;
 
-    memcpy(&param->value.f, &bits, 8u);
+    for (i = 0u; i < (uint16_t)sizeof(double); i++) {
+      bits |= (uint64_t)value[i] << (i * 8u);
+    }
+    memcpy(&param->value.f, &bits, sizeof(double));
   } else {
     uint16_t text_len = 0u;
 

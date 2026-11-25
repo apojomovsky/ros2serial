@@ -181,13 +181,22 @@ void put_varint(std::vector<std::uint8_t> & out, std::uint32_t value)
 // The MCU default as the ROS value to declare. The walk validated every
 // shape before keeping the entry ([PAR-1], [PAR-3]), so this only lays the
 // bytes out; the trailing throw names a type the walk should not have kept.
-rclcpp::ParameterValue decode_param_default(const ParamInfo & info)
+rclcpp::ParameterValue decode_param_default(const ParamInfo & info, bool narrow)
 {
   switch (info.type) {
     case kParamBool:
       return rclcpp::ParameterValue(info.default_value[0] != 0u);
     case kParamI64:
     case kParamF64: {
+        if (info.type == kParamF64 && narrow) {
+          std::uint32_t bits = 0u;
+          for (std::size_t at = 0; at < 4u; ++at) {
+            bits |= static_cast<std::uint32_t>(info.default_value[at]) << (8u * at);
+          }
+          float narrow_value = 0;
+          std::memcpy(&narrow_value, &bits, sizeof(narrow_value));
+          return rclcpp::ParameterValue(static_cast<double>(narrow_value));
+        }
         std::uint64_t bits = 0u;
         for (std::size_t at = 0; at < 8u; ++at) {
           bits |= static_cast<std::uint64_t>(info.default_value[at]) << (8u * at);
@@ -220,7 +229,7 @@ rclcpp::ParameterValue decode_param_default(const ParamInfo & info)
 // in the string case because the walk keeps types 0 to 3 ([PAR-3]).
 void encode_param_value(
   std::uint8_t type, const rclcpp::Parameter & value,
-  std::vector<std::uint8_t> & out)
+  std::vector<std::uint8_t> & out, bool narrow = false)
 {
   out.clear();
   if (type == kParamBool) {
@@ -232,6 +241,15 @@ void encode_param_value(
     }
   } else if (type == kParamF64) {
     const double number = value.get_value<double>();
+    if (narrow) {
+      const float narrow_value = static_cast<float>(number);
+      std::uint32_t bits = 0u;
+      std::memcpy(&bits, &narrow_value, sizeof(bits));
+      for (int at = 0; at < 4; ++at) {
+        out.push_back(static_cast<std::uint8_t>((bits >> (8 * at)) & 0xFFu));
+      }
+      return;
+    }
     std::uint64_t bits = 0u;
     static_assert(sizeof(number) == sizeof(bits), "a host double carries 64 bits");
     std::memcpy(&bits, &number, sizeof(bits));
@@ -2142,7 +2160,8 @@ struct Router::Impl
         try {
           rcl_interfaces::msg::ParameterDescriptor descriptor;
           descriptor.read_only = (info.flags & kParamReadOnly) != 0u;
-          node_params_->declare_parameter(info.name, decode_param_default(info), descriptor);
+          node_params_->declare_parameter(
+            info.name, decode_param_default(info, session_.narrow_float64()), descriptor);
         } catch (const std::exception & error) {
           emit(SessionLog::kWarning,
                          "parameter '" + info.name + "': not declared (" + error.what() + ")");
@@ -2160,7 +2179,7 @@ struct Router::Impl
         continue;
       }
       std::vector<std::uint8_t> wire;
-      encode_param_value(info.type, current, wire);
+      encode_param_value(info.type, current, wire, session_.narrow_float64());
       if (wire != info.default_value) {
         session_.send_param_set(info.index, wire);
       }
@@ -2190,7 +2209,7 @@ struct Router::Impl
         return result;
       }
       std::vector<std::uint8_t> wire;
-      encode_param_value(found->second.type, param, wire);
+      encode_param_value(found->second.type, param, wire, session_.narrow_float64());
       if (!session_.send_param_set(found->second.index, wire)) {
         result.successful = false;
         result.reason = "parameter '" + param.get_name() + "': the link is down";

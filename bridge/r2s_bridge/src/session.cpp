@@ -998,6 +998,8 @@ struct Session::Impl
     }
     state = SessionState::kHandshaking;
     start_topic_walk();
+    // The parameter walk follows, so the width is known before it starts.
+    narrow_float64_ = (facts.features & kDouble32FeaturesBit) != 0u;
     return true;
   }
 
@@ -1112,8 +1114,14 @@ struct Session::Impl
       if (def.size() != 1u || def[0] > 1u) {
         return;
       }
-    } else if (info.type == 1u || info.type == 2u) {
+    } else if (info.type == 1u) {
       if (def.size() != 8u) {
+        return;
+      }
+    } else if (info.type == 2u) {
+      // A 32-bit-double MCU holds an f64 as binary32, so its default
+      // travels narrow like a service payload ([ENC-12]).
+      if (def.size() != (narrow_float64_ ? 4u : 8u)) {
         return;
       }
     } else {
