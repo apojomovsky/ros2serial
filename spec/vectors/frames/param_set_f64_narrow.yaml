@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
+
+name: param_set
+covers: [PAR-1, PAR-3, ENC-12]
+topic_id: 3
+seq: 2
+payload: "03 00 00 00 00 20 40"
+frame: "03 02 03 00 00 00 00 20 40 29 5a"
+wire: "03 02 03 04 01 01 01 20 40 29 5a 05 00"

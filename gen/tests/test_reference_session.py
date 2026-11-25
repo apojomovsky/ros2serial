@@ -184,6 +184,29 @@ def test_declare_and_set_cover_float_and_writable_int():
     assert session.snapshot()['params'] == [(model.PARAM_F64, 2.5), (model.PARAM_I64, 8)]
 
 
+# covers: PAR-1, PAR-3, ENC-12
+def test_declare_and_set_float_narrow_on_32_bit_double():
+    params = [model.Param('gain', model.PARAM_F64, 0, 0, 1.5, 1.5)]
+    session = model.McuSession(topics=list(TOPICS), params=params, features=0x12)
+    session.reset(0)
+    session.take_tx()
+    session.feed(wire(3, 0, bytes((model.OP_PARAM_REQ, 0))))
+    session.spin()
+    assert session.take_tx() == [
+        model.encode_frame(
+            3,
+            0,
+            bytes((model.OP_PARAM_DECLARE, 0, model.PARAM_F64, 0, 4))
+            + b'gain'
+            + struct.pack('<f', 1.5),
+        )
+    ]
+    connect(session)
+    session.feed(wire(3, 0, bytes((model.OP_PARAM_SET, 0, 0)) + struct.pack('<f', 2.5)))
+    session.spin()
+    assert session.snapshot()['params'] == [(model.PARAM_F64, 2.5)]
+
+
 # covers: SES-5
 def test_hello_repeats_after_one_silent_second():
     session = fresh()

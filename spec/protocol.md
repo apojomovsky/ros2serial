@@ -100,7 +100,7 @@ A payload is the packed encoding of one message, field after field, with no padd
 - [ENC-9] Unbounded and bounded sequences `T[]` and `T[<=N]` are a varint element count, which may be 0, followed by the elements.
 - [ENC-10] A topic is narrow when its topic announcement has the narrow flag set.
 - [ENC-11] On a narrow topic every `float64` field travels as IEEE 754 binary32, little-endian. A side holding the value as binary64 converts it with IEEE 754 roundTiesToEven before sending: a finite value too large for binary32 becomes an infinity of the same sign, a finite value below the smallest normal becomes the smallest normal, a subnormal or a zero of the same sign, and a NaN stays a NaN. The receiving host widens the value exactly.
-- [ENC-12] An MCU build whose C `double` is 32 bits MUST set the narrow flag on every topic.
+- [ENC-12] An MCU build whose C `double` is 32 bits MUST set the narrow flag on every topic. On such a build every `float64` value on a channel that announces no narrow flag of its own (parameters, services and actions) also travels as binary32, as [ENC-11] gives for a narrow topic.
 - [ENC-13] The wire layout does not depend on the bounds chosen for strings and sequences: only the actual lengths are encoded. A message encodes to the same bytes whatever bounds the two sides were built with, as long as it fits them.
 - [ENC-14] A string MUST NOT contain a `0x00` byte, because the MCU holds strings NUL-terminated. A sender MUST NOT send one, and a receiver MUST drop a payload with one.
 - [ENC-15] The MCU MUST NOT truncate a string or sequence longer than its bound: the publish fails with a bounds error and sends nothing. The host has no bounds.
@@ -222,7 +222,7 @@ The MCU sends on this channel; the host does not.
 
 - [PAR-1] The payload of each parameters opcode is the one the table above gives, in that order and with nothing between: the opcode byte, then the fields it lists, and a string as its varint length and bytes (section 5).
 - [PAR-2] A `type` is 0 for bool, 1 for i64, 2 for f64 and 3 for string. Every other value is reserved. A receiver MUST refuse ([SYS-5]) a DECLARE whose type is not one of those four.
-- [PAR-3] A bool value is one byte, 0 for false and 1 for true. An i64 value is 8 bytes, little-endian. An f64 value is IEEE 754 binary64, little-endian. A string value is a varint length with bytes, and MUST NOT hold a `0x00` byte. A receiver MUST refuse a value that breaks its type's rule.
+- [PAR-3] A bool value is one byte, 0 for false and 1 for true. An i64 value is 8 bytes, little-endian. An f64 value is IEEE 754 binary64, little-endian, except on a build whose `double` is 32 bits, where it is binary32 ([ENC-12]). A string value is a varint length with bytes, and MUST NOT hold a `0x00` byte. A receiver MUST refuse a value that breaks its type's rule.
 - [PAR-4] The `flags` byte has bit 0 for read-only. Every other bit is reserved and MUST be 0. A receiver MUST refuse ([SYS-5]) a DECLARE with a reserved bit set.
 - [PAR-5] A PARAM_STATUS `status` is 0 for applied, 1 for unknown index, 2 for bad type or length, 3 for read-only and 4 for out of range. Every other value is reserved. A receiver MUST refuse ([SYS-5]) a PARAM_STATUS whose status is not one of those five.
 - [PAR-6] A DECLARE carries the full name in both handshake modes.

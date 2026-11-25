@@ -517,8 +517,13 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
                 if kind == 0:
                     if r.u8() not in (0, 1):
                         problems.append(f'{name}/payload: the bool value is neither 0 nor 1')
-                elif kind in (1, 2):
-                    r.take(8)  # i64, f64
+                elif kind == 1:
+                    r.take(8)  # i64
+                elif kind == 2:
+                    # f64: 8 bytes, or 4 on a 32-bit-double build ([ENC-12]).
+                    if len(payload) - r.pos not in (4, 8):
+                        problems.append(f'{name}/payload: the f64 value is not 4 or 8 bytes')
+                    r.take(len(payload) - r.pos)
                 else:
                     text = r.string()
                     if b'\x00' in text:
@@ -529,8 +534,8 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
             r.u8()  # rel seq
             r.u8()  # index
             value = r.take(len(payload) - r.pos)
-            if len(value) == 8 or value in (b'\x00', b'\x01'):
-                pass  # i64, f64, or a bool; a SET carries no type byte
+            if len(value) in (4, 8) or value in (b'\x00', b'\x01'):
+                pass  # i64, f64 (4 on a 32-bit-double build), or a bool
             else:
                 # A SET carries no type byte, so anything else must parse as
                 # a string: a varint length holding exactly the rest.

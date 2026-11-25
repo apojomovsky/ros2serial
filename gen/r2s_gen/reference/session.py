@@ -493,6 +493,10 @@ class McuSession:
         if len(rest) != length or any(byte == 0 for byte in rest):
             self._refuse()
 
+    def _f64_format(self) -> str:
+        """The f64 wire format: binary32 on a 32-bit-double build."""
+        return '<f' if self.features & 0x10 else '<d'
+
     def _default_bytes(self, param: Param) -> bytes:
         """Return the DECLARE default for one parameter (PAR-1, PAR-3)."""
         if param.kind == PARAM_BOOL:
@@ -500,7 +504,7 @@ class McuSession:
         if param.kind == PARAM_I64:
             return int(param.initial).to_bytes(8, 'little', signed=True)
         if param.kind == PARAM_F64:
-            return struct.pack('<d', param.initial)
+            return struct.pack(self._f64_format(), param.initial)
         encoded = bytes(param.initial)
         return varint_mod.encode(len(encoded)) + encoded
 
@@ -517,8 +521,11 @@ class McuSession:
                 return PARAM_BAD_TYPE_OR_LENGTH
             if value[0] > 1:
                 return None
-        elif param.kind in (PARAM_I64, PARAM_F64):
+        elif param.kind == PARAM_I64:
             if len(value) != 8:
+                return PARAM_BAD_TYPE_OR_LENGTH
+        elif param.kind == PARAM_F64:
+            if len(value) != struct.calcsize(self._f64_format()):
                 return PARAM_BAD_TYPE_OR_LENGTH
         else:
             try:
@@ -542,7 +549,7 @@ class McuSession:
         elif param.kind == PARAM_I64:
             param.value = int.from_bytes(value, 'little', signed=True)
         elif param.kind == PARAM_F64:
-            param.value = struct.unpack('<d', value)[0]
+            param.value = struct.unpack(self._f64_format(), value)[0]
         else:
             length, used = varint_mod.decode(value)
             param.value = bytes(value[used : used + length])
