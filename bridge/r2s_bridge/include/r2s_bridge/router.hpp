@@ -52,11 +52,24 @@ struct NodeServiceInterfaces
   rclcpp::node_interfaces::NodeServicesInterface::SharedPtr services;
 };
 
+/// One topic's host endpoint QoS override ([SES-31]).
+struct QosOverride
+{
+  bool reliable = false;  ///< True for reliable, false for best effort.
+  bool transient_local = false;  ///< True for transient local durability.
+  /// Whether both overrides agree.
+  bool operator==(const QosOverride & other) const
+  {
+    return reliable == other.reliable && transient_local == other.transient_local;
+  }
+};
+
 /// The bridge parameters behind the pacing (docs/00-design.md, E4).
 struct RouterParams
 {
   double rate_default_hz = 0.0;  ///< The default send rate, 0 for none.
   std::map<std::string, double> rate_limits;  ///< Per-topic send rates.
+  std::map<std::string, QosOverride> qos_overrides;  ///< Per-topic QoS.
   int tx_budget_pct = 50;  ///< The link share for host-to-MCU traffic.
   std::size_t qos_depth = 10;  ///< The endpoint queue depth.
   int baud = 115200;  ///< Bits per second.
@@ -74,6 +87,15 @@ struct RouterParams
 std::map<std::string, double> parse_rate_overrides(
   const std::vector<std::string> & entries,
   const LogSink & sink);
+
+/// Parses "<topic>=reliable|best_effort[,transient_local]" entries ([SES-31]).
+/**
+ * \param[in] entries the qos.overrides lines to parse.
+ * \return The parsed per-topic QoS overrides.
+ * \throws std::invalid_argument naming a malformed entry or unknown option.
+ */
+std::map<std::string, QosOverride> parse_qos_overrides(
+  const std::vector<std::string> & entries);
 
 /// Routes one link.
 /**
@@ -158,6 +180,8 @@ public:
     bool route_missing = false;
     /// Why the route is missing, meaningful only when route_missing holds.
     std::string route_error;
+    std::string reliability;  ///< The effective reliability [SES-31].
+    std::string durability;  ///< The effective durability [SES-31].
   };
 
   /// The H8 snapshot.

@@ -26,3 +26,5 @@ r2s_bridge:
       # overrides: ["cmd_vel=20"]
     tx_budget_pct: 50
     qos_depth: 10
+    # Per-topic host endpoint QoS naming the announced topic: add a qos key
+    # with overrides: ["battery=reliable"] to set one topic reliable.

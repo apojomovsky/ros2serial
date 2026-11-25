@@ -15,6 +15,7 @@
 #include <deque>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -278,6 +279,48 @@ std::map<std::string, double> parse_rate_overrides(
     rates[entry.substr(0u, at)] = hz;
   }
   return rates;
+}
+
+std::map<std::string, QosOverride> parse_qos_overrides(
+  const std::vector<std::string> & entries)
+{
+  std::map<std::string, QosOverride> out;
+  for (const std::string & entry : entries) {
+    const std::string why_prefix = "qos.overrides: invalid entry '" + entry + "': ";
+    const std::string::size_type at = entry.find('=');
+    if (at == std::string::npos || at == 0u || at + 1u >= entry.size()) {
+      throw std::invalid_argument(
+              why_prefix + "want <topic>=reliable or <topic>=best_effort");
+    }
+    const std::string value = entry.substr(at + 1u);
+    std::vector<std::string> tokens;
+    std::string::size_type begin = 0u;
+    while (true) {
+      const std::string::size_type comma = value.find(',', begin);
+      tokens.push_back(value.substr(begin, comma == std::string::npos ? comma : comma - begin));
+      if (comma == std::string::npos) {
+        break;
+      }
+      begin = comma + 1u;
+    }
+    QosOverride parsed;
+    if (tokens[0] == "reliable") {
+      parsed.reliable = true;
+    } else if (tokens[0] == "best_effort") {
+      parsed.reliable = false;
+    } else {
+      throw std::invalid_argument(
+              why_prefix + "want reliable or best_effort, got '" + tokens[0] + "'");
+    }
+    for (std::size_t i = 1u; i < tokens.size(); ++i) {
+      if (tokens[i] != "transient_local" || parsed.transient_local) {
+        throw std::invalid_argument(why_prefix + "unknown option '" + tokens[i] + "'");
+      }
+      parsed.transient_local = true;
+    }
+    out[entry.substr(0u, at)] = parsed;
+  }
+  return out;
 }
 
 struct Router::Impl
@@ -632,15 +675,70 @@ struct Router::Impl
     sink(level, text);
   }
 
+  static const char * reliability_name(bool reliable)
+  {
+    return reliable ? "reliable" : "best_effort";
+  }
+
   rclcpp::QoS route_qos(const TopicInfo & info) const
   {
     rclcpp::QoS qos(params.qos_depth);
+    const auto override = params.qos_overrides.find(info.topic_name);
+    if (override != params.qos_overrides.end()) {
+      if (override->second.reliable) {
+        qos.reliable();
+      } else {
+        qos.best_effort();
+      }
+      if (override->second.transient_local) {
+        qos.transient_local();
+      } else {
+        qos.durability_volatile();
+      }
+      return qos;
+    }
     if ((info.flags & kReliableFlag) != 0u) {
       qos.reliable();
     } else {
       qos.best_effort();
     }
     return qos;
+  }
+
+  bool effective_reliable(const TopicInfo & info) const
+  {
+    const auto override = params.qos_overrides.find(info.topic_name);
+    if (override != params.qos_overrides.end()) {
+      return override->second.reliable;
+    }
+    return (info.flags & kReliableFlag) != 0u;
+  }
+
+  void on_incompatible_qos(
+    const TopicInfo & info, bool publisher_route, std::int32_t total_count)
+  {
+    const std::string key = info.topic_name + "#" + std::to_string(total_count);
+    if (!qos_warned_.insert(key).second) {
+      return;
+    }
+    const bool ours = effective_reliable(info);
+    const bool remote = !ours;
+    (void)publisher_route;
+    emit(SessionLog::kWarning,
+        "topic '" + info.topic_name + "': incompatible QoS: host endpoint is " +
+        reliability_name(ours) + ", remote endpoint is " + reliability_name(remote) +
+        "; set qos.overrides entry '" + info.topic_name + "=" + reliability_name(remote) +
+        "' to match (qos.overrides)");
+  }
+
+  void log_qos_event_unavailable()
+  {
+    if (qos_event_unavailable_logged_) {
+      return;
+    }
+    qos_event_unavailable_logged_ = true;
+    emit(SessionLog::kDebug,
+        "incompatible QoS warning unavailable on this RMW");
   }
 
     // Creates one route's endpoint, reporting the failure through the sink at
@@ -652,16 +750,42 @@ struct Router::Impl
   {
     Route route;
     route.info = info;
+    const rclcpp::QoS qos = route_qos(info);
     try {
       if (info.device_to_host()) {
-        route.pub = rclcpp::create_generic_publisher(topics, info.topic_name, info.type_name,
-                                                             route_qos(info));
+        rclcpp::PublisherOptions options;
+        options.event_callbacks.incompatible_qos_callback =
+          [this, info](rclcpp::QOSOfferedIncompatibleQoSInfo & event) {
+            on_incompatible_qos(info, true, event.total_count);
+          };
+        try {
+          route.pub = rclcpp::create_generic_publisher(
+            topics, info.topic_name, info.type_name, qos, options);
+        } catch (const rclcpp::UnsupportedEventTypeException &) {
+          log_qos_event_unavailable();
+          route.pub = rclcpp::create_generic_publisher(
+            topics, info.topic_name, info.type_name, qos);
+        }
       } else {
-        route.sub = rclcpp::create_generic_subscription(
-                    topics, info.topic_name, info.type_name, route_qos(info),
-          [this, id = info.topic_id](std::shared_ptr<rclcpp::SerializedMessage> msg) {
-            on_ros_message(id, std::move(msg));
-                    });
+        rclcpp::SubscriptionOptions options;
+        options.event_callbacks.incompatible_qos_callback =
+          [this, info](rclcpp::QOSRequestedIncompatibleQoSInfo & event) {
+            on_incompatible_qos(info, false, event.total_count);
+          };
+        try {
+          route.sub = rclcpp::create_generic_subscription(
+            topics, info.topic_name, info.type_name, qos,
+            [this, id = info.topic_id](std::shared_ptr<rclcpp::SerializedMessage> msg) {
+              on_ros_message(id, std::move(msg));
+            }, options);
+        } catch (const rclcpp::UnsupportedEventTypeException &) {
+          log_qos_event_unavailable();
+          route.sub = rclcpp::create_generic_subscription(
+            topics, info.topic_name, info.type_name, qos,
+            [this, id = info.topic_id](std::shared_ptr<rclcpp::SerializedMessage> msg) {
+              on_ros_message(id, std::move(msg));
+            });
+        }
       }
     } catch (const std::exception & failure) {
       error = failure.what();
@@ -669,6 +793,12 @@ struct Router::Impl
           "topic '" + info.topic_name + "': no publisher or subscription: " + error);
       return std::nullopt;
     }
+    emit(SessionLog::kDebug,
+        "topic '" + info.topic_name + "': qos " +
+        std::string(reliability_name(qos.reliability() == rclcpp::ReliabilityPolicy::Reliable)) +
+        " " +
+        (qos.durability() == rclcpp::DurabilityPolicy::TransientLocal ? "transient_local" :
+        "volatile"));
     error.clear();
     return route;
   }
@@ -2335,6 +2465,8 @@ struct Router::Impl
   std::map<std::uint8_t, std::unique_ptr<ActionRoute>> action_routes_;
   std::map<std::uint8_t, RepairState> action_repairs_;
   RclClock rcl_clock_;
+  std::set<std::string> qos_warned_;
+  bool qos_event_unavailable_logged_ = false;
     // Recursive: declaring a ROS parameter reenters through the on-set
     // hook on the same thread, which takes the guard again.
   std::recursive_mutex mutex;
@@ -2443,6 +2575,12 @@ Router::Diagnostics Router::diagnostics() const
     topic.device_to_host = info.device_to_host();
     topic.status = info.status;
     topic.seq_gaps = impl_->session_.seq_gaps(info.topic_id);
+    const rclcpp::QoS effective = impl_->route_qos(info);
+    topic.reliability =
+      effective.reliability() == rclcpp::ReliabilityPolicy::Reliable ? "reliable" : "best_effort";
+    topic.durability =
+      effective.durability() == rclcpp::DurabilityPolicy::TransientLocal ? "transient_local" :
+      "volatile";
     topic.dropped = impl_->scheduler_.dropped(info.topic_id);
     const auto route = impl_->routes.find(info.topic_id);
     topic.publish_failures = route == impl_->routes.end() ? 0u : route->second.publish_failures;
