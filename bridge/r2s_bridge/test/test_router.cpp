@@ -572,6 +572,45 @@ TEST_F(RouterNode, IncompatibleQosWarningNamesTopicAndFix)
     EXPECT_EQ(warnings, 1) << "the warning fires once per topic and remote pair";
 }
 
+TEST_F(RouterNode, IncompatibleQosWarningOnSubscriptionRoute)
+{
+    const std::string rmw = rmw_get_implementation_identifier();
+    if (rmw == "rmw_zenoh_cpp") {
+      GTEST_SKIP() << "rmw_zenoh_cpp does not support the incompatible QoS event";
+    }
+    RouterFixture fixture("qos_warn_sub", remapped(), RouterParams{});
+    fixture.handshake(0x09u);
+    auto pub = fixture.node()->create_publisher<geometry_msgs::msg::Twist>(
+        "cmd_vel", rclcpp::QoS(10).best_effort());
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!logged_has(fixture.logged(), "cmd_vel=best_effort") &&
+      std::chrono::steady_clock::now() < deadline) {
+      rclcpp::spin_some(fixture.node());
+    }
+    EXPECT_TRUE(logged_has(fixture.logged(), "incompatible"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "cmd_vel=best_effort"));
+}
+
+TEST_F(RouterNode, IncompatibleDurabilityWarningSuggestsTransientLocal)
+{
+    const std::string rmw = rmw_get_implementation_identifier();
+    if (rmw == "rmw_zenoh_cpp") {
+      GTEST_SKIP() << "rmw_zenoh_cpp does not support the incompatible QoS event";
+    }
+    RouterFixture fixture("qos_warn_dur", remapped(), RouterParams{});
+    fixture.handshake();
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
+        "power/battery", rclcpp::QoS(10).best_effort().transient_local(),
+    [](const std_msgs::msg::Float32 &) {});
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!logged_has(fixture.logged(), "battery=best_effort,transient_local") &&
+      std::chrono::steady_clock::now() < deadline) {
+      rclcpp::spin_some(fixture.node());
+    }
+    EXPECT_TRUE(logged_has(fixture.logged(), "incompatible QoS durability"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "battery=best_effort,transient_local"));
+}
+
 TEST_F(RouterNode, McuToHostForwardsTheConvertedMessage)
 {
     RouterFixture fixture("up", remapped(), RouterParams{});

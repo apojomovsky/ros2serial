@@ -318,7 +318,9 @@ std::map<std::string, QosOverride> parse_qos_overrides(
       }
       parsed.transient_local = true;
     }
-    out[entry.substr(0u, at)] = parsed;
+    if (!out.emplace(entry.substr(0u, at), parsed).second) {
+      throw std::invalid_argument(why_prefix + "duplicate topic");
+    }
   }
   return out;
 }
@@ -715,20 +717,42 @@ struct Router::Impl
   }
 
   void on_incompatible_qos(
-    const TopicInfo & info, bool publisher_route, std::int32_t total_count)
+    const TopicInfo & info, bool publisher_route, std::int32_t total_count,
+    rmw_qos_policy_kind_t policy_kind)
   {
-    const std::string key = info.topic_name + "#" + std::to_string(total_count);
+    const std::string key = info.topic_name + "#" + std::to_string(total_count) + "#" +
+      std::to_string(static_cast<int>(policy_kind));
     if (!qos_warned_.insert(key).second) {
       return;
     }
     const bool ours = effective_reliable(info);
+    const rclcpp::QoS effective = route_qos(info);
+    const bool transient = effective.durability() == rclcpp::DurabilityPolicy::TransientLocal;
+    const std::string durability_suffix = transient ? ",transient_local" : "";
+    if (policy_kind == RMW_QOS_POLICY_DURABILITY) {
+      const std::string fix = publisher_route ?
+        info.topic_name + "=" + reliability_name(ours) + ",transient_local" :
+        info.topic_name + "=" + reliability_name(ours);
+      const char * remote_need = publisher_route ? "transient_local" : "volatile";
+      emit(SessionLog::kWarning,
+          "topic '" + info.topic_name + "': incompatible QoS durability: host endpoint is " +
+          reliability_name(ours) + (transient ? " transient_local" : " volatile") +
+          ", remote endpoint requires " + remote_need +
+          " durability; set qos.overrides entry '" + fix + "' to match (qos.overrides)");
+      return;
+    }
+    if (policy_kind != RMW_QOS_POLICY_RELIABILITY) {
+      emit(SessionLog::kWarning,
+          "topic '" + info.topic_name + "': incompatible QoS: host endpoint is " +
+          reliability_name(ours) + (transient ? " transient_local" : " volatile"));
+      return;
+    }
     const bool remote = !ours;
-    (void)publisher_route;
     emit(SessionLog::kWarning,
         "topic '" + info.topic_name + "': incompatible QoS: host endpoint is " +
         reliability_name(ours) + ", remote endpoint is " + reliability_name(remote) +
         "; set qos.overrides entry '" + info.topic_name + "=" + reliability_name(remote) +
-        "' to match (qos.overrides)");
+        durability_suffix + "' to match (qos.overrides)");
   }
 
   void log_qos_event_unavailable()
@@ -756,7 +780,7 @@ struct Router::Impl
         rclcpp::PublisherOptions options;
         options.event_callbacks.incompatible_qos_callback =
           [this, info](rclcpp::QOSOfferedIncompatibleQoSInfo & event) {
-            on_incompatible_qos(info, true, event.total_count);
+            on_incompatible_qos(info, true, event.total_count, event.last_policy_kind);
           };
         try {
           route.pub = rclcpp::create_generic_publisher(
@@ -770,7 +794,7 @@ struct Router::Impl
         rclcpp::SubscriptionOptions options;
         options.event_callbacks.incompatible_qos_callback =
           [this, info](rclcpp::QOSRequestedIncompatibleQoSInfo & event) {
-            on_incompatible_qos(info, false, event.total_count);
+            on_incompatible_qos(info, false, event.total_count, event.last_policy_kind);
           };
         try {
           route.sub = rclcpp::create_generic_subscription(
@@ -887,6 +911,7 @@ struct Router::Impl
 
   void sync_routes()
   {
+    qos_warned_.clear();
     routes.clear();
     const double budget_bytes_per_sec =
       static_cast<double>(params.baud) / 10.0 * static_cast<double>(params.tx_budget_pct) / 100.0;
