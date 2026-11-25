@@ -57,11 +57,6 @@ struct QosOverride
 {
   bool reliable = false;  ///< True for reliable, false for best effort.
   bool transient_local = false;  ///< True for transient local durability.
-  /// Whether both overrides agree.
-  bool operator==(const QosOverride & other) const
-  {
-    return reliable == other.reliable && transient_local == other.transient_local;
-  }
 };
 
 /// The bridge parameters behind the pacing (docs/00-design.md, E4).

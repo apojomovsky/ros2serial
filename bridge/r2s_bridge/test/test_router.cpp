@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <map>
@@ -26,7 +27,6 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
-#include <rmw/rmw.h>
 #include <sensor_msgs/srv/set_camera_info.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/float32.hpp>
@@ -481,13 +481,24 @@ TEST(QosOverrides, MalformedEntriesThrowNamingTheEntry)
 {
     for (const std::string & entry :
       {"battery", "=reliable", "battery=", "battery=bogus", "battery=reliable,latched",
-        "battery=reliable,", "battery=transient_local", "battery=reliable,reliable"}) {
+        "battery=reliable,", "battery=transient_local", "battery=reliable,reliable",
+        "battery=reliable,transient_local,transient_local"}) {
       try {
         parse_qos_overrides({entry});
         FAIL() << "entry should throw: " << entry;
       } catch (const std::invalid_argument & error) {
         EXPECT_NE(std::string(error.what()).find(entry), std::string::npos) << entry;
       }
+    }
+}
+
+TEST(QosOverrides, DuplicateTopicThrowsNamingTheEntry)
+{
+    try {
+      parse_qos_overrides({"battery=reliable", "battery=best_effort"});
+      FAIL() << "a duplicate topic should throw";
+    } catch (const std::invalid_argument & error) {
+      EXPECT_NE(std::string(error.what()).find("battery=best_effort"), std::string::npos);
     }
 }
 
@@ -510,6 +521,12 @@ TEST_F(RouterNode, QosOverrideSetsPublisherReliabilitySes31)
     ASSERT_EQ(received.size(), 1u);
     EXPECT_TRUE(logged_has(fixture.logged(), "battery"));
     EXPECT_TRUE(logged_has(fixture.logged(), "reliable"));
+    for (const auto & topic : fixture.router().diagnostics().topics) {
+      if (topic.topic_name == "battery") {
+        EXPECT_EQ(topic.reliability, "reliable");
+        EXPECT_EQ(topic.durability, "volatile");
+      }
+    }
 }
 
 TEST_F(RouterNode, QosOverrideSetsSubscriptionReliabilityAndDurabilitySes31)
@@ -540,8 +557,8 @@ TEST_F(RouterNode, QosOverrideSetsSubscriptionReliabilityAndDurabilitySes31)
 
 TEST_F(RouterNode, IncompatibleQosWarningNamesTopicAndFix)
 {
-    const std::string rmw = rmw_get_implementation_identifier();
-    if (rmw == "rmw_zenoh_cpp") {
+    const char * rmw_env = std::getenv("RMW_IMPLEMENTATION");
+    if (rmw_env != nullptr && std::string(rmw_env) == "rmw_zenoh_cpp") {
       GTEST_SKIP() << "rmw_zenoh_cpp does not support the incompatible QoS event";
     }
     RouterFixture fixture("qos_warn", remapped(), RouterParams{});
@@ -574,8 +591,8 @@ TEST_F(RouterNode, IncompatibleQosWarningNamesTopicAndFix)
 
 TEST_F(RouterNode, IncompatibleQosWarningOnSubscriptionRoute)
 {
-    const std::string rmw = rmw_get_implementation_identifier();
-    if (rmw == "rmw_zenoh_cpp") {
+    const char * rmw_env = std::getenv("RMW_IMPLEMENTATION");
+    if (rmw_env != nullptr && std::string(rmw_env) == "rmw_zenoh_cpp") {
       GTEST_SKIP() << "rmw_zenoh_cpp does not support the incompatible QoS event";
     }
     RouterFixture fixture("qos_warn_sub", remapped(), RouterParams{});
@@ -593,8 +610,8 @@ TEST_F(RouterNode, IncompatibleQosWarningOnSubscriptionRoute)
 
 TEST_F(RouterNode, IncompatibleDurabilityWarningSuggestsTransientLocal)
 {
-    const std::string rmw = rmw_get_implementation_identifier();
-    if (rmw == "rmw_zenoh_cpp") {
+    const char * rmw_env = std::getenv("RMW_IMPLEMENTATION");
+    if (rmw_env != nullptr && std::string(rmw_env) == "rmw_zenoh_cpp") {
       GTEST_SKIP() << "rmw_zenoh_cpp does not support the incompatible QoS event";
     }
     RouterFixture fixture("qos_warn_dur", remapped(), RouterParams{});
@@ -609,6 +626,48 @@ TEST_F(RouterNode, IncompatibleDurabilityWarningSuggestsTransientLocal)
     }
     EXPECT_TRUE(logged_has(fixture.logged(), "incompatible QoS durability"));
     EXPECT_TRUE(logged_has(fixture.logged(), "battery=best_effort,transient_local"));
+}
+
+TEST_F(RouterNode, IncompatibleWarningWithOverrideSet)
+{
+    const char * rmw_env = std::getenv("RMW_IMPLEMENTATION");
+    if (rmw_env != nullptr && std::string(rmw_env) == "rmw_zenoh_cpp") {
+      GTEST_SKIP() << "rmw_zenoh_cpp does not support the incompatible QoS event";
+    }
+    RouterParams params;
+    params.qos_overrides = parse_qos_overrides({"battery=best_effort"});
+    RouterFixture fixture("qos_warn_override", remapped(), params);
+    fixture.handshake();
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
+        "power/battery", rclcpp::QoS(10).reliable(),
+    [](const std_msgs::msg::Float32 &) {});
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!logged_has(fixture.logged(), "battery=reliable") &&
+      std::chrono::steady_clock::now() < deadline) {
+      rclcpp::spin_some(fixture.node());
+    }
+    EXPECT_TRUE(logged_has(fixture.logged(), "battery=reliable"));
+}
+
+TEST_F(RouterNode, IncompatibleSubscriptionDurabilityWarning)
+{
+    const char * rmw_env = std::getenv("RMW_IMPLEMENTATION");
+    if (rmw_env != nullptr && std::string(rmw_env) == "rmw_zenoh_cpp") {
+      GTEST_SKIP() << "rmw_zenoh_cpp does not support the incompatible QoS event";
+    }
+    RouterParams params;
+    params.qos_overrides = parse_qos_overrides({"cmd_vel=best_effort,transient_local"});
+    RouterFixture fixture("qos_warn_sub_dur", remapped(), params);
+    fixture.handshake(0x09u);
+    auto pub = fixture.node()->create_publisher<geometry_msgs::msg::Twist>(
+        "cmd_vel", rclcpp::QoS(10).best_effort());
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!logged_has(fixture.logged(), "'cmd_vel=best_effort'") &&
+      std::chrono::steady_clock::now() < deadline) {
+      rclcpp::spin_some(fixture.node());
+    }
+    EXPECT_TRUE(logged_has(fixture.logged(), "incompatible QoS durability"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "'cmd_vel=best_effort'"));
 }
 
 TEST_F(RouterNode, McuToHostForwardsTheConvertedMessage)

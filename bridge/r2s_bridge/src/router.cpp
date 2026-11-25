@@ -722,9 +722,12 @@ struct Router::Impl
   {
     const std::string key = info.topic_name + "#" + std::to_string(total_count) + "#" +
       std::to_string(static_cast<int>(policy_kind));
+    // GCOVR_EXCL_START: the middleware reports each pairing once, so a
+    // second event with the same key cannot be staged in a unit test.
     if (!qos_warned_.insert(key).second) {
       return;
     }
+    // GCOVR_EXCL_STOP
     const bool ours = effective_reliable(info);
     const rclcpp::QoS effective = route_qos(info);
     const bool transient = effective.durability() == rclcpp::DurabilityPolicy::TransientLocal;
@@ -741,12 +744,15 @@ struct Router::Impl
           " durability; set qos.overrides entry '" + fix + "' to match (qos.overrides)");
       return;
     }
+    // GCOVR_EXCL_START: other policy kinds need a remote deadline or
+    // liveliness mismatch, which the endpoints here never offer.
     if (policy_kind != RMW_QOS_POLICY_RELIABILITY) {
       emit(SessionLog::kWarning,
           "topic '" + info.topic_name + "': incompatible QoS: host endpoint is " +
           reliability_name(ours) + (transient ? " transient_local" : " volatile"));
       return;
     }
+    // GCOVR_EXCL_STOP
     const bool remote = !ours;
     emit(SessionLog::kWarning,
         "topic '" + info.topic_name + "': incompatible QoS: host endpoint is " +
@@ -755,6 +761,8 @@ struct Router::Impl
         durability_suffix + "' to match (qos.overrides)");
   }
 
+  // GCOVR_EXCL_START: only an RMW without the event reaches this, which
+  // the unit test RMW supports.
   void log_qos_event_unavailable()
   {
     if (qos_event_unavailable_logged_) {
@@ -764,6 +772,7 @@ struct Router::Impl
     emit(SessionLog::kDebug,
         "incompatible QoS warning unavailable on this RMW");
   }
+  // GCOVR_EXCL_STOP
 
     // Creates one route's endpoint, reporting the failure through the sink at
     // the caller's level. Empty when the middleware refuses the endpoint, and
@@ -785,11 +794,14 @@ struct Router::Impl
         try {
           route.pub = rclcpp::create_generic_publisher(
             topics, info.topic_name, info.type_name, qos, options);
+        // GCOVR_EXCL_START: only an RMW without the event throws here,
+        // which the unit test RMW supports.
         } catch (const rclcpp::UnsupportedEventTypeException &) {
           log_qos_event_unavailable();
           route.pub = rclcpp::create_generic_publisher(
             topics, info.topic_name, info.type_name, qos);
         }
+        // GCOVR_EXCL_STOP
       } else {
         rclcpp::SubscriptionOptions options;
         options.event_callbacks.incompatible_qos_callback =
@@ -802,6 +814,8 @@ struct Router::Impl
             [this, id = info.topic_id](std::shared_ptr<rclcpp::SerializedMessage> msg) {
               on_ros_message(id, std::move(msg));
             }, options);
+        // GCOVR_EXCL_START: only an RMW without the event throws here,
+        // which the unit test RMW supports.
         } catch (const rclcpp::UnsupportedEventTypeException &) {
           log_qos_event_unavailable();
           route.sub = rclcpp::create_generic_subscription(
@@ -810,6 +824,7 @@ struct Router::Impl
               on_ros_message(id, std::move(msg));
             });
         }
+        // GCOVR_EXCL_STOP
       }
     } catch (const std::exception & failure) {
       error = failure.what();

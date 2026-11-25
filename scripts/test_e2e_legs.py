@@ -23,6 +23,7 @@ SHORT = [
     'test_scenario_4_posix',
     'test_scenario_13_posix',
     'test_scenario_14_posix',
+    'test_scenario_20_posix',
 ]
 # One firmware per leg: what it announces and serves is what its leg covers.
 FIRMWARES = {
