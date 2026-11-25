@@ -2841,7 +2841,7 @@ TEST_F(RouterNode, AcceptsAGoalAndStreamsFeedbackAndResult)
 }
 
 // covers: SES-35, ACT-4
-TEST_F(RouterNode, AcceptsASecondGoalAfterTheFirstSucceeds)
+TEST_F(RouterNode, AcceptsAThirdGoalWithTwoRetiredHandles)
 {
   RouterFixture fixture("act_next", remapped(), RouterParams{},
     512u, true, action_session_config());
@@ -2880,7 +2880,7 @@ TEST_F(RouterNode, AcceptsASecondGoalAfterTheFirstSucceeds)
   auto second = client->async_send_goal(make_spin_goal());
   ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
   fixture.deliver_frame(kHelperActions, 4u, {kHelperActGoalResp, 0x02u, goal_seq, 0x00u});
-  fixture.deliver_frame(kAckTopic, 4u, {kHelperActions, 0x00u});
+  fixture.deliver_frame(kAckTopic, 4u, {kHelperActions, 0x01u});
   ASSERT_TRUE(spin_until_ready(fixture, second));
   const auto second_handle = second.get();
   ASSERT_NE(second_handle, nullptr);
@@ -2904,6 +2904,37 @@ TEST_F(RouterNode, AcceptsASecondGoalAfterTheFirstSucceeds)
   fixture.deliver_frame(kHelperActions, 5u, frame);
   ASSERT_TRUE(spin_until_ready(fixture, second_result));
   EXPECT_EQ(second_result.get().code, rclcpp_action::ResultCode::SUCCEEDED);
+
+  // A third goal retires the second beside the first: terminal goals stay
+  // tracked far past this test, so two retired handles are held at once
+  // without waiting for the rcl expiry path.
+  auto third = client->async_send_goal(make_spin_goal());
+  ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+  fixture.deliver_frame(kHelperActions, 6u, {kHelperActGoalResp, 0x04u, goal_seq, 0x00u});
+  fixture.deliver_frame(kAckTopic, 6u, {kHelperActions, 0x02u});
+  ASSERT_TRUE(spin_until_ready(fixture, third));
+  const auto third_handle = third.get();
+  ASSERT_NE(third_handle, nullptr);
+  const auto third_start = std::chrono::steady_clock::now();
+  executing = false;
+  while (!executing && std::chrono::steady_clock::now() - third_start < std::chrono::seconds(10)) {
+    fixture.advance(20u);
+    rclcpp::spin_some(fixture.node());
+    for (const auto & array : statuses) {
+      for (const auto & entry : array.status_list) {
+        if (entry.goal_info.goal_id.uuid == third_handle->get_goal_id() && entry.status == 2) {
+          executing = true;
+        }
+      }
+    }
+  }
+  EXPECT_TRUE(executing) << "the status array never showed the third goal executing";
+  auto third_result = client->async_get_result(third_handle);
+  frame = {kHelperActResult, 0x05u, goal_seq, 0x04u};
+  frame.insert(frame.end(), packed.begin(), packed.end());
+  fixture.deliver_frame(kHelperActions, 7u, frame);
+  ASSERT_TRUE(spin_until_ready(fixture, third_result));
+  EXPECT_EQ(third_result.get().code, rclcpp_action::ResultCode::SUCCEEDED);
 }
 
 // covers: SES-35, ACT-4

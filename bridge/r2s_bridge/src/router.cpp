@@ -483,8 +483,6 @@ struct Router::Impl
     {
       rcl_action_goal_handle_t handle = rcl_action_get_zero_initialized_goal_handle();
       std::array<std::uint8_t, 16> uuid{};
-      std::int32_t accept_sec = 0;
-      std::uint32_t accept_nanosec = 0;
     };
 
     // One routed action's endpoints: the rcl action server the ROS clients
@@ -1450,8 +1448,6 @@ struct Router::Impl
         RetiredGoal retired;
         retired.handle = route.active->handle;
         retired.uuid = route.active->uuid;
-        retired.accept_sec = route.active->accept_sec;
-        retired.accept_nanosec = route.active->accept_nanosec;
         route.retired_handles.push_back(retired);
       }
       route.pending.reset();
@@ -1737,8 +1733,8 @@ struct Router::Impl
           for (auto retired = route.retired_handles.begin();
             retired != route.retired_handles.end();)
           {
-            const rcl_action_goal_info_t info = goal_info_of(retired->uuid,
-                retired->accept_sec, retired->accept_nanosec);
+            // The existence check names a goal by its uuid alone.
+            const rcl_action_goal_info_t info = goal_info_of(retired->uuid, 0, 0u);
             if (rcl_action_server_goal_exists(&route.server, &info)) {
               ++retired;
               continue;
