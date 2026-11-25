@@ -2906,6 +2906,27 @@ TEST_F(RouterNode, AcceptsASecondGoalAfterTheFirstSucceeds)
   EXPECT_EQ(second_result.get().code, rclcpp_action::ResultCode::SUCCEEDED);
 }
 
+// covers: SES-35, ACT-4
+TEST_F(RouterNode, DestroyingTheRouterWithAnActiveGoalFreesItsHandle)
+{
+  {
+    RouterFixture fixture("act_live", remapped(), RouterParams{},
+      512u, true, action_session_config());
+    handshake_with_actions(fixture);
+    auto client = rclcpp_action::create_client<tf2_msgs::action::LookupTransform>(
+      fixture.node(), "spin");
+    ASSERT_TRUE(client->wait_for_action_server(std::chrono::seconds(10)));
+    auto goal_handle = client->async_send_goal(make_spin_goal());
+    std::uint8_t goal_seq = 0xFFu;
+    std::vector<std::uint8_t> payload;
+    ASSERT_TRUE(wait_for_wire_goal(fixture, goal_seq, payload));
+    fixture.deliver_frame(kHelperActions, 2u, {kHelperActGoalResp, 0x00u, goal_seq, 0x00u});
+    fixture.deliver_frame(kAckTopic, 2u, {kHelperActions, 0x00u});
+    ASSERT_TRUE(spin_until_ready(fixture, goal_handle));
+    ASSERT_NE(goal_handle.get(), nullptr) << "the goal stays active as the router dies";
+  }
+}
+
 // A handshake announcing one LookupTransform action on a 32-bit-double
 // MCU: the features byte carries bit 4, so every float64 travels narrow.
 void handshake_with_narrow_actions(RouterFixture & fixture)
