@@ -455,11 +455,11 @@ def test_the_isolation_pairs_belong_to_nightly_not_the_e2e_legs():
 # Source roots with a single owning section task: a new package lands as
 # a new top-level directory, so every tracked file under each one must be
 # an input of that task, or the section stays fresh over the change.
-OWNED_ROOTS = {'gen': 'gen', 'core': 'core', 'bridge': 'bridge', 'cpp': 'cpp'}
+OWNED_ROOTS = {'gen': 'gen', 'core': 'core', 'bridge': 'bridge', 'cpp': 'cpp', 'rosidl': 'gen'}
 
 
 def test_every_top_level_package_directory_is_an_input_of_its_section_task():
-    """A new package must wake its section: gen/r2s_rosidl once did not."""
+    """A new package must wake its section: rosidl/r2s_rosidl once did not."""
     for root, owner in OWNED_ROOTS.items():
         task = tasks()[owner]
         children = sorted(path for path in (ROOT / root).iterdir() if path.is_dir())

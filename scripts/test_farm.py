@@ -81,10 +81,16 @@ def test_the_generator_test_tooling_resolves_through_rosdep():
         assert key in text, f'gen/package.xml names no {key} test dependency'
 
 
+def test_the_farm_script_discovers_rosidl_beside_gen_not_inside_it():
+    text = script_text()
+    assert 'gen/r2s_rosidl' not in text
+    assert 'rosidl' in text
+
+
 def test_every_released_package_carries_the_farm_metadata():
     for manifest in (
         ROOT / 'gen' / 'package.xml',
-        ROOT / 'gen' / 'r2s_rosidl' / 'package.xml',
+        ROOT / 'rosidl' / 'r2s_rosidl' / 'package.xml',
         ROOT / 'bridge' / 'r2s_bridge' / 'package.xml',
     ):
         text = manifest.read_text(encoding='utf-8')

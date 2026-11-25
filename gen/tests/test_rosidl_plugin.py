@@ -22,7 +22,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = ROOT / 'gen'
-PLUGIN = PACKAGE / 'r2s_rosidl'
+PLUGIN = ROOT / 'rosidl' / 'r2s_rosidl'
 
 GOOD_CONFIG = """\
 node: fw_fixture
