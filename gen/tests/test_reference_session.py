@@ -205,7 +205,7 @@ def test_declare_and_set_float_narrow_on_32_bit_double():
     session.feed(wire(3, 0, bytes((model.OP_PARAM_SET, 0, 0)) + struct.pack('<f', 2.5)))
     session.spin()
     assert session.snapshot()['params'] == [(model.PARAM_F64, 2.5)]
-    session.feed(wire(3, 1, bytes((model.OP_PARAM_SET, 1, 0)) + struct.pack('<d', 2.5)))
+    session.feed(wire(3, 1, bytes((model.OP_PARAM_SET, 1, 0)) + struct.pack('<d', 9.5)))
     session.spin()
     assert session.snapshot()['params'] == [(model.PARAM_F64, 2.5)]
 

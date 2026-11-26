@@ -1022,6 +1022,26 @@ TEST_F(RouterNode, Float64ParameterTravelsNarrowOn32BitDoubleMcus)
     EXPECT_EQ(sets.at(2u).value,
               std::vector<std::uint8_t>({0x00u, 0x00u, 0x20u, 0x40u}))
         << "the f64 set travels as binary32 on a narrow link";
+    fixture.deliver_frame(kAckTopic, 0u, {kParamsTopic, sets.at(2u).rel});
+    fixture.advance(1u);
+    const auto overflow = fixture.node()->set_parameters({rclcpp::Parameter("gain", 1e300)});
+    ASSERT_EQ(overflow.size(), 1u);
+    EXPECT_TRUE(overflow[0].successful) << overflow[0].reason;
+    const auto wide_sets = fixture.param_sets();
+    ASSERT_EQ(wide_sets.count(2u), 1u);
+    EXPECT_EQ(wide_sets.at(2u).value,
+              std::vector<std::uint8_t>({0x00u, 0x00u, 0x80u, 0x7Fu}))
+        << "a finite value too large for binary32 becomes a positive infinity";
+    fixture.deliver_frame(kAckTopic, 0u, {kParamsTopic, wide_sets.at(2u).rel});
+    fixture.advance(1u);
+    const auto underflow = fixture.node()->set_parameters({rclcpp::Parameter("gain", -1e300)});
+    ASSERT_EQ(underflow.size(), 1u);
+    EXPECT_TRUE(underflow[0].successful) << underflow[0].reason;
+    const auto neg_sets = fixture.param_sets();
+    ASSERT_EQ(neg_sets.count(2u), 1u);
+    EXPECT_EQ(neg_sets.at(2u).value,
+              std::vector<std::uint8_t>({0x00u, 0x00u, 0x80u, 0xFFu}))
+        << "a finite value too large for binary32 becomes a negative infinity";
 }
 
 // covers: PAR-9

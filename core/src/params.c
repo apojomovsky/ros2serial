@@ -5,6 +5,7 @@
  * firmware's live values; the session calls in for channel 3 frames. */
 #include "r2s/r2s_params.h"
 
+#include <float.h>
 #include <string.h>
 
 #include "r2s/r2s.h"
@@ -235,13 +236,21 @@ void r2s_params_store(uint8_t index, const uint8_t *value, uint16_t len)
 
     memcpy(&param->value.i, &bits, 8u);
   } else if (param->type == R2S_PARAM_F64) {
-    uint64_t bits = 0u;
+#if DBL_MANT_DIG == FLT_MANT_DIG
+    /* The wire bytes assemble into a 32-bit holder: on a big-endian
+     * target a wider holder would copy its zero high bytes instead. */
+    uint32_t bits = 0u;
     uint16_t i;
 
-    for (i = 0u; i < (uint16_t)sizeof(double); i++) {
-      bits |= (uint64_t)value[i] << (i * 8u);
+    for (i = 0u; i < (uint16_t)sizeof bits; i++) {
+      bits |= (uint32_t)value[i] << (i * 8u);
     }
-    memcpy(&param->value.f, &bits, sizeof(double));
+    memcpy(&param->value.f, &bits, sizeof bits);
+#else
+    uint64_t bits = wire_u64(value);
+
+    memcpy(&param->value.f, &bits, sizeof bits);
+#endif
   } else {
     uint16_t text_len = 0u;
 

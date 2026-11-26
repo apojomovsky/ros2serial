@@ -611,12 +611,23 @@ static void send_declare(uint8_t index)
       put_byte((uint8_t)(bits >> (i * 8u)));
     }
   } else if (param->type == R2S_PARAM_F64) {
-    uint64_t bits = 0u;
+#if DBL_MANT_DIG == FLT_MANT_DIG
+    /* The value moves through a 32-bit holder: on a big-endian target a
+     * wider holder would emit its zero high bytes instead. */
+    uint32_t bits = 0u;
 
-    memcpy(&bits, &param->initial.f, sizeof(param->initial.f));
-    for (i = 0u; i < (uint16_t)sizeof(param->initial.f); i++) {
+    memcpy(&bits, &param->initial.f, sizeof bits);
+    for (i = 0u; i < (uint16_t)sizeof bits; i++) {
       put_byte((uint8_t)(bits >> (i * 8u)));
     }
+#else
+    uint64_t bits = 0u;
+
+    memcpy(&bits, &param->initial.f, sizeof bits);
+    for (i = 0u; i < (uint16_t)sizeof bits; i++) {
+      put_byte((uint8_t)(bits >> (i * 8u)));
+    }
+#endif
   } else {
     size_t text_len = strlen(param->initial.s);
 

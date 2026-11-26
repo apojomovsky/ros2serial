@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstring>
 #include <deque>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -242,9 +243,15 @@ void encode_param_value(
   } else if (type == kParamF64) {
     const double number = value.get_value<double>();
     if (narrow) {
-      const float narrow_value = static_cast<float>(number);
       std::uint32_t bits = 0u;
-      std::memcpy(&bits, &narrow_value, sizeof(bits));
+      if (std::isfinite(number) && std::abs(number) > std::numeric_limits<float>::max()) {
+        // Casting an overflowing double to float is undefined, so the
+        // infinity ENC-11 requires is made from its sign instead.
+        bits = std::signbit(number) ? 0xFF800000u : 0x7F800000u;
+      } else {
+        const float narrow_value = static_cast<float>(number);
+        std::memcpy(&bits, &narrow_value, sizeof(bits));
+      }
       for (int at = 0; at < 4; ++at) {
         out.push_back(static_cast<std::uint8_t>((bits >> (8 * at)) & 0xFFu));
       }

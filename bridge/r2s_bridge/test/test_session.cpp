@@ -3060,6 +3060,31 @@ TEST(ReliableWalk, CollectsDeclaresForTheParametersLayer)
               std::vector<std::uint8_t>({0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
 }
 
+// covers: PAR-3, ENC-12
+TEST(ReliableWalk, RefusesAnF64DeclareAtTheOtherLinksWidth)
+{
+    // Narrow link, wide default: 8 bytes where binary32 travels.
+    Fixture narrow_fixture;
+    narrow_fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x14u, 1000u));
+    narrow_fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+    narrow_fixture.deliver_frame(kParams, 0u,
+    {kParamDeclare, 0x00u, 0x02u, 0x00u, 0x04u, 'g', 'a', 'i', 'n',
+      0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF8u, 0x3Fu});
+    narrow_fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x01u, 0x01u});
+    EXPECT_EQ(narrow_fixture.session().state(), SessionState::kConnected);
+    EXPECT_TRUE(narrow_fixture.session().params().empty()) << "the wide f64 is dropped on narrow";
+    // Wide link, narrow default: 4 bytes where binary64 travels.
+    Fixture wide_fixture;
+    wide_fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x04u, 1000u));
+    wide_fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+    wide_fixture.deliver_frame(kParams, 0u,
+    {kParamDeclare, 0x00u, 0x02u, 0x00u, 0x04u, 'g', 'a', 'i', 'n',
+      0x00u, 0x00u, 0xC0u, 0x3Fu});
+    wide_fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x01u, 0x01u});
+    EXPECT_EQ(wide_fixture.session().state(), SessionState::kConnected);
+    EXPECT_TRUE(wide_fixture.session().params().empty()) << "the narrow f64 is dropped on wide";
+}
+
 // covers: PAR-1, PAR-3, PAR-7
 TEST(ReliableWalk, SkipsUnparseableDeclares)
 {
