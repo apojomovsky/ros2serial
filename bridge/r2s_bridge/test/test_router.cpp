@@ -1042,6 +1042,17 @@ TEST_F(RouterNode, Float64ParameterTravelsNarrowOn32BitDoubleMcus)
     EXPECT_EQ(neg_sets.at(2u).value,
               std::vector<std::uint8_t>({0x00u, 0x00u, 0x80u, 0xFFu}))
         << "a finite value too large for binary32 becomes a negative infinity";
+    fixture.deliver_frame(kAckTopic, 0u, {kParamsTopic, neg_sets.at(2u).rel});
+    fixture.advance(1u);
+    const auto infinite = fixture.node()->set_parameters(
+      {rclcpp::Parameter("gain", std::numeric_limits<double>::infinity())});
+    ASSERT_EQ(infinite.size(), 1u);
+    EXPECT_TRUE(infinite[0].successful) << infinite[0].reason;
+    const auto inf_sets = fixture.param_sets();
+    ASSERT_EQ(inf_sets.count(2u), 1u);
+    EXPECT_EQ(inf_sets.at(2u).value,
+              std::vector<std::uint8_t>({0x00u, 0x00u, 0x80u, 0x7Fu}))
+        << "an infinity stays an infinity of the same sign";
 }
 
 // covers: PAR-9
