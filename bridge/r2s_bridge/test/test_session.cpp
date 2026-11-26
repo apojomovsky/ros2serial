@@ -723,6 +723,33 @@ TEST(SessionHandshake, RefusesAHelloOfAnotherProtocolVersion)
         << "the error names the host version";
 }
 
+TEST(SessionHandshake, NewRefusalReasonLogsAtErrorAgain)
+{
+    std::vector<SessionLog> levels;
+    std::vector<std::string> texts;
+    SessionEvents events;
+    events.log = [&levels, &texts](SessionLog level, const std::string & text) {
+        levels.push_back(level);
+        texts.push_back(text);
+      };
+    Fixture fixture(
+      [](const TopicInfo &) {return std::uint8_t{0};}, SessionConfig{}, events);
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0u, 1500u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0u, 1500u));
+    ASSERT_EQ(levels.size(), 4u);
+    EXPECT_EQ(levels[0], SessionLog::kError);
+    EXPECT_EQ(levels[1], SessionLog::kDebug) << "the same reason repeats at debug";
+    EXPECT_EQ(levels[2], SessionLog::kError) << "a different reason logs at error again";
+    EXPECT_EQ(levels[3], SessionLog::kDebug);
+    EXPECT_EQ(fixture.session().handshake_refused(), texts[2]);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u));
+    EXPECT_TRUE(fixture.session().handshake_refused().empty())
+      << "an accepted HELLO clears the refusal";
+}
+
 TEST(SessionHandshake, AcceptsAnMcuWhoseDoubleIs32Bits)
 {
     Fixture fixture;
