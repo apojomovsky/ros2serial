@@ -469,6 +469,12 @@ public:
    * \return The token ([SES-19]).
    */
   std::uint32_t token() const;
+
+  /// The MCU node name the HELLO carried, empty before the first HELLO.
+  /**
+   * \return The announced node name.
+   */
+  std::string node_name() const;
   /// The last completed handshake's topics, empty before the first one.
   /**
    * \return The announced topics.
