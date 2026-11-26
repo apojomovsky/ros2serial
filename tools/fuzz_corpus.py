@@ -153,6 +153,14 @@ def _bridge_converter():
         name = f'vector_{stem}_{counts.get(stem, 0)}'
         seeds[name] = head + _hex(doc['payload'])
         counts[stem] = counts.get(stem, 0) + 1
+    # std_msgs/msg/Int32MultiArray has no message vector: the reference
+    # snapshots carry no definition for it, so no vector can seed it. Its
+    # seeds are laid out by hand instead: one dim holding label "x", size
+    # 2 and stride 2, a zero data_offset and the data [1, -1].
+    hand = _hex('01 01 78 02 00 00 00 02 00 00 00 00 00 00 00 02 01 00 00 00 ff ff ff ff')
+    index = BRIDGE_CONVERTER_TYPE['std_msgs/msg/Int32MultiArray']
+    seeds['hand_int32multiarray_0'] = bytes((index, 0)) + hand
+    seeds['hand_int32multiarray_narrow_0'] = bytes((index, 1)) + hand
     return seeds
 
 

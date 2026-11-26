@@ -149,9 +149,15 @@ def test_bridge_converter_seeds_cover_the_fuzzed_types():
         head = bytes((types[doc['type']], 1 if doc['profile']['narrow_float64'] else 0))
         seed = head + bytes.fromhex(doc['payload'])
         assert seed in seeds.values(), f'{path.name} has no seed with its type and narrow head'
-    for name, seed in seeds.items():
-        if not name.startswith('vector_'):
-            continue
+    # The hand_* seeds are generated too: Int32MultiArray has no message
+    # vector, so its generated seeds are the documented hand layout.
+    generated = {
+        name: seed for name, seed in seeds.items() if name.startswith(('vector_', 'hand_'))
+    }
+    assert {seed[0] for seed in generated.values()} == {0, 1, 2, 3}, (
+        'a fuzzed type has no generated seed'
+    )
+    for seed in generated.values():
         assert seed[0] in types.values(), 'a seed names a type the target does not fuzz'
         assert seed[1] in (0, 1), 'a seed narrow flag is 0 or 1'
 
