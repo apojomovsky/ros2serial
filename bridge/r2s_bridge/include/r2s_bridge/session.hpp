@@ -464,6 +464,15 @@ public:
    */
   bool seen_hello() const;
 
+  /// The full text of the latest refused HELLO, empty when none is active.
+  /**
+   * Set by every refused HELLO, cleared by an accepted HELLO and by a
+   * port close, so /diagnostics names the reason while refusals continue.
+   *
+   * \return The refusal text, or an empty string.
+   */
+  std::string handshake_refused() const;
+
   /// The recorded session token, 0 before any READY and after every reboot.
   /**
    * \return The token ([SES-19]).
