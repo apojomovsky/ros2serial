@@ -247,6 +247,7 @@ TEST(DiagnosticsMessage, NamesTimeSyncKeysBeforeTheFirstCorrection)
     EXPECT_EQ(values.at("time sync offset"), "not available");
     EXPECT_EQ(values.at("time sync drift"), "not available");
     EXPECT_EQ(values.at("time sync round trip"), "not available");
+    EXPECT_EQ(values.at("mcu node name"), "not available");
 }
 
 TEST(DiagnosticsMessage, MapsLinkStateToLevel)
