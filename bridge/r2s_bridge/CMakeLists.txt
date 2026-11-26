@@ -17,6 +17,16 @@ if(R2S_SANITIZE)
   add_link_options(-fsanitize=address,undefined)
 endif()
 
+option(R2S_BRIDGE_FUZZ "Build the bridge libFuzzer targets (needs Clang)" OFF)
+if(R2S_BRIDGE_FUZZ)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "R2S_BRIDGE_FUZZ needs Clang, got ${CMAKE_CXX_COMPILER_ID}")
+  endif()
+  add_compile_options(-fsanitize=fuzzer-no-link,address,undefined
+    -fno-sanitize-recover=all -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=address,undefined)
+endif()
+
 find_package(ament_cmake REQUIRED)
 find_package(action_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -96,6 +106,38 @@ install(TARGETS r2s_bridge_component
   RUNTIME DESTINATION bin)
 install(TARGETS bridge RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
+
+if(R2S_BRIDGE_FUZZ)
+  # Clang warns on the selectively used constexpr constants gcc accepts;
+  # after the component's own -Wall, so the suppression wins.
+  target_compile_options(r2s_bridge_component PRIVATE -Wno-unused-const-variable)
+  target_compile_options(r2s_core_framing PRIVATE -Wno-unused-const-variable)
+  find_package(sensor_msgs REQUIRED)
+  find_package(std_msgs REQUIRED)
+  find_package(tf2_msgs REQUIRED)
+
+  add_executable(fuzz_bridge_session
+    fuzz/fuzz_bridge_session.cpp
+    test/support/fake_transport.cpp
+    test/support/manual_clock.cpp)
+  target_include_directories(fuzz_bridge_session PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/test/support
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../core/include)
+  target_compile_definitions(fuzz_bridge_session PRIVATE
+    R2S_MAX_FRAME=${R2S_HOST_MAX_FRAME} R2S_MAX_LINKS=${R2S_HOST_MAX_LINKS})
+  target_link_libraries(fuzz_bridge_session r2s_bridge_component)
+  target_compile_options(fuzz_bridge_session PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  target_link_options(fuzz_bridge_session PRIVATE -fsanitize=fuzzer,address,undefined)
+
+  add_executable(fuzz_bridge_converter fuzz/fuzz_bridge_converter.cpp)
+  target_link_libraries(fuzz_bridge_converter
+    r2s_bridge_component
+    sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
+    std_msgs::std_msgs__rosidl_typesupport_cpp
+    tf2_msgs::tf2_msgs__rosidl_typesupport_cpp)
+  target_compile_options(fuzz_bridge_converter PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  target_link_options(fuzz_bridge_converter PRIVATE -fsanitize=fuzzer,address,undefined)
+endif()
 
 # The launch file and the example parameters install into the package share,
 # so the launch test and the e2e framework find them without the sources.

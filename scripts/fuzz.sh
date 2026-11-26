@@ -4,7 +4,8 @@
 
 # Build the libFuzzer targets and run each over its seed corpus, then fuzz it.
 # Usage: fuzz.sh; env TARGET picks one target (framer, rcobs_decode, session,
-# codec), default all four; env R2S_FUZZ_SECONDS sets the fuzz time per target,
+# codec, bridge_session, bridge_converter), default all; env R2S_FUZZ_SECONDS
+# sets the fuzz time per target,
 # default 60; 0 only runs the seeds. R2S_FUZZ_COVERAGE=1 additionally replays
 # the committed seeds under gcov and renders tools/fuzz_coverage.py's report
 # (report only, never a gate). R2S_FUZZ_ARTIFACTS_DIR keeps whatever libFuzzer
@@ -15,7 +16,12 @@ set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root" || exit 2
 build=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/fuzz
-targets=(${TARGET:-framer rcobs_decode session codec})
+want_bridge=1
+case "${TARGET:-}" in
+  bridge_session | bridge_converter) want_bridge=1; targets=() ;;
+  "") targets=(framer rcobs_decode session codec) ;;
+  *) want_bridge=0; targets=($TARGET) ;;
+esac
 seconds=${R2S_FUZZ_SECONDS:-60}
 coverage=${R2S_FUZZ_COVERAGE:-0}
 artifacts=${R2S_FUZZ_ARTIFACTS_DIR:-}
@@ -107,6 +113,15 @@ for target in "${targets[@]}"; do
   rm -rf "$work"
   [ "$ok" = 1 ] && echo "-- fuzz: $target ok"
 done
+# The bridge targets build in the ROS image through their own script, which
+# the same fuzz job runs here so one TARGET name reaches every target.
+if [ "$want_bridge" = 1 ]; then
+  if [ -n "${TARGET:-}" ]; then
+    TARGET=$TARGET bash scripts/fuzz-bridge.sh || failed+=(bridge)
+  else
+    TARGET= bash scripts/fuzz-bridge.sh || failed+=(bridge)
+  fi
+fi
 # Seed-corpus coverage, nightly only: replay the committed seeds under gcov
 # and report which lines each target reaches. A low percentage never fails
 # here; only a broken measurement does.

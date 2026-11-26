@@ -560,7 +560,7 @@ struct SerializedGuard
   ~SerializedGuard()
   {
     if (owned) {
-      rmw_serialized_message_fini(&msg);
+      (void)rmw_serialized_message_fini(&msg);
     }
   }
 };
