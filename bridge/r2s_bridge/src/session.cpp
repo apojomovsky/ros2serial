@@ -388,7 +388,8 @@ struct Session::Impl
 
   void refuse_hello(const std::string & text)
   {
-    log(handshake_refused_ == text ? SessionLog::kDebug : SessionLog::kError, text);
+    log(hello_refusals_seen_.insert(text).second ? SessionLog::kError : SessionLog::kDebug,
+        text);
     handshake_refused_ = text;
   }
 
@@ -408,6 +409,7 @@ struct Session::Impl
     reader = std::make_unique<FrameReader>(*transport, clock);
     reader->clear_link_fault();
     handshake_refused_.clear();
+    hello_refusals_seen_.clear();
     clear_queue();
     state = SessionState::kBootWait;
     boot_wait_deadline_ms = now_ms() + config.boot_wait_ms;
@@ -421,6 +423,7 @@ struct Session::Impl
     }
     transport.reset();
     handshake_refused_.clear();
+    hello_refusals_seen_.clear();
     clear_queue();
     awaiting_topic = false;
     reset_time();
@@ -2269,6 +2272,7 @@ struct Session::Impl
   HelloFacts hello;
   bool seen_hello = false;
   std::string handshake_refused_;
+  std::set<std::string> hello_refusals_seen_;
   bool awaiting_topic = false;
   std::uint8_t requested_index = 0;
   int retries = 0;

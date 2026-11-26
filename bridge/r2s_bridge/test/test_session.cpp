@@ -739,12 +739,15 @@ TEST(SessionHandshake, NewRefusalReasonLogsAtErrorAgain)
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u));
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0u, 1500u));
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0u, 1500u));
-    ASSERT_EQ(levels.size(), 4u);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u));
+    ASSERT_EQ(levels.size(), 5u);
     EXPECT_EQ(levels[0], SessionLog::kError);
     EXPECT_EQ(levels[1], SessionLog::kDebug) << "the same reason repeats at debug";
     EXPECT_EQ(levels[2], SessionLog::kError) << "a different reason logs at error again";
     EXPECT_EQ(levels[3], SessionLog::kDebug);
-    EXPECT_EQ(fixture.session().handshake_refused(), texts[2]);
+    EXPECT_EQ(levels[4], SessionLog::kDebug)
+      << "the first reason already logged at error on this port open";
+    EXPECT_EQ(fixture.session().handshake_refused(), texts[4]);
     fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u));
     EXPECT_TRUE(fixture.session().handshake_refused().empty())
       << "an accepted HELLO clears the refusal";
