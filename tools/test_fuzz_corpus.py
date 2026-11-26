@@ -137,18 +137,22 @@ def test_bridge_converter_seeds_cover_the_fuzzed_types():
     seeds = _bridge_seeds('bridge_converter')
     assert seeds, 'the bridge converter corpus is empty'
     types = {
-        0: 'sensor_msgs/msg/Imu',
-        1: 'sensor_msgs/msg/JointState',
-        2: 'tf2_msgs/msg/TFMessage',
+        'sensor_msgs/msg/Imu': 0,
+        'sensor_msgs/msg/JointState': 1,
+        'tf2_msgs/msg/TFMessage': 2,
+        'std_msgs/msg/Int32MultiArray': 3,
     }
     for path in sorted((VECTORS / 'messages').glob('*.yaml')):
         doc = yaml.safe_load(path.read_text())
-        if doc['type'] not in types.values():
+        if doc['type'] not in types:
             continue
-        payload = bytes.fromhex(doc['payload'])
-        assert any(payload in seed for seed in seeds.values()), f'{path.name} payload has no seed'
-    for seed in seeds.values():
-        assert seed[0] in types, 'a seed names a type the target does not fuzz'
+        head = bytes((types[doc['type']], 1 if doc['profile']['narrow_float64'] else 0))
+        seed = head + bytes.fromhex(doc['payload'])
+        assert seed in seeds.values(), f'{path.name} has no seed with its type and narrow head'
+    for name, seed in seeds.items():
+        if not name.startswith('vector_'):
+            continue
+        assert seed[0] in types.values(), 'a seed names a type the target does not fuzz'
         assert seed[1] in (0, 1), 'a seed narrow flag is 0 or 1'
 
 

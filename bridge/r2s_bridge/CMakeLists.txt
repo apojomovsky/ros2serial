@@ -19,8 +19,8 @@ endif()
 
 option(R2S_BRIDGE_FUZZ "Build the bridge libFuzzer targets (needs Clang)" OFF)
 if(R2S_BRIDGE_FUZZ)
-  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    message(FATAL_ERROR "R2S_BRIDGE_FUZZ needs Clang, got ${CMAKE_CXX_COMPILER_ID}")
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "R2S_BRIDGE_FUZZ needs Clang for C and C++")
   endif()
   add_compile_options(-fsanitize=fuzzer-no-link,address,undefined
     -fno-sanitize-recover=all -fno-omit-frame-pointer)

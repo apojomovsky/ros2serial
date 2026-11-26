@@ -27,6 +27,16 @@ python3 tools/fuzz_corpus.py --check || exit 1
 
 build=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/fuzz-bridge
 targets=(${TARGET:-bridge_session bridge_converter})
+build_targets=()
+for target in "${targets[@]}"; do
+  case "$target" in
+    bridge_session | bridge_converter) build_targets+=(fuzz_$target) ;;
+    *)
+      echo "unknown bridge fuzz target '$target'"
+      exit 1
+      ;;
+  esac
+done
 seconds=${R2S_FUZZ_SECONDS:-60}
 artifacts=${R2S_FUZZ_ARTIFACTS_DIR:-}
 export LSAN_OPTIONS="suppressions=$root/bridge/lsan_suppressions.txt"
@@ -40,26 +50,23 @@ cmake -S bridge/r2s_bridge -B "$build" \
   echo "-- fuzz-bridge: configure FAILED"
   exit 1
 }
-cmake --build "$build" --target fuzz_bridge_session fuzz_bridge_converter -j"$(nproc)" || {
+cmake --build "$build" --target "${build_targets[@]}" -j"$(nproc)" || {
   echo "-- fuzz-bridge: build FAILED"
   exit 1
 }
 
 failed=()
 for target in "${targets[@]}"; do
-  case "$target" in
-    bridge_session | bridge_converter) ;;
-    *)
-      echo "unknown bridge fuzz target '$target'"
-      failed+=("$target")
-      continue
-      ;;
-  esac
   binary="$build/fuzz_$target"
   corpus="bridge/r2s_bridge/fuzz/corpus/$target"
   echo "-- fuzz: $target"
   work=$(mktemp -d) || exit 1
-  cp "$corpus"/* "$work"/
+  cp "$corpus"/* "$work"/ || {
+    echo "-- fuzz: $target corpus copy FAILED"
+    failed+=("$target")
+    rm -rf "$work"
+    continue
+  }
   ok=1
   if [ "$seconds" = 0 ]; then
     "$binary" -runs=0 -timeout=30 -artifact_prefix="$work/" "$work" || {

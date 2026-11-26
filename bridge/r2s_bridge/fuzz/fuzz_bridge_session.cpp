@@ -6,9 +6,9 @@
 // payload; the harness lays the check and the rCOBS over it, scripts it
 // through the fake transport and polls the session on the manual clock.
 // The session must take any frame without crashing, hanging or touching
-// memory out of bounds; the sanitizers are the oracle. Opening each input
-// with a valid HELLO (as the transcript seeds do) gets the run past the
-// handshake into the TOPIC, PARAM, SVC and ACT walks and connected traffic.
+// memory out of bounds; the sanitizers are the oracle. The transcript
+// seeds open with a valid HELLO, so a seeded run gets past the handshake
+// into the TOPIC, PARAM, SVC and ACT walks and connected traffic.
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
