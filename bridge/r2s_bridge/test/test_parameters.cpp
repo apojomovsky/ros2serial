@@ -43,6 +43,7 @@ TEST_F(BridgeParameters, DeclaresEverySpecifiedParameterWithItsDefault)
     rclcpp::Parameter("rate_limit.overrides", std::vector<std::string>{}),
     rclcpp::Parameter("tx_budget_pct", 50),
     rclcpp::Parameter("qos_depth", 10),
+    rclcpp::Parameter("qos.overrides", std::vector<std::string>{}),
     };
 
     for (const auto & want : expected) {
@@ -50,4 +51,20 @@ TEST_F(BridgeParameters, DeclaresEverySpecifiedParameterWithItsDefault)
     ASSERT_TRUE(node->has_parameter(want.get_name()));
     EXPECT_EQ(node->get_parameter(want.get_name()), want);
     }
+}
+
+TEST_F(BridgeParameters, MalformedQosOverrideThrowsAtConstruction)
+{
+    rclcpp::NodeOptions options;
+    options.append_parameter_override(
+      "qos.overrides", std::vector<std::string>{"battery=bogus"});
+    EXPECT_THROW(std::make_shared<r2s_bridge::Bridge>(options), std::invalid_argument);
+}
+
+TEST_F(BridgeParameters, UnknownQosOptionThrowsAtConstruction)
+{
+    rclcpp::NodeOptions options;
+    options.append_parameter_override(
+      "qos.overrides", std::vector<std::string>{"battery=reliable,latched"});
+    EXPECT_THROW(std::make_shared<r2s_bridge::Bridge>(options), std::invalid_argument);
 }

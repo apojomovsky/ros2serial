@@ -71,6 +71,11 @@ terminals. Inspect endpoint QoS if discovery succeeds without matching. Confirm
 the firmware is publishing after connection; a one-shot event sent before the
 subscriber existed is not retained. The button/LED example repeats state.
 
+A best-effort publisher does not match a reliable subscriber, so a default
+`rclcpp` subscriber receives nothing from a best-effort MCU topic. Subscribe
+with `rclcpp::SensorDataQoS()`, or set `qos.overrides: ["battery=reliable"]`
+on the bridge, and verify with `ros2 topic info /battery --verbose`.
+
 For actuator commands, confirm the topic direction and that its callback runs
 during spin.
 

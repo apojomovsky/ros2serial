@@ -87,6 +87,7 @@ For a namespaced node, use a wildcard or the fully qualified node name in YAML:
     rate_limit.overrides: ["led=10"]
     tx_budget_pct: 50
     qos_depth: 10
+    qos.overrides: ["battery=reliable"]
 ```
 
 Save this as `panel.yaml`, then launch:
@@ -113,5 +114,14 @@ Diagnostics report link state, topic acceptance, drops, and time synchronization
 MCU logs appear under the bridge's `.mcu` logger and in `/rosout` once the firmware
 is built with `R2S_WITH_LOG`. Enable bridge
 logging with `log_level:=debug` when diagnosing connection problems.
-Topics are best effort over serial even when a host DDS endpoint requests
-reliability; do not infer end-to-end delivery guarantees from DDS QoS alone.
+MCU topics are best effort unless the MCU announces the reliable flag, and
+the bridge creates its host endpoint with that reliability. A best-effort
+publisher does not match a reliable subscriber: a default `rclcpp`
+subscriber asks for reliable, so it receives nothing from a best-effort
+MCU topic. Subscribe with `rclcpp::SensorDataQoS()` on the subscriber
+side, or set the bridge override `qos.overrides: ["battery=reliable"]`
+to make the host publisher reliable. Check the matched endpoints with
+`ros2 topic info /battery --verbose`, which shows each endpoint's
+reliability. The override changes only the host endpoint; nothing on
+the serial wire changes, and serial delivery stays best effort in
+substance.

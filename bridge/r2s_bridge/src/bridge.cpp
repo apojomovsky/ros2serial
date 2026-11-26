@@ -58,6 +58,7 @@ Bridge::Bridge(const rclcpp::NodeOptions & options)
   declare_parameter<std::vector<std::string>>("rate_limit.overrides", std::vector<std::string>{});
   declare_parameter<int>("tx_budget_pct", 50);
   declare_parameter<int>("qos_depth", 10);
+  declare_parameter<std::vector<std::string>>("qos.overrides", std::vector<std::string>{});
 
     // The bridge's own lines stay on the node logger; the MCU's lines go to
     // the mcu child, so they reach /rosout under <node>.mcu (docs/00-design.md,
@@ -105,6 +106,8 @@ Bridge::Bridge(const rclcpp::NodeOptions & options)
   pacing.rate_default_hz = get_parameter("rate_limit.default_hz").as_double();
   pacing.rate_limits =
     parse_rate_overrides(get_parameter("rate_limit.overrides").as_string_array(), forward_log);
+  pacing.qos_overrides =
+    parse_qos_overrides(get_parameter("qos.overrides").as_string_array());
   pacing.tx_budget_pct = static_cast<int>(get_parameter("tx_budget_pct").as_int());
   const int depth = static_cast<int>(get_parameter("qos_depth").as_int());
   if (depth < 1) {

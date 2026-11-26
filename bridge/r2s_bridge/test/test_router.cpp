@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <map>
@@ -461,6 +462,245 @@ TEST_F(RouterNode, QosDepthSetsHistoryDepth)
     EXPECT_EQ(sub_qos->depth(), 7u) << "the reliable flag selects reliable delivery";
     EXPECT_EQ(sub_qos->reliability(), rclcpp::ReliabilityPolicy::Reliable);
     EXPECT_FALSE(fixture.router().endpoint_qos(18u).has_value()) << "no such topic is routed";
+}
+
+TEST(QosOverrides, ParsesReliableBestEffortAndTransientLocal)
+{
+    const auto parsed = parse_qos_overrides(
+      {"battery=reliable", "cmd_vel=best_effort,transient_local", "echo=reliable,transient_local"});
+    ASSERT_EQ(parsed.size(), 3u);
+    EXPECT_TRUE(parsed.at("battery").reliable);
+    EXPECT_FALSE(parsed.at("battery").transient_local);
+    EXPECT_FALSE(parsed.at("cmd_vel").reliable);
+    EXPECT_TRUE(parsed.at("cmd_vel").transient_local);
+    EXPECT_TRUE(parsed.at("echo").reliable);
+    EXPECT_TRUE(parsed.at("echo").transient_local);
+}
+
+TEST(QosOverrides, MalformedEntriesThrowNamingTheEntry)
+{
+    for (const std::string & entry :
+      {"battery", "=reliable", "battery=", "battery=bogus", "battery=reliable,latched",
+        "battery=reliable,", "battery=transient_local", "battery=reliable,reliable",
+        "battery=reliable,transient_local,transient_local"}) {
+      try {
+        parse_qos_overrides({entry});
+        FAIL() << "entry should throw: " << entry;
+      } catch (const std::invalid_argument & error) {
+        EXPECT_NE(std::string(error.what()).find(entry), std::string::npos) << entry;
+      }
+    }
+}
+
+TEST(QosOverrides, DuplicateTopicThrowsNamingTheEntry)
+{
+    try {
+      parse_qos_overrides({"battery=reliable", "battery=best_effort"});
+      FAIL() << "a duplicate topic should throw";
+    } catch (const std::invalid_argument & error) {
+      EXPECT_NE(std::string(error.what()).find("battery=best_effort"), std::string::npos);
+    }
+}
+
+TEST_F(RouterNode, QosOverrideSetsPublisherReliabilitySes31)
+{
+    RouterParams params;
+    params.qos_overrides = parse_qos_overrides({"battery=reliable"});
+    RouterFixture fixture("qos_pub_override", remapped(), params);
+    fixture.handshake();
+    const std::optional<rclcpp::QoS> qos = fixture.router().endpoint_qos(kBattery);
+    ASSERT_TRUE(qos.has_value());
+    EXPECT_EQ(qos->reliability(), rclcpp::ReliabilityPolicy::Reliable);
+    EXPECT_EQ(qos->durability(), rclcpp::DurabilityPolicy::Volatile);
+    std::vector<float> received;
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
+        "power/battery", rclcpp::QoS(10).reliable(),
+    [&received](const std_msgs::msg::Float32 & msg) {received.push_back(msg.data);});
+    fixture.deliver_frame(kBattery, 0u, {0x00, 0x00, 0xC0, 0x3F});
+    rclcpp::spin_some(fixture.node());
+    ASSERT_EQ(received.size(), 1u);
+    EXPECT_TRUE(logged_has(fixture.logged(), "battery"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "reliable"));
+    for (const auto & topic : fixture.router().diagnostics().topics) {
+      if (topic.topic_name == "battery") {
+        EXPECT_EQ(topic.reliability, "reliable");
+        EXPECT_EQ(topic.durability, "volatile");
+      }
+    }
+}
+
+TEST_F(RouterNode, QosOverrideSetsSubscriptionReliabilityAndDurabilitySes31)
+{
+    RouterParams params;
+    params.qos_overrides = parse_qos_overrides({"cmd_vel=best_effort,transient_local"});
+    RouterFixture fixture("qos_sub_override", remapped(), params);
+    fixture.handshake(0x09u);
+    const std::optional<rclcpp::QoS> qos = fixture.router().endpoint_qos(kCmdVel);
+    ASSERT_TRUE(qos.has_value());
+    EXPECT_EQ(qos->reliability(), rclcpp::ReliabilityPolicy::BestEffort);
+    EXPECT_EQ(qos->durability(), rclcpp::DurabilityPolicy::TransientLocal);
+    const auto snapshot = fixture.router().diagnostics();
+    bool found = false;
+    for (const auto & topic : snapshot.topics) {
+      if (topic.topic_name == "cmd_vel") {
+        found = true;
+        EXPECT_EQ(topic.reliability, "best_effort");
+        EXPECT_EQ(topic.durability, "transient_local");
+      }
+      if (topic.topic_name == "battery") {
+        EXPECT_EQ(topic.reliability, "best_effort");
+        EXPECT_EQ(topic.durability, "volatile");
+      }
+    }
+    EXPECT_TRUE(found);
+}
+
+TEST_F(RouterNode, IncompatibleQosWarningNamesTopicAndFix)
+{
+    const char * rmw_env = std::getenv("RMW_IMPLEMENTATION");
+    if (rmw_env != nullptr && std::string(rmw_env) == "rmw_zenoh_cpp") {
+      GTEST_SKIP() << "rmw_zenoh_cpp does not support the incompatible QoS event";
+    }
+    RouterFixture fixture("qos_warn", remapped(), RouterParams{});
+    fixture.handshake();
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
+        "power/battery", rclcpp::QoS(10).reliable(),
+    [](const std_msgs::msg::Float32 &) {});
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!logged_has(fixture.logged(), "incompatible") &&
+      std::chrono::steady_clock::now() < deadline) {
+      rclcpp::spin_some(fixture.node());
+    }
+    ASSERT_TRUE(logged_has(fixture.logged(), "incompatible"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "battery"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "best_effort"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "reliable"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "qos.overrides"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "battery=reliable"));
+    for (int i = 0; i < 20; ++i) {
+      rclcpp::spin_some(fixture.node());
+    }
+    int warnings = 0;
+    for (const std::string & line : fixture.logged()) {
+      if (line.find("incompatible") != std::string::npos) {
+        ++warnings;
+      }
+    }
+    EXPECT_EQ(warnings, 1) << "the warning fires once per topic and remote pair";
+}
+
+TEST_F(RouterNode, IncompatibleQosWarningOnSubscriptionRoute)
+{
+    const char * rmw_env = std::getenv("RMW_IMPLEMENTATION");
+    if (rmw_env != nullptr && std::string(rmw_env) == "rmw_zenoh_cpp") {
+      GTEST_SKIP() << "rmw_zenoh_cpp does not support the incompatible QoS event";
+    }
+    RouterFixture fixture("qos_warn_sub", remapped(), RouterParams{});
+    fixture.handshake(0x09u);
+    auto pub = fixture.node()->create_publisher<geometry_msgs::msg::Twist>(
+        "cmd_vel", rclcpp::QoS(10).best_effort());
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!logged_has(fixture.logged(), "cmd_vel=best_effort") &&
+      std::chrono::steady_clock::now() < deadline) {
+      rclcpp::spin_some(fixture.node());
+    }
+    EXPECT_TRUE(logged_has(fixture.logged(), "incompatible"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "cmd_vel=best_effort"));
+}
+
+TEST_F(RouterNode, IncompatibleWarningsFireForBothRouteDirections)
+{
+    const char * rmw_env = std::getenv("RMW_IMPLEMENTATION");
+    if (rmw_env != nullptr && std::string(rmw_env) == "rmw_zenoh_cpp") {
+      GTEST_SKIP() << "rmw_zenoh_cpp does not support the incompatible QoS event";
+    }
+    RouterFixture fixture("qos_warn_both", remapped(), RouterParams{});
+    fixture.handshake(0x09u);
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
+        "power/battery", rclcpp::QoS(10).reliable(),
+    [](const std_msgs::msg::Float32 &) {});
+    auto pub = fixture.node()->create_publisher<geometry_msgs::msg::Twist>(
+        "cmd_vel", rclcpp::QoS(10).best_effort());
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (
+      !(logged_has(fixture.logged(), "battery=reliable") &&
+      logged_has(fixture.logged(), "cmd_vel=best_effort")) &&
+      std::chrono::steady_clock::now() < deadline) {
+      rclcpp::spin_some(fixture.node());
+    }
+    EXPECT_TRUE(logged_has(fixture.logged(), "battery=reliable"))
+      << "the publisher route warns";
+    EXPECT_TRUE(logged_has(fixture.logged(), "cmd_vel=best_effort"))
+      << "the subscription route warns with the same count and policy";
+    int warnings = 0;
+    for (const std::string & line : fixture.logged()) {
+      if (line.find("incompatible QoS:") != std::string::npos) {
+        ++warnings;
+      }
+    }
+    EXPECT_GE(warnings, 2);
+}
+
+TEST_F(RouterNode, IncompatibleDurabilityWarningSuggestsTransientLocal)
+{
+    const char * rmw_env = std::getenv("RMW_IMPLEMENTATION");
+    if (rmw_env != nullptr && std::string(rmw_env) == "rmw_zenoh_cpp") {
+      GTEST_SKIP() << "rmw_zenoh_cpp does not support the incompatible QoS event";
+    }
+    RouterFixture fixture("qos_warn_dur", remapped(), RouterParams{});
+    fixture.handshake();
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
+        "power/battery", rclcpp::QoS(10).best_effort().transient_local(),
+    [](const std_msgs::msg::Float32 &) {});
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!logged_has(fixture.logged(), "battery=best_effort,transient_local") &&
+      std::chrono::steady_clock::now() < deadline) {
+      rclcpp::spin_some(fixture.node());
+    }
+    EXPECT_TRUE(logged_has(fixture.logged(), "incompatible QoS durability"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "battery=best_effort,transient_local"));
+}
+
+TEST_F(RouterNode, IncompatibleWarningWithOverrideSet)
+{
+    const char * rmw_env = std::getenv("RMW_IMPLEMENTATION");
+    if (rmw_env != nullptr && std::string(rmw_env) == "rmw_zenoh_cpp") {
+      GTEST_SKIP() << "rmw_zenoh_cpp does not support the incompatible QoS event";
+    }
+    RouterParams params;
+    params.qos_overrides = parse_qos_overrides({"battery=best_effort"});
+    RouterFixture fixture("qos_warn_override", remapped(), params);
+    fixture.handshake();
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
+        "power/battery", rclcpp::QoS(10).reliable(),
+    [](const std_msgs::msg::Float32 &) {});
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!logged_has(fixture.logged(), "battery=reliable") &&
+      std::chrono::steady_clock::now() < deadline) {
+      rclcpp::spin_some(fixture.node());
+    }
+    EXPECT_TRUE(logged_has(fixture.logged(), "battery=reliable"));
+}
+
+TEST_F(RouterNode, IncompatibleSubscriptionDurabilityWarning)
+{
+    const char * rmw_env = std::getenv("RMW_IMPLEMENTATION");
+    if (rmw_env != nullptr && std::string(rmw_env) == "rmw_zenoh_cpp") {
+      GTEST_SKIP() << "rmw_zenoh_cpp does not support the incompatible QoS event";
+    }
+    RouterParams params;
+    params.qos_overrides = parse_qos_overrides({"cmd_vel=best_effort,transient_local"});
+    RouterFixture fixture("qos_warn_sub_dur", remapped(), params);
+    fixture.handshake(0x09u);
+    auto pub = fixture.node()->create_publisher<geometry_msgs::msg::Twist>(
+        "cmd_vel", rclcpp::QoS(10).best_effort());
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!logged_has(fixture.logged(), "'cmd_vel=best_effort'") &&
+      std::chrono::steady_clock::now() < deadline) {
+      rclcpp::spin_some(fixture.node());
+    }
+    EXPECT_TRUE(logged_has(fixture.logged(), "incompatible QoS durability"));
+    EXPECT_TRUE(logged_has(fixture.logged(), "'cmd_vel=best_effort'"));
 }
 
 TEST_F(RouterNode, McuToHostForwardsTheConvertedMessage)
@@ -1241,8 +1481,7 @@ TEST_F(RouterNode, ForwardsMcuLogLinesToTheirOwnSink)
     EXPECT_EQ(fixture.mcu_logged()[0].second, "hot");
     EXPECT_EQ(fixture.mcu_logged()[1].first, SessionLog::kError);
     EXPECT_EQ(fixture.mcu_logged()[1].second, "hotter");
-    ASSERT_EQ(fixture.logged().size(), 1u) << "MCU lines bypass the bridge sink";
-    EXPECT_TRUE(logged_has(fixture.logged(), "connected: MCU node 'node'")) << fixture.logged()[0];
+    EXPECT_TRUE(logged_has(fixture.logged(), "connected: MCU node 'node'"));
     EXPECT_FALSE(logged_has(fixture.logged(), "hot")) << "MCU lines bypass the bridge sink";
 }
 
@@ -1252,9 +1491,9 @@ TEST_F(RouterNode, FallsBackToTheLogSinkWithoutAnMcuSink)
     fixture.handshake();
     fixture.deliver_frame(2u, 0u, mcu_log_payload(20u, "line"));
     EXPECT_TRUE(fixture.mcu_logged().empty());
-    ASSERT_EQ(fixture.logged().size(), 2u);
-    EXPECT_EQ(fixture.logged()[0], "connected: MCU node 'node'");
-    EXPECT_EQ(fixture.logged()[1], "line");
+    ASSERT_FALSE(fixture.logged().empty());
+    EXPECT_EQ(fixture.logged().back(), "line");
+    EXPECT_TRUE(logged_has(fixture.logged(), "connected: MCU node 'node'"));
 }
 
 TEST(RouterOverrides, ParsesTopicRates)
@@ -2743,8 +2982,13 @@ TEST_F(RouterNode, IgnoresACancelResponseWithNoPendingCancel)
   handshake_with_actions(fixture);
   fixture.deliver_frame(kHelperActions, 2u, {kHelperActCancelResp, 0x00u, 0x00u, 0x00u});
   rclcpp::spin_some(fixture.node());
-  ASSERT_EQ(fixture.logged().size(), 1u) << "a stray cancel response stays silent";
-  EXPECT_TRUE(logged_has(fixture.logged(), "connected: MCU node 'node'")) << fixture.logged()[0];
+  EXPECT_TRUE(
+    std::all_of(fixture.logged().begin(), fixture.logged().end(),
+      [](const std::string & line) {
+        return line.find(": qos ") != std::string::npos ||
+               line.find("connected: MCU node") != std::string::npos;
+      }))
+    << "a stray cancel response stays silent";
 }
 
 // covers: SES-35, ACT-2, ACT-3, ACT-8

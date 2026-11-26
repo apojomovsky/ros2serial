@@ -1186,13 +1186,14 @@ The generator computes the REP-2011 RIHS01 hash for each type in `gen/r2s_gen/ty
 | `rate_limit.overrides` | string array | empty | Per-topic limits as `"<topic>=<hz>"`, naming the announced topic, for example `"cmd_vel=20"` |
 | `tx_budget_pct` | int | 50 | Cap on host-to-MCU bandwidth, as a percentage of the link |
 | `qos_depth` | int | 10 | Depth for publishers and subscriptions created for the MCU |
+| `qos.overrides` | string array | empty | Per-topic host endpoint QoS as `"<topic>=reliable"` or `"<topic>=best_effort"`, optionally followed by `,transient_local`, naming the announced topic ([SES-31]); a malformed entry throws at construction |
 
 The package ships these defaults as `config/r2s_bridge.params.yaml`, started
 by `launch/r2s_bridge.launch.py` with `port`, `params_file`, `namespace` and `remappings` arguments.
 
 ### Published by the bridge
 
-- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, running MCU error report sums per code (`mcu error code 1` through `mcu error code 6`) and the per-topic breakdown (`topic <id> <name> mcu errors`), per-topic direction, verdict, sequence gaps, drops and publish failures, each keyed `topic <id> <name> <key>` with `key` one of `direction`, `status`, `route`, `seq gaps`, `dropped`, `publish failures` or `mcu errors`, time sync offset in nanoseconds, drift in ppm and round trip in nanoseconds.
+- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, running MCU error report sums per code (`mcu error code 1` through `mcu error code 6`) and the per-topic breakdown (`topic <id> <name> mcu errors`), per-topic direction, verdict, sequence gaps, drops and publish failures, each keyed `topic <id> <name> <key>` with `key` one of `direction`, `status`, `route`, `reliability`, `durability`, `seq gaps`, `dropped`, `publish failures` or `mcu errors`, time sync offset in nanoseconds, drift in ppm and round trip in nanoseconds.
 - The MCU's topics, under the names it announced, after remapping and namespacing.
 - MCU log messages and error reports through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`; a report names its code, topic, count since the previous report, and the field path for a bound violation.
 
