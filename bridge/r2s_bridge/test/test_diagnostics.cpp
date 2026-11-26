@@ -82,7 +82,10 @@ public:
     }
     router_ = std::make_unique<Router>(
             node_->get_node_topics_interface(), std::move(open), clock_, clock_, std::move(params),
-      [this](SessionLog, const std::string & text) {logged_.push_back(text);});
+      [this](SessionLog level, const std::string & text) {
+        logged_levels_.push_back(level);
+        logged_.push_back(text);
+      });
   }
 
   void advance(std::uint32_t ms)
@@ -172,6 +175,17 @@ public:
     return router_->diagnostics();
   }
 
+  std::vector<SessionLog> log_levels_for(const std::string & needle) const
+  {
+    std::vector<SessionLog> out;
+    for (std::size_t i = 0; i < logged_.size(); ++i) {
+      if (logged_[i].find(needle) != std::string::npos) {
+        out.push_back(logged_levels_[i]);
+      }
+    }
+    return out;
+  }
+
   Router & router()
   {
     return *router_;
@@ -186,6 +200,7 @@ private:
   ManualClock clock_;
   rclcpp::Node::SharedPtr node_;
   std::unique_ptr<Router> router_;
+  std::vector<SessionLog> logged_levels_;
   std::vector<std::string> logged_;
 };
 
@@ -419,6 +434,62 @@ TEST_F(DiagnosticsNode, RefusedHelloKeepsBootWait)
     EXPECT_EQ(diagnostics.session_token, 0u);
     EXPECT_EQ(diagnostics.resets, 0u);
 }
+TEST_F(DiagnosticsNode, WrongVersionHelloLogsOnceAndReportsInDiagnostics)
+{
+    DiagnosticsFixture fixture("wrongversion", RouterParams{});
+    std::vector<std::uint8_t> bad_version = helper_hello(7u, 0u);
+    bad_version[1] = 99u;
+    for (int i = 0; i < 10; ++i) {
+      fixture.advance(500u);
+      fixture.deliver_frame(kHelperControl, 0u, bad_version);
+    }
+    const std::vector<SessionLog> levels = fixture.log_levels_for("HELLO refused");
+    ASSERT_EQ(levels.size(), 10u) << "every refusal still logs, at some level";
+    EXPECT_EQ(
+      std::count(levels.begin(), levels.end(), SessionLog::kError), 1) <<
+      "the same reason logs at error only the first time";
+    EXPECT_EQ(std::count(levels.begin(), levels.end(), SessionLog::kDebug), 9);
+    const std::string expected = "HELLO refused: the MCU protocol version is 99, "
+      "the host protocol version is " + std::to_string(R2S_PROTOCOL_VERSION);
+    const Diagnostics diagnostics = fixture.snapshot();
+    EXPECT_EQ(diagnostics.handshake_refused, expected);
+    const diagnostic_msgs::msg::DiagnosticArray message =
+      diagnostics_message(diagnostics, "test_node", "");
+    ASSERT_EQ(message.status.size(), 1u);
+    EXPECT_EQ(message.status[0].level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+    bool found = false;
+    for (const auto & value : message.status[0].values) {
+      if (value.key == "handshake refused") {
+        found = true;
+        EXPECT_EQ(value.value, expected);
+      }
+    }
+    EXPECT_TRUE(found) << "the diagnostics carry the refusal";
+    fixture.deliver_frame(kHelperControl, 0u, helper_hello(7u, 0u));
+    const Diagnostics cleared = fixture.snapshot();
+    EXPECT_EQ(cleared.link_state, "connected");
+    EXPECT_TRUE(cleared.handshake_refused.empty()) << "an accepted HELLO clears the refusal";
+    const diagnostic_msgs::msg::DiagnosticArray cleared_message =
+      diagnostics_message(cleared, "test_node", "");
+    for (const auto & value : cleared_message.status[0].values) {
+      EXPECT_NE(value.key, "handshake refused");
+    }
+}
+
+TEST_F(DiagnosticsNode, PortCloseClearsHandshakeRefused)
+{
+    DiagnosticsFixture fixture("refusedclose", RouterParams{});
+    std::vector<std::uint8_t> bad_version = helper_hello(7u, 0u);
+    bad_version[1] = 99u;
+    fixture.deliver_frame(kHelperControl, 0u, bad_version);
+    EXPECT_FALSE(fixture.snapshot().handshake_refused.empty());
+    fixture.script_closed();
+    fixture.poll_once();
+    const Diagnostics diagnostics = fixture.snapshot();
+    EXPECT_EQ(diagnostics.link_state, "disconnected");
+    EXPECT_TRUE(diagnostics.handshake_refused.empty()) << "a port close clears the refusal";
+}
+
 TEST_F(DiagnosticsNode, LinkTimeoutRehandshakesWithoutReset)
 {
     DiagnosticsFixture fixture("timeout", RouterParams{});
