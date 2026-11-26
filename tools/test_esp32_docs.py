@@ -74,6 +74,14 @@ def test_esp32_page_covers_board_choice_ports_and_fqbns():
     assert '303a' in text
     assert '/dev/serial/by-id' in text
     assert 'baud is ignored on USB CDC' in text
+    intro = ' '.join(text.split('## Install the ESP32 core', 1)[0].split())
+    assert 'ESP32-S3 (UART and USB CDC)' in intro
+    assert 'ESP32-C3 (USB CDC)' in intro
+    assert 'not in the CI example matrix' in text
+    assert 'only `esp32c3-usb` is built in CI for the C3' in text
+    assert 'vendor alone says' not in text
+    assert '/sys/class/tty/' in text
+    assert 'with both cables plugged in, both vendors' in ' '.join(text.split())
 
 
 def test_readme_links_esp32_page_and_matches_validation_level():

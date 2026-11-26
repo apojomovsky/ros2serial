@@ -1,7 +1,8 @@
 # ESP32 boards
 
-The ESP32, ESP32-S3 and ESP32-C3 are built in CI via the Arduino layout.
-That proves the examples compile for each chip; it is not a board run.
+The ESP32, the ESP32-S3 (UART and USB CDC) and the ESP32-C3 (USB CDC)
+variants are built in CI via the Arduino layout. That proves the
+examples compile for each of those variants; it is not a board run.
 [Real-board validation](hardware-validation.md) records the level of each
 variant, and a variant moves to a board run only when a maintainer run
 passes there. The link stays serial, over UART or USB CDC; WiFi is not
@@ -41,7 +42,11 @@ Board* or as the `arduino-cli` FQBN:
 
 These FQBNs are the rows of `ports/arduino/boards.list`, whose names
 (`esp32`, `esp32s3`, `esp32s3-usb`, `esp32c3`, `esp32c3-usb`) are also
-the `BOARD` values `make hardware-check` accepts. The classic ESP32
+the `BOARD` values `make hardware-check` accepts. The C3 UART row is
+the exception to the level above: `esp32c3` is a `boards.list` and
+hardware-check row only, it is not in the CI example matrix, and
+[Real-board validation](hardware-validation.md) gives the C3 no UART
+row; only `esp32c3-usb` is built in CI for the C3. The classic ESP32
 reaches the host through a USB-to-UART bridge chip, so `Serial` is
 UART0. The S3 and C3 have native USB as well, which the next section
 covers.
@@ -70,9 +75,16 @@ baud rate on UART0.
 ## Tell the ports apart on the host
 
 Run `lsusb` with the board plugged in. A vendor of `303a` is the
-chip's own USB (Espressif); any other vendor is the bridge chip on the
-`COM`/`UART` port, so the vendor alone says which cable you hold.
-`arduino-cli board list` shows the current device node for each port.
+chip's own USB (Espressif); any other vendor is the bridge chip on
+the `COM`/`UART` port. That lists the interfaces present, not which
+device node is which: with both cables plugged in, both vendors
+appear, and a `303a` interface can be the chip's USB/JTAG port even
+when `Serial` is on UART0. To identify one device node, read its own
+vendor the way `scripts/hardware-check.sh` does, for example
+`cat /sys/class/tty/ttyACM0/device/../idVendor`, or use
+`arduino-cli board list`, which maps each board to its current port.
+Which of those ports carries `Serial` still follows the build choice
+in the section above.
 
 Prefer the stable name under `/dev/serial/by-id/` over `ttyACM0` or
 `ttyACM1` in the bridge launch and in reports: the `ttyACMn` name can
