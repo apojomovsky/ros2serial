@@ -17,19 +17,17 @@
 
 #include "r2s_bridge/converter.hpp"
 
-extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
-                                      std::size_t size) {
-  using namespace r2s_bridge;
-
+extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t * data, std::size_t size)
+{
   if (size < 2u) {
     return 0;
   }
   const std::uint8_t type = static_cast<std::uint8_t>(data[0] % 4u);
   const bool narrow = (data[1] & 1u) != 0u;
-  const std::uint8_t *payload = data + 2u;
+  const std::uint8_t * payload = data + 2u;
   const std::size_t payload_size = size - 2u;
 
-  Converter converter;
+  r2s_bridge::Converter converter;
   std::vector<std::uint8_t> cdr;
   sensor_msgs::msg::Imu imu;
   sensor_msgs::msg::JointState joint_state;
@@ -37,29 +35,27 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
   std_msgs::msg::Int32MultiArray int32_multi_array;
 
   switch (type) {
-  case 0:
-    converter.to_cdr("sensor_msgs/msg/Imu", narrow, payload, payload_size, cdr);
-    converter.unpack_to_struct("sensor_msgs/msg/Imu", narrow, payload,
-                               payload_size, &imu);
-    break;
-  case 1:
-    converter.to_cdr("sensor_msgs/msg/JointState", narrow, payload,
-                     payload_size, cdr);
-    converter.unpack_to_struct("sensor_msgs/msg/JointState", narrow, payload,
-                               payload_size, &joint_state);
-    break;
-  case 2:
-    converter.to_cdr("tf2_msgs/msg/TFMessage", narrow, payload, payload_size,
-                     cdr);
-    converter.unpack_to_struct("tf2_msgs/msg/TFMessage", narrow, payload,
-                               payload_size, &tf_message);
-    break;
-  default:
-    converter.to_cdr("std_msgs/msg/Int32MultiArray", narrow, payload,
-                     payload_size, cdr);
-    converter.unpack_to_struct("std_msgs/msg/Int32MultiArray", narrow, payload,
-                               payload_size, &int32_multi_array);
-    break;
+    case 0:
+      converter.to_cdr("sensor_msgs/msg/Imu", narrow, payload, payload_size, cdr);
+      converter.unpack_to_struct(
+        "sensor_msgs/msg/Imu", narrow, payload, payload_size, &imu);
+      break;
+    case 1:
+      converter.to_cdr("sensor_msgs/msg/JointState", narrow, payload, payload_size, cdr);
+      converter.unpack_to_struct(
+        "sensor_msgs/msg/JointState", narrow, payload, payload_size, &joint_state);
+      break;
+    case 2:
+      converter.to_cdr("tf2_msgs/msg/TFMessage", narrow, payload, payload_size, cdr);
+      converter.unpack_to_struct(
+        "tf2_msgs/msg/TFMessage", narrow, payload, payload_size, &tf_message);
+      break;
+    default:
+      converter.to_cdr(
+        "std_msgs/msg/Int32MultiArray", narrow, payload, payload_size, cdr);
+      converter.unpack_to_struct(
+        "std_msgs/msg/Int32MultiArray", narrow, payload, payload_size, &int32_multi_array);
+      break;
   }
   return 0;
 }

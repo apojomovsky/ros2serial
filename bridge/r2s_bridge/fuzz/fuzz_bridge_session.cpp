@@ -20,30 +20,27 @@
 #include "manual_clock.hpp"
 #include "r2s_bridge/session.hpp"
 
-namespace {
+namespace
+{
 
 constexpr std::size_t kMaxRecords = 64u;
 constexpr int kPollRounds = 256;
 
-} // namespace
+}  // namespace
 
-extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
-                                      std::size_t size) {
-  using namespace r2s_bridge;
-  using namespace r2s_bridge::test;
-
-  ManualClock clock;
-  ManualClock ros_clock;
-  FakeTransport transport;
+extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t * data, std::size_t size)
+{
+  r2s_bridge::test::ManualClock clock;
+  r2s_bridge::test::ManualClock ros_clock;
+  r2s_bridge::test::FakeTransport transport;
 
   std::size_t offset = 0;
   std::size_t records = 0;
   while (offset + 4u <= size && records < kMaxRecords) {
     const std::uint8_t topic_id = data[offset];
     const std::uint8_t seq = data[offset + 1u];
-    const std::size_t length =
-        static_cast<std::size_t>(data[offset + 2u]) |
-        (static_cast<std::size_t>(data[offset + 3u]) << 8u);
+    const std::size_t length = static_cast<std::size_t>(data[offset + 2u]) |
+      (static_cast<std::size_t>(data[offset + 3u]) << 8u);
     offset += 4u;
     if (length > size - offset) {
       break;
@@ -52,22 +49,24 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data,
     decoded.insert(decoded.end(), data + offset, data + offset + length);
     offset += length;
     ++records;
-    transport.script_read(helper_wire_of(helper_with_check(decoded)));
+    transport.script_read(
+      r2s_bridge::test::helper_wire_of(r2s_bridge::test::helper_with_check(decoded)));
   }
   if (records == 0u) {
     return 0;
   }
 
-  SessionEvents events;
+  r2s_bridge::SessionEvents events;
   events.user_frame = [](std::uint8_t, const std::vector<std::uint8_t> &) {};
-  Session session(
-      SessionConfig{}, clock, ros_clock,
-      [&transport]() {
-        return std::unique_ptr<Transport>(new HelperLink(transport));
-      },
-      [](const TopicInfo &) { return std::uint8_t{0}; }, events,
-      [](const ServiceInfo &) { return std::uint8_t{0}; },
-      [](const ActionInfo &) { return std::uint8_t{0}; });
+  r2s_bridge::Session session(
+    r2s_bridge::SessionConfig{}, clock, ros_clock,
+    [&transport]() {
+      return std::unique_ptr<r2s_bridge::Transport>(
+        new r2s_bridge::test::HelperLink(transport));
+    },
+    [](const r2s_bridge::TopicInfo &) {return std::uint8_t{0};}, events,
+    [](const r2s_bridge::ServiceInfo &) {return std::uint8_t{0};},
+    [](const r2s_bridge::ActionInfo &) {return std::uint8_t{0};});
   session.poll();
   for (int round = 0; round < kPollRounds; ++round) {
     clock.advance(std::chrono::milliseconds(10));

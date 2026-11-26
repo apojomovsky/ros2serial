@@ -16,12 +16,15 @@ set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root" || exit 2
 build=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/fuzz
-want_bridge=1
-case "${TARGET:-}" in
-  bridge_session | bridge_converter) want_bridge=1; targets=() ;;
-  "") targets=(framer rcobs_decode session codec) ;;
-  *) want_bridge=0; targets=($TARGET) ;;
-esac
+targets=(${TARGET:-framer rcobs_decode session codec bridge_session bridge_converter})
+core_targets=()
+want_bridge=0
+for target in "${targets[@]}"; do
+  case "$target" in
+    bridge_session | bridge_converter) want_bridge=1 ;;
+    *) core_targets+=("$target") ;;
+  esac
+done
 seconds=${R2S_FUZZ_SECONDS:-60}
 coverage=${R2S_FUZZ_COVERAGE:-0}
 artifacts=${R2S_FUZZ_ARTIFACTS_DIR:-}
@@ -57,7 +60,7 @@ target_sources() {
       ;;
   esac
 }
-for target in "${targets[@]}"; do
+for target in "${core_targets[@]}"; do
   sources=$(target_sources "$target") || {
     failed+=("$target")
     continue
@@ -129,7 +132,7 @@ if [ "$coverage" = 1 ]; then
   command -v gcovr >/dev/null 2>&1 || { echo "gcovr not found: run it in the dev image" >&2; exit 1; }
   mkdir -p "$build/cov" || exit 1
   pairs=()
-  for target in "${targets[@]}"; do
+  for target in "${core_targets[@]}"; do
     sources=$(target_sources "$target") || { failed+=("$target-coverage"); continue; }
     obj="$build/cov/$target/obj"
     # Fresh objects every run: a changed flag set would otherwise read old
