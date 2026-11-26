@@ -48,7 +48,8 @@ covers.
 
 ## Two-port boards: pick one port and build for it
 
-Many ESP32-S3 boards carry two USB connectors. The one labelled `COM`
+Many ESP32-S3 boards carry two USB connectors, and the same choice
+applies to an ESP32-C3 wired for both UART and native USB. The one labelled `COM`
 or `UART` goes through a bridge chip to UART0. The one labelled `USB`
 goes straight to the chip's own USB. The sketch's `Serial` must be the
 port the bridge will open, and a board option decides which one that is:
