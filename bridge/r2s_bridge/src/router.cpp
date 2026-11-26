@@ -723,7 +723,9 @@ struct Router::Impl
     // Event callbacks run on the executor thread, while the session thread
     // clears qos_warned_ on a handshake: the same mutex guards both.
     std::lock_guard<std::recursive_mutex> guard(mutex);
-    const std::string key = info.topic_name + "#" + std::to_string(total_count) + "#" +
+    const std::string key = info.topic_name + "#" +
+      std::to_string(static_cast<unsigned>(info.topic_id)) + "#" +
+      (publisher_route ? "pub" : "sub") + "#" + std::to_string(total_count) + "#" +
       std::to_string(static_cast<int>(policy_kind));
     // GCOVR_EXCL_START: the middleware reports each pairing once, so a
     // second event with the same key cannot be staged in a unit test.

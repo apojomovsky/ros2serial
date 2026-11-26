@@ -608,6 +608,39 @@ TEST_F(RouterNode, IncompatibleQosWarningOnSubscriptionRoute)
     EXPECT_TRUE(logged_has(fixture.logged(), "cmd_vel=best_effort"));
 }
 
+TEST_F(RouterNode, IncompatibleWarningsFireForBothRouteDirections)
+{
+    const char * rmw_env = std::getenv("RMW_IMPLEMENTATION");
+    if (rmw_env != nullptr && std::string(rmw_env) == "rmw_zenoh_cpp") {
+      GTEST_SKIP() << "rmw_zenoh_cpp does not support the incompatible QoS event";
+    }
+    RouterFixture fixture("qos_warn_both", remapped(), RouterParams{});
+    fixture.handshake(0x09u);
+    auto sub = fixture.node()->create_subscription<std_msgs::msg::Float32>(
+        "power/battery", rclcpp::QoS(10).reliable(),
+    [](const std_msgs::msg::Float32 &) {});
+    auto pub = fixture.node()->create_publisher<geometry_msgs::msg::Twist>(
+        "cmd_vel", rclcpp::QoS(10).best_effort());
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (
+      !(logged_has(fixture.logged(), "battery=reliable") &&
+      logged_has(fixture.logged(), "cmd_vel=best_effort")) &&
+      std::chrono::steady_clock::now() < deadline) {
+      rclcpp::spin_some(fixture.node());
+    }
+    EXPECT_TRUE(logged_has(fixture.logged(), "battery=reliable"))
+      << "the publisher route warns";
+    EXPECT_TRUE(logged_has(fixture.logged(), "cmd_vel=best_effort"))
+      << "the subscription route warns with the same count and policy";
+    int warnings = 0;
+    for (const std::string & line : fixture.logged()) {
+      if (line.find("incompatible QoS:") != std::string::npos) {
+        ++warnings;
+      }
+    }
+    EXPECT_GE(warnings, 2);
+}
+
 TEST_F(RouterNode, IncompatibleDurabilityWarningSuggestsTransientLocal)
 {
     const char * rmw_env = std::getenv("RMW_IMPLEMENTATION");

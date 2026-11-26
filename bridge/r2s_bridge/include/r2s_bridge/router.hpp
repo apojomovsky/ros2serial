@@ -214,10 +214,10 @@ public:
   };
 
   /// How many publishers the router serves.
-/**
- * \return The device-to-host route count.
- */
-std::size_t publisher_count() const;
+  /**
+   * \return The device-to-host route count.
+   */
+  std::size_t publisher_count() const;
 
   /// How many subscriptions the router serves.
   /**
