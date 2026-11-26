@@ -1241,7 +1241,9 @@ TEST_F(RouterNode, ForwardsMcuLogLinesToTheirOwnSink)
     EXPECT_EQ(fixture.mcu_logged()[0].second, "hot");
     EXPECT_EQ(fixture.mcu_logged()[1].first, SessionLog::kError);
     EXPECT_EQ(fixture.mcu_logged()[1].second, "hotter");
-    EXPECT_TRUE(fixture.logged().empty()) << "MCU lines bypass the bridge sink";
+    ASSERT_EQ(fixture.logged().size(), 1u) << "MCU lines bypass the bridge sink";
+    EXPECT_TRUE(logged_has(fixture.logged(), "connected: MCU node 'node'")) << fixture.logged()[0];
+    EXPECT_FALSE(logged_has(fixture.logged(), "hot")) << "MCU lines bypass the bridge sink";
 }
 
 TEST_F(RouterNode, FallsBackToTheLogSinkWithoutAnMcuSink)
@@ -1250,8 +1252,9 @@ TEST_F(RouterNode, FallsBackToTheLogSinkWithoutAnMcuSink)
     fixture.handshake();
     fixture.deliver_frame(2u, 0u, mcu_log_payload(20u, "line"));
     EXPECT_TRUE(fixture.mcu_logged().empty());
-    ASSERT_EQ(fixture.logged().size(), 1u);
-    EXPECT_EQ(fixture.logged()[0], "line");
+    ASSERT_EQ(fixture.logged().size(), 2u);
+    EXPECT_EQ(fixture.logged()[0], "connected: MCU node 'node'");
+    EXPECT_EQ(fixture.logged()[1], "line");
 }
 
 TEST(RouterOverrides, ParsesTopicRates)
@@ -2740,7 +2743,8 @@ TEST_F(RouterNode, IgnoresACancelResponseWithNoPendingCancel)
   handshake_with_actions(fixture);
   fixture.deliver_frame(kHelperActions, 2u, {kHelperActCancelResp, 0x00u, 0x00u, 0x00u});
   rclcpp::spin_some(fixture.node());
-  EXPECT_TRUE(fixture.logged().empty()) << "a stray cancel response stays silent";
+  ASSERT_EQ(fixture.logged().size(), 1u) << "a stray cancel response stays silent";
+  EXPECT_TRUE(logged_has(fixture.logged(), "connected: MCU node 'node'")) << fixture.logged()[0];
 }
 
 // covers: SES-35, ACT-2, ACT-3, ACT-8
