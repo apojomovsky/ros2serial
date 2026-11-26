@@ -2430,6 +2430,7 @@ Router::Diagnostics Router::diagnostics() const
   std::lock_guard<std::recursive_mutex> guard(impl_->mutex);
   Diagnostics out;
   out.link_state = link_state_name(impl_->session_.state());
+  out.mcu_node_name = impl_->session_.node_name();
   out.session_token = impl_->session_.token();
   out.resets = impl_->session_.resets();
   out.control_coalesced = impl_->session_.control_coalesced();

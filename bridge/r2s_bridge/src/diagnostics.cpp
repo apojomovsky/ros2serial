@@ -94,6 +94,11 @@ diagnostic_msgs::msg::DiagnosticArray diagnostics_message(
     status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
   }
   status.message = snapshot.link_state;
+  std::string mcu_node_name = snapshot.mcu_node_name;
+  if (mcu_node_name.empty()) {
+    mcu_node_name = "not available";
+  }
+  add_value(status, "mcu node name", mcu_node_name);
   add_value(status, "session token", std::to_string(snapshot.session_token));
   add_value(status, "resets", std::to_string(snapshot.resets));
   add_value(status, "control coalesced", std::to_string(snapshot.control_coalesced));

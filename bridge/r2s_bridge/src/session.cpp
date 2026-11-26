@@ -936,6 +936,7 @@ struct Session::Impl
     next_ping_ms_ = connected_ms_;
     ping_id = 0;
     seq_time = 0;
+    log(SessionLog::kInfo, "connected: MCU node '" + hello.node_name + "'");
     if (events.handshake_completed) {
       events.handshake_completed(identical);
     }
@@ -2442,6 +2443,11 @@ std::string Session::handshake_refused() const
 std::uint32_t Session::token() const
 {
   return impl_->hello.token;
+}
+
+std::string Session::node_name() const
+{
+  return impl_->seen_hello ? impl_->hello.node_name : std::string();
 }
 
 const std::vector<TopicInfo> & Session::topics() const
