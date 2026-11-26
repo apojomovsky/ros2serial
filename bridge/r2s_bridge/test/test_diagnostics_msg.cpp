@@ -38,6 +38,7 @@ Router::Diagnostics connected_snapshot()
   snapshot.time_drift_ppm = 12;
   snapshot.time_round_trip_ns = 2300000;
   snapshot.link_state = "connected";
+  snapshot.mcu_node_name = "mcu_alpha";
   snapshot.session_token = 1u;
   snapshot.resets = 2u;
   snapshot.control_coalesced = 6u;
@@ -77,6 +78,7 @@ TEST(DiagnosticsMessage, ReportsConnectedSnapshot)
     EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
     EXPECT_EQ(status.message, "connected");
     const std::map<std::string, std::string> values = values_of(status);
+    EXPECT_EQ(values.at("mcu node name"), "mcu_alpha");
     EXPECT_EQ(values.at("session token"), "1");
     EXPECT_EQ(values.at("resets"), "2");
     EXPECT_EQ(values.at("protocol version"), "2");
@@ -245,6 +247,7 @@ TEST(DiagnosticsMessage, NamesTimeSyncKeysBeforeTheFirstCorrection)
     EXPECT_EQ(values.at("time sync offset"), "not available");
     EXPECT_EQ(values.at("time sync drift"), "not available");
     EXPECT_EQ(values.at("time sync round trip"), "not available");
+    EXPECT_EQ(values.at("mcu node name"), "not available");
 }
 
 TEST(DiagnosticsMessage, MapsLinkStateToLevel)

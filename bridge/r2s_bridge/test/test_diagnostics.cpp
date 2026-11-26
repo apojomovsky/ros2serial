@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -24,6 +25,7 @@
 
 #include "frame_helpers.hpp"
 #include "manual_clock.hpp"
+#include "r2s_bridge/diagnostics.hpp"
 #include "r2s_bridge/router.hpp"
 #include "rosidl_runtime_c/type_hash.h"
 extern "C" {
@@ -130,9 +132,9 @@ public:
     // ([CTL-2]); the time bit lets the host PING.
   void handshake_full(
     std::uint32_t token, std::uint8_t cmd_vel_flags,
-    std::uint8_t features = 0x00u)
+    std::uint8_t features = 0x00u, const std::string & node_name = "node")
   {
-    deliver_frame(kHelperControl, 0u, helper_hello(token, 2u, 512u, features));
+    deliver_frame(kHelperControl, 0u, helper_hello(token, 2u, 512u, features, node_name));
     router_->poll();
     const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
     deliver_frame(
@@ -153,6 +155,16 @@ public:
   void handshake(std::uint32_t token = 7u)
   {
     handshake_full(token, 0x01u);
+  }
+
+  void handshake_named(const std::string & node_name)
+  {
+    handshake_full(7u, 0x01u, 0x00u, node_name);
+  }
+
+  const std::vector<std::string> & logged() const
+  {
+    return logged_;
   }
 
   Diagnostics snapshot() const
@@ -237,6 +249,28 @@ TEST_F(DiagnosticsNode, ReportsConnectedWithSessionTokenAfterHandshake)
     ASSERT_NE(cmd_vel, nullptr);
     EXPECT_EQ(cmd_vel->topic_name, "cmd_vel");
     EXPECT_FALSE(cmd_vel->device_to_host);
+}
+
+TEST_F(DiagnosticsNode, ReportsMcuNodeNameInConnectLogAndDiagnostics)
+{
+    DiagnosticsFixture fixture("mcu_name", RouterParams{});
+    fixture.handshake_named("mcu_alpha");
+    const bool connect_line_names_mcu = std::any_of(
+        fixture.logged().begin(), fixture.logged().end(),
+        [](const std::string & line) {
+          return line.find("connected") != std::string::npos &&
+          line.find("mcu_alpha") != std::string::npos;
+        });
+    EXPECT_TRUE(connect_line_names_mcu) << "the connect log line names the MCU node";
+    const diagnostic_msgs::msg::DiagnosticArray message =
+    diagnostics_message(fixture.snapshot(), "test_node", "");
+    ASSERT_EQ(message.status.size(), 1u);
+    std::map<std::string, std::string> values;
+    for (const diagnostic_msgs::msg::KeyValue & value : message.status[0].values) {
+    values[value.key] = value.value;
+    }
+    ASSERT_TRUE(values.count("mcu node name") != 0u) << "the diagnostics name the MCU node";
+    EXPECT_EQ(values.at("mcu node name"), "mcu_alpha");
 }
 
 TEST_F(DiagnosticsNode, ReportsANameAnnouncedInBothDirectionsAsAConflict)
