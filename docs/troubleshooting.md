@@ -86,6 +86,36 @@ to every translation unit in your own build.
 An application that blocks for longer than the link timeout can appear unplugged.
 Use nonblocking driver logic and frequent spin calls before increasing timeouts.
 
+## No topics from an ESP32: `Serial` is not the port in use
+
+The sketch talks on `Serial`, and a board option decides which physical
+port that is. If the board was built with `USB CDC On Boot: Enabled` but
+the bridge is on the `COM`/`UART` port, or the other way round, the
+firmware runs on the other port and the bridge hears silence. Rebuild
+with the FQBN and the `USB CDC On Boot` setting for the port in use, as
+[ESP32 boards](esp32.md#two-port-boards-pick-one-port-and-build-for-it)
+spells out. On the native USB build `Serial` is USB and `Serial0` is
+UART0, so a sketch that must use UART0 there names `Serial0`.
+
+## An ESP32 board is held in reset or download mode
+
+The auto-reset circuit lets a host tool drive the board into reset or
+download mode through the port's control lines. A tool that exited
+while it left RTS asserted can leave the board held in that state, so
+it never starts the sketch and no topics appear. Close every program
+that held the port, unplug and replug the board, and press its reset
+or EN button if it has one. Then start the bridge once, with nothing
+else owning the port.
+
+## The ESP32 port name changes after a reset
+
+The port name changing after a reset is normal on the native USB
+port: a reset makes the board re-enumerate, and the host may give it
+the next `ttyACMn` name. A bridge still pointing at the old name then
+cannot open the port. Use the stable name under `/dev/serial/by-id/`
+for the launch and for `make hardware-check`, as
+[ESP32 boards](esp32.md#tell-the-ports-apart-on-the-host) shows.
+
 ## A useful bug report
 
 Include the checkout commit, `ros2 run r2s_gen r2s-gen version`, ROS distro,

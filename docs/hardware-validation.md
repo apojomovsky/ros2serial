@@ -10,9 +10,12 @@ and the bootloader timing.
 | Target | Coverage | What that proves |
 | --- | --- | --- |
 | Uno, Mega | Simulation in CI (simavr) | Frames, handshake, services, actions and the end-to-end scenarios, on the board's own instruction set |
-| ESP32 | Build in CI | The sketch and the library compile for the target |
-| CH32V003, STM32F103, RP2040 | Build in CI | The core and port compile for the target |
-| PIC18F4550 | Build in CI, advisory | The port compiles with epic-cc; the simulator run is advisory |
+| ESP32 | build in CI | The sketch and the library compile for the target |
+| ESP32-S3 (UART) | build in CI | The sketch and the library compile for UART0 through the bridge chip |
+| ESP32-S3 (USB CDC) | build in CI | The sketch and the library compile for the native USB port |
+| ESP32-C3 (USB CDC) | build in CI | The sketch and the library compile for the native USB port |
+| CH32V003, STM32F103, RP2040 | build in CI | The core and port compile for the target |
+| PIC18F4550 | build in CI, advisory | The port compiles with epic-cc; the simulator run is advisory |
 | A real Uno and a real Mega | Board run by the maintainer | Everything above plus the adapter, the reset and the bootloader |
 
 Compiling for a board is not a promise about its hardware. Only the rows marked
@@ -29,7 +32,8 @@ make hardware-check PORT=/dev/ttyACM0 BOARD=uno
 
 An ESP32 board names its row in `ports/arduino/boards.list` instead. An
 ESP32-S3 leaves the factory either as a COM/UART bridge or as native USB,
-and the row fixes which one the check expects:
+and the row fixes which one the check expects. [ESP32 boards](esp32.md)
+covers the board, port and FQBN choices behind those rows:
 
 ```sh
 make hardware-check PORT=/dev/ttyACM0 BOARD=esp32s3

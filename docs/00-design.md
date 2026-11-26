@@ -44,7 +44,7 @@ Tiers are defined by resources, not ISA bitness: a 32-bit core is not automatica
 | --- | --- | --- | --- |
 | S | PIC16F1938 class (PIC14E, Phase 5); PIC16F877A as a Float32-only stretch goal | 368 B to 1 KB | Publish and subscribe, compact handshake, optional log |
 | M | Arduino Uno (ATmega328P) + Mega (ATmega2560), the validation platforms; CH32V00x (Phase 3); PIC18F2455/4550 (Phase 5) | 2 KB on Uno and PIC18F4550, 8 KB on Mega | Everything in P0 and P1 |
-| L | STM32 (one small + one mid, Phase 3), RP2040, ESP32 (build-only via the Arduino layout) | 32 KB or more | Everything; full-width `float64` by default |
+| L | STM32 (one small + one mid, Phase 3), RP2040, ESP32, S3 and C3 built in CI via the Arduino layout | 32 KB or more | Everything; full-width `float64` by default |
 
 Features are selected at compile time (`R2S_WITH_TIME`, `R2S_WITH_LOG`, `R2S_WITH_PARAMS`, `R2S_WITH_SERVICES`, `R2S_WITH_ACTIONS`, `R2S_WITH_CODEC`, `R2S_WITH_RX_RING`), so a tier S build carries only publish and subscribe.
 
@@ -682,7 +682,7 @@ Each phase ends in a decision gate and a publishable artifact.
 - *Gate:* P0 complete and tier M budgets met. *Artifact:* benchmark write-up, the spec, and a rosserial migration post.
 
 **Phase 3: 32-bit ports and P1**
-- 32-bit ports: CH32V00x (tier M proof on a modern toolchain) + one small STM32 for tier M/L; RP2040 for tier L; ESP32 build-only via the Arduino layout (no WiFi transport in v1).
+- 32-bit ports: CH32V00x (tier M proof on a modern toolchain) + one small STM32 for tier M/L; RP2040 for tier L; ESP32, S3 and C3 built in CI via the Arduino layout (no WiFi transport in v1).
 - Parameters, services, actions, the reliable channel, PlatformIO packaging, rosidl plugin wrapper.
 - *Demo:* the same sketch on Uno, Mega and a 32-bit board, all publishing into the same ROS 2 graph.
 - *Gate:* release candidate.
@@ -1384,7 +1384,7 @@ Tickets T1 to T8 are specified in `docs/01-testing.md`, section 11, with their d
 | --- | --- | --- | --- |
 | X1 | CH32V00x port (tier M proof) | V1, R11 | Builds; budgets recorded; e2e on hardware manually |
 | X2 | One small STM32 port (tier M/L) and RP2040 (tier L) | V1 | Builds; budgets recorded; e2e on hardware manually |
-| X3 | ESP32 build-only via the Arduino layout | G10 | In the build matrix |
+| X3 | ESP32, S3 and C3 built in CI via the Arduino layout | G10 | In the build matrix |
 | X4 | Reliable channel | S5 | Unit and fault-injection tests |
 | X5 | Parameters | X4 | `ros2 param set` reaches the MCU in e2e |
 | X6 | Services | X4, R4 | Server and client e2e |

@@ -54,6 +54,11 @@ The pinned AVR core matches the project's tested toolchain. Uno and Mega use
 `arduino:avr:uno` and `arduino:avr:mega`. Other boards require their own platform;
 compilation support is not a promise of hardware validation.
 
+For an ESP32, ESP32-S3 or ESP32-C3, install the `esp32` core from the
+Boards Manager URL at the pinned version instead, then pick the board and
+port for the cable you will use. [ESP32 boards](esp32.md) gives the URL,
+the pin and the FQBN for each variant.
+
 Prepare a library after sourcing your ROS workspace:
 
 ```sh

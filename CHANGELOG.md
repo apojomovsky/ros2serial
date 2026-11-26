@@ -9,6 +9,11 @@
   [migration guide](https://apojomovsky.github.io/ros2serial/port-guide.html)
   ports a sketch from it
 
+### Documentation
+
+- **docs:** ESP32, S3 and C3 built versus validated, and how to pick the
+  board and port (#709)
+
 ## 0.5.0 (2026-11-19)
 
 ### Breaking
