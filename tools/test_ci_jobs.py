@@ -69,6 +69,11 @@ CASES = (
         {'bridge', 'core', 'budgets', 'docs'},
     ),
     (
+        ['scripts/fuzz-bridge.sh'],
+        {'lint', 'scripts', 'fuzz-smoke'},
+        {'bridge', 'core', 'budgets', 'docs'},
+    ),
+    (
         ['tools/coverage_gate.py'],
         {'lint', 'scripts', 'coverage'},
         {'bridge', 'core', 'docs', 'budgets'},

@@ -620,10 +620,13 @@ tasks:
       - scripts/with-build-lock.sh
       - scripts/e2e-lease.sh
       - scripts/fuzz.sh
+      - scripts/fuzz-bridge.sh
       - tools/fuzz_corpus.py
       - tools/fuzz_coverage.py
-      # Every target parses the core; the seeds come from the vectors.
+      # Every target parses the core; the bridge targets parse the bridge
+      # and the seeds come from the vectors.
       - core/**
+      - bridge/**
       - spec/**
     cmds:
       - FUZZ=1 bash scripts/ci-test.sh

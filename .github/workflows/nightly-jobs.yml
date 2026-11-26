@@ -45,8 +45,8 @@ jobs:
   fuzz-long:
     if: ${{ inputs.fuzz }}
     runs-on: ubuntu-24.04
-    # Four targets at R2S_FUZZ_SECONDS each, plus the image floor.
-    timeout-minutes: 150
+    # Six targets at R2S_FUZZ_SECONDS each, plus the image floor.
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: ./.github/actions/dev-image

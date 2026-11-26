@@ -343,7 +343,7 @@ The SCRIPTS scope runs in CI as one job per shard over the collected node ids, s
 | Mutation testing | Core, C++ layer, generator, bridge logic | Mull, mutmut (R13) | Nightly |
 | Zone check | Core free of function pointers, float operations and C++ includes | `tools/zone_check.py` on object files | Every PR |
 | Big-endian | Core unit tests on a big-endian target | qemu-user (for example s390x) | Nightly |
-| Fuzzing | rCOBS decoder, framer, codec with every descriptor, session input, bridge framer | libFuzzer; corpora in `core/fuzz/corpus/` | 60 s per target on PRs, 30 min nightly or on PRs labelled `fuzz-long` |
+| Fuzzing | rCOBS decoder, framer, codec with every descriptor, session input, bridge framer, bridge session, bridge converter | libFuzzer; corpora in `core/fuzz/corpus/` and `bridge/r2s_bridge/fuzz/corpus/` | 60 s per target on PRs, 30 min nightly or on PRs labelled `fuzz-long` |
 | Generator unit and golden | Config validation, [bounds](message-bounds.md), naming and collisions, error messages; generated files for example configs | pytest; `make regen` for intentional changes | Every PR |
 | Generator property and differential | Random message definitions and values: generate C, compile on host, round-trip, compare with the reference | hypothesis + host gcc | Every PR (bounded), more nightly |
 | Generator hashes | RIHS01 equals the installed type support's hash for bundled types, per distro | pytest in the ROS containers | Every PR |

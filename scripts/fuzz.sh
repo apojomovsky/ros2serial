@@ -4,7 +4,8 @@
 
 # Build the libFuzzer targets and run each over its seed corpus, then fuzz it.
 # Usage: fuzz.sh; env TARGET picks one target (framer, rcobs_decode, session,
-# codec), default all four; env R2S_FUZZ_SECONDS sets the fuzz time per target,
+# codec, bridge_session, bridge_converter), default all; env R2S_FUZZ_SECONDS
+# sets the fuzz time per target,
 # default 60; 0 only runs the seeds. R2S_FUZZ_COVERAGE=1 additionally replays
 # the committed seeds under gcov and renders tools/fuzz_coverage.py's report
 # (report only, never a gate). R2S_FUZZ_ARTIFACTS_DIR keeps whatever libFuzzer
@@ -15,7 +16,15 @@ set -uo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root" || exit 2
 build=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/fuzz
-targets=(${TARGET:-framer rcobs_decode session codec})
+targets=(${TARGET:-framer rcobs_decode session codec bridge_session bridge_converter})
+core_targets=()
+bridge_targets=()
+for target in "${targets[@]}"; do
+  case "$target" in
+    bridge_session | bridge_converter) bridge_targets+=("$target") ;;
+    *) core_targets+=("$target") ;;
+  esac
+done
 seconds=${R2S_FUZZ_SECONDS:-60}
 coverage=${R2S_FUZZ_COVERAGE:-0}
 artifacts=${R2S_FUZZ_ARTIFACTS_DIR:-}
@@ -51,7 +60,7 @@ target_sources() {
       ;;
   esac
 }
-for target in "${targets[@]}"; do
+for target in "${core_targets[@]}"; do
   sources=$(target_sources "$target") || {
     failed+=("$target")
     continue
@@ -107,6 +116,11 @@ for target in "${targets[@]}"; do
   rm -rf "$work"
   [ "$ok" = 1 ] && echo "-- fuzz: $target ok"
 done
+# The bridge targets build in the ROS image through their own script, which
+# the same fuzz job runs here so one TARGET name reaches every target.
+if [ "${#bridge_targets[@]}" -gt 0 ]; then
+  TARGET=${bridge_targets[*]} bash scripts/fuzz-bridge.sh || failed+=(bridge)
+fi
 # Seed-corpus coverage, nightly only: replay the committed seeds under gcov
 # and report which lines each target reaches. A low percentage never fails
 # here; only a broken measurement does.
@@ -114,7 +128,7 @@ if [ "$coverage" = 1 ]; then
   command -v gcovr >/dev/null 2>&1 || { echo "gcovr not found: run it in the dev image" >&2; exit 1; }
   mkdir -p "$build/cov" || exit 1
   pairs=()
-  for target in "${targets[@]}"; do
+  for target in "${core_targets[@]}"; do
     sources=$(target_sources "$target") || { failed+=("$target-coverage"); continue; }
     obj="$build/cov/$target/obj"
     # Fresh objects every run: a changed flag set would otherwise read old
