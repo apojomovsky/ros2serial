@@ -39,15 +39,33 @@ def test_hardware_validation_lists_each_esp32_variant_as_build_in_ci():
         assert row in text
 
 
+def _board_table(text):
+    table = {}
+    for line in text.splitlines():
+        cells = [cell.strip().strip('`') for cell in line.strip().strip('|').split('|')]
+        if len(cells) == 4 and cells[0] in ('ESP32', 'ESP32-S3', 'ESP32-C3'):
+            table[cells[0]] = cells[1:]
+    return table
+
+
 def test_esp32_page_covers_board_choice_ports_and_fqbns():
     text = _read('docs/esp32.md')
     boards = _boards()
     assert 'https://espressif.github.io/arduino-esp32/package_esp32_index.json' in text
     assert _esp32_pin() in text
-    for choice in ('ESP32 Dev Module', 'ESP32S3 Dev Module', 'ESP32C3 Dev Module'):
-        assert choice in text
-    for name in ('esp32', 'esp32s3', 'esp32s3-usb', 'esp32c3', 'esp32c3-usb'):
-        assert boards[name] in text
+    table = _board_table(text)
+    assert table['ESP32'][:2] == ['ESP32 Dev Module', boards['esp32']]
+    assert table['ESP32'][2].startswith('none')
+    assert table['ESP32-S3'] == [
+        'ESP32S3 Dev Module',
+        boards['esp32s3'],
+        boards['esp32s3-usb'],
+    ]
+    assert table['ESP32-C3'] == [
+        'ESP32C3 Dev Module',
+        boards['esp32c3'],
+        boards['esp32c3-usb'],
+    ]
     assert 'USB CDC On Boot: Disabled' in text
     assert 'USB CDC On Boot: Enabled' in text
     assert 'USB Mode: Hardware CDC and JTAG' in text
@@ -61,8 +79,15 @@ def test_esp32_page_covers_board_choice_ports_and_fqbns():
 def test_readme_links_esp32_page_and_matches_validation_level():
     text = _read('README.md')
     assert '[ESP32 boards](docs/esp32.md)' in text
-    assert 'built in CI' in text
-    assert 'does not establish real-hardware validation' in text
+    paragraphs = [' '.join(block.split()) for block in text.split('\n\n')]
+    top = next(p for p in paragraphs if p.startswith('**Under active development.**'))
+    ports = next(p for p in paragraphs if p.startswith('The bridge targets ROS 2'))
+    for paragraph in (top, ports):
+        assert 'ESP32, ESP32-S3 (UART and USB CDC)' in paragraph
+        assert 'ESP32-C3 (USB CDC)' in paragraph
+        assert 'built in CI' in paragraph
+    assert 'not that they run on hardware' in top
+    assert 'does not establish real-hardware validation' in ports
 
 
 def test_troubleshooting_covers_the_three_esp32_failures():

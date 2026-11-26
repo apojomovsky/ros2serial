@@ -14,8 +14,8 @@ and the bootloader timing.
 | ESP32-S3 (UART) | build in CI | The sketch and the library compile for UART0 through the bridge chip |
 | ESP32-S3 (USB CDC) | build in CI | The sketch and the library compile for the native USB port |
 | ESP32-C3 (USB CDC) | build in CI | The sketch and the library compile for the native USB port |
-| CH32V003, STM32F103, RP2040 | Build in CI | The core and port compile for the target |
-| PIC18F4550 | Build in CI, advisory | The port compiles with epic-cc; the simulator run is advisory |
+| CH32V003, STM32F103, RP2040 | build in CI | The core and port compile for the target |
+| PIC18F4550 | build in CI, advisory | The port compiles with epic-cc; the simulator run is advisory |
 | A real Uno and a real Mega | Board run by the maintainer | Everything above plus the adapter, the reset and the bootloader |
 
 Compiling for a board is not a promise about its hardware. Only the rows marked
