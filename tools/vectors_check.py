@@ -535,7 +535,11 @@ def check_payload(name: str, frame_name: str, payload: bytes, topic_id: int) -> 
             r.u8()  # index
             value = r.take(len(payload) - r.pos)
             if len(value) in (4, 8) or value in (b'\x00', b'\x01'):
-                pass  # i64, f64 (4 on a 32-bit-double build), or a bool
+                # i64, f64 (4 on a 32-bit-double build), or a bool. A SET
+                # carries no type byte, so a 4-byte string value is
+                # indistinguishable from a narrow f64 and escapes the
+                # string checks below; no string vector is that short.
+                pass
             else:
                 # A SET carries no type byte, so anything else must parse as
                 # a string: a varint length holding exactly the rest.
