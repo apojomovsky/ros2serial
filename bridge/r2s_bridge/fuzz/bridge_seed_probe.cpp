@@ -158,6 +158,9 @@ int main(int argc, char ** argv)
       type_name(seed[0]), (seed[1] & 1u) != 0u, seed.data() + 2u, seed.size() - 2u, cdr);
     if (result.fail == r2s_bridge::ConvertFail::kNone) {
       converted[seed[0]] = true;
+    } else {
+      std::fprintf(stderr, "bridge_seed_probe: %s does not convert to CDR\n", name.c_str());
+      ++failures;
     }
     if (!unpacks(converter, seed)) {
       std::fprintf(stderr, "bridge_seed_probe: %s does not unpack into its struct\n",
