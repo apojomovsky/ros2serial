@@ -106,6 +106,7 @@ def _records(seed):
 def test_bridge_session_seeds_start_with_a_valid_hello():
     seeds = _bridge_seeds('bridge_session')
     assert seeds, 'the bridge session corpus is empty'
+    assert any(name.startswith('transcript_') for name in seeds)
     for name, seed in seeds.items():
         if not name.startswith('transcript_'):
             continue
