@@ -1120,6 +1120,52 @@ TEST(SessionLink, DoesNotResumeAWalkOnAReopenedLink)
     EXPECT_EQ(units[0][2], 0x01u);
 }
 
+TEST(SessionLink, RefusedHelloLogsAtErrorAgainAfterAReopen)
+{
+    ManualClock clock;
+    std::uint32_t now = 0;
+    int opens = 0;
+    FakeTransport first;
+    FakeTransport second;
+    std::vector<SessionLog> levels;
+    SessionEvents events;
+    events.log = [&levels](SessionLog level, const std::string &) {
+        levels.push_back(level);
+      };
+    std::unique_ptr<Session> session;
+    session = std::make_unique<Session>(
+        SessionConfig{}, clock, clock,
+    [&opens, &first, &second]() -> std::unique_ptr<Transport> {
+      ++opens;
+      return std::unique_ptr<Transport>(new Link(opens == 1 ? first : second));
+        },
+    [](const TopicInfo &) {return std::uint8_t{0};}, events);
+    const auto advance = [&clock, &session, &now](std::uint32_t ms) {
+      while (now < ms) {
+        clock.advance(kTick);
+        ++now;
+        session->poll();
+      }
+    };
+    const std::vector<std::uint8_t> wrong =
+      wire_of(with_check(with_topic_frame(hello_payload(0x1000u, 0u, 1u))));
+    first.script_read(wrong);
+    session->poll();
+    ASSERT_EQ(levels.size(), 1u);
+    EXPECT_EQ(levels[0], SessionLog::kError);
+    first.script_read(IoStatus::kClosed);
+    session->poll();
+    ASSERT_EQ(session->state(), SessionState::kDisconnected);
+    EXPECT_TRUE(session->handshake_refused().empty());
+    advance(1100);
+    ASSERT_EQ(opens, 2) << "the port reopened after the reconnect period";
+    second.script_read(wrong);
+    session->poll();
+    ASSERT_EQ(levels.size(), 2u);
+    EXPECT_EQ(levels[1], SessionLog::kError)
+      << "the same reason logs at error again on the reopened port";
+}
+
 TEST(SessionConnected, UsesTheConfiguredHeartbeatPeriod)
 {
     SessionConfig config;
