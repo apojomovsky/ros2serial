@@ -305,15 +305,9 @@ public:
                       helper_declare(1u, 0x01u, 0x00u, "rate",
       {0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
     expect_param_req(2u);
-    if (narrow) {
-      deliver_frame(kParamsTopic, 2u,
-                        helper_declare(2u, 0x02u, 0x00u, "gain",
-        {0x00u, 0x00u, 0xC0u, 0x3Fu}));
-    } else {
-      deliver_frame(kParamsTopic, 2u,
-                        helper_declare(2u, 0x02u, 0x00u, "gain",
-        {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF8u, 0x3Fu}));
-    }
+    deliver_frame(kParamsTopic, 2u,
+                      helper_declare(2u, 0x02u, 0x00u, "gain",
+      {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF8u, 0x3Fu}));
     expect_param_req(3u);
     if (long_label) {
       std::vector<std::uint8_t> wide{0xC8u, 0x01u};
@@ -1248,11 +1242,14 @@ TEST_F(RouterNode, McuParameterCodecsCoverAllTypes)
 }
 
 // covers: PAR-1, PAR-3, ENC-12
-TEST_F(RouterNode, Float64ParameterTravelsNarrowOn32BitDoubleMcus)
+TEST_F(RouterNode, Float64ParameterStaysBinary64On32BitDoubleMcus)
 {
+    // Bit 4 announces a 32-bit-double MCU, whose topics and services travel
+    // narrow; a parameter still travels as binary64 ([PAR-3]), widened by
+    // the MCU from the binary32 it holds.
     RouterFixture fixture("paramnarrow", remapped(), RouterParams{});
     fixture.handshake_with_params(7u, true, false, false, true);
-    ASSERT_TRUE(fixture.node()->has_parameter("gain")) << "the narrow f64 is a ROS parameter";
+    ASSERT_TRUE(fixture.node()->has_parameter("gain")) << "the f64 is a ROS parameter";
     EXPECT_DOUBLE_EQ(fixture.node()->get_parameter("gain").as_double(), 1.5);
     const auto result = fixture.node()->set_parameters({rclcpp::Parameter("gain", 2.5)});
     ASSERT_EQ(result.size(), 1u);
@@ -1260,39 +1257,21 @@ TEST_F(RouterNode, Float64ParameterTravelsNarrowOn32BitDoubleMcus)
     const auto sets = fixture.param_sets();
     ASSERT_EQ(sets.count(2u), 1u);
     EXPECT_EQ(sets.at(2u).value,
-              std::vector<std::uint8_t>({0x00u, 0x00u, 0x20u, 0x40u}))
-        << "the f64 set travels as binary32 on a narrow link";
+              std::vector<std::uint8_t>(
+        {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x04u, 0x40u}))
+        << "the f64 set travels as binary64 on a 32-bit-double link";
     fixture.deliver_frame(kAckTopic, 0u, {kParamsTopic, sets.at(2u).rel});
     fixture.advance(1u);
-    const auto overflow = fixture.node()->set_parameters({rclcpp::Parameter("gain", 1e300)});
-    ASSERT_EQ(overflow.size(), 1u);
-    EXPECT_TRUE(overflow[0].successful) << overflow[0].reason;
-    const auto wide_sets = fixture.param_sets();
-    ASSERT_EQ(wide_sets.count(2u), 1u);
-    EXPECT_EQ(wide_sets.at(2u).value,
-              std::vector<std::uint8_t>({0x00u, 0x00u, 0x80u, 0x7Fu}))
-        << "a finite value too large for binary32 becomes a positive infinity";
-    fixture.deliver_frame(kAckTopic, 0u, {kParamsTopic, wide_sets.at(2u).rel});
-    fixture.advance(1u);
-    const auto underflow = fixture.node()->set_parameters({rclcpp::Parameter("gain", -1e300)});
-    ASSERT_EQ(underflow.size(), 1u);
-    EXPECT_TRUE(underflow[0].successful) << underflow[0].reason;
-    const auto neg_sets = fixture.param_sets();
-    ASSERT_EQ(neg_sets.count(2u), 1u);
-    EXPECT_EQ(neg_sets.at(2u).value,
-              std::vector<std::uint8_t>({0x00u, 0x00u, 0x80u, 0xFFu}))
-        << "a finite value too large for binary32 becomes a negative infinity";
-    fixture.deliver_frame(kAckTopic, 0u, {kParamsTopic, neg_sets.at(2u).rel});
-    fixture.advance(1u);
-    const auto infinite = fixture.node()->set_parameters(
-      {rclcpp::Parameter("gain", std::numeric_limits<double>::infinity())});
-    ASSERT_EQ(infinite.size(), 1u);
-    EXPECT_TRUE(infinite[0].successful) << infinite[0].reason;
-    const auto inf_sets = fixture.param_sets();
-    ASSERT_EQ(inf_sets.count(2u), 1u);
-    EXPECT_EQ(inf_sets.at(2u).value,
-              std::vector<std::uint8_t>({0x00u, 0x00u, 0x80u, 0x7Fu}))
-        << "an infinity stays an infinity of the same sign";
+    const auto large = fixture.node()->set_parameters({rclcpp::Parameter("gain", 1e300)});
+    ASSERT_EQ(large.size(), 1u);
+    EXPECT_TRUE(large[0].successful) << large[0].reason;
+    const auto large_sets = fixture.param_sets();
+    ASSERT_EQ(large_sets.count(2u), 1u);
+    ASSERT_EQ(large_sets.at(2u).value.size(), 8u)
+        << "a large f64 travels whole as binary64, never narrowed here";
+    double large_value = 0;
+    std::memcpy(&large_value, large_sets.at(2u).value.data(), sizeof(large_value));
+    EXPECT_DOUBLE_EQ(large_value, 1e300);
 }
 
 // covers: PAR-9

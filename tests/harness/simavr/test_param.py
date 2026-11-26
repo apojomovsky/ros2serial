@@ -1,17 +1,21 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
-"""The float64 parameter over simavr: a 32-bit-double MCU declares and sets it narrow.
+"""The float64 parameter over simavr: binary64 on the wire, binary32 in the MCU.
 
 The firmware carries one topic and a gain parameter defaulting to 1.5. On
-this build the DECLARE carries the 4 bytes of binary32, a narrow SET of
-2.5 applies and the firmware reports the stored value, and the same value
-at 8 bytes is refused as a bad length. A core that travelled wide would
-declare 8 bytes the bridge drops, and this test would never see them.
+this 32-bit-double build the DECLARE still carries the 8 bytes of
+binary64, the value widened exactly from the binary32 the MCU holds. A
+SET arrives as binary64 and the store narrows it with roundTiesToEven:
+the firmware reports the stored bits after each applied SET, so the
+largest finite value, the rounding midpoint above it, values past it in
+both signs, and subnormal boundaries all show what was kept. A value
+that only fits at 4 bytes earns a bad-length STATUS instead.
 
 covers: DSC-27, ENC-12, PAR-1, PAR-3
 """
 
+import struct
 import time
 
 import pytest
@@ -21,8 +25,33 @@ from test_echo import Harness
 
 PROTOCOL_VERSION = 4
 MAX_FRAME = 84
-DECLARE_GAIN = bytes.fromhex('02 00 02 00 04 67 61 69 6e 00 00 c0 3f')
+DECLARE_GAIN = bytes.fromhex('02 00 02 00 04 67 61 69 6e 00 00 00 00 00 00 f8 3f')
 RUN_MS = ('--run-ms', '60000')
+
+# One applied SET per row: the binary64 bytes the host sends and the
+# binary32 bits the MCU stores, worked out from [ENC-11] by hand. The
+# midpoint sits half an ulp above the largest finite binary32: a value
+# there rounds to infinity, since the largest mantissa is odd.
+FLT_MAX = struct.unpack('<f', b'\xff\xff\x7f\x7f')[0]
+ABOVE_MAX = FLT_MAX + 2.0**100
+MIDPOINT = FLT_MAX + 2.0**103
+SETTLES = [
+    (2.5, 0x40200000),
+    (ABOVE_MAX, 0x7F7FFFFF),
+    (MIDPOINT, 0x7F800000),
+    (-ABOVE_MAX, 0xFF7FFFFF),
+    (-MIDPOINT, 0xFF800000),
+    (MIDPOINT + 2.0**100, 0x7F800000),
+    (2.0**-149, 0x00000001),
+    (2.0**-150, 0x00000000),
+    (3 * 2.0**-150, 0x00000002),
+    (-(2.0**-150), 0x80000000),
+]
+
+
+def settle_payload(value):
+    """One binary64 SET value as its 8 little-endian bytes."""
+    return struct.pack('<d', value)
 
 
 def drain(port):
@@ -52,8 +81,15 @@ def expect(port, topic_id, payload):
     assert got_payload == payload, f'{got_payload.hex(" ")}, want {payload.hex(" ")}'
 
 
+def expect_stored(port, bits):
+    """The firmware's raw report carries exactly these stored bits."""
+    port.timeout = 2
+    report = port.read(5)
+    assert report == b'V' + struct.pack('<I', bits), f'stored {report.hex(" ")}'
+
+
 @pytest.mark.parametrize('mcu', ['atmega328p', 'atmega2560'])
-def test_f64_parameter_declares_and_sets_narrow(mcu):
+def test_f64_parameter_declares_wide_and_narrows_on_set(mcu):
     with Harness(mcu, *RUN_MS, image='param') as harness:
         with serial.Serial(harness.pty, 115200, timeout=2) as port:
             drain(port)
@@ -74,17 +110,21 @@ def test_f64_parameter_declares_and_sets_narrow(mcu):
             port.write(frames.encode_wire(3, 1, bytes((0x01, 1))))
             expect(port, 3, bytes((0x04, 0, 1, 1)))
             port.write(frames.encode_wire(0, 3, bytes((0x06, 1, 0, 0, 0))))
-            # A narrow SET of 2.5 applies; the firmware then reports the
-            # stored value as raw marker bytes after the framed STATUS.
-            port.write(frames.encode_wire(3, 0, bytes.fromhex('03 00 00 00 00 20 40')))
-            expect(port, 6, bytes((3, 0)))
-            expect(port, 3, bytes((0x04, 0, 0, 0)))
-            port.timeout = 2
-            assert port.read(7) == b'GAIN25!'
-            port.write(frames.encode_wire(6, 0, bytes((3, 0))))
-            # The same value at 8 bytes earns a bad-length STATUS, not an apply.
-            port.write(frames.encode_wire(3, 1, bytes.fromhex('03 01 00 00 00 00 00 00 00 04 40')))
-            expect(port, 6, bytes((3, 1)))
-            expect(port, 3, bytes((0x04, 1, 0, 2)))
-            port.write(frames.encode_wire(6, 1, bytes((3, 1))))
+            for rel, (value, bits) in enumerate(SETTLES):
+                payload = bytes((0x03, rel, 0)) + settle_payload(value)
+                port.write(frames.encode_wire(3, rel, payload))
+                expect(port, 6, bytes((3, rel)))
+                expect(port, 3, bytes((0x04, rel, 0, 0)))
+                expect_stored(port, bits)
+                port.write(frames.encode_wire(6, rel, bytes((3, rel))))
+            # A 4-byte SET is the wrong width for a parameter on any link.
+            rel = len(SETTLES)
+            port.write(
+                frames.encode_wire(
+                    3, rel, bytes.fromhex('03') + bytes((rel, 0)) + bytes.fromhex('00 00 20 40')
+                )
+            )
+            expect(port, 6, bytes((3, rel)))
+            expect(port, 3, bytes((0x04, rel, 0, 2)))
+            port.write(frames.encode_wire(6, rel, bytes((3, rel))))
     assert harness.stop() == 0

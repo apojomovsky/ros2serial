@@ -2,10 +2,11 @@
 // Copyright (c) 2026 Alexis Pojomovsky and ros2serial contributors
 
 /* Param firmware for the simavr harness: one topic and one float64
- * parameter, announced over UART0 on a build whose double is 32 bits, so
- * the parameter travels as binary32 ([ENC-12], [DSC-27]). The loop reports
- * the live value once a narrow SET lands it on 2.5, as raw marker bytes
- * after the framed STATUS, so the test sees the store itself. */
+ * parameter, announced over UART0 on a build whose double is 32 bits. The
+ * parameter travels as binary64 ([PAR-3]): the loop reports the stored
+ * binary32 bits after every SET that changes them, as a raw V and the 4
+ * little-endian bytes after the framed STATUS, so the test sees the
+ * narrowing the store applied. */
 
 #include <avr/io.h>
 #include <stdint.h>
@@ -65,8 +66,8 @@ uint32_t r2s_port_tick(void)
 
 int main(void)
 {
-  static const uint8_t marker[] = {'G', 'A', 'I', 'N', '2', '5', '!'};
-  uint8_t reported = 0u;
+  /* The default's bits, so only a SET the session stored is reported. */
+  uint32_t last_bits = 0x3FC00000u;
 
   UBRR0 = (uint16_t)UBRR_VALUE;
   UCSR0B = (1 << RXEN0) | (1 << TXEN0);
@@ -77,15 +78,21 @@ int main(void)
   for (;; ) {
     const r2s_param_t *gain;
     uint32_t bits = 0u;
+    uint8_t report[5];
+    uint8_t i;
 
     r2s_spin_some();
     gain = r2s_params_get(0u);
     if (gain != NULL) {
       memcpy(&bits, &gain->value.f, sizeof bits);
     }
-    if (reported == 0u && bits == 0x40200000u) {
-      r2s_port_write(marker, (uint16_t)sizeof marker);
-      reported = 1u;
+    if (bits != last_bits) {
+      last_bits = bits;
+      report[0] = 'V';
+      for (i = 0u; i < 4u; i++) {
+        report[1u + i] = (uint8_t)(bits >> (i * 8u));
+      }
+      r2s_port_write(report, (uint16_t)sizeof report);
     }
   }
 }
