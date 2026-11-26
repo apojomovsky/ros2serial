@@ -27,7 +27,6 @@ DOCKER_BASE = docker run --rm $(TTY) --user $$(id -u):$$(id -g) \
 	-v $(REPO_ROOT):$(REPO_ROOT) -w $(CURDIR) -v $(CACHE):$(CACHE) -e R2S_BUILD_DIR=$(BUILD_DIR) -e R2S_CACHE_DIR=$(CACHE) -e R2S_HOST_MOUNT=$(REPO_ROOT)
 DOCKER_RUN = $(DOCKER_BASE) $(foreach v,$(PASS_VARS),-e $(v)) $(IMAGE)
 in_image = $(if $(R2S_IN_IMAGE),$(1),$(DOCKER_RUN) $(1))
-pending = echo "make $(1): not available until $(2)"; exit 1
 
 # A misspelled scope must fail with the valid scopes, not silently run nothing
 # or everything. Only command-line variables are checked, so environment
@@ -37,8 +36,8 @@ _SCOPE_ERROR := $(shell bash scripts/check-scope-vars.sh $(_CMDLINE_VARS))
 $(if $(_SCOPE_ERROR),$(error $(_SCOPE_ERROR)))
 
 .PHONY: help bootstrap doctor check test test-core test-gen test-bridge test-cpp test-scripts \
-	test-all e2e-posix e2e-avr pytest ctest fmt shell image exec ci-local compile fuzz size-report \
-	capacity-report vectors regen bounds-table rosdoc2 docs-gen lint check-warnings setup-hooks pre-pr-check guard-main-clone cache-dir pic-sim hardware-check
+	test-all e2e-posix e2e-avr pytest ctest fmt shell image exec ci-local fuzz size-report \
+	capacity-report vectors regen bounds-table rosdoc2 lint check-warnings setup-hooks pre-pr-check guard-main-clone cache-dir pic-sim hardware-check
 
 ##@Everyday
 
@@ -113,9 +112,6 @@ ci-local: guard-main-clone cache-dir image ## The exact CI run, unscoped, in the
 hardware-check: cache-dir ## Check a real board end to end: PORT=/dev/ttyACM0 BOARD=name in ports/arduino/boards.list
 	@bash scripts/hardware-check.sh '$(PORT)' '$(BOARD)'
 
-compile: ## Not built yet (pending G10 and V4): will build an example firmware
-	@$(call pending,compile,G10 and V4 in docs/00-design.md)
-
 fuzz: guard-main-clone cache-dir ## Fuzz each target for 60 s (TARGET=name and R2S_FUZZ_SECONDS=n narrow it)
 	@$(call in_image,env TARGET='$(TARGET)' R2S_FUZZ_SECONDS='$(R2S_FUZZ_SECONDS)' bash scripts/fuzz.sh)
 
@@ -138,9 +134,6 @@ bounds-table: guard-main-clone cache-dir ## Refresh the limits table in docs/mes
 
 rosdoc2: guard-main-clone cache-dir ## Advisory API docs build: doxygen counts plus rosdoc2 per package
 	@$(call in_image,bash scripts/rosdoc2.sh)
-
-docs-gen: ## Not built yet (pending G1 and H1): will regenerate reference docs
-	@$(call pending,docs-gen,G1 and H1 in docs/00-design.md)
 
 lint: guard-main-clone cache-dir ## Linters: the LINT section of the suite
 	@$(MAKE) --no-print-directory test LINT=1
