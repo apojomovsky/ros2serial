@@ -18,10 +18,10 @@ cd "$root" || exit 2
 build=${R2S_BUILD_DIR:-$HOME/.cache/ros2serial/build$(echo "$root" | tr / -)}/fuzz
 targets=(${TARGET:-framer rcobs_decode session codec bridge_session bridge_converter})
 core_targets=()
-want_bridge=0
+bridge_targets=()
 for target in "${targets[@]}"; do
   case "$target" in
-    bridge_session | bridge_converter) want_bridge=1 ;;
+    bridge_session | bridge_converter) bridge_targets+=("$target") ;;
     *) core_targets+=("$target") ;;
   esac
 done
@@ -118,12 +118,8 @@ for target in "${core_targets[@]}"; do
 done
 # The bridge targets build in the ROS image through their own script, which
 # the same fuzz job runs here so one TARGET name reaches every target.
-if [ "$want_bridge" = 1 ]; then
-  if [ -n "${TARGET:-}" ]; then
-    TARGET=$TARGET bash scripts/fuzz-bridge.sh || failed+=(bridge)
-  else
-    TARGET= bash scripts/fuzz-bridge.sh || failed+=(bridge)
-  fi
+if [ "${#bridge_targets[@]}" -gt 0 ]; then
+  TARGET=${bridge_targets[*]} bash scripts/fuzz-bridge.sh || failed+=(bridge)
 fi
 # Seed-corpus coverage, nightly only: replay the committed seeds under gcov
 # and report which lines each target reaches. A low percentage never fails

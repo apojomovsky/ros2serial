@@ -50,8 +50,16 @@ cmake -S bridge/r2s_bridge -B "$build" \
   echo "-- fuzz-bridge: configure FAILED"
   exit 1
 }
-cmake --build "$build" --target "${build_targets[@]}" -j"$(nproc)" || {
+cmake --build "$build" --target "${build_targets[@]}" bridge_seed_probe -j"$(nproc)" || {
   echo "-- fuzz-bridge: build FAILED"
+  exit 1
+}
+
+# The probe first: the fuzz runs accept a refusal, so a transcript that
+# never connects or a seed that never converts would pass silently.
+"$build/bridge_seed_probe" bridge/r2s_bridge/fuzz/corpus/bridge_session \
+  bridge/r2s_bridge/fuzz/corpus/bridge_converter || {
+  echo "-- fuzz-bridge: seed probe FAILED"
   exit 1
 }
 

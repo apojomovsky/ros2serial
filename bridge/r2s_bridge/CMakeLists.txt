@@ -129,6 +129,22 @@ if(R2S_BRIDGE_FUZZ)
   target_compile_options(fuzz_bridge_session PRIVATE -Wall -Wextra -Wpedantic -Werror)
   target_link_options(fuzz_bridge_session PRIVATE -fsanitize=fuzzer,address,undefined)
 
+  add_executable(bridge_seed_probe
+    fuzz/bridge_seed_probe.cpp
+    test/support/fake_transport.cpp
+    test/support/manual_clock.cpp)
+  target_include_directories(bridge_seed_probe PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/test/support
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../core/include)
+  target_compile_definitions(bridge_seed_probe PRIVATE
+    R2S_MAX_FRAME=${R2S_HOST_MAX_FRAME} R2S_MAX_LINKS=${R2S_HOST_MAX_LINKS})
+  target_link_libraries(bridge_seed_probe
+    r2s_bridge_component
+    sensor_msgs::sensor_msgs__rosidl_typesupport_cpp
+    std_msgs::std_msgs__rosidl_typesupport_cpp
+    tf2_msgs::tf2_msgs__rosidl_typesupport_cpp)
+  target_compile_options(bridge_seed_probe PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
   add_executable(fuzz_bridge_converter fuzz/fuzz_bridge_converter.cpp)
   target_link_libraries(fuzz_bridge_converter
     r2s_bridge_component

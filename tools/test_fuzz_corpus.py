@@ -9,12 +9,15 @@ byte, so a vector change without regenerated seeds fails the suite. The
 bridge corpora under bridge/r2s_bridge/fuzz/corpus/ follow the same rule.
 """
 
+import os
 from pathlib import Path
 
 import fuzz_corpus
 import pytest
 import yaml
+from r2s_gen import msgs
 from r2s_gen.reference import frames
+from r2s_gen.reference import messages
 from r2s_gen.reference import rcobs
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -160,6 +163,25 @@ def test_bridge_converter_seeds_cover_the_fuzzed_types():
     for seed in generated.values():
         assert seed[0] in types.values(), 'a seed names a type the target does not fuzz'
         assert seed[1] in (0, 1), 'a seed narrow flag is 0 or 1'
+
+
+def test_bridge_converter_hand_seed_decodes_to_its_layout():
+    seeds = _bridge_seeds('bridge_converter')
+    prefixes = [part for part in os.environ.get('AMENT_PREFIX_PATH', '').split(':') if part] or [
+        f'/opt/ros/{os.environ["ROS_DISTRO"]}'
+    ]
+    repo = msgs.MessageRepository(ament_prefix_path=prefixes)
+    expected = {
+        'layout': {'dim': [{'label': b'x', 'size': 2, 'stride': 2}], 'data_offset': 0},
+        'data': [1, -1],
+    }
+    for name in ('hand_int32multiarray_0', 'hand_int32multiarray_narrow_0'):
+        seed = seeds[name]
+        assert seed[0] == 3, f'{name} does not name Int32MultiArray'
+        decoded = messages.decode(
+            repo, 'std_msgs/msg/Int32MultiArray', seed[2:], narrow=bool(seed[1])
+        )
+        assert decoded == expected, f'{name} decodes to {decoded}'
 
 
 def test_codec_seeds_cover_every_message_payload():
