@@ -720,6 +720,9 @@ struct Router::Impl
     const TopicInfo & info, bool publisher_route, std::int32_t total_count,
     rmw_qos_policy_kind_t policy_kind)
   {
+    // Event callbacks run on the executor thread, while the session thread
+    // clears qos_warned_ on a handshake: the same mutex guards both.
+    std::lock_guard<std::recursive_mutex> guard(mutex);
     const std::string key = info.topic_name + "#" + std::to_string(total_count) + "#" +
       std::to_string(static_cast<int>(policy_kind));
     // GCOVR_EXCL_START: the middleware reports each pairing once, so a
@@ -734,15 +737,15 @@ struct Router::Impl
     const std::string durability_suffix = transient ? ",transient_local" : "";
     if (policy_kind == RMW_QOS_POLICY_DURABILITY) {
       std::string fix = info.topic_name + "=" + reliability_name(ours);
-      const char * remote_need = "volatile";
+      const char * remote_need = "offers volatile";
       if (publisher_route) {
         fix += ",transient_local";
-        remote_need = "transient_local";
+        remote_need = "requires transient_local";
       }
       emit(SessionLog::kWarning,
           "topic '" + info.topic_name + "': incompatible QoS durability: host endpoint is " +
           reliability_name(ours) + (transient ? " transient_local" : " volatile") +
-          ", remote endpoint requires " + remote_need +
+          ", remote endpoint " + remote_need +
           " durability; set qos.overrides entry '" + fix + "' to match (qos.overrides)");
       return;
     }
