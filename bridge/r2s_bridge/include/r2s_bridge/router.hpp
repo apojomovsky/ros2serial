@@ -188,6 +188,7 @@ public:
   struct Diagnostics
   {
     std::string link_state;  ///< The session state name.
+    std::string mcu_node_name;  ///< The MCU node name the HELLO carried.
     std::uint32_t session_token = 0;  ///< The session token [SES-19].
     std::uint32_t resets = 0;  ///< HELLOs accepted while connected.
     /// Control frames a newer frame of the same slot replaced.
@@ -196,6 +197,8 @@ public:
      */
     std::uint32_t control_coalesced = 0;
     std::uint8_t protocol_version = 0;  ///< The negotiated wire version.
+    /// The full text of the latest refused HELLO, empty when none is active.
+    std::string handshake_refused;
     McuCounters mcu_counters;  ///< The heartbeat counters [HB-2].
     /// Running MCU error report sums per code ([ERR-6]).
     /**
@@ -211,10 +214,10 @@ public:
   };
 
   /// How many publishers the router serves.
-  /**
-   * \return The device-to-host route count.
-   */
-  std::size_t publisher_count() const;
+/**
+ * \return The device-to-host route count.
+ */
+std::size_t publisher_count() const;
 
   /// How many subscriptions the router serves.
   /**

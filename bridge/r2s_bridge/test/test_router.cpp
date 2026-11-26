@@ -1448,10 +1448,8 @@ TEST_F(RouterNode, ForwardsMcuLogLinesToTheirOwnSink)
     EXPECT_EQ(fixture.mcu_logged()[0].second, "hot");
     EXPECT_EQ(fixture.mcu_logged()[1].first, SessionLog::kError);
     EXPECT_EQ(fixture.mcu_logged()[1].second, "hotter");
-    EXPECT_TRUE(
-      std::all_of(fixture.logged().begin(), fixture.logged().end(),
-        [](const std::string & line) {return line.find(": qos ") != std::string::npos;}))
-      << "MCU lines bypass the bridge sink";
+    EXPECT_TRUE(logged_has(fixture.logged(), "connected: MCU node 'node'"));
+    EXPECT_FALSE(logged_has(fixture.logged(), "hot")) << "MCU lines bypass the bridge sink";
 }
 
 TEST_F(RouterNode, FallsBackToTheLogSinkWithoutAnMcuSink)
@@ -1462,6 +1460,7 @@ TEST_F(RouterNode, FallsBackToTheLogSinkWithoutAnMcuSink)
     EXPECT_TRUE(fixture.mcu_logged().empty());
     ASSERT_FALSE(fixture.logged().empty());
     EXPECT_EQ(fixture.logged().back(), "line");
+    EXPECT_TRUE(logged_has(fixture.logged(), "connected: MCU node 'node'"));
 }
 
 TEST(RouterOverrides, ParsesTopicRates)
@@ -2952,7 +2951,10 @@ TEST_F(RouterNode, IgnoresACancelResponseWithNoPendingCancel)
   rclcpp::spin_some(fixture.node());
   EXPECT_TRUE(
     std::all_of(fixture.logged().begin(), fixture.logged().end(),
-      [](const std::string & line) {return line.find(": qos ") != std::string::npos;}))
+      [](const std::string & line) {
+        return line.find(": qos ") != std::string::npos ||
+               line.find("connected: MCU node") != std::string::npos;
+      }))
     << "a stray cancel response stays silent";
 }
 

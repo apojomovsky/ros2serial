@@ -386,6 +386,13 @@ struct Session::Impl
     }
   }
 
+  void refuse_hello(const std::string & text)
+  {
+    log(hello_refusals_seen_.insert(text).second ? SessionLog::kError : SessionLog::kDebug,
+        text);
+    handshake_refused_ = text;
+  }
+
   void try_open()
   {
     next_open_ms = now_ms() + config.reconnect_period_ms;
@@ -401,6 +408,8 @@ struct Session::Impl
     transport = std::move(opened);
     reader = std::make_unique<FrameReader>(*transport, clock);
     reader->clear_link_fault();
+    handshake_refused_.clear();
+    hello_refusals_seen_.clear();
     clear_queue();
     state = SessionState::kBootWait;
     boot_wait_deadline_ms = now_ms() + config.boot_wait_ms;
@@ -413,6 +422,8 @@ struct Session::Impl
       transport->close();
     }
     transport.reset();
+    handshake_refused_.clear();
+    hello_refusals_seen_.clear();
     clear_queue();
     awaiting_topic = false;
     reset_time();
@@ -925,6 +936,7 @@ struct Session::Impl
     next_ping_ms_ = connected_ms_;
     ping_id = 0;
     seq_time = 0;
+    log(SessionLog::kInfo, "connected: MCU node '" + hello.node_name + "'");
     if (events.handshake_completed) {
       events.handshake_completed(identical);
     }
@@ -943,41 +955,42 @@ struct Session::Impl
       !reader.u32(facts.tick_hz) ||
       !reader.u8(facts.features) || !reader.u8(facts.topic_count))
     {
-      log(SessionLog::kError, "HELLO refused: the payload is shorter than its fields");
+      refuse_hello("HELLO refused: the payload is shorter than its fields");
       return false;
     }
     if (facts.version != R2S_PROTOCOL_VERSION) {
-      log(SessionLog::kError, "HELLO refused: the MCU protocol version is " +
+      refuse_hello("HELLO refused: the MCU protocol version is " +
                                         std::to_string(facts.version) +
           ", the host protocol version is " +
                                         std::to_string(R2S_PROTOCOL_VERSION));
       return false;
     }
     if (facts.mode != kModeFull) {
-      log(SessionLog::kError,
+      refuse_hello(
                 "HELLO refused: compact mode needs a node map, which is not supported yet");
       return false;
     }
     if ((facts.features & kSvcActFeaturesBits) != 0u &&
       (facts.features & kReliableFeaturesBit) == 0u)
     {
-      log(SessionLog::kError, "HELLO refused: services without the reliable bit");
+      refuse_hello("HELLO refused: services without the reliable bit");
       return false;
     }
     if (!tick_hz_is_valid(facts.tick_hz)) {
-      log(SessionLog::kError, "HELLO refused: tick_hz " + std::to_string(facts.tick_hz) +
+      refuse_hello("HELLO refused: tick_hz " + std::to_string(facts.tick_hz) +
                                         " is not 1000 times a divisor of 10^6");
       return false;
     }
     if (facts.max_frame > kMaxFrameLimit) {
-      log(SessionLog::kError, "HELLO refused: max_frame is above the protocol limit");
+      refuse_hello("HELLO refused: max_frame is above the protocol limit");
       return false;
     }
     if (!reader.string(facts.node_name) || !reader.at_end()) {
-      log(SessionLog::kError, "HELLO refused: the node name does not match the payload");
+      refuse_hello("HELLO refused: the node name does not match the payload");
       return false;
     }
 
+    handshake_refused_.clear();
     const bool same_token = seen_hello && facts.token == hello.token;
     if (state == SessionState::kHandshaking && awaiting_topic && same_token) {
             // The MCU repeats HELLO while it hears nothing; the walk under way
@@ -2259,6 +2272,8 @@ struct Session::Impl
 
   HelloFacts hello;
   bool seen_hello = false;
+  std::string handshake_refused_;
+  std::set<std::string> hello_refusals_seen_;
   bool awaiting_topic = false;
   std::uint8_t requested_index = 0;
   int retries = 0;
@@ -2420,9 +2435,19 @@ bool Session::seen_hello() const
   return impl_->seen_hello;
 }
 
+std::string Session::handshake_refused() const
+{
+  return impl_->handshake_refused_;
+}
+
 std::uint32_t Session::token() const
 {
   return impl_->hello.token;
+}
+
+std::string Session::node_name() const
+{
+  return impl_->seen_hello ? impl_->hello.node_name : std::string();
 }
 
 const std::vector<TopicInfo> & Session::topics() const

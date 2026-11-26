@@ -723,6 +723,36 @@ TEST(SessionHandshake, RefusesAHelloOfAnotherProtocolVersion)
         << "the error names the host version";
 }
 
+TEST(SessionHandshake, NewRefusalReasonLogsAtErrorAgain)
+{
+    std::vector<SessionLog> levels;
+    std::vector<std::string> texts;
+    SessionEvents events;
+    events.log = [&levels, &texts](SessionLog level, const std::string & text) {
+        levels.push_back(level);
+        texts.push_back(text);
+      };
+    Fixture fixture(
+      [](const TopicInfo &) {return std::uint8_t{0};}, SessionConfig{}, events);
+    fixture.advance_to(10);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0u, 1500u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 4u, 0u, 1500u));
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u, 1u));
+    ASSERT_EQ(levels.size(), 5u);
+    EXPECT_EQ(levels[0], SessionLog::kError);
+    EXPECT_EQ(levels[1], SessionLog::kDebug) << "the same reason repeats at debug";
+    EXPECT_EQ(levels[2], SessionLog::kError) << "a different reason logs at error again";
+    EXPECT_EQ(levels[3], SessionLog::kDebug);
+    EXPECT_EQ(levels[4], SessionLog::kDebug)
+      << "the first reason already logged at error on this port open";
+    EXPECT_EQ(fixture.session().handshake_refused(), texts[4]);
+    fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 0u));
+    EXPECT_TRUE(fixture.session().handshake_refused().empty())
+      << "an accepted HELLO clears the refusal";
+}
+
 TEST(SessionHandshake, AcceptsAnMcuWhoseDoubleIs32Bits)
 {
     Fixture fixture;
@@ -970,8 +1000,9 @@ TEST(SessionConnected, HelloWhileConnectedLogsTheReset)
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
     logged.clear();
     fixture.deliver_frame(kControl, 0u, hello_payload(1u, 0u));
-    ASSERT_EQ(logged.size(), 1u) << "a HELLO while connected logs its own re-handshake";
+    ASSERT_EQ(logged.size(), 2u) << "a HELLO while connected logs its own re-handshake";
     EXPECT_NE(logged[0].find("HELLO while connected"), std::string::npos) << logged[0];
+    EXPECT_NE(logged[1].find("connected: MCU node 'node'"), std::string::npos) << logged[1];
 }
 
 TEST(SessionHandshake, HelloWhileHandshakingLogsTheRestart)
@@ -1088,6 +1119,52 @@ TEST(SessionLink, DoesNotResumeAWalkOnAReopenedLink)
     }());
     ASSERT_EQ(units.size(), 1u) << "one HELLO_REQ, and no TOPIC_REQ";
     EXPECT_EQ(units[0][2], 0x01u);
+}
+
+TEST(SessionLink, RefusedHelloLogsAtErrorAgainAfterAReopen)
+{
+    ManualClock clock;
+    std::uint32_t now = 0;
+    int opens = 0;
+    FakeTransport first;
+    FakeTransport second;
+    std::vector<SessionLog> levels;
+    SessionEvents events;
+    events.log = [&levels](SessionLog level, const std::string &) {
+        levels.push_back(level);
+      };
+    std::unique_ptr<Session> session;
+    session = std::make_unique<Session>(
+        SessionConfig{}, clock, clock,
+    [&opens, &first, &second]() -> std::unique_ptr<Transport> {
+      ++opens;
+      return std::unique_ptr<Transport>(new Link(opens == 1 ? first : second));
+        },
+    [](const TopicInfo &) {return std::uint8_t{0};}, events);
+    const auto advance = [&clock, &session, &now](std::uint32_t ms) {
+      while (now < ms) {
+        clock.advance(kTick);
+        ++now;
+        session->poll();
+      }
+    };
+    const std::vector<std::uint8_t> wrong =
+      wire_of(with_check(with_topic_frame(hello_payload(0x1000u, 0u, 1u))));
+    first.script_read(wrong);
+    session->poll();
+    ASSERT_EQ(levels.size(), 1u);
+    EXPECT_EQ(levels[0], SessionLog::kError);
+    first.script_read(IoStatus::kClosed);
+    session->poll();
+    ASSERT_EQ(session->state(), SessionState::kDisconnected);
+    EXPECT_TRUE(session->handshake_refused().empty());
+    advance(1100);
+    ASSERT_EQ(opens, 2) << "the port reopened after the reconnect period";
+    second.script_read(wrong);
+    session->poll();
+    ASSERT_EQ(levels.size(), 2u);
+    EXPECT_EQ(levels[1], SessionLog::kError)
+      << "the same reason logs at error again on the reopened port";
 }
 
 TEST(SessionConnected, UsesTheConfiguredHeartbeatPeriod)

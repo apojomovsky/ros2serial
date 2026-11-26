@@ -20,7 +20,7 @@ from pathlib import Path
 VERSION_FILE = 'VERSION'
 PACKAGE_VERSION = Path('gen') / 'r2s_gen' / 'version.py'
 GEN_MANIFEST = Path('gen') / 'package.xml'
-ROSIDL_MANIFEST = Path('gen') / 'r2s_rosidl' / 'package.xml'
+ROSIDL_MANIFEST = Path('rosidl') / 'r2s_rosidl' / 'package.xml'
 BRIDGE_MANIFEST = Path('bridge') / 'r2s_bridge' / 'package.xml'
 BRIDGE_TESTS_MANIFEST = Path('bridge') / 'r2s_bridge_tests' / 'package.xml'
 # The example interface package is a ROS package in the tree, so the cut

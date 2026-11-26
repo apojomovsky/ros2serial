@@ -33,10 +33,10 @@ echo "== ament-lint: $ROS_DISTRO (advisory; cpplint must report zero)"
 # and never the unit tests.
 linters="copyright cppcheck cpplint flake8 lint_cmake pep257 uncrustify xmllint"
 cmake_pkgs="r2s_bridge r2s_rosidl"
-# r2s_rosidl is named beside gen the way the farm check does: a plain gen
-# base path would hide the nested package from colcon.
+# rosidl sits beside gen the way bridge does, so colcon discovers
+# r2s_rosidl from its own root without naming the package inside it.
 # shellcheck disable=SC2206
-base_paths=(bridge/r2s_bridge gen gen/r2s_rosidl)
+base_paths=(bridge/r2s_bridge gen rosidl)
 colcon --log-base "$workspace/log" build \
   --base-paths "${base_paths[@]}" \
   --build-base "$workspace/build" \

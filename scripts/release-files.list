@@ -7,7 +7,7 @@ CHANGELOG.md
 tools/capacity_measurements.json
 gen/r2s_gen/version.py
 gen/package.xml
-gen/r2s_rosidl/package.xml
+rosidl/r2s_rosidl/package.xml
 bridge/r2s_bridge/package.xml
 bridge/r2s_bridge_tests/package.xml
 examples/custom_interfaces/package.xml

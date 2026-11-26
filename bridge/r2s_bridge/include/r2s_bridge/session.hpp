@@ -464,11 +464,26 @@ public:
    */
   bool seen_hello() const;
 
+  /// The full text of the latest refused HELLO, empty when none is active.
+  /**
+   * Set by every refused HELLO, cleared by an accepted HELLO and by a
+   * port close, so /diagnostics names the reason while refusals continue.
+   *
+   * \return The refusal text, or an empty string.
+   */
+  std::string handshake_refused() const;
+
   /// The recorded session token, 0 before any READY and after every reboot.
   /**
    * \return The token ([SES-19]).
    */
   std::uint32_t token() const;
+
+  /// The MCU node name the HELLO carried, empty before the first HELLO.
+  /**
+   * \return The announced node name.
+   */
+  std::string node_name() const;
   /// The last completed handshake's topics, empty before the first one.
   /**
    * \return The announced topics.

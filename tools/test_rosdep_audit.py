@@ -61,8 +61,8 @@ ROS_LYRICAL_IMAGE=ros:lyrical-ros-base-resolute@sha256:{DIGEST}
 def probe_tree(tmp_path: Path) -> Path:
     (tmp_path / 'gen').mkdir()
     (tmp_path / 'gen' / 'package.xml').write_text(GEN_PKG)
-    (tmp_path / 'gen' / 'r2s_rosidl').mkdir()
-    (tmp_path / 'gen' / 'r2s_rosidl' / 'package.xml').write_text(ROSIDL_PKG)
+    (tmp_path / 'rosidl' / 'r2s_rosidl').mkdir(parents=True)
+    (tmp_path / 'rosidl' / 'r2s_rosidl' / 'package.xml').write_text(ROSIDL_PKG)
     (tmp_path / 'bridge' / 'r2s_bridge').mkdir(parents=True)
     (tmp_path / 'bridge' / 'r2s_bridge' / 'package.xml').write_text(BRIDGE_PKG)
     (tmp_path / 'ci').mkdir()

@@ -7,8 +7,8 @@ port and handshake, then check the ROS graph, then inspect payloads.
 
 Source the ROS underlay and your workspace's `install/setup.bash` in every
 terminal. Check `ros2 pkg executables r2s_gen` and `ros2 pkg prefix r2s_bridge`.
-If the workspace was built before the tools were added, rebuild it. For the
-nested `r2s_rosidl` package, use the explicit discovery command in
+If the workspace was built before the tools were added, rebuild it. For
+`r2s_rosidl`, use the plain discovery command in
 [Custom interfaces](custom-interfaces.md#generate-as-part-of-colcon-build).
 
 ## Upload or launch cannot open the port
@@ -42,6 +42,21 @@ Check the log for rejected types, protocol mismatch, or failure to register the
 firmware's topics. Regenerate and flash firmware from the same checkout as the
 host. A type-hash mismatch means the message definitions differ; use the same
 ROS distro and custom interface version on both sides.
+
+## The bridge refuses the HELLO for a protocol version mismatch
+
+The log shows this line once at error level, then at debug level while the
+same mismatch repeats:
+
+```text
+HELLO refused: the MCU protocol version is 3, the host protocol version is 4
+```
+
+`/diagnostics` carries the same text under `handshake refused` at level
+ERROR while the refusals continue. The protocol version must match exactly:
+no other version is accepted. Regenerate and reflash the firmware library
+from the same checkout as the bridge, or install a matching bridge, so both
+sides report the same version.
 
 ## Topics exist but data does not arrive
 

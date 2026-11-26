@@ -575,7 +575,7 @@ and `SetRemap` around the inclusion stay the equivalent scoping route.
 
 ## Code generator and packaging
 
-*Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling, plus the rosidl plugin wrapper (`gen/r2s_rosidl`) and `.action` support with Goal, Result and Feedback hashes in #317.*
+*Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling, plus the rosidl plugin wrapper (`rosidl/r2s_rosidl`) and `.action` support with Goal, Result and Feedback hashes in #317.*
 
 `r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required). It parses the `.msg` grammar itself, since `rosidl_parser` ships only with a ROS installation and the bundled snapshots make the ROS-free path complete. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources; the C++ headers and the compact-mode node map are specified and not emitted yet, and the generator refuses both rather than writing something incomplete. It also builds the bundled Arduino library (common types with the chosen bounds in `BUNDLE_BOUNDS`) that the X-macro path uses. Outputs are laid out to be usable as:
 
@@ -584,7 +584,7 @@ and `SetRemap` around the inclusion stay the equivalent scoping route.
 - a CMake or Makefile include for bare-metal and vendor toolchains;
 - an epic-hal module (serial and tick) for PIC (Phase 5).
 
-The generator targets a ROS distro explicitly (`distro:` in the config, default `jazzy`), because type hashes can differ between distros. It bundles a `common_interfaces` snapshot per supported distro. A thin rosidl plugin (`gen/r2s_rosidl`) wraps it for users who want generation inside `colcon build`: a firmware package calls `r2s_generate_firmware(CONFIG r2s.yaml)` and the build runs `r2s-gen generate --layout cmake`. The bridge, the generator and a bundle of the standard messages are released as ROS packages through the buildfarm.
+The generator targets a ROS distro explicitly (`distro:` in the config, default `jazzy`), because type hashes can differ between distros. It bundles a `common_interfaces` snapshot per supported distro. A thin rosidl plugin (`rosidl/r2s_rosidl`) wraps it for users who want generation inside `colcon build`: a firmware package calls `r2s_generate_firmware(CONFIG r2s.yaml)` and the build runs `r2s-gen generate --layout cmake`. The bridge, the generator and a bundle of the standard messages are released as ROS packages through the buildfarm.
 
 ## Host bridge
 
@@ -780,8 +780,9 @@ ros2serial/
 ├── cpp/                      C++ layer: runtime API (r2s/runtime.hpp) with the per-message headers and the static API (ros2serial.hpp)
 ├── gen/                      r2s-gen: Python package (pip) and ament_python package (ROS)
 │   ├── r2s_gen/              cli.py, config.py, msgs.py, bounds.py, emit.py, descriptors.py, topics.py, services.py, actions.py, cpp.py, static_api.py, layouts.py, bundle.py, types.py, limits.py, arduino.py, vectors.py, typehash.py, version.py, reference/ (Python reference codec), schema/, snapshots/
-│   ├── r2s_rosidl/           the colcon plugin wrapping the generator for firmware packages
 │   └── tests/                pytest: unit, golden-file, property-based
+├── rosidl/
+│   └── r2s_rosidl/           the colcon plugin wrapping the generator for firmware packages
 ├── bridge/
 │   ├── r2s_bridge/           C++ rclcpp component + executable, launch/, config/
 │   └── r2s_bridge_tests/     launch_testing integration tests (ROS package, test-only)
