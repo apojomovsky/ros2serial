@@ -32,12 +32,12 @@ SCRIPT = ROOT / 'scripts' / 'ament-lint.sh'
 PACKAGES = (
     ROOT / 'bridge' / 'r2s_bridge' / 'package.xml',
     ROOT / 'gen' / 'package.xml',
-    ROOT / 'gen' / 'r2s_rosidl' / 'package.xml',
+    ROOT / 'rosidl' / 'r2s_rosidl' / 'package.xml',
 )
 
 CMAKE_PACKAGES = (
     ROOT / 'bridge' / 'r2s_bridge' / 'CMakeLists.txt',
-    ROOT / 'gen' / 'r2s_rosidl' / 'CMakeLists.txt',
+    ROOT / 'rosidl' / 'r2s_rosidl' / 'CMakeLists.txt',
 )
 
 GEN_LINT_TESTS = (

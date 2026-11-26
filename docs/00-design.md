@@ -575,7 +575,7 @@ and `SetRemap` around the inclusion stay the equivalent scoping route.
 
 ## Code generator and packaging
 
-*Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling, plus the rosidl plugin wrapper (`gen/r2s_rosidl`) and `.action` support with Goal, Result and Feedback hashes in #317.*
+*Status (0.1.0): built: `generate`, `check`, `bundle`, `vectors` and `version`, with snapshots for Jazzy, Lyrical and Rolling, plus the rosidl plugin wrapper (`rosidl/r2s_rosidl`) and `.action` support with Goal, Result and Feedback hashes in #317.*
 
 `r2s-gen` is a standalone Python tool (pip-installable, with no ROS installation required). It parses the `.msg` grammar itself, since `rosidl_parser` ships only with a ROS installation and the bundled snapshots make the ROS-free path complete. Its inputs are `.msg` files and `r2s.yaml`. Its outputs are C99 headers and sources; the C++ headers and the compact-mode node map are specified and not emitted yet, and the generator refuses both rather than writing something incomplete. It also builds the bundled Arduino library (common types with the chosen bounds in `BUNDLE_BOUNDS`) that the X-macro path uses. Outputs are laid out to be usable as:
 
@@ -584,7 +584,7 @@ and `SetRemap` around the inclusion stay the equivalent scoping route.
 - a CMake or Makefile include for bare-metal and vendor toolchains;
 - an epic-hal module (serial and tick) for PIC (Phase 5).
 
-The generator targets a ROS distro explicitly (`distro:` in the config, default `jazzy`), because type hashes can differ between distros. It bundles a `common_interfaces` snapshot per supported distro. A thin rosidl plugin (`gen/r2s_rosidl`) wraps it for users who want generation inside `colcon build`: a firmware package calls `r2s_generate_firmware(CONFIG r2s.yaml)` and the build runs `r2s-gen generate --layout cmake`. The bridge, the generator and a bundle of the standard messages are released as ROS packages through the buildfarm.
+The generator targets a ROS distro explicitly (`distro:` in the config, default `jazzy`), because type hashes can differ between distros. It bundles a `common_interfaces` snapshot per supported distro. A thin rosidl plugin (`rosidl/r2s_rosidl`) wraps it for users who want generation inside `colcon build`: a firmware package calls `r2s_generate_firmware(CONFIG r2s.yaml)` and the build runs `r2s-gen generate --layout cmake`. The bridge, the generator and a bundle of the standard messages are released as ROS packages through the buildfarm.
 
 ## Host bridge
 
@@ -780,8 +780,9 @@ ros2serial/
 ├── cpp/                      C++ layer: runtime API (r2s/runtime.hpp) with the per-message headers and the static API (ros2serial.hpp)
 ├── gen/                      r2s-gen: Python package (pip) and ament_python package (ROS)
 │   ├── r2s_gen/              cli.py, config.py, msgs.py, bounds.py, emit.py, descriptors.py, topics.py, services.py, actions.py, cpp.py, static_api.py, layouts.py, bundle.py, types.py, limits.py, arduino.py, vectors.py, typehash.py, version.py, reference/ (Python reference codec), schema/, snapshots/
-│   ├── r2s_rosidl/           the colcon plugin wrapping the generator for firmware packages
 │   └── tests/                pytest: unit, golden-file, property-based
+├── rosidl/
+│   └── r2s_rosidl/           the colcon plugin wrapping the generator for firmware packages
 ├── bridge/
 │   ├── r2s_bridge/           C++ rclcpp component + executable, launch/, config/
 │   └── r2s_bridge_tests/     launch_testing integration tests (ROS package, test-only)
@@ -1185,13 +1186,14 @@ The generator computes the REP-2011 RIHS01 hash for each type in `gen/r2s_gen/ty
 | `rate_limit.overrides` | string array | empty | Per-topic limits as `"<topic>=<hz>"`, naming the announced topic, for example `"cmd_vel=20"` |
 | `tx_budget_pct` | int | 50 | Cap on host-to-MCU bandwidth, as a percentage of the link |
 | `qos_depth` | int | 10 | Depth for publishers and subscriptions created for the MCU |
+| `qos.overrides` | string array | empty | Per-topic host endpoint QoS as `"<topic>=reliable"` or `"<topic>=best_effort"`, optionally followed by `,transient_local`, naming the announced topic ([SES-31]); a malformed entry throws at construction |
 
 The package ships these defaults as `config/r2s_bridge.params.yaml`, started
 by `launch/r2s_bridge.launch.py` with `port`, `params_file`, `namespace` and `remappings` arguments.
 
 ### Published by the bridge
 
-- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, running MCU error report sums per code (`mcu error code 1` through `mcu error code 6`) and the per-topic breakdown (`topic <id> <name> mcu errors`), per-topic direction, verdict, sequence gaps, drops and publish failures, each keyed `topic <id> <name> <key>` with `key` one of `direction`, `status`, `route`, `seq gaps`, `dropped`, `publish failures` or `mcu errors`, time sync offset in nanoseconds, drift in ppm and round trip in nanoseconds.
+- `/diagnostics` (a `diagnostic_msgs/DiagnosticArray` the bridge publishes at 1 Hz from its poll timer): link state, session token and resets detected, coalesced control frames, protocol version, MCU counters from heartbeats, running MCU error report sums per code (`mcu error code 1` through `mcu error code 6`) and the per-topic breakdown (`topic <id> <name> mcu errors`), per-topic direction, verdict, sequence gaps, drops and publish failures, each keyed `topic <id> <name> <key>` with `key` one of `direction`, `status`, `route`, `reliability`, `durability`, `seq gaps`, `dropped`, `publish failures` or `mcu errors`, time sync offset in nanoseconds, drift in ppm and round trip in nanoseconds.
 - The MCU's topics, under the names it announced, after remapping and namespacing.
 - MCU log messages and error reports through the bridge's logger (`<node_name>.mcu`), so they reach `/rosout`; a report names its code, topic, count since the previous report, and the field path for a bound violation.
 

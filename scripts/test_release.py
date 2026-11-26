@@ -92,8 +92,8 @@ def repo_with(tmp_path: Path, tag: str, subjects: list[str]) -> Path:
         f'<package format="3">\n  <name>r2s_gen</name>\n  '
         f'<version>{version}</version>\n</package>\n'
     )
-    (repo / 'gen' / 'r2s_rosidl').mkdir(parents=True)
-    (repo / 'gen' / 'r2s_rosidl' / 'package.xml').write_text(
+    (repo / 'rosidl' / 'r2s_rosidl').mkdir(parents=True)
+    (repo / 'rosidl' / 'r2s_rosidl' / 'package.xml').write_text(
         f'<package format="3">\n  <name>r2s_rosidl</name>\n  '
         f'<version>{version}</version>\n</package>\n'
     )
@@ -281,7 +281,9 @@ def test_a_real_run_writes_the_version_into_the_generator_package(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "__version__ = '0.4.0'" in (repo / 'gen' / 'r2s_gen' / 'version.py').read_text()
     assert '<version>0.4.0</version>' in (repo / 'gen' / 'package.xml').read_text()
-    assert '<version>0.4.0</version>' in (repo / 'gen' / 'r2s_rosidl' / 'package.xml').read_text()
+    assert (
+        '<version>0.4.0</version>' in (repo / 'rosidl' / 'r2s_rosidl' / 'package.xml').read_text()
+    )
     assert (
         '<version>0.4.0</version>' in (repo / 'bridge' / 'r2s_bridge' / 'package.xml').read_text()
     )
@@ -497,7 +499,7 @@ def test_a_simulated_cut_leaves_the_versioned_tests_green(tmp_path):
         'CHANGELOG.md',
         'gen/r2s_gen/version.py',
         'gen/package.xml',
-        'gen/r2s_rosidl/package.xml',
+        'rosidl/r2s_rosidl/package.xml',
         'bridge/r2s_bridge/package.xml',
         'bridge/r2s_bridge_tests/package.xml',
         'examples/custom_interfaces/package.xml',

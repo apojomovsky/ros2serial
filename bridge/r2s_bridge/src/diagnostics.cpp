@@ -49,6 +49,8 @@ void add_topic(
   } else {
     add_value(status, head + " route", "ok");
   }
+  add_value(status, head + " reliability", topic.reliability);
+  add_value(status, head + " durability", topic.durability);
   add_value(status, head + " seq gaps", std::to_string(topic.seq_gaps));
   add_value(status, head + " dropped", std::to_string(topic.dropped));
     // GCOVR_EXCL_BR_START: a unit test cannot throw out of this call

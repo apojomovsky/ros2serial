@@ -52,7 +52,7 @@ jobs:
         run: |
           bash scripts/apt-install.sh update
           rosdep update
-          rosdep install --from-paths gen bridge --ignore-src -r -y --rosdistro "$ROS_DISTRO"
+          rosdep install --from-paths gen rosidl bridge --ignore-src -r -y --rosdistro "$ROS_DISTRO"
         env:
           ROS_DISTRO: ${{ matrix.distro }}
       - name: Build, test and smoke the released packages

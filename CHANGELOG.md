@@ -9,6 +9,11 @@
   [migration guide](https://apojomovsky.github.io/ros2serial/port-guide.html)
   ports a sketch from it
 
+### Build
+
+- **gen:** Move `r2s_rosidl` beside `r2s_gen` under `rosidl/`, so a plain
+  colcon build discovers it without an extra base path
+
 ## 0.5.0 (2026-11-19)
 
 ### Breaking

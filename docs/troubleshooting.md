@@ -7,8 +7,8 @@ port and handshake, then check the ROS graph, then inspect payloads.
 
 Source the ROS underlay and your workspace's `install/setup.bash` in every
 terminal. Check `ros2 pkg executables r2s_gen` and `ros2 pkg prefix r2s_bridge`.
-If the workspace was built before the tools were added, rebuild it. For the
-nested `r2s_rosidl` package, use the explicit discovery command in
+If the workspace was built before the tools were added, rebuild it. For
+`r2s_rosidl`, use the plain discovery command in
 [Custom interfaces](custom-interfaces.md#generate-as-part-of-colcon-build).
 
 ## Upload or launch cannot open the port
@@ -70,6 +70,11 @@ Use the names after remapping and namespacing. Match `ROS_DOMAIN_ID` between
 terminals. Inspect endpoint QoS if discovery succeeds without matching. Confirm
 the firmware is publishing after connection; a one-shot event sent before the
 subscriber existed is not retained. The button/LED example repeats state.
+
+A best-effort publisher does not match a reliable subscriber, so a default
+`rclcpp` subscriber receives nothing from a best-effort MCU topic. Subscribe
+with `rclcpp::SensorDataQoS()`, or set `qos.overrides: ["battery=reliable"]`
+on the bridge, and verify with `ros2 topic info /battery --verbose`.
 
 For actuator commands, confirm the topic direction and that its callback runs
 during spin.

@@ -85,6 +85,7 @@ DOCUMENTED_PARAMETERS = frozenset(
         'rate_limit.overrides',
         'tx_budget_pct',
         'qos_depth',
+        'qos.overrides',
     ]
 )
 
@@ -288,7 +289,7 @@ class TestLaunchFileChecks(unittest.TestCase):
         # the example keeps rate_limit.overrides commented out.
         found = set(_flatten(_example_params()))
         self.assertEqual(found - DOCUMENTED_PARAMETERS, set())
-        self.assertEqual(DOCUMENTED_PARAMETERS - found, {'rate_limit.overrides'})
+        self.assertEqual(DOCUMENTED_PARAMETERS - found, {'rate_limit.overrides', 'qos.overrides'})
 
     def test_overrides_example_uncomments_cleanly(self):
         path = (

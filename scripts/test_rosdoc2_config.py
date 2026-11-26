@@ -12,7 +12,7 @@ ROS_PACKAGES = [
     'bridge/r2s_bridge',
     'bridge/r2s_bridge_tests',
     'gen',
-    'gen/r2s_rosidl',
+    'rosidl/r2s_rosidl',
 ]
 
 

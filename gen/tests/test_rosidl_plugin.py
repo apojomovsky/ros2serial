@@ -22,7 +22,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = ROOT / 'gen'
-PLUGIN = PACKAGE / 'r2s_rosidl'
+PLUGIN = ROOT / 'rosidl' / 'r2s_rosidl'
 
 GOOD_CONFIG = """\
 node: fw_fixture
@@ -127,7 +127,7 @@ def package_sources(workspace: Path) -> Path:
     shutil.copytree(
         PACKAGE,
         package,
-        ignore=shutil.ignore_patterns('__pycache__', '*.egg-info', 'build', 'r2s_rosidl'),
+        ignore=shutil.ignore_patterns('__pycache__', '*.egg-info', 'build'),
     )
     plugin = src / 'r2s_rosidl'
     shutil.copytree(PLUGIN, plugin, ignore=shutil.ignore_patterns('__pycache__'))
