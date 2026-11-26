@@ -36,6 +36,12 @@ PAGES = (
         'Build and install in a ROS workspace.',
     ),
     Page(
+        'docs/esp32.md',
+        'esp32.html',
+        'ESP32 boards',
+        'Pick the board, the port and the FQBN for an ESP32.',
+    ),
+    Page(
         'docs/firmware.md',
         'firmware.html',
         'Firmware',

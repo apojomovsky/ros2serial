@@ -30,8 +30,9 @@ flowchart LR
 ```
 
 **Under active development.** This guide follows `master`. Uno and Mega firmware
-is tested in simulation on every pull request; ESP32 and the other ports are
-built in CI, which proves they compile, not that they run on hardware. Real
+is tested in simulation on every pull request; ESP32, ESP32-S3 (UART and
+USB CDC), ESP32-C3 (USB CDC) and the other ports are built in CI, which
+proves they compile, not that they run on hardware. Real
 board results are recorded on [Real-board
 validation](docs/hardware-validation.md) as the maintainer fills them in.
 The current wire format is protocol v4, and it is not frozen: it may change
@@ -186,6 +187,7 @@ see light. The format and both verdicts are documented in
 | I want to… | Read |
 | --- | --- |
 | Add publishing and subscriptions to my sketch | [Firmware guide](docs/firmware.md) |
+| Use an ESP32, ESP32-S3 or ESP32-C3 board | [ESP32 boards](docs/esp32.md) |
 | Choose how to declare my topics | [Declaring topics](docs/declaring-topics.md) |
 | Build in C, with CMake or PlatformIO, or on my own board | [C and bare metal](docs/c-and-bare-metal.md) |
 | Start the bridge with my robot; rename topics or connect several boards | [Robot integration](docs/robot-integration.md) |
@@ -218,8 +220,9 @@ without the Arduino library, has its own page: [C and bare
 metal](docs/c-and-bare-metal.md).
 
 The bridge targets ROS 2 Jazzy, Lyrical and Rolling. Uno and Mega have simulated
-end-to-end coverage. ESP32 examples and the CH32V003, STM32F103 and RP2040 ports
-are built in CI; that does not establish real-hardware validation. PIC support
+end-to-end coverage. ESP32, ESP32-S3 (UART and USB CDC) and ESP32-C3 (USB CDC)
+examples and the CH32V003, STM32F103 and RP2040 ports are built in CI; that
+does not establish real-hardware validation. PIC support
 remains development work. Measurements are in
 [Size and stack budgets](docs/budgets.md), and [Real-board
 validation](docs/hardware-validation.md) records what was checked on physical
