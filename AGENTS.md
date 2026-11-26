@@ -53,7 +53,6 @@ repository development and CI, not installation into a robot workspace.
 | `ctest` ARGS=`...` | Reruns core unit tests by name in the image |
 | `ci-local` | The exact CI run, unscoped, in the `ci` image |
 | `hardware-check PORT=... BOARD=<name in boards.list>` | Checks a real board end to end: flashes `button_led`, samples `/button`, reads the counters, drives `/led` and prints one report with a verdict |
-| `compile EXAMPLE=<name> BOARD=<uno\|mega\|...>` | Not built yet (pending G10 and V4): will build an example firmware and print flash, RAM and stack |
 | `fuzz TARGET=<name>` | Run one libFuzzer target for 60 s |
 | `size-report` | Regenerate the flash, RAM and stack report |
 | `capacity-report` | Regenerate `docs/capacity.md` and the measurements behind it |
@@ -61,7 +60,6 @@ repository development and CI, not installation into a robot workspace.
 | `regen` | Regenerate every version-stamped generated file (goldens, example and cpp libraries, posix sources) |
 | `bounds-table` | Refresh the limits table in [docs/message-bounds.md](docs/message-bounds.md) from `r2s-gen limits` |
 | `rosdoc2` | Advisory API docs build: doxygen counts plus rosdoc2 per package |
-| `docs-gen` | Not built yet (pending G1 and H1): will regenerate reference docs (CLI, vectors, bridge parameters) |
 | `fmt` / `lint` / `check-warnings` | Formatting, linters (advisory), warnings (hard gate) |
 | `lint-docs` | Check mermaid blocks in the docs with mermaid's own parser (needs host docker) |
 | `bigendian` | Cross-build the core for s390x and run the suite under qemu (host-only, needs docker) |
@@ -88,7 +86,7 @@ Work is plain GitHub issues.
 
 ## Development cycle
 
-- Inner loop in the container: `make shell`, then `make test CORE=1` (or `GEN=1`, `BRIDGE=1`, `E2E=posix`). `make compile` is pending (see above); compile examples as the README walkthrough does until it lands.
+- Inner loop in the container: `make shell`, then `make test CORE=1` (or `GEN=1`, `BRIDGE=1`, `E2E=posix`). Compile examples as the README walkthrough does.
 - **Tests first.** The first commit of a PR adds tests, vectors or fuzz corpus entries that fail. Bugs are fixed by first reproducing them in a test.
 - **`docs/01-testing.md` is normative:** how code must be written to be testable, what to test at which level, coverage, mutation and spec-coverage gates, and the rules for the tests themselves. Read it before writing any code.
 - Behavior that crosses the wire is specified by a conformance vector before any code is written. The first message vectors are computed by hand; the Python reference must reproduce them before it generates any further vector.

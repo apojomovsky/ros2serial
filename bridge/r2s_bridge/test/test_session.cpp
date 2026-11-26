@@ -970,8 +970,9 @@ TEST(SessionConnected, HelloWhileConnectedLogsTheReset)
     ASSERT_EQ(fixture.session().state(), SessionState::kConnected);
     logged.clear();
     fixture.deliver_frame(kControl, 0u, hello_payload(1u, 0u));
-    ASSERT_EQ(logged.size(), 1u) << "a HELLO while connected logs its own re-handshake";
+    ASSERT_EQ(logged.size(), 2u) << "a HELLO while connected logs its own re-handshake";
     EXPECT_NE(logged[0].find("HELLO while connected"), std::string::npos) << logged[0];
+    EXPECT_NE(logged[1].find("connected: MCU node 'node'"), std::string::npos) << logged[1];
 }
 
 TEST(SessionHandshake, HelloWhileHandshakingLogsTheRestart)

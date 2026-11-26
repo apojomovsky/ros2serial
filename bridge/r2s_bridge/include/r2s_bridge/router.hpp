@@ -169,6 +169,7 @@ public:
   struct Diagnostics
   {
     std::string link_state;  ///< The session state name.
+    std::string mcu_node_name;  ///< The MCU node name the HELLO carried.
     std::uint32_t session_token = 0;  ///< The session token [SES-19].
     std::uint32_t resets = 0;  ///< HELLOs accepted while connected.
     /// Control frames a newer frame of the same slot replaced.
