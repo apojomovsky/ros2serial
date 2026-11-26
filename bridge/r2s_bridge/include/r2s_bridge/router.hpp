@@ -177,6 +177,8 @@ public:
      */
     std::uint32_t control_coalesced = 0;
     std::uint8_t protocol_version = 0;  ///< The negotiated wire version.
+    /// The full text of the latest refused HELLO, empty when none is active.
+    std::string handshake_refused;
     McuCounters mcu_counters;  ///< The heartbeat counters [HB-2].
     /// Running MCU error report sums per code ([ERR-6]).
     /**

@@ -80,7 +80,9 @@ diagnostic_msgs::msg::DiagnosticArray diagnostics_message(
     // A silent link is an error; a link mid-handshake is transient. A
     // connected link missing a route is degraded: it warns instead of
     // reporting ok while a topic it announced has no endpoint.
-  if (snapshot.link_state == "connected") {
+  if (!snapshot.handshake_refused.empty()) {
+    status.level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
+  } else if (snapshot.link_state == "connected") {
     const bool degraded =
       std::any_of(snapshot.topics.begin(), snapshot.topics.end(),
         [](const Router::TopicDiagnostics & topic) {return topic.route_missing;});
@@ -96,6 +98,9 @@ diagnostic_msgs::msg::DiagnosticArray diagnostics_message(
   add_value(status, "resets", std::to_string(snapshot.resets));
   add_value(status, "control coalesced", std::to_string(snapshot.control_coalesced));
   add_value(status, "protocol version", std::to_string(snapshot.protocol_version));
+  if (!snapshot.handshake_refused.empty()) {
+    add_value(status, "handshake refused", snapshot.handshake_refused);
+  }
   add_value(status, "mcu rx frames", std::to_string(snapshot.mcu_counters.rx_frames));
   add_value(status, "mcu crc errors", std::to_string(snapshot.mcu_counters.crc_errors));
   add_value(status, "mcu rx overflows", std::to_string(snapshot.mcu_counters.rx_overflows));

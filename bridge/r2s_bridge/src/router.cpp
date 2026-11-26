@@ -2434,6 +2434,7 @@ Router::Diagnostics Router::diagnostics() const
   out.resets = impl_->session_.resets();
   out.control_coalesced = impl_->session_.control_coalesced();
   out.protocol_version = R2S_PROTOCOL_VERSION;
+  out.handshake_refused = impl_->session_.handshake_refused();
   out.mcu_counters = impl_->session_.mcu_counters();
   out.mcu_error_sums = impl_->session_.error_sums();
   for (const TopicInfo & info : impl_->session_.topics()) {

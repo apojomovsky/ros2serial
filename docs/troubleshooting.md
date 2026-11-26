@@ -43,6 +43,21 @@ firmware's topics. Regenerate and flash firmware from the same checkout as the
 host. A type-hash mismatch means the message definitions differ; use the same
 ROS distro and custom interface version on both sides.
 
+## The bridge refuses the HELLO for a protocol version mismatch
+
+The log shows this line once at error level, then at debug level while the
+same mismatch repeats:
+
+```text
+HELLO refused: the MCU protocol version is 3, the host protocol version is 4
+```
+
+`/diagnostics` carries the same text under `handshake refused` at level
+ERROR while the refusals continue. The protocol version must match exactly:
+no other version is accepted. Regenerate and reflash the firmware library
+from the same checkout as the bridge, or install a matching bridge, so both
+sides report the same version.
+
 ## Topics exist but data does not arrive
 
 ```sh

@@ -443,6 +443,20 @@ TEST_F(DiagnosticsNode, WrongVersionHelloLogsOnceAndReportsInDiagnostics)
     }
 }
 
+TEST_F(DiagnosticsNode, PortCloseClearsHandshakeRefused)
+{
+    DiagnosticsFixture fixture("refusedclose", RouterParams{});
+    std::vector<std::uint8_t> bad_version = helper_hello(7u, 0u);
+    bad_version[1] = 99u;
+    fixture.deliver_frame(kHelperControl, 0u, bad_version);
+    EXPECT_FALSE(fixture.snapshot().handshake_refused.empty());
+    fixture.script_closed();
+    fixture.poll_once();
+    const Diagnostics diagnostics = fixture.snapshot();
+    EXPECT_EQ(diagnostics.link_state, "disconnected");
+    EXPECT_TRUE(diagnostics.handshake_refused.empty()) << "a port close clears the refusal";
+}
+
 TEST_F(DiagnosticsNode, LinkTimeoutRehandshakesWithoutReset)
 {
     DiagnosticsFixture fixture("timeout", RouterParams{});
