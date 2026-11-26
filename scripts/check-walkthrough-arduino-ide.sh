@@ -49,7 +49,7 @@ python3 tools/docs_walkthrough.py --page "$page" || exit 1
 
 # The bridge and the generator the page reaches through `ros2 run`, installed
 # as the reader installs them.
-colcon build --base-paths bridge gen gen/r2s_rosidl \
+colcon build --base-paths bridge gen rosidl \
   --packages-up-to r2s_bridge r2s_gen r2s_rosidl \
   --build-base "$work/install/build" --install-base "$work/install/root" \
   --cmake-args -DBUILD_TESTING=OFF || exit 1

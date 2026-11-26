@@ -149,6 +149,7 @@ def test_a_shared_tree_runs_the_full_matrix():
         'ports/stm32/build.sh',
         'bridge/src/session.cpp',
         'gen/r2s_gen/cli.py',
+        'rosidl/r2s_rosidl/CMakeLists.txt',
         '.github/workflows/ci.yml',
         '.github/actions/dev-image/action.yml',
         'ci/versions.env',

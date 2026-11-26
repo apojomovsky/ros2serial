@@ -47,10 +47,10 @@ echo "== farm: $ROS_DISTRO"
 bash "$root/scripts/build-host-lib.sh" "$workspace/host" || exit 1
 export R2S_HOST_LIB_DIR="$workspace/host"
 
-# gen/ itself is the r2s_gen package, so a plain --base-paths gen would hide
-# the nested gen/r2s_rosidl package: every released package is named.
+# Every released package is under one of these roots, so colcon discovers
+# r2s_gen, r2s_rosidl and both bridge packages without naming each package.
 colcon --log-base "$workspace/log" build \
-  --base-paths gen gen/r2s_rosidl bridge/r2s_bridge bridge/r2s_bridge_tests \
+  --base-paths gen rosidl bridge \
   --build-base "$workspace/build" \
   --install-base "$workspace/install" \
   --event-handlers console_direct+ || exit 1
@@ -63,7 +63,7 @@ status=0
 # The pytest step runs only when asked: newer setuptools ignore setup.py
 # tests_require, so the default unittest fallback finds no tests and fails.
 colcon --log-base "$workspace/log" test \
-  --base-paths gen gen/r2s_rosidl bridge/r2s_bridge bridge/r2s_bridge_tests \
+  --base-paths gen rosidl bridge \
   --build-base "$workspace/build" \
   --install-base "$workspace/install" \
   --event-handlers console_direct+ \

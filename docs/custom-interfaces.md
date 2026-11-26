@@ -81,13 +81,12 @@ Implement the subscription handler in your firmware. Do not edit generated files
 ## Generate as part of colcon build
 
 The `r2s_rosidl` package installs `r2s_generate_firmware()`, a CMake helper that
-runs the same generator. It currently lives inside `gen/`; pass that nested
-package explicitly so colcon discovers it alongside the enclosing package:
+runs the same generator. It sits beside `r2s_gen` under `rosidl/`, so a plain
+colcon build from the workspace root discovers it with the other packages:
 
 ```sh
 cd ~/ros2_ws
-colcon build --base-paths src src/ros2serial/gen/r2s_rosidl \
-  --packages-up-to r2s_rosidl --cmake-args -DBUILD_TESTING=OFF
+colcon build --packages-up-to r2s_rosidl --cmake-args -DBUILD_TESTING=OFF
 source install/setup.bash
 ```
 
@@ -105,8 +104,7 @@ ament_package()
 ```
 
 ```sh
-colcon build --base-paths src src/ros2serial/gen/r2s_rosidl \
-  --packages-up-to sensor_firmware --cmake-args -DBUILD_TESTING=OFF
+colcon build --packages-up-to sensor_firmware --cmake-args -DBUILD_TESTING=OFF
 ```
 
 Sources appear under `build/sensor_firmware/r2s_generated/`.

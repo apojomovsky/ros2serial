@@ -92,7 +92,7 @@ R2S_BUILD_DIR=$PWD/build bash tests/harness/simavr/run.sh --build-only || exit 1
 sim=build/harness/simavr/r2s_simavr
 # The bridge build the walkthrough runs, from the repo root, exactly as
 # documented: build outputs land under build/, which the checkout ignores.
-colcon build --base-paths bridge gen gen/r2s_rosidl --packages-up-to r2s_bridge r2s_gen r2s_rosidl --build-base build/bridge/build --install-base build/bridge/install --cmake-args -DBUILD_TESTING=OFF || exit 1
+colcon build --base-paths bridge gen rosidl --packages-up-to r2s_bridge r2s_gen r2s_rosidl --build-base build/bridge/build --install-base build/bridge/install --cmake-args -DBUILD_TESTING=OFF || exit 1
 # shellcheck source=/dev/null
 set +u
 source build/bridge/install/setup.bash
