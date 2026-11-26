@@ -5,6 +5,7 @@
  * firmware's live values; the session calls in for channel 3 frames. */
 #include "r2s/r2s_params.h"
 
+#include <float.h>
 #include <string.h>
 
 #include "r2s/r2s.h"
@@ -203,6 +204,90 @@ int r2s_params_check_set(uint8_t index, const uint8_t *value, uint16_t len)
   return R2S_PARAM_APPLIED;
 }
 
+#if DBL_MANT_DIG == FLT_MANT_DIG
+/* Narrowing a binary64 to the binary32 this build holds, with
+ * roundTiesToEven ([ENC-11]), from its two little-endian halves. Only
+ * integer shifts and compares: the core never computes with floats. The
+ * rounding is the codec's, on the value a SET carries ([PAR-3]). */
+static uint32_t narrow_binary64(const uint8_t *value)
+{
+  uint32_t lo = 0u;
+  uint32_t hi = 0u;
+  uint16_t i;
+
+  for (i = 0u; i < 4u; i++) {
+    lo |= (uint32_t)value[i] << (i * 8u);
+    hi |= (uint32_t)value[4u + i] << (i * 8u);
+  }
+  {
+    uint32_t sign = hi >> 31u;
+    uint32_t exp = (hi >> 20u) & 0x7FFu;
+    uint32_t mhi = hi & 0xFFFFFu;
+
+    if (exp == 0x7FFu) {
+      if ((mhi | lo) == 0u) {
+        return (sign << 31u) | 0x7F800000u;
+      }
+      return (sign << 31u) | 0x7FC00000u;
+    }
+    if (exp == 0u) {
+      return sign << 31u;
+    }
+    if (exp >= 0x47Fu) {
+      return (sign << 31u) | 0x7F800000u;
+    }
+    if (exp >= 0x381u) {
+      uint32_t kept = (mhi << 3u) | (lo >> 29u);
+      uint32_t rest = lo & 0x1FFFFFFFu;
+      uint32_t out_exp = exp - 896u;
+
+      if (rest > 0x10000000u || (rest == 0x10000000u && (kept & 1u) != 0u)) {
+        kept++;
+        if (kept == 0x800000u) {
+          kept = 0u;
+          out_exp++;
+        }
+      }
+      if (out_exp >= 0xFFu) {
+        return (sign << 31u) | 0x7F800000u;
+      }
+      return (sign << 31u) | (out_exp << 23u) | kept;
+    }
+    {
+      uint32_t fhi = mhi | 0x100000u;
+      uint32_t shift = 926u - exp;
+      uint32_t count;
+      uint32_t guard;
+      uint32_t sticky;
+
+      if (shift > 52u) {
+        return sign << 31u;
+      }
+      if (shift < 32u) {
+        count = (lo >> shift) | (fhi << (32u - shift));
+        guard = (lo >> (shift - 1u)) & 1u;
+        sticky = lo & ((1u << (shift - 1u)) - 1u);
+      } else if (shift == 32u) {
+        count = fhi;
+        guard = (lo >> 31u) & 1u;
+        sticky = lo & 0x7FFFFFFFu;
+      } else {
+        count = fhi >> (shift - 32u);
+        guard = (fhi >> (shift - 33u)) & 1u;
+        sticky = (fhi & ((1u << (shift - 33u)) - 1u)) | (lo == 0u ? 0u : 1u);
+      }
+      if (guard != 0u && (sticky != 0u || (count & 1u) != 0u)) {
+        count++;
+      }
+      if (count == 0x800000u) {
+        return (sign << 31u) | 0x00800000u;
+      }
+      return (sign << 31u) | count;
+    }
+  }
+}
+#endif
+
 /* The 8 wire bytes as a native 64-bit value: values travel little-endian
  * while the struct holds the target's order ([PAR-3]). */
 static uint64_t wire_u64(const uint8_t *value)
@@ -230,9 +315,15 @@ void r2s_params_store(uint8_t index, const uint8_t *value, uint16_t len)
 
     memcpy(&param->value.i, &bits, 8u);
   } else if (param->type == R2S_PARAM_F64) {
+#if DBL_MANT_DIG == FLT_MANT_DIG
+    uint32_t bits = narrow_binary64(value);
+
+    memcpy(&param->value.f, &bits, sizeof bits);
+#else
     uint64_t bits = wire_u64(value);
 
-    memcpy(&param->value.f, &bits, 8u);
+    memcpy(&param->value.f, &bits, sizeof bits);
+#endif
   } else {
     uint16_t text_len = 0u;
 

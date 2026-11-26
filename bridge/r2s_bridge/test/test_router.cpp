@@ -272,9 +272,10 @@ public:
   std::vector<std::vector<std::uint8_t>> handshake_with_params(
     std::uint32_t token = 7u, bool full = true,
     bool led_i64 = false,
-    bool long_label = false)
+    bool long_label = false, bool narrow = false)
   {
-    deliver_frame(kHelperControl, 0u, helper_hello(token, 2u, max_frame_, 0x04u));
+    deliver_frame(kHelperControl, 0u,
+      helper_hello(token, 2u, max_frame_, narrow ? 0x14u : 0x04u));
     expect_topic_req(0u);
     const std::array<std::uint8_t, 8> float_hash = installed_hash("std_msgs/msg/Float32");
     deliver_frame(
@@ -1238,6 +1239,39 @@ TEST_F(RouterNode, McuParameterCodecsCoverAllTypes)
     ASSERT_EQ(third.count(3u), 1u);
     EXPECT_EQ(third.at(3u).value,
           std::vector<std::uint8_t>{0x00u}) << "an empty string is one zero byte";
+}
+
+// covers: PAR-1, PAR-3, ENC-12
+TEST_F(RouterNode, Float64ParameterStaysBinary64On32BitDoubleMcus)
+{
+    // Bit 4 announces a 32-bit-double MCU, whose topics and services travel
+    // narrow; a parameter still travels as binary64 ([PAR-3]), widened by
+    // the MCU from the binary32 it holds.
+    RouterFixture fixture("paramnarrow", remapped(), RouterParams{});
+    fixture.handshake_with_params(7u, true, false, false, true);
+    ASSERT_TRUE(fixture.node()->has_parameter("gain")) << "the f64 is a ROS parameter";
+    EXPECT_DOUBLE_EQ(fixture.node()->get_parameter("gain").as_double(), 1.5);
+    const auto result = fixture.node()->set_parameters({rclcpp::Parameter("gain", 2.5)});
+    ASSERT_EQ(result.size(), 1u);
+    EXPECT_TRUE(result[0].successful) << result[0].reason;
+    const auto sets = fixture.param_sets();
+    ASSERT_EQ(sets.count(2u), 1u);
+    EXPECT_EQ(sets.at(2u).value,
+              std::vector<std::uint8_t>(
+        {0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x04u, 0x40u}))
+        << "the f64 set travels as binary64 on a 32-bit-double link";
+    fixture.deliver_frame(kAckTopic, 0u, {kParamsTopic, sets.at(2u).rel});
+    fixture.advance(1u);
+    const auto large = fixture.node()->set_parameters({rclcpp::Parameter("gain", 1e300)});
+    ASSERT_EQ(large.size(), 1u);
+    EXPECT_TRUE(large[0].successful) << large[0].reason;
+    const auto large_sets = fixture.param_sets();
+    ASSERT_EQ(large_sets.count(2u), 1u);
+    ASSERT_EQ(large_sets.at(2u).value.size(), 8u)
+        << "a large f64 travels whole as binary64, never narrowed here";
+    double large_value = 0;
+    std::memcpy(&large_value, large_sets.at(2u).value.data(), sizeof(large_value));
+    EXPECT_DOUBLE_EQ(large_value, 1e300);
 }
 
 // covers: PAR-9

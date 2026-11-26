@@ -575,6 +575,52 @@ static void queue_status(uint8_t index, uint8_t status, uint32_t now)
   }
 }
 
+#if defined(R2S_WITH_PARAMS) && DBL_MANT_DIG == FLT_MANT_DIG
+/* Widening the binary32 this build holds to the binary64 a parameter
+ * travels as ([PAR-3]), which is exact, into 8 little-endian bytes. A
+ * binary32 denormal normalizes, since the wider type holds it exactly.
+ * The widening is the codec's, assembled bytewise on any target. */
+static void widen_binary32(uint32_t bits, uint8_t out[8])
+{
+  uint32_t sign = bits >> 31u;
+  uint32_t exp = (bits >> 23u) & 0xFFu;
+  uint32_t mant = bits & 0x7FFFFFu;
+  uint32_t hi;
+  uint32_t lo;
+
+  if (exp == 0xFFu) {
+    hi = (sign << 31u) | ((uint32_t)0x7FFu << 20u) | (mant >> 3u);
+    lo = (mant & 7u) << 29u;
+  } else if (exp == 0u) {
+    if (mant == 0u) {
+      hi = sign << 31u;
+      lo = 0u;
+    } else {
+      uint32_t places = 0u;
+
+      while ((mant & 0x800000u) == 0u) {
+        mant <<= 1u;
+        places++;
+      }
+      mant &= 0x7FFFFFu;
+      hi = (sign << 31u) | (((uint32_t)897u - places) << 20u) | (mant >> 3u);
+      lo = (mant & 7u) << 29u;
+    }
+  } else {
+    hi = (sign << 31u) | ((exp + (uint32_t)896u) << 20u) | (mant >> 3u);
+    lo = (mant & 7u) << 29u;
+  }
+  out[0] = (uint8_t)(lo & 0xFFu);
+  out[1] = (uint8_t)((lo >> 8u) & 0xFFu);
+  out[2] = (uint8_t)((lo >> 16u) & 0xFFu);
+  out[3] = (uint8_t)((lo >> 24u) & 0xFFu);
+  out[4] = (uint8_t)(hi & 0xFFu);
+  out[5] = (uint8_t)((hi >> 8u) & 0xFFu);
+  out[6] = (uint8_t)((hi >> 16u) & 0xFFu);
+  out[7] = (uint8_t)((hi >> 24u) & 0xFFu);
+}
+#endif
+
 /* One plain DECLARE answering a PARAM_REQ (PAR-7, PAR-8), streamed byte by
  * byte so no buffer holds the frame. The default travels as the table
  * holds it: the scalar width, or the length varint and the bytes. */
@@ -611,12 +657,23 @@ static void send_declare(uint8_t index)
       put_byte((uint8_t)(bits >> (i * 8u)));
     }
   } else if (param->type == R2S_PARAM_F64) {
+#if DBL_MANT_DIG == FLT_MANT_DIG
+    uint32_t held = 0u;
+    uint8_t wide[8];
+
+    memcpy(&held, &param->initial.f, sizeof held);
+    widen_binary32(held, wide);
+    for (i = 0u; i < 8u; i++) {
+      put_byte(wide[i]);
+    }
+#else
     uint64_t bits = 0u;
 
-    memcpy(&bits, &param->initial.f, 8u);
+    memcpy(&bits, &param->initial.f, sizeof bits);
     for (i = 0u; i < 8u; i++) {
       put_byte((uint8_t)(bits >> (i * 8u)));
     }
+#endif
   } else {
     size_t text_len = strlen(param->initial.s);
 

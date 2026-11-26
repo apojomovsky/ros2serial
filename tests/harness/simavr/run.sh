@@ -51,6 +51,11 @@ for mcu in atmega328p atmega2560; do
     "${harness_frames[@]}" -I "$root/core/include" \
     -o "$build/rebind-$mcu.elf" tests/harness/simavr/rebind_firmware.c \
     "${core_sources[@]}" || status=1
+  # The param firmware links the same core with the parameters channel, so
+  # its float64 parameter declares and sets at the build's double width.
+  avr-gcc -mmcu="$mcu" -DF_CPU=16000000UL -Os -Wall -Wextra -Werror -DR2S_WITH_PARAMS \
+    "${harness_frames[@]}" -I "$root/core/include" \
+    -o "$build/param-$mcu.elf" tests/harness/simavr/param_firmware.c "${core_sources[@]}" || status=1
 done
 # The runtime firmware uses the C++ runtime API, so it needs the bundle's
 # message headers, the runtime layer and the core. The bundle is staged

@@ -3060,6 +3060,32 @@ TEST(ReliableWalk, CollectsDeclaresForTheParametersLayer)
               std::vector<std::uint8_t>({0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u}));
 }
 
+// covers: PAR-3, ENC-12
+TEST(ReliableWalk, KeepsABinary64F64DeclareOnA32BitDoubleLink)
+{
+    // A parameter travels as binary64 whatever the double width ([PAR-3]):
+    // the 8-byte default is kept on a 32-bit-double link, and the 4-byte
+    // form no build emits is dropped on any link.
+    Fixture narrow_fixture;
+    narrow_fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x14u, 1000u));
+    narrow_fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+    narrow_fixture.deliver_frame(kParams, 0u,
+    {kParamDeclare, 0x00u, 0x02u, 0x00u, 0x04u, 'g', 'a', 'i', 'n',
+      0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xF8u, 0x3Fu});
+    narrow_fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x01u, 0x01u});
+    EXPECT_EQ(narrow_fixture.session().state(), SessionState::kConnected);
+    ASSERT_EQ(narrow_fixture.session().params().size(), 1u) << "the binary64 f64 is kept on narrow";
+    Fixture short_fixture;
+    short_fixture.deliver_frame(kControl, 0u, hello_payload(0x1000u, 1u, 4u, 0x14u, 1000u));
+    short_fixture.deliver_frame(kControl, 1u, topic_payload(0u, 0x10u, "battery"));
+    short_fixture.deliver_frame(kParams, 0u,
+    {kParamDeclare, 0x00u, 0x02u, 0x00u, 0x04u, 'g', 'a', 'i', 'n',
+      0x00u, 0x00u, 0xC0u, 0x3Fu});
+    short_fixture.deliver_frame(kParams, 1u, {kParamStatus, 0x00u, 0x01u, 0x01u});
+    EXPECT_EQ(short_fixture.session().state(), SessionState::kConnected);
+    EXPECT_TRUE(short_fixture.session().params().empty()) << "a 4-byte f64 default is dropped";
+}
+
 // covers: PAR-1, PAR-3, PAR-7
 TEST(ReliableWalk, SkipsUnparseableDeclares)
 {
@@ -3086,7 +3112,9 @@ TEST(ReliableWalk, SkipsUnparseableDeclares)
     fixture.deliver_frame(kParams, 10u,
     {kParamDeclare, 0x0Au, 0x03u, 0x00u, 0x01u, 'u', 0x01u, 'z', 0xFFu});
     fixture.deliver_frame(kParams, 11u, {kParamDeclare, 0x0Bu, 0x00u, 0x00u, 0x01u, 'v', 0x02u});
-    fixture.deliver_frame(kParams, 12u, {kParamStatus, 0x00u, 0x0Cu, 0x01u});
+    fixture.deliver_frame(kParams, 12u,
+    {kParamDeclare, 0x0Cu, 0x02u, 0x00u, 0x04u, 'g', 'a', 'i', 'n', 0x00u, 0x00u, 0x00u});
+    fixture.deliver_frame(kParams, 13u, {kParamStatus, 0x00u, 0x0Du, 0x01u});
     EXPECT_EQ(fixture.session().state(), SessionState::kConnected);
     const std::vector<ParamInfo> & params = fixture.session().params();
     ASSERT_EQ(params.size(), 1u);
